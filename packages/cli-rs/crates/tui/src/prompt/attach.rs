@@ -44,23 +44,14 @@ impl Previews {
 
     /// Shows the prompt's images when the option is on.
     pub fn update(&self, tui: &Tui, prompt: &Inner) {
-        let enabled = tui
-            .settings
-            .info()
-            .prompt
-            .and_then(|prompt| prompt.image_preview)
-            .unwrap_or(false);
+        let enabled = tui.settings.info().prompt.and_then(|prompt| prompt.image_preview).unwrap_or(false);
         let height = (tui.app.size().1 / 4).clamp(4, 8);
         let next = (fingerprint(&prompt.prompt.borrow()), height, enabled);
         if self.rendered.borrow().as_ref() == Some(&next) {
             return;
         }
         *self.rendered.borrow_mut() = Some(next);
-        let images = if enabled {
-            images(&prompt.prompt.borrow())
-        } else {
-            Vec::new()
-        };
+        let images = if enabled { images(&prompt.prompt.borrow()) } else { Vec::new() };
         let uris: Vec<String> = images.iter().map(|(uri, _)| uri.clone()).collect();
         let app = &tui.app;
         let theme = tui.page();
@@ -87,13 +78,9 @@ impl Previews {
                 .shrink(1.0)
                 .align_items(Align::Center)
                 .justify(Justify::Center);
-            let image = ImageView::new(app)
-                .fit(ImageFit::Cover)
-                .width(Length::Percent(100.0))
-                .height(Length::Percent(100.0));
-            match crate::routes::session::messages::images::data_uri(uri)
-                .map(|bytes| image.load(&bytes))
-            {
+            let image =
+                ImageView::new(app).fit(ImageFit::Cover).width(Length::Percent(100.0)).height(Length::Percent(100.0));
+            match crate::routes::session::messages::images::data_uri(uri).map(|bytes| image.load(&bytes)) {
                 Some(Ok(image)) => cell.add(&image),
                 _ => cell.add(&Text::new(app, "No preview").fg(theme.text.muted)),
             };
@@ -129,15 +116,9 @@ pub fn view(tui: &Tui, prompt: &Inner) {
 }
 
 pub fn has_images(prompt: &Inner) -> bool {
-    prompt.prompt.borrow()["files"]
-        .as_array()
-        .is_some_and(|files| {
-            files.iter().any(|file| {
-                file["uri"]
-                    .as_str()
-                    .is_some_and(|uri| uri.starts_with("data:image/"))
-            })
-        })
+    prompt.prompt.borrow()["files"].as_array().is_some_and(|files| {
+        files.iter().any(|file| file["uri"].as_str().is_some_and(|uri| uri.starts_with("data:image/")))
+    })
 }
 
 /// What the previews depend on, without copying the URIs, which hold whole images: each file's label,

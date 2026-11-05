@@ -27,12 +27,7 @@ pub fn sidecar(file: &Path) -> PathBuf {
 }
 
 /// Publishes the terminals of the service in `info` before it is stopped. Never fails.
-pub async fn prepare(
-    transport: Arc<dyn Transport>,
-    file: &Path,
-    info: &Registration,
-    timeout: Duration,
-) {
+pub async fn prepare(transport: Arc<dyn Transport>, file: &Path, info: &Registration, timeout: Duration) {
     if read(file).is_some_and(|existing| existing.current() && existing.from(info)) {
         return;
     }
@@ -40,12 +35,7 @@ pub async fn prepare(
         return;
     };
     let options = RequestOptions::default();
-    let handoff = match tokio::time::timeout(
-        timeout,
-        client.experimental_persistent_pty_handoff(&options),
-    )
-    .await
-    {
+    let handoff = match tokio::time::timeout(timeout, client.experimental_persistent_pty_handoff(&options)).await {
         Ok(Ok(output)) => match output.handoff {
             None => Ok(Value::Null),
             Some(handoff) if handoff.expires_at > now_ms() => Ok(json!({
@@ -69,11 +59,7 @@ pub async fn prepare(
             eprintln!(
                 "Background service cannot hand off persistent terminals; shutting them down before replacement: {cause}"
             );
-            let _ = tokio::time::timeout(
-                timeout,
-                client.experimental_persistent_pty_shutdown(&options),
-            )
-            .await;
+            let _ = tokio::time::timeout(timeout, client.experimental_persistent_pty_shutdown(&options)).await;
             Value::Null
         }
     };
@@ -85,16 +71,10 @@ pub async fn prepare(
 /// `OPENCODE_PTY_HANDOFF` for a new service: the published handoff when it is current and belongs
 /// to the registered service (or none is registered), else unset.
 pub fn environment(file: &Path) -> (String, Option<String>) {
-    let current: Option<Value> = std::fs::read_to_string(file)
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok());
+    let current: Option<Value> = std::fs::read_to_string(file).ok().and_then(|text| serde_json::from_str(&text).ok());
     let handoff = read(file)
         .filter(|record| record.current())
-        .filter(|record| {
-            current
-                .as_ref()
-                .is_none_or(|current| record.matches(current))
-        })
+        .filter(|record| current.as_ref().is_none_or(|current| record.matches(current)))
         .map(|record| record.handoff)
         .filter(|handoff| !handoff.is_null())
         .map(|handoff| handoff.to_string());
@@ -153,36 +133,24 @@ fn read(file: &Path) -> Option<Sidecar> {
         pid: source.get("pid")?.as_f64()?,
         url: source.get("url")?.as_str()?.to_owned(),
         handoff,
-        expires_at: value
-            .get("expiresAt")?
-            .as_f64()
-            .filter(|at| at.is_finite())?,
+        expires_at: value.get("expiresAt")?.as_f64().filter(|at| at.is_finite())?,
     })
 }
 
 fn is_handoff(value: &Value) -> bool {
-    ["directory", "instanceID", "ticket"]
-        .iter()
-        .all(|key| value.get(key).is_some_and(Value::is_string))
-        && value
-            .get("expiresAt")
-            .and_then(Value::as_f64)
-            .is_some_and(f64::is_finite)
+    ["directory", "instanceID", "ticket"].iter().all(|key| value.get(key).is_some_and(Value::is_string))
+        && value.get("expiresAt").and_then(Value::as_f64).is_some_and(f64::is_finite)
 }
 
 fn publish(file: &Path, info: &Registration, handoff: Value) -> std::io::Result<()> {
-    let expires_at = handoff
-        .get("expiresAt")
-        .and_then(Value::as_f64)
-        .unwrap_or_else(|| now_ms() + EMPTY_TTL_MS);
+    let expires_at = handoff.get("expiresAt").and_then(Value::as_f64).unwrap_or_else(|| now_ms() + EMPTY_TTL_MS);
     let mut source = serde_json::Map::new();
     if let Some(id) = &info.id {
         source.insert("id".to_owned(), json!(id));
     }
     source.insert("pid".to_owned(), json!(info.pid));
     source.insert("url".to_owned(), json!(info.url));
-    let text = json!({ "source": source, "handoff": handoff, "expiresAt": number(expires_at) })
-        .to_string();
+    let text = json!({ "source": source, "handoff": handoff, "expiresAt": number(expires_at) }).to_string();
     let mut temporary = sidecar(file).into_os_string();
     temporary.push(format!(".{}.tmp", uuid::Uuid::new_v4()));
     let temporary = PathBuf::from(temporary);
@@ -205,9 +173,7 @@ fn number(value: f64) -> Value {
 }
 
 fn now_ms() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0.0, |elapsed| elapsed.as_secs_f64() * 1000.0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_secs_f64() * 1000.0)
 }
 
 #[cfg(test)]
@@ -241,8 +207,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("service.json");
         std::fs::write(&file, serde_json::to_string(&info(9)).unwrap()).unwrap();
-        let server =
-            Arc::new(Server::default().reply(HANDOFF_URL, Reply::json(200, handoff_body())));
+        let server = Arc::new(Server::default().reply(HANDOFF_URL, Reply::json(200, handoff_body())));
         prepare(server.clone(), &file, &info(9), Duration::from_secs(1)).await;
         assert!(server.requests()[0].1.is_some(), "Basic auth sent");
         // The old service is still registered: the handoff is for its successor.
@@ -268,9 +233,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("service.json");
         let server = Arc::new(
-            Server::default()
-                .reply(HANDOFF_URL, Reply::json(500, "{}"))
-                .reply(SHUTDOWN_URL, Reply::json(200, "{}")),
+            Server::default().reply(HANDOFF_URL, Reply::json(500, "{}")).reply(SHUTDOWN_URL, Reply::json(200, "{}")),
         );
         prepare(server.clone(), &file, &info(9), Duration::from_secs(1)).await;
         let urls: Vec<String> = server.requests().into_iter().map(|(url, _)| url).collect();
@@ -290,22 +253,14 @@ mod tests {
         let file = dir.path().join("service.json");
         let write = |text: &str| std::fs::write(sidecar(&file), text).unwrap();
         let handoff = r#"{"directory":"/d","instanceID":"i","ticket":"t","expiresAt":1}"#;
-        write(&format!(
-            r#"{{"source":{{"pid":9,"url":"u"}},"handoff":{handoff},"expiresAt":1}}"#
-        ));
+        write(&format!(r#"{{"source":{{"pid":9,"url":"u"}},"handoff":{handoff},"expiresAt":1}}"#));
         assert_eq!(environment(&file).1, None);
         let later = now_ms() + 60_000.0;
-        write(&format!(
-            r#"{{"source":{{"pid":9,"url":"u"}},"handoff":{handoff},"expiresAt":{later}}}"#
-        ));
+        write(&format!(r#"{{"source":{{"pid":9,"url":"u"}},"handoff":{handoff},"expiresAt":{later}}}"#));
         assert!(environment(&file).1.is_some());
-        write(&format!(
-            r#"{{"source":{{"pid":9,"url":"u","id":3}},"handoff":{handoff},"expiresAt":{later}}}"#
-        ));
+        write(&format!(r#"{{"source":{{"pid":9,"url":"u","id":3}},"handoff":{handoff},"expiresAt":{later}}}"#));
         assert_eq!(environment(&file).1, None);
-        write(&format!(
-            r#"{{"source":{{"pid":9,"url":"u"}},"handoff":{{"ticket":"t"}},"expiresAt":{later}}}"#
-        ));
+        write(&format!(r#"{{"source":{{"pid":9,"url":"u"}},"handoff":{{"ticket":"t"}},"expiresAt":{later}}}"#));
         assert_eq!(environment(&file).1, None);
     }
 }

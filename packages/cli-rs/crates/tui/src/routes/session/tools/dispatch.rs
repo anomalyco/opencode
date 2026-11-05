@@ -8,8 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use opencode_api::generated::{
-    SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState,
-    ToolContent,
+    SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
 };
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
@@ -19,8 +18,7 @@ use serde_json::{Map, Value};
 use unicode_width::UnicodeWidthStr;
 
 use super::{
-    edit, execute, generic, glob, grep, patch, question, read, shell, skill, subagent, todo,
-    webfetch, websearch, write,
+    edit, execute, generic, glob, grep, patch, question, read, shell, skill, subagent, todo, webfetch, websearch, write,
 };
 use crate::dialogs::open::truncate_file_path;
 use crate::routes::session::messages::images::{Images, tool_images};
@@ -62,29 +60,15 @@ impl Tool {
     pub fn new(cx: &Context<'_>) -> Self {
         let body = View::new(cx.app).column().shrink(0.0);
         let images = Images::new(cx, 3);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(&body)
-            .child(images.root());
-        Self {
-            root,
-            body,
-            view: RefCell::default(),
-            images,
-        }
+        let root = View::new(cx.app).column().shrink(0.0).child(&body).child(images.root());
+        Self { root, body, view: RefCell::default(), images }
     }
 
     pub fn root(&self) -> &View {
         &self.root
     }
 
-    pub fn update(
-        &self,
-        cx: &Context<'_>,
-        _message: &SessionMessageAssistant,
-        part: &SessionMessageAssistantTool,
-    ) {
+    pub fn update(&self, cx: &Context<'_>, _message: &SessionMessageAssistant, part: &SessionMessageAssistantTool) {
         let display = display(&part.name);
         let mut view = self.view.borrow_mut();
         if view.as_ref().is_none_or(|(current, _)| *current != display) {
@@ -183,23 +167,14 @@ pub struct Props<'a> {
 impl<'a> Props<'a> {
     fn new(cx: &Context<'_>, part: &'a SessionMessageAssistantTool) -> Self {
         let state = serde_json::to_value(&part.state).unwrap_or_default();
-        let input = state
-            .get("input")
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default();
+        let input = state.get("input").and_then(Value::as_object).cloned().unwrap_or_default();
         let streaming = matches!(part.state, SessionMessageAssistantToolState::Streaming(_));
         let output = (!streaming).then(|| {
             tool_display_content(&part.state)
                 .iter()
                 .filter_map(|content| match content {
                     ToolContent::Text(text) => Some(text.text.clone()),
-                    ToolContent::File(file) => Some(
-                        file.name
-                            .clone()
-                            .flatten()
-                            .unwrap_or_else(|| file.uri.clone()),
-                    ),
+                    ToolContent::File(file) => Some(file.name.clone().flatten().unwrap_or_else(|| file.uri.clone())),
                     ToolContent::Unknown(_) => None,
                 })
                 .collect::<Vec<_>>()
@@ -251,12 +226,7 @@ pub enum Status {
 pub fn format_path(cx: &Context<'_>, input: Option<&str>) -> String {
     let cwd = std::env::current_dir().unwrap_or_default();
     let home = std::env::home_dir();
-    opencode_ui::path::format(
-        input.unwrap_or_default(),
-        cx.directory,
-        &cwd,
-        home.as_deref(),
-    )
+    opencode_ui::path::format(input.unwrap_or_default(), cx.directory, &cwd, home.as_deref())
 }
 
 /// The width tool rows lay out in (`ctx.width`).
@@ -281,9 +251,7 @@ pub fn truthy(value: Option<&Value>) -> bool {
 
 /// `finiteNumber(value)`, when it is not 0 (`finiteNumber(x) || …`).
 pub fn finite(value: Option<&Value>) -> Option<f64> {
-    value
-        .and_then(opencode_ui::tool_info::finite_number)
-        .filter(|number| *number != 0.0)
+    value.and_then(opencode_ui::tool_info::finite_number).filter(|number| *number != 0.0)
 }
 
 /// What an [`InlineTool`] shows.
@@ -327,14 +295,9 @@ impl Inline {
     /// A denied call: rejected, ruled out, or dismissed by the user, drawn struck through.
     fn denied(&self) -> bool {
         self.error.as_deref().is_some_and(|error| {
-            [
-                "QuestionRejectedError",
-                "rejected permission",
-                "specified a rule",
-                "user dismissed",
-            ]
-            .iter()
-            .any(|needle| error.contains(needle))
+            ["QuestionRejectedError", "rejected permission", "specified a rule", "user dismissed"]
+                .iter()
+                .any(|needle| error.contains(needle))
         })
     }
 
@@ -371,13 +334,8 @@ enum Painted {
 
 impl InlineTool {
     pub fn new(cx: &Context<'_>) -> Self {
-        let error = View::new(cx.app)
-            .padding_edge(Edge::Left, ICON_WIDTH)
-            .visible(false);
-        let root = View::new(cx.app)
-            .column()
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0);
+        let error = View::new(cx.app).padding_edge(Edge::Left, ICON_WIDTH).visible(false);
+        let root = View::new(cx.app).column().padding_edge(Edge::Left, 3).shrink(0.0);
         let inner = Rc::new(InlineInner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -393,29 +351,18 @@ impl InlineTool {
         let weak = Rc::downgrade(&inner);
         inner.root.on_hover(move |_, hovered| {
             let Some(inner) = weak.upgrade() else { return };
-            let clickable = inner
-                .state
-                .borrow()
-                .as_ref()
-                .is_some_and(|state| state.clickable || state.failed());
+            let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable || state.failed());
             inner.hover.set(hovered && clickable);
             inner.recolor();
         });
         let weak = Rc::downgrade(&inner);
         inner.root.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
-            if cx
-                .app()
-                .selected_text()
-                .is_some_and(|text| !text.is_empty())
-            {
+            if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
-            let (failed, error_click) = inner
-                .state
-                .borrow()
-                .as_ref()
-                .map_or((false, false), |state| (state.failed(), state.error_click));
+            let (failed, error_click) =
+                inner.state.borrow().as_ref().map_or((false, false), |state| (state.failed(), state.error_click));
             if failed && !error_click {
                 inner.expanded.set(!inner.expanded.get());
                 inner.paint_error();
@@ -446,12 +393,7 @@ impl InlineTool {
         inner.root.clear();
         let fg = inner.fg(&inline);
         let error_color = inner.theme.text.feedback.error.base;
-        let badge = |app: &App| {
-            inline
-                .badge
-                .as_deref()
-                .map(|label| status_badge(app, &inner.theme, label, false))
-        };
+        let badge = |app: &App| inline.badge.as_deref().map(|label| status_badge(app, &inner.theme, label, false));
         // `InlineToolLabel`: the text, then the badge, wrapping under it when the row is full.
         let label = |text: &Text, badge: Text| {
             View::new(&inner.app)
@@ -463,24 +405,12 @@ impl InlineTool {
                 .child(&badge)
         };
         let painted = if inline.spinner || !(inline.complete || inline.failed()) {
-            let text = if inline.spinner {
-                inline.text.clone()
-            } else {
-                inline.pending.clone()
-            };
-            let spinner = Spinner::new(&inner.app)
-                .color(fg)
-                .animations(inner.animations);
+            let text = if inline.spinner { inline.text.clone() } else { inline.pending.clone() };
+            let spinner = Spinner::new(&inner.app).color(fg).animations(inner.animations);
             match badge(&inner.app).filter(|_| inline.spinner) {
                 Some(badge) => {
                     let text = Text::new(&inner.app, text).fg(fg);
-                    inner.root.add(
-                        &View::new(&inner.app)
-                            .row()
-                            .gap(1)
-                            .child(&spinner)
-                            .child(&label(&text, badge)),
-                    );
+                    inner.root.add(&View::new(&inner.app).row().gap(1).child(&spinner).child(&label(&text, badge)));
                     Painted::Labeled(spinner, text)
                 }
                 None => {
@@ -491,13 +421,12 @@ impl InlineTool {
             }
         } else {
             let failed = inline.failed();
-            let icon = Text::new(&inner.app, inline.icon)
-                .width(ICON_WIDTH)
-                .shrink(0.0)
-                .fg(if failed { error_color } else { fg });
-            let text = Text::new(&inner.app, inline.text.clone())
-                .grow(1.0)
-                .fg(if failed { error_color } else { fg });
+            let icon = Text::new(&inner.app, inline.icon).width(ICON_WIDTH).shrink(0.0).fg(if failed {
+                error_color
+            } else {
+                fg
+            });
+            let text = Text::new(&inner.app, inline.text.clone()).grow(1.0).fg(if failed { error_color } else { fg });
             if inline.denied() {
                 icon.strikethrough();
                 text.strikethrough();
@@ -555,15 +484,12 @@ impl InlineInner {
 
     fn paint_error(&self) {
         let state = self.state.borrow();
-        let error = state
-            .as_ref()
-            .filter(|state| state.failed() && self.expanded.get())
-            .and_then(|state| state.error.clone());
+        let error =
+            state.as_ref().filter(|state| state.failed() && self.expanded.get()).and_then(|state| state.error.clone());
         self.error.clear();
         self.error.visible(error.is_some());
         if let Some(error) = error {
-            self.error
-                .add(&Text::new(&self.app, error).fg(self.theme.text.feedback.error.base));
+            self.error.add(&Text::new(&self.app, error).fg(self.theme.text.feedback.error.base));
         }
     }
 }
@@ -618,9 +544,7 @@ impl BlockTool {
         let theme = cx.theme;
         let header = View::new(cx.app).row().gap(1).min_width(0).visible(false);
         let children = View::new(cx.app).column().gap(1).visible(false);
-        let error = Text::new(cx.app, "")
-            .fg(theme.text.feedback.error.base)
-            .visible(false);
+        let error = Text::new(cx.app, "").fg(theme.text.feedback.error.base).visible(false);
         let root = View::new(cx.app)
             .column()
             .shrink(0.0)
@@ -651,35 +575,19 @@ impl BlockTool {
         let weak = Rc::downgrade(&inner);
         inner.root.on_hover(move |_, hovered| {
             let Some(inner) = weak.upgrade() else { return };
-            let clickable = inner
-                .state
-                .borrow()
-                .as_ref()
-                .is_some_and(|state| state.clickable);
+            let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable);
             inner.hover.set(hovered && clickable);
             // `decrease` finds the token by reference, so it takes the theme's own field.
             let raised = &inner.theme.background.raised.base;
-            inner.root.bg(if inner.hover.get() {
-                inner.theme.decrease(raised, 1)
-            } else {
-                *raised
-            });
+            inner.root.bg(if inner.hover.get() { inner.theme.decrease(raised, 1) } else { *raised });
         });
         let weak = Rc::downgrade(&inner);
         inner.root.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
-            if cx
-                .app()
-                .selected_text()
-                .is_some_and(|text| !text.is_empty())
-            {
+            if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
-            let clickable = inner
-                .state
-                .borrow()
-                .as_ref()
-                .is_some_and(|state| state.clickable);
+            let clickable = inner.state.borrow().as_ref().is_some_and(|state| state.clickable);
             let click = inner.click.borrow().clone();
             if let (true, Some(click)) = (clickable, click) {
                 click();
@@ -723,22 +631,11 @@ impl BlockTool {
         if !block.clickable {
             inner.hover.set(false);
         }
-        inner.root.bg(if inner.hover.get() {
-            theme.decrease(raised, 1)
-        } else {
-            *raised
-        });
+        inner.root.bg(if inner.hover.get() { theme.decrease(raised, 1) } else { *raised });
         let colors = inner.colors.get();
-        let spinner_fg = if block.permission {
-            theme.text.feedback.warning.base
-        } else {
-            theme.text.muted
-        };
-        let fg = if block.permission {
-            theme.text.feedback.warning.base
-        } else {
-            colors.header.unwrap_or(theme.text.muted)
-        };
+        let spinner_fg = if block.permission { theme.text.feedback.warning.base } else { theme.text.muted };
+        let fg =
+            if block.permission { theme.text.feedback.warning.base } else { colors.header.unwrap_or(theme.text.muted) };
         let spinner = |label: &str| {
             Spinner::new(&inner.app)
                 .color(spinner_fg)
@@ -753,34 +650,23 @@ impl BlockTool {
                 inner.header.add(&spinner(title));
             }
             Header::Title(title) => {
-                inner
-                    .header
-                    .add(&Text::new(&inner.app, title.clone()).fg(fg));
+                inner.header.add(&Text::new(&inner.app, title.clone()).fg(fg));
             }
             Header::Path { label, value } => {
                 if block.spinner {
                     inner.header.add(&spinner(label).shrink(0.0));
                 } else {
-                    inner
-                        .header
-                        .add(&Text::new(&inner.app, label.clone()).shrink(0.0).fg(fg));
+                    inner.header.add(&Text::new(&inner.app, label.clone()).shrink(0.0).fg(fg));
                 }
-                let max =
-                    (block.width - 4 - label.width() as i64 - if block.spinner { 2 } else { 0 })
-                        .max(2);
+                let max = (block.width - 4 - label.width() as i64 - if block.spinner { 2 } else { 0 }).max(2);
                 inner.header.add(
-                    &Text::new(&inner.app, truncate_file_path(value, max))
-                        .fg(fg)
-                        .wrap(WrapMode::None)
-                        .truncate(true),
+                    &Text::new(&inner.app, truncate_file_path(value, max)).fg(fg).wrap(WrapMode::None).truncate(true),
                 );
             }
         }
         let error = block.error.as_deref().map(strip_ansi).unwrap_or_default();
         inner.error.visible(!error.is_empty());
-        inner
-            .error
-            .fg(colors.error.unwrap_or(theme.text.feedback.error.base));
+        inner.error.fg(colors.error.unwrap_or(theme.text.feedback.error.base));
         inner.error.set_text(error);
         *inner.state.borrow_mut() = Some(block);
     }
@@ -789,13 +675,6 @@ impl BlockTool {
 /// `StatusBadge`: a padded label on a darker background.
 pub fn status_badge(app: &App, theme: &Theme, label: &str, raised: bool) -> Text {
     // `decrease` finds the token by reference, so this borrows the theme's own field.
-    let background = if raised {
-        &theme.background.raised.base
-    } else {
-        &theme.background.base
-    };
-    Text::new(app, format!(" {label} "))
-        .shrink(0.0)
-        .bg(theme.decrease(background, 1))
-        .fg(theme.text.muted)
+    let background = if raised { &theme.background.raised.base } else { &theme.background.base };
+    Text::new(app, format!(" {label} ")).shrink(0.0).bg(theme.decrease(background, 1)).fg(theme.text.muted)
 }

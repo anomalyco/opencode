@@ -39,26 +39,22 @@ impl Server {
 pub fn start(app: &App, addr: SocketAddr, version: String) -> std::io::Result<Server> {
     let listener = TcpListener::bind(addr)?;
     let addr = listener.local_addr()?;
-    let driver = Rc::new(RefCell::new(Driver {
-        parser: Parser::new(app.session()),
-        mouse: keys::MouseState::default(),
-    }));
+    let driver =
+        Rc::new(RefCell::new(Driver { parser: Parser::new(app.session()), mouse: keys::MouseState::default() }));
     app.on_message(move |cx, call: &Call| {
         let answer = driver.borrow_mut().answer(cx.app(), &call.request);
         let _ = call.reply.send(answer);
     });
     let proxy = app.proxy();
-    std::thread::Builder::new()
-        .name("drive-ui".into())
-        .spawn(move || {
-            for stream in listener.incoming().flatten() {
-                let proxy = proxy.clone();
-                let version = version.clone();
-                let _ = std::thread::Builder::new()
-                    .name("drive-ui-socket".into())
-                    .spawn(move || serve(stream, &proxy, &version));
-            }
-        })?;
+    std::thread::Builder::new().name("drive-ui".into()).spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let proxy = proxy.clone();
+            let version = version.clone();
+            let _ = std::thread::Builder::new()
+                .name("drive-ui-socket".into())
+                .spawn(move || serve(stream, &proxy, &version));
+        }
+    })?;
     Ok(Server { addr })
 }
 
@@ -105,12 +101,8 @@ fn respond(input: &str, proxy: &opentui::app::AppProxy, version: &str) -> Option
 
 fn ask(proxy: &opentui::app::AppProxy, request: Request) -> Result<Value, String> {
     let (reply, answer) = mpsc::sync_channel(1);
-    proxy
-        .send(Call { request, reply })
-        .map_err(|error| error.to_string())?;
-    answer
-        .recv()
-        .map_err(|_| opentui::app::ProxyError::Closed.to_string())?
+    proxy.send(Call { request, reply }).map_err(|error| error.to_string())?;
+    answer.recv().map_err(|_| opentui::app::ProxyError::Closed.to_string())?
 }
 
 /// The endpoint's state on the UI thread.
@@ -123,17 +115,11 @@ impl Driver {
     fn answer(&mut self, app: &App, request: &Request) -> Result<Value, String> {
         match request {
             Request::Capture => {
-                return app
-                    .capture()
-                    .map(|frame| capture::frame(&frame))
-                    .map_err(|error| error.to_string());
+                return app.capture().map(|frame| capture::frame(&frame)).map_err(|error| error.to_string());
             }
             Request::Matches { text } => {
                 // As TS, read the current frame without painting one; only before the first frame is there none.
-                let frame = app
-                    .last_frame()
-                    .map_or_else(|| app.capture(), Ok)
-                    .map_err(|error| error.to_string())?;
+                let frame = app.last_frame().map_or_else(|| app.capture(), Ok).map_err(|error| error.to_string())?;
                 return Ok(json!(capture::matches(&frame, text)));
             }
             Request::Type { text } => self.feed(app, text.as_bytes())?,
@@ -151,8 +137,7 @@ impl Driver {
             }
             Request::Resize { cols, rows } => {
                 let size = |value: f64| {
-                    (value.fract() == 0.0 && value >= 1.0 && value <= f64::from(u16::MAX))
-                        .then_some(value as u16)
+                    (value.fract() == 0.0 && value >= 1.0 && value <= f64::from(u16::MAX)).then_some(value as u16)
                 };
                 let (Some(cols), Some(rows)) = (size(*cols), size(*rows)) else {
                     return Err("resize cols and rows must be positive integers".into());
@@ -165,9 +150,7 @@ impl Driver {
         }
         app.capture().map_err(|error| error.to_string())?;
         // As Core's `currentFocusedEditor`: any focused input or textarea, the prompt or a dialog's search.
-        let editor = app
-            .focused()
-            .is_some_and(|widget| widget.element().is_editor());
+        let editor = app.focused().is_some_and(|widget| widget.element().is_editor());
         Ok(json!({ "focused": { "editor": editor }, "elements": [] }))
     }
 
@@ -178,11 +161,7 @@ impl Driver {
         let parsed = self
             .parser
             .feed(bytes, app.now(), &mut inputs)
-            .and_then(|()| {
-                self.parser
-                    .deadline()
-                    .map_or(Ok(()), |deadline| self.parser.expire(deadline, &mut inputs))
-            });
+            .and_then(|()| self.parser.deadline().map_or(Ok(()), |deadline| self.parser.expire(deadline, &mut inputs)));
         parsed.map_err(|error| error.to_string())?;
         for input in inputs {
             if let Input::Event(event) = input {
@@ -202,16 +181,8 @@ mod tests {
     /// A client on another thread sends each request and collects the responses; the app records the events it got.
     #[test]
     fn requests_drive_a_headless_app() {
-        let options = AppOptions {
-            exit_on_ctrl_c: false,
-            ..AppOptions::default()
-        };
-        let app = App::headless(HeadlessOptions {
-            width: 30,
-            height: 4,
-            app: options,
-        })
-        .unwrap();
+        let options = AppOptions { exit_on_ctrl_c: false, ..AppOptions::default() };
+        let app = App::headless(HeadlessOptions { width: 30, height: 4, app: options }).unwrap();
         let input = opentui::widget::Input::new(&app);
         let submitted = Text::new(&app, "");
         app.root().add(&input).add(&submitted);
@@ -223,19 +194,11 @@ mod tests {
         let events = Rc::new(RefCell::new(Vec::new()));
         app.on_key_capture({
             let events = events.clone();
-            move |_cx, key| {
-                events
-                    .borrow_mut()
-                    .push(format!("{:?} {:?}", key.code, key.modifiers))
-            }
+            move |_cx, key| events.borrow_mut().push(format!("{:?} {:?}", key.code, key.modifiers))
         });
         app.on_mouse({
             let events = events.clone();
-            move |_cx, mouse| {
-                events
-                    .borrow_mut()
-                    .push(format!("{:?} {} {}", mouse.kind, mouse.x, mouse.y))
-            }
+            move |_cx, mouse| events.borrow_mut().push(format!("{:?} {} {}", mouse.kind, mouse.x, mouse.y))
         });
         let server = start(&app, SocketAddr::from(([127, 0, 0, 1], 0)), "1.2.3".into()).unwrap();
 
@@ -279,53 +242,26 @@ mod tests {
         app.clone().run().unwrap();
         let responses = client.join().unwrap();
         let result = |id: u64| {
-            let response = responses
-                .iter()
-                .find(|response| response["id"] == id)
-                .unwrap_or_else(|| panic!("no {id}"));
-            response
-                .get("result")
-                .cloned()
-                .ok_or_else(|| response["error"]["message"].as_str().unwrap().to_owned())
+            let response = responses.iter().find(|response| response["id"] == id).unwrap_or_else(|| panic!("no {id}"));
+            response.get("result").cloned().ok_or_else(|| response["error"]["message"].as_str().unwrap().to_owned())
         };
 
         assert_eq!(result(1).unwrap()["server"]["version"], "1.2.3");
-        assert_eq!(
-            result(2).unwrap(),
-            json!({ "focused": { "editor": true }, "elements": [] })
-        );
+        assert_eq!(result(2).unwrap(), json!({ "focused": { "editor": true }, "elements": [] }));
         assert_eq!(result(7), Ok(json!(true)));
         assert_eq!(result(9), Ok(json!(true)));
         // The input under the pointer takes the wheel step, so no app mouse handler sees it.
         assert_eq!(result(13).unwrap()["elements"], json!([]));
-        assert_eq!(
-            result(14),
-            Err("mouse position must be within the terminal viewport".into())
-        );
-        assert_eq!(
-            result(15),
-            Err("resize cols and rows must be positive integers".into())
-        );
+        assert_eq!(result(14), Err("mouse position must be within the terminal viewport".into()));
+        assert_eq!(result(15), Err("resize cols and rows must be positive integers".into()));
         let frame = result(17).unwrap();
-        assert_eq!(
-            (frame["cols"].clone(), frame["rows"].clone()),
-            (json!(20), json!(3))
-        );
+        assert_eq!((frame["cols"].clone(), frame["rows"].clone()), (json!(20), json!(3)));
         let row = |y: usize| -> String {
-            frame["lines"][y]["spans"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|span| span["text"].as_str().unwrap())
-                .collect()
+            frame["lines"][y]["spans"].as_array().unwrap().iter().map(|span| span["text"].as_str().unwrap()).collect()
         };
         assert_eq!(row(0).trim_end(), "Ada");
         assert_eq!(row(1).trim_end(), "submitted Ada");
-        assert!(
-            result(18)
-                .unwrap_err()
-                .starts_with("ui.state is not supported")
-        );
+        assert!(result(18).unwrap_err().starts_with("ui.state is not supported"));
         let invalid = responses.last().unwrap();
         assert_eq!(invalid["id"], Value::Null);
         assert_eq!(responses.len(), 19);

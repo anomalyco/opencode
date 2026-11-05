@@ -25,42 +25,23 @@ pub enum Change {
 impl Selection {
     pub fn apply(&self, change: &Change) -> Self {
         match change {
-            Change::Model(model) => Self {
-                model: Some(model.clone()),
-                ..self.clone()
-            },
-            Change::Mode(mode) => Self {
-                mode_id: Some(mode.clone()),
-                ..self.clone()
-            },
+            Change::Model(model) => Self { model: Some(model.clone()), ..self.clone() },
+            Change::Mode(mode) => Self { mode_id: Some(mode.clone()), ..self.clone() },
         }
     }
 }
 
 pub fn current_model(catalog: &Catalog, selection: &Selection) -> ModelRef {
-    selection
-        .model
-        .clone()
-        .unwrap_or_else(|| catalog.default_model.clone())
+    selection.model.clone().unwrap_or_else(|| catalog.default_model.clone())
 }
 
 pub fn config_options(catalog: &Catalog, selection: &Selection) -> Vec<Value> {
     let model = current_model(catalog, selection);
     let variants: Vec<String> = find_model(&catalog.models, &model)
-        .map(|item| {
-            item.variants
-                .iter()
-                .map(|variant| variant.id.clone())
-                .collect()
-        })
+        .map(|item| item.variants.iter().map(|variant| variant.id.clone()).collect())
         .unwrap_or_default();
     let mut models: Vec<&ModelInfo> = catalog.models.iter().collect();
-    models.sort_by(|a, b| {
-        a.provider_id
-            .0
-            .cmp(&b.provider_id.0)
-            .then_with(|| locale_compare(&a.name, &b.name))
-    });
+    models.sort_by(|a, b| a.provider_id.0.cmp(&b.provider_id.0).then_with(|| locale_compare(&a.name, &b.name)));
     let mut options = vec![json!({
         "id": "model",
         "name": "Model",
@@ -129,9 +110,7 @@ pub fn available_commands(catalog: &Catalog) -> Vec<Value> {
             })
         })
         .chain(
-            BUILTIN_COMMANDS
-                .iter()
-                .map(|(name, description, _)| json!({ "name": name, "description": description })),
+            BUILTIN_COMMANDS.iter().map(|(name, description, _)| json!({ "name": name, "description": description })),
         )
         .collect()
 }
@@ -151,26 +130,17 @@ pub fn resolve_change(
                 value == DEFAULT_VARIANT || model.variants.iter().any(|variant| variant.id == value)
             });
             if !known {
-                return Err(Failure::InvalidEffort {
-                    effort: value.to_owned(),
-                });
+                return Err(Failure::InvalidEffort { effort: value.to_owned() });
             }
-            Ok(Change::Model(ModelRef {
-                variant: Some(value.to_owned()),
-                ..current
-            }))
+            Ok(Change::Model(ModelRef { variant: Some(value.to_owned()), ..current }))
         }
         "mode" => catalog
             .modes
             .iter()
             .find(|mode| mode.id == value)
             .map(|mode| Change::Mode(mode.id.clone()))
-            .ok_or_else(|| Failure::InvalidMode {
-                mode: value.to_owned(),
-            }),
-        _ => Err(Failure::InvalidConfigOption {
-            config_id: config_id.to_owned(),
-        }),
+            .ok_or_else(|| Failure::InvalidMode { mode: value.to_owned() }),
+        _ => Err(Failure::InvalidConfigOption { config_id: config_id.to_owned() }),
     }
 }
 
@@ -180,23 +150,15 @@ pub fn parse_model_selection(value: &str, models: &[ModelInfo]) -> ModelRef {
         provider_id: model.provider_id.clone(),
         variant,
     };
-    if let Some(exact) = models
-        .iter()
-        .find(|model| advertised(&model.provider_id.0, &model.id) == value)
-    {
+    if let Some(exact) = models.iter().find(|model| advertised(&model.provider_id.0, &model.id) == value) {
         return reference(exact, None);
     }
     let separator = value.rfind('/');
     let variant = separator.map_or(value, |index| &value[index + 1..]);
     let base_value = separator.map_or("", |index| &value[..index]);
     // JS `slice(0, -1)` when there is no slash.
-    let base_value = if separator.is_none() {
-        value
-            .get(..value.len().saturating_sub(1))
-            .unwrap_or_default()
-    } else {
-        base_value
-    };
+    let base_value =
+        if separator.is_none() { value.get(..value.len().saturating_sub(1)).unwrap_or_default() } else { base_value };
     if let Some(base) = models.iter().find(|model| {
         advertised(&model.provider_id.0, &model.id) == base_value
             && model.variants.iter().any(|item| item.id == variant)
@@ -204,11 +166,7 @@ pub fn parse_model_selection(value: &str, models: &[ModelInfo]) -> ModelRef {
         return reference(base, Some(variant.to_owned()));
     }
     match value.find('/') {
-        None => ModelRef {
-            id: String::new(),
-            provider_id: ProviderID(value.to_owned()),
-            variant: None,
-        },
+        None => ModelRef { id: String::new(), provider_id: ProviderID(value.to_owned()), variant: None },
         Some(index) => ModelRef {
             id: value[index + 1..].to_owned(),
             provider_id: ProviderID(value[..index].to_owned()),
@@ -220,34 +178,23 @@ pub fn parse_model_selection(value: &str, models: &[ModelInfo]) -> ModelRef {
 fn require_model(catalog: &Catalog, value: &str, current: &ModelRef) -> Result<ModelRef, Failure> {
     let selected = parse_model_selection(value, &catalog.models);
     let Some(model) = find_model(&catalog.models, &selected) else {
-        return Err(Failure::InvalidModel {
-            model_id: value.to_owned(),
-            provider_id: Some(selected.provider_id.0),
-        });
+        return Err(Failure::InvalidModel { model_id: value.to_owned(), provider_id: Some(selected.provider_id.0) });
     };
-    let selected_variant = model
-        .variants
-        .iter()
-        .find(|variant| Some(&variant.id) == selected.variant.as_ref());
+    let selected_variant = model.variants.iter().find(|variant| Some(&variant.id) == selected.variant.as_ref());
     if let Some(variant) = &selected.variant
         && selected_variant.is_none()
     {
-        return Err(Failure::InvalidEffort {
-            effort: variant.clone(),
-        });
+        return Err(Failure::InvalidEffort { effort: variant.clone() });
     }
     let same = current.provider_id == model.provider_id && current.id == model.id;
-    let keeps = current.variant.as_deref().is_some_and(|variant| {
-        variant == DEFAULT_VARIANT || model.variants.iter().any(|item| item.id == variant)
-    });
+    let keeps = current
+        .variant
+        .as_deref()
+        .is_some_and(|variant| variant == DEFAULT_VARIANT || model.variants.iter().any(|item| item.id == variant));
     let variant = selected_variant
         .map(|variant| variant.id.clone())
         .or_else(|| (same && keeps).then(|| current.variant.clone()).flatten());
-    Ok(ModelRef {
-        id: model.id.clone(),
-        provider_id: model.provider_id.clone(),
-        variant,
-    })
+    Ok(ModelRef { id: model.id.clone(), provider_id: model.provider_id.clone(), variant })
 }
 
 fn advertised(provider_id: &str, id: &str) -> String {
@@ -255,9 +202,7 @@ fn advertised(provider_id: &str, id: &str) -> String {
 }
 
 fn select_variant(variant: Option<&str>, variants: &[String]) -> String {
-    let Some(variant) =
-        variant.filter(|variant| !variant.is_empty() && *variant != DEFAULT_VARIANT)
-    else {
+    let Some(variant) = variant.filter(|variant| !variant.is_empty() && *variant != DEFAULT_VARIANT) else {
         return DEFAULT_VARIANT.to_owned();
     };
     if variants.iter().any(|item| item == variant) {
@@ -266,10 +211,7 @@ fn select_variant(variant: Option<&str>, variants: &[String]) -> String {
     if variants.iter().any(|item| item == DEFAULT_VARIANT) {
         return DEFAULT_VARIANT.to_owned();
     }
-    variants
-        .first()
-        .cloned()
-        .unwrap_or_else(|| DEFAULT_VARIANT.to_owned())
+    variants.first().cloned().unwrap_or_else(|| DEFAULT_VARIANT.to_owned())
 }
 
 fn title_case(value: &str) -> String {
@@ -288,7 +230,5 @@ fn title_case(value: &str) -> String {
 
 /// An approximation of `localeCompare`: case-insensitive first, then by code point.
 fn locale_compare(a: &str, b: &str) -> Ordering {
-    a.to_lowercase()
-        .cmp(&b.to_lowercase())
-        .then_with(|| a.cmp(b))
+    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| a.cmp(b))
 }

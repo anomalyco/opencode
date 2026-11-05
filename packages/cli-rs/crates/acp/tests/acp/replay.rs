@@ -2,9 +2,7 @@
 
 use serde_json::{Value, json};
 
-use crate::wire::{
-    WireOptions, assert_matches, assistant_message, file_diff, make_session, start_wire,
-};
+use crate::wire::{WireOptions, assert_matches, assistant_message, file_diff, make_session, start_wire};
 
 fn messages(edited: &str) -> Vec<Value> {
     vec![
@@ -67,22 +65,14 @@ async fn replays_user_text_reasoning_and_tool_messages_in_order_on_session_load(
     let acp = start_wire(WireOptions::default()).await;
     {
         let mut state = acp.server.state();
-        state.sessions.insert(
-            "ses_replay".to_owned(),
-            make_session("ses_replay", "/workspace"),
-        );
-        state
-            .messages
-            .insert("ses_replay".to_owned(), messages(&edited));
+        state.sessions.insert("ses_replay".to_owned(), make_session("ses_replay", "/workspace"));
+        state.messages.insert("ses_replay".to_owned(), messages(&edited));
     }
     acp.initialize(json!({})).await;
 
-    acp.request(
-        "session/load",
-        json!({ "cwd": "/workspace", "sessionId": "ses_replay", "mcpServers": [] }),
-    )
-    .await
-    .unwrap();
+    acp.request("session/load", json!({ "cwd": "/workspace", "sessionId": "ses_replay", "mcpServers": [] }))
+        .await
+        .unwrap();
 
     let updates: Vec<Value> = acp
         .updates()
@@ -90,10 +80,7 @@ async fn replays_user_text_reasoning_and_tool_messages_in_order_on_session_load(
         .filter(|item| item["update"]["sessionUpdate"] != "available_commands_update")
         .collect();
     assert!(updates.iter().all(|item| item["sessionId"] == "ses_replay"));
-    let kinds: Vec<&str> = updates
-        .iter()
-        .map(|item| item["update"]["sessionUpdate"].as_str().unwrap())
-        .collect();
+    let kinds: Vec<&str> = updates.iter().map(|item| item["update"]["sessionUpdate"].as_str().unwrap()).collect();
     assert_eq!(
         kinds,
         [
@@ -122,10 +109,7 @@ async fn replays_user_text_reasoning_and_tool_messages_in_order_on_session_load(
         update(2),
         &json!({ "content": { "type": "resource", "resource": { "mimeType": "text/plain", "text": "hello" } } }),
     );
-    assert_matches(
-        update(4),
-        &json!({ "messageId": "msg_assistant:reasoning:0" }),
-    );
+    assert_matches(update(4), &json!({ "messageId": "msg_assistant:reasoning:0" }));
     assert_matches(
         update(6),
         &json!({
@@ -152,10 +136,7 @@ async fn replays_user_text_reasoning_and_tool_messages_in_order_on_session_load(
         }),
     );
     assert_matches(update(5), &json!({ "name": "shell" }));
-    assert_matches(
-        update(11),
-        &json!({ "toolCallId": "call_streaming", "status": "pending", "rawInput": {} }),
-    );
+    assert_matches(update(11), &json!({ "toolCallId": "call_streaming", "status": "pending", "rawInput": {} }));
     assert_matches(
         update(13),
         &json!({

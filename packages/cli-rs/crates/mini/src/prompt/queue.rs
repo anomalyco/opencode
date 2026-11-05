@@ -61,26 +61,17 @@ impl Queue {
         if !prompt.shell && is_exit(&prompt.text) {
             return Submitted::Exit;
         }
-        let local = |prompt: &RunPrompt| {
-            !prompt.shell && (is_new(&prompt.text) || is_compact(&prompt.text))
-        };
+        let local = |prompt: &RunPrompt| !prompt.shell && (is_new(&prompt.text) || is_compact(&prompt.text));
         let ordinary_active = matches!(&self.active, Some(Some(active)) if !active.shell);
         if ordinary_active
             && !prompt.shell
-            && prompt
-                .command
-                .as_ref()
-                .and_then(|command| command.source.as_deref())
-                != Some("skill")
+            && prompt.command.as_ref().and_then(|command| command.source.as_deref()) != Some("skill")
             && !local(&prompt)
             && !self.queue.iter().any(local)
         {
             self.admissions += 1;
             let delivery = prompt.delivery.unwrap_or(Delivery::Queue);
-            let sent = RunPrompt {
-                message_id: Some(opencode_api::id::message()),
-                ..prompt
-            };
+            let sent = RunPrompt { message_id: Some(opencode_api::id::message()), ..prompt };
             return Submitted::Admit(sent, delivery);
         }
         let first = !local(&prompt);
@@ -105,13 +96,7 @@ impl Queue {
         let sent = if prompt.shell {
             prompt
         } else {
-            RunPrompt {
-                message_id: prompt
-                    .message_id
-                    .clone()
-                    .or_else(|| Some(opencode_api::id::message())),
-                ..prompt
-            }
+            RunPrompt { message_id: prompt.message_id.clone().or_else(|| Some(opencode_api::id::message())), ..prompt }
         };
         self.admissions = 0;
         self.active = Some(Some(sent.clone()));
@@ -144,24 +129,14 @@ mod tests {
         assert_eq!(queue.submit(text("  ")), Submitted::Ignored);
         assert_eq!(queue.submit(text("/exit")), Submitted::Exit);
         assert_eq!(queue.submit(text("one")), Submitted::Queued { first: true });
-        let Some(Work::Run(run)) = queue.pump() else {
-            panic!("a turn")
-        };
+        let Some(Work::Run(run)) = queue.pump() else { panic!("a turn") };
         assert!(run.message_id.is_some());
         assert_eq!(queue.pump(), None);
         // Enter steers; `prompt.queue` queues; a prompt without a delivery queues.
-        let steer = RunPrompt {
-            delivery: Some(Delivery::Steer),
-            ..text("two")
-        };
-        let Submitted::Admit(sent, Delivery::Steer) = queue.submit(steer) else {
-            panic!("admitted")
-        };
+        let steer = RunPrompt { delivery: Some(Delivery::Steer), ..text("two") };
+        let Submitted::Admit(sent, Delivery::Steer) = queue.submit(steer) else { panic!("admitted") };
         assert!(sent.message_id.is_some());
-        assert!(matches!(
-            queue.submit(text("three")),
-            Submitted::Admit(_, Delivery::Queue)
-        ));
+        assert!(matches!(queue.submit(text("three")), Submitted::Admit(_, Delivery::Queue)));
         assert!(queue.take_admissions());
         assert!(!queue.take_admissions());
         assert!(!queue.done());
@@ -170,32 +145,17 @@ mod tests {
     #[test]
     fn shells_and_local_operations_wait_their_turn() {
         let mut queue = Queue::default();
-        let shell = RunPrompt {
-            shell: true,
-            ..text("ls")
-        };
-        assert_eq!(
-            queue.submit(shell.clone()),
-            Submitted::Queued { first: true }
-        );
+        let shell = RunPrompt { shell: true, ..text("ls") };
+        assert_eq!(queue.submit(shell.clone()), Submitted::Queued { first: true });
         assert_eq!(queue.pump(), Some(Work::Run(shell)));
         assert!(queue.shell_running());
         // A prompt behind a shell waits here.
-        assert_eq!(
-            queue.submit(text("after")),
-            Submitted::Queued { first: true }
-        );
+        assert_eq!(queue.submit(text("after")), Submitted::Queued { first: true });
         assert!(queue.done());
         assert!(matches!(queue.pump(), Some(Work::Run(_))));
-        assert_eq!(
-            queue.submit(text("/compact")),
-            Submitted::Queued { first: false }
-        );
+        assert_eq!(queue.submit(text("/compact")), Submitted::Queued { first: false });
         // While `/compact` waits, an ordinary prompt waits behind it too.
-        assert_eq!(
-            queue.submit(text("later")),
-            Submitted::Queued { first: true }
-        );
+        assert_eq!(queue.submit(text("later")), Submitted::Queued { first: true });
         assert!(queue.done());
         assert_eq!(queue.pump(), Some(Work::Compact));
         assert!(queue.done());

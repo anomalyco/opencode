@@ -13,16 +13,14 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginState,
-    PluginUpdateInput, V2Event,
+    LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginState, PluginUpdateInput,
+    V2Event,
 };
 use opencode_plugin::{Definition, Setup, Source, Status};
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
-use opencode_ui::select::{
-    ActionRun, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, select,
-};
+use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, select};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 
@@ -47,11 +45,7 @@ pub fn plugin() -> Definition<Tui> {
                 .title("Plugins")
                 .group("System")
                 .palette()
-                .slash(Slash {
-                    name: "plugins".to_owned(),
-                    aliases: Vec::new(),
-                    arguments: false,
-                }),
+                .slash(Slash { name: "plugins".to_owned(), aliases: Vec::new(), arguments: false }),
             ],
             ..KeymapLayer::default()
         });
@@ -62,9 +56,7 @@ pub fn plugin() -> Definition<Tui> {
 pub fn show(tui: &Tui) {
     let manager = Rc::new(Manager {
         tui: tui.weak(),
-        directory: tui
-            .data
-            .read(|state| state.default_location().directory.clone()),
+        directory: tui.data.read(|state| state.default_location().directory.clone()),
         server: RefCell::new(None),
         locked: Cell::new(false),
         checking: Cell::new(false),
@@ -115,9 +107,7 @@ struct Manager {
 
 impl Manager {
     fn location(&self) -> Option<LocationQueryInput> {
-        Some(LocationQueryInput {
-            directory: Some(self.directory.clone()),
-        })
+        Some(LocationQueryInput { directory: Some(self.directory.clone()) })
     }
 
     /// Builds the list, focused on `focus` when given (back from an error).
@@ -154,8 +144,7 @@ impl Manager {
                         };
                         let focused = manager.focused();
                         let mut hints = Vec::new();
-                        if focused.as_ref().and_then(error).is_some()
-                            && manager.toggleable(focused.as_ref()).is_none()
+                        if focused.as_ref().and_then(error).is_some() && manager.toggleable(focused.as_ref()).is_none()
                         {
                             hints.push(FooterHint {
                                 title: "view error".to_owned(),
@@ -163,11 +152,7 @@ impl Manager {
                                 group: Some(Group::Primary),
                             });
                         }
-                        let internal = if manager.show_internal.get() {
-                            "hide"
-                        } else {
-                            "show"
-                        };
+                        let internal = if manager.show_internal.get() { "hide" } else { "show" };
                         hints.push(FooterHint {
                             title: format!("{internal} internal"),
                             label: "ctrl+a".to_owned(),
@@ -199,16 +184,11 @@ impl Manager {
                 handle.refresh_footer();
                 manager.open.set(true);
                 let closed = manager.clone();
-                cx.on_close(opentui::keymap::Disposer::new(move || {
-                    closed.open.set(false)
-                }));
+                cx.on_close(opentui::keymap::Disposer::new(move || closed.open.set(false)));
                 view
             },
             None,
-            DialogOptions {
-                size: DialogSize::Large,
-                ..DialogOptions::default()
-            },
+            DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
         );
     }
 
@@ -238,20 +218,10 @@ impl Manager {
                     let weak = weak.clone();
                     move |_| {
                         let checking = weak.upgrade().is_some_and(|manager| manager.checking.get());
-                        if checking {
-                            "checking for updates"
-                        } else {
-                            "check for updates"
-                        }
-                        .to_owned()
+                        if checking { "checking for updates" } else { "check for updates" }.to_owned()
                     }
                 }),
-                hidden_when: Some(hidden(|manager, _| {
-                    !manager
-                        .entries()
-                        .iter()
-                        .any(|entry| package(entry).is_some())
-                })),
+                hidden_when: Some(hidden(|manager, _| !manager.entries().iter().any(|entry| package(entry).is_some()))),
                 disabled: Some(Rc::new({
                     let weak = weak.clone();
                     move |_| weak.upgrade().is_some_and(|manager| manager.checking.get())
@@ -267,9 +237,7 @@ impl Manager {
                 ..SelectAction::new("dialog.plugins.check", "check for updates", |_| {})
             },
             SelectAction {
-                hidden_when: Some(hidden(|manager, entry| {
-                    manager.toggleable(entry).and_then(error).is_none()
-                })),
+                hidden_when: Some(hidden(|manager, entry| manager.toggleable(entry).and_then(error).is_none())),
                 ..SelectAction::new(
                     "dialog.plugins.error",
                     "view error",
@@ -297,20 +265,12 @@ impl Manager {
                 }),
                 group: Some(Group::Primary),
                 hidden_when: Some(hidden(|manager, entry| manager.toggleable(entry).is_none())),
-                ..SelectAction::new(
-                    "plugins.toggle",
-                    "toggle",
-                    with(|manager, entry| manager.toggle(entry.as_ref())),
-                )
+                ..SelectAction::new("plugins.toggle", "toggle", with(|manager, entry| manager.toggle(entry.as_ref())))
             },
             SelectAction {
                 group: Some(Group::Primary),
                 hidden_when: Some(hidden(|manager, entry| !manager.updatable(entry))),
-                ..SelectAction::new(
-                    "dialog.plugins.update",
-                    "update",
-                    with(|manager, entry| manager.update(entry)),
-                )
+                ..SelectAction::new("dialog.plugins.update", "update", with(|manager, entry| manager.update(entry)))
             },
         ]
     }
@@ -350,10 +310,7 @@ impl Manager {
             .borrow()
             .iter()
             .flatten()
-            .filter(|plugin| {
-                plugin.features.server == Some(true)
-                    || matches!(plugin.state, PluginState::Failed(_))
-            })
+            .filter(|plugin| plugin.features.server == Some(true) || matches!(plugin.state, PluginState::Failed(_)))
             .map(|plugin| {
                 let source = source(plugin, &self.directory);
                 Entry::Server {
@@ -373,16 +330,12 @@ impl Manager {
     fn visible(&self) -> Vec<Entry> {
         self.entries()
             .into_iter()
-            .filter(|entry| {
-                self.show_internal.get() || !internal(entry) || status(entry) == "failed"
-            })
+            .filter(|entry| self.show_internal.get() || !internal(entry) || status(entry) == "failed")
             .collect()
     }
 
     fn entry(&self, key: &str) -> Option<Entry> {
-        self.entries()
-            .into_iter()
-            .find(|entry| self.key(entry) == key)
+        self.entries().into_iter().find(|entry| self.key(entry) == key)
     }
 
     fn key(&self, entry: &Entry) -> String {
@@ -418,21 +371,16 @@ impl Manager {
         self.visible()
             .into_iter()
             .map(|entry| {
-                let mut option =
-                    SelectOption::new(label(&entry), self.key(&entry)).category(match entry {
-                        Entry::Tui { .. } => "TUI",
-                        Entry::Server { .. } => "Server",
-                    });
+                let mut option = SelectOption::new(label(&entry), self.key(&entry)).category(match entry {
+                    Entry::Tui { .. } => "TUI",
+                    Entry::Server { .. } => "Server",
+                });
                 option.search_text = Some(match &entry {
                     Entry::Tui { target, .. } => target.clone(),
                     Entry::Server { source, .. } => source.clone(),
                 });
                 let updating = self.updating(&entry);
-                option.footer = if updating {
-                    Some("updating".to_owned())
-                } else {
-                    footer(&entry)
-                };
+                option.footer = if updating { Some("updating".to_owned()) } else { footer(&entry) };
                 let failed = status(&entry) == "failed";
                 option.footer_color = Some(if failed {
                     theme.text.feedback.error.base
@@ -443,13 +391,10 @@ impl Manager {
                 });
                 let error_color = theme.text.feedback.error.base;
                 if updating {
-                    option.gutter = Some(Rc::new(|app: &App, color: Color| {
-                        Spinner::new(app).color(color).as_any()
-                    }));
+                    option.gutter = Some(Rc::new(|app: &App, color: Color| Spinner::new(app).color(color).as_any()));
                 } else if failed {
-                    option.gutter = Some(Rc::new(move |app: &App, _: Color| {
-                        Text::new(app, "x").fg(error_color).as_any()
-                    }));
+                    option.gutter =
+                        Some(Rc::new(move |app: &App, _: Color| Text::new(app, "x").fg(error_color).as_any()));
                 }
                 option
             })
@@ -475,25 +420,20 @@ impl Manager {
             return;
         };
         let client = tui.data.client().clone();
-        let input = PluginListInput {
-            location: self.location(),
-        };
+        let input = PluginListInput { location: self.location() };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { client.plugin_list(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(manager) = weak.upgrade() else {
-                    return;
-                };
-                match result {
-                    Ok(output) => {
-                        *manager.server.borrow_mut() = Some(output.data);
-                        manager.refresh();
-                    }
-                    Err(error) => log::warn!("plugin list: {error}"),
+        tui.app.spawn(async move { client.plugin_list(&input, &RequestOptions::default()).await }, move |_, result| {
+            let Some(manager) = weak.upgrade() else {
+                return;
+            };
+            match result {
+                Ok(output) => {
+                    *manager.server.borrow_mut() = Some(output.data);
+                    manager.refresh();
                 }
-            },
-        );
+                Err(error) => log::warn!("plugin list: {error}"),
+            }
+        });
     }
 
     /// Reads the server plugins again on `plugin.updated` while the dialog is open.
@@ -567,25 +507,15 @@ impl Manager {
         self.pending.borrow_mut().push(key.clone());
         self.refresh();
         let client = tui.data.client().clone();
-        let input = PluginUpdateInput {
-            location: self.location(),
-            targets: vec![target],
-        };
+        let input = PluginUpdateInput { location: self.location(), targets: vec![target] };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
-            async move {
-                client
-                    .plugin_update(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.plugin_update(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(manager) = weak.upgrade() else {
                     return;
                 };
-                manager
-                    .pending
-                    .borrow_mut()
-                    .retain(|pending| *pending != key);
+                manager.pending.borrow_mut().retain(|pending| *pending != key);
                 match result {
                     Ok(()) => manager.refetch(),
                     Err(error) => {
@@ -609,17 +539,10 @@ impl Manager {
         };
         self.refresh();
         let client = tui.data.client().clone();
-        let input = PluginCheckInput {
-            location: self.location(),
-            ..PluginCheckInput::default()
-        };
+        let input = PluginCheckInput { location: self.location(), ..PluginCheckInput::default() };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
-            async move {
-                client
-                    .plugin_check(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.plugin_check(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(manager) = weak.upgrade() else {
                     return;
@@ -649,25 +572,14 @@ impl Manager {
         };
         let source = plugin_source(&entry);
         let props = error_details::Props {
-            title: format!(
-                "{} plugin error",
-                if runtime == "tui" { "TUI" } else { "Server" }
-            ),
+            title: format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
             source: Some(source.clone()),
             error: error(&entry).unwrap_or_else(|| "Unknown plugin error".to_owned()),
-            context: Some(format!(
-                "Plugin: {}\nStatus: failed\nRuntime: {runtime}\nSource: {source}",
-                label(&entry)
-            )),
+            context: Some(format!("Plugin: {}\nStatus: failed\nRuntime: {runtime}\nSource: {source}", label(&entry))),
             diagnostic_ref: match &entry {
-                Entry::Server {
-                    plugin:
-                        PluginInfo {
-                            state: PluginState::Failed(failed),
-                            ..
-                        },
-                    ..
-                } => failed.r#ref.clone(),
+                Entry::Server { plugin: PluginInfo { state: PluginState::Failed(failed), .. }, .. } => {
+                    failed.r#ref.clone()
+                }
                 _ => None,
             },
             // The error view owns the manager while it is open.
@@ -689,10 +601,7 @@ impl Manager {
             tui.dialogs.replace(
                 |cx| error_details::view(&tui, cx, props),
                 None,
-                DialogOptions {
-                    size: DialogSize::Large,
-                    ..DialogOptions::default()
-                },
+                DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
             );
         });
     }
@@ -701,10 +610,7 @@ impl Manager {
 fn label(entry: &Entry) -> String {
     match entry {
         Entry::Tui { id, target, .. } => id.clone().unwrap_or_else(|| target.clone()),
-        Entry::Server { plugin, source, .. } => plugin
-            .id
-            .as_ref()
-            .map_or_else(|| source.clone(), |id| id.0.clone()),
+        Entry::Server { plugin, source, .. } => plugin.id.as_ref().map_or_else(|| source.clone(), |id| id.0.clone()),
     }
 }
 
@@ -756,14 +662,7 @@ fn status(entry: &Entry) -> &str {
 
 fn package(entry: &Entry) -> Option<&opencode_api::generated::PluginSourcePackage> {
     match entry {
-        Entry::Server {
-            plugin:
-                PluginInfo {
-                    source: PluginSource::Package(package),
-                    ..
-                },
-            ..
-        } => Some(package),
+        Entry::Server { plugin: PluginInfo { source: PluginSource::Package(package), .. }, .. } => Some(package),
         _ => None,
     }
 }
@@ -792,11 +691,7 @@ fn footer(entry: &Entry) -> Option<String> {
 /// A commit hash shows as its first 7 characters.
 fn display_version(version: &str) -> String {
     let hash = matches!(version.len(), 40 | 64) && version.chars().all(|c| c.is_ascii_hexdigit());
-    if hash {
-        version[..7].to_owned()
-    } else {
-        version.to_owned()
-    }
+    if hash { version[..7].to_owned() } else { version.to_owned() }
 }
 
 fn error(entry: &Entry) -> Option<String> {
@@ -811,9 +706,7 @@ fn error(entry: &Entry) -> Option<String> {
 
 /// `localeCompare` for plugin labels: by letters ignoring case, lowercase first on a tie.
 fn locale_compare(a: &str, b: &str) -> Ordering {
-    a.to_lowercase()
-        .cmp(&b.to_lowercase())
-        .then_with(|| b.cmp(a))
+    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| b.cmp(a))
 }
 
 #[cfg(test)]

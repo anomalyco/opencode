@@ -10,17 +10,8 @@ pub(crate) const STATES: [&str; 5] = ["disabled", "pressed", "focused", "selecte
 pub(crate) const VARIANTS: [&str; 3] = ["primary", "secondary", "destructive"];
 pub(crate) const STEPS: [u16; 9] = [100, 200, 300, 400, 500, 600, 700, 800, 900];
 const FEEDBACK: [&str; 4] = ["error", "warning", "success", "info"];
-const SYNTAX: [&str; 9] = [
-    "comment",
-    "keyword",
-    "function",
-    "variable",
-    "string",
-    "number",
-    "type",
-    "operator",
-    "punctuation",
-];
+const SYNTAX: [&str; 9] =
+    ["comment", "keyword", "function", "variable", "string", "number", "type", "operator", "punctuation"];
 const MARKDOWN: [&str; 14] = [
     "text",
     "heading",
@@ -40,33 +31,18 @@ const MARKDOWN: [&str; 14] = [
 
 /// The modes a document defines, light first.
 pub(crate) fn modes(document: &Value) -> Vec<ThemeMode> {
-    [ThemeMode::Light, ThemeMode::Dark]
-        .into_iter()
-        .filter(|mode| document.get(mode_name(*mode)).is_some())
-        .collect()
+    [ThemeMode::Light, ThemeMode::Dark].into_iter().filter(|mode| document.get(mode_name(*mode)).is_some()).collect()
 }
 
 /// `selectThemeMode`: the requested mode if the document has it, else its first mode, merged over `base`.
-pub(crate) fn select(
-    document: &Value,
-    mode: ThemeMode,
-) -> Result<(Map<String, Value>, ThemeMode), String> {
+pub(crate) fn select(document: &Value, mode: ThemeMode) -> Result<(Map<String, Value>, ThemeMode), String> {
     let modes = modes(document);
-    let selected = if modes.contains(&mode) {
-        Some(mode)
-    } else {
-        modes.first().copied()
-    };
-    let definition = selected
-        .and_then(|mode| document.get(mode_name(mode)))
-        .filter(|value| truthy(value));
+    let selected = if modes.contains(&mode) { Some(mode) } else { modes.first().copied() };
+    let definition = selected.and_then(|mode| document.get(mode_name(mode))).filter(|value| truthy(value));
     let (Some(selected), Some(definition)) = (selected, definition) else {
         return Err("Theme must provide at least one mode".to_owned());
     };
-    Ok((
-        merge(&[document.get("base").unwrap_or(&Value::Null), definition]),
-        selected,
-    ))
+    Ok((merge(&[document.get("base").unwrap_or(&Value::Null), definition]), selected))
 }
 
 /// `mergeTheme`: objects merge key by key, anything else replaces.
@@ -139,13 +115,8 @@ fn expand_text(text: &Map<String, Value>) -> Map<String, Value> {
                     return (kind.clone(), item.clone());
                 };
                 let mut item = item.clone();
-                if item.get("muted").is_none_or(Value::is_null)
-                    && item.get("base").is_some_and(truthy)
-                {
-                    item.insert(
-                        "muted".to_owned(),
-                        reference(&format!("text.feedback.{kind}.base")),
-                    );
+                if item.get("muted").is_none_or(Value::is_null) && item.get("base").is_some_and(truthy) {
+                    item.insert("muted".to_owned(), reference(&format!("text.feedback.{kind}.base")));
                 }
                 (kind.clone(), Value::Object(item))
             })
@@ -160,12 +131,7 @@ fn expand_section(section: &mut Map<String, Value>, path: &str) {
     if let Some(Value::Object(actions)) = section.get("action") {
         let expanded = actions
             .iter()
-            .map(|(variant, value)| {
-                (
-                    variant.clone(),
-                    expand_states(value, &format!("{path}.action.{variant}")),
-                )
-            })
+            .map(|(variant, value)| (variant.clone(), expand_states(value, &format!("{path}.action.{variant}"))))
             .collect();
         section.insert("action".to_owned(), Value::Object(expanded));
     }
@@ -226,9 +192,7 @@ impl Issue {
             Issue::Got(value) => {
                 let text = serde_json::to_string(value).unwrap_or_default();
                 if let Some(rest) = text.strip_prefix('"') {
-                    return rest
-                        .find('"')
-                        .map_or(text.clone(), |end| format!("\"{}\"", &rest[..end]));
+                    return rest.find('"').map_or(text.clone(), |end| format!("\"{}\"", &rest[..end]));
                 }
                 text.split_whitespace().next().unwrap_or("value").to_owned()
             }
@@ -291,29 +255,15 @@ fn dialog(value: &Value) -> Check {
 }
 
 /// The token sections; `complete` requires every token a base definition needs.
-fn tokens(
-    input: &Map<String, Value>,
-    output: &mut Map<String, Value>,
-    complete: bool,
-) -> Result<(), Issue> {
+fn tokens(input: &Map<String, Value>, output: &mut Map<String, Value>, complete: bool) -> Result<(), Issue> {
     let single = |value: &Value| strict(value, &[("base", complete)], color);
-    field(input, output, "text", complete, |value| {
-        text(value, complete)
-    })?;
-    field(input, output, "background", complete, |value| {
-        background(value, complete)
-    })?;
+    field(input, output, "text", complete, |value| text(value, complete))?;
+    field(input, output, "background", complete, |value| background(value, complete))?;
     field(input, output, "border", complete, single)?;
     field(input, output, "scrollbar", complete, single)?;
-    field(input, output, "diff", complete, |value| {
-        diff(value, complete)
-    })?;
-    field(input, output, "syntax", complete, |value| {
-        record(value, &SYNTAX, complete)
-    })?;
-    field(input, output, "markdown", complete, |value| {
-        record(value, &MARKDOWN, complete)
-    })?;
+    field(input, output, "diff", complete, |value| diff(value, complete))?;
+    field(input, output, "syntax", complete, |value| record(value, &SYNTAX, complete))?;
+    field(input, output, "markdown", complete, |value| record(value, &MARKDOWN, complete))?;
     Ok(())
 }
 
@@ -323,16 +273,10 @@ fn text(value: &Value, complete: bool) -> Check {
     field(input, &mut output, "base", complete, color)?;
     field(input, &mut output, "muted", complete, color)?;
     field(input, &mut output, "faint", false, color)?;
-    field(input, &mut output, "action", complete, |value| {
-        actions(value, complete)
-    })?;
-    field(input, &mut output, "formfield", complete, |value| {
-        stateful(value, complete)
-    })?;
+    field(input, &mut output, "action", complete, |value| actions(value, complete))?;
+    field(input, &mut output, "formfield", complete, |value| stateful(value, complete))?;
     field(input, &mut output, "feedback", complete, |value| {
-        feedback(value, complete, |value| {
-            strict(value, &[("base", complete), ("muted", false)], color)
-        })
+        feedback(value, complete, |value| strict(value, &[("base", complete), ("muted", false)], color))
     })?;
     Ok(Value::Object(output))
 }
@@ -342,22 +286,12 @@ fn background(value: &Value, complete: bool) -> Check {
     let mut output = Map::new();
     field(input, &mut output, "base", complete, color)?;
     field(input, &mut output, "raised", complete, |value| {
-        strict(
-            value,
-            &[("base", complete), ("high", complete), ("max", complete)],
-            color,
-        )
+        strict(value, &[("base", complete), ("high", complete), ("max", complete)], color)
     })?;
-    field(input, &mut output, "action", complete, |value| {
-        actions(value, complete)
-    })?;
-    field(input, &mut output, "formfield", complete, |value| {
-        stateful(value, complete)
-    })?;
+    field(input, &mut output, "action", complete, |value| actions(value, complete))?;
+    field(input, &mut output, "formfield", complete, |value| stateful(value, complete))?;
     field(input, &mut output, "feedback", complete, |value| {
-        feedback(value, complete, |value| {
-            strict(value, &[("base", complete)], color)
-        })
+        feedback(value, complete, |value| strict(value, &[("base", complete)], color))
     })?;
     Ok(Value::Object(output))
 }
@@ -369,25 +303,12 @@ fn diff(value: &Value, complete: bool) -> Check {
     field(input, &mut output, "text", complete, |value| {
         strict(
             value,
-            &[
-                ("added", complete),
-                ("removed", complete),
-                ("context", complete),
-                ("hunkHeader", complete),
-            ],
+            &[("added", complete), ("removed", complete), ("context", complete), ("hunkHeader", complete)],
             color,
         )
     })?;
     field(input, &mut output, "background", complete, |value| {
-        strict(
-            value,
-            &[
-                ("added", complete),
-                ("removed", complete),
-                ("context", complete),
-            ],
-            color,
-        )
+        strict(value, &[("added", complete), ("removed", complete), ("context", complete)], color)
     })?;
     field(input, &mut output, "highlight", complete, pair)?;
     field(input, &mut output, "lineNumber", complete, |value| {
@@ -404,9 +325,7 @@ fn actions(value: &Value, complete: bool) -> Check {
     let input = object(value)?;
     let mut output = Map::new();
     for variant in VARIANTS {
-        field(input, &mut output, variant, complete, |value| {
-            stateful(value, complete)
-        })?;
+        field(input, &mut output, variant, complete, |value| stateful(value, complete))?;
     }
     Ok(Value::Object(output))
 }
@@ -460,13 +379,7 @@ fn hue(value: &Value) -> Check {
             return Err(Issue::Got(Value::String(String::new())));
         }
         let decoded = match scale {
-            Value::String(alias)
-                if alias
-                    .strip_prefix("$hue.")
-                    .is_some_and(|rest| !rest.is_empty()) =>
-            {
-                scale.clone()
-            }
+            Value::String(alias) if alias.strip_prefix("$hue.").is_some_and(|rest| !rest.is_empty()) => scale.clone(),
             Value::String(_) => return Err(Issue::Got(scale.clone())),
             Value::Object(steps) => {
                 let mut decoded = Map::new();
@@ -484,10 +397,7 @@ fn hue(value: &Value) -> Check {
         };
         output.insert(name.clone(), decoded);
     }
-    if ["accent", "interactive", "neutral"]
-        .iter()
-        .any(|name| !output.contains_key(*name))
-    {
+    if ["accent", "interactive", "neutral"].iter().any(|name| !output.contains_key(*name)) {
         return Err(Issue::Other);
     }
     Ok(Value::Object(output))
@@ -497,10 +407,7 @@ fn categorical(value: &Value) -> Check {
     let Value::Array(names) = value else {
         return Err(Issue::Got(value.clone()));
     };
-    if let Some(bad) = names
-        .iter()
-        .find(|name| name.as_str().is_none_or(str::is_empty))
-    {
+    if let Some(bad) = names.iter().find(|name| name.as_str().is_none_or(str::is_empty)) {
         return Err(Issue::Got(bad.clone()));
     }
     if names.is_empty() {
@@ -512,9 +419,7 @@ fn categorical(value: &Value) -> Check {
 /// `ColorValue`: a hex color, `transparent`, or a `$` reference.
 fn color(value: &Value) -> Check {
     match value {
-        Value::String(text)
-            if is_hex(text) || text == "transparent" || text.len() > 1 && text.starts_with('$') =>
-        {
+        Value::String(text) if is_hex(text) || text == "transparent" || text.len() > 1 && text.starts_with('$') => {
             Ok(value.clone())
         }
         _ => Err(Issue::Got(value.clone())),
@@ -529,14 +434,8 @@ fn hue_color(value: &Value) -> Check {
     let reference = text
         .strip_prefix("$hue.")
         .and_then(|rest| rest.rsplit_once('.'))
-        .is_some_and(|(name, step)| {
-            !name.is_empty() && STEPS.iter().any(|known| known.to_string() == step)
-        });
-    if is_hex(text) || reference {
-        Ok(value.clone())
-    } else {
-        Err(Issue::Got(value.clone()))
-    }
+        .is_some_and(|(name, step)| !name.is_empty() && STEPS.iter().any(|known| known.to_string() == step));
+    if is_hex(text) || reference { Ok(value.clone()) } else { Err(Issue::Got(value.clone())) }
 }
 
 fn object(value: &Value) -> Result<&Map<String, Value>, Issue> {

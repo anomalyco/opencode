@@ -38,20 +38,12 @@ enum Line {
     /// `↳ Moved to ` then the directory in the info color.
     Moved(String),
     /// A subagent's or shell's completion: the heading in its state's color, then a muted suffix.
-    Completion {
-        heading: String,
-        suffix: String,
-        state: Option<String>,
-        child: Option<String>,
-    },
+    Completion { heading: String, suffix: String, state: Option<String>, child: Option<String> },
 }
 
 impl Notice {
     pub fn new(cx: &Context<'_>) -> Self {
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .padding_edge(Edge::Left, 3);
+        let root = View::new(cx.app).column().shrink(0.0).padding_edge(Edge::Left, 3);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -71,15 +63,11 @@ impl Notice {
         inner.root.on_click(move |_, _| {
             let Some(inner) = weak.upgrade() else { return };
             let child = match &*inner.rendered.borrow() {
-                Some(Line::Completion {
-                    child: Some(child), ..
-                }) => child.clone(),
+                Some(Line::Completion { child: Some(child), .. }) => child.clone(),
                 _ => return,
             };
             if let Some(tui) = inner.tui.upgrade() {
-                tui.navigate(Route::Session {
-                    id: SessionID(child),
-                });
+                tui.navigate(Route::Session { id: SessionID(child) });
             }
         });
         Self(inner)
@@ -115,10 +103,7 @@ impl Notice {
                     app,
                     vec![
                         Span::styled("↳ Moved to ", Style::new().fg(muted)),
-                        Span::styled(
-                            directory.clone(),
-                            Style::new().fg(theme.text.feedback.info.base),
-                        ),
+                        Span::styled(directory.clone(), Style::new().fg(theme.text.feedback.info.base)),
                     ],
                 ));
             }
@@ -136,13 +121,7 @@ impl Notice {
 
 impl Inner {
     fn paint(&self) {
-        let Some(Line::Completion {
-            heading,
-            suffix,
-            state,
-            child,
-        }) = &*self.rendered.borrow()
-        else {
+        let Some(Line::Completion { heading, suffix, state, child }) = &*self.rendered.borrow() else {
             return;
         };
         let theme = &self.theme;
@@ -163,34 +142,25 @@ impl Inner {
 
 fn line(message: &SessionMessageInfo, models: &[ModelInfo], width: usize) -> Line {
     match message {
-        SessionMessageInfo::Skill(skill) => Line::Inline {
-            icon: "→",
-            text: format!("Skill {}", skill.name.as_str()),
-        },
+        SessionMessageInfo::Skill(skill) => {
+            Line::Inline { icon: "→", text: format!("Skill {}", skill.name.as_str()) }
+        }
         SessionMessageInfo::AgentSwitched(switched) => {
             let agent = titlecase(switched.agent.as_str());
             Line::Plain(match &switched.previous {
-                Some(previous) if *previous != switched.agent => format!(
-                    "Switched agent from {} to {agent}",
-                    titlecase(previous.as_str())
-                ),
+                Some(previous) if *previous != switched.agent => {
+                    format!("Switched agent from {} to {agent}", titlecase(previous.as_str()))
+                }
                 _ => format!("Switched agent to {agent}"),
             })
         }
-        SessionMessageInfo::ModelSwitched(switched) => Line::Plain(switch_label(
-            &switched.model,
-            models,
-            switched.previous.as_ref(),
-        )),
-        SessionMessageInfo::LocationSwitched(switched) => {
-            Line::Moved(switched.location.directory.to_string())
+        SessionMessageInfo::ModelSwitched(switched) => {
+            Line::Plain(switch_label(&switched.model, models, switched.previous.as_ref()))
         }
+        SessionMessageInfo::LocationSwitched(switched) => Line::Moved(switched.location.directory.to_string()),
         SessionMessageInfo::System(system) => Line::Inline {
             icon: "◈",
-            text: system
-                .description
-                .clone()
-                .unwrap_or_else(|| "Instructions updated".to_owned()),
+            text: system.description.clone().unwrap_or_else(|| "Instructions updated".to_owned()),
         },
         SessionMessageInfo::Synthetic(synthetic) => {
             let text = synthetic.description.clone().unwrap_or_default();
@@ -204,48 +174,22 @@ fn line(message: &SessionMessageInfo, models: &[ModelInfo], width: usize) -> Lin
             };
             let source = meta("source");
             if !matches!(source.as_deref(), Some("subagent" | "shell")) {
-                return Line::Inline {
-                    icon: if source.as_deref() == Some("goal") {
-                        "◎"
-                    } else {
-                        "◈"
-                    },
-                    text,
-                };
+                return Line::Inline { icon: if source.as_deref() == Some("goal") { "◎" } else { "◈" }, text };
             }
             let shell = source.as_deref() == Some("shell");
             let state = meta("state");
-            let actor = if shell {
-                "Shell".to_owned()
-            } else {
-                titlecase(meta("agent").as_deref().unwrap_or("Subagent"))
-            };
+            let actor =
+                if shell { "Shell".to_owned() } else { titlecase(meta("agent").as_deref().unwrap_or("Subagent")) };
             let status = match state.as_deref() {
                 Some("completed") | None => "finished",
                 Some("error") => "failed",
                 Some(other) => other,
             };
-            let mark = if state.as_deref() == Some("completed") {
-                "↳"
-            } else {
-                "!"
-            };
+            let mark = if state.as_deref() == Some("completed") { "↳" } else { "!" };
             let heading = format!("{mark} {actor} {status}");
-            let description = if shell {
-                text.split_whitespace().collect::<Vec<_>>().join(" ")
-            } else {
-                text
-            };
-            let suffix = truncate_width(
-                &format!(" · {description}"),
-                width.saturating_sub(3 + heading.width()),
-            );
-            Line::Completion {
-                heading,
-                suffix,
-                state,
-                child: if shell { None } else { meta("childID") },
-            }
+            let description = if shell { text.split_whitespace().collect::<Vec<_>>().join(" ") } else { text };
+            let suffix = truncate_width(&format!(" · {description}"), width.saturating_sub(3 + heading.width()));
+            Line::Completion { heading, suffix, state, child: if shell { None } else { meta("childID") } }
         }
         _ => Line::Plain(String::new()),
     }
@@ -257,14 +201,9 @@ fn switch_label(model: &ModelRef, models: &[ModelInfo], previous: Option<&ModelR
         && previous.provider_id == model.provider_id
         && previous.id == model.id
     {
-        return format!(
-            "Switched variant to {}",
-            model.variant.as_deref().unwrap_or("default")
-        );
+        return format!("Switched variant to {}", model.variant.as_deref().unwrap_or("default"));
     }
-    let display = models
-        .iter()
-        .find(|item| item.provider_id == model.provider_id && item.id == model.id);
+    let display = models.iter().find(|item| item.provider_id == model.provider_id && item.id == model.id);
     let Some(display) = display else {
         let mut parts = vec![model.provider_id.as_str(), model.id.as_str()];
         parts.extend(model.variant.as_deref());
@@ -315,32 +254,18 @@ mod tests {
     #[test]
     fn lines_follow_the_typescript_notices() {
         let time = json!({ "created": 1 });
-        let skill = message(
-            json!({ "id": "m", "type": "skill", "skill": "s", "name": "rust", "text": "", "time": time }),
-        );
-        assert_eq!(
-            line(&skill, &[], 80),
-            Line::Inline {
-                icon: "→",
-                text: "Skill rust".into()
-            }
-        );
-        let agent = message(
-            json!({ "id": "m", "type": "agent-switched", "agent": "plan", "previous": "build", "time": time }),
-        );
-        assert_eq!(
-            line(&agent, &[], 80),
-            Line::Plain("Switched agent from Build to Plan".into())
-        );
+        let skill =
+            message(json!({ "id": "m", "type": "skill", "skill": "s", "name": "rust", "text": "", "time": time }));
+        assert_eq!(line(&skill, &[], 80), Line::Inline { icon: "→", text: "Skill rust".into() });
+        let agent =
+            message(json!({ "id": "m", "type": "agent-switched", "agent": "plan", "previous": "build", "time": time }));
+        assert_eq!(line(&agent, &[], 80), Line::Plain("Switched agent from Build to Plan".into()));
         let model = message(json!({
             "id": "m", "type": "model-switched", "time": time,
             "model": { "providerID": "p", "id": "m", "variant": "high" },
             "previous": { "providerID": "p", "id": "m" },
         }));
-        assert_eq!(
-            line(&model, &[], 80),
-            Line::Plain("Switched variant to high".into())
-        );
+        assert_eq!(line(&model, &[], 80), Line::Plain("Switched variant to high".into()));
         let done = message(json!({
             "id": "m", "type": "synthetic", "text": "", "time": time,
             "description": "ran   the\ntests",

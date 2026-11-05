@@ -58,22 +58,12 @@ pub struct Policy {
 }
 
 fn span(y: i32, from: i32, to: i32) -> SpatialSpan {
-    SpatialSpan {
-        y,
-        from_x: from.min(to),
-        to_x: from.max(to),
-    }
+    SpatialSpan { y, from_x: from.min(to), to_x: from.max(to) }
 }
 
 pub fn rect_spans(bounds: &Bounds) -> Vec<SpatialSpan> {
     (0..bounds.height.max(0))
-        .map(|offset| {
-            span(
-                bounds.top + offset,
-                bounds.left,
-                bounds.left + bounds.width - 1,
-            )
-        })
+        .map(|offset| span(bounds.top + offset, bounds.left, bounds.left + bounds.width - 1))
         .collect()
 }
 
@@ -106,32 +96,12 @@ pub fn path_spans(points: &[Point]) -> Vec<SpatialSpan> {
     spans
 }
 
-pub fn rect_claim(
-    id: impl Into<String>,
-    owner: impl Into<String>,
-    role: Role,
-    bounds: &Bounds,
-) -> Claim {
-    Claim {
-        id: id.into(),
-        owner: owner.into(),
-        role,
-        spans: rect_spans(bounds),
-    }
+pub fn rect_claim(id: impl Into<String>, owner: impl Into<String>, role: Role, bounds: &Bounds) -> Claim {
+    Claim { id: id.into(), owner: owner.into(), role, spans: rect_spans(bounds) }
 }
 
-pub fn path_claim(
-    id: impl Into<String>,
-    owner: impl Into<String>,
-    role: Role,
-    points: &[Point],
-) -> Claim {
-    Claim {
-        id: id.into(),
-        owner: owner.into(),
-        role,
-        spans: path_spans(points),
-    }
+pub fn path_claim(id: impl Into<String>, owner: impl Into<String>, role: Role, points: &[Point]) -> Claim {
+    Claim { id: id.into(), owner: owner.into(), role, spans: path_spans(points) }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -150,18 +120,13 @@ impl SpatialIndex {
     }
 
     pub fn add(&self, claims: impl IntoIterator<Item = Claim>) -> SpatialIndex {
-        self.overlay(&SpatialIndex {
-            claims: claims.into_iter().map(Self::normalize).collect(),
-        })
+        self.overlay(&SpatialIndex { claims: claims.into_iter().map(Self::normalize).collect() })
     }
 
     /// Claims of both, sorted by ID; a later claim replaces one with the same ID.
     pub fn overlay(&self, other: &SpatialIndex) -> SpatialIndex {
-        let mut claims: IndexMap<String, Claim> = self
-            .claims
-            .iter()
-            .map(|claim| (claim.id.clone(), claim.clone()))
-            .collect();
+        let mut claims: IndexMap<String, Claim> =
+            self.claims.iter().map(|claim| (claim.id.clone(), claim.clone())).collect();
         for claim in &other.claims {
             claims.insert(claim.id.clone(), claim.clone());
         }
@@ -172,9 +137,7 @@ impl SpatialIndex {
 
     pub fn is_free(&self, moving: &Claim, policy: &Policy) -> bool {
         for existing in &self.claims {
-            if moving.owner == existing.owner
-                || (moving.role == Role::Route && existing.role == Role::Route)
-            {
+            if moving.owner == existing.owner || (moving.role == Role::Route && existing.role == Role::Route) {
                 continue;
             }
             let clearance = match &policy.clearance {
@@ -195,16 +158,10 @@ impl SpatialIndex {
                             continue;
                         }
                         for x in from.max(existing_span.from_x)..=to.min(existing_span.to_x) {
-                            let occupies = moving
-                                .spans
-                                .iter()
-                                .any(|s| s.y == y && x >= s.from_x && x <= s.to_x);
+                            let occupies = moving.spans.iter().any(|s| s.y == y && x >= s.from_x && x <= s.to_x);
                             let contact = policy.contacts.iter().any(|contact| {
                                 contact.owner == existing.owner
-                                    && contact
-                                        .points
-                                        .iter()
-                                        .any(|point| point.x == x && point.y == y)
+                                    && contact.points.iter().any(|point| point.x == x && point.y == y)
                             });
                             if !(occupies && contact) {
                                 return false;

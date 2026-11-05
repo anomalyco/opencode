@@ -114,9 +114,8 @@ pub fn braille_graph(values: &[f64], width: usize) -> String {
     let min = values.iter().copied().fold(f64::INFINITY, f64::min);
     let range = values.iter().copied().fold(f64::NEG_INFINITY, f64::max) - min;
     let pad = (width * 2).saturating_sub(values.len());
-    let points: Vec<Option<f64>> = std::iter::repeat_n(values.first().copied(), pad)
-        .chain(values.iter().copied().map(Some))
-        .collect();
+    let points: Vec<Option<f64>> =
+        std::iter::repeat_n(values.first().copied(), pad).chain(values.iter().copied().map(Some)).collect();
     let points = &points[points.len().saturating_sub(width * 2)..];
     const DOTS: [[u32; 4]; 2] = [[6, 2, 1, 0], [7, 5, 4, 3]];
     (0..width)
@@ -125,16 +124,10 @@ pub fn braille_graph(values: &[f64], width: usize) -> String {
                 let Some(Some(value)) = points.get(index * 2 + column) else {
                     return bits;
                 };
-                let scaled = if range == 0.0 {
-                    0.0
-                } else {
-                    (value - min) / range
-                };
+                let scaled = if range == 0.0 { 0.0 } else { (value - min) / range };
                 // `Math.round` rounds halves up.
                 let height = 1 + (scaled * 3.0 + 0.5).floor() as usize;
-                DOTS[column][..height.min(4)]
-                    .iter()
-                    .fold(bits, |bits, dot| bits | (1 << dot))
+                DOTS[column][..height.min(4)].iter().fold(bits, |bits, dot| bits | (1 << dot))
             });
             char::from_u32(0x2800 + bits).unwrap_or(' ')
         })
@@ -172,11 +165,7 @@ pub fn mount(tui: &Rc<Tui>, parent: &View) {
         tui: tui.weak(),
         root,
         panel: Cell::new(None),
-        state: RefCell::new(State {
-            status: Status::Connecting,
-            attempt: 0,
-            error: None,
-        }),
+        state: RefCell::new(State { status: Status::Connecting, attempt: 0, error: None }),
         server: RefCell::new(None),
         samples: RefCell::new(Vec::new()),
         dumping: Cell::new(false),
@@ -267,12 +256,7 @@ fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         };
         last.set((now, cpu_now, true));
         let mut samples = bar.samples.borrow_mut();
-        samples.push(Sample {
-            cpu,
-            memory: memory(),
-            delay: if ready { delay } else { 0.0 },
-            time: now,
-        });
+        samples.push(Sample { cpu, memory: memory(), delay: if ready { delay } else { 0.0 }, time: now });
         samples.retain(|sample| sample.time + SAMPLE_RETENTION >= now);
         drop(samples);
         if let Some(tui) = bar.tui.upgrade()
@@ -282,8 +266,7 @@ fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         }
     };
     sample(tui.app.now());
-    tui.app
-        .set_interval(SAMPLE_INTERVAL, move |cx| sample(cx.now()));
+    tui.app.set_interval(SAMPLE_INTERVAL, move |cx| sample(cx.now()));
 }
 
 impl Bar {
@@ -316,15 +299,12 @@ impl Bar {
     fn fetch_server(self: &Rc<Self>, tui: &Tui) {
         let client = tui.data.client().clone();
         let weak = self.weak();
-        tui.app.spawn(
-            async move { client.server_info(&RequestOptions::default()).await },
-            move |_, result| {
-                let Some(bar) = weak.upgrade() else { return };
-                let Some(tui) = bar.tui.upgrade() else { return };
-                *bar.server.borrow_mut() = Some(result.map_err(|error| error.to_string()));
-                bar.render(&tui);
-            },
-        );
+        tui.app.spawn(async move { client.server_info(&RequestOptions::default()).await }, move |_, result| {
+            let Some(bar) = weak.upgrade() else { return };
+            let Some(tui) = bar.tui.upgrade() else { return };
+            *bar.server.borrow_mut() = Some(result.map_err(|error| error.to_string()));
+            bar.render(&tui);
+        });
     }
 
     /// Rebuilds the bar.
@@ -375,13 +355,11 @@ impl Bar {
             (_, Indicator::Disconnected) => theme.text.feedback.error.base,
             _ => theme.text.base,
         }));
-        item.add(
-            &Text::new(app, " Server").fg(match (server_open, indicator) {
-                (true, _) => focused,
-                (_, Indicator::Disconnected) => theme.text.feedback.error.base,
-                _ => theme.text.muted,
-            }),
-        );
+        item.add(&Text::new(app, " Server").fg(match (server_open, indicator) {
+            (true, _) => focused,
+            (_, Indicator::Disconnected) => theme.text.feedback.error.base,
+            _ => theme.text.muted,
+        }));
         if server_open {
             item.add(&self.server_panel(tui, &theme, &state));
         }
@@ -406,11 +384,7 @@ impl Bar {
         // Theme
         let theme_open = panel == Some(Panel::Theme);
         let item = self.item(tui, theme_open, Some(Panel::Theme));
-        item.add(&Text::new(app, "Theme").fg(if theme_open {
-            focused
-        } else {
-            theme.text.muted
-        }));
+        item.add(&Text::new(app, "Theme").fg(if theme_open { focused } else { theme.text.muted }));
         if theme_open {
             item.add(&self.theme_panel(tui, &theme));
         }
@@ -418,11 +392,7 @@ impl Bar {
         // Tools
         let tools_open = panel == Some(Panel::Tools);
         let item = self.item(tui, tools_open, Some(Panel::Tools));
-        item.add(&Text::new(app, "Tools").fg(if tools_open {
-            focused
-        } else {
-            theme.text.muted
-        }));
+        item.add(&Text::new(app, "Tools").fg(if tools_open { focused } else { theme.text.muted }));
         if tools_open {
             item.add(&self.tools_panel(tui, &theme, &info));
         }
@@ -432,19 +402,12 @@ impl Bar {
         item.add(&Text::new(app, "Experiments").fg(theme.text.muted));
 
         let rest = View::new(app).grow(1.0).basis(Length::Auto).min_width(0);
-        if info
-            .debug
-            .as_ref()
-            .and_then(|debug| debug.timing)
-            .unwrap_or(false)
-        {
+        if info.debug.as_ref().and_then(|debug| debug.timing).unwrap_or(false) {
             let ms = *self.first_draw.get().get_or_insert_with(process_age_ms);
             self.first_draw.set(Some(ms));
             rest.add(
                 &View::new(app).row().justify(Justify::Center).child(
-                    &Text::new(app, format!("Time to first draw: {ms:.2}ms"))
-                        .fg(theme.text.muted)
-                        .truncate(true),
+                    &Text::new(app, format!("Time to first draw: {ms:.2}ms")).fg(theme.text.muted).truncate(true),
                 ),
             );
         }
@@ -458,8 +421,7 @@ impl Bar {
         let theme = tui.page();
         let item = View::new(&tui.app).row().height(1).padding_x(1);
         if active {
-            item.z_index(2500)
-                .bg(theme.background.action.primary.focused);
+            item.z_index(2500).bg(theme.background.action.primary.focused);
         } else {
             // Restyled in place: a rebuild between press and release would drop the pressed widget.
             let hovered = theme.background.action.primary.hovered;
@@ -511,20 +473,11 @@ impl Bar {
             Some(Ok(info)) => {
                 panel.add(&row(app, theme, "Version", &info.version));
                 panel.add(&row(app, theme, "PID", &info.pid.to_string()));
-                let address = info
-                    .urls
-                    .first()
-                    .map_or_else(|| "Unknown".to_owned(), |url| url_host(url));
+                let address = info.urls.first().map_or_else(|| "Unknown".to_owned(), |url| url_host(url));
                 panel.add(&row(app, theme, "Address", &address));
             }
             Some(Err(_)) => {
-                panel.add(
-                    &Text::new(app, "Server details unavailable").fg(theme
-                        .text
-                        .feedback
-                        .error
-                        .base),
-                );
+                panel.add(&Text::new(app, "Server details unavailable").fg(theme.text.feedback.error.base));
             }
             None => {}
         }
@@ -537,23 +490,9 @@ impl Bar {
         panel.add(&row(app, theme, "Status", runtime.as_str()));
         let samples = self.samples.borrow();
         let series = |pick: fn(&Sample) -> f64| samples.iter().map(pick).collect::<Vec<_>>();
-        panel.add(&process_stat(
-            app,
-            theme,
-            "Loop",
-            &series(|s| s.delay),
-            " ms",
-            1,
-        ));
+        panel.add(&process_stat(app, theme, "Loop", &series(|s| s.delay), " ms", 1));
         panel.add(&process_stat(app, theme, "CPU", &series(|s| s.cpu), "%", 1));
-        panel.add(&process_stat(
-            app,
-            theme,
-            "Memory",
-            &series(|s| s.memory / 1024.0 / 1024.0),
-            " MB",
-            0,
-        ));
+        panel.add(&process_stat(app, theme, "Memory", &series(|s| s.memory / 1024.0 / 1024.0), " MB", 0));
         let overlay = tui.app.debug_overlay().is_some();
         panel.add(&self.action(
             tui,
@@ -572,31 +511,17 @@ impl Bar {
         let panel = panel_box(app, theme, "Theme");
         let (name, mode, next, supported) = {
             let state = tui.theme.borrow();
-            let next = if state.mode() == ThemeMode::Dark {
-                ThemeMode::Light
-            } else {
-                ThemeMode::Dark
-            };
-            (
-                state.selected().to_owned(),
-                state.mode(),
-                next,
-                state.supports(next),
-            )
+            let next = if state.mode() == ThemeMode::Dark { ThemeMode::Light } else { ThemeMode::Dark };
+            (state.selected().to_owned(), state.mode(), next, state.supports(next))
         };
         panel.add(&row(app, theme, "Name", &name));
         panel.add(&row(app, theme, "Mode", mode_name(mode)));
         if supported {
-            panel.add(&self.action(
-                tui,
-                &format!("Switch to {}", mode_name(next)),
-                false,
-                move |bar, tui| {
-                    tui.theme.borrow_mut().set_mode(Some(next), true);
-                    tui.theme_changed();
-                    bar.render(tui);
-                },
-            ));
+            panel.add(&self.action(tui, &format!("Switch to {}", mode_name(next)), false, move |bar, tui| {
+                tui.theme.borrow_mut().set_mode(Some(next), true);
+                tui.theme_changed();
+                bar.render(tui);
+            }));
         }
         panel
     }
@@ -607,28 +532,16 @@ impl Bar {
         let dumping = self.dumping.get();
         panel.add(&self.action(
             tui,
-            if dumping {
-                "Writing debug snapshot…"
-            } else {
-                "Write debug snapshot"
-            },
+            if dumping { "Writing debug snapshot…" } else { "Write debug snapshot" },
             dumping,
             |bar, tui| bar.write_snapshot(tui),
         ));
         match self.dump.borrow().as_ref() {
             Some(Ok(path)) => {
-                panel.add(
-                    &Text::new(app, path.clone())
-                        .fg(theme.text.muted)
-                        .wrap(WrapMode::Word),
-                );
+                panel.add(&Text::new(app, path.clone()).fg(theme.text.muted).wrap(WrapMode::Word));
             }
             Some(Err(error)) => {
-                panel.add(
-                    &Text::new(app, error.clone())
-                        .fg(theme.text.feedback.error.base)
-                        .wrap(WrapMode::Word),
-                );
+                panel.add(&Text::new(app, error.clone()).fg(theme.text.feedback.error.base).wrap(WrapMode::Word));
             }
             None => {}
         }
@@ -638,27 +551,13 @@ impl Bar {
         let render = View::new(app).margin_edge(Edge::Top, 1);
         render.add(&Text::new(app, "Render").fg(theme.text.base).bold());
         let check = |on: bool| if on { "[x]" } else { "[ ]" };
-        render.add(&self.action(
-            tui,
-            &format!("{} Time to first draw", check(timing)),
-            false,
-            move |_, tui| {
-                settings::update(tui, move |draft| {
-                    set_path(draft, &["debug", "timing"], Value::Bool(!timing))
-                })
-            },
-        ));
+        render.add(&self.action(tui, &format!("{} Time to first draw", check(timing)), false, move |_, tui| {
+            settings::update(tui, move |draft| set_path(draft, &["debug", "timing"], Value::Bool(!timing)))
+        }));
         let on = tokens != TurnTokens::Enabled(false);
-        render.add(&self.action(
-            tui,
-            &format!("{} Turn token usage", check(on)),
-            false,
-            move |_, tui| {
-                settings::update(tui, move |draft| {
-                    set_path(draft, &["debug", "turn_tokens"], Value::Bool(!on))
-                })
-            },
-        ));
+        render.add(&self.action(tui, &format!("{} Turn token usage", check(on)), false, move |_, tui| {
+            settings::update(tui, move |draft| set_path(draft, &["debug", "turn_tokens"], Value::Bool(!on)))
+        }));
         if on {
             let verbose = tokens == TurnTokens::Verbose;
             render.add(&self.action(
@@ -666,14 +565,8 @@ impl Bar {
                 &format!("{} Turn token usage (verbose)", check(verbose)),
                 false,
                 move |_, tui| {
-                    let next = if verbose {
-                        json!(true)
-                    } else {
-                        json!("verbose")
-                    };
-                    settings::update(tui, move |draft| {
-                        set_path(draft, &["debug", "turn_tokens"], next)
-                    })
+                    let next = if verbose { json!(true) } else { json!("verbose") };
+                    settings::update(tui, move |draft| set_path(draft, &["debug", "turn_tokens"], next))
                 },
             ));
         }
@@ -682,13 +575,7 @@ impl Bar {
     }
 
     /// `Action`: an action-colored line with a hover background; muted while disabled.
-    fn action(
-        self: &Rc<Self>,
-        tui: &Tui,
-        label: &str,
-        disabled: bool,
-        run: impl Fn(&Rc<Bar>, &Tui) + 'static,
-    ) -> View {
+    fn action(self: &Rc<Self>, tui: &Tui, label: &str, disabled: bool, run: impl Fn(&Rc<Bar>, &Tui) + 'static) -> View {
         let theme = tui.page();
         let view = View::new(&tui.app);
         view.add(&Text::new(&tui.app, label).fg(if disabled {
@@ -713,10 +600,7 @@ impl Bar {
             if disabled {
                 return;
             }
-            let (Some(bar), Some(tui)) = (
-                weak.upgrade(),
-                weak.upgrade().and_then(|bar| bar.tui.upgrade()),
-            ) else {
+            let (Some(bar), Some(tui)) = (weak.upgrade(), weak.upgrade().and_then(|bar| bar.tui.upgrade())) else {
                 return;
             };
             let run = run.clone();
@@ -747,20 +631,14 @@ impl Bar {
         });
         let session_json = session.as_ref().map(|id| {
             tui.data.read(|data| {
-                let mut value = data
-                    .session(id)
-                    .and_then(|info| serde_json::to_value(info).ok())
-                    .unwrap_or_else(|| json!({}));
+                let mut value =
+                    data.session(id).and_then(|info| serde_json::to_value(info).ok()).unwrap_or_else(|| json!({}));
                 if let Some(map) = value.as_object_mut() {
                     map.insert("id".into(), json!(id.0));
-                    map.insert(
-                        "status".into(),
-                        json!(format!("{:?}", data.status(id)).to_lowercase()),
-                    );
+                    map.insert("status".into(), json!(format!("{:?}", data.status(id)).to_lowercase()));
                     map.insert(
                         "permissions".into(),
-                        serde_json::to_value(data.permissions(id).unwrap_or_default())
-                            .unwrap_or_default(),
+                        serde_json::to_value(data.permissions(id).unwrap_or_default()).unwrap_or_default(),
                     );
                 }
                 value
@@ -813,20 +691,10 @@ fn defer(tui: &Tui, run: impl FnOnce(&Tui) + 'static) {
 }
 
 /// The last 100 durable events of the session's log; nothing when the log is unavailable.
-async fn session_events(
-    client: &opencode_api::client::Client,
-    id: &opencode_api::generated::SessionID,
-) -> Vec<Value> {
+async fn session_events(client: &opencode_api::client::Client, id: &opencode_api::generated::SessionID) -> Vec<Value> {
     use futures_util::StreamExt;
-    let input = ExperimentalSessionLogInput {
-        session_id: id.clone(),
-        after: None,
-        follow: Some(false),
-    };
-    let Ok(response) = client
-        .experimental_session_log(&input, &RequestOptions::default())
-        .await
-    else {
+    let input = ExperimentalSessionLogInput { session_id: id.clone(), after: None, follow: Some(false) };
+    let Ok(response) = client.experimental_session_log(&input, &RequestOptions::default()).await else {
         return Vec::new();
     };
     let events: Vec<Value> = SseResponse::<Value>::new(response.response)
@@ -851,10 +719,7 @@ fn write_private(output: &Value) -> Result<String, String> {
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     let text = serde_json::to_string_pretty(output).map_err(|error| error.to_string())? + "\n";
-    options
-        .open(&path)
-        .and_then(|mut file| file.write_all(text.as_bytes()))
-        .map_err(|error| error.to_string())?;
+    options.open(&path).and_then(|mut file| file.write_all(text.as_bytes())).map_err(|error| error.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -875,12 +740,7 @@ fn panel_box(app: &App, theme: &Theme, title: &str) -> View {
                 cx.stop_propagation();
             }
         })
-        .child(
-            &Text::new(app, title)
-                .fg(theme.text.base)
-                .bold()
-                .margin_edge(Edge::Bottom, 1),
-        )
+        .child(&Text::new(app, title).fg(theme.text.base).bold().margin_edge(Edge::Bottom, 1))
 }
 
 /// `Row`: the label on the left, the value on the right.
@@ -893,42 +753,19 @@ fn row(app: &App, theme: &Theme, label: &str, value: &str) -> View {
 }
 
 /// `ProcessStat`: the label, a braille graph, and the latest value.
-fn process_stat(
-    app: &App,
-    theme: &Theme,
-    label: &str,
-    values: &[f64],
-    unit: &str,
-    decimals: usize,
-) -> View {
-    let color = if values.is_empty() {
-        theme.text.muted
-    } else {
-        theme.text.base
-    };
-    let value = values.last().map_or_else(
-        || "--".to_owned(),
-        |value| format!("{value:.decimals$}{unit}"),
-    );
+fn process_stat(app: &App, theme: &Theme, label: &str, values: &[f64], unit: &str, decimals: usize) -> View {
+    let color = if values.is_empty() { theme.text.muted } else { theme.text.base };
+    let value = values.last().map_or_else(|| "--".to_owned(), |value| format!("{value:.decimals$}{unit}"));
     View::new(app)
         .row()
-        .child(
-            &View::new(app)
-                .width(7)
-                .child(&Text::new(app, label).fg(theme.text.muted)),
-        )
+        .child(&View::new(app).width(7).child(&Text::new(app, label).fg(theme.text.muted)))
         .child(
             &View::new(app)
                 .grow(1.0)
                 .basis(Length::Auto)
                 .child(&Text::new(app, braille_graph(values, GRAPH_WIDTH)).fg(color)),
         )
-        .child(
-            &View::new(app)
-                .width(8)
-                .align_items(Align::End)
-                .child(&Text::new(app, value).fg(color)),
-        )
+        .child(&View::new(app).width(8).align_items(Align::End).child(&Text::new(app, value).fg(color)))
 }
 
 fn mode_name(mode: ThemeMode) -> &'static str {
@@ -948,10 +785,7 @@ fn url_host(url: &str) -> String {
         "https" | "wss" => Some(":443"),
         _ => None,
     };
-    default
-        .and_then(|port| host.strip_suffix(port))
-        .unwrap_or(host)
-        .to_lowercase()
+    default.and_then(|port| host.strip_suffix(port)).unwrap_or(host).to_lowercase()
 }
 
 /// CPU time of this process in seconds, from `/proc/self/schedstat` on Linux; 0 elsewhere.
@@ -980,19 +814,8 @@ fn process_age_ms() -> f64 {
     let age = || -> Option<f64> {
         let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
         // `starttime` is field 22, the 20th after the parenthesized command.
-        let start: f64 = stat
-            .rsplit_once(')')?
-            .1
-            .split_whitespace()
-            .nth(19)?
-            .parse()
-            .ok()?;
-        let uptime: f64 = std::fs::read_to_string("/proc/uptime")
-            .ok()?
-            .split_whitespace()
-            .next()?
-            .parse()
-            .ok()?;
+        let start: f64 = stat.rsplit_once(')')?.1.split_whitespace().nth(19)?.parse().ok()?;
+        let uptime: f64 = std::fs::read_to_string("/proc/uptime").ok()?.split_whitespace().next()?.parse().ok()?;
         Some((uptime - start / TICKS) * 1000.0)
     };
     age().unwrap_or(0.0).max(0.0)
@@ -1014,22 +837,12 @@ mod tests {
     #[test]
     fn status_helpers_match_typescript() {
         let at = Instant::now();
-        let sample = |delay: f64, seconds: u64| Sample {
-            cpu: 0.0,
-            memory: 0.0,
-            delay,
-            time: at + Duration::from_secs(seconds),
-        };
+        let sample =
+            |delay: f64, seconds: u64| Sample { cpu: 0.0, memory: 0.0, delay, time: at + Duration::from_secs(seconds) };
         assert_eq!(runtime_status(&[]), RuntimeStatus::Normal);
         assert_eq!(runtime_status(&[sample(20.0, 0)]), RuntimeStatus::Medium);
-        assert_eq!(
-            runtime_status(&[sample(150.0, 0), sample(1.0, 6)]),
-            RuntimeStatus::Normal
-        );
-        assert_eq!(
-            runtime_status(&[sample(150.0, 1), sample(1.0, 6)]),
-            RuntimeStatus::High
-        );
+        assert_eq!(runtime_status(&[sample(150.0, 0), sample(1.0, 6)]), RuntimeStatus::Normal);
+        assert_eq!(runtime_status(&[sample(150.0, 1), sample(1.0, 6)]), RuntimeStatus::High);
         assert_eq!(status_icon(RuntimeStatus::Medium), "⦿");
         assert_eq!(connection_indicator(Status::Connected, 0).1, "✓");
         assert_eq!(connection_indicator(Status::Reconnecting, 2).1, "↻");

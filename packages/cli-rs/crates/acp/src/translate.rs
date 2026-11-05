@@ -9,9 +9,7 @@ use serde_json::{Map, Value, json};
 use crate::child;
 use crate::compaction;
 use crate::error::Failure;
-use crate::tools::{
-    DiffSource, completed_tool_update, error_tool_update, pending_tool_call, running_tool_update,
-};
+use crate::tools::{DiffSource, completed_tool_update, error_tool_update, pending_tool_call, running_tool_update};
 
 const RETRY_META: &str = "opencode/retry";
 
@@ -117,26 +115,11 @@ pub struct TurnState {
 
 #[derive(Debug, Clone)]
 pub enum Output {
-    SessionUpdate {
-        update: Value,
-        diff: Option<DiffSource>,
-    },
-    ChildUpdate {
-        update: Value,
-        diff: Option<DiffSource>,
-    },
-    PermissionAsk {
-        event: Value,
-        tool: Option<Tool>,
-        child: Option<child::Session>,
-    },
-    FormAsk {
-        form: Value,
-        child: Option<child::Session>,
-    },
-    AskSettled {
-        id: String,
-    },
+    SessionUpdate { update: Value, diff: Option<DiffSource> },
+    ChildUpdate { update: Value, diff: Option<DiffSource> },
+    PermissionAsk { event: Value, tool: Option<Tool>, child: Option<child::Session> },
+    FormAsk { form: Value, child: Option<child::Session> },
+    AskSettled { id: String },
 }
 
 #[derive(Debug, Clone)]
@@ -148,11 +131,7 @@ pub struct Folded {
 
 impl Folded {
     fn new(state: TurnState, outputs: Vec<Output>) -> Self {
-        Self {
-            state,
-            outputs,
-            terminal: None,
-        }
+        Self { state, outputs, terminal: None }
     }
 }
 
@@ -177,37 +156,22 @@ pub fn fold(state: &TurnState, event: &Value, ctx: &TurnContext) -> Folded {
     let child = session_id.and_then(|id| state.children.get(id)).cloned();
 
     match kind(event) {
-        "permission.asked"
-            if text(data, "sessionID") == Some(ctx.session_id.as_str()) || child.is_some() =>
-        {
+        "permission.asked" if text(data, "sessionID") == Some(ctx.session_id.as_str()) || child.is_some() => {
             let tool = data
                 .get("source")
                 .and_then(|source| text(source, "id"))
                 .filter(|id| !id.is_empty())
-                .and_then(|id| {
-                    state
-                        .tools
-                        .get(&tool_key(text(data, "sessionID").unwrap_or_default(), id))
-                })
+                .and_then(|id| state.tools.get(&tool_key(text(data, "sessionID").unwrap_or_default(), id)))
                 .cloned();
             let mut next = state.clone();
-            next.asks
-                .insert(text(data, "id").unwrap_or_default().to_owned());
-            return Folded::new(
-                next,
-                vec![Output::PermissionAsk {
-                    event: event.clone(),
-                    tool,
-                    child,
-                }],
-            );
+            next.asks.insert(text(data, "id").unwrap_or_default().to_owned());
+            return Folded::new(next, vec![Output::PermissionAsk { event: event.clone(), tool, child }]);
         }
         "form.created" => {
             let form = data.get("form").cloned().unwrap_or(Value::Null);
             if text(&form, "sessionID") == Some(ctx.session_id.as_str()) || child.is_some() {
                 let mut next = state.clone();
-                next.asks
-                    .insert(text(&form, "id").unwrap_or_default().to_owned());
+                next.asks.insert(text(&form, "id").unwrap_or_default().to_owned());
                 return Folded::new(next, vec![Output::FormAsk { form, child }]);
             }
         }
@@ -244,19 +208,13 @@ pub fn fold(state: &TurnState, event: &Value, ctx: &TurnContext) -> Folded {
 }
 
 pub fn from_tracked_child(state: &TurnState, event: &Value) -> bool {
-    let session_id = if kind(event) == "session.created" {
-        text(data(event), "parentID")
-    } else {
-        session_id_from_event(event)
-    };
+    let session_id =
+        if kind(event) == "session.created" { text(data(event), "parentID") } else { session_id_from_event(event) };
     session_id.is_some_and(|id| state.children.contains_key(id))
 }
 
 pub fn failure(state: &TurnState) -> Option<Failure> {
-    let error = state
-        .step_error
-        .as_ref()
-        .or(state.execution_error.as_ref())?;
+    let error = state.step_error.as_ref().or(state.execution_error.as_ref())?;
     let error_type = text(error, "type").unwrap_or_default();
     if error_type == "provider.auth" {
         return Some(Failure::AuthRequired);
@@ -285,15 +243,8 @@ pub fn number(value: f64) -> Value {
 
 pub fn response(state: &TurnState, session_id: &str, terminal: Terminal) -> Value {
     let mut response = Map::new();
-    let error = state
-        .step_error
-        .as_ref()
-        .or(state.execution_error.as_ref())
-        .and_then(|error| text(error, "type"));
-    response.insert(
-        "stopReason".to_owned(),
-        json!(stop_reason(terminal, state.finish.as_deref(), error)),
-    );
+    let error = state.step_error.as_ref().or(state.execution_error.as_ref()).and_then(|error| text(error, "type"));
+    response.insert("stopReason".to_owned(), json!(stop_reason(terminal, state.finish.as_deref(), error)));
     if let Some(usage) = &state.usage {
         let tokens = usage.turn;
         let mut out = Map::new();
@@ -340,10 +291,8 @@ pub fn abandon(state: &TurnState, ctx: &TurnContext) -> Folded {
         })
         .collect();
     if let Some(started) = state.compactions.get(&ctx.session_id)
-        && let Some(update) = compaction::abandon(
-            started,
-            compaction::uses_standard_updates(ctx.compaction, ctx.child_updates, false),
-        )
+        && let Some(update) =
+            compaction::abandon(started, compaction::uses_standard_updates(ctx.compaction, ctx.child_updates, false))
     {
         outputs.extend(route(ctx, None, update));
     }
@@ -370,9 +319,7 @@ fn child_created(state: &TurnState, event: &Value, ctx: &TurnContext) -> Folded 
     let Some(parent_id) = text(data, "parentID").filter(|id| !id.is_empty()) else {
         return Folded::new(state.clone(), Vec::new());
     };
-    let parent = (parent_id != ctx.session_id)
-        .then(|| state.children.get(parent_id))
-        .flatten();
+    let parent = (parent_id != ctx.session_id).then(|| state.children.get(parent_id)).flatten();
     if parent.is_none() && parent_id != ctx.session_id {
         return Folded::new(state.clone(), Vec::new());
     }
@@ -422,36 +369,19 @@ fn root_event(state: &TurnState, event: &Value, ctx: &TurnContext) -> Folded {
 }
 
 fn terminal(state: TurnState, terminal: Terminal) -> Folded {
-    Folded {
-        state,
-        outputs: Vec::new(),
-        terminal: Some(terminal),
-    }
+    Folded { state, outputs: Vec::new(), terminal: Some(terminal) }
 }
 
-fn child_event(
-    state: &TurnState,
-    event: &Value,
-    ctx: &TurnContext,
-    child: &child::Session,
-) -> Folded {
+fn child_event(state: &TurnState, event: &Value, ctx: &TurnContext, child: &child::Session) -> Folded {
     match kind(event) {
-        "session.execution.started" => Folded::new(
-            state.clone(),
-            child_status(ctx, child, child::status("running", None)),
-        ),
-        "session.execution.succeeded" => {
-            child_ended(state, ctx, child, child::status("completed", None))
+        "session.execution.started" => {
+            Folded::new(state.clone(), child_status(ctx, child, child::status("running", None)))
         }
-        "session.execution.interrupted" => {
-            child_ended(state, ctx, child, child::status("interrupted", None))
+        "session.execution.succeeded" => child_ended(state, ctx, child, child::status("completed", None)),
+        "session.execution.interrupted" => child_ended(state, ctx, child, child::status("interrupted", None)),
+        "session.execution.failed" => {
+            child_ended(state, ctx, child, child::status("failed", data(event).get("error").cloned()))
         }
-        "session.execution.failed" => child_ended(
-            state,
-            ctx,
-            child,
-            child::status("failed", data(event).get("error").cloned()),
-        ),
         _ => session_event(state, event, ctx, Some(child)),
     }
 }
@@ -466,17 +396,11 @@ fn tag(update: &mut Value, session_update: &str) {
     *object = tagged;
 }
 
-fn session_event(
-    state: &TurnState,
-    event: &Value,
-    ctx: &TurnContext,
-    child: Option<&child::Session>,
-) -> Folded {
+fn session_event(state: &TurnState, event: &Value, ctx: &TurnContext, child: Option<&child::Session>) -> Folded {
     let data = data(event);
     let session_id = child.map_or(ctx.session_id.as_str(), |child| child.id.as_str());
     let send = |update: Value| route(ctx, child, update);
-    let standard =
-        compaction::uses_standard_updates(ctx.compaction, ctx.child_updates, child.is_some());
+    let standard = compaction::uses_standard_updates(ctx.compaction, ctx.child_updates, child.is_some());
     match kind(event) {
         "session.step.started" => {
             if !state.retries.contains_key(session_id) {
@@ -484,9 +408,7 @@ fn session_event(
             }
             let mut next = state.clone();
             next.retries.remove(session_id);
-            let outputs = send(
-                json!({ "sessionUpdate": "session_info_update", "_meta": { (RETRY_META): null } }),
-            );
+            let outputs = send(json!({ "sessionUpdate": "session_info_update", "_meta": { (RETRY_META): null } }));
             Folded::new(next, outputs)
         }
         "session.retry.scheduled" => {
@@ -497,9 +419,7 @@ fn session_event(
             });
             let mut next = state.clone();
             next.retries.insert(session_id.to_owned(), retry.clone());
-            let outputs = send(
-                json!({ "sessionUpdate": "session_info_update", "_meta": { (RETRY_META): retry } }),
-            );
+            let outputs = send(json!({ "sessionUpdate": "session_info_update", "_meta": { (RETRY_META): retry } }));
             Folded::new(next, outputs)
         }
         "session.compaction.started" | "session.compaction.ended" | "session.compaction.failed" => {
@@ -510,11 +430,8 @@ fn session_event(
             Folded::new(next, outputs)
         }
         "session.compaction.delta" => {
-            let update = compaction::chunk(
-                state.compactions.get(session_id),
-                text(data, "text").unwrap_or_default(),
-                standard,
-            );
+            let update =
+                compaction::chunk(state.compactions.get(session_id), text(data, "text").unwrap_or_default(), standard);
             Folded::new(state.clone(), update.map(send).unwrap_or_default())
         }
         "session.text.delta" => Folded::new(
@@ -541,10 +458,7 @@ fn session_event(
             let id = text(data, "id").unwrap_or_default();
             let name = text(data, "name").unwrap_or("tool");
             let mut next = state.clone();
-            next.tools.insert(
-                tool_key(tool_session, id),
-                new_tool(tool_session, id, Some(name)),
-            );
+            next.tools.insert(tool_key(tool_session, id), new_tool(tool_session, id, Some(name)));
             let mut update = pending_tool_call(id, name, &json!({}), None, &ctx.cwd);
             tag(&mut update, "tool_call");
             Folded::new(next, send(update))
@@ -553,11 +467,7 @@ fn session_event(
             let tool_session = text(data, "sessionID").unwrap_or_default();
             let id = text(data, "id").unwrap_or_default();
             let key = tool_key(tool_session, id);
-            let mut tool = state
-                .tools
-                .get(&key)
-                .cloned()
-                .unwrap_or_else(|| new_tool(tool_session, id, None));
+            let mut tool = state.tools.get(&key).cloned().unwrap_or_else(|| new_tool(tool_session, id, None));
             tool.input = data.get("input").cloned().unwrap_or_else(|| json!({}));
             let mut update = running_tool_update(id, &tool.name, &tool.input, &ctx.cwd);
             tag(&mut update, "tool_call_update");
@@ -583,11 +493,7 @@ fn session_event(
             let tool_session = text(data, "sessionID").unwrap_or_default();
             let id = text(data, "id").unwrap_or_default();
             let key = tool_key(tool_session, id);
-            let tool = state
-                .tools
-                .get(&key)
-                .cloned()
-                .unwrap_or_else(|| new_tool(tool_session, id, None));
+            let tool = state.tools.get(&key).cloned().unwrap_or_else(|| new_tool(tool_session, id, None));
             let metadata = data.get("metadata").filter(|value| !value.is_null());
             let mut update = completed_tool_update(
                 id,
@@ -598,15 +504,9 @@ fn session_event(
                 &ctx.cwd,
             );
             tag(&mut update, "tool_call_update");
-            let source = DiffSource {
-                tool_name: tool.name.clone(),
-                input: tool.input.clone(),
-                metadata: metadata.cloned(),
-            };
-            let outputs = send(update)
-                .into_iter()
-                .map(|output| with_diff(output, &source))
-                .collect();
+            let source =
+                DiffSource { tool_name: tool.name.clone(), input: tool.input.clone(), metadata: metadata.cloned() };
+            let outputs = send(update).into_iter().map(|output| with_diff(output, &source)).collect();
             let mut next = state.clone();
             next.tools.shift_remove(&key);
             Folded::new(next, outputs)
@@ -615,33 +515,11 @@ fn session_event(
             let tool_session = text(data, "sessionID").unwrap_or_default();
             let id = text(data, "id").unwrap_or_default();
             let key = tool_key(tool_session, id);
-            let tool = state
-                .tools
-                .get(&key)
-                .cloned()
-                .unwrap_or_else(|| new_tool(tool_session, id, None));
-            let metadata = data
-                .get("metadata")
-                .filter(|value| !value.is_null())
-                .unwrap_or(&tool.metadata);
-            let content = data
-                .get("content")
-                .filter(|value| !value.is_null())
-                .cloned()
-                .unwrap_or_else(|| json!([]));
-            let error = data
-                .get("error")
-                .and_then(|error| text(error, "message"))
-                .unwrap_or_default();
-            let mut update = error_tool_update(
-                id,
-                &tool.name,
-                &tool.input,
-                &content,
-                Some(metadata),
-                error,
-                &ctx.cwd,
-            );
+            let tool = state.tools.get(&key).cloned().unwrap_or_else(|| new_tool(tool_session, id, None));
+            let metadata = data.get("metadata").filter(|value| !value.is_null()).unwrap_or(&tool.metadata);
+            let content = data.get("content").filter(|value| !value.is_null()).cloned().unwrap_or_else(|| json!([]));
+            let error = data.get("error").and_then(|error| text(error, "message")).unwrap_or_default();
+            let mut update = error_tool_update(id, &tool.name, &tool.input, &content, Some(metadata), error, &ctx.cwd);
             tag(&mut update, "tool_call_update");
             let mut next = state.clone();
             next.tools.shift_remove(&key);
@@ -653,14 +531,8 @@ fn session_event(
 
 fn with_diff(output: Output, source: &DiffSource) -> Output {
     match output {
-        Output::SessionUpdate { update, .. } => Output::SessionUpdate {
-            update,
-            diff: Some(source.clone()),
-        },
-        Output::ChildUpdate { update, .. } => Output::ChildUpdate {
-            update,
-            diff: Some(source.clone()),
-        },
+        Output::SessionUpdate { update, .. } => Output::SessionUpdate { update, diff: Some(source.clone()) },
+        Output::ChildUpdate { update, .. } => Output::ChildUpdate { update, diff: Some(source.clone()) },
         other => other,
     }
 }
@@ -692,28 +564,17 @@ fn route(ctx: &TurnContext, child: Option<&child::Session>, update: Value) -> Ve
     if ctx.child_updates {
         return child_status(ctx, child, child::update_event(projected));
     }
-    vec![Output::SessionUpdate {
-        update: projected,
-        diff: None,
-    }]
+    vec![Output::SessionUpdate { update: projected, diff: None }]
 }
 
 fn child_status(ctx: &TurnContext, child: &child::Session, event: Value) -> Vec<Output> {
     if !ctx.child_updates {
         return Vec::new();
     }
-    vec![Output::ChildUpdate {
-        update: child::update(&ctx.session_id, child, event),
-        diff: None,
-    }]
+    vec![Output::ChildUpdate { update: child::update(&ctx.session_id, child, event), diff: None }]
 }
 
-fn child_ended(
-    state: &TurnState,
-    ctx: &TurnContext,
-    child: &child::Session,
-    status: Value,
-) -> Folded {
+fn child_ended(state: &TurnState, ctx: &TurnContext, child: &child::Session, status: Value) -> Folded {
     let mut next = state.clone();
     next.open_children.remove(&child.id);
     Folded::new(next, child_status(ctx, child, status))
@@ -722,10 +583,7 @@ fn child_ended(
 fn record_step(state: &TurnState, tokens: Option<&Value>) -> TurnState {
     let tokens = Tokens::from_json(tokens.unwrap_or(&Value::Null));
     let mut next = state.clone();
-    next.usage = Some(Usage {
-        turn: state.usage.map_or(tokens, |usage| usage.turn.add(&tokens)),
-        last: tokens,
-    });
+    next.usage = Some(Usage { turn: state.usage.map_or(tokens, |usage| usage.turn.add(&tokens)), last: tokens });
     next
 }
 

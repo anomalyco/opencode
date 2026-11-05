@@ -46,10 +46,7 @@ impl Stash {
         writer.run(move || {
             let _ = send.send(jsonl::Stash::load(&file).list().to_vec());
         });
-        let stash = Self {
-            entries: Rc::default(),
-            file: Some((state, writer)),
-        };
+        let stash = Self { entries: Rc::default(), file: Some((state, writer)) };
         let entries = stash.entries.clone();
         app.spawn(async move { receive.await.ok() }, move |_, loaded| {
             let Some(loaded) = loaded else { return };
@@ -118,8 +115,7 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
     let when = |check: fn(&Inner, &Tui) -> bool| {
         let weak = Rc::downgrade(inner);
         Condition::when(move || {
-            weak.upgrade()
-                .is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui)))
+            weak.upgrade().is_some_and(|prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui)))
         })
     };
     let run = |action: fn(&Rc<Inner>, &Tui)| {
@@ -134,11 +130,7 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
         }
     };
     let command = |id: &str, title: &str, action: fn(&Rc<Inner>, &Tui)| {
-        TuiCommand::new(id, run(action))
-            .title(title)
-            .group("Prompt")
-            .bind(Bind::Off)
-            .palette()
+        TuiCommand::new(id, run(action)).title(title).group("Prompt").bind(Bind::Off).palette()
     };
     KeymapLayer {
         mode: Some(GLOBAL_MODE.to_owned()),

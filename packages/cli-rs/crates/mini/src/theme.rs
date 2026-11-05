@@ -111,16 +111,8 @@ pub struct ThemeInput {
 
 /// `resolveRunTheme`.
 pub fn resolve(input: &ThemeInput) -> RunTheme {
-    let colors = input
-        .palette
-        .as_ref()
-        .map(TerminalColors::from_palette)
-        .filter(TerminalColors::usable);
-    let mode = colors
-        .as_ref()
-        .and_then(terminal_mode)
-        .or(input.mode)
-        .unwrap_or(ThemeMode::Dark);
+    let colors = input.palette.as_ref().map(TerminalColors::from_palette).filter(TerminalColors::usable);
+    let mode = colors.as_ref().and_then(terminal_mode).or(input.mode).unwrap_or(ThemeMode::Dark);
     if input.mono {
         return mono(mode);
     }
@@ -136,37 +128,25 @@ pub fn resolve(input: &ThemeInput) -> RunTheme {
         catalog.set_custom(custom);
     }
     // Mini keeps the terminal background, so a theme without this mode falls back to opencode.
-    let resolved = catalog
-        .load(name, mode)
-        .ok()
-        .filter(|loaded| loaded.mode == mode)
-        .map(|loaded| loaded.theme);
+    let resolved = catalog.load(name, mode).ok().filter(|loaded| loaded.mode == mode).map(|loaded| loaded.theme);
     let system = name == "system" && resolved.is_some();
     let theme = resolved.unwrap_or_else(|| fallback(mode));
     let mut run = map(&theme, &indexed, system);
     run.background = terminal_default(
-        input
-            .palette
-            .as_ref()
-            .and_then(|palette| palette.background)
-            .unwrap_or(theme.background.base),
+        input.palette.as_ref().and_then(|palette| palette.background).unwrap_or(theme.background.base),
     );
     run
 }
 
 fn fallback(mode: ThemeMode) -> UiTheme {
-    Catalog::default()
-        .load("opencode", mode)
-        .expect("the built-in opencode theme resolves")
-        .theme
+    Catalog::default().load("opencode", mode).expect("the built-in opencode theme resolves").theme
 }
 
 /// The 256 palette slots: the terminal's colors where it reported them, else xterm's.
 fn indexed(palette: Option<&TerminalPalette>) -> Vec<(u8, Color)> {
     (0..=255u8)
         .map(|index| {
-            let reported = palette
-                .and_then(|palette| palette.colors.get(usize::from(index)).copied().flatten());
+            let reported = palette.and_then(|palette| palette.colors.get(usize::from(index)).copied().flatten());
             let fallback = Color::indexed(index);
             let color = reported.unwrap_or(fallback);
             (index, Color::rgb(color.r, color.g, color.b))
@@ -197,10 +177,7 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
         }
         nearest(indexed, value)
     };
-    let tone = |color: Color| Tone {
-        body: scrollback(color),
-        start: None,
-    };
+    let tone = |color: Color| Tone { body: scrollback(color), start: None };
     let text = &theme.text;
     let mut categorical: Vec<Color> = Vec::new();
     for scale in theme.categorical() {
@@ -250,10 +227,7 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
             user: tone(text.base),
             assistant: tone(theme.markdown.text),
             reasoning: tone(text.muted),
-            tool: Tone {
-                body: scrollback(text.muted),
-                start: Some(scrollback(text.muted)),
-            },
+            tool: Tone { body: scrollback(text.muted), start: Some(scrollback(text.muted)) },
             error: tone(text.feedback.error.base),
         },
         splash: SplashTheme {
@@ -295,19 +269,10 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
 /// `monoTheme`: the terminal's default foreground and background only.
 pub fn mono(mode: ThemeMode) -> RunTheme {
     let (fg, bg) = match mode {
-        ThemeMode::Light => (
-            Color::default_with(0, 0, 0),
-            Color::default_with(255, 255, 255),
-        ),
-        ThemeMode::Dark => (
-            Color::default_with(255, 255, 255),
-            Color::default_with(0, 0, 0),
-        ),
+        ThemeMode::Light => (Color::default_with(0, 0, 0), Color::default_with(255, 255, 255)),
+        ThemeMode::Dark => (Color::default_with(255, 255, 255), Color::default_with(0, 0, 0)),
     };
-    let tone = Tone {
-        body: fg,
-        start: None,
-    };
+    let tone = Tone { body: fg, start: None };
     RunTheme {
         background: bg,
         footer: FooterTheme {
@@ -334,19 +299,8 @@ pub fn mono(mode: ThemeMode) -> RunTheme {
             border: fg,
             line: bg,
         },
-        entry: EntryTheme {
-            system: tone,
-            user: tone,
-            assistant: tone,
-            reasoning: tone,
-            tool: tone,
-            error: tone,
-        },
-        splash: SplashTheme {
-            left: fg,
-            right: fg,
-            left_shadow: bg,
-        },
+        entry: EntryTheme { system: tone, user: tone, assistant: tone, reasoning: tone, tool: tone, error: tone },
+        splash: SplashTheme { left: fg, right: fg, left_shadow: bg },
         block: BlockTheme {
             text: fg,
             muted: fg,
@@ -383,11 +337,7 @@ pub fn nearest(indexed: &[(u8, Color)], color: Color) -> Color {
     let mut best = (f64::INFINITY, 0u8);
     for (index, sample) in indexed {
         let sample = oklab(*sample);
-        let (dl, da, db) = (
-            sample.0 - target.0,
-            sample.1 - target.1,
-            sample.2 - target.2,
-        );
+        let (dl, da, db) = (sample.0 - target.0, sample.1 - target.1, sample.2 - target.2);
         let distance = dl * dl * 2.0 + da * da + db * db;
         if distance < best.0 {
             best = (distance, *index);
@@ -400,11 +350,7 @@ pub fn nearest(indexed: &[(u8, Color)], color: Color) -> Color {
 fn oklab(color: Color) -> (f64, f64, f64) {
     let linear = |channel: u8| {
         let value = f64::from(channel) / 255.0;
-        if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        }
+        if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) }
     };
     let (r, g, b) = (linear(color.r), linear(color.g), linear(color.b));
     let l = (0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b).cbrt();
@@ -515,11 +461,7 @@ pub fn mono_snapshot(buffer: &opentui::native::Buffer) -> opentui::Result<()> {
                 // A grapheme cluster.
                 (Some(_), Some(_)) => '?',
             };
-            let style = Style {
-                fg: Some(cell.fg),
-                bg: Some(cell.bg),
-                attributes: cell.attributes,
-            };
+            let style = Style { fg: Some(cell.fg), bg: Some(cell.bg), attributes: cell.attributes };
             buffer.cell(x as i32, y as i32, character, style)?;
         }
     }
@@ -535,10 +477,7 @@ mod tests {
         assert_eq!(mono_text("a — b… “q” • ✓\tx"), "a -- b... \"q\" * ?\tx");
         assert_eq!(mono_prefix("→ Skill", true), "-> Skill");
         assert_eq!(mono_prefix("→ Skill", false), "→ Skill");
-        assert_eq!(
-            mono_tool_text("2 questions · done", true),
-            "2 questions - done"
-        );
+        assert_eq!(mono_tool_text("2 questions · done", true), "2 questions - done");
         assert_eq!(mono_tool_text("read · a.ts", true), "read · a.ts");
         assert_eq!(mono_truncate("abcdefgh", 6, true), "abc...");
     }
@@ -546,14 +485,8 @@ mod tests {
     #[test]
     fn nearest_picks_the_closest_slot() {
         let slots = indexed(None);
-        assert_eq!(
-            nearest(&slots, Color::rgb(255, 0, 0)).intent(),
-            Intent::Indexed(9)
-        );
-        assert_eq!(
-            nearest(&slots, Color::rgb(0, 0, 0)).intent(),
-            Intent::Indexed(0)
-        );
+        assert_eq!(nearest(&slots, Color::rgb(255, 0, 0)).intent(), Intent::Indexed(9));
+        assert_eq!(nearest(&slots, Color::rgb(0, 0, 0)).intent(), Intent::Indexed(0));
         // A gray lands on the gray ramp, not on a primary.
         let gray = nearest(&slots, Color::rgb(0x80, 0x80, 0x80));
         assert!(matches!(gray.intent(), Intent::Indexed(8 | 244)));
@@ -570,17 +503,10 @@ mod tests {
 
     #[test]
     fn mono_uses_default_colors_by_mode() {
-        let dark = resolve(&ThemeInput {
-            mono: true,
-            ..ThemeInput::default()
-        });
+        let dark = resolve(&ThemeInput { mono: true, ..ThemeInput::default() });
         assert_eq!(dark.entry.assistant.body.intent(), Intent::Default);
         assert_eq!((dark.entry.user.body.r, dark.background.r), (255, 0));
-        let light = resolve(&ThemeInput {
-            mono: true,
-            mode: Some(ThemeMode::Light),
-            ..ThemeInput::default()
-        });
+        let light = resolve(&ThemeInput { mono: true, mode: Some(ThemeMode::Light), ..ThemeInput::default() });
         assert_eq!((light.entry.user.body.r, light.background.r), (0, 255));
         assert!(light.syntax.is_none());
     }

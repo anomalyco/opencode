@@ -16,10 +16,7 @@ pub struct Diagnostic {
 
 /// `parseDiagnostics`: the first three errors (severity 1) the tool's metadata lists for `path`.
 pub fn parse(diagnostics: Option<&Value>, path: &str) -> Vec<Diagnostic> {
-    let Some(Value::Array(items)) = diagnostics
-        .and_then(Value::as_object)
-        .and_then(|files| files.get(path))
-    else {
+    let Some(Value::Array(items)) = diagnostics.and_then(Value::as_object).and_then(|files| files.get(path)) else {
         return Vec::new();
     };
     items
@@ -31,21 +28,13 @@ pub fn parse(diagnostics: Option<&Value>, path: &str) -> Vec<Diagnostic> {
                 .and_then(Value::as_object)
                 .and_then(|range| range.get("start"))
                 .and_then(Value::as_object)?;
-            let finite = |key: &str| {
-                start
-                    .get(key)
-                    .and_then(opencode_ui::tool_info::finite_number)
-            };
+            let finite = |key: &str| start.get(key).and_then(opencode_ui::tool_info::finite_number);
             let message = item.get("message").and_then(Value::as_str)?;
             let error = item.get("severity").and_then(Value::as_f64) == Some(1.0);
             if !error || message.is_empty() {
                 return None;
             }
-            Some(Diagnostic {
-                line: finite("line")?,
-                character: finite("character")?,
-                message: message.to_owned(),
-            })
+            Some(Diagnostic { line: finite("line")?, character: finite("character")?, message: message.to_owned() })
         })
         .take(3)
         .collect()

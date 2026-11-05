@@ -42,10 +42,7 @@ pub struct Changes {
 
 impl Changes {
     pub fn everything() -> Self {
-        Self {
-            all: true,
-            ..Self::default()
-        }
+        Self { all: true, ..Self::default() }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -143,8 +140,7 @@ impl Log {
             return None;
         }
         self.revision += 1;
-        self.entries
-            .push_back((self.revision, std::mem::take(&mut self.current)));
+        self.entries.push_back((self.revision, std::mem::take(&mut self.current)));
         if self.entries.len() > LOG_LIMIT {
             self.entries.pop_front();
         }
@@ -156,11 +152,7 @@ impl Log {
         if seen >= self.revision {
             return Changes::default();
         }
-        if self
-            .entries
-            .front()
-            .is_none_or(|(oldest, _)| seen + 1 < *oldest)
-        {
+        if self.entries.front().is_none_or(|(oldest, _)| seen + 1 < *oldest) {
             return Changes::everything();
         }
         let mut changes = Changes::default();
@@ -189,9 +181,7 @@ impl Log {
     }
 
     pub(crate) fn message(&mut self, session: &SessionID, message: &SessionMessageID) {
-        self.current
-            .message
-            .insert((session.clone(), message.clone()));
+        self.current.message.insert((session.clone(), message.clone()));
     }
 
     pub(crate) fn pending(&mut self, id: &SessionID) {

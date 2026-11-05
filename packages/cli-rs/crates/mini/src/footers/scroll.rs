@@ -23,11 +23,7 @@ impl Scroller {
             .min_width(0)
             .scrollbars(shown && !always)
             .scrollbar_colors(theme.line, theme.surface);
-        let row = View::new(app)
-            .row()
-            .width(Length::percent(100.0))
-            .min_height(0)
-            .child(&scroll);
+        let row = View::new(app).row().width(Length::percent(100.0)).min_height(0).child(&scroll);
         if shown && always {
             // A full-height thumb: the content of a permission fits its footer.
             row.add(

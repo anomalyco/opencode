@@ -20,11 +20,7 @@ pub struct Form {
 }
 
 pub(crate) fn sync_key(owner: &str, location: &Location) -> String {
-    let scope = if owner == GLOBAL {
-        location.key()
-    } else {
-        String::new()
-    };
+    let scope = if owner == GLOBAL { location.key() } else { String::new() };
     format!("session.form:{owner}:{scope}")
 }
 
@@ -37,12 +33,7 @@ impl State {
             return Some(forms.iter().collect());
         }
         let location = location?;
-        Some(
-            forms
-                .iter()
-                .filter(|form| form.location.as_ref() == Some(location))
-                .collect(),
-        )
+        Some(forms.iter().filter(|form| form.location.as_ref() == Some(location)).collect())
     }
 
     /// Sessions with pending forms.
@@ -73,12 +64,7 @@ impl State {
     }
 
     /// Removes a form; a global form only at `location`, when given. True when one was removed.
-    pub(crate) fn remove_form(
-        &mut self,
-        owner: &str,
-        id: &FormID,
-        location: Option<&Location>,
-    ) -> bool {
+    pub(crate) fn remove_form(&mut self, owner: &str, id: &FormID, location: Option<&Location>) -> bool {
         let Some(forms) = self.forms.get_mut(owner) else {
             return false;
         };
@@ -104,9 +90,7 @@ impl Data {
     /// Reads pending forms once per invalidation: a session's, or the global forms of a location
     /// (the default one for `None`).
     pub fn form_sync(&self, owner: &str, location: Option<&Location>) -> Task<()> {
-        let location = location
-            .cloned()
-            .unwrap_or_else(|| self.read(|state| state.default_location().clone()));
+        let location = location.cloned().unwrap_or_else(|| self.read(|state| state.default_location().clone()));
         let owner = owner.to_owned();
         let key = sync_key(&owner, &location);
         self.sync_start(
@@ -116,12 +100,7 @@ impl Data {
                 if owner == GLOBAL {
                     let response = data
                         .client()
-                        .form_list(
-                            &FormListInput {
-                                location: location.query(),
-                            },
-                            &RequestOptions::default(),
-                        )
+                        .form_list(&FormListInput { location: location.query() }, &RequestOptions::default())
                         .await
                         .map_err(Error::new)?;
                     let at = Location::from(&response.location);
@@ -133,10 +112,7 @@ impl Data {
                                 .data
                                 .into_iter()
                                 .filter(|form| form.session_id == GLOBAL)
-                                .map(|info| Form {
-                                    info,
-                                    location: Some(at.clone()),
-                                }),
+                                .map(|info| Form { info, location: Some(at.clone()) }),
                         );
                         state.log.forms(&owner);
                     });
@@ -144,25 +120,14 @@ impl Data {
                 }
                 let list = data
                     .client()
-                    .session_form_list(
-                        &SessionFormListInput {
-                            session_id: owner.clone(),
-                        },
-                        &RequestOptions::default(),
-                    )
+                    .session_form_list(&SessionFormListInput { session_id: owner.clone() }, &RequestOptions::default())
                     .await
                     .map_err(|error| evict_missing(&data, error))?;
                 data.write(|state| {
                     if state.deleted_since(&SessionID(owner.clone()), started) {
                         return;
                     }
-                    let forms = list
-                        .into_iter()
-                        .map(|info| Form {
-                            info,
-                            location: None,
-                        })
-                        .collect();
+                    let forms = list.into_iter().map(|info| Form { info, location: None }).collect();
                     state.forms.insert(owner.clone(), forms);
                     state.log.forms(&owner);
                 });
@@ -180,28 +145,14 @@ impl Data {
 
     /// Answers a form and drops it. A form that is already settled counts as answered. A global
     /// form needs its location, which the request names in a header.
-    pub async fn form_reply(
-        &self,
-        input: SessionFormReplyInput,
-        location: Option<&Location>,
-    ) -> Result<(), Error> {
-        let result = self
-            .client()
-            .session_form_reply(&input, &request_options(&input.session_id, location))
-            .await;
+    pub async fn form_reply(&self, input: SessionFormReplyInput, location: Option<&Location>) -> Result<(), Error> {
+        let result = self.client().session_form_reply(&input, &request_options(&input.session_id, location)).await;
         self.settle_form(&input.session_id, &input.form_id, location, result)
     }
 
     /// Cancels a form and drops it; see [`Data::form_reply`].
-    pub async fn form_cancel(
-        &self,
-        input: SessionFormCancelInput,
-        location: Option<&Location>,
-    ) -> Result<(), Error> {
-        let result = self
-            .client()
-            .session_form_cancel(&input, &request_options(&input.session_id, location))
-            .await;
+    pub async fn form_cancel(&self, input: SessionFormCancelInput, location: Option<&Location>) -> Result<(), Error> {
+        let result = self.client().session_form_cancel(&input, &request_options(&input.session_id, location)).await;
         self.settle_form(&input.session_id, &input.form_id, location, result)
     }
 
@@ -214,11 +165,8 @@ impl Data {
     ) -> Result<(), Error> {
         if let Err(error) = result {
             let settled = error.declared().is_some_and(|declared| {
-                matches!(
-                    declared.tag.as_deref(),
-                    Some("FormNotFoundError" | "FormAlreadySettledError")
-                ) && declared.body.get("id").and_then(serde_json::Value::as_str)
-                    == Some(id.0.as_str())
+                matches!(declared.tag.as_deref(), Some("FormNotFoundError" | "FormAlreadySettledError"))
+                    && declared.body.get("id").and_then(serde_json::Value::as_str) == Some(id.0.as_str())
             });
             if !settled {
                 return Err(Error::new(error));
@@ -237,10 +185,9 @@ impl Data {
 /// Global forms name their location in a header (`formRequestOptions`).
 fn request_options(owner: &str, location: Option<&Location>) -> RequestOptions {
     match (owner, location) {
-        (GLOBAL, Some(location)) => RequestOptions::default().header(
-            "x-opencode-directory",
-            encode_component(&location.directory),
-        ),
+        (GLOBAL, Some(location)) => {
+            RequestOptions::default().header("x-opencode-directory", encode_component(&location.directory))
+        }
         _ => RequestOptions::default(),
     }
 }
@@ -250,18 +197,9 @@ fn encode_component(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'!'
-            | b'~'
-            | b'*'
-            | b'\''
-            | b'('
-            | b')' => (byte as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
+                (byte as char).to_string()
+            }
             _ => format!("%{byte:02X}"),
         })
         .collect()
@@ -271,9 +209,6 @@ fn encode_component(value: &str) -> String {
 mod tests {
     #[test]
     fn encodes_like_encode_uri_component() {
-        assert_eq!(
-            super::encode_component("/tmp/a b&c=d/é(x)!"),
-            "%2Ftmp%2Fa%20b%26c%3Dd%2F%C3%A9(x)!"
-        );
+        assert_eq!(super::encode_component("/tmp/a b&c=d/é(x)!"), "%2Ftmp%2Fa%20b%26c%3Dd%2F%C3%A9(x)!");
     }
 }

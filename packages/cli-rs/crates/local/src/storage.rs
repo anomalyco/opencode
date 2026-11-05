@@ -41,11 +41,7 @@ impl Storage {
         let root = state.join(segment(channel)?);
         let directory = root.join("tui");
         fs::create_dir_all(&directory)?;
-        Ok(Self {
-            directory,
-            locks: root.join("locks"),
-            lock: lock::Options::default(),
-        })
+        Ok(Self { directory, locks: root.join("locks"), lock: lock::Options::default() })
     }
 
     pub fn directory(&self) -> &Path {
@@ -63,12 +59,7 @@ impl Storage {
     }
 
     /// Changes `key` under the lock and returns the value written.
-    pub fn update(
-        &self,
-        key: &str,
-        initial: &Value,
-        change: impl FnOnce(&mut Value),
-    ) -> Result<Value, Error> {
+    pub fn update(&self, key: &str, initial: &Value, change: impl FnOnce(&mut Value)) -> Result<Value, Error> {
         let file = self.file(key)?;
         lock::with_lock(&self.locks, &file.to_string_lossy(), &self.lock, || {
             let mut draft = read(&file).unwrap_or_else(|| initial.clone());
@@ -102,11 +93,7 @@ fn segment(value: &str) -> Result<&str, Error> {
     let mut chars = value.chars();
     let valid = chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
-    if valid {
-        Ok(value)
-    } else {
-        Err(Error::Segment(value.to_string()))
-    }
+    if valid { Ok(value) } else { Err(Error::Segment(value.to_string())) }
 }
 
 /// `writeJsonAtomic`: compact `JSON.stringify` to `<file>.<pid>.<uuid>.tmp`, then a rename. The
@@ -120,17 +107,10 @@ pub fn write_text_atomic(file: &Path, text: &str) -> io::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
-    let temp = PathBuf::from(format!(
-        "{}.{}.{}.tmp",
-        file.display(),
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ));
-    fs::write(&temp, text)
-        .and_then(|()| fs::rename(&temp, file))
-        .inspect_err(|_| {
-            let _ = fs::remove_file(&temp);
-        })
+    let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), uuid::Uuid::new_v4()));
+    fs::write(&temp, text).and_then(|()| fs::rename(&temp, file)).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })
 }
 
 #[cfg(test)]
@@ -147,22 +127,14 @@ mod tests {
         let file = storage.file("view").unwrap();
         assert_eq!(file, state.path().join("dev/tui/view.json"));
         fs::write(&file, "{\"open\":false,\"other\":1}").unwrap();
-        let next = storage
-            .update("view", &initial, |value| value["open"] = json!(true))
-            .unwrap();
+        let next = storage.update("view", &initial, |value| value["open"] = json!(true)).unwrap();
         assert_eq!(next, json!({"open": true, "other": 1}));
-        assert_eq!(
-            fs::read_to_string(&file).unwrap(),
-            "{\"open\":true,\"other\":1}"
-        );
+        assert_eq!(fs::read_to_string(&file).unwrap(), "{\"open\":true,\"other\":1}");
         fs::write(&file, "5").unwrap();
         assert_eq!(storage.load("view", &initial).unwrap(), initial);
         assert!(matches!(storage.file("../x"), Err(Error::Segment(_))));
         assert!(matches!(storage.file(".x"), Err(Error::Segment(_))));
         assert!(storage.file("plugin.sidebar.view").is_ok());
-        assert!(matches!(
-            storage.update("view", &initial, |value| *value = json!(1)),
-            Err(Error::NotObject)
-        ));
+        assert!(matches!(storage.update("view", &initial, |value| *value = json!(1)), Err(Error::NotObject)));
     }
 }

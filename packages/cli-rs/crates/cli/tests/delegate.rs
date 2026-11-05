@@ -42,12 +42,7 @@ impl Fake {
             .spawn()
             .unwrap();
         let pid = child.id();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(stdin.as_bytes())
-            .unwrap();
+        child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
         (child.wait_with_output().unwrap(), pid)
     }
 
@@ -63,16 +58,7 @@ fn every_delegated_command_gets_the_arguments_as_typed() {
         &["upgrade", "v1.2.3", "-m", "npm"],
         &["update", "--method=brew"],
         &["uninstall", "--dry-run", "-f"],
-        &[
-            "serve",
-            "--port",
-            "4096",
-            "--cors",
-            "a",
-            "--cors",
-            "b",
-            "--service",
-        ],
+        &["serve", "--port", "4096", "--cors", "a", "--cors", "b", "--service"],
         &["--log-level", "debug", "plugin", "list", "--builtin"],
         &["plugin", "add", "@scope/pkg@1"],
         &["plugin", "check", "pkg", "--server", "http://127.0.0.1:1"],
@@ -95,10 +81,7 @@ fn the_child_keeps_the_process_stdio_and_exit_code() {
     assert_eq!(String::from_utf8_lossy(&output.stdout), "piped input\n");
     // `--print-logs` prints this process's "cli starting" line before the TypeScript binary takes over.
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("message=\"cli starting\"") && stderr.ends_with("\nto stderr\n"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("message=\"cli starting\"") && stderr.ends_with("\nto stderr\n"), "{stderr}");
     // On Unix the TypeScript binary replaces the process, so `serve --service` registers this pid.
     assert_eq!(fake.read("pid").trim(), pid.to_string());
     assert_eq!(fake.read("env"), "print-logs=1\n");
@@ -160,18 +143,12 @@ fn an_interrupt_waits_for_the_remote_access_command() {
         .unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while !dir.path().join("started").exists() {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the fake never started"
-        );
+        assert!(std::time::Instant::now() < deadline, "the fake never started");
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let group = rustix::process::Pid::from_raw(child.id() as i32).unwrap();
     rustix::process::kill_process_group(group, rustix::process::Signal::INT).unwrap();
     let status = child.wait().unwrap();
     assert_eq!(status.code(), Some(130));
-    assert_eq!(
-        std::fs::read_to_string(dir.path().join("teardown")).unwrap_or_default(),
-        "done\n"
-    );
+    assert_eq!(std::fs::read_to_string(dir.path().join("teardown")).unwrap_or_default(), "done\n");
 }

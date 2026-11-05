@@ -57,9 +57,7 @@ pub fn open_url(input: &str) -> Result<(), String> {
     let url = url::Url::parse(input)
         .ok()
         .filter(|url| matches!(url.scheme(), "http" | "https"))
-        .ok_or_else(|| {
-            format!("Only http and https links can be opened in the browser: {input}")
-        })?;
+        .ok_or_else(|| format!("Only http and https links can be opened in the browser: {input}"))?;
     open(url.as_str())
 }
 
@@ -145,15 +143,10 @@ mod tests {
         assert_eq!(open_url("https://opencode.ai/v2/docs"), Ok(()));
         assert_eq!(
             open_url("file:///etc/passwd"),
-            Err(
-                "Only http and https links can be opened in the browser: file:///etc/passwd".into()
-            )
+            Err("Only http and https links can be opened in the browser: file:///etc/passwd".into())
         );
         assert!(open_url("not a url").is_err());
         assert_eq!(open_path("/tmp/project"), Ok(()));
-        assert_eq!(
-            *capture.0.opened.borrow(),
-            ["https://opencode.ai/v2/docs", "/tmp/project"]
-        );
+        assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/v2/docs", "/tmp/project"]);
     }
 }

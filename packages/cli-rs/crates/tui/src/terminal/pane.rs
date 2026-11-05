@@ -24,10 +24,7 @@ use crate::app::Tui;
 
 enum Item {
     Output(Vec<u8>),
-    Resize {
-        size: Size,
-        checkpoint: Option<Vec<u8>>,
-    },
+    Resize { size: Size, checkpoint: Option<Vec<u8>> },
     Ready,
 }
 
@@ -79,9 +76,7 @@ impl Pane {
             .width(80)
             .height(24)
             .transparent_background(background.a == 0);
-        let failure = Text::new(app, "")
-            .fg(page.text.feedback.error.base)
-            .visible(false);
+        let failure = Text::new(app, "").fg(page.text.feedback.error.base).visible(false);
         let root = View::new(app)
             .grow(1.0)
             .basis(Length::Auto)
@@ -98,10 +93,7 @@ impl Pane {
             view: RefCell::new(Some(view.clone())),
             shown: view,
             socket: RefCell::default(),
-            state: RefCell::new(State {
-                terminal_size: Some(Size { cols: 80, rows: 24 }),
-                ..State::default()
-            }),
+            state: RefCell::new(State { terminal_size: Some(Size { cols: 80, rows: 24 }), ..State::default() }),
             disposed: Cell::new(false),
             attachment: uuid::Uuid::new_v4().to_string(),
             theme: super::palette::osc(&page, mode, background),
@@ -189,10 +181,7 @@ impl Pane {
         let weak = Rc::downgrade(self);
         self.root.on_resize(move |_, rect| {
             let Some(pane) = weak.upgrade() else { return };
-            let size = Size {
-                cols: (rect.width as u16).saturating_sub(2).max(1),
-                rows: rect.height as u16,
-            };
+            let size = Size { cols: (rect.width as u16).saturating_sub(2).max(1), rows: rect.height as u16 };
             let claim = {
                 let mut state = pane.state.borrow_mut();
                 state.size = Some(size);
@@ -337,16 +326,10 @@ impl Pane {
 
     fn connect(self: &Rc<Self>, tui: &Tui) {
         let client = tui.data.client().clone();
-        let input = ExperimentalPersistentPtySnapshotInput {
-            pty_id: PtyID(self.pty.clone()),
-        };
+        let input = ExperimentalPersistentPtySnapshotInput { pty_id: PtyID(self.pty.clone()) };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
-            async move {
-                client
-                    .experimental_persistent_pty_snapshot(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.experimental_persistent_pty_snapshot(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
                     return;
@@ -355,16 +338,11 @@ impl Pane {
                     Ok(snapshot) => snapshot,
                     Err(error) => return pane.fail(&error.to_string()),
                 };
-                let size = Size {
-                    cols: snapshot.info.size.cols as u16,
-                    rows: snapshot.info.size.rows as u16,
-                };
-                let checkpoint = base64::engine::general_purpose::STANDARD
-                    .decode(&snapshot.checkpoint)
-                    .unwrap_or_default();
+                let size = Size { cols: snapshot.info.size.cols as u16, rows: snapshot.info.size.rows as u16 };
+                let checkpoint =
+                    base64::engine::general_purpose::STANDARD.decode(&snapshot.checkpoint).unwrap_or_default();
                 pane.set_canonical(size);
-                pane.state.borrow_mut().waiting =
-                    Some((size, checkpoint, snapshot.info.output.tail));
+                pane.state.borrow_mut().waiting = Some((size, checkpoint, snapshot.info.output.tail));
                 pane.resume();
             },
         );
@@ -399,21 +377,18 @@ impl Pane {
             takeover: true,
         };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { pty::connect(&client, connector.as_ref(), &input).await },
-            move |cx, result| {
-                let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
-                    return;
-                };
-                match result {
-                    Ok((_, socket)) => {
-                        *pane.socket.borrow_mut() = Some(socket.outgoing);
-                        pane.receive(cx.app(), socket.incoming);
-                    }
-                    Err(error) => pane.fail(&error.to_string()),
+        tui.app.spawn(async move { pty::connect(&client, connector.as_ref(), &input).await }, move |cx, result| {
+            let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
+                return;
+            };
+            match result {
+                Ok((_, socket)) => {
+                    *pane.socket.borrow_mut() = Some(socket.outgoing);
+                    pane.receive(cx.app(), socket.incoming);
                 }
-            },
-        );
+                Err(error) => pane.fail(&error.to_string()),
+            }
+        });
     }
 
     /// Reads the socket on the UI thread, one wake per batch of messages.
@@ -468,39 +443,27 @@ impl Pane {
             Message::Exited { .. } => self.state.borrow_mut().exited = true,
             Message::Resized { size, checkpoint } => self.enqueue(Item::Resize {
                 size,
-                checkpoint: Some(
-                    base64::engine::general_purpose::STANDARD
-                        .decode(checkpoint)
-                        .unwrap_or_default(),
-                ),
+                checkpoint: Some(base64::engine::general_purpose::STANDARD.decode(checkpoint).unwrap_or_default()),
             }),
             Message::ReplayComplete => self.enqueue(Item::Ready),
             Message::ControllerChanged { attachment_id } => {
                 let claim = {
                     let mut state = self.state.borrow_mut();
                     let previous = state.controller;
-                    state.controller =
-                        attachment_id.flatten().as_deref() == Some(self.attachment.as_str());
+                    state.controller = attachment_id.flatten().as_deref() == Some(self.attachment.as_str());
                     state.controller && !previous && state.restored
                 };
                 if claim {
                     self.interact();
                 }
             }
-            Message::Attached {
-                input_protocol,
-                size,
-                role,
-            } => {
+            Message::Attached { input_protocol, size, role } => {
                 if input_protocol != Some(1.0) {
                     self.fail("Persistent terminal server is out of date; restart OpenCode");
                     self.socket.borrow_mut().take();
                     return false;
                 }
-                self.enqueue(Item::Resize {
-                    size,
-                    checkpoint: None,
-                });
+                self.enqueue(Item::Resize { size, checkpoint: None });
                 let mut state = self.state.borrow_mut();
                 state.controller = role == Some(Role::Controller);
                 state.attached = true;

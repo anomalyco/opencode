@@ -30,22 +30,11 @@ pub fn install(tui: &Rc<Tui>) {
     .title("Switch theme")
     .group("System")
     .palette()
-    .slash(Slash {
-        name: "themes".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    });
+    .slash(Slash { name: "themes".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: the configured keybind (`none` by default).
-        KeymapLayer {
-            bindings: vec!["theme.switch".to_owned()],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { bindings: vec!["theme.switch".to_owned()], ..KeymapLayer::default() },
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
@@ -195,11 +184,7 @@ impl List {
         };
         let list = self.clone();
         tui.app.defer(move |_| {
-            let first = list
-                .select
-                .borrow()
-                .as_ref()
-                .and_then(|select| select.filtered().into_iter().next());
+            let first = list.select.borrow().as_ref().and_then(|select| select.filtered().into_iter().next());
             if let Some(first) = first {
                 list.preview(&first.value);
             }
@@ -243,8 +228,5 @@ impl List {
 fn options(tui: &Tui) -> Vec<SelectOption<String>> {
     let mut names = tui.theme.borrow().names();
     names.sort_by_key(|name| name.to_lowercase());
-    names
-        .into_iter()
-        .map(|name| SelectOption::new(name.clone(), name))
-        .collect()
+    names.into_iter().map(|name| SelectOption::new(name.clone(), name)).collect()
 }

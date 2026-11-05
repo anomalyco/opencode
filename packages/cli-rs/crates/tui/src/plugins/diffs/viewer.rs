@@ -14,8 +14,8 @@ use std::rc::{Rc, Weak};
 use base64::Engine;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    FileDiffInfo, FileDiffInfoStatus, FileReadInput, LocationQueryInput, SessionDiffInput,
-    SessionID, VcsBaseInput, VcsDiffInput, VcsMode,
+    FileDiffInfo, FileDiffInfoStatus, FileReadInput, LocationQueryInput, SessionDiffInput, SessionID, VcsBaseInput,
+    VcsDiffInput, VcsMode,
 };
 use opencode_local::cli_config::{DiffSource, DiffView as PreferredView};
 use opencode_plugin::{Definition, Setup, Slotted};
@@ -44,8 +44,7 @@ const FILE_TREE_MIN_WIDTH: i64 = 30;
 const FILE_TREE_MAX_WIDTH: i64 = 40;
 const FULL_INSET: u16 = 2;
 /// The full layout keeps its tree and inset cards only while its patches stay as wide as the narrowest docked panel.
-const FULL_LAYOUT_MIN_WIDTH: i64 =
-    FILE_TREE_MIN_WIDTH + FULL_INSET as i64 * 2 + SESSION_PANEL_SPLIT_MIN_WIDTH / 2;
+const FULL_LAYOUT_MIN_WIDTH: i64 = FILE_TREE_MIN_WIDTH + FULL_INSET as i64 * 2 + SESSION_PANEL_SPLIT_MIN_WIDTH / 2;
 const VCS_DIFF_CONTEXT_LINES: i64 = 12;
 /// Frames the passes run after a change: the rebuilt layout, the scroll it asks for, and the headers pinned to it.
 const PASSES: u32 = 4;
@@ -138,10 +137,7 @@ impl From<FileDiffInfo> for File {
 enum Load {
     Loading,
     Failed,
-    Ready {
-        base: Option<Base>,
-        files: Vec<File>,
-    },
+    Ready { base: Option<Base>, files: Vec<File> },
 }
 
 /// The plugin's memory, kept until the TUI exits (`storage.memory("review")`): the last source and the chosen base
@@ -174,10 +170,7 @@ pub fn plugin() -> Definition<Tui> {
             ID,
             ROUTE,
             Rc::new(move |tui, host, input| {
-                let place = Place::Panel {
-                    host: host.clone(),
-                    session: SessionID(input.target.session.clone()),
-                };
+                let place = Place::Panel { host: host.clone(), session: SessionID(input.target.session.clone()) };
                 let viewer = Viewer::mount(tui, &panel, place, i64::from(input.width));
                 host.add(&viewer.root);
                 // The panel's host keeps the viewer, so its keys, menu, and watch go when the panel closes.
@@ -186,26 +179,12 @@ pub fn plugin() -> Definition<Tui> {
         );
         let route = shared.clone();
         setup.route(ROUTE, move |tui| {
-            let data = route.route.borrow().clone().unwrap_or(RouteData {
-                session: None,
-                back: Route::Home,
-            });
-            let place = Place::Route {
-                session: data.session,
-                back: data.back,
-            };
-            Box::new(RouteSlot(Viewer::mount(
-                tui,
-                &route,
-                place,
-                i64::from(tui.app.size().0),
-            )))
+            let data = route.route.borrow().clone().unwrap_or(RouteData { session: None, back: Route::Home });
+            let place = Place::Route { session: data.session, back: data.back };
+            Box::new(RouteSlot(Viewer::mount(tui, &route, place, i64::from(tui.app.size().0))))
         });
         let open = shared.clone();
-        setup.layer(keys::open_layer(
-            &tui,
-            Rc::new(move |tui| self::open(tui, &open)),
-        ));
+        setup.layer(keys::open_layer(&tui, Rc::new(move |tui| self::open(tui, &open))));
         let weak = tui.weak();
         setup.on_dispose(move || {
             if let Some(tui) = weak.upgrade() {
@@ -220,32 +199,18 @@ fn open(tui: &Tui, shared: &Rc<Shared>) {
     let route = tui.route();
     tui.dialogs.clear();
     if let Route::Session { id } = &route {
-        let target = Target {
-            plugin: ID.to_owned(),
-            name: ROUTE.to_owned(),
-            session: id.0.clone(),
-        };
+        let target = Target { plugin: ID.to_owned(), name: ROUTE.to_owned(), session: id.0.clone() };
         if tui.panels.current().as_ref() == Some(&target) {
             tui.panels.close(tui);
             return;
         }
         let fullscreen = tui.settings.info().diffs.and_then(|diffs| diffs.fullscreen) == Some(true);
-        let presentation = if fullscreen {
-            Presentation::Fullscreen
-        } else {
-            Presentation::Panel
-        };
+        let presentation = if fullscreen { Presentation::Fullscreen } else { Presentation::Panel };
         tui.panels.open(tui, target, presentation);
         return;
     }
-    *shared.route.borrow_mut() = Some(RouteData {
-        session: None,
-        back: route,
-    });
-    tui.navigate(Route::Plugin {
-        id: ID.to_owned(),
-        name: ROUTE.to_owned(),
-    });
+    *shared.route.borrow_mut() = Some(RouteData { session: None, back: route });
+    tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
 }
 
 struct RouteSlot(Rc<Viewer>);
@@ -261,10 +226,7 @@ enum Place {
     /// In the session's panel host, which takes the focus.
     Panel { host: View, session: SessionID },
     /// The full-screen route; closing goes back to `back`.
-    Route {
-        session: Option<SessionID>,
-        back: Route,
-    },
+    Route { session: Option<SessionID>, back: Route },
 }
 
 struct State {
@@ -346,18 +308,10 @@ impl Viewer {
             Place::Route { session, .. } => session.clone(),
         };
         let preferences = tui.settings.info().diffs.unwrap_or_default();
-        let initial = shared
-            .memory
-            .borrow()
-            .source
-            .or(preferences.source.map(Mode::from_config))
-            .unwrap_or(Mode::Branch);
+        let initial =
+            shared.memory.borrow().source.or(preferences.source.map(Mode::from_config)).unwrap_or(Mode::Branch);
         let sources = sources(session.is_some());
-        let mode = if sources.contains(&initial) {
-            initial
-        } else {
-            Mode::Branch
-        };
+        let mode = if sources.contains(&initial) { initial } else { Mode::Branch };
         let (location, branch) = tui.data.read(|state| {
             let location = session
                 .as_ref()
@@ -430,13 +384,8 @@ impl Viewer {
             Place::Route { .. } => {
                 let tui = self.tui.clone();
                 let enabled = Condition::when(move || {
-                    tui.upgrade().is_some_and(|tui| {
-                        tui.route()
-                            == Route::Plugin {
-                                id: ID.to_owned(),
-                                name: ROUTE.to_owned(),
-                            }
-                    })
+                    tui.upgrade()
+                        .is_some_and(|tui| tui.route() == Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() })
                 });
                 (None, enabled)
             }
@@ -483,18 +432,9 @@ impl Viewer {
     /// The chosen base, else the one the location reported (`sourceBase`).
     pub fn source_base(&self) -> Option<Base> {
         let state = self.state.borrow();
-        let chosen = self
-            .shared
-            .memory
-            .borrow()
-            .bases
-            .get(&state.base_key)
-            .cloned();
+        let chosen = self.shared.memory.borrow().bases.get(&state.base_key).cloned();
         chosen
-            .map(|reference| Base {
-                name: reference.clone(),
-                reference,
-            })
+            .map(|reference| Base { name: reference.clone(), reference })
             .or_else(|| state.reported.get(&state.base_key).cloned().flatten())
     }
 
@@ -531,16 +471,8 @@ impl Viewer {
     /// `onSelect` of the base dialog: remembers `reference` for `key`, and loads again when this viewer compares
     /// with it.
     pub fn choose_base(&self, key: &str, reference: String) {
-        let previous = self
-            .shared
-            .memory
-            .borrow_mut()
-            .bases
-            .insert(key.to_owned(), reference.clone());
-        if previous.as_ref() != Some(&reference)
-            && self.mode().needs_base()
-            && self.base_key() == key
-        {
+        let previous = self.shared.memory.borrow_mut().bases.insert(key.to_owned(), reference.clone());
+        if previous.as_ref() != Some(&reference) && self.mode().needs_base() && self.base_key() == key {
             self.load();
         }
     }
@@ -560,32 +492,21 @@ impl Viewer {
             return;
         };
         let client = tui.data.client().clone();
-        let input = VcsBaseInput {
-            location: self.location(),
-        };
+        let input = VcsBaseInput { location: self.location() };
         let weak = self.this.clone();
-        tui.app.spawn(
-            async move { client.vcs_base(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else {
-                    return;
-                };
-                let base = output.data.map(|base| Base {
-                    name: base.name,
-                    reference: base.r#ref,
-                });
-                viewer.state.borrow_mut().reported.insert(key, base);
-            },
-        );
+        tui.app.spawn(async move { client.vcs_base(&input, &RequestOptions::default()).await }, move |_, result| {
+            let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else {
+                return;
+            };
+            let base = output.data.map(|base| Base { name: base.name, reference: base.r#ref });
+            viewer.state.borrow_mut().reported.insert(key, base);
+        });
     }
 
     /// Whether the panel is docked beside the session.
     fn docked(&self) -> bool {
         matches!(self.place, Place::Panel { .. })
-            && self
-                .tui
-                .upgrade()
-                .is_some_and(|tui| tui.panels.presentation() == Presentation::Panel)
+            && self.tui.upgrade().is_some_and(|tui| tui.panels.presentation() == Presentation::Panel)
     }
 
     pub fn in_panel(&self) -> bool {
@@ -646,11 +567,7 @@ impl Viewer {
     }
 
     fn patch_pane_width(&self) -> i64 {
-        let tree = if self.show_tree() {
-            self.tree_width()
-        } else {
-            0
-        };
+        let tree = if self.show_tree() { self.tree_width() } else { 0 };
         self.state.borrow().width - tree - i64::from(self.inset()) * 2
     }
 
@@ -662,15 +579,8 @@ impl Viewer {
         if !self.split_available() {
             return DiffView::Unified;
         }
-        let preferred = self
-            .tui
-            .upgrade()
-            .and_then(|tui| tui.settings.info().diffs?.view);
-        self.state
-            .borrow()
-            .view_override
-            .or(stored_view(preferred))
-            .unwrap_or(DiffView::Split)
+        let preferred = self.tui.upgrade().and_then(|tui| tui.settings.info().diffs?.view);
+        self.state.borrow().view_override.or(stored_view(preferred)).unwrap_or(DiffView::Split)
     }
 
     /// The files the cards show: every file in tree order, or the one file of the single view.
@@ -680,11 +590,7 @@ impl Viewer {
             return files;
         }
         let selected = self.state.borrow().selected;
-        selected
-            .or_else(|| self.current_file())
-            .or(files.first().copied())
-            .into_iter()
-            .collect()
+        selected.or_else(|| self.current_file()).or(files.first().copied()).into_iter().collect()
     }
 
     // Loading.
@@ -697,12 +603,7 @@ impl Viewer {
             let mut state = self.state.borrow_mut();
             state.generation += 1;
             state.load = Load::Loading;
-            (
-                state.generation,
-                state.mode,
-                state.location.clone(),
-                state.base_key.clone(),
-            )
+            (state.generation, state.mode, state.location.clone(), state.base_key.clone())
         };
         self.reset();
         self.refresh();
@@ -726,23 +627,15 @@ impl Viewer {
                 let mut reported = None;
                 let base = match (mode.needs_base(), chosen, known) {
                     (false, ..) => None,
-                    (true, Some(reference), _) => Some(Base {
-                        name: reference.clone(),
-                        reference,
-                    }),
+                    (true, Some(reference), _) => Some(Base { name: reference.clone(), reference }),
                     (true, None, Some(known)) => known,
                     (true, None, None) => {
-                        let input = VcsBaseInput {
-                            location: query(&location),
-                        };
+                        let input = VcsBaseInput { location: query(&location) };
                         let base = client
                             .vcs_base(&input, &options)
                             .await?
                             .data
-                            .map(|base| Base {
-                                name: base.name,
-                                reference: base.r#ref,
-                            });
+                            .map(|base| Base { name: base.name, reference: base.r#ref });
                         reported = Some(base.clone());
                         base
                     }
@@ -772,10 +665,7 @@ impl Viewer {
                             if let Some(reported) = reported {
                                 state.reported.insert(key, reported);
                             }
-                            Load::Ready {
-                                base,
-                                files: files.into_iter().map(File::from).collect(),
-                            }
+                            Load::Ready { base, files: files.into_iter().map(File::from).collect() }
                         }
                         Err(error) => {
                             log::warn!("{ID}: {error}");
@@ -814,12 +704,7 @@ impl Viewer {
             (Load::Failed, _) => Some("Base or diff unavailable".to_owned()),
             (Load::Loading, _) => Some("Resolving diff…".to_owned()),
             (Load::Ready { base: None, .. }, _) => Some("Base not reported".to_owned()),
-            (
-                Load::Ready {
-                    base: Some(base), ..
-                },
-                _,
-            ) => Some(format!("vs {}", base.name)),
+            (Load::Ready { base: Some(base), .. }, _) => Some(format!("vs {}", base.name)),
         }
     }
 
@@ -891,11 +776,7 @@ impl Viewer {
                     state.selected_hunk = None;
                     state.view_override = Some(next);
                 }
-                let name = if next == DiffView::Split {
-                    "split"
-                } else {
-                    "unified"
-                };
+                let name = if next == DiffView::Split { "split" } else { "unified" };
                 preference(&tui, "view", json!(name));
                 self.refresh();
             }
@@ -919,10 +800,7 @@ impl Viewer {
     fn toggle_single(&self, tui: &Tui) {
         self.state.borrow_mut().selected_hunk = None;
         if !self.single() {
-            let file = self
-                .current_file()
-                .or(self.state.borrow().selected)
-                .or(self.patch_files().first().copied());
+            let file = self.current_file().or(self.state.borrow().selected).or(self.patch_files().first().copied());
             if let Some(file) = file {
                 self.select_file(file);
             }
@@ -962,13 +840,11 @@ impl Viewer {
     }
 
     fn scroll_top(&self) -> i64 {
-        self.scroll()
-            .map_or(0, |scroll| scroll.scroll_position().1.round() as i64)
+        self.scroll().map_or(0, |scroll| scroll.scroll_position().1.round() as i64)
     }
 
     fn viewport_height(&self) -> i64 {
-        self.scroll()
-            .map_or(0, |scroll| scroll.rect().height as i64)
+        self.scroll().map_or(0, |scroll| scroll.rect().height as i64)
     }
 
     fn scroll_to(&self, top: i64) {
@@ -999,29 +875,16 @@ impl Viewer {
     }
 
     fn card_y(&self, file: usize) -> Option<i64> {
-        let node = self
-            .parts
-            .borrow()
-            .cards
-            .iter()
-            .find(|card| card.file == file)
-            .map(|card| card.node.clone())?;
+        let node = self.parts.borrow().cards.iter().find(|card| card.file == file).map(|card| card.node.clone())?;
         self.content_y(&node)
     }
 
     /// `currentPatchFileIndex`.
     fn current_file(&self) -> Option<usize> {
-        let nodes: Vec<(usize, View)> = self
-            .parts
-            .borrow()
-            .cards
-            .iter()
-            .map(|card| (card.file, card.node.clone()))
-            .collect();
-        let positions: Vec<(usize, i64)> = nodes
-            .iter()
-            .filter_map(|(file, node)| Some((*file, self.content_y(node)?)))
-            .collect();
+        let nodes: Vec<(usize, View)> =
+            self.parts.borrow().cards.iter().map(|card| (card.file, card.node.clone())).collect();
+        let positions: Vec<(usize, i64)> =
+            nodes.iter().filter_map(|(file, node)| Some((*file, self.content_y(node)?))).collect();
         hunks::current_file(&positions, self.scroll_top())
     }
 
@@ -1061,28 +924,18 @@ impl Viewer {
 
     fn jump_hunk(&self, offset: i64) {
         let Some(scroll) = self.scroll() else { return };
-        let rows: Vec<(usize, Vec<AnyWidget>)> = self
-            .parts
-            .borrow()
-            .cards
-            .iter()
-            .map(|card| (card.file, card.hunks.clone()))
-            .collect();
+        let rows: Vec<(usize, Vec<AnyWidget>)> =
+            self.parts.borrow().cards.iter().map(|card| (card.file, card.hunks.clone())).collect();
         let positions: Vec<Hunk> = rows
             .iter()
             .flat_map(|(file, rows)| {
-                rows.iter().enumerate().filter_map(|(hunk, row)| {
-                    Some(Hunk {
-                        file: *file,
-                        hunk,
-                        y: self.content_y(row)?,
-                    })
-                })
+                rows.iter()
+                    .enumerate()
+                    .filter_map(|(hunk, row)| Some(Hunk { file: *file, hunk, y: self.content_y(row)? }))
             })
             .collect();
         let top = self.scroll_top();
-        let Some(next) = hunks::jump(&positions, self.state.borrow().selected_hunk, top, offset)
-        else {
+        let Some(next) = hunks::jump(&positions, self.state.borrow().selected_hunk, top, offset) else {
             return;
         };
         self.select_file(next.file);
@@ -1090,11 +943,7 @@ impl Viewer {
         let content = scroll.content_view().rect().height as i64;
         let target = hunks::clamp_scroll(hunks::hunk_top(&next), content, self.viewport_height());
         self.scroll_to(target);
-        self.state.borrow_mut().selected_hunk = Some(Selected {
-            file: next.file,
-            hunk: next.hunk,
-            scroll_top: target,
-        });
+        self.state.borrow_mut().selected_hunk = Some(Selected { file: next.file, hunk: next.hunk, scroll_top: target });
     }
 
     /// `toggleFileReviewed`: a file reviewed from the current card moves on (the next file in the single view);
@@ -1107,12 +956,7 @@ impl Viewer {
         let current = self.state.borrow().selected.or_else(|| self.current_file());
         let offset = current.and_then(|current| {
             let parts = self.parts.borrow();
-            let node = parts
-                .cards
-                .iter()
-                .find(|card| card.file == current)?
-                .node
-                .clone();
+            let node = parts.cards.iter().find(|card| card.file == current)?.node.clone();
             let viewport = parts.scroll.as_ref()?.rect();
             Some((viewport.screen_y - node.rect().screen_y).round() as i64)
         });
@@ -1132,11 +976,8 @@ impl Viewer {
             self.refresh();
             return;
         }
-        let next = if single && !was {
-            tree::move_file(&self.patch_files(), Some(file), 1).unwrap_or(file)
-        } else {
-            file
-        };
+        let next =
+            if single && !was { tree::move_file(&self.patch_files(), Some(file), 1).unwrap_or(file) } else { file };
         self.select_file(next);
         {
             let mut state = self.state.borrow_mut();
@@ -1160,9 +1001,7 @@ impl Viewer {
     /// Whether `file` is marked reviewed.
     pub fn is_reviewed(&self, file: usize) -> bool {
         let files = self.files();
-        files
-            .get(file)
-            .is_some_and(|file| self.state.borrow().reviewed.contains(&file.file))
+        files.get(file).is_some_and(|file| self.state.borrow().reviewed.contains(&file.file))
     }
 
     /// `scrollToPatchFileIndexAfterRender`.
@@ -1227,11 +1066,7 @@ impl Viewer {
                 .iter()
                 .rfind(|card| card.node.rect().screen_y <= viewport.screen_y)
                 .is_some_and(|card| card.reviewed);
-            edge.bg(if reviewed {
-                theme.background.raised.high
-            } else {
-                theme.diff.background.context
-            });
+            edge.bg(if reviewed { theme.background.raised.high } else { theme.diff.background.context });
         }
     }
 
@@ -1282,22 +1117,14 @@ impl Viewer {
         *self.parts.borrow_mut() = Parts::default();
         let docked = self.docked();
         let compact = self.compact();
-        let surface = if docked {
-            theme.background.raised.base
-        } else {
-            theme.background.base
-        };
+        let surface = if docked { theme.background.raised.base } else { theme.background.base };
         self.root.bg(surface);
         let show_tree = self.show_tree();
         let help = tui.keymap.shortcut("diff.help");
         if !show_tree {
             self.root.add(&self.header(app, &theme, docked, compact));
         }
-        let body = View::new(app)
-            .column()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_height(0);
+        let body = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0);
         self.root.add(&body);
         let message = |text: &str, color: Color| {
             View::new(app)
@@ -1325,9 +1152,7 @@ impl Viewer {
                 "Committed comparison unavailable without base metadata. Choose a base branch from Diff source.",
                 theme.text.muted,
             )),
-            Load::Ready { files, .. } if files.is_empty() => {
-                body.add(&message("No changes to show", theme.text.muted))
-            }
+            Load::Ready { files, .. } if files.is_empty() => body.add(&message("No changes to show", theme.text.muted)),
             Load::Ready { files, .. } => {
                 let row = View::new(app).row().grow(1.0).basis(Length::Auto).min_height(0);
                 if show_tree {
@@ -1340,8 +1165,7 @@ impl Viewer {
             }
         };
         if compact {
-            self.root
-                .add(&self.footer(tui, &theme, docked, help.clone()));
+            self.root.add(&self.footer(tui, &theme, docked, help.clone()));
         }
         if !show_tree && !compact && help.is_some() {
             let shortcut = Text::new(app, "?").fg(theme.text.base).wrap(WrapMode::None);
@@ -1369,18 +1193,9 @@ impl Viewer {
     /// The source header above the cards when the tree is hidden.
     fn header(&self, app: &App, theme: &Theme, docked: bool, compact: bool) -> View {
         let mode = self.mode();
-        let switch = View::new(app)
-            .row()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_width(0)
-            .child(
-                &Text::new(app, mode.label())
-                    .fg(theme.text.action.secondary.base)
-                    .bold()
-                    .wrap(WrapMode::None)
-                    .shrink(0.0),
-            );
+        let switch = View::new(app).row().grow(1.0).basis(Length::Auto).min_width(0).child(
+            &Text::new(app, mode.label()).fg(theme.text.action.secondary.base).bold().wrap(WrapMode::None).shrink(0.0),
+        );
         if let Some(detail) = self.source_detail() {
             switch.add(
                 &Text::new(app, format!(" · {detail}"))
@@ -1400,9 +1215,7 @@ impl Viewer {
             }
         });
         let files = self.files();
-        let reviewed = (0..files.len())
-            .filter(|&file| self.is_reviewed(file))
-            .count();
+        let reviewed = (0..files.len()).filter(|&file| self.is_reviewed(file)).count();
         View::new(app)
             .row()
             .gap(1)
@@ -1421,14 +1234,7 @@ impl Viewer {
     }
 
     /// The fixed top edge and the scrolled cards.
-    fn patches(
-        &self,
-        tui: &Tui,
-        theme: &Theme,
-        files: &[File],
-        surface: Color,
-        previous: Option<f64>,
-    ) -> View {
+    fn patches(&self, tui: &Tui, theme: &Theme, files: &[File], surface: Color, previous: Option<f64>) -> View {
         let app = &tui.app;
         let inset = self.inset();
         let compact = self.compact();
@@ -1438,18 +1244,11 @@ impl Viewer {
             .margin_edge(Edge::Left, inset)
             .margin_edge(Edge::Right, inset)
             .bg(theme.diff.background.context);
-        let scroll = ScrollBox::new(app)
-            .scrollbars(false)
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_height(0)
-            .focusable(false);
+        let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0).basis(Length::Auto).min_height(0).focusable(false);
         let weak = self.this.clone();
         scroll.on_mouse(move |_, event| {
-            if matches!(
-                event.kind,
-                MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
-            ) && let Some(viewer) = weak.upgrade()
+            if matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown)
+                && let Some(viewer) = weak.upgrade()
             {
                 viewer.clear_patch_selection();
                 viewer.passes();
@@ -1465,11 +1264,7 @@ impl Viewer {
                 continue;
             };
             let reviewed = self.state.borrow().reviewed.contains(&entry.file);
-            let background = if reviewed {
-                theme.background.raised.high
-            } else {
-                theme.diff.background.context
-            };
+            let background = if reviewed { theme.background.raised.high } else { theme.diff.background.context };
             let image = is_image(&entry.file);
             let node = View::new(app).column().shrink(0.0);
             if index > 0 {
@@ -1478,14 +1273,9 @@ impl Viewer {
             let counts = if image {
                 6
             } else {
-                entry.additions.to_string().len() as i64
-                    + entry.deletions.to_string().len() as i64
-                    + 5
+                entry.additions.to_string().len() as i64 + entry.deletions.to_string().len() as i64 + 5
             } + if reviewed { 2 } else { 0 };
-            let path = crate::dialogs::open::truncate_file_path(
-                &entry.file,
-                (pane_width - counts - 2).max(1),
-            );
+            let path = crate::dialogs::open::truncate_file_path(&entry.file, (pane_width - counts - 2).max(1));
             let split = path.rfind('/').map_or(0, |at| at + 1);
             let line = View::new(app)
                 .row()
@@ -1495,26 +1285,18 @@ impl Viewer {
                 .padding_edge(Edge::Left, if compact { 2 } else { 1 })
                 .padding_edge(Edge::Right, 1)
                 .child(
-                    &View::new(app)
-                        .grow(1.0)
-                        .basis(Length::Auto)
-                        .min_width(0)
-                        .child(
-                            &Text::new(
-                                app,
-                                vec![
-                                    path[..split].to_owned().fg(theme.text.muted),
-                                    path[split..].to_owned().fg(if reviewed {
-                                        theme.text.muted
-                                    } else {
-                                        theme.text.base
-                                    }),
-                                ],
-                            )
-                            .fg(theme.text.muted)
-                            .wrap(WrapMode::None)
-                            .truncate(true),
-                        ),
+                    &View::new(app).grow(1.0).basis(Length::Auto).min_width(0).child(
+                        &Text::new(
+                            app,
+                            vec![
+                                path[..split].to_owned().fg(theme.text.muted),
+                                path[split..].to_owned().fg(if reviewed { theme.text.muted } else { theme.text.base }),
+                            ],
+                        )
+                        .fg(theme.text.muted)
+                        .wrap(WrapMode::None)
+                        .truncate(true),
+                    ),
                 );
             if reviewed {
                 line.add(&Text::new(app, "✓").fg(theme.text.muted).shrink(0.0));
@@ -1523,18 +1305,10 @@ impl Viewer {
                 line.add(&Text::new(app, "Image").fg(theme.text.muted));
             } else {
                 let count = |text: String, color: Color| {
-                    Text::new(app, text)
-                        .fg(if reviewed { theme.text.muted } else { color })
-                        .shrink(0.0)
+                    Text::new(app, text).fg(if reviewed { theme.text.muted } else { color }).shrink(0.0)
                 };
-                line.add(&count(
-                    format!("+{}", entry.additions),
-                    theme.diff.text.added,
-                ));
-                line.add(&count(
-                    format!("-{}", entry.deletions),
-                    theme.diff.text.removed,
-                ));
+                line.add(&count(format!("+{}", entry.additions), theme.diff.text.added));
+                line.add(&count(format!("-{}", entry.deletions), theme.diff.text.removed));
             }
             let weak = self.this.clone();
             line.on_mouse(move |cx, event| {
@@ -1568,19 +1342,10 @@ impl Viewer {
                     .bg(background)
                     .child(&line);
                 card.add(&header);
-                card.add(&self.body(
-                    tui, theme, &syntax, entry, mode, view, compact, image, &mut rows,
-                ));
+                card.add(&self.body(tui, theme, &syntax, entry, mode, view, compact, image, &mut rows));
                 Some(header)
             };
-            cards.push(Card {
-                file,
-                reviewed,
-                node: node.clone(),
-                card,
-                header,
-                hunks: rows,
-            });
+            cards.push(Card { file, reviewed, node: node.clone(), card, header, hunks: rows });
             scroll.add(&node);
         }
         if let Some(previous) = previous {
@@ -1592,14 +1357,7 @@ impl Viewer {
             parts.top_edge = Some(top_edge.clone());
             parts.cards = cards;
         }
-        View::new(app)
-            .column()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_width(0)
-            .min_height(0)
-            .child(&top_edge)
-            .child(&scroll)
+        View::new(app).column().grow(1.0).basis(Length::Auto).min_width(0).min_height(0).child(&top_edge).child(&scroll)
     }
 
     /// A card's body: its patch, or a line that says why there is none.
@@ -1621,11 +1379,7 @@ impl Viewer {
             return self.image(tui, theme, &entry.file);
         }
         if !image && !entry.patch.is_empty() {
-            let view = if entry.status == tree::Status::Modified {
-                view
-            } else {
-                DiffView::Unified
-            };
+            let view = if entry.status == tree::Status::Modified { view } else { DiffView::Unified };
             let diff = opencode_ui::diff::view(
                 app,
                 theme,
@@ -1669,21 +1423,14 @@ impl Viewer {
     fn image(&self, tui: &Tui, theme: &Theme, file: &str) -> View {
         let app = &tui.app;
         let height = (app.size().1 / 4).clamp(3, 8);
-        let slot = View::new(app)
-            .column()
-            .height(height + 2)
-            .shrink(0.0)
-            .gap(1);
+        let slot = View::new(app).column().height(height + 2).shrink(0.0).gap(1);
         let cached = self.previews.borrow().get(file).cloned();
         let preview = cached.unwrap_or_else(|| {
             self.read_image(tui, file);
             Preview::Loading
         });
         fill_image(tui, theme, &slot, file, height, &preview);
-        self.parts
-            .borrow_mut()
-            .images
-            .push((file.to_owned(), slot.clone()));
+        self.parts.borrow_mut().images.push((file.to_owned(), slot.clone()));
         View::new(app)
             .column()
             .width(Length::percent(100.0))
@@ -1697,55 +1444,35 @@ impl Viewer {
     }
 
     fn read_image(&self, tui: &Tui, file: &str) {
-        self.previews
-            .borrow_mut()
-            .insert(file.to_owned(), Preview::Loading);
+        self.previews.borrow_mut().insert(file.to_owned(), Preview::Loading);
         let client = tui.data.client().clone();
-        let input = FileReadInput {
-            location: self.location(),
-            path: file.to_owned(),
-        };
-        let (weak, file, generation) = (
-            self.this.clone(),
-            file.to_owned(),
-            self.state.borrow().generation,
-        );
-        tui.app.spawn(
-            async move { client.file_read(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(viewer) = weak.upgrade() else { return };
-                let Some(tui) = viewer.tui.upgrade() else {
-                    return;
-                };
-                if viewer.state.borrow().generation != generation {
-                    return;
+        let input = FileReadInput { location: self.location(), path: file.to_owned() };
+        let (weak, file, generation) = (self.this.clone(), file.to_owned(), self.state.borrow().generation);
+        tui.app.spawn(async move { client.file_read(&input, &RequestOptions::default()).await }, move |_, result| {
+            let Some(viewer) = weak.upgrade() else { return };
+            let Some(tui) = viewer.tui.upgrade() else {
+                return;
+            };
+            if viewer.state.borrow().generation != generation {
+                return;
+            }
+            let preview = match result {
+                Ok(bytes) => Preview::Ready(Rc::new(bytes.to_vec())),
+                Err(error) => {
+                    log::warn!("{ID}: {file}: {error}");
+                    Preview::Failed
                 }
-                let preview = match result {
-                    Ok(bytes) => Preview::Ready(Rc::new(bytes.to_vec())),
-                    Err(error) => {
-                        log::warn!("{ID}: {file}: {error}");
-                        Preview::Failed
-                    }
-                };
-                viewer
-                    .previews
-                    .borrow_mut()
-                    .insert(file.clone(), preview.clone());
-                let slot = viewer
-                    .parts
-                    .borrow()
-                    .images
-                    .iter()
-                    .find(|(shown, _)| *shown == file)
-                    .map(|(_, slot)| slot.clone());
-                if let Some(slot) = slot {
-                    let theme = tui.page();
-                    let height = (tui.app.size().1 / 4).clamp(3, 8);
-                    fill_image(&tui, &theme, &slot, &file, height, &preview);
-                    tui.app.request_redraw();
-                }
-            },
-        );
+            };
+            viewer.previews.borrow_mut().insert(file.clone(), preview.clone());
+            let slot =
+                viewer.parts.borrow().images.iter().find(|(shown, _)| *shown == file).map(|(_, slot)| slot.clone());
+            if let Some(slot) = slot {
+                let theme = tui.page();
+                let height = (tui.app.size().1 / 4).clamp(3, 8);
+                fill_image(&tui, &theme, &slot, &file, height, &preview);
+                tui.app.request_redraw();
+            }
+        });
     }
 
     /// The footer of the compact layout: how to leave, and the shortcuts.
@@ -1753,10 +1480,7 @@ impl Viewer {
         let app = &tui.app;
         let focused = self.focused(tui);
         let surface = theme.background.raised.base;
-        let footer = View::new(app)
-            .column()
-            .shrink(0.0)
-            .bg(theme.background.base);
+        let footer = View::new(app).column().shrink(0.0).bg(theme.background.base);
         if docked {
             footer.add(
                 &View::new(app)
@@ -1768,38 +1492,17 @@ impl Viewer {
                     .bg(theme.background.base),
             );
         }
-        let (command, label) = if docked {
-            ("pane.focus.left", " focus prompt")
-        } else {
-            ("diff.close", " close")
-        };
+        let (command, label) = if docked { ("pane.focus.left", " focus prompt") } else { ("diff.close", " close") };
         let shortcut = tui.keymap.shortcut(command).unwrap_or_default();
-        let leave = Text::new(
-            app,
-            vec![
-                shortcut.into(),
-                if focused {
-                    label.fg(theme.text.muted)
-                } else {
-                    label.into()
-                },
-            ],
-        )
-        .fg(if focused {
-            theme.background.action.primary.focused
-        } else {
-            theme.text.action.primary.disabled
-        })
-        .attributes(if focused {
-            Attributes::default()
-        } else {
-            Attributes::DIM
-        })
-        .wrap(WrapMode::None)
-        .truncate(true)
-        .grow(1.0)
-        .basis(Length::Auto)
-        .min_width(0);
+        let leave =
+            Text::new(app, vec![shortcut.into(), if focused { label.fg(theme.text.muted) } else { label.into() }])
+                .fg(if focused { theme.background.action.primary.focused } else { theme.text.action.primary.disabled })
+                .attributes(if focused { Attributes::default() } else { Attributes::DIM })
+                .wrap(WrapMode::None)
+                .truncate(true)
+                .grow(1.0)
+                .basis(Length::Auto)
+                .min_width(0);
         let weak = self.this.clone();
         leave.on_click(move |_, _| {
             let Some(viewer) = weak.upgrade() else { return };
@@ -1822,25 +1525,10 @@ impl Viewer {
             let muted = !focused;
             let text = Text::new(
                 app,
-                vec![
-                    help.into(),
-                    if muted {
-                        " see all".into()
-                    } else {
-                        " see all".fg(theme.text.muted)
-                    },
-                ],
+                vec![help.into(), if muted { " see all".into() } else { " see all".fg(theme.text.muted) }],
             )
-            .fg(if muted {
-                theme.text.action.primary.disabled
-            } else {
-                theme.text.base
-            })
-            .attributes(if muted {
-                Attributes::DIM
-            } else {
-                Attributes::default()
-            })
+            .fg(if muted { theme.text.action.primary.disabled } else { theme.text.base })
+            .attributes(if muted { Attributes::DIM } else { Attributes::default() })
             .wrap(WrapMode::None)
             .shrink(0.0);
             let weak = self.this.clone();
@@ -1867,33 +1555,15 @@ impl Viewer {
         slot.clear();
         let theme = tui.page();
         let files = self.files();
-        let items: Vec<tree::Item<'_>> = files
-            .iter()
-            .map(|file| tree::Item {
-                file: &file.file,
-                status: file.status,
-            })
-            .collect();
+        let items: Vec<tree::Item<'_>> =
+            files.iter().map(|file| tree::Item { file: &file.file, status: file.status }).collect();
         let (tree, expanded, selected, reviewed) = {
             let state = self.state.borrow();
-            (
-                state.tree.clone(),
-                state.expanded.clone(),
-                state.selected,
-                state.reviewed.clone(),
-            )
+            (state.tree.clone(), state.expanded.clone(), state.selected, state.reviewed.clone())
         };
-        let selected = selected.or_else(|| {
-            self.single()
-                .then(|| self.visible().first().copied())
-                .flatten()
-        });
+        let selected = selected.or_else(|| self.single().then(|| self.visible().first().copied()).flatten());
         let detail = self.source_detail();
-        let is_reviewed = |file: usize| {
-            files
-                .get(file)
-                .is_some_and(|file| reviewed.contains(&file.file))
-        };
+        let is_reviewed = |file: usize| files.get(file).is_some_and(|file| reviewed.contains(&file.file));
         let weak = self.this.clone();
         let on_row: tree::OnRow = Rc::new(move |row| {
             let Some(viewer) = weak.upgrade() else { return };
@@ -1950,19 +1620,8 @@ impl Viewer {
 
 /// A half-row of page between cards: the card's color over its width, the pane's surface over the insets
 /// (`CardGap`).
-fn card_gap(
-    app: &App,
-    theme: &Theme,
-    glyph: char,
-    card: Color,
-    surface: Color,
-    inset: u16,
-) -> View {
-    let side = if glyph == '▄' {
-        Sides::TOP
-    } else {
-        Sides::BOTTOM
-    };
+fn card_gap(app: &App, theme: &Theme, glyph: char, card: Color, surface: Color, inset: u16) -> View {
+    let side = if glyph == '▄' { Sides::TOP } else { Sides::BOTTOM };
     let half = |color: Color| {
         View::new(app)
             .height(1)
@@ -2043,16 +1702,13 @@ fn fill_image(tui: &Tui, theme: &Theme, slot: &View, file: &str, height: u16, pr
             crate::dialogs::image_preview::show(&tui, vec![(uri, Some(file.clone()))], 0);
         }
     };
-    let picture = View::new(app)
-        .width(Length::percent(100.0))
-        .height(height)
-        .child(
-            &ImageView::new(app)
-                .image(Some(image))
-                .fit(ImageFit::Contain)
-                .width(Length::percent(100.0))
-                .height(Length::percent(100.0)),
-        );
+    let picture = View::new(app).width(Length::percent(100.0)).height(height).child(
+        &ImageView::new(app)
+            .image(Some(image))
+            .fit(ImageFit::Contain)
+            .width(Length::percent(100.0))
+            .height(Length::percent(100.0)),
+    );
     picture.on_mouse(open.clone());
     let enlarge = Text::new(app, "Click to enlarge").fg(theme.text.action.secondary.base);
     enlarge.on_mouse(open);
@@ -2061,26 +1717,19 @@ fn fill_image(tui: &Tui, theme: &Theme, slot: &View, file: &str, height: u16, pr
         &View::new(app)
             .row()
             .justify(Justify::SpaceBetween)
-            .child(&line(
-                &format!("{} x {}", info.width, info.height),
-                theme.text.muted,
-            ))
+            .child(&line(&format!("{} x {}", info.width, info.height), theme.text.muted))
             .child(&enlarge),
     );
 }
 
 fn query(location: &Location) -> Option<LocationQueryInput> {
-    Some(LocationQueryInput {
-        directory: Some(location.directory.clone()),
-    })
+    Some(LocationQueryInput { directory: Some(location.directory.clone()) })
 }
 
 /// `isDiffImageFile`.
 pub fn is_image(file: &str) -> bool {
     let lower = file.to_ascii_lowercase();
-    [".png", ".jpg", ".jpeg", ".webp", ".gif"]
-        .iter()
-        .any(|extension| lower.ends_with(extension))
+    [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|extension| lower.ends_with(extension))
 }
 
 /// `onPreferencesChange`: one `diffs` key in `cli.json`.
@@ -2104,10 +1753,7 @@ mod tests {
     #[test]
     fn the_full_layout_needs_room_for_a_docked_panel_of_patches() {
         assert_eq!(FULL_LAYOUT_MIN_WIDTH, 88);
-        assert_eq!(
-            sources(false),
-            [Mode::Branch, Mode::Committed, Mode::Working]
-        );
+        assert_eq!(sources(false), [Mode::Branch, Mode::Committed, Mode::Working]);
         assert_eq!(sources(true).last(), Some(&Mode::Turn));
     }
 }

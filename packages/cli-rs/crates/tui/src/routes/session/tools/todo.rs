@@ -23,17 +23,8 @@ impl Todo {
     pub fn new(cx: &Context<'_>) -> Self {
         let inline = InlineTool::new(cx);
         let block = BlockTool::new(cx);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(inline.root())
-            .child(block.root());
-        Self {
-            root,
-            inline,
-            block,
-            shown: RefCell::default(),
-        }
+        let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(block.root());
+        Self { root, inline, block, shown: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -48,18 +39,8 @@ impl Todo {
         self.block.root().visible(listed);
         if !listed {
             self.inline.set(Inline {
-                text: if status == Status::Error {
-                    "Todo update failed"
-                } else {
-                    "Cleared todos"
-                }
-                .to_owned(),
-                ..Inline::new(
-                    props,
-                    "⚙",
-                    "Updating todos…",
-                    matches!(status, Status::Completed | Status::Error),
-                )
+                text: if status == Status::Error { "Todo update failed" } else { "Cleared todos" }.to_owned(),
+                ..Inline::new(props, "⚙", "Updating todos…", matches!(status, Status::Completed | Status::Error))
             });
             return;
         }
@@ -93,19 +74,12 @@ pub fn item(app: &App, theme: &Theme, todo: &Item) -> View {
         TodoStatus::Cancelled => theme.text.faint,
         _ => theme.text.muted,
     };
-    let text = Text::new(app, todo.content.clone())
-        .grow(1.0)
-        .wrap(WrapMode::Word)
-        .fg(fg);
+    let text = Text::new(app, todo.content.clone()).grow(1.0).wrap(WrapMode::Word).fg(fg);
     if todo.status == TodoStatus::Cancelled {
         text.strikethrough();
     }
     View::new(app)
         .row()
-        .child(
-            &Text::new(app, format!("{} ", todo_marker(todo.status, false)))
-                .shrink(0.0)
-                .fg(fg),
-        )
+        .child(&Text::new(app, format!("{} ", todo_marker(todo.status, false))).shrink(0.0).fg(fg))
         .child(&text)
 }

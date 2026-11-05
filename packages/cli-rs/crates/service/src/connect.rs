@@ -116,9 +116,7 @@ pub struct Error {
 
 impl Error {
     fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
+        Self { message: message.into() }
     }
 }
 
@@ -139,12 +137,7 @@ pub async fn resolve(
         if let Some(warning) = &warning {
             eprintln!("{warning}");
         }
-        return Ok(Connection {
-            endpoint,
-            version,
-            source: Source::Server,
-            warning,
-        });
+        return Ok(Connection { endpoint, version, source: Source::Server, warning });
     }
     let channels = Channels::from_vars(|name| match name {
         "OPENCODE_CHANNEL" => env.channel.clone().map(Into::into),
@@ -161,16 +154,7 @@ pub async fn resolve(
         Err(_) if options.standalone_fallback => return start_standalone(env).await,
         Err(missing) => {
             let file = registration::Files::new(paths, &channels.channel).file;
-            ensure_missing(
-                transport,
-                paths,
-                env,
-                &config,
-                file,
-                options.on_start,
-                missing,
-            )
-            .await?
+            ensure_missing(transport, paths, env, &config, file, options.on_start, missing).await?
         }
     };
     log::info!(
@@ -186,10 +170,7 @@ pub async fn resolve(
     Ok(Connection {
         endpoint: found.service.endpoint,
         version,
-        source: Source::Service {
-            channel: found.channel,
-            file: found.file,
-        },
+        source: Source::Service { channel: found.channel, file: found.file },
         warning: None,
     })
 }
@@ -197,11 +178,7 @@ pub async fn resolve(
 /// Finds the registered service again, for a client that lost it (`managedService.reconnect`,
 /// `packages/cli/src/services/server-connection.ts:66-75`): discovered, waited for, or started
 /// quietly when none is registered.
-pub async fn reconnect(
-    transport: Arc<dyn Transport>,
-    paths: &Paths,
-    env: &Env,
-) -> Result<discover::Found, Error> {
+pub async fn reconnect(transport: Arc<dyn Transport>, paths: &Paths, env: &Env) -> Result<discover::Found, Error> {
     match discover::discover(transport.as_ref(), paths, env.channel.as_deref()).await {
         Ok(found) => Ok(found),
         Err(missing) => {
@@ -210,9 +187,7 @@ pub async fn reconnect(
                 _ => None,
             })
             .channel;
-            let config = ServiceConfig::new(paths, &channel)
-                .read()
-                .unwrap_or_default();
+            let config = ServiceConfig::new(paths, &channel).read().unwrap_or_default();
             let file = registration::Files::new(paths, &channel).file;
             ensure_missing(transport, paths, env, &config, file, None, missing).await
         }
@@ -236,15 +211,8 @@ async fn ensure_missing(
     {
         return Err(Error::new(reason));
     }
-    let mut ensure_options = ensure::Options::new(
-        missing.pending.unwrap_or(file),
-        paths.state.clone(),
-        &env.ts(),
-    );
-    ensure_options.env = service_config::process_env(config.env.as_ref())
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+    let mut ensure_options = ensure::Options::new(missing.pending.unwrap_or(file), paths.state.clone(), &env.ts());
+    ensure_options.env = service_config::process_env(config.env.as_ref()).unwrap_or_default().into_iter().collect();
     let ensured = ensure::ensure(transport, &ensure_options, &mut || {
         if let Some(on_start) = on_start {
             on_start();
@@ -252,11 +220,7 @@ async fn ensure_missing(
     })
     .await
     .map_err(|error| Error::new(error.0))?;
-    Ok(discover::Found {
-        channel: discover::channel_of(&ensured.file),
-        service: ensured.service,
-        file: ensured.file,
-    })
+    Ok(discover::Found { channel: discover::channel_of(&ensured.file), service: ensured.service, file: ensured.file })
 }
 
 fn mismatch(endpoint: &Endpoint, version: &str, options: &Options) -> Option<String> {
@@ -268,26 +232,13 @@ fn mismatch(endpoint: &Endpoint, version: &str, options: &Options) -> Option<Str
     })
 }
 
-async fn server_version(
-    transport: Arc<dyn Transport>,
-    endpoint: &Endpoint,
-) -> Result<String, Error> {
-    let client = endpoint
-        .client(transport)
-        .map_err(|error| connect_error(endpoint, &error))?;
-    match tokio::time::timeout(
-        SERVER_TIMEOUT,
-        client.server_info(&RequestOptions::default()),
-    )
-    .await
-    {
+async fn server_version(transport: Arc<dyn Transport>, endpoint: &Endpoint) -> Result<String, Error> {
+    let client = endpoint.client(transport).map_err(|error| connect_error(endpoint, &error))?;
+    match tokio::time::timeout(SERVER_TIMEOUT, client.server_info(&RequestOptions::default())).await {
         Ok(Ok(info)) => Ok(info.version),
         Ok(Err(error)) => Err(connect_error(endpoint, &error)),
         // The abort signal of the TypeScript client fails the fetch as a transport error.
-        Err(_) => Err(Error::new(format!(
-            "Could not reach server at {}: The operation timed out.",
-            endpoint.url
-        ))),
+        Err(_) => Err(Error::new(format!("Could not reach server at {}: The operation timed out.", endpoint.url))),
     }
 }
 
@@ -303,9 +254,7 @@ fn connect_error(endpoint: &Endpoint, error: &ApiError) -> Error {
     if let ApiError::Transport(cause) = error {
         return Error::new(format!("Could not reach server at {url}: {cause}"));
     }
-    Error::new(format!(
-        "Server at {url} did not provide a compatible V2 health response: {error}"
-    ))
+    Error::new(format!("Server at {url} did not provide a compatible V2 health response: {error}"))
 }
 
 async fn start_standalone(env: &Env) -> Result<Connection, Error> {
@@ -359,11 +308,7 @@ mod tests {
     const INFO: &str = "http://127.0.0.1:4096/api/info";
     const HEALTH: &str = r#"{"version":"2.0.0","pid":9,"urls":[],"paths":{"tmp":"/tmp"}}"#;
 
-    async fn run(
-        server: Server,
-        env: Env,
-        options: Options,
-    ) -> (Result<Connection, Error>, Arc<Server>) {
+    async fn run(server: Server, env: Env, options: Options) -> (Result<Connection, Error>, Arc<Server>) {
         let dir = tempfile::tempdir().unwrap();
         let paths = paths(dir.path());
         let server = Arc::new(server);
@@ -377,14 +322,9 @@ mod tests {
 
     #[tokio::test]
     async fn server_flag_connects_with_the_password_and_warns_on_a_mismatch() {
-        let env =
-            Env::from_vars(|name| (name == "OPENCODE_SERVER_PASSWORD").then(|| "pw".to_owned()));
-        let (result, server) = run(
-            Server::default().reply(INFO, Reply::json(200, HEALTH)),
-            env,
-            options(Some(URL)),
-        )
-        .await;
+        let env = Env::from_vars(|name| (name == "OPENCODE_SERVER_PASSWORD").then(|| "pw".to_owned()));
+        let (result, server) =
+            run(Server::default().reply(INFO, Reply::json(200, HEALTH)), env, options(Some(URL))).await;
         let connection = result.unwrap();
         assert_eq!(connection.version, "2.0.0");
         assert_eq!(connection.source, Source::Server);
@@ -396,59 +336,31 @@ mod tests {
         );
         assert_eq!(
             server.requests()[0].1.as_deref(),
-            Some(
-                format!(
-                    "Basic {}",
-                    opencode_api::client::Auth::password("pw").token()
-                )
-                .as_str()
-            )
+            Some(format!("Basic {}", opencode_api::client::Auth::password("pw").token()).as_str())
         );
         assert!(!format!("{connection:?}").contains("pw"));
     }
 
     #[tokio::test]
     async fn server_flag_errors_use_the_typescript_texts() {
-        let unauthorized = || {
-            Server::default().reply(
-                INFO,
-                Reply::json(401, r#"{"_tag":"UnauthorizedError","message":"no"}"#),
-            )
-        };
+        let unauthorized =
+            || Server::default().reply(INFO, Reply::json(401, r#"{"_tag":"UnauthorizedError","message":"no"}"#));
         let (result, _) = run(unauthorized(), Env::default(), options(Some(URL))).await;
-        assert_eq!(
-            message(result),
-            "Server at http://127.0.0.1:4096 requires a password; set OPENCODE_PASSWORD"
-        );
+        assert_eq!(message(result), "Server at http://127.0.0.1:4096 requires a password; set OPENCODE_PASSWORD");
         let env = Env::from_vars(|name| (name == "OPENCODE_PASSWORD").then(|| "pw".to_owned()));
         let (result, _) = run(unauthorized(), env, options(Some(URL))).await;
-        assert_eq!(
-            message(result),
-            "Server at http://127.0.0.1:4096 rejected the password"
-        );
+        assert_eq!(message(result), "Server at http://127.0.0.1:4096 rejected the password");
         let (result, _) = run(Server::default(), Env::default(), options(Some(URL))).await;
-        assert_eq!(
-            message(result),
-            "Could not reach server at http://127.0.0.1:4096: connection refused"
+        assert_eq!(message(result), "Could not reach server at http://127.0.0.1:4096: connection refused");
+        let (result, _) =
+            run(Server::default().reply(INFO, Reply::json(200, "{}")), Env::default(), options(Some(URL))).await;
+        assert!(
+            message(result)
+                .starts_with("Server at http://127.0.0.1:4096 did not provide a compatible V2 health response: ")
         );
-        let (result, _) = run(
-            Server::default().reply(INFO, Reply::json(200, "{}")),
-            Env::default(),
-            options(Some(URL)),
-        )
-        .await;
-        assert!(message(result).starts_with(
-            "Server at http://127.0.0.1:4096 did not provide a compatible V2 health response: "
-        ));
-        let both = Options {
-            standalone: true,
-            ..options(Some(URL))
-        };
+        let both = Options { standalone: true, ..options(Some(URL)) };
         let (result, _) = run(Server::default(), Env::default(), both).await;
-        assert_eq!(
-            message(result),
-            "--server and --standalone cannot be combined"
-        );
+        assert_eq!(message(result), "--server and --standalone cannot be combined");
     }
 
     #[tokio::test]
@@ -460,47 +372,32 @@ mod tests {
             r#"{"url":"http://127.0.0.1:4096","pid":9,"version":"2.0.0","password":"p"}"#,
         )
         .unwrap();
-        let server: Arc<dyn Transport> =
-            Arc::new(Server::default().reply(INFO, Reply::json(200, HEALTH)));
-        let connection = resolve(server.clone(), &paths, &Env::default(), &options(None))
-            .await
-            .unwrap();
+        let server: Arc<dyn Transport> = Arc::new(Server::default().reply(INFO, Reply::json(200, HEALTH)));
+        let connection = resolve(server.clone(), &paths, &Env::default(), &options(None)).await.unwrap();
         assert_eq!(connection.version, "2.0.0");
         assert_eq!(
             connection.source,
-            Source::Service {
-                channel: "oc-x".to_owned(),
-                file: paths.state.join("service-oc-x.json")
-            }
+            Source::Service { channel: "oc-x".to_owned(), file: paths.state.join("service-oc-x.json") }
         );
         // Versions differ (2.0.0 against 1.0.0), but a discovered service's mismatch is only
         // logged (O-22).
         assert_eq!(connection.warning, None);
         let endpoint = Endpoint::new(URL, None);
         assert!(mismatch(&endpoint, "2.0.0", &options(None)).is_some());
-        let same = Options {
-            client_version: "2.0.0".to_owned(),
-            ..options(None)
-        };
+        let same = Options { client_version: "2.0.0".to_owned(), ..options(None) };
         assert_eq!(mismatch(&endpoint, "2.0.0", &same), None);
     }
 
     // Never the real `opencode`: the child would inherit this process's real state directories.
     fn missing_ts() -> Env {
-        Env {
-            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
-            ..Env::default()
-        }
+        Env { ts_bin: Some("/nonexistent/opencode-ts".to_owned()), ..Env::default() }
     }
 
     #[tokio::test]
     async fn no_service_starts_the_typescript_one() {
         let (result, _) = run(Server::default(), missing_ts(), options(None)).await;
         let text = message(result);
-        assert!(
-            text.starts_with("Failed to start server: /nonexistent/opencode-ts: "),
-            "{text}"
-        );
+        assert!(text.starts_with("Failed to start server: /nonexistent/opencode-ts: "), "{text}");
         assert!(text.contains("OPENCODE_TS_BIN"), "{text}");
     }
 
@@ -523,19 +420,14 @@ mod tests {
     #[tokio::test]
     async fn a_starting_service_of_another_channel_is_waited_for() {
         let starting = Reply::json(503, HEALTH);
-        let connection = other_channel(vec![starting.clone(), starting, Reply::json(200, HEALTH)])
-            .await
-            .unwrap();
+        let connection = other_channel(vec![starting.clone(), starting, Reply::json(200, HEALTH)]).await.unwrap();
         assert_eq!(connection.endpoint.url, "http://127.0.0.1:4097");
         assert!(matches!(connection.source, Source::Service { channel, .. } if channel == "oc-x"));
     }
 
     #[tokio::test]
     async fn a_failed_or_incompatible_service_of_another_channel_is_reported() {
-        assert_eq!(
-            message(other_channel(vec![Reply::json(500, HEALTH)]).await),
-            "Background service failed to start"
-        );
+        assert_eq!(message(other_channel(vec![Reply::json(500, HEALTH)]).await), "Background service failed to start");
         assert!(
             message(other_channel(vec![Reply::json(404, "")]).await)
                 .starts_with("Background service uses an incompatible health protocol.")
@@ -553,19 +445,10 @@ mod tests {
 
     #[tokio::test]
     async fn standalone_runs_the_typescript_binary() {
-        let standalone = Options {
-            standalone: true,
-            ..options(None)
-        };
+        let standalone = Options { standalone: true, ..options(None) };
         let (result, _) = run(Server::default(), missing_ts(), standalone).await;
-        assert!(
-            message(result)
-                .starts_with("Failed to start standalone server: /nonexistent/opencode-ts: ")
-        );
-        let fallback = Options {
-            standalone_fallback: true,
-            ..options(None)
-        };
+        assert!(message(result).starts_with("Failed to start standalone server: /nonexistent/opencode-ts: "));
+        let fallback = Options { standalone_fallback: true, ..options(None) };
         let (result, _) = run(Server::default(), missing_ts(), fallback).await;
         assert!(message(result).starts_with("Failed to start standalone server: "));
     }

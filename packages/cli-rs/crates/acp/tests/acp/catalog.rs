@@ -24,21 +24,13 @@ async fn switches_model_effort_and_mode_against_the_warm_catalog() {
     let session = acp.new_session("/workspace", json!([])).await.unwrap();
     let session_id = session["sessionId"].as_str().unwrap().to_owned();
     let set = |config: &str, value: &str| {
-        acp.request(
-            "session/set_config_option",
-            json!({ "sessionId": session_id, "configId": config, "value": value }),
-        )
+        acp.request("session/set_config_option", json!({ "sessionId": session_id, "configId": config, "value": value }))
     };
 
     let selected_model = set("model", "test/second-model").await.unwrap();
     let selected_effort = set("effort", "medium").await.unwrap();
     let selected_mode = set("mode", "plan").await.unwrap();
-    acp.request(
-        "session/set_mode",
-        json!({ "sessionId": session_id, "modeId": "build" }),
-    )
-    .await
-    .unwrap();
+    acp.request("session/set_mode", json!({ "sessionId": session_id, "modeId": "build" })).await.unwrap();
 
     assert_eq!(current_value(&selected_model, "model"), "test/second-model");
     assert_eq!(current_value(&selected_model, "effort"), "default");
@@ -58,27 +50,14 @@ async fn switches_model_effort_and_mode_against_the_warm_catalog() {
         ("effort", "maximum", json!({ "effort": "maximum" })),
         ("mode", "missing", json!({ "mode": "missing" })),
         ("missing", "value", json!({ "configId": "missing" })),
-        (
-            "model",
-            "test/missing-model",
-            json!({ "modelId": "test/missing-model" }),
-        ),
+        ("model", "test/missing-model", json!({ "modelId": "test/missing-model" })),
     ] {
         let error = set(config, value).await.expect_err(value);
         assert_matches(&error.json(), &json!({ "code": -32602, "data": data }));
     }
     let overlap = "test/sub/second-model";
-    assert_eq!(
-        current_value(&set("model", overlap).await.unwrap(), "model"),
-        overlap
-    );
-    assert_eq!(
-        current_value(
-            &set("model", &format!("{overlap}/low")).await.unwrap(),
-            "effort"
-        ),
-        "low"
-    );
+    assert_eq!(current_value(&set("model", overlap).await.unwrap(), "model"), overlap);
+    assert_eq!(current_value(&set("model", &format!("{overlap}/low")).await.unwrap(), "effort"), "low");
 }
 
 #[tokio::test]
@@ -108,12 +87,7 @@ async fn answers_the_first_session_after_a_cold_location_activates_its_plugins()
         .unwrap();
     activated.await.unwrap();
 
-    let model = session["configOptions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|option| option["id"] == "model")
-        .unwrap();
+    let model = session["configOptions"].as_array().unwrap().iter().find(|option| option["id"] == "model").unwrap();
     assert_eq!(
         model["options"],
         json!([

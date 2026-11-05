@@ -21,10 +21,7 @@ pub struct Tab {
 
 impl Tab {
     pub fn new(session_id: impl Into<String>, title: Option<String>) -> Self {
-        Self {
-            session_id: session_id.into(),
-            title,
-        }
+        Self { session_id: session_id.into(), title }
     }
 }
 
@@ -45,12 +42,7 @@ pub fn overflow_width(count: usize) -> usize {
 }
 
 /// `sessionTabDetail`.
-pub fn detail(
-    project: &str,
-    current: Option<&str>,
-    default: Option<&str>,
-    worktree: bool,
-) -> String {
+pub fn detail(project: &str, current: Option<&str>, default: Option<&str>, worktree: bool) -> String {
     let branch = current.filter(|current| worktree && Some(*current) != default);
     match branch {
         Some(branch) if !project.is_empty() => format!("{project} ⎇ {branch}"),
@@ -61,10 +53,7 @@ pub fn detail(
 
 /// `openSessionTab`.
 pub fn open(tabs: &[Tab], tab: Tab) -> Option<Vec<Tab>> {
-    let Some(index) = tabs
-        .iter()
-        .position(|item| item.session_id == tab.session_id)
-    else {
+    let Some(index) = tabs.iter().position(|item| item.session_id == tab.session_id) else {
         let mut next = tabs.to_vec();
         next.push(tab);
         return Some(next);
@@ -84,13 +73,7 @@ pub fn close(tabs: &[Tab], session: &str) -> Option<(Vec<Tab>, Option<String>)> 
         .get(index + 1)
         .or_else(|| index.checked_sub(1).and_then(|before| tabs.get(before)))
         .map(|tab| tab.session_id.clone());
-    Some((
-        tabs.iter()
-            .filter(|tab| tab.session_id != session)
-            .cloned()
-            .collect(),
-        next,
-    ))
+    Some((tabs.iter().filter(|tab| tab.session_id != session).cloned().collect(), next))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,23 +92,14 @@ pub fn record_closed(stack: &mut Vec<Closed>, tab: Tab, index: usize) {
 
 /// `reopenSessionTab`: pops entries (the newest, or `session`'s) until one is not open, and puts it back at its
 /// position. The stack loses every entry it walked past.
-pub fn reopen(
-    stack: &mut Vec<Closed>,
-    tabs: &[Tab],
-    session: Option<&str>,
-) -> Option<(Vec<Tab>, String)> {
+pub fn reopen(stack: &mut Vec<Closed>, tabs: &[Tab], session: Option<&str>) -> Option<(Vec<Tab>, String)> {
     while !stack.is_empty() {
         let index = match session {
-            Some(session) => stack
-                .iter()
-                .position(|entry| entry.tab.session_id == session)?,
+            Some(session) => stack.iter().position(|entry| entry.tab.session_id == session)?,
             None => stack.len() - 1,
         };
         let entry = stack.remove(index);
-        if tabs
-            .iter()
-            .any(|tab| tab.session_id == entry.tab.session_id)
-        {
+        if tabs.iter().any(|tab| tab.session_id == entry.tab.session_id) {
             continue;
         }
         let mut next = tabs.to_vec();
@@ -160,18 +134,13 @@ pub fn cycle<'a>(
         return None;
     }
     let direction = if forward { 1 } else { -1 };
-    let start = match tabs
-        .iter()
-        .position(|tab| Some(tab.session_id.as_str()) == active)
-    {
+    let start = match tabs.iter().position(|tab| Some(tab.session_id.as_str()) == active) {
         Some(index) => index as isize,
         None if forward => -1,
         None => 0,
     };
     (0..count)
-        .map(|offset| {
-            &tabs[(start + direction * (offset + 1) + count * 2).rem_euclid(count) as usize]
-        })
+        .map(|offset| &tabs[(start + direction * (offset + 1) + count * 2).rem_euclid(count) as usize])
         .find(|tab| matches(tab))
 }
 
@@ -184,16 +153,11 @@ pub struct History {
 
 impl History {
     pub fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-            index: -1,
-        }
+        Self { entries: Vec::new(), index: -1 }
     }
 
     fn at(&self, index: isize) -> Option<&String> {
-        usize::try_from(index)
-            .ok()
-            .and_then(|index| self.entries.get(index))
+        usize::try_from(index).ok().and_then(|index| self.entries.get(index))
     }
 
     /// `recordSessionTabHistory`.
@@ -219,9 +183,8 @@ impl History {
         } else {
             (0..self.index.max(0) as usize).rev().collect()
         };
-        let target = candidates
-            .into_iter()
-            .find(|&index| self.entries[index] != active && open(&self.entries[index]))?;
+        let target =
+            candidates.into_iter().find(|&index| self.entries[index] != active && open(&self.entries[index]))?;
         self.index = target as isize;
         Some(self.entries[target].clone())
     }
@@ -244,12 +207,7 @@ impl Layout {
 }
 
 /// `adaptiveSessionTabLayout` over the tabs' session IDs.
-pub fn layout(
-    tabs: &[&str],
-    active: Option<&str>,
-    available: i64,
-    previous_start: usize,
-) -> Layout {
+pub fn layout(tabs: &[&str], active: Option<&str>, available: i64, previous_start: usize) -> Layout {
     if tabs.is_empty() {
         return Layout::default();
     }
@@ -259,19 +217,13 @@ pub fn layout(
         let width = width.max(0);
         let fitted = match active_index {
             None => width / SESSION_TAB_MIN_WIDTH as i64,
-            Some(_) => {
-                1 + (width - SESSION_TAB_WIDTH as i64).div_euclid(SESSION_TAB_MIN_WIDTH as i64)
-            }
+            Some(_) => 1 + (width - SESSION_TAB_WIDTH as i64).div_euclid(SESSION_TAB_MIN_WIDTH as i64),
         };
         fitted.clamp(1, count as i64) as usize
     };
     let markers = |start: usize, visible: usize| {
         (if start > 0 { overflow_width(start) } else { 0 })
-            + (if start + visible < count {
-                overflow_width(count - start - visible)
-            } else {
-                0
-            })
+            + (if start + visible < count { overflow_width(count - start - visible) } else { 0 })
     };
     let mut visible = fit(available);
     let mut start = previous_start;
@@ -293,20 +245,14 @@ pub fn layout(
     let after = count - start - visible;
     let content = (available - markers(start, visible) as i64).max(1) as usize;
     let roomy = content >= SESSION_TAB_WIDTH * visible;
-    let total = if roomy {
-        content.min(SESSION_TAB_MAX_WIDTH * visible)
-    } else {
-        content
-    };
+    let total = if roomy { content.min(SESSION_TAB_MAX_WIDTH * visible) } else { content };
     let active_visible = active_index.filter(|index| (start..start + visible).contains(index));
     if roomy || active_index.is_none() {
         let width = total / visible;
         let remainder = total - width * visible;
         return Layout {
             start,
-            widths: (0..visible)
-                .map(|index| width + usize::from(index < remainder))
-                .collect(),
+            widths: (0..visible).map(|index| width + usize::from(index < remainder)).collect(),
             before,
             after,
             total,
@@ -315,8 +261,7 @@ pub fn layout(
     let inactive = if visible == 1 {
         0
     } else {
-        ((total - SESSION_TAB_WIDTH.min(total)) / (visible - 1))
-            .clamp(SESSION_TAB_MIN_WIDTH, SESSION_TAB_WIDTH)
+        ((total - SESSION_TAB_WIDTH.min(total)) / (visible - 1)).clamp(SESSION_TAB_MIN_WIDTH, SESSION_TAB_WIDTH)
     };
     let active_width = if visible == 1 {
         total
@@ -327,13 +272,7 @@ pub fn layout(
     Layout {
         start,
         widths: (start..start + visible)
-            .map(|index| {
-                if Some(index) == active_visible {
-                    active_width
-                } else {
-                    inactive
-                }
-            })
+            .map(|index| if Some(index) == active_visible { active_width } else { inactive })
             .collect(),
         before,
         after,
@@ -371,25 +310,15 @@ mod tests {
 
     #[test]
     fn opens_each_session_once_and_refreshes_its_title() {
-        let tabs = open(
-            &[Tab::new("a", Some("Old".into()))],
-            Tab::new("a", Some("New".into())),
-        )
-        .unwrap();
+        let tabs = open(&[Tab::new("a", Some("Old".into()))], Tab::new("a", Some("New".into()))).unwrap();
         assert_eq!(tabs, [Tab::new("a", Some("New".into()))]);
-        assert_eq!(
-            open(&tabs, Tab::new("b", None)).unwrap(),
-            [Tab::new("a", Some("New".into())), Tab::new("b", None)]
-        );
+        assert_eq!(open(&tabs, Tab::new("b", None)).unwrap(), [Tab::new("a", Some("New".into())), Tab::new("b", None)]);
         assert_eq!(open(&tabs, Tab::new("a", Some("New".into()))), None);
     }
 
     #[test]
     fn close_selects_right_then_left() {
-        assert_eq!(
-            close(&tabs(&["a", "b", "c"]), "b"),
-            Some((tabs(&["a", "c"]), Some("c".into())))
-        );
+        assert_eq!(close(&tabs(&["a", "b", "c"]), "b"), Some((tabs(&["a", "c"]), Some("c".into()))));
         assert_eq!(close(&tabs(&["a", "b"]), "b").unwrap().1, Some("a".into()));
         assert_eq!(close(&tabs(&["a"]), "a").unwrap().1, None);
         assert_eq!(close(&tabs(&["a", "b"]), "missing"), None);
@@ -397,14 +326,8 @@ mod tests {
 
     #[test]
     fn reorders_to_a_clamped_index() {
-        assert_eq!(
-            reorder(&tabs(&["a", "b", "c"]), "a", 9).unwrap(),
-            tabs(&["b", "c", "a"])
-        );
-        assert_eq!(
-            reorder(&tabs(&["a", "b", "c"]), "c", 0).unwrap(),
-            tabs(&["c", "a", "b"])
-        );
+        assert_eq!(reorder(&tabs(&["a", "b", "c"]), "a", 9).unwrap(), tabs(&["b", "c", "a"]));
+        assert_eq!(reorder(&tabs(&["a", "b", "c"]), "c", 0).unwrap(), tabs(&["c", "a", "b"]));
         assert_eq!(reorder(&tabs(&["a", "b"]), "a", 0), None);
         assert_eq!(reorder(&tabs(&["a", "b"]), "x", 0), None);
     }
@@ -414,10 +337,7 @@ mod tests {
         let all = tabs(&["a", "c", "e"]);
         let id = |tab: Option<&Tab>| tab.map(|tab| tab.session_id.clone());
         assert_eq!(id(cycle(&all, Some("c"), true, |_| true)), Some("e".into()));
-        assert_eq!(
-            id(cycle(&all, Some("c"), false, |_| true)),
-            Some("a".into())
-        );
+        assert_eq!(id(cycle(&all, Some("c"), false, |_| true)), Some("a".into()));
         assert_eq!(id(cycle(&all, Some("e"), true, |_| true)), Some("a".into()));
         assert_eq!(id(cycle(&all, Some("b"), true, |_| true)), Some("a".into()));
         let all = tabs(&["a", "b", "c", "d", "e"]);
@@ -447,13 +367,7 @@ mod tests {
         let mut history = history(&["a", "b", "c"]);
         history.step(&all, Some("c"), false);
         history.record("d");
-        assert_eq!(
-            history,
-            History {
-                entries: vec!["a".into(), "b".into(), "d".into()],
-                index: 2
-            }
-        );
+        assert_eq!(history, History { entries: vec!["a".into(), "b".into(), "d".into()], index: 2 });
         assert_eq!(history.step(&all, Some("d"), true), None);
     }
 
@@ -463,10 +377,7 @@ mod tests {
         let before = history.clone();
         history.record("b");
         assert_eq!(history, before);
-        assert_eq!(
-            history.step(&tabs(&["a", "b"]), Some("b"), false),
-            Some("a".into())
-        );
+        assert_eq!(history.step(&tabs(&["a", "b"]), Some("b"), false), Some("a".into()));
     }
 
     #[test]
@@ -481,10 +392,7 @@ mod tests {
 
     #[test]
     fn history_without_an_active_tab_returns_the_latest_entry() {
-        assert_eq!(
-            history(&["a", "b"]).step(&tabs(&["a", "b"]), None, false),
-            Some("b".into())
-        );
+        assert_eq!(history(&["a", "b"]).step(&tabs(&["a", "b"]), None, false), Some("b".into()));
     }
 
     #[test]
@@ -501,14 +409,7 @@ mod tests {
         record_closed(&mut stack, Tab::new("b", Some("Middle".into())), 1);
         let (tabs_after, session) = reopen(&mut stack, &tabs(&["a", "c"]), None).unwrap();
         assert_eq!(session, "b");
-        assert_eq!(
-            tabs_after,
-            [
-                Tab::new("a", None),
-                Tab::new("b", Some("Middle".into())),
-                Tab::new("c", None)
-            ]
-        );
+        assert_eq!(tabs_after, [Tab::new("a", None), Tab::new("b", Some("Middle".into())), Tab::new("c", None)]);
         assert!(stack.is_empty());
         assert_eq!(reopen(&mut Vec::new(), &tabs(&["a"]), None), None);
     }
@@ -519,47 +420,21 @@ mod tests {
         record_closed(&mut stack, Tab::new("b", None), 1);
         record_closed(&mut stack, Tab::new("c", None), 2);
         let full = stack.clone();
-        assert_eq!(
-            reopen(&mut stack, &tabs(&["a"]), Some("b")),
-            Some((tabs(&["a", "b"]), "b".into()))
-        );
-        assert_eq!(
-            stack,
-            [Closed {
-                tab: Tab::new("c", None),
-                index: 2
-            }]
-        );
+        assert_eq!(reopen(&mut stack, &tabs(&["a"]), Some("b")), Some((tabs(&["a", "b"]), "b".into())));
+        assert_eq!(stack, [Closed { tab: Tab::new("c", None), index: 2 }]);
         let mut missing = full.clone();
         assert_eq!(reopen(&mut missing, &[], Some("missing")), None);
         assert_eq!(missing, full);
         let mut open_already = full;
         assert_eq!(reopen(&mut open_already, &tabs(&["b"]), Some("b")), None);
-        assert_eq!(
-            open_already,
-            [Closed {
-                tab: Tab::new("c", None),
-                index: 2
-            }]
-        );
+        assert_eq!(open_already, [Closed { tab: Tab::new("c", None), index: 2 }]);
     }
 
     #[test]
     fn reopen_consumes_entries_that_are_open() {
-        let mut stack = vec![
-            Closed {
-                tab: Tab::new("a", None),
-                index: 0,
-            },
-            Closed {
-                tab: Tab::new("b", None),
-                index: 1,
-            },
-        ];
-        assert_eq!(
-            reopen(&mut stack, &tabs(&["b"]), None),
-            Some((tabs(&["a", "b"]), "a".into()))
-        );
+        let mut stack =
+            vec![Closed { tab: Tab::new("a", None), index: 0 }, Closed { tab: Tab::new("b", None), index: 1 }];
+        assert_eq!(reopen(&mut stack, &tabs(&["b"]), None), Some((tabs(&["a", "b"]), "a".into())));
         assert!(stack.is_empty());
     }
 
@@ -568,19 +443,9 @@ mod tests {
         let mut stack = Vec::new();
         record_closed(&mut stack, Tab::new("a", None), 5);
         record_closed(&mut stack, Tab::new("a", None), 2);
-        assert_eq!(
-            stack,
-            [Closed {
-                tab: Tab::new("a", None),
-                index: 2
-            }]
-        );
-        assert_eq!(
-            reopen(&mut stack.clone(), &tabs(&["b"]), None).unwrap().0,
-            tabs(&["b", "a"])
-        );
-        (0..27)
-            .for_each(|index| record_closed(&mut stack, Tab::new(index.to_string(), None), index));
+        assert_eq!(stack, [Closed { tab: Tab::new("a", None), index: 2 }]);
+        assert_eq!(reopen(&mut stack.clone(), &tabs(&["b"]), None).unwrap().0, tabs(&["b", "a"]));
+        (0..27).for_each(|index| record_closed(&mut stack, Tab::new(index.to_string(), None), index));
         assert_eq!(stack.len(), 25);
         assert_eq!(stack.last().unwrap().tab.session_id, "26");
         assert_eq!(stack[0].tab.session_id, "2");
@@ -605,10 +470,7 @@ mod tests {
     fn layout_expands_the_active_tab() {
         let all = ["a", "b", "c", "d", "e", "f", "g"];
         let layout = layout(&all, Some("d"), 76, 0);
-        assert_eq!(
-            (layout.before, layout.after, layout.start, layout.total),
-            (0, 0, 0, 76)
-        );
+        assert_eq!((layout.before, layout.after, layout.start, layout.total), (0, 0, 0, 76));
         assert_eq!(layout.widths, [9, 9, 9, 22, 9, 9, 9]);
     }
 
@@ -645,15 +507,9 @@ mod tests {
         let before = layout(&["a", "b", "c"], Some("a"), 100, 0);
         assert_eq!(before.widths, [32, 32, 32]);
         assert_eq!(before.total, 96);
-        assert_eq!(
-            layout(&["a", "b", "c"], Some("c"), 100, 0).widths,
-            before.widths
-        );
+        assert_eq!(layout(&["a", "b", "c"], Some("c"), 100, 0).widths, before.widths);
         assert_eq!(layout(&["a"], Some("a"), 100, 0).widths, [32]);
-        assert_eq!(
-            layout(&["a", "b", "c", "d"], Some("b"), 100, 0).widths,
-            [25, 25, 25, 25]
-        );
+        assert_eq!(layout(&["a", "b", "c", "d"], Some("b"), 100, 0).widths, [25, 25, 25, 25]);
     }
 
     #[test]
@@ -661,10 +517,7 @@ mod tests {
         let all = ["a", "b", "c", "d", "e"];
         let before = layout(&all, Some("c"), 100, 0);
         assert_eq!(before.widths, [19, 19, 24, 19, 19]);
-        assert_eq!(
-            layout(&all, Some("d"), 100, before.start).widths,
-            [19, 19, 19, 24, 19]
-        );
+        assert_eq!(layout(&all, Some("d"), 100, before.start).widths, [19, 19, 19, 24, 19]);
     }
 
     #[test]

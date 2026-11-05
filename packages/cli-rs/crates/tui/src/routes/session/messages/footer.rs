@@ -6,8 +6,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use opencode_api::generated::{
-    ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem,
-    SessionMessageAssistantFinish, SessionMessageInfo,
+    ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
+    SessionMessageInfo,
 };
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
@@ -30,18 +30,8 @@ impl Footer {
         let error = StepError::new(cx);
         let line = Text::new(cx.app, "").wrap(WrapMode::Word);
         let line_box = View::new(cx.app).padding_edge(Edge::Left, 3).child(&line);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(error.root())
-            .child(&line_box);
-        Self {
-            root,
-            error,
-            line_box,
-            line,
-            rendered: RefCell::default(),
-        }
+        let root = View::new(cx.app).column().shrink(0.0).child(error.root()).child(&line_box);
+        Self { root, error, line_box, line, rendered: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -51,34 +41,18 @@ impl Footer {
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant) {
         let theme = cx.theme;
         let muted = Style::new().fg(theme.text.muted);
-        let interrupted = message
-            .error
-            .as_ref()
-            .is_some_and(|error| error.message == "Step interrupted");
+        let interrupted = message.error.as_ref().is_some_and(|error| error.message == "Step interrupted");
         self.error.update(cx, message);
         let index = cx.index.get(message.id.as_str()).copied();
         let duration = turn_duration(cx.messages, message, index, cx.legacy);
         let width = cx.width;
-        let agent = if message.error.is_some() {
-            theme.text.muted
-        } else {
-            cx.agent_color(message.agent.as_str())
-        };
-        let mut spans = vec![Span::styled(
-            titlecase(message.agent.as_str()),
-            Style::new().fg(agent),
-        )];
+        let agent = if message.error.is_some() { theme.text.muted } else { cx.agent_color(message.agent.as_str()) };
+        let mut spans = vec![Span::styled(titlecase(message.agent.as_str()), Style::new().fg(agent))];
         if width >= 28 {
-            spans.push(Span::styled(
-                format!(" · {}", cx.model_name(&message.model)),
-                muted,
-            ));
+            spans.push(Span::styled(format!(" · {}", cx.model_name(&message.model)), muted));
         }
         if duration > 0.0 && !(28..36).contains(&width) {
-            spans.push(Span::styled(
-                format!(" · {}", self::duration(duration)),
-                muted,
-            ));
+            spans.push(Span::styled(format!(" · {}", self::duration(duration)), muted));
         }
         if cx.tps
             && let Some(value) = tokens_per_second(cx.messages, index, cx.legacy)
@@ -93,8 +67,7 @@ impl Footer {
             self.line.set_text(spans);
         }
         let spaced = message.retry.is_some() || (message.error.is_some() && !interrupted);
-        self.line_box
-            .margin_edge(Edge::Top, if spaced { 1 } else { 0 });
+        self.line_box.margin_edge(Edge::Top, if spaced { 1 } else { 0 });
     }
 }
 
@@ -132,29 +105,16 @@ pub struct CacheUsage {
 
 impl CacheUsage {
     pub fn of(message: &SessionMessageAssistant) -> Self {
-        Self {
-            read: message
-                .tokens
-                .as_ref()
-                .map_or(0.0, |tokens| tokens.cache.read),
-            model: message.model.clone(),
-        }
+        Self { read: message.tokens.as_ref().map_or(0.0, |tokens| tokens.cache.read), model: message.model.clone() }
     }
 }
 
 impl TurnUsage {
     pub fn new(cx: &Context<'_>) -> Self {
-        let summary = Text::new(cx.app, "")
-            .fg(cx.theme.text.muted)
-            .wrap(WrapMode::None);
+        let summary = Text::new(cx.app, "").fg(cx.theme.text.muted).wrap(WrapMode::None);
         let header = View::new(cx.app).row().child(&summary);
         let table = View::new(cx.app).column().visible(false);
-        let root = View::new(cx.app)
-            .column()
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&header)
-            .child(&table);
+        let root = View::new(cx.app).column().padding_edge(Edge::Left, 3).shrink(0.0).child(&header).child(&table);
         let inner = Rc::new(UsageInner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -244,10 +204,7 @@ impl UsageInner {
         self.root.visible(!steps.is_empty());
         let theme = &self.theme;
         let latest = steps.last();
-        let drops = steps
-            .iter()
-            .filter(|step| step.reuse_drop.is_some())
-            .count();
+        let drops = steps.iter().filter(|step| step.reuse_drop.is_some()).count();
         // TS asks for a bold "Tokens" and bold new-token counts through a span `attributes` style, which
         // its spans ignore; the cells are plain, so these are too.
         let mut spans = vec![
@@ -264,20 +221,11 @@ impl UsageInner {
         ];
         if drops > 0 {
             spans.push(Span::styled(
-                format!(
-                    " · ! {drops} likely cache {}",
-                    if drops == 1 { "bust" } else { "busts" }
-                ),
+                format!(" · ! {drops} likely cache {}", if drops == 1 { "bust" } else { "busts" }),
                 Style::new().fg(theme.text.feedback.warning.base),
             ));
         }
-        self.summary
-            .fg(if self.hover.get() {
-                theme.text.base
-            } else {
-                theme.text.muted
-            })
-            .set_text(spans);
+        self.summary.fg(if self.hover.get() { theme.text.base } else { theme.text.muted }).set_text(spans);
 
         self.table.clear();
         self.table.visible(self.expanded.get());
@@ -285,12 +233,7 @@ impl UsageInner {
             return;
         }
         let width = |name: &str, value: &dyn Fn(&Step) -> String| {
-            steps
-                .iter()
-                .map(|step| value(step).chars().count())
-                .max()
-                .unwrap_or(0)
-                .max(name.len())
+            steps.iter().map(|step| value(step).chars().count()).max().unwrap_or(0).max(name.len())
         };
         let columns = (
             width("Step", &|step| step.finish.clone()),
@@ -310,23 +253,14 @@ impl UsageInner {
             cached = columns.2,
             total = columns.3,
         );
-        self.table.add(
-            &row(&self.app).child(&Text::new(&self.app, header).fg(theme.text.muted).italic()),
-        );
+        self.table.add(&row(&self.app).child(&Text::new(&self.app, header).fg(theme.text.muted).italic()));
         for step in steps.iter() {
             let line = row(&self.app);
-            let fg = if self.verbose.get() && step.finish == "tool-call" {
-                theme.text.base
-            } else {
-                theme.text.muted
-            };
+            let fg = if self.verbose.get() && step.finish == "tool-call" { theme.text.base } else { theme.text.muted };
             line.add(&Text::new(
                 &self.app,
                 vec![
-                    Span::styled(
-                        format!("{:<width$}", step.finish, width = columns.0 + 2),
-                        Style::new().fg(fg),
-                    ),
+                    Span::styled(format!("{:<width$}", step.finish, width = columns.0 + 2), Style::new().fg(fg)),
                     Span::styled(
                         format!("{:>width$}", locale(step.new_tokens), width = columns.1),
                         Style::new().fg(fg),
@@ -344,13 +278,7 @@ impl UsageInner {
                 ],
             ));
             if !step.tools.is_empty() {
-                let name_width = step
-                    .tools
-                    .iter()
-                    .map(|(name, _)| name.chars().count())
-                    .max()
-                    .unwrap_or(0)
-                    + 2;
+                let name_width = step.tools.iter().map(|(name, _)| name.chars().count()).max().unwrap_or(0) + 2;
                 let tools = View::new(&self.app).column().padding_edge(Edge::Left, 2);
                 for (name, summary) in &step.tools {
                     tools.add(
@@ -380,10 +308,7 @@ impl UsageInner {
                 line.add(
                     &Text::new(
                         &self.app,
-                        format!(
-                            "! Likely cache bust: {} fewer cached tokens than the previous step",
-                            locale(drop)
-                        ),
+                        format!("! Likely cache bust: {} fewer cached tokens than the previous step", locale(drop)),
                     )
                     .fg(theme.text.feedback.warning.base),
                 );
@@ -395,9 +320,10 @@ impl UsageInner {
 
 /// Every token the step used.
 pub fn total(message: &SessionMessageAssistant) -> f64 {
-    message.tokens.as_ref().map_or(0.0, |tokens| {
-        tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
-    })
+    message
+        .tokens
+        .as_ref()
+        .map_or(0.0, |tokens| tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write)
 }
 
 /// `cacheReuseDrop`: how many fewer tokens the cache served than the previous step of the same
@@ -431,27 +357,13 @@ fn tool_summary(tool: &opencode_api::generated::SessionMessageAssistantTool) -> 
             _ => return String::new(),
         },
     };
-    summarize(
-        &input
-            .iter()
-            .map(|(k, v)| (k.as_str(), v))
-            .collect::<Vec<_>>(),
-    )
+    summarize(&input.iter().map(|(k, v)| (k.as_str(), v)).collect::<Vec<_>>())
 }
 
 fn summarize(input: &[(&str, &serde_json::Value)]) -> String {
-    let primary = [
-        "command",
-        "id",
-        "pattern",
-        "url",
-        "query",
-        "path",
-        "description",
-        "code",
-    ]
-    .into_iter()
-    .find(|key| input.iter().any(|(name, _)| name == key));
+    let primary = ["command", "id", "pattern", "url", "query", "path", "description", "code"]
+        .into_iter()
+        .find(|key| input.iter().any(|(name, _)| name == key));
     let scalar = |value: &serde_json::Value| match value {
         serde_json::Value::String(text) => Some(text.clone()),
         serde_json::Value::Number(number) => Some(number.to_string()),
@@ -486,19 +398,13 @@ pub fn turn_duration(
         return 0.0;
     };
     let input = input_index(messages, index.unwrap_or(messages.len()), legacy);
-    let start = input
-        .and_then(|input| messages.get(input))
-        .map_or(message.time.created, created);
+    let start = input.and_then(|input| messages.get(input)).map_or(message.time.created, created);
     (completed - start).max(0.0)
 }
 
 /// `SessionTurn.tokensPerSecond`: output and reasoning tokens per second across the turn's steps
 /// up to `message`, or none until every step has streamed.
-pub fn tokens_per_second(
-    messages: &[SessionMessageInfo],
-    index: Option<usize>,
-    legacy: bool,
-) -> Option<f64> {
+pub fn tokens_per_second(messages: &[SessionMessageInfo], index: Option<usize>, legacy: bool) -> Option<f64> {
     let end = index.map_or(messages.len(), |index| index + 1);
     let start = input_index(messages, end, legacy).map_or(0, |input| input + 1);
     let steps: Vec<_> = messages[start.min(end)..end]
@@ -510,23 +416,13 @@ pub fn tokens_per_second(
         .collect();
     let durations: Vec<f64> = steps
         .iter()
-        .filter_map(|step| {
-            step.time
-                .streamed
-                .map(|streamed| (streamed - step.time.created).max(0.0))
-        })
+        .filter_map(|step| step.time.streamed.map(|streamed| (streamed - step.time.created).max(0.0)))
         .collect();
     if steps.is_empty() || durations.len() != steps.len() {
         return None;
     }
-    let output: f64 = steps
-        .iter()
-        .map(|step| {
-            step.tokens
-                .as_ref()
-                .map_or(0.0, |tokens| tokens.output + tokens.reasoning)
-        })
-        .sum();
+    let output: f64 =
+        steps.iter().map(|step| step.tokens.as_ref().map_or(0.0, |tokens| tokens.output + tokens.reasoning)).sum();
     let total: f64 = durations.iter().sum();
     if output <= 0.0 || total <= 0.0 {
         return None;
@@ -572,11 +468,7 @@ pub fn duration(input: f64) -> String {
     if input < 86_400_000 {
         return format!("{}h {}m", input / 3_600_000, input % 3_600_000 / 60_000);
     }
-    format!(
-        "{}d {}h",
-        input / 86_400_000,
-        input % 86_400_000 / 3_600_000
-    )
+    format!("{}d {}h", input / 86_400_000, input % 86_400_000 / 3_600_000)
 }
 
 /// `value.toFixed(1)`: like `{:.1}`, except that an exact tie rounds up, not to even.
@@ -591,11 +483,7 @@ fn to_fixed_1(value: f64) -> String {
 
 /// A number as JavaScript prints it: integers without a fraction.
 fn js_number(value: f64) -> String {
-    if value.fract() == 0.0 {
-        format!("{}", value as i64)
-    } else {
-        format!("{value}")
-    }
+    if value.fract() == 0.0 { format!("{}", value as i64) } else { format!("{value}") }
 }
 
 /// `Number.toLocaleString()` in `en-US` for token counts: digits grouped by commas.
@@ -609,11 +497,7 @@ pub fn locale(value: f64) -> String {
         }
         grouped.push(digit);
     }
-    if rounded < 0 {
-        format!("-{grouped}")
-    } else {
-        grouped
-    }
+    if rounded < 0 { format!("-{grouped}") } else { grouped }
 }
 
 #[cfg(test)]

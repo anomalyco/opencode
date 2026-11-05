@@ -48,10 +48,7 @@ impl Transport for Empty {
 
 /// The harness config of `parity/lib/component.tsx` plus `extra`.
 fn info(extra: Value) -> Info {
-    merge(&[
-        Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })),
-        Some(extra),
-    ])
+    merge(&[Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })), Some(extra)])
 }
 
 fn mount(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
@@ -85,9 +82,7 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
     let mut actual = Fixture::from_capture(&app.render());
     let at = (0..expected.height)
         .find_map(|y| {
-            let row: String = (0..expected.width)
-                .map(|x| expected.cell(x, y).unwrap().symbol.clone())
-                .collect();
+            let row: String = (0..expected.width).map(|x| expected.cell(x, y).unwrap().symbol.clone()).collect();
             row.find(title).map(|x| (x as u32, y))
         })
         .unwrap_or_else(|| panic!("{title:?} is not in {name}"));
@@ -96,14 +91,8 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
         .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
         .filter(|&(x, y)| expected.cell(x, y).unwrap().bg == panel)
         .collect();
-    let (left, right) = (
-        inside.iter().map(|p| p.0).min().unwrap(),
-        inside.iter().map(|p| p.0).max().unwrap(),
-    );
-    let (top, bottom) = (
-        inside.iter().map(|p| p.1).min().unwrap(),
-        inside.iter().map(|p| p.1).max().unwrap(),
-    );
+    let (left, right) = (inside.iter().map(|p| p.0).min().unwrap(), inside.iter().map(|p| p.0).max().unwrap());
+    let (top, bottom) = (inside.iter().map(|p| p.1).min().unwrap(), inside.iter().map(|p| p.1).max().unwrap());
     for y in 0..expected.height {
         for x in 0..expected.width {
             if !(left..=right).contains(&x) || !(top..=bottom).contains(&y) {
@@ -113,16 +102,11 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
     }
     let comparison = compare(&expected, &actual);
     if !comparison.is_equal() {
-        let path = std::env::temp_dir()
-            .join("opencode-parity")
-            .join(format!("{name}.json"));
+        let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual.to_json()).unwrap();
     }
-    assert!(
-        comparison.is_equal(),
-        "P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}"
-    );
+    assert!(comparison.is_equal(), "P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}");
 }
 
 #[test]
@@ -169,11 +153,7 @@ fn experiments_dialog_matches_typescript() {
     assert_dialog(&app, "E.18a/experiments", "Experiments");
 
     let app = TestApp::new(80, 24);
-    let tui = mount(
-        &app,
-        info(json!({ "experimental": { "client-mcp": true } })),
-        None,
-    );
+    let tui = mount(&app, info(json!({ "experimental": { "client-mcp": true } })), None);
     experiments::show(&tui);
     app.press("down");
     assert_dialog(&app, "E.18a/experiments-on", "Experiments");
@@ -193,17 +173,11 @@ fn footer(app: &TestApp, title: &str) -> String {
         .find_map(|line| {
             let at = line.find(title)?;
             let gutter = line[..at].trim().trim_end_matches('▪');
-            gutter
-                .chars()
-                .all(|char| char == '┃' || char.is_whitespace())
-                .then(|| &line[at..])
+            gutter.chars().all(|char| char == '┃' || char.is_whitespace()).then(|| &line[at..])
         })
         .unwrap_or_else(|| panic!("no {title:?} row:\n{screen}"));
     let value = line[title.len()..].trim();
-    let value = value
-        .strip_prefix("‹ ")
-        .and_then(|value| value.strip_suffix(" ›"))
-        .unwrap_or(value);
+    let value = value.strip_prefix("‹ ").and_then(|value| value.strip_suffix(" ›")).unwrap_or(value);
     value.trim_end_matches(" ↵").to_owned()
 }
 
@@ -235,10 +209,7 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
         app.press("right");
     }
     assert_eq!(footer(&app, "Volume"), "100%");
-    assert_eq!(
-        tui.settings.info().to_value()["attention"]["volume"].as_f64(),
-        Some(1.0)
-    );
+    assert_eq!(tui.settings.info().to_value()["attention"]["volume"].as_f64(), Some(1.0));
     settings::show(&tui, None);
     app.type_text("leader");
     app.press("right");
@@ -249,10 +220,7 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
     app.type_text("color mode");
     app.press("right");
     assert_eq!(footer(&app, "Color mode"), "light");
-    assert_eq!(
-        tui.theme.borrow().mode(),
-        opencode_ui::theme::ThemeMode::Light
-    );
+    assert_eq!(tui.theme.borrow().mode(), opencode_ui::theme::ThemeMode::Light);
 }
 
 #[test]
@@ -299,10 +267,7 @@ fn slash_and_palette_commands_open_settings_and_debug() {
     for label in ["Version", "Date", "OS", "Terminal", "Session ID", "Model"] {
         assert!(screen.contains(label), "{label}: {screen}");
     }
-    assert!(
-        screen.contains(&format!("{} (", debug::VERSION)),
-        "{screen}"
-    );
+    assert!(screen.contains(&format!("{} (", debug::VERSION)), "{screen}");
     assert!(screen.contains("copy c"), "{screen}");
     // `TestApp` has no terminal, so the copy fails; the PTY run in the step report shows the success path.
     app.press("c");
@@ -318,11 +283,7 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     let tui = mount(&app, info(json!({ "debug": { "devtools": true } })), None);
     let screen = wait_for(&app, "Experiments");
     let bar = screen.lines().last().unwrap();
-    assert_eq!(
-        bar.trim_end(),
-        " ↻ Server  ○ UI  Theme  Tools  Experiments",
-        "{screen}"
-    );
+    assert_eq!(bar.trim_end(), " ↻ Server  ○ UI  Theme  Tools  Experiments", "{screen}");
 
     // A click on Theme opens its panel above the item; Escape closes it.
     let row = app.size().1 - 1;
@@ -337,17 +298,10 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     app.click(column(bar, "Tools"), row);
     wait_for(&app, "[ ] Time to first draw");
     let text = app.text();
-    let (y, line) = text
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("[ ] Time to first draw"))
-        .unwrap();
+    let (y, line) = text.lines().enumerate().find(|(_, line)| line.contains("[ ] Time to first draw")).unwrap();
     app.click(column(line, "["), y as u16);
     wait_for(&app, "[x] Time to first draw");
-    assert_eq!(
-        tui.settings.info().debug.and_then(|debug| debug.timing),
-        Some(true)
-    );
+    assert_eq!(tui.settings.info().debug.and_then(|debug| debug.timing), Some(true));
     assert!(app.text().contains("Time to first draw: "));
     app.press("escape");
 
@@ -365,10 +319,7 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
 // P-FILE ------------------------------------------------------------------------------------------------------
 
 fn ts_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../..")
-        .canonicalize()
-        .unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap()
 }
 
 fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
@@ -383,19 +334,13 @@ fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
 
 fn paths(home: &Path) -> Paths {
     let vars = env(home);
-    Paths::from_vars(|name| {
-        vars.iter()
-            .find(|(key, _)| *key == name)
-            .map(|(_, value)| value.clone().into_os_string())
-    })
-    .unwrap()
+    Paths::from_vars(|name| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string()))
+        .unwrap()
 }
 
 /// One op of the F.5 oracle's `config` command in `home`, or `None` without bun and `node_modules`.
 fn ts_config(home: &Path, op: Value) -> Option<Value> {
-    if !ts_root().join("node_modules").is_dir()
-        || Command::new("bun").arg("--version").output().is_err()
-    {
+    if !ts_root().join("node_modules").is_dir() || Command::new("bun").arg("--version").output().is_err() {
         eprintln!("skipped the TypeScript side: needs bun and node_modules");
         return None;
     }
@@ -409,10 +354,7 @@ fn ts_config(home: &Path, op: Value) -> Option<Value> {
         .arg("config")
         .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
         .env_remove("OPENCODE_CONFIG_DIR")
-        .env(
-            "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
-            std::env::temp_dir().join("opencode-rs-f5-bun-cache"),
-        )
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -420,18 +362,9 @@ fn ts_config(home: &Path, op: Value) -> Option<Value> {
         command.env(name, value);
     }
     let mut child = command.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(json!([op]).to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(json!([op]).to_string().as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
     let mut results: Vec<Value> = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     Some(results.remove(0))
@@ -448,30 +381,18 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     std::fs::write(&file, ORIGINAL).unwrap();
     let info = CliConfig::new(&paths).get().unwrap();
     let app = TestApp::new(80, 30);
-    let tui = mount(
-        &app,
-        info,
-        Some(Roots {
-            paths: paths.clone(),
-            storage_channel: "test".into(),
-        }),
-    );
+    let tui = mount(&app, info, Some(Roots { paths: paths.clone(), storage_channel: "test".into() }));
 
     settings::show(&tui, Some("session.thinking"));
     app.type_text("thinking");
     app.press("right");
     // The write runs on a blocking thread; the footer follows when it lands.
-    assert!(
-        app.wait_until(Duration::from_secs(5), || footer(&app, "Thinking")
-            == "show")
-    );
+    assert!(app.wait_until(Duration::from_secs(5), || footer(&app, "Thinking") == "show"));
     app.press("escape");
     experiments::show(&tui);
     wait_for(&app, "TUI tools");
     app.press("right");
-    assert!(app.wait_until(Duration::from_secs(5), || {
-        tui.settings.experiment("client-mcp")
-    }));
+    assert!(app.wait_until(Duration::from_secs(5), || { tui.settings.experiment("client-mcp") }));
     // The bytes TS writes for the same two updates (`Config.update` through the F.5 oracle).
     let text = std::fs::read_to_string(&file).unwrap();
     assert_eq!(
@@ -484,26 +405,15 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     let twin_file = self::paths(twin.path()).config.join("cli.json");
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();
     std::fs::write(&twin_file, ORIGINAL).unwrap();
-    let Some(_) = ts_config(
-        twin.path(),
-        json!({ "update": [[["session", "thinking"], "show"]] }),
-    ) else {
+    let Some(_) = ts_config(twin.path(), json!({ "update": [[["session", "thinking"], "show"]] })) else {
         return;
     };
-    ts_config(
-        twin.path(),
-        json!({ "update": [[["experimental", "client-mcp"], true]] }),
-    )
-    .unwrap();
+    ts_config(twin.path(), json!({ "update": [[["experimental", "client-mcp"], true]] })).unwrap();
     assert_eq!(std::fs::read_to_string(&twin_file).unwrap(), text);
 
     let read = ts_config(home.path(), json!({ "get": true })).unwrap();
     assert_eq!(read["ok"]["session"]["thinking"], json!("show"), "{read}");
-    assert_eq!(
-        read["ok"]["experimental"]["client-mcp"],
-        json!(true),
-        "{read}"
-    );
+    assert_eq!(read["ok"]["experimental"]["client-mcp"], json!(true), "{read}");
     let written = ts_config(home.path(), json!({ "update": [[["mouse"], false]] })).unwrap();
     assert!(written.get("ok").is_some(), "{written}");
     let app = TestApp::new(80, 30);

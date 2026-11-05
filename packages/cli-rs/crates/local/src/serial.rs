@@ -12,13 +12,11 @@ impl Serial {
     /// Starts the worker; it stops once every clone is dropped and the queued jobs ran.
     pub fn new(name: &str) -> Self {
         let (send, receive) = mpsc::channel::<Job>();
-        let spawned = std::thread::Builder::new()
-            .name(name.to_owned())
-            .spawn(move || {
-                for job in receive {
-                    job();
-                }
-            });
+        let spawned = std::thread::Builder::new().name(name.to_owned()).spawn(move || {
+            for job in receive {
+                job();
+            }
+        });
         if let Err(error) = spawned {
             log::warn!("{name}: {error}");
         }

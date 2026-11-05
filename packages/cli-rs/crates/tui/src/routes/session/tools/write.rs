@@ -6,9 +6,7 @@ use std::cell::RefCell;
 use opentui::prelude::*;
 
 use super::diagnostics;
-use super::dispatch::{
-    Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width, format_path,
-};
+use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width, format_path};
 use crate::routes::session::messages::list::Context;
 
 pub struct Write {
@@ -23,17 +21,8 @@ impl Write {
     pub fn new(cx: &Context<'_>) -> Self {
         let inline = InlineTool::new(cx);
         let block = BlockTool::new(cx);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(inline.root())
-            .child(block.root());
-        Self {
-            root,
-            inline,
-            block,
-            shown: RefCell::default(),
-        }
+        let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(block.root());
+        Self { root, inline, block, shown: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -48,20 +37,12 @@ impl Write {
         if !completed {
             self.inline.set(Inline {
                 text: format!("Write {}", format_path(cx, path)),
-                ..Inline::new(
-                    props,
-                    "←",
-                    "Preparing write…",
-                    path.is_some_and(|path| !path.is_empty()),
-                )
+                ..Inline::new(props, "←", "Preparing write…", path.is_some_and(|path| !path.is_empty()))
             });
             return;
         }
         self.block.set(Block {
-            header: Header::Path {
-                label: "# Wrote".to_owned(),
-                value: format_path(cx, path),
-            },
+            header: Header::Path { label: "# Wrote".to_owned(), value: format_path(cx, path) },
             spinner: false,
             permission: props.permission,
             error: None,
@@ -79,13 +60,8 @@ impl Write {
         }
         let children = self.block.children();
         children.clear();
-        let code = opencode_ui::code::view(
-            cx.app,
-            cx.theme,
-            cx.syntax,
-            opentui::syntax::filetype_for_path(path),
-            &shown.0,
-        );
+        let code =
+            opencode_ui::code::view(cx.app, cx.theme, cx.syntax, opentui::syntax::filetype_for_path(path), &shown.0);
         children.add(&opencode_ui::code::numbered(cx.app, cx.theme, &code));
         if let Some(errors) = diagnostics::view(cx, &props.metadata, path) {
             children.add(&errors);

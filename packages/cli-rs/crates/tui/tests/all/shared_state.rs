@@ -36,21 +36,15 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
         let directory = request
             .url
             .query_pairs()
             .find(|(key, _)| key == "location[directory]")
             .map_or("/project".to_owned(), |(_, value)| value.into_owned());
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), path.clone(), body.clone()));
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
         let location = json!({ "directory": directory });
         let agents = if directory == "/project-b" {
             json!([agent("build"), agent("reviewer")])
@@ -85,19 +79,11 @@ impl Transport for Fixture {
                     "payload": { "text": body["text"] }, "delivery": "steer",
                 } }),
             ),
-            ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => {
-                (204, Value::Null)
-            }
-            ("GET", path) if path.starts_with("/api/session/ses_b/") => {
-                (200, json!({ "data": [] }))
-            }
+            ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => (204, Value::Null),
+            ("GET", path) if path.starts_with("/api/session/ses_b/") => (200, json!({ "data": [] })),
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -145,12 +131,7 @@ struct Setup {
 impl Setup {
     /// The TUI on `ses_b`, started from `/project`, with `state` files written first.
     fn new(state: &[(&str, &str)]) -> Self {
-        Self::at(
-            Route::Session {
-                id: SessionID("ses_b".into()),
-            },
-            state,
-        )
+        Self::at(Route::Session { id: SessionID("ses_b".into()) }, state)
     }
 
     fn at(route: Route, state: &[(&str, &str)]) -> Self {
@@ -161,11 +142,7 @@ impl Setup {
             std::fs::write(paths.state.join(name), text).unwrap();
         }
         let seen = Seen::default();
-        let client = Client::with_transport(
-            "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone() }),
-        )
-        .unwrap();
+        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
         let app = TestApp::new(100, 30);
         let tui = opencode_tui::mount(
             &app,
@@ -173,22 +150,13 @@ impl Setup {
                 client,
                 directory: "/project".into(),
                 config: Resolved::new(Info::default(), |_| None),
-                roots: Some(Roots {
-                    paths,
-                    storage_channel: "latest".into(),
-                }),
+                roots: Some(Roots { paths, storage_channel: "latest".into() }),
                 route,
                 continue_: false,
                 events: false,
             },
         );
-        Self {
-            app,
-            tui,
-            seen,
-            home,
-            seq: std::cell::Cell::new(0),
-        }
+        Self { app, tui, seen, home, seq: std::cell::Cell::new(0) }
     }
 
     fn state(&self) -> std::path::PathBuf {
@@ -261,11 +229,7 @@ fn a_session_in_another_location_keeps_its_own_agent() {
         setup.tui.local.catalog_ready() && setup.agent().as_deref() == Some("reviewer")
     });
     setup.submit("hello", 1);
-    assert!(
-        setup.writes("/agent").is_empty(),
-        "the submit switched the agent: {:?}",
-        setup.writes("/agent")
-    );
+    assert!(setup.writes("/agent").is_empty(), "the submit switched the agent: {:?}", setup.writes("/agent"));
 }
 
 /// carbon-3: home's `/cd` moves the model and agent state to the new directory, as the prompt's own
@@ -273,25 +237,11 @@ fn a_session_in_another_location_keeps_its_own_agent() {
 #[test]
 fn cd_on_home_moves_the_agents_to_the_new_directory() {
     let setup = Setup::at(Route::Home, &[]);
-    setup.wait("the home catalog", || {
-        setup
-            .tui
-            .local
-            .agents()
-            .iter()
-            .any(|agent| agent.id.0 == "plan")
-    });
+    setup.wait("the home catalog", || setup.tui.local.agents().iter().any(|agent| agent.id.0 == "plan"));
     setup.app.type_text("/cd /project-b");
     setup.app.press("escape");
     setup.app.press("return");
-    setup.wait("the new directory's agents", || {
-        setup
-            .tui
-            .local
-            .agents()
-            .iter()
-            .any(|agent| agent.id.0 == "reviewer")
-    });
+    setup.wait("the new directory's agents", || setup.tui.local.agents().iter().any(|agent| agent.id.0 == "reviewer"));
 }
 
 /// carbon-3: once the session reports the agent and model a submit committed, the drafts give way, so a
@@ -299,9 +249,7 @@ fn cd_on_home_moves_the_agents_to_the_new_directory() {
 #[test]
 fn acknowledged_commits_clear_the_drafts() {
     let setup = Setup::new(&[]);
-    setup.wait("the session's catalog", || {
-        setup.agent().as_deref() == Some("reviewer")
-    });
+    setup.wait("the session's catalog", || setup.agent().as_deref() == Some("reviewer"));
     setup.tui.local.set_agent("build");
     setup.tui.local.set(&Model::new("openai", "gpt-5"), false);
     setup.submit("switch", 1);
@@ -312,10 +260,7 @@ fn acknowledged_commits_clear_the_drafts() {
         let changed = changed.clone();
         move || changed.set(true)
     });
-    setup.emit(
-        "session.agent.selected",
-        json!({ "sessionID": "ses_b", "agent": "build" }),
-    );
+    setup.emit("session.agent.selected", json!({ "sessionID": "ses_b", "agent": "build" }));
     setup.emit(
         "session.model.selected",
         json!({ "sessionID": "ses_b", "model": { "providerID": "openai", "id": "gpt-5" } }),
@@ -329,13 +274,8 @@ fn acknowledged_commits_clear_the_drafts() {
     setup.wait("the other client's model", || {
         setup.tui.local.current() == Some(Model::new("anthropic", "claude-haiku"))
     });
-    setup.emit(
-        "session.agent.selected",
-        json!({ "sessionID": "ses_b", "agent": "reviewer" }),
-    );
-    setup.wait("the other client's agent", || {
-        setup.agent().as_deref() == Some("reviewer")
-    });
+    setup.emit("session.agent.selected", json!({ "sessionID": "ses_b", "agent": "reviewer" }));
+    setup.wait("the other client's agent", || setup.agent().as_deref() == Some("reviewer"));
 }
 
 /// carbon-7: a pin keeps the pins another client wrote after this one read the file, and
@@ -345,11 +285,7 @@ fn pins_keep_other_clients_pins_and_prune_deleted_sessions() {
     let setup = Setup::new(&[("session.json", r#"{"pinned":["ses_old"]}"#)]);
     assert_eq!(pins::list(&setup.tui), [SessionID("ses_old".into())]);
     // The TS TUI pins `ses_ts` meanwhile.
-    std::fs::write(
-        setup.state().join("session.json"),
-        r#"{"pinned":["ses_old","ses_ts"]}"#,
-    )
-    .unwrap();
+    std::fs::write(setup.state().join("session.json"), r#"{"pinned":["ses_old","ses_ts"]}"#).unwrap();
     pins::toggle(&setup.tui, &SessionID("ses_b".into()));
     let pinned = r#"{"pinned":["ses_old","ses_ts","ses_b"]}"#;
     setup.wait("the pin", || setup.file("session.json") == pinned);
@@ -376,15 +312,10 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
     let entry = json!({ "text": "early", "pasted": [] });
     history.append(&app, entry.clone());
     let saved = app.wait_until(wait::WAIT, || {
-        std::fs::read_to_string(&file).is_ok_and(|text| {
-            text == "{\"text\":\"old\",\"pasted\":[]}\n{\"text\":\"early\",\"pasted\":[]}\n"
-        })
+        std::fs::read_to_string(&file)
+            .is_ok_and(|text| text == "{\"text\":\"old\",\"pasted\":[]}\n{\"text\":\"early\",\"pasted\":[]}\n")
     });
-    assert!(
-        saved,
-        "{:?}",
-        std::fs::read_to_string(&file).unwrap().get(..200)
-    );
+    assert!(saved, "{:?}", std::fs::read_to_string(&file).unwrap().get(..200));
     assert_eq!(history.step(-1, ""), Some(entry));
     assert_eq!(history.step(-1, "early").unwrap()["text"], "old");
 }
@@ -393,32 +324,19 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
 /// load trims the file to the newest 50.
 #[test]
 fn a_save_past_the_limit_keeps_lines_another_client_appended() {
-    let full: String = (0..50)
-        .map(|n| format!("{{\"text\":\"{n}\",\"pasted\":[]}}\n"))
-        .collect();
+    let full: String = (0..50).map(|n| format!("{{\"text\":\"{n}\",\"pasted\":[]}}\n")).collect();
     let setup = Setup::new(&[("prompt-history.jsonl", &full)]);
     setup.wait("the catalog", || setup.tui.local.catalog_ready());
     // Wait for the load: Up shows the newest entry.
-    setup.wait("the history", || {
-        setup.tui.prompt.history.step(-1, "").is_some()
-    });
+    setup.wait("the history", || setup.tui.prompt.history.step(-1, "").is_some());
     setup.tui.prompt.history.step(1, "49");
     let file = setup.state().join("prompt-history.jsonl");
-    let mut append = std::fs::OpenOptions::new()
-        .append(true)
-        .open(&file)
-        .unwrap();
+    let mut append = std::fs::OpenOptions::new().append(true).open(&file).unwrap();
     std::io::Write::write_all(&mut append, b"{\"text\":\"from ts\",\"pasted\":[]}\n").unwrap();
     setup.submit("from rust", 1);
-    setup.wait("the save", || {
-        setup.file("prompt-history.jsonl").contains("from rust")
-    });
+    setup.wait("the save", || setup.file("prompt-history.jsonl").contains("from rust"));
     let history = opencode_local::jsonl::History::load(&setup.state());
-    let texts: Vec<&str> = history
-        .entries()
-        .iter()
-        .filter_map(|entry| entry["text"].as_str())
-        .collect();
+    let texts: Vec<&str> = history.entries().iter().filter_map(|entry| entry["text"].as_str()).collect();
     assert_eq!(texts.len(), 50);
     assert_eq!(texts[0], "2");
     assert_eq!(texts[48..], ["from ts", "from rust"]);

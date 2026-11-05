@@ -2,9 +2,8 @@
 
 use super::core::{self, Base, Prompt};
 use super::style::{
-    S_BAR, S_BAR_END, S_CHECKBOX_ACTIVE, S_CHECKBOX_INACTIVE, S_CHECKBOX_SELECTED, S_RADIO_ACTIVE,
-    S_RADIO_INACTIVE, bg_white, cyan, dim, gray, green, inverse, reset, strikethrough, symbol,
-    yellow,
+    S_BAR, S_BAR_END, S_CHECKBOX_ACTIVE, S_CHECKBOX_INACTIVE, S_CHECKBOX_SELECTED, S_RADIO_ACTIVE, S_RADIO_INACTIVE,
+    bg_white, cyan, dim, gray, green, inverse, reset, strikethrough, symbol, yellow,
 };
 use super::{Cancelled, Output, State, term};
 
@@ -19,11 +18,7 @@ pub struct Choice<T> {
 
 impl<T> Choice<T> {
     pub fn new(value: T, label: impl Into<String>) -> Choice<T> {
-        Choice {
-            value,
-            label: label.into(),
-            hint: None,
-        }
+        Choice { value, label: label.into(), hint: None }
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> Choice<T> {
@@ -37,11 +32,7 @@ impl<T: ToString> Choice<T> {
     /// An option labeled with its value, as Clack labels an option without `label`.
     pub fn plain(value: T) -> Choice<T> {
         let label = value.to_string();
-        Choice {
-            value,
-            label,
-            hint: None,
-        }
+        Choice { value, label, hint: None }
     }
 }
 
@@ -69,11 +60,7 @@ fn window<T>(
     let cursor = cursor as i64;
     let wanted = max_items.map_or(i64::MAX, |items| items as i64);
     let max = (rows - 4).max(0).min(wanted.max(5));
-    let start = if cursor >= max - 3 {
-        (cursor - max + 3).min(length - max).max(0)
-    } else {
-        0
-    };
+    let start = if cursor >= max - 3 { (cursor - max + 3).min(length - max).max(0) } else { 0 };
     let top = max < length && start > 0;
     let bottom = max < length && start + max < length;
     let end = (start + max).min(length);
@@ -99,16 +86,8 @@ pub struct Select<T> {
     max_items: Option<usize>,
 }
 
-pub fn select<T: Clone + PartialEq>(
-    message: impl Into<String>,
-    options: Vec<Choice<T>>,
-) -> Select<T> {
-    Select {
-        message: message.into(),
-        options,
-        initial_value: None,
-        max_items: None,
-    }
+pub fn select<T: Clone + PartialEq>(message: impl Into<String>, options: Vec<Choice<T>>) -> Select<T> {
+    Select { message: message.into(), options, initial_value: None, max_items: None }
 }
 
 impl<T: Clone + PartialEq> Select<T> {
@@ -132,16 +111,9 @@ impl<T: Clone + PartialEq> Select<T> {
         let cursor = self
             .initial_value
             .as_ref()
-            .and_then(|initial| {
-                self.options
-                    .iter()
-                    .position(|option| option.value == *initial)
-            })
+            .and_then(|initial| self.options.iter().position(|option| option.value == *initial))
             .unwrap_or(0);
-        let mut prompt = SelectPrompt {
-            options: self,
-            cursor,
-        };
+        let mut prompt = SelectPrompt { options: self, cursor };
         core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.options.options[prompt.cursor].value.clone())
     }
@@ -162,22 +134,12 @@ impl<T> Prompt for SelectPrompt<T> {
     }
 
     fn render(&self, base: &Base) -> String {
-        let title = format!(
-            "{}\n{}  {}\n",
-            gray(S_BAR()),
-            symbol(base.state),
-            self.options.message
-        );
+        let title = format!("{}\n{}  {}\n", gray(S_BAR()), symbol(base.state), self.options.message);
         let current = &self.options.options[self.cursor];
         match base.state {
             State::Submit => format!("{title}{}  {}", gray(S_BAR()), dim(&current.label)),
             State::Cancel => {
-                format!(
-                    "{title}{}  {}\n{}",
-                    gray(S_BAR()),
-                    strikethrough(&dim(&current.label)),
-                    gray(S_BAR())
-                )
+                format!("{title}{}  {}\n{}", gray(S_BAR()), strikethrough(&dim(&current.label)), gray(S_BAR()))
             }
             _ => {
                 let rows = limit_options(
@@ -187,11 +149,7 @@ impl<T> Prompt for SelectPrompt<T> {
                     Output::Stdout,
                     |option, active| {
                         if active {
-                            let hint = option
-                                .hint
-                                .as_deref()
-                                .map(|hint| dim(&format!("({hint})")))
-                                .unwrap_or_default();
+                            let hint = option.hint.as_deref().map(|hint| dim(&format!("({hint})"))).unwrap_or_default();
                             format!("{} {} {hint}", green(S_RADIO_ACTIVE()), option.label)
                         } else {
                             format!("{} {}", dim(S_RADIO_INACTIVE()), dim(&option.label))
@@ -238,16 +196,8 @@ pub struct MultiSelect<T> {
     required: bool,
 }
 
-pub fn multiselect<T: Clone + PartialEq>(
-    message: impl Into<String>,
-    options: Vec<Choice<T>>,
-) -> MultiSelect<T> {
-    MultiSelect {
-        message: message.into(),
-        options,
-        initial_values: Vec::new(),
-        required: true,
-    }
+pub fn multiselect<T: Clone + PartialEq>(message: impl Into<String>, options: Vec<Choice<T>>) -> MultiSelect<T> {
+    MultiSelect { message: message.into(), options, initial_values: Vec::new(), required: true }
 }
 
 impl<T: Clone + PartialEq> MultiSelect<T> {
@@ -269,11 +219,7 @@ impl<T: Clone + PartialEq> MultiSelect<T> {
             return Err(Cancelled);
         }
         let value = self.initial_values.clone();
-        let mut prompt = MultiSelectPrompt {
-            options: self,
-            cursor: 0,
-            value,
-        };
+        let mut prompt = MultiSelectPrompt { options: self, cursor: 0, value };
         core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.value)
     }
@@ -287,11 +233,7 @@ struct MultiSelectPrompt<T> {
 
 impl<T: Clone + PartialEq> MultiSelectPrompt<T> {
     fn label(&self, option: &Choice<T>, state: &str) -> String {
-        let hint = option
-            .hint
-            .as_deref()
-            .map(|hint| dim(&format!("({hint})")))
-            .unwrap_or_default();
+        let hint = option.hint.as_deref().map(|hint| dim(&format!("({hint})"))).unwrap_or_default();
         let label = &option.label;
         match state {
             "active" => format!("{} {label} {hint}", cyan(S_CHECKBOX_ACTIVE())),
@@ -304,22 +246,16 @@ impl<T: Clone + PartialEq> MultiSelectPrompt<T> {
     }
 
     fn rows(&self, bar: &str) -> String {
-        limit_options(
-            &self.options.options,
-            self.cursor,
-            None,
-            Output::Stdout,
-            |option, active| {
-                let selected = self.value.contains(&option.value);
-                let state = match (active, selected) {
-                    (true, true) => "active-selected",
-                    (false, true) => "selected",
-                    (true, false) => "active",
-                    (false, false) => "inactive",
-                };
-                self.label(option, state)
-            },
-        )
+        limit_options(&self.options.options, self.cursor, None, Output::Stdout, |option, active| {
+            let selected = self.value.contains(&option.value);
+            let state = match (active, selected) {
+                (true, true) => "active-selected",
+                (false, true) => "selected",
+                (true, false) => "active",
+                (false, false) => "inactive",
+            };
+            self.label(option, state)
+        })
         .join(&format!("\n{bar}  "))
     }
 
@@ -343,15 +279,8 @@ impl<T: Clone + PartialEq> Prompt for MultiSelectPrompt<T> {
     fn key(&mut self, char: Option<&str>, _key: &term::Key, _base: &mut Base) {
         if char == Some("a") {
             let all = self.value.len() == self.options.options.len();
-            self.value = if all {
-                Vec::new()
-            } else {
-                self.options
-                    .options
-                    .iter()
-                    .map(|option| option.value.clone())
-                    .collect()
-            };
+            self.value =
+                if all { Vec::new() } else { self.options.options.iter().map(|option| option.value.clone()).collect() };
         }
     }
 
@@ -372,42 +301,22 @@ impl<T: Clone + PartialEq> Prompt for MultiSelectPrompt<T> {
             let key = |name: &str| gray(&bg_white(&inverse(name)));
             format!(
                 "Please select at least one option.\n{}",
-                reset(&dim(&format!(
-                    "Press {} to select, {} to submit",
-                    key(" space "),
-                    key(" enter ")
-                )))
+                reset(&dim(&format!("Press {} to select, {} to submit", key(" space "), key(" enter "))))
             )
         })
     }
 
     fn render(&self, base: &Base) -> String {
-        let title = format!(
-            "{}\n{}  {}\n",
-            gray(S_BAR()),
-            symbol(base.state),
-            self.options.message
-        );
+        let title = format!("{}\n{}  {}\n", gray(S_BAR()), symbol(base.state), self.options.message);
         match base.state {
             State::Submit => {
                 let chosen = self.chosen("submitted");
-                format!(
-                    "{title}{}  {}",
-                    gray(S_BAR()),
-                    if chosen.is_empty() {
-                        dim("none")
-                    } else {
-                        chosen
-                    }
-                )
+                format!("{title}{}  {}", gray(S_BAR()), if chosen.is_empty() { dim("none") } else { chosen })
             }
             State::Cancel => {
                 let chosen = self.chosen("cancelled");
-                let rest = if chosen.trim().is_empty() {
-                    String::new()
-                } else {
-                    format!("{chosen}\n{}", gray(S_BAR()))
-                };
+                let rest =
+                    if chosen.trim().is_empty() { String::new() } else { format!("{chosen}\n{}", gray(S_BAR())) };
                 format!("{title}{}  {rest}", gray(S_BAR()))
             }
             State::Error => {
@@ -423,19 +332,9 @@ impl<T: Clone + PartialEq> Prompt for MultiSelectPrompt<T> {
                         }
                     })
                     .collect();
-                format!(
-                    "{title}{}  {}\n{}\n",
-                    yellow(S_BAR()),
-                    self.rows(&yellow(S_BAR())),
-                    footer.join("\n")
-                )
+                format!("{title}{}  {}\n{}\n", yellow(S_BAR()), self.rows(&yellow(S_BAR())), footer.join("\n"))
             }
-            _ => format!(
-                "{title}{}  {}\n{}\n",
-                cyan(S_BAR()),
-                self.rows(&cyan(S_BAR())),
-                cyan(S_BAR_END())
-            ),
+            _ => format!("{title}{}  {}\n{}\n", cyan(S_BAR()), self.rows(&cyan(S_BAR())), cyan(S_BAR_END())),
         }
     }
 }
@@ -449,14 +348,10 @@ mod tests {
         // Ten rows (non-terminal output) leave room for 6 items.
         let items: Vec<usize> = (0..20).collect();
         let at = |cursor| {
-            window(&items, cursor, Some(7), 10, |item, active| {
-                format!("{}{item}", if active { ">" } else { "" })
-            })
+            window(&items, cursor, Some(7), 10, |item, active| format!("{}{item}", if active { ">" } else { "" }))
         };
         let plain = |rows: Vec<String>| {
-            rows.into_iter()
-                .map(|row| super::super::wrap::strip(&row).into_owned())
-                .collect::<Vec<_>>()
+            rows.into_iter().map(|row| super::super::wrap::strip(&row).into_owned()).collect::<Vec<_>>()
         };
         assert_eq!(plain(at(0)), [">0", "1", "2", "3", "4", "..."]);
         assert_eq!(plain(at(3)), ["0", "1", "2", ">3", "4", "..."]);

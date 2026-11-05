@@ -25,10 +25,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
         let endpoint = server.endpoint();
         let transport = Reqwest::default();
         let auth = match &endpoint.auth {
-            Some(auth @ Auth::Basic { .. }) => vec![(
-                "authorization".to_owned(),
-                format!("Basic {}", auth.token()),
-            )],
+            Some(auth @ Auth::Basic { .. }) => vec![("authorization".to_owned(), format!("Basic {}", auth.token()))],
             _ => Vec::new(),
         };
         let params = params(&args.param);
@@ -50,15 +47,13 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
                 if !(200..300).contains(&response.status) {
                     anyhow::bail!("Failed to load OpenAPI document: HTTP {}", response.status);
                 }
-                let spec: Value =
-                    serde_json::from_slice(&response.bytes().await.map_err(anyhow::Error::msg)?)?;
+                let spec: Value = serde_json::from_slice(&response.bytes().await.map_err(anyhow::Error::msg)?)?;
                 resolve_operation(&spec, &args.request[0], &params)?
             }
         };
         let mut headers = auth;
         for header in &args.header {
-            let Some((name, value)) = header.split_once(':').filter(|(name, _)| !name.is_empty())
-            else {
+            let Some((name, value)) = header.split_once(':').filter(|(name, _)| !name.is_empty()) else {
                 anyhow::bail!("Invalid header, expected name:value: {header}");
             };
             set(&mut headers, name.trim().to_ascii_lowercase(), value.trim());
@@ -79,10 +74,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
         let body = response.bytes().await.map_err(anyhow::Error::msg)?;
         let output = String::from_utf8_lossy(&body);
         if !output.is_empty() {
-            print(&format!(
-                "{output}{}",
-                if output.ends_with('\n') { "" } else { "\n" }
-            ))?;
+            print(&format!("{output}{}", if output.ends_with('\n') { "" } else { "\n" }))?;
         }
         if !(200..300).contains(&status) {
             let text = reqwest::StatusCode::from_u16(status)
@@ -101,10 +93,7 @@ pub fn run(context: &Context, args: &ApiArgs) -> anyhow::Result<()> {
 }
 
 fn method(name: &str) -> Option<&'static str> {
-    METHODS
-        .iter()
-        .find(|(lower, _)| *lower == name)
-        .map(|(_, upper)| *upper)
+    METHODS.iter().find(|(lower, _)| *lower == name).map(|(_, upper)| *upper)
 }
 
 // `headers.set`: a later value replaces an earlier one of the same name.
@@ -123,14 +112,8 @@ fn params(pairs: &[(String, String)]) -> Vec<(String, String)> {
             None => record.push((key.clone(), value.clone())),
         }
     }
-    let index = |key: &str| {
-        key.parse::<u32>()
-            .ok()
-            .filter(|index| *index < u32::MAX && index.to_string() == key)
-    };
-    let (mut indexes, names): (Vec<_>, Vec<_>) = record
-        .into_iter()
-        .partition(|(key, _)| index(key).is_some());
+    let index = |key: &str| key.parse::<u32>().ok().filter(|index| *index < u32::MAX && index.to_string() == key);
+    let (mut indexes, names): (Vec<_>, Vec<_>) = record.into_iter().partition(|(key, _)| index(key).is_some());
     indexes.sort_by_key(|(key, _)| index(key));
     indexes.into_iter().chain(names).collect()
 }
@@ -154,11 +137,7 @@ fn resolve_operation(
         .into_iter()
         .flatten()
         .flat_map(|(path, operations)| {
-            operations
-                .as_object()
-                .into_iter()
-                .flatten()
-                .map(move |(name, value)| (path, name, value))
+            operations.as_object().into_iter().flatten().map(move |(name, value)| (path, name, value))
         })
         .find_map(|(path, name, value)| {
             let method = method(name)?;
@@ -190,10 +169,7 @@ fn interpolate(path: &str, params: &[(String, String)]) -> anyhow::Result<String
     }
     pathname.push_str(rest);
     let mut query = url::form_urlencoded::Serializer::new(String::new());
-    for (key, value) in params
-        .iter()
-        .filter(|(key, _)| !used.contains(&key.as_str()))
-    {
+    for (key, value) in params.iter().filter(|(key, _)| !used.contains(&key.as_str())) {
         query.append_pair(key, value);
     }
     let query = query.finish();
@@ -208,18 +184,9 @@ fn encode_uri_component(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'!'
-            | b'~'
-            | b'*'
-            | b'\''
-            | b'('
-            | b')' => (byte as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
+                (byte as char).to_string()
+            }
             byte => format!("%{byte:02X}"),
         })
         .collect()
@@ -231,24 +198,13 @@ mod tests {
     use serde_json::json;
 
     fn pairs(items: &[(&str, &str)]) -> Vec<(String, String)> {
-        items
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect()
+        items.iter().map(|(key, value)| (key.to_string(), value.to_string())).collect()
     }
 
     #[test]
     fn raw_requests_need_a_method_and_an_absolute_path() {
-        let input = |items: &[&str]| {
-            items
-                .iter()
-                .map(|item| item.to_string())
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(
-            raw_request(&input(&["Get", "/api/x?a=1"])),
-            Some(("GET", "/api/x?a=1".to_owned()))
-        );
+        let input = |items: &[&str]| items.iter().map(|item| item.to_string()).collect::<Vec<_>>();
+        assert_eq!(raw_request(&input(&["Get", "/api/x?a=1"])), Some(("GET", "/api/x?a=1".to_owned())));
         assert_eq!(raw_request(&input(&["get", "api/x"])), None);
         assert_eq!(raw_request(&input(&["fetch", "/api/x"])), None);
         assert_eq!(raw_request(&input(&["session.list"])), None);
@@ -265,57 +221,27 @@ mod tests {
                 "delete": { "operationId": "session.message.delete" },
             },
         }});
-        let params = pairs(&[
-            ("sessionID", "ses 1/2"),
-            ("limit", "5"),
-            ("messageID", "msg_1"),
-            ("q", "a b&c"),
-        ]);
+        let params = pairs(&[("sessionID", "ses 1/2"), ("limit", "5"), ("messageID", "msg_1"), ("q", "a b&c")]);
         assert_eq!(
             resolve_operation(&spec, "session.message.delete", &params).unwrap(),
-            (
-                "DELETE",
-                "/api/session/ses%201%2F2/message/msg_1?limit=5&q=a+b%26c".to_owned()
-            )
+            ("DELETE", "/api/session/ses%201%2F2/message/msg_1?limit=5&q=a+b%26c".to_owned())
         );
         assert_eq!(
-            resolve_operation(
-                &spec,
-                "session.get",
-                &pairs(&[("sessionID", "ses/a"), ("workspace", "work")])
-            )
-            .unwrap(),
+            resolve_operation(&spec, "session.get", &pairs(&[("sessionID", "ses/a"), ("workspace", "work")])).unwrap(),
             ("GET", "/api/session/ses%2Fa?workspace=work".to_owned())
         );
+        assert_eq!(resolve_operation(&spec, "session.list", &[]).unwrap(), ("GET", "/api/session".to_owned()));
         assert_eq!(
-            resolve_operation(&spec, "session.list", &[]).unwrap(),
-            ("GET", "/api/session".to_owned())
-        );
-        assert_eq!(
-            resolve_operation(&spec, "session.message", &pairs(&[("sessionID", "s")]))
-                .unwrap_err()
-                .to_string(),
+            resolve_operation(&spec, "session.message", &pairs(&[("sessionID", "s")])).unwrap_err().to_string(),
             "Missing path parameter: messageID"
         );
-        assert_eq!(
-            resolve_operation(&spec, "nope", &[])
-                .unwrap_err()
-                .to_string(),
-            "Operation not found: nope"
-        );
+        assert_eq!(resolve_operation(&spec, "nope", &[]).unwrap_err().to_string(), "Operation not found: nope");
     }
 
     #[test]
     fn params_follow_javascript_record_order() {
         assert_eq!(
-            params(&pairs(&[
-                ("b", "1"),
-                ("10", "x"),
-                ("a", "2"),
-                ("b", "3"),
-                ("2", "y"),
-                ("01", "z")
-            ])),
+            params(&pairs(&[("b", "1"), ("10", "x"), ("a", "2"), ("b", "3"), ("2", "y"), ("01", "z")])),
             pairs(&[("2", "y"), ("10", "x"), ("b", "3"), ("a", "2"), ("01", "z")])
         );
     }

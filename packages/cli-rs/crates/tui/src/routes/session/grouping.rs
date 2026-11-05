@@ -12,8 +12,7 @@ use std::rc::Rc;
 
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantReasoning,
-    SessionMessageAssistantTool, SessionMessageAssistantToolState, SessionMessageCompaction,
-    SessionMessageInfo,
+    SessionMessageAssistantTool, SessionMessageAssistantToolState, SessionMessageCompaction, SessionMessageInfo,
 };
 use opencode_local::cli_config::{Grouping, Info, Verbosity};
 use opencode_store::MessageExt;
@@ -69,10 +68,7 @@ impl Group {
     /// `groupID`: the first leaf's message and part, the kind, and the nesting level.
     pub fn id(&self, level: usize) -> Option<String> {
         let (message, part) = first_ref(&self.children)?;
-        Some(format!(
-            "{message}\u{1f}{part}\u{1f}{}\u{1f}{level}",
-            self.kind.name()
-        ))
+        Some(format!("{message}\u{1f}{part}\u{1f}{}\u{1f}{level}", self.kind.name()))
     }
 
     /// The rows below, depth first (`descendants`).
@@ -143,9 +139,7 @@ impl Settings {
     pub fn read(&self, info: &Info) -> bool {
         let session = info.session.as_ref();
         let grouping = session.and_then(|session| session.grouping) != Some(Grouping::None);
-        let verbosity = session
-            .and_then(|session| session.verbosity)
-            .unwrap_or(Verbosity::Medium);
+        let verbosity = session.and_then(|session| session.verbosity).unwrap_or(Verbosity::Medium);
         let grouping = self.grouping.replace(grouping) != grouping;
         let verbosity = self.verbosity.replace(verbosity) != verbosity;
         grouping || verbosity
@@ -154,8 +148,7 @@ impl Settings {
     /// `groupExpanded`: the reader's choice, else High opens exploration and instruction groups.
     pub fn expanded(&self, id: &str, kind: Kind) -> bool {
         self.expanded.borrow().get(id).copied().unwrap_or(
-            self.verbosity.get() == Verbosity::High
-                && matches!(kind, Kind::Exploration | Kind::Instructions),
+            self.verbosity.get() == Verbosity::High && matches!(kind, Kind::Exploration | Kind::Instructions),
         )
     }
 
@@ -216,15 +209,8 @@ pub fn rows_after(weights: &[usize], start: usize, budget: usize) -> usize {
 const EXPLORATION_TOOLS: [&str; 5] = ["read", "glob", "grep", "webfetch", "websearch"];
 
 /// `projectEntries` over `reduce`'s rows: adjacent rows that share a path prefix form groups.
-pub fn project(
-    rows: Vec<Spec>,
-    messages: &[SessionMessageInfo],
-    verbosity: Verbosity,
-) -> Vec<Spec> {
-    let index: HashMap<&str, &SessionMessageInfo> = messages
-        .iter()
-        .map(|message| (message.id(), message))
-        .collect();
+pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verbosity) -> Vec<Spec> {
+    let index: HashMap<&str, &SessionMessageInfo> = messages.iter().map(|message| (message.id(), message)).collect();
     let mut nodes: Vec<(Node, bool)> = Vec::new();
     for spec in rows {
         let (path, closes) = path(&spec, &index, verbosity);
@@ -238,12 +224,12 @@ pub fn project(
             Node::Entry(spec) => out.push(spec),
             Node::Group(mut group) => {
                 let next = nodes.peek();
-                group.completed = next.is_some_and(|(next, closes)| {
-                    matches!(next, Node::Group(_)) || *closes
-                }) || (group.kind == Kind::Reasoning
-                    && group.children.iter().all(|child| {
-                        matches!(child, Node::Entry(spec) if reasoning_done(spec, &index))
-                    }));
+                group.completed = next.is_some_and(|(next, closes)| matches!(next, Node::Group(_)) || *closes)
+                    || (group.kind == Kind::Reasoning
+                        && group
+                            .children
+                            .iter()
+                            .all(|child| matches!(child, Node::Entry(spec) if reasoning_done(spec, &index))));
                 out.push(Spec::Group(group));
             }
         }
@@ -266,15 +252,7 @@ fn append(nodes: &mut Vec<(Node, bool)>, spec: Spec, path: &[Kind], closes: bool
     }
     let mut children = Vec::new();
     append_child(&mut children, spec, rest);
-    nodes.push((
-        Node::Group(Group {
-            kind,
-            children,
-            size: 1,
-            completed: false,
-        }),
-        closes,
-    ));
+    nodes.push((Node::Group(Group { kind, children, size: 1, completed: false }), closes));
 }
 
 fn append_child(nodes: &mut Vec<Node>, spec: Spec, path: &[Kind]) {
@@ -291,31 +269,17 @@ fn append_child(nodes: &mut Vec<Node>, spec: Spec, path: &[Kind]) {
     }
     let mut children = Vec::new();
     append_child(&mut children, spec, rest);
-    nodes.push(Node::Group(Group {
-        kind,
-        children,
-        size: 1,
-        completed: false,
-    }));
+    nodes.push(Node::Group(Group { kind, children, size: 1, completed: false }));
 }
 
 /// A row's grouping path (`partPath`, `messagePath`) and whether it closes the group before it.
-fn path(
-    spec: &Spec,
-    index: &HashMap<&str, &SessionMessageInfo>,
-    verbosity: Verbosity,
-) -> (Vec<Kind>, bool) {
+fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verbosity) -> (Vec<Kind>, bool) {
     let low = verbosity == Verbosity::Low;
     match spec {
         Spec::Message(id) => {
             let message = index.get(id.as_str()).copied();
             // A running compaction is pending and leaves the group before it open.
-            let running = matches!(
-                message,
-                Some(SessionMessageInfo::Compaction(
-                    SessionMessageCompaction::Running(_)
-                ))
-            );
+            let running = matches!(message, Some(SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))));
             let path = if instruction_paths(message).is_empty() {
                 Vec::new()
             } else if low {
@@ -326,18 +290,12 @@ fn path(
             (path, !running)
         }
         Spec::Part { message, part } => {
-            let activity = if low && !matches!(part, Part::Text(_)) {
-                vec![Kind::Activity]
-            } else {
-                Vec::new()
-            };
+            let activity = if low && !matches!(part, Part::Text(_)) { vec![Kind::Activity] } else { Vec::new() };
             let path = match part {
                 Part::Text(_) => activity,
                 Part::Reasoning(_) => [activity, vec![Kind::Reasoning]].concat(),
                 Part::Tool(_) => {
-                    let name = tool(index, message, part)
-                        .map(|tool| tool.name.to_lowercase())
-                        .unwrap_or_default();
+                    let name = tool(index, message, part).map(|tool| tool.name.to_lowercase()).unwrap_or_default();
                     if name == "question" {
                         Vec::new()
                     } else if EXPLORATION_TOOLS.contains(&name.as_str()) {
@@ -353,10 +311,7 @@ fn path(
     }
 }
 
-fn assistant<'a>(
-    index: &HashMap<&str, &'a SessionMessageInfo>,
-    id: &str,
-) -> Option<&'a SessionMessageAssistant> {
+fn assistant<'a>(index: &HashMap<&str, &'a SessionMessageInfo>, id: &str) -> Option<&'a SessionMessageAssistant> {
     match index.get(id)? {
         SessionMessageInfo::Assistant(message) => Some(message),
         _ => None,
@@ -393,23 +348,15 @@ pub fn instruction_paths(message: Option<&SessionMessageInfo>) -> Vec<String> {
     let Some(SessionMessageInfo::Synthetic(message)) = message else {
         return Vec::new();
     };
-    let Some(instruction) = message
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("instruction"))
-        .and_then(|value| value.as_object())
+    let Some(instruction) =
+        message.metadata.as_ref().and_then(|metadata| metadata.get("instruction")).and_then(|value| value.as_object())
     else {
         return Vec::new();
     };
     instruction
         .get("paths")
         .and_then(|paths| paths.as_array())
-        .map(|paths| {
-            paths
-                .iter()
-                .filter_map(|path| path.as_str().map(str::to_owned))
-                .collect()
-        })
+        .map(|paths| paths.iter().filter_map(|path| path.as_str().map(str::to_owned)).collect())
         .unwrap_or_default()
 }
 
@@ -436,19 +383,12 @@ pub fn exploration_label(tools: &[&SessionMessageAssistantTool], completed: bool
             (count, name) => format!("{count} {name}s"),
         })
         .collect();
-    format!(
-        "{}: {}",
-        if completed { "Explored" } else { "Exploring" },
-        names.join(", ")
-    )
+    format!("{}: {}", if completed { "Explored" } else { "Exploring" }, names.join(", "))
 }
 
 /// A thought or tool call an activity summary counts.
 pub enum Activity<'a> {
-    Thought(
-        &'a SessionMessageAssistant,
-        &'a SessionMessageAssistantReasoning,
-    ),
+    Thought(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning),
     Tool(&'a SessionMessageAssistantTool),
 }
 
@@ -462,8 +402,7 @@ impl Activity<'_> {
             }
             Self::Tool(tool) => matches!(
                 tool.state,
-                SessionMessageAssistantToolState::Streaming(_)
-                    | SessionMessageAssistantToolState::Running(_)
+                SessionMessageAssistantToolState::Streaming(_) | SessionMessageAssistantToolState::Running(_)
             ),
         }
     }
@@ -471,19 +410,9 @@ impl Activity<'_> {
 
 /// `summarizeActivity`: Low's summary, e.g. `3 commands, 1 edit, 2 thoughts, 4 reads`. Until something
 /// finishes, the label is the first running item's status. Returns the label and whether any item runs.
-pub fn activity_summary(
-    items: &[Activity<'_>],
-    instructions: usize,
-    closed: bool,
-) -> (String, bool) {
-    let mut counts = [
-        ("command", 0),
-        ("edit", 0),
-        ("thought", 0),
-        ("read", 0),
-        ("tool", 0),
-        ("instruction", instructions),
-    ];
+pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: bool) -> (String, bool) {
+    let mut counts =
+        [("command", 0), ("edit", 0), ("thought", 0), ("read", 0), ("tool", 0), ("instruction", instructions)];
     let mut add = |name: &str| {
         if let Some((_, count)) = counts.iter_mut().find(|(other, _)| *other == name) {
             *count += 1;
@@ -502,11 +431,7 @@ pub fn activity_summary(
                 if name == "execute" {
                     let calls = execute_calls(tool);
                     for call in &calls {
-                        add(if canonical_tool_name(call) == "read" {
-                            "read"
-                        } else {
-                            "tool"
-                        });
+                        add(if canonical_tool_name(call) == "read" { "read" } else { "tool" });
                     }
                     if calls.is_empty() && !active {
                         add("tool");
@@ -535,11 +460,7 @@ pub fn activity_summary(
     if !label.is_empty() {
         return (label, active);
     }
-    let busy = items
-        .iter()
-        .find(|item| item.active(closed))
-        .map(busy_label)
-        .unwrap_or_default();
+    let busy = items.iter().find(|item| item.active(closed)).map(busy_label).unwrap_or_default();
     (busy, active)
 }
 
@@ -646,11 +567,7 @@ impl GroupView {
     pub fn new(cx: &Context<'_>, settings: &Rc<Settings>, level: usize) -> Self {
         let header = View::new(cx.app).padding_edge(Edge::Left, 3);
         let body = View::new(cx.app).column().shrink(0.0);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(&header)
-            .child(&body);
+        let root = View::new(cx.app).column().shrink(0.0).child(&header).child(&body);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -671,11 +588,7 @@ impl GroupView {
         inner.header.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
             // A click that ends a text selection does not toggle (`useDisclosure`).
-            if cx
-                .app()
-                .selected_text()
-                .is_some_and(|text| !text.is_empty())
-            {
+            if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
             let (Some(id), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else {
@@ -706,9 +619,7 @@ impl GroupView {
         let inner = &self.0;
         let id = group.id(inner.level);
         inner.kind.set(Some(group.kind));
-        let expanded = id
-            .as_deref()
-            .is_some_and(|id| inner.settings.expanded(id, group.kind));
+        let expanded = id.as_deref().is_some_and(|id| inner.settings.expanded(id, group.kind));
         *inner.id.borrow_mut() = id;
         let grouped = inner.settings.grouped(group.kind, cx.hide_thinking);
         let (header, mode) = match group.kind {
@@ -719,20 +630,9 @@ impl GroupView {
         };
         inner.paint(header);
         let children = mode.map_or(&[][..], |_| &group.children[..]);
-        inner.body.margin_edge(
-            Edge::Top,
-            if group.kind == Kind::Activity && mode.is_some() {
-                1
-            } else {
-                0
-            },
-        );
-        inner
-            .body
-            .gap(if group.kind == Kind::Activity { 1 } else { 0 });
-        inner
-            .body
-            .padding_edge(Edge::Left, if mode == Some(Mode::Thought) { 3 } else { 0 });
+        inner.body.margin_edge(Edge::Top, if group.kind == Kind::Activity && mode.is_some() { 1 } else { 0 });
+        inner.body.gap(if group.kind == Kind::Activity { 1 } else { 0 });
+        inner.body.padding_edge(Edge::Left, if mode == Some(Mode::Thought) { 3 } else { 0 });
         inner.children(cx, children, mode.unwrap_or(Mode::Normal), completed);
     }
 
@@ -797,11 +697,7 @@ impl GroupView {
             icon: if expanded { "-" } else { "+" },
             label,
             spinner: !completed,
-            color: if completed {
-                HeaderColor::Warning { open: expanded }
-            } else {
-                HeaderColor::Base
-            },
+            color: if completed { HeaderColor::Warning { open: expanded } } else { HeaderColor::Base },
         };
         (Some(header), expanded.then_some(Mode::Thought))
     }
@@ -857,9 +753,7 @@ impl GroupView {
                 };
                 let assistant = cx.assistant(message)?;
                 match part.resolve(assistant)? {
-                    SessionMessageAssistantContentItem::Reasoning(part) => {
-                        Some(Activity::Thought(assistant, part))
-                    }
+                    SessionMessageAssistantContentItem::Reasoning(part) => Some(Activity::Thought(assistant, part)),
                     SessionMessageAssistantContentItem::Tool(tool) => Some(Activity::Tool(tool)),
                     _ => None,
                 }
@@ -878,19 +772,11 @@ impl GroupView {
         (Some(header), expanded.then_some(Mode::Normal))
     }
 
-    fn instructions(
-        &self,
-        cx: &Context<'_>,
-        group: &Group,
-        expanded: bool,
-    ) -> (Option<Header>, Option<Mode>) {
+    fn instructions(&self, cx: &Context<'_>, group: &Group, expanded: bool) -> (Option<Header>, Option<Mode>) {
         let files = instruction_files(cx, &group.entries());
         let header = Header {
             icon: "◈",
-            label: format!(
-                "Instructions: {files} {}",
-                if files == 1 { "file" } else { "files" }
-            ),
+            label: format!("Instructions: {files} {}", if files == 1 { "file" } else { "files" }),
             spinner: false,
             color: HeaderColor::Muted,
         };
@@ -917,10 +803,7 @@ impl GroupView {
 fn thought<'a>(
     cx: &'a Context<'_>,
     spec: &Spec,
-) -> Option<(
-    &'a SessionMessageAssistant,
-    &'a SessionMessageAssistantReasoning,
-)> {
+) -> Option<(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning)> {
     let Spec::Part { message, part } = spec else {
         return None;
     };
@@ -954,33 +837,21 @@ impl Inner {
             *self.painted.borrow_mut() = None;
             return;
         };
-        if self
-            .painted
-            .borrow()
-            .as_ref()
-            .is_some_and(|(painted, _)| *painted == header)
-        {
+        if self.painted.borrow().as_ref().is_some_and(|(painted, _)| *painted == header) {
             self.paint_color();
             return;
         }
         self.header.clear();
         let fg = self.color(header.color);
         let painted = if header.spinner {
-            let spinner = Spinner::new(&self.app)
-                .color(fg)
-                .label(header.label.clone())
-                .animations(self.animations);
+            let spinner = Spinner::new(&self.app).color(fg).label(header.label.clone()).animations(self.animations);
             self.header.add(&View::new(&self.app).row().child(&spinner));
             Painted::Spinner(spinner)
         } else {
             // `InlineToolRow`: the icon in its own two cells, then the label.
-            let icon = Text::new(&self.app, header.icon)
-                .width(2)
-                .shrink(0.0)
-                .fg(fg);
+            let icon = Text::new(&self.app, header.icon).width(2).shrink(0.0).fg(fg);
             let label = Text::new(&self.app, header.label.clone()).grow(1.0).fg(fg);
-            self.header
-                .add(&View::new(&self.app).row().child(&icon).child(&label));
+            self.header.add(&View::new(&self.app).row().child(&icon).child(&label));
             Painted::Done(vec![icon, label])
         };
         *self.painted.borrow_mut() = Some((header, painted));
@@ -1018,8 +889,9 @@ impl Inner {
         let mut old = std::mem::take(&mut *children);
         for (index, node) in nodes.iter().enumerate() {
             let key = match node {
-                Node::Entry(spec) => entry_ref(spec)
-                    .map(|(message, part)| ChildKey::Entry(mode, message.to_owned(), part)),
+                Node::Entry(spec) => {
+                    entry_ref(spec).map(|(message, part)| ChildKey::Entry(mode, message.to_owned(), part))
+                }
                 Node::Group(group) => group.id(self.level + 1).map(ChildKey::Group),
             };
             let Some(key) = key else { continue };
@@ -1032,9 +904,7 @@ impl Inner {
                         row.wrapper.margin_edge(Edge::Top, 0);
                         Child::Row(Box::new(row))
                     }
-                    Node::Group(_) => {
-                        Child::Group(GroupView::new(cx, &self.settings, self.level + 1))
-                    }
+                    Node::Group(_) => Child::Group(GroupView::new(cx, &self.settings, self.level + 1)),
                 },
             };
             match (&child, node) {
@@ -1089,34 +959,21 @@ struct Thought {
 
 impl Thought {
     fn new(cx: &Context<'_>) -> Self {
-        let markdown = opencode_ui::markdown::view(
-            cx.app,
-            cx.theme,
-            cx.thinking_syntax,
-            cx.renderers,
-            cx.conceal,
-            true,
-        )
-        .colors(opentui::widget::MarkdownColors {
-            text: cx.theme.text.muted,
-            ..opencode_ui::markdown::colors(cx.theme)
-        });
+        let markdown =
+            opencode_ui::markdown::view(cx.app, cx.theme, cx.thinking_syntax, cx.renderers, cx.conceal, true).colors(
+                opentui::widget::MarkdownColors {
+                    text: cx.theme.text.muted,
+                    ..opencode_ui::markdown::colors(cx.theme)
+                },
+            );
         let bar = View::new(cx.app)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
             .border_color(cx.theme.decrease(&cx.theme.background.raised.base, 1))
             .padding_edge(Edge::Left, 1)
             .child(&markdown);
-        let root = View::new(cx.app)
-            .margin_edge(Edge::Top, 1)
-            .shrink(0.0)
-            .child(&bar);
-        Self {
-            root,
-            markdown,
-            content: RefCell::default(),
-            streaming: Cell::new(true),
-        }
+        let root = View::new(cx.app).margin_edge(Edge::Top, 1).shrink(0.0).child(&bar);
+        Self { root, markdown, content: RefCell::default(), streaming: Cell::new(true) }
     }
 
     fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning) {
@@ -1126,8 +983,8 @@ impl Thought {
             self.markdown.set_markdown(content.as_str());
             *self.content.borrow_mut() = content;
         }
-        let streaming = part.time.as_ref().and_then(|time| time.completed).is_none()
-            && message.time.completed.is_none();
+        let streaming =
+            part.time.as_ref().and_then(|time| time.completed).is_none() && message.time.completed.is_none();
         if self.streaming.replace(streaming) != streaming {
             self.markdown.streaming(streaming);
         }
@@ -1153,10 +1010,7 @@ mod tests {
     }
 
     fn part(message: &str, part: Part) -> Spec {
-        Spec::Part {
-            message: message.into(),
-            part,
-        }
+        Spec::Part { message: message.into(), part }
     }
 
     #[test]
@@ -1192,25 +1046,16 @@ mod tests {
             })
             .collect();
         assert_eq!(kinds, ["row", "Reasoning:2", "Exploration:2", "row", "row"]);
-        let Spec::Group(reasoning) = &medium[1] else {
-            unreachable!()
-        };
+        let Spec::Group(reasoning) = &medium[1] else { unreachable!() };
         assert!(reasoning.completed);
-        assert_eq!(
-            reasoning.id(0).as_deref(),
-            Some("msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0")
-        );
+        assert_eq!(reasoning.id(0).as_deref(), Some("msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0"));
 
         // Low wraps the whole run of thoughts and tools in one activity group, with nested groups.
         let low = project(rows, &list, Verbosity::Low);
         assert_eq!(low.len(), 3);
-        let Spec::Group(activity) = &low[1] else {
-            unreachable!()
-        };
+        let Spec::Group(activity) = &low[1] else { unreachable!() };
         assert_eq!((activity.kind, activity.size), (Kind::Activity, 5));
-        assert!(
-            matches!(&activity.children[0], Node::Group(group) if group.kind == Kind::Reasoning)
-        );
+        assert!(matches!(&activity.children[0], Node::Group(group) if group.kind == Kind::Reasoning));
         assert!(matches!(&activity.children[2], Node::Entry(_)));
     }
 
@@ -1227,13 +1072,8 @@ mod tests {
             completed: true,
         });
         assert_eq!(settings.weight(&group, true), 1);
-        let Spec::Group(inner) = &group else {
-            unreachable!()
-        };
-        settings
-            .expanded
-            .borrow_mut()
-            .insert(inner.id(0).unwrap(), true);
+        let Spec::Group(inner) = &group else { unreachable!() };
+        settings.expanded.borrow_mut().insert(inner.id(0).unwrap(), true);
         assert_eq!(settings.weight(&group, true), 3);
         settings.grouping.set(false);
         assert_eq!(settings.weight(&group, true), 2);
@@ -1249,15 +1089,9 @@ mod tests {
             .map(|(index, name)| serde_json::from_value(tool(&format!("c{index}"), name)).unwrap())
             .collect();
         let refs: Vec<_> = tools.iter().collect();
-        assert_eq!(
-            exploration_label(&refs, true),
-            "Explored: 2 reads, 2 searches, 1 fetch"
-        );
+        assert_eq!(exploration_label(&refs, true), "Explored: 2 reads, 2 searches, 1 fetch");
         assert_eq!(exploration_label(&refs[..1], false), "Exploring: 1 read");
         let items: Vec<_> = tools.iter().map(Activity::Tool).collect();
-        assert_eq!(
-            activity_summary(&items, 1, true),
-            ("2 reads, 3 tools, 1 instruction".to_owned(), false)
-        );
+        assert_eq!(activity_summary(&items, 1, true), ("2 reads, 3 tools, 1 instruction".to_owned(), false));
     }
 }

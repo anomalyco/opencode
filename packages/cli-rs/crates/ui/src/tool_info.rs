@@ -7,9 +7,7 @@
 //! The TypeScript works on untyped JSON and falls back to a generic summary when a rule throws. This
 //! port reads the part as JSON the same way, and a rule that would throw returns `None`.
 
-use opencode_api::generated::types::{
-    SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
-};
+use opencode_api::generated::types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
 use opencode_api::query::js_string;
 use serde_json::{Map, Value};
 
@@ -69,8 +67,7 @@ pub fn primitive_input_summary(input: &Map<String, Value>, omit: &[&str]) -> Str
     let entries: Vec<_> = input
         .iter()
         .filter(|(key, value)| {
-            !omit.contains(&key.as_str())
-                && matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
+            !omit.contains(&key.as_str()) && matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
         })
         .map(|(key, value)| format!("{key}={}", js_string(value)))
         .collect();
@@ -120,9 +117,7 @@ pub fn execute_calls(value: &Value) -> Vec<ExecuteCall> {
 
 pub fn execute_call_summary(call: &ExecuteCall) -> String {
     let args = primitive_input_summary(call.input.as_ref().unwrap_or(&Map::new()), &[]);
-    let args = args
-        .split(char::is_whitespace)
-        .filter(|part| !part.is_empty());
+    let args = args.split(char::is_whitespace).filter(|part| !part.is_empty());
     let args = args.collect::<Vec<_>>().join(" ");
     if args.is_empty() {
         return call.tool.clone();
@@ -138,10 +133,7 @@ pub fn web_search_provider_name(provider: &Value) -> String {
         return "OpenCode".to_owned();
     }
     let mut chars = provider.chars();
-    chars
-        .next()
-        .map(|first| first.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
+    chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }
 
 pub fn web_search_provider_label(provider: &Value) -> String {
@@ -167,26 +159,18 @@ pub fn tool_display_metadata(state: &SessionMessageAssistantToolState) -> Map<St
         }
     };
     metadata
-        .map(|metadata| {
-            metadata
-                .iter()
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect()
-        })
+        .map(|metadata| metadata.iter().map(|(key, value)| (key.clone(), value.clone())).collect())
         .unwrap_or_default()
 }
 
 /// The tool's content items, empty until it finishes.
-pub fn tool_display_content(
-    state: &SessionMessageAssistantToolState,
-) -> std::borrow::Cow<'_, [ToolContent]> {
+pub fn tool_display_content(state: &SessionMessageAssistantToolState) -> std::borrow::Cow<'_, [ToolContent]> {
     match state {
-        SessionMessageAssistantToolState::Streaming(_)
-        | SessionMessageAssistantToolState::Running(_) => Default::default(),
-        SessionMessageAssistantToolState::Completed(state) => state.content.as_slice().into(),
-        SessionMessageAssistantToolState::Error(state) => {
-            state.content.as_deref().unwrap_or_default().into()
+        SessionMessageAssistantToolState::Streaming(_) | SessionMessageAssistantToolState::Running(_) => {
+            Default::default()
         }
+        SessionMessageAssistantToolState::Completed(state) => state.content.as_slice().into(),
+        SessionMessageAssistantToolState::Error(state) => state.content.as_deref().unwrap_or_default().into(),
         // A state this client does not know may still carry content items.
         SessionMessageAssistantToolState::Unknown(state) => state
             .get("content")
@@ -207,12 +191,7 @@ pub fn tool_output_text(name: &str, content: &[ToolContent]) -> String {
     let name = canonical_tool_name(name);
     // V2 shell content appends model-only status after the user-visible command output.
     if name == "shell" {
-        return content
-            .iter()
-            .find_map(text_of)
-            .flatten()
-            .unwrap_or_default()
-            .to_owned();
+        return content.iter().find_map(text_of).flatten().unwrap_or_default().to_owned();
     }
     let joined = content
         .iter()
@@ -239,10 +218,8 @@ pub fn read_display_text(text: &str) -> Option<String> {
         }
     }
     let entries = envelope.get("entries")?.as_array()?;
-    let lines: Vec<_> = entries
-        .iter()
-        .filter_map(|entry| entry.as_str().or_else(|| entry.get("path")?.as_str()))
-        .collect();
+    let lines: Vec<_> =
+        entries.iter().filter_map(|entry| entry.as_str().or_else(|| entry.get("path")?.as_str())).collect();
     Some(lines.join("\n"))
 }
 
@@ -256,20 +233,14 @@ pub fn tool_path(input: &str, directory: Option<&str>, home: Option<&str>) -> St
     let base = match directory {
         Some(directory) => directory,
         None => {
-            cwd = std::env::current_dir()
-                .map(|dir| dir.to_string_lossy().into_owned())
-                .unwrap_or_default();
+            cwd = std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
             &cwd
         }
     };
     if !windows_path(base) && windows_path(input) {
         return input.replace('\\', "/");
     }
-    let absolute = if input.starts_with('/') {
-        input.to_owned()
-    } else {
-        resolve(base, input)
-    };
+    let absolute = if input.starts_with('/') { input.to_owned() } else { resolve(base, input) };
     let relative = relative(base, &absolute);
     if relative.is_empty() {
         return ".".to_owned();
@@ -305,21 +276,14 @@ pub fn parse_todos(value: &Value) -> Vec<Todo> {
     items
         .iter()
         .filter_map(|item| {
-            let content = item
-                .as_object()?
-                .get("content")?
-                .as_str()
-                .filter(|content| !content.is_empty())?;
+            let content = item.as_object()?.get("content")?.as_str().filter(|content| !content.is_empty())?;
             let status = match item.get("status").and_then(Value::as_str) {
                 Some("in_progress") => TodoStatus::InProgress,
                 Some("completed") => TodoStatus::Completed,
                 Some("cancelled") => TodoStatus::Cancelled,
                 _ => TodoStatus::Pending,
             };
-            Some(Todo {
-                content: content.to_owned(),
-                status,
-            })
+            Some(Todo { content: content.to_owned(), status })
         })
         .collect()
 }
@@ -350,14 +314,7 @@ impl<'a> Frame<'a> {
         let name = canonical_tool_name(&part.name);
         let status = part.state.tag();
         if let SessionMessageAssistantToolState::Streaming(_) = part.state {
-            return Frame {
-                directory,
-                name,
-                input: Map::new(),
-                meta: Map::new(),
-                status,
-                output: String::new(),
-            };
+            return Frame { directory, name, input: Map::new(), meta: Map::new(), status, output: String::new() };
         }
         // Read the input as JSON so that a member this client does not know reads like a known one.
         let state = serde_json::to_value(&part.state).unwrap_or_default();
@@ -408,11 +365,7 @@ fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<Strin
         return metadata;
     }
     if let Some(Value::Array(files)) = metadata.get("files") {
-        let files = files
-            .iter()
-            .filter_map(normalize_file)
-            .map(Value::Object)
-            .collect();
+        let files = files.iter().filter_map(normalize_file).map(Value::Object).collect();
         metadata.insert("files".to_owned(), Value::Array(files));
     }
     metadata
@@ -421,14 +374,10 @@ fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<Strin
 /// A file of edit or patch metadata, with legacy field names mapped to `file`, `status`, and `from`.
 fn normalize_file(value: &Value) -> Option<Map<String, Value>> {
     let mut file = dict(Some(value));
-    let name = [
-        text(file.get("file")),
-        text(file.get("relativePath")),
-        text(file.get("filePath")),
-    ]
-    .into_iter()
-    .find(|name| !name.is_empty())?
-    .to_owned();
+    let name = [text(file.get("file")), text(file.get("relativePath")), text(file.get("filePath"))]
+        .into_iter()
+        .find(|name| !name.is_empty())?
+        .to_owned();
     let status = match (text(file.get("status")), text(file.get("type"))) {
         ("", "add") => "added",
         ("", "delete") => "deleted",
@@ -468,28 +417,17 @@ fn run_grep(frame: &Frame) -> Option<ToolInline> {
 
 fn search(frame: &Frame, label: &str, metadata: &str) -> Option<ToolInline> {
     let root = frame.input.get("path").filter(|root| !root.is_null());
-    let suffix = if truthy(root) {
-        format!("in {}", frame.path(root)?)
-    } else {
-        String::new()
-    };
+    let suffix = if truthy(root) { format!("in {}", frame.path(root)?) } else { String::new() };
     let description = match frame.meta.get(metadata) {
         None => suffix,
         Some(matches) => {
             let separator = if suffix.is_empty() { "" } else { " · " };
-            let plural = if matches.as_f64() == Some(1.0) {
-                ""
-            } else {
-                "es"
-            };
+            let plural = if matches.as_f64() == Some(1.0) { "" } else { "es" };
             format!("{suffix}{separator}{} match{plural}", js_string(matches))
         }
     };
     let title = format!("{label} \"{}\"", or_empty(frame.input.get("pattern")));
-    Some(ToolInline {
-        description: non_empty(description),
-        ..inline("✱", title)
-    })
+    Some(ToolInline { description: non_empty(description), ..inline("✱", title) })
 }
 
 fn run_list(frame: &Frame) -> Option<ToolInline> {
@@ -497,19 +435,13 @@ fn run_list(frame: &Frame) -> Option<ToolInline> {
     if dir.is_empty() {
         return Some(inline("→", "List".to_owned()));
     }
-    Some(inline(
-        "→",
-        format!("List {}", tool_path(dir, frame.directory, None)),
-    ))
+    Some(inline("→", format!("List {}", tool_path(dir, frame.directory, None))))
 }
 
 fn run_read(frame: &Frame) -> Option<ToolInline> {
     let file = frame.path(frame.input.get("path"))?;
     let description = non_empty(primitive_input_summary(&frame.input, &["path"]));
-    Some(ToolInline {
-        description,
-        ..inline("→", format!("Read {file}"))
-    })
+    Some(ToolInline { description, ..inline("→", format!("Read {file}")) })
 }
 
 fn run_write(frame: &Frame) -> Option<ToolInline> {
@@ -526,18 +458,9 @@ fn run_webfetch(frame: &Frame) -> Option<ToolInline> {
 }
 
 fn run_edit(frame: &Frame) -> Option<ToolInline> {
-    let file = frame
-        .meta
-        .get("files")
-        .and_then(Value::as_array)
-        .and_then(|files| files.first());
-    let patch = file
-        .and_then(|file| file.get("patch"))
-        .filter(|patch| !patch.is_null());
-    let body = patch
-        .or_else(|| frame.meta.get("diff"))
-        .and_then(Value::as_str)
-        .map(str::to_owned);
+    let file = frame.meta.get("files").and_then(Value::as_array).and_then(|files| files.first());
+    let patch = file.and_then(|file| file.get("patch")).filter(|patch| !patch.is_null());
+    let body = patch.or_else(|| frame.meta.get("diff")).and_then(Value::as_str).map(str::to_owned);
     let title = format!("Edit {}", frame.path(frame.input.get("path"))?);
     Some(block("←", title, body))
 }
@@ -553,11 +476,7 @@ fn run_web_search(frame: &Frame) -> Option<ToolInline> {
 
 fn run_task(frame: &Frame) -> Option<ToolInline> {
     let agent = frame.input.get("agent");
-    let kind = titlecase(if truthy(agent) {
-        agent?.as_str()?
-    } else {
-        "unknown"
-    });
+    let kind = titlecase(if truthy(agent) { agent?.as_str()? } else { "unknown" });
     let icon = match frame.status {
         "error" => "✗",
         "running" => "•",
@@ -567,17 +486,11 @@ fn run_task(frame: &Frame) -> Option<ToolInline> {
     if !truthy(description) {
         return Some(inline(icon, format!("{kind} Subagent")));
     }
-    Some(ToolInline {
-        description: Some(format!("{kind} Agent")),
-        ..inline(icon, or_empty(description))
-    })
+    Some(ToolInline { description: Some(format!("{kind} Agent")), ..inline(icon, or_empty(description)) })
 }
 
 fn run_skill(frame: &Frame) -> Option<ToolInline> {
-    let name = [frame.meta.get("name"), frame.input.get("id")]
-        .into_iter()
-        .flatten()
-        .find(|name| !name.is_null());
+    let name = [frame.meta.get("name"), frame.input.get("id")].into_iter().flatten().find(|name| !name.is_null());
     Some(inline("→", format!("Skill \"{}\"", or_empty(name))))
 }
 
@@ -606,37 +519,22 @@ fn run_todo(frame: &Frame) -> Option<ToolInline> {
 
 fn run_question(frame: &Frame) -> Option<ToolInline> {
     let total = list_len(frame.input.get("questions"));
-    Some(inline(
-        "→",
-        format!("Asked {total} question{}", plural(total)),
-    ))
+    Some(inline("→", format!("Asked {total} question{}", plural(total))))
 }
 
 fn run_invalid(frame: &Frame) -> Option<ToolInline> {
-    Some(block(
-        "✗",
-        "Invalid Tool".to_owned(),
-        frame.completed_output(),
-    ))
+    Some(block("✗", "Invalid Tool".to_owned(), frame.completed_output()))
 }
 
 fn run_batch(frame: &Frame) -> Option<ToolInline> {
     let calls = list_len(frame.input.get("tool_calls"));
-    let title = if calls > 0 {
-        format!("Batch {calls} tool{}", plural(calls))
-    } else {
-        "Batch".to_owned()
-    };
+    let title = if calls > 0 { format!("Batch {calls} tool{}", plural(calls)) } else { "Batch".to_owned() };
     Some(block("#", title, frame.completed_output()))
 }
 
 fn run_lsp(frame: &Frame) -> Option<ToolInline> {
     let operation = frame.input.get("operation");
-    let operation = if truthy(operation) {
-        or_empty(operation)
-    } else {
-        "request".to_owned()
-    };
+    let operation = if truthy(operation) { or_empty(operation) } else { "request".to_owned() };
     let file = frame.path(frame.input.get("path"))?;
     if file.is_empty() {
         return Some(inline("→", format!("LSP {operation}")));
@@ -651,31 +549,17 @@ fn run_lsp(frame: &Frame) -> Option<ToolInline> {
 
 fn run_shell(frame: &Frame) -> Option<ToolInline> {
     let command = frame.input.get("command");
-    let title = if truthy(command) {
-        or_empty(command)
-    } else {
-        String::new()
-    };
+    let title = if truthy(command) { or_empty(command) } else { String::new() };
     let body = (frame.status == "completed").then(|| frame.output.trim().to_owned());
     Some(block("$", title, body))
 }
 
 fn inline(icon: &'static str, title: String) -> ToolInline {
-    ToolInline {
-        icon,
-        title,
-        description: None,
-        block: false,
-        body: None,
-    }
+    ToolInline { icon, title, description: None, block: false, body: None }
 }
 
 fn block(icon: &'static str, title: String, body: Option<String>) -> ToolInline {
-    ToolInline {
-        block: true,
-        body,
-        ..inline(icon, title)
-    }
+    ToolInline { block: true, body, ..inline(icon, title) }
 }
 
 fn plural(count: usize) -> &'static str {
@@ -687,10 +571,7 @@ fn non_empty(text: String) -> Option<String> {
 }
 
 fn dict(value: Option<&Value>) -> Map<String, Value> {
-    value
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default()
+    value.and_then(Value::as_object).cloned().unwrap_or_default()
 }
 
 fn text(value: Option<&Value>) -> &str {
@@ -714,10 +595,7 @@ fn truthy(value: Option<&Value>) -> bool {
 
 /// `${value ?? ""}` in a template literal.
 fn or_empty(value: Option<&Value>) -> String {
-    value
-        .filter(|value| !value.is_null())
-        .map(js_string)
-        .unwrap_or_default()
+    value.filter(|value| !value.is_null()).map(js_string).unwrap_or_default()
 }
 
 /// `Locale.titlecase`: uppercases every ASCII word character that starts a word.
@@ -728,11 +606,7 @@ fn titlecase(text: &str) -> String {
         .map(|char| {
             let start = word(char) && !previous.is_some_and(word);
             previous = Some(char);
-            if start {
-                char.to_ascii_uppercase()
-            } else {
-                char
-            }
+            if start { char.to_ascii_uppercase() } else { char }
         })
         .collect()
 }
@@ -745,11 +619,7 @@ fn windows_path(input: &str) -> bool {
 
 /// `path.posix.resolve(base, input)` for an absolute `base`.
 fn resolve(base: &str, input: &str) -> String {
-    let joined = if input.starts_with('/') {
-        input.to_owned()
-    } else {
-        format!("{base}/{input}")
-    };
+    let joined = if input.starts_with('/') { input.to_owned() } else { format!("{base}/{input}") };
     let segments = joined.split('/').fold(Vec::new(), |mut segments, segment| {
         match segment {
             "" | "." => {}
@@ -767,23 +637,11 @@ fn resolve(base: &str, input: &str) -> String {
 fn relative(from: &str, to: &str) -> String {
     let from = resolve(from, "");
     let to = resolve(to, "");
-    let from: Vec<_> = from
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
-    let to: Vec<_> = to
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
-    let common = from
-        .iter()
-        .zip(&to)
-        .take_while(|(from, to)| from == to)
-        .count();
+    let from: Vec<_> = from.split('/').filter(|segment| !segment.is_empty()).collect();
+    let to: Vec<_> = to.split('/').filter(|segment| !segment.is_empty()).collect();
+    let common = from.iter().zip(&to).take_while(|(from, to)| from == to).count();
     let up = std::iter::repeat_n("..", from.len() - common);
-    up.chain(to[common..].iter().copied())
-        .collect::<Vec<_>>()
-        .join("/")
+    up.chain(to[common..].iter().copied()).collect::<Vec<_>>().join("/")
 }
 
 fn abbreviate_home(input: &str, home: &str) -> String {
@@ -809,10 +667,7 @@ mod tests {
         assert_eq!(path("/work/project"), ".");
         assert_eq!(path("/work/project/src/./a.ts"), "src/a.ts");
         assert_eq!(path("C:\\work\\a.ts"), "C:/work/a.ts");
-        assert_eq!(
-            tool_path("/home/me/x", Some("/work"), Some("/home/me")),
-            "~/x"
-        );
+        assert_eq!(tool_path("/home/me/x", Some("/work"), Some("/home/me")), "~/x");
     }
 
     #[test]

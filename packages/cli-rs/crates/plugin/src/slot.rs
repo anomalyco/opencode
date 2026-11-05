@@ -78,10 +78,7 @@ pub struct Placement {
 
 impl Placement {
     pub fn new(kind: Kind, target: impl Into<String>) -> Self {
-        Self {
-            kind,
-            target: target.into(),
-        }
+        Self { kind, target: target.into() }
     }
 
     pub fn prepend(target: impl Into<String>) -> Self {
@@ -127,9 +124,7 @@ pub struct Resolution {
 
 /// Whether `path` is strictly inside `ancestor`.
 pub fn contains(ancestor: &str, path: &str) -> bool {
-    path.len() > ancestor.len()
-        && path.starts_with(ancestor)
-        && path.as_bytes()[ancestor.len()] == b'.'
+    path.len() > ancestor.len() && path.starts_with(ancestor) && path.as_bytes()[ancestor.len()] == b'.'
 }
 
 /// Resolves `claims`, in plugin enable order, against the published `paths` (`resolveSlots`). Per target
@@ -149,10 +144,7 @@ pub fn resolve(paths: &[&str], claims: &[Placement]) -> Resolution {
             resolution.suppressed.push((index, None));
             continue;
         }
-        match winners
-            .iter_mut()
-            .find(|(target, _)| *target == claim.target)
-        {
+        match winners.iter_mut().find(|(target, _)| *target == claim.target) {
             Some(winner) => {
                 resolution.suppressed.push((winner.1, Some(index)));
                 winner.1 = index;
@@ -176,12 +168,7 @@ pub fn resolve(paths: &[&str], claims: &[Placement]) -> Resolution {
         let target = claim.target.as_str();
         // Inside placements on a replaced boundary are its contents; siblings of the boundary stay outside.
         let inside = matches!(claim.kind, Kind::Prepend | Kind::Append)
-            .then(|| {
-                boundaries
-                    .iter()
-                    .find(|(path, _)| *path == target)
-                    .map(|(_, winner)| *winner)
-            })
+            .then(|| boundaries.iter().find(|(path, _)| *path == target).map(|(_, winner)| *winner))
             .flatten();
         if let Some(outer) = inside.or_else(|| containing(&boundaries, target)) {
             resolution.suppressed.push((index, Some(outer)));
@@ -203,29 +190,17 @@ pub fn resolve(paths: &[&str], claims: &[Placement]) -> Resolution {
             continue;
         };
         resolution.degraded.push((index, ancestor.to_owned()));
-        resolution
-            .placed
-            .entry(ancestor.to_owned())
-            .or_default()
-            .append
-            .push(index);
+        resolution.placed.entry(ancestor.to_owned()).or_default().append.push(index);
     }
 
     for (path, winner) in boundaries {
-        resolution
-            .placed
-            .entry(path.to_owned())
-            .or_default()
-            .replace = Some(winner);
+        resolution.placed.entry(path.to_owned()).or_default().replace = Some(winner);
     }
     resolution
 }
 
 fn containing(boundaries: &[(&str, usize)], path: &str) -> Option<usize> {
-    boundaries
-        .iter()
-        .find(|(boundary, _)| contains(boundary, path))
-        .map(|(_, winner)| *winner)
+    boundaries.iter().find(|(boundary, _)| contains(boundary, path)).map(|(_, winner)| *winner)
 }
 
 fn depth(path: &str) -> usize {
@@ -234,10 +209,6 @@ fn depth(path: &str) -> usize {
 
 /// The nearest published ancestor of `path`.
 fn ancestor<'a>(path: &str, paths: &[&'a str]) -> Option<&'a str> {
-    path.rmatch_indices('.').find_map(|(index, _)| {
-        paths
-            .iter()
-            .find(|candidate| **candidate == &path[..index])
-            .copied()
-    })
+    path.rmatch_indices('.')
+        .find_map(|(index, _)| paths.iter().find(|candidate| **candidate == &path[..index]).copied())
 }

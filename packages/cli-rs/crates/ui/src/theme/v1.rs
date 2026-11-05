@@ -11,17 +11,8 @@ use serde_json::{Map, Value, json};
 use super::color::{ansi, from_hex, hex, hex_ints, luminance, to_oklch};
 use super::document::{STEPS, truthy};
 
-pub(crate) const CHROMATIC: [&str; 7] =
-    ["red", "orange", "yellow", "green", "cyan", "blue", "purple"];
-pub(crate) const CATEGORICAL: [&str; 7] = [
-    "secondary",
-    "accent",
-    "success",
-    "warning",
-    "primary",
-    "error",
-    "info",
-];
+pub(crate) const CHROMATIC: [&str; 7] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"];
+pub(crate) const CATEGORICAL: [&str; 7] = ["secondary", "accent", "success", "warning", "primary", "error", "info"];
 
 /// Every V1 color the migrations read. `selectedListItemText` and `backgroundMenu` have defaults, and nothing
 /// reads `borderSubtle`.
@@ -90,21 +81,12 @@ impl V1 {
 
     pub fn resolve(theme: &Value, mode: ThemeMode) -> Result<Self, String> {
         let empty = Map::new();
-        let defs = theme
-            .get("defs")
-            .and_then(Value::as_object)
-            .unwrap_or(&empty);
-        let colors = theme
-            .get("theme")
-            .and_then(Value::as_object)
-            .ok_or("Invalid V1 theme color")?;
+        let defs = theme.get("defs").and_then(Value::as_object).unwrap_or(&empty);
+        let colors = theme.get("theme").and_then(Value::as_object).ok_or("Invalid V1 theme color")?;
         let resolve = |value: &Value| resolve_v1_color(value, defs, colors, mode, &mut Vec::new());
         let mut resolved = HashMap::new();
         for (key, value) in colors {
-            if matches!(
-                key.as_str(),
-                "selectedListItemText" | "backgroundMenu" | "thinkingOpacity"
-            ) {
+            if matches!(key.as_str(), "selectedListItemText" | "backgroundMenu" | "thinkingOpacity") {
                 continue;
             }
             resolved.insert(key.clone(), resolve(value)?);
@@ -124,10 +106,7 @@ impl V1 {
         };
         resolved.insert("selectedListItemText".to_owned(), selected);
         resolved.insert("backgroundMenu".to_owned(), menu);
-        Ok(Self {
-            colors: resolved,
-            has_selected_list_item_text,
-        })
+        Ok(Self { colors: resolved, has_selected_list_item_text })
     }
 }
 
@@ -143,19 +122,11 @@ fn resolve_v1_color(
         Value::String(text) if text.starts_with('#') => Ok(from_hex(text)),
         Value::String(text) => {
             if chain.contains(text) {
-                return Err(format!(
-                    "Circular color reference: {} -> {text}",
-                    chain.join(" -> ")
-                ));
+                return Err(format!("Circular color reference: {} -> {text}", chain.join(" -> ")));
             }
-            let next = defs
-                .get(text)
-                .filter(|value| !value.is_null())
-                .or_else(|| theme.get(text));
+            let next = defs.get(text).filter(|value| !value.is_null()).or_else(|| theme.get(text));
             let Some(next) = next else {
-                return Err(format!(
-                    "Color reference \"{text}\" not found in defs or theme"
-                ));
+                return Err(format!("Color reference \"{text}\" not found in defs or theme"));
             };
             chain.push(text.clone());
             let color = resolve_v1_color(next, defs, theme, mode, chain);
@@ -190,21 +161,14 @@ pub(crate) fn migrate_with(
 ) -> Result<Value, String> {
     let light_theme = V1::resolve(theme, ThemeMode::Light)?;
     let dark_theme = V1::resolve(theme, ThemeMode::Dark)?;
-    let (light_background, dark_background) =
-        (light_theme.get("background"), dark_theme.get("background"));
+    let (light_background, dark_background) = (light_theme.get("background"), dark_theme.get("background"));
     if light_background.a > 0 && dark_background.a > 0 && light_background == dark_background {
         let light_mode = detect_mode(&light_theme);
         if light_mode == detect_mode(&dark_theme) {
-            let source = if light_mode == ThemeMode::Light {
-                &light_theme
-            } else {
-                &dark_theme
-            };
+            let source = if light_mode == ThemeMode::Light { &light_theme } else { &dark_theme };
             let definition = migrate(source, light_mode);
             if light_mode == ThemeMode::Light {
-                return Ok(
-                    json!({ "base": base(&definition), "light": light(&definition, &light_theme) }),
-                );
+                return Ok(json!({ "base": base(&definition), "light": light(&definition, &light_theme) }));
             }
             return Ok(json!({ "base": base(&definition), "dark": { "hue": definition["hue"] } }));
         }
@@ -219,21 +183,11 @@ pub(crate) fn migrate_with(
 }
 
 pub(crate) fn base(definition: &Map<String, Value>) -> Value {
-    Value::Object(
-        definition
-            .iter()
-            .filter(|(key, _)| *key != "hue")
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-    )
+    Value::Object(definition.iter().filter(|(key, _)| *key != "hue").map(|(k, v)| (k.clone(), v.clone())).collect())
 }
 
 pub(crate) fn detect_mode(theme: &V1) -> ThemeMode {
-    if luminance(theme.get("text")) > luminance(theme.get("background")) {
-        ThemeMode::Dark
-    } else {
-        ThemeMode::Light
-    }
+    if luminance(theme.get("text")) > luminance(theme.get("background")) { ThemeMode::Dark } else { ThemeMode::Light }
 }
 
 pub(crate) fn feedback_text(theme: &V1) -> Value {
@@ -329,15 +283,10 @@ pub(crate) fn dialog_background(theme: &V1) -> String {
     if theme.get("backgroundPanel").a == 255 {
         return "$background.raised.base".to_owned();
     }
-    let visible = [
-        "backgroundPanel",
-        "backgroundMenu",
-        "backgroundElement",
-        "background",
-    ]
-    .iter()
-    .map(|key| theme.get(key))
-    .find(|color| color.a > 0);
+    let visible = ["backgroundPanel", "backgroundMenu", "backgroundElement", "background"]
+        .iter()
+        .map(|key| theme.get(key))
+        .find(|color| color.a > 0);
     match visible {
         Some(color) => hex_ints(color.r, color.g, color.b, 255),
         None if luminance(theme.get("text")) > 0.5 => "#000000".to_owned(),
@@ -376,11 +325,7 @@ pub(crate) fn reference_hues(theme: Map<String, Value>) -> Map<String, Value> {
     theme
         .iter()
         .map(|(key, value)| {
-            let value = if key == "hue" || key == "categorical" {
-                value.clone()
-            } else {
-                replace(value, &references)
-            };
+            let value = if key == "hue" || key == "categorical" { value.clone() } else { replace(value, &references) };
             (key.clone(), value)
         })
         .collect()
@@ -396,9 +341,7 @@ fn alias_scale<'a>(
     }
     match definitions.get(name).filter(|value| truthy(value))? {
         Value::String(alias) => {
-            let target = alias
-                .strip_prefix("$hue.")
-                .filter(|target| !target.is_empty() && !target.contains('.'))?;
+            let target = alias.strip_prefix("$hue.").filter(|target| !target.is_empty() && !target.contains('.'))?;
             chain.push(name.to_owned());
             alias_scale(definitions, target, chain)
         }
@@ -409,15 +352,10 @@ fn alias_scale<'a>(
 
 fn replace(value: &Value, references: &HashMap<String, String>) -> Value {
     match value {
-        Value::String(text) => references
-            .get(&text.to_lowercase())
-            .map_or_else(|| value.clone(), |r| json!(r)),
-        Value::Object(object) => Value::Object(
-            object
-                .iter()
-                .map(|(key, item)| (key.clone(), replace(item, references)))
-                .collect(),
-        ),
+        Value::String(text) => references.get(&text.to_lowercase()).map_or_else(|| value.clone(), |r| json!(r)),
+        Value::Object(object) => {
+            Value::Object(object.iter().map(|(key, item)| (key.clone(), replace(item, references))).collect())
+        }
         _ => value.clone(),
     }
 }
@@ -430,28 +368,19 @@ pub(crate) struct Hues {
 
 impl Hues {
     fn token(&self, token: &str) -> Option<&'static str> {
-        self.by_token
-            .iter()
-            .find(|(name, _)| *name == token)
-            .map(|(_, hue)| *hue)
+        self.by_token.iter().find(|(name, _)| *name == token).map(|(_, hue)| *hue)
     }
 
     /// The matched hues in chromatic order, each with the color nearest to its reference angle.
     pub fn chromatic(&self) -> Vec<(&'static str, Color)> {
         CHROMATIC
             .iter()
-            .filter_map(|name| {
-                self.by_hue
-                    .iter()
-                    .find(|(hue, _, _)| hue == name)
-                    .map(|(hue, color, _)| (*hue, *color))
-            })
+            .filter_map(|name| self.by_hue.iter().find(|(hue, _, _)| hue == name).map(|(hue, color, _)| (*hue, *color)))
             .collect()
     }
 
     pub fn alias(&self, token: &str) -> String {
-        self.token(token)
-            .map_or_else(|| "$hue.gray".to_owned(), |hue| format!("$hue.{hue}"))
+        self.token(token).map_or_else(|| "$hue.gray".to_owned(), |hue| format!("$hue.{hue}"))
     }
 
     pub fn categorical(&self) -> Vec<&'static str> {
@@ -461,11 +390,7 @@ impl Hues {
                 unique.push(hue);
             }
         }
-        if unique.is_empty() {
-            vec!["neutral"]
-        } else {
-            unique
-        }
+        if unique.is_empty() { vec!["neutral"] } else { unique }
     }
 
     fn set_token(&mut self, token: &'static str, hue: &'static str) {
@@ -484,19 +409,8 @@ impl Hues {
 }
 
 pub(crate) fn infer_hues(theme: &V1) -> Hues {
-    let mut hues = Hues {
-        by_hue: Vec::new(),
-        by_token: Vec::new(),
-    };
-    for token in [
-        "accent",
-        "success",
-        "warning",
-        "primary",
-        "error",
-        "info",
-        "secondary",
-    ] {
+    let mut hues = Hues { by_hue: Vec::new(), by_token: Vec::new() };
+    for token in ["accent", "success", "warning", "primary", "error", "info", "secondary"] {
         let color = theme.get(token);
         let Some((name, distance)) = infer_hue(color) else {
             continue;
@@ -525,13 +439,9 @@ fn infer_hue(color: Color) -> Option<(&'static str, f64)> {
         return None;
     }
     let references: [&str; 7] = if value.l >= 0.6 {
-        [
-            "#fca5a5", "#fdba74", "#fde047", "#86efac", "#67e8f9", "#93c5fd", "#d8b4fe",
-        ]
+        ["#fca5a5", "#fdba74", "#fde047", "#86efac", "#67e8f9", "#93c5fd", "#d8b4fe"]
     } else {
-        [
-            "#b91c1c", "#c2410c", "#a16207", "#15803d", "#0e7490", "#1d4ed8", "#7e22ce",
-        ]
+        ["#b91c1c", "#c2410c", "#a16207", "#15803d", "#0e7490", "#1d4ed8", "#7e22ce"]
     };
     let mut best: Option<(&'static str, f64)> = None;
     for (name, reference) in CHROMATIC.iter().zip(references) {
@@ -551,27 +461,13 @@ pub(crate) fn selected_foreground(theme: &V1, background: Color) -> Color {
     if theme.get("background").a != 0 {
         return theme.get("background");
     }
-    if luminance(background) > 0.5 {
-        Color::rgb(0, 0, 0)
-    } else {
-        Color::rgb(255, 255, 255)
-    }
+    if luminance(background) > 0.5 { Color::rgb(0, 0, 0) } else { Color::rgb(255, 255, 255) }
 }
 
 pub(crate) fn with_alpha(generated: String, alpha: u8) -> String {
-    if alpha == 255 {
-        generated
-    } else {
-        format!("{generated}{alpha:02x}")
-    }
+    if alpha == 255 { generated } else { format!("{generated}{alpha:02x}") }
 }
 
 pub(crate) fn scale_value(scale: &[String]) -> Value {
-    Value::Object(
-        STEPS
-            .iter()
-            .zip(scale)
-            .map(|(step, color)| (step.to_string(), json!(color)))
-            .collect(),
-    )
+    Value::Object(STEPS.iter().zip(scale).map(|(step, color)| (step.to_string(), json!(color))).collect())
 }

@@ -11,8 +11,8 @@ use std::time::Duration;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::error::Error;
 use opencode_api::generated::{
-    LocationQueryInput, SessionMessageShellOutput, SessionMessageShellStatus, ShellGetInput,
-    ShellInfo, ShellOutputInput,
+    LocationQueryInput, SessionMessageShellOutput, SessionMessageShellStatus, ShellGetInput, ShellInfo,
+    ShellOutputInput,
 };
 use opencode_store::Location;
 use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, layout};
@@ -34,10 +34,7 @@ pub fn show(tui: &Tui, shell: ShellInfo, location: Location) {
     tui.dialogs.replace(
         move |cx| build(&weak, cx, shell, location),
         None,
-        DialogOptions {
-            size: DialogSize::XLarge,
-            key: Some("shell-output".to_owned()),
-        },
+        DialogOptions { size: DialogSize::XLarge, key: Some("shell-output".to_owned()) },
     );
     tui.dialogs.set_centered(true);
 }
@@ -83,36 +80,18 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         .row()
         .justify(Justify::SpaceBetween)
         .gap(if cx.width() < 60 { 1 } else { 2 })
-        .child(
-            &Text::new(app, "Shell output")
-                .fg(theme.text.base)
-                .bold()
-                .grow(1.0),
-        )
+        .child(&Text::new(app, "Shell output").fg(theme.text.base).bold().grow(1.0))
         .child(&status)
         .child(&close);
 
-    let note = Text::new(app, "Earlier output omitted · showing recent output")
-        .fg(theme.text.muted)
-        .visible(false);
+    let note = Text::new(app, "Earlier output omitted · showing recent output").fg(theme.text.muted).visible(false);
     let text = Text::new(app, "").fg(theme.text.base).wrap(WrapMode::Word);
-    let scroll = ScrollBox::new(app)
-        .scrollbars(false)
-        .sticky(true)
-        .sticky_start(ScrollEdge::Bottom)
-        .height(height);
+    let scroll = ScrollBox::new(app).scrollbars(false).sticky(true).sticky_start(ScrollEdge::Bottom).height(height);
     scroll.add(&text);
-    let failure = Text::new(app, "")
-        .fg(theme.text.feedback.error.base)
-        .visible(false);
+    let failure = Text::new(app, "").fg(theme.text.feedback.error.base).visible(false);
     let body = View::new(app)
         .gap(1)
-        .child(
-            &Text::new(app, shell.command.clone())
-                .fg(theme.text.muted)
-                .max_height(3)
-                .wrap(WrapMode::Word),
-        )
+        .child(&Text::new(app, shell.command.clone()).fg(theme.text.muted).max_height(3).wrap(WrapMode::Word))
         .child(&note)
         .child(&scroll)
         .child(&failure);
@@ -120,9 +99,7 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
     let page = f64::from(height);
     let scroll_command = |key: &str, title: &str, run: fn(&ScrollBox, f64)| {
         let scroll = scroll.clone();
-        TuiCommand::inline(key, move |_, _| run(&scroll, page))
-            .title(title)
-            .group("Shell")
+        TuiCommand::inline(key, move |_, _| run(&scroll, page)).title(title).group("Shell")
     };
     cx.layer(KeymapLayer {
         commands: vec![
@@ -186,13 +163,7 @@ impl Poll {
         };
         let client = tui.data.client().clone();
         let running = self.info.borrow().status == SessionMessageShellStatus::Running;
-        let future = load(
-            client,
-            self.id.clone(),
-            self.location.directory.clone(),
-            running,
-            self.cursor.get(),
-        );
+        let future = load(client, self.id.clone(), self.location.directory.clone(), running, self.cursor.get());
         let poll = self.clone();
         tui.app.spawn(future, move |cx, result| {
             if poll.disposed.get() {
@@ -215,13 +186,8 @@ impl Poll {
                 return;
             }
             let next = poll.clone();
-            let delay = if more {
-                Duration::ZERO
-            } else {
-                Duration::from_secs(1)
-            };
-            poll.timer
-                .set(Some(cx.set_timeout(delay, move |_| next.poll())));
+            let delay = if more { Duration::ZERO } else { Duration::from_secs(1) };
+            poll.timer.set(Some(cx.set_timeout(delay, move |_| next.poll())));
         });
     }
 
@@ -261,9 +227,7 @@ impl Poll {
         self.status.set_text(status);
         self.note.visible(self.omitted.get());
         let output = self.output.borrow();
-        let text = strip_ansi(output.as_deref().unwrap_or_default())
-            .replace("\r\n", "\n")
-            .replace('\r', "\n");
+        let text = strip_ansi(output.as_deref().unwrap_or_default()).replace("\r\n", "\n").replace('\r', "\n");
         self.text.set_text(if !text.is_empty() {
             text
         } else if output.is_none() {
@@ -288,24 +252,9 @@ async fn load(
     cursor: Option<i64>,
 ) -> Result<Loaded, Error> {
     let options = RequestOptions::default();
-    let location = || {
-        Some(LocationQueryInput {
-            directory: Some(directory.clone()),
-        })
-    };
+    let location = || Some(LocationQueryInput { directory: Some(directory.clone()) });
     let info = match running {
-        true => Some(
-            client
-                .shell_get(
-                    &ShellGetInput {
-                        id: id.clone(),
-                        location: location(),
-                    },
-                    &options,
-                )
-                .await?
-                .data,
-        ),
+        true => Some(client.shell_get(&ShellGetInput { id: id.clone(), location: location() }, &options).await?.data),
         false => None,
     };
     let (cursor, start) = match cursor {
@@ -313,12 +262,7 @@ async fn load(
         None => {
             let head = client
                 .shell_output(
-                    &ShellOutputInput {
-                        id: id.clone(),
-                        location: location(),
-                        cursor: Some(END),
-                        limit: None,
-                    },
+                    &ShellOutputInput { id: id.clone(), location: location(), cursor: Some(END), limit: None },
                     &options,
                 )
                 .await?;
@@ -328,12 +272,7 @@ async fn load(
     };
     let page = client
         .shell_output(
-            &ShellOutputInput {
-                id,
-                location: location(),
-                cursor: Some(cursor),
-                limit: Some(PAGE_BYTES),
-            },
+            &ShellOutputInput { id, location: location(), cursor: Some(cursor), limit: Some(PAGE_BYTES) },
             &options,
         )
         .await?

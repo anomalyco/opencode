@@ -18,11 +18,7 @@ impl Plugin {
             .as_ref()
             .map(|content| content.root())
             .unwrap_or_else(|| crate::features::route_missing::mount(tui, id, name));
-        let root = View::new(&tui.app)
-            .column()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .child(&view);
+        let root = View::new(&tui.app).column().grow(1.0).basis(Length::Auto).child(&view);
         Self { root, content }
     }
 }

@@ -35,16 +35,9 @@ pub fn install(tui: &Rc<Tui>) {
             .enabled(enabled())
         })
         .collect();
-    let names = commands
-        .iter()
-        .filter_map(|command| command.id.clone())
-        .collect();
+    let names = commands.iter().filter_map(|command| command.id.clone()).collect();
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands,
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
         // `pinnedSessionBindingCommands`, bound only while tabs are off.
         KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),

@@ -27,41 +27,25 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
         let query = request.url.query().unwrap_or_default().to_owned();
-        self.seen.lock().unwrap().push((
-            request.method.to_owned(),
-            path.clone(),
-            query.clone(),
-            body.clone(),
-        ));
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), query.clone(), body.clone()));
         let location = json!({ "directory": "/project" });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/location") => {
-                let directory = if query.contains("project-new") {
-                    "/project-new"
-                } else {
-                    "/project"
-                };
+                let directory = if query.contains("project-new") { "/project-new" } else { "/project" };
                 (
                     200,
                     json!({ "directory": directory, "project": { "id": "project", "directory": directory, "canonical": "/project" } }),
                 )
             }
-            ("GET", "/api/worktree") => (
-                200,
-                json!([{ "directory": "/project" }, { "directory": "/project-spike", "strategy": "git" }]),
-            ),
+            ("GET", "/api/worktree") => {
+                (200, json!([{ "directory": "/project" }, { "directory": "/project-spike", "strategy": "git" }]))
+            }
             ("POST", "/api/worktree") => (200, json!({ "directory": "/project-new" })),
-            ("GET", "/api/session") => (
-                200,
-                json!({ "data": [session("ses_a"), session("ses_b")], "cursor": {} }),
-            ),
+            ("GET", "/api/session") => (200, json!({ "data": [session("ses_a"), session("ses_b")], "cursor": {} })),
             ("GET", "/api/agent") => (
                 200,
                 json!({ "location": location, "data": [{
@@ -78,14 +62,9 @@ impl Transport for Fixture {
                     "enabled": true, "limit": { "context": 1000, "output": 100 },
                 }] }),
             ),
-            ("GET", "/api/provider" | "/api/integration") => {
-                (200, json!({ "location": location, "data": [] }))
-            }
+            ("GET", "/api/provider" | "/api/integration") => (200, json!({ "location": location, "data": [] })),
             ("GET", "/api/config") => (200, json!([])),
-            ("POST", "/api/session") => (
-                200,
-                json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) }),
-            ),
+            ("POST", "/api/session") => (200, json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) })),
             ("POST", path) if path.ends_with("/prompt") => (
                 200,
                 json!({ "data": {
@@ -101,20 +80,12 @@ impl Transport for Fixture {
                     Some(_) => (200, json!({ "data": [] })),
                 }
             }
-            ("POST", path)
-                if ["/model", "/agent", "/move", "/refresh"]
-                    .iter()
-                    .any(|end| path.ends_with(end)) =>
-            {
+            ("POST", path) if ["/model", "/agent", "/move", "/refresh"].iter().any(|end| path.ends_with(end)) => {
                 (204, Value::Null)
             }
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -147,17 +118,9 @@ impl Setup {
         let home = tempfile::tempdir().unwrap();
         let state = home.path().join("state");
         std::fs::create_dir_all(&state).unwrap();
-        std::fs::write(
-            state.join("session.json"),
-            json!({ "pinned": pinned }).to_string(),
-        )
-        .unwrap();
+        std::fs::write(state.join("session.json"), json!({ "pinned": pinned }).to_string()).unwrap();
         let seen = Seen::default();
-        let client = Client::with_transport(
-            "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone() }),
-        )
-        .unwrap();
+        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
         let app = TestApp::new(100, 30);
         let info = decode_text(r#"{ "tabs": { "mode": "off" }, "animations": false }"#).unwrap();
         let tui = opencode_tui::mount(
@@ -166,29 +129,19 @@ impl Setup {
                 client,
                 directory: "/project".into(),
                 config: Resolved::new(info, |_| None),
-                roots: Some(Roots {
-                    paths: paths(home.path()),
-                    storage_channel: "latest".into(),
-                }),
+                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
                 route,
                 continue_: false,
                 events: false,
             },
         );
-        let setup = Self {
-            app,
-            tui,
-            seen,
-            home,
-        };
+        let setup = Self { app, tui, seen, home };
         setup.wait_for("Model M");
         setup
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -208,18 +161,15 @@ impl Setup {
     }
 
     fn wait_request(&self, method: &str, path: &str) -> Vec<(String, Value)> {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
-            !self.requests(method, path).is_empty()
-        });
+        let found = self.app.wait_until(Duration::from_secs(5), || !self.requests(method, path).is_empty());
         assert!(found, "no {method} {path}: {:?}", self.log());
         self.requests(method, path)
     }
 
     fn wait_session(&self, id: &str) {
         let id = SessionID(id.into());
-        let loaded = self.app.wait_until(Duration::from_secs(5), || {
-            self.tui.data.read(|state| state.session(&id).is_some())
-        });
+        let loaded =
+            self.app.wait_until(Duration::from_secs(5), || self.tui.data.read(|state| state.session(&id).is_some()));
         assert!(loaded, "{id:?} never loaded: {:?}", self.log());
     }
 
@@ -255,9 +205,7 @@ fn paths(home: &Path) -> Paths {
 }
 
 fn session_route(id: &str) -> Route {
-    Route::Session {
-        id: SessionID(id.into()),
-    }
+    Route::Session { id: SessionID(id.into()) }
 }
 
 #[test]
@@ -269,25 +217,16 @@ fn a_session_moves_to_a_worktree() {
     assert!(screen.contains("move ctrl+m"), "{screen}");
     let current = screen.find("Current").unwrap();
     let other = screen.find("Other").unwrap();
-    let main = screen
-        .find("/project\n")
-        .or_else(|| screen.find("/project "))
-        .unwrap();
+    let main = screen.find("/project\n").or_else(|| screen.find("/project ")).unwrap();
     assert!(current < main && main < other, "{screen}");
     // `worktree.list`, then `worktree.refresh` once.
     setup.wait_request("POST", "/api/worktree/refresh");
-    assert_eq!(
-        setup.requests("GET", "/api/worktree")[0].0,
-        "projectID=project"
-    );
+    assert_eq!(setup.requests("GET", "/api/worktree")[0].0, "projectID=project");
 
     setup.app.press("down");
     setup.app.press("ctrl+m");
     let moved = setup.wait_request("POST", "/api/session/ses_a/move");
-    assert_eq!(
-        moved,
-        vec![(String::new(), json!({ "directory": "/project-spike" }))]
-    );
+    assert_eq!(moved, vec![(String::new(), json!({ "directory": "/project-spike" }))]);
     assert!(!setup.tui.dialogs.is_open());
     assert_eq!(setup.tui.route(), session_route("ses_a"));
 }
@@ -299,9 +238,7 @@ fn picking_a_worktree_goes_home_there() {
     setup.open_worktrees();
     setup.app.press("down");
     setup.app.press("return");
-    let home = setup
-        .app
-        .wait_until(Duration::from_secs(5), || setup.tui.route() == Route::Home);
+    let home = setup.app.wait_until(Duration::from_secs(5), || setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());
     // The home prompt works in the picked checkout.
     setup.wait_for("/project-spike");
@@ -324,15 +261,9 @@ fn a_new_worktree_is_staged_on_home_and_created_by_the_first_submit() {
     setup.app.type_text("hello");
     setup.app.press("return");
     let created = setup.wait_request("POST", "/api/worktree");
-    assert_eq!(
-        created[0].1,
-        json!({ "projectID": "project", "name": "my-spike" })
-    );
+    assert_eq!(created[0].1, json!({ "projectID": "project", "name": "my-spike" }));
     let sessions = setup.wait_request("POST", "/api/session");
-    assert_eq!(
-        sessions[0].1["location"],
-        json!({ "directory": "/project-new" })
-    );
+    assert_eq!(sessions[0].1["location"], json!({ "directory": "/project-new" }));
     let id = sessions[0].1["id"].as_str().unwrap().to_owned();
     let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"));
     assert_eq!(prompts[0].1["text"], "hello");
@@ -346,17 +277,8 @@ fn a_new_worktree_is_staged_on_home_and_created_by_the_first_submit() {
         })
         .map(|(method, path, _, _)| format!("{method} {path}"))
         .collect();
-    assert_eq!(
-        order[..3],
-        [
-            "POST /api/worktree",
-            "GET /api/location",
-            "POST /api/session"
-        ]
-    );
-    let opened = setup.app.wait_until(Duration::from_secs(5), || {
-        setup.tui.route() == session_route(&id)
-    });
+    assert_eq!(order[..3], ["POST /api/worktree", "GET /api/location", "POST /api/session"]);
+    let opened = setup.app.wait_until(Duration::from_secs(5), || setup.tui.route() == session_route(&id));
     assert!(opened, "{:?}", setup.tui.route());
 }
 
@@ -365,10 +287,7 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
     let setup = Setup::new(session_route("ses_a"), &["ses_b", "ses_a"]);
     setup.wait_session("ses_a");
     // The home's list read would load it; this route reads only its own session.
-    setup
-        .tui
-        .data
-        .remember(serde_json::from_value(session("ses_b")).unwrap());
+    setup.tui.data.remember(serde_json::from_value(session("ses_b")).unwrap());
     setup.wait_session("ses_b");
     // Slot 1 is the first pin.
     setup.app.press("ctrl+x");
@@ -389,8 +308,8 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
     }))
     .unwrap();
     setup.tui.data.apply(&[deleted]);
-    let pruned = setup.app.wait_until(Duration::from_secs(5), || {
-        setup.pins().contains(r#""ses_a""#) && !setup.pins().contains("ses_b")
-    });
+    let pruned = setup
+        .app
+        .wait_until(Duration::from_secs(5), || setup.pins().contains(r#""ses_a""#) && !setup.pins().contains("ses_b"));
     assert!(pruned, "{}", setup.pins());
 }

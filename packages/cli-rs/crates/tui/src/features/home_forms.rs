@@ -29,10 +29,7 @@ pub fn mount(tui: &Tui, home: &View) -> HomeForms {
         .column()
         .visible(false);
     home.add(&overlay);
-    HomeForms {
-        host: Host::new(tui, overlay),
-        read: Cell::new(false),
-    }
+    HomeForms { host: Host::new(tui, overlay), read: Cell::new(false) }
 }
 
 impl HomeForms {

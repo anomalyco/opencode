@@ -13,18 +13,10 @@ const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
 const DIM: &str = "\x1b[90m";
 
-const LOGO_LEFT: [&str; 4] = [
-    "                   ",
-    "█▀▀█ █▀▀█ █▀▀█ █▀▀▄",
-    "█__█ █__█ █^^^ █__█",
-    "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀",
-];
-const LOGO_RIGHT: [&str; 4] = [
-    "             ▄     ",
-    "█▀▀▀ █▀▀█ █▀▀█ █▀▀█",
-    "█___ █__█ █__█ █^^^",
-    "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
-];
+const LOGO_LEFT: [&str; 4] =
+    ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"];
+const LOGO_RIGHT: [&str; 4] =
+    ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"];
 
 /// The updated version an install recorded (`EpilogueProvider`).
 #[derive(Default)]
@@ -43,19 +35,13 @@ impl Epilogue {
 pub fn text(tui: &Tui) -> Option<String> {
     let session = match tui.route() {
         Route::Session { id } => {
-            let title = tui.data.read(|state| {
-                state
-                    .session(&id)
-                    .and_then(|session| session.title.clone())
-                    .unwrap_or_default()
-            });
+            let title =
+                tui.data.read(|state| state.session(&id).and_then(|session| session.title.clone()).unwrap_or_default());
             Some((opencode_ui::select::truncate(&title, 50), id))
         }
         _ => None,
     };
-    let session = session
-        .as_ref()
-        .map(|(title, id)| (title.as_str(), id.0.as_str()));
+    let session = session.as_ref().map(|(title, id)| (title.as_str(), id.0.as_str()));
     let updated = tui.epilogue.updated_version.borrow().clone();
     render(session, updated.as_deref(), &cli_name())
 }
@@ -75,9 +61,7 @@ fn render(session: Option<(&str, &str)>, updated: Option<&str>, cli: &str) -> Op
     let mut lines = wordmark("  ");
     lines.push(String::new());
     if let Some(version) = updated {
-        lines.push(format!(
-            "  {DIM}Run {RESET}{BOLD}{cli}{RESET}{DIM} to use {RESET}{BOLD}{version}{RESET}"
-        ));
+        lines.push(format!("  {DIM}Run {RESET}{BOLD}{cli}{RESET}{DIM} to use {RESET}{BOLD}{version}{RESET}"));
         lines.push(String::new());
     }
     if let Some((title, id)) = session {

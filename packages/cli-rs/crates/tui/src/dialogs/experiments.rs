@@ -34,9 +34,11 @@ fn options(tui: &Tui) -> Vec<SelectOption<&'static str>> {
         .iter()
         .map(|experiment| {
             let on = tui.settings.experiment(experiment.id);
-            SelectOption::new(experiment.title, experiment.id)
-                .search_text(experiment.description)
-                .footer(if on { "on" } else { "off" })
+            SelectOption::new(experiment.title, experiment.id).search_text(experiment.description).footer(if on {
+                "on"
+            } else {
+                "off"
+            })
         })
         .collect()
 }
@@ -44,9 +46,7 @@ fn options(tui: &Tui) -> Vec<SelectOption<&'static str>> {
 /// Flips experiment `id`. All experiments are booleans, so either direction toggles.
 pub fn toggle(tui: &Tui, id: &'static str) {
     let next = !tui.settings.experiment(id);
-    settings::update(tui, move |draft| {
-        set_path(draft, &["experimental", id], Value::Bool(next))
-    });
+    settings::update(tui, move |draft| set_path(draft, &["experimental", id], Value::Bool(next)));
 }
 
 /// `DialogExperiments`, in place of any open dialog.
@@ -88,9 +88,7 @@ pub fn show(tui: &Tui) {
                 props.bindings = vec![bind("left", "Previous value"), bind("right", "Next value")];
             }
             let (view, handle) = select(cx, props);
-            settings::refresh_on_change(&tui, Rc::downgrade(cx), move |tui| {
-                handle.set_options(options(tui))
-            });
+            settings::refresh_on_change(&tui, Rc::downgrade(cx), move |tui| handle.set_options(options(tui)));
             view
         },
         None,

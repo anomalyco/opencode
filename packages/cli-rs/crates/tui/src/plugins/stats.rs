@@ -8,9 +8,7 @@ use std::rc::Rc;
 
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{
-    ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo,
-};
+use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
 use opencode_plugin::{Definition, Slotted};
 use opencode_store::Changes;
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
@@ -42,18 +40,11 @@ pub fn plugin() -> Definition<Tui> {
                     }
                     *previous.borrow_mut() = current;
                     tui.dialogs.clear();
-                    tui.navigate(Route::Plugin {
-                        id: ID.to_owned(),
-                        name: ROUTE.to_owned(),
-                    });
+                    tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
                 })
                 .title("Usage statistics")
                 .group("System")
-                .slash(opencode_ui::keymap::Slash {
-                    name: "stats".to_owned(),
-                    aliases: Vec::new(),
-                    arguments: false,
-                })
+                .slash(opencode_ui::keymap::Slash { name: "stats".to_owned(), aliases: Vec::new(), arguments: false })
                 .palette()
                 .bind(Bind::Default),
             ],
@@ -74,14 +65,8 @@ impl Page {
         let app = &tui.app;
         let theme = tui.page();
         let scroll = ScrollBox::new(app).scrollbars(false).grow(1.0);
-        scroll
-            .content_view()
-            .align_items(Align::Center)
-            .justify(Justify::Center)
-            .padding_y(1);
-        let content = View::new(app)
-            .shrink(0.0)
-            .child(&Text::new(app, "Gathering your stats…").fg(theme.text.muted));
+        scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
+        let content = View::new(app).shrink(0.0).child(&Text::new(app, "Gathering your stats…").fg(theme.text.muted));
         scroll.add(&content);
         let root = View::new(app)
             .width(Length::percent(100.0))
@@ -106,11 +91,7 @@ impl Page {
             .map_err(|error| log::error!("stats keymap layer: {error}"))
             .ok();
         load(tui, &content);
-        Self {
-            root,
-            layer: RefCell::new(layer),
-            app: app.clone(),
-        }
+        Self { root, layer: RefCell::new(layer), app: app.clone() }
     }
 }
 
@@ -134,10 +115,7 @@ impl Drop for Page {
 /// Reads this year's stats in the local time zone, without tool details.
 fn load(tui: &Tui, content: &View) {
     let now = Local::now();
-    let from = Local
-        .with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0)
-        .earliest()
-        .map_or(0, |start| start.timestamp_millis());
+    let from = Local.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).earliest().map_or(0, |start| start.timestamp_millis());
     let input = ExperimentalSessionStatsInput {
         from: Some(from as f64),
         timezone: Some(time_zone()),
@@ -148,11 +126,7 @@ fn load(tui: &Tui, content: &View) {
     let weak = tui.weak();
     let content = content.clone();
     tui.app.spawn(
-        async move {
-            client
-                .experimental_session_stats(&input, &RequestOptions::default())
-                .await
-        },
+        async move { client.experimental_session_stats(&input, &RequestOptions::default()).await },
         move |_, result| {
             let Some(tui) = weak.upgrade() else { return };
             let theme = tui.page();
@@ -163,11 +137,11 @@ fn load(tui: &Tui, content: &View) {
                 }
                 Err(_) => {
                     content.add(
-                        &Text::new(
-                            &tui.app,
-                            "Could not load stats. Reopen /stats to try again.",
-                        )
-                        .fg(theme.text.feedback.error.base),
+                        &Text::new(&tui.app, "Could not load stats. Reopen /stats to try again.").fg(theme
+                            .text
+                            .feedback
+                            .error
+                            .base),
                     );
                 }
             }
@@ -206,20 +180,12 @@ fn poster(tui: &Tui, theme: &Theme, stats: &SessionStatsInfo) -> View {
         + stats.tokens.cache.read
         + stats.tokens.cache.write;
     let total = number(tokens);
-    let root = View::new(app)
-        .column()
-        .width(width)
-        .align_items(Align::Center)
-        .shrink(0.0)
-        .gap(if compact { 1 } else { 2 });
+    let root =
+        View::new(app).column().width(width).align_items(Align::Center).shrink(0.0).gap(if compact { 1 } else { 2 });
     let title = View::new(app)
         .width(Length::percent(100.0))
         .justify(Justify::SpaceBetween)
-        .child(
-            &Text::new(app, "opencode / stats")
-                .fg(theme.text.base)
-                .bold(),
-        )
+        .child(&Text::new(app, "opencode / stats").fg(theme.text.base).bold())
         .child(&Text::new(app, dates(stats.range.from, stats.range.to)).fg(theme.text.muted));
     if width < 44 {
         title.column();
@@ -232,37 +198,19 @@ fn poster(tui: &Tui, theme: &Theme, stats: &SessionStatsInfo) -> View {
         crate::routes::home::paint_logo(app, &logo, theme, columns, rows);
         root.add(&logo);
     }
-    let letters: Option<Vec<&[&str; 5]>> = total
-        .chars()
-        .map(|char| {
-            DIGITS
-                .iter()
-                .find(|(key, _)| *key == char)
-                .map(|(_, rows)| rows)
-        })
-        .collect();
+    let letters: Option<Vec<&[&str; 5]>> =
+        total.chars().map(|char| DIGITS.iter().find(|(key, _)| *key == char).map(|(_, rows)| rows)).collect();
     let large = letters.as_ref().filter(|letters| {
-        letters
-            .iter()
-            .map(|letter| letter[0].len() as i64 * 2 + 2)
-            .sum::<i64>()
-            - 2
-            <= i64::from(width)
+        letters.iter().map(|letter| letter[0].len() as i64 * 2 + 2).sum::<i64>() - 2 <= i64::from(width)
     });
     let big = View::new(app).align_items(Align::Center).gap(1);
     match large {
         Some(letters) => {
             let lines = View::new(app);
             for row in 0..5 {
-                let line: Vec<String> = letters
-                    .iter()
-                    .map(|letter| letter[row].replace('1', "██").replace('0', "  "))
-                    .collect();
-                lines.add(
-                    &Text::new(app, line.join("  "))
-                        .fg(theme.text.base)
-                        .selectable(false),
-                );
+                let line: Vec<String> =
+                    letters.iter().map(|letter| letter[row].replace('1', "██").replace('0', "  ")).collect();
+                lines.add(&Text::new(app, line.join("  ")).fg(theme.text.base).selectable(false));
             }
             big.add(&lines);
         }
@@ -273,24 +221,15 @@ fn poster(tui: &Tui, theme: &Theme, stats: &SessionStatsInfo) -> View {
     big.add(&Text::new(app, "TOKENS").fg(theme.text.muted));
     root.add(&big);
     root.add(&calendar_view(app, theme, stats, width));
-    let metrics = View::new(app)
-        .row()
-        .width(Length::percent(100.0))
-        .justify(Justify::SpaceAround);
-    for (label, value) in [
-        ("best streak", stats.streak),
-        ("active days", stats.active_days),
-        ("sessions", stats.sessions),
-    ] {
+    let metrics = View::new(app).row().width(Length::percent(100.0)).justify(Justify::SpaceAround);
+    for (label, value) in
+        [("best streak", stats.streak), ("active days", stats.active_days), ("sessions", stats.sessions)]
+    {
         let suffix = if label == "best streak" { " days" } else { "" };
         metrics.add(
             &View::new(app)
                 .align_items(Align::Center)
-                .child(
-                    &Text::new(app, format!("{}{suffix}", number(value as f64)))
-                        .fg(theme.text.base)
-                        .bold(),
-                )
+                .child(&Text::new(app, format!("{}{suffix}", number(value as f64))).fg(theme.text.base).bold())
                 .child(&Text::new(app, label).fg(theme.text.muted)),
         );
     }
@@ -313,10 +252,7 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
         stats.range.to as i64,
         f64::from(width.saturating_sub(4) / 2),
     );
-    let accent = theme
-        .categorical()
-        .first()
-        .map_or(theme.text.base, |scale| scale.step(200));
+    let accent = theme.categorical().first().map_or(theme.text.base, |scale| scale.step(200));
     let shades: Vec<Color> = std::iter::once(theme.text.muted)
         .chain(
             [0.3, 0.5, 0.75, 1.0]
@@ -328,17 +264,12 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
         .months
         .iter()
         .map(|month| {
-            let label = if month.label.len() <= month.span * 2 {
-                month.label
-            } else {
-                ""
-            };
+            let label = if month.label.len() <= month.span * 2 { month.label } else { "" };
             format!("{label:<width$}", width = month.span * 2)
         })
         .collect();
-    let root = View::new(app)
-        .align_items(Align::Center)
-        .child(&Text::new(app, format!("    {months}")).fg(theme.text.muted));
+    let root =
+        View::new(app).align_items(Align::Center).child(&Text::new(app, format!("    {months}")).fg(theme.text.muted));
     for (index, day) in ["M", "T", "W", "T", "F", "S", "S"].into_iter().enumerate() {
         let mut spans = vec![format!("{day}   ").fg(theme.text.muted)];
         for week in &calendar.weeks {
@@ -350,18 +281,10 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
             };
             spans.push(cell.fg(shades[level.max(0) as usize]));
         }
-        root.add(
-            &View::new(app)
-                .row()
-                .height(1)
-                .child(&Text::new(app, spans).selectable(false)),
-        );
+        root.add(&View::new(app).row().height(1).child(&Text::new(app, spans).selectable(false)));
     }
     if calendar.clipped {
-        root.add(
-            &Text::new(app, format!("Your last {} weeks", calendar.weeks.len()))
-                .fg(theme.text.muted),
-        );
+        root.add(&Text::new(app, format!("Your last {} weeks", calendar.weeks.len())).fg(theme.text.muted));
     }
     root
 }
@@ -370,10 +293,7 @@ fn calendar_view(app: &App, theme: &Theme, stats: &SessionStatsInfo, width: u32)
 pub fn number(value: f64) -> String {
     const UNITS: [(f64, &str); 5] = [(1.0, ""), (1e3, "K"), (1e6, "M"), (1e9, "B"), (1e12, "T")];
     let round = |value: f64| (value * 10.0).round() / 10.0;
-    let mut index = UNITS
-        .iter()
-        .rposition(|(scale, _)| value.abs() >= *scale)
-        .unwrap_or(0);
+    let mut index = UNITS.iter().rposition(|(scale, _)| value.abs() >= *scale).unwrap_or(0);
     // A value that rounds up to 1000 of a unit reads as one of the next (`999950` is `1M`).
     if round(value / UNITS[index].0).abs() >= 1000.0 && index + 1 < UNITS.len() {
         index += 1;
@@ -390,21 +310,12 @@ fn trim(value: f64) -> String {
 /// `Dec 2025 – Jan 2026`.
 fn dates(from: f64, to: f64) -> String {
     let date = |time: f64| {
-        Local
-            .timestamp_millis_opt(time as i64)
-            .single()
-            .map_or(NaiveDate::default(), |date| date.date_naive())
+        Local.timestamp_millis_opt(time as i64).single().map_or(NaiveDate::default(), |date| date.date_naive())
     };
     let (start, end) = (date(from), date(from.max(to - 1.0)));
     let month = |date: NaiveDate| date.format("%b").to_string();
     if start.year() != end.year() {
-        return format!(
-            "{} {} – {} {}",
-            month(start),
-            start.year(),
-            month(end),
-            end.year()
-        );
+        return format!("{} {} – {} {}", month(start), start.year(), month(end), end.year());
     }
     if start.month() != end.month() {
         return format!("{} – {} {}", month(start), month(end), end.year());

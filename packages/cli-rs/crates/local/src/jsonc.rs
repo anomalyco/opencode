@@ -298,18 +298,14 @@ impl<'a> Scanner<'a> {
                             if (0xDC00..0xE000).contains(&unit)
                                 && let Some(h) = high.take()
                             {
-                                let code = 0x10000
-                                    + ((u32::from(h) - 0xD800) << 10)
-                                    + (u32::from(unit) - 0xDC00);
+                                let code = 0x10000 + ((u32::from(h) - 0xD800) << 10) + (u32::from(unit) - 0xDC00);
                                 result.push(char::from_u32(code).unwrap_or('\u{FFFD}'));
                             } else {
                                 flush(&mut result, &mut high);
                                 if (0xD800..0xDC00).contains(&unit) {
                                     high = Some(unit);
                                 } else {
-                                    result.push(
-                                        char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}'),
-                                    );
+                                    result.push(char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}'));
                                 }
                             }
                         }
@@ -357,9 +353,7 @@ fn is_line_break(ch: u8) -> bool {
 }
 
 fn is_unknown_content(ch: u8) -> bool {
-    !(is_white_space(ch)
-        || is_line_break(ch)
-        || matches!(ch, b'}' | b']' | b'{' | b'[' | b'"' | b':' | b',' | b'/'))
+    !(is_white_space(ch) || is_line_break(ch) || matches!(ch, b'}' | b']' | b'{' | b'[' | b'"' | b':' | b',' | b'/'))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -452,10 +446,7 @@ impl Tree {
 pub fn parse_tree(text: &str) -> Tree {
     let mut parser = Parser {
         scanner: Scanner::new(text),
-        tree: Tree {
-            nodes: vec![node(Kind::Array, 0, None, Value::Null)],
-            errors: 0,
-        },
+        tree: Tree { nodes: vec![node(Kind::Array, 0, None, Value::Null)], errors: 0 },
         current: 0,
     };
     parser.run();
@@ -472,14 +463,7 @@ pub fn parse(text: &str) -> Option<Value> {
 }
 
 fn node(kind: Kind, offset: usize, parent: Option<usize>, value: Value) -> Node {
-    Node {
-        kind,
-        offset,
-        length: 0,
-        parent,
-        children: Vec::new(),
-        value,
-    }
+    Node { kind, offset, length: 0, parent, children: Vec::new(), value }
 }
 
 struct Parser<'a> {
@@ -492,9 +476,7 @@ impl Parser<'_> {
     fn push(&mut self, kind: Kind, value: Value) -> usize {
         let id = self.tree.nodes.len();
         let offset = self.scanner.offset();
-        self.tree
-            .nodes
-            .push(node(kind, offset, Some(self.current), value));
+        self.tree.nodes.push(node(kind, offset, Some(self.current), value));
         self.tree.nodes[self.current].children.push(id);
         id
     }
@@ -604,11 +586,7 @@ impl Parser<'_> {
     }
 
     fn parse_container(&mut self, object: bool) -> bool {
-        let (kind, close) = if object {
-            (Kind::Object, Token::CloseBrace)
-        } else {
-            (Kind::Array, Token::CloseBracket)
-        };
+        let (kind, close) = if object { (Kind::Object, Token::CloseBrace) } else { (Kind::Array, Token::CloseBracket) };
         self.current = self.push(kind, Value::Null);
         self.scan_next();
         let mut needs_comma = false;
@@ -625,11 +603,7 @@ impl Parser<'_> {
             } else if needs_comma {
                 self.handle_error(&[], &[]);
             }
-            let parsed = if object {
-                self.parse_property()
-            } else {
-                self.parse_value()
-            };
+            let parsed = if object { self.parse_property() } else { self.parse_value() };
             if !parsed {
                 self.handle_error(&[], &[close, Token::Comma]);
             }
@@ -691,13 +665,9 @@ pub fn number(value: f64) -> Value {
 pub fn same(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
-        (Value::Array(a), Value::Array(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same(a, b))
-        }
+        (Value::Array(a), Value::Array(b)) => a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same(a, b)),
         (Value::Object(a), Value::Object(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .all(|(key, a)| b.get(key).is_some_and(|b| same(a, b)))
+            a.len() == b.len() && a.iter().all(|(key, a)| b.get(key).is_some_and(|b| same(a, b)))
         }
         _ => a == b,
     }
@@ -796,16 +766,8 @@ fn number_text(number: &Number) -> String {
         format!("0.{}{}", "0".repeat((-n) as usize), digits)
     } else {
         let exp = n - 1;
-        let exp = if exp >= 0 {
-            format!("+{exp}")
-        } else {
-            exp.to_string()
-        };
-        if k == 1 {
-            format!("{digits}e{exp}")
-        } else {
-            format!("{}.{}e{exp}", &digits[..1], &digits[1..])
-        }
+        let exp = if exp >= 0 { format!("+{exp}") } else { exp.to_string() };
+        if k == 1 { format!("{digits}e{exp}") } else { format!("{}.{}e{exp}", &digits[..1], &digits[1..]) }
     };
     format!("{sign}{body}")
 }
@@ -871,11 +833,7 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
             match (existing, value) {
                 (Some(existing), None) => {
                     let property = tree.node(existing).parent.unwrap_or(existing);
-                    let index = parent_node
-                        .children
-                        .iter()
-                        .position(|&c| c == property)
-                        .unwrap_or(0);
+                    let index = parent_node.children.iter().position(|&c| c == property).unwrap_or(0);
                     let mut remove_end = end(property);
                     let remove_begin = if index > 0 {
                         end(parent_node.children[index - 1])
@@ -885,26 +843,15 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
                         }
                         parent_node.offset + 1
                     };
-                    Ok(with_formatting(
-                        text,
-                        remove_begin,
-                        remove_end - remove_begin,
-                        "",
-                    ))
+                    Ok(with_formatting(text, remove_begin, remove_end - remove_begin, ""))
                 }
                 (Some(existing), Some(value)) => {
                     let node = tree.node(existing);
-                    Ok(with_formatting(
-                        text,
-                        node.offset,
-                        node.length,
-                        &stringify(&value),
-                    ))
+                    Ok(with_formatting(text, node.offset, node.length, &stringify(&value)))
                 }
                 (None, None) => Ok(text.to_string()),
                 (None, Some(value)) => {
-                    let property =
-                        format!("{}: {}", stringify(&Value::String(key)), stringify(&value));
+                    let property = format!("{}: {}", stringify(&Value::String(key)), stringify(&value));
                     let (offset, content) = match parent_node.children.last() {
                         Some(&previous) => (end(previous), format!(",{property}")),
                         None => (parent_node.offset + 1, property),
@@ -922,10 +869,7 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
                         (parent_node.offset + 1, parent_node.length - 2)
                     } else if index > 0 && children.len() - 1 == index {
                         let offset = end(children[index - 1]);
-                        (
-                            offset,
-                            (parent_node.offset + parent_node.length).saturating_sub(2 + offset),
-                        )
+                        (offset, (parent_node.offset + parent_node.length).saturating_sub(2 + offset))
                     } else if index + 1 < children.len() {
                         let offset = tree.node(children[index]).offset;
                         (offset, tree.node(children[index + 1]).offset - offset)
@@ -941,11 +885,7 @@ pub fn modify(text: &str, path: &[Segment], value: Option<&Value>) -> Result<Str
                         return Ok(with_formatting(text, node.offset, node.length, &item));
                     }
                     if children.is_empty() || index == 0 {
-                        let content = if children.is_empty() {
-                            item
-                        } else {
-                            format!("{item},")
-                        };
+                        let content = if children.is_empty() { item } else { format!("{item},") };
                         return Ok(with_formatting(text, parent_node.offset + 1, 0, &content));
                     }
                     let previous = children[index.min(children.len()) - 1];
@@ -1011,11 +951,8 @@ fn format_range(document: &str, range_start: usize, range_end: usize) -> Vec<Edi
     }
     let text = &document[start..stop];
     let initial_level = {
-        let columns: usize = text
-            .bytes()
-            .take_while(|b| *b == b' ' || *b == b'\t')
-            .map(|b| if b == b' ' { 1 } else { 2 })
-            .sum();
+        let columns: usize =
+            text.bytes().take_while(|b| *b == b' ' || *b == b'\t').map(|b| if b == b' ' { 1 } else { 2 }).sum();
         (columns / 2) as i64
     };
     let eol = match bytes.iter().position(|b| is_line_break(*b)) {
@@ -1042,31 +979,17 @@ fn format_range(document: &str, range_start: usize, range_end: usize) -> Vec<Edi
         *has_error = token == Token::Unknown || scanner.error();
         token
     };
-    let indent = |level: i64| {
-        format!(
-            "{eol}{}",
-            INDENT.repeat((initial_level + level).max(0) as usize)
-        )
-    };
+    let indent = |level: i64| format!("{eol}{}", INDENT.repeat((initial_level + level).max(0) as usize));
     let mut add = |has_error: bool, content: String, from: usize, to: usize| {
         if !has_error && from < range_end && to > range_start && document[from..to] != content {
-            edits.push(Edit {
-                offset: from,
-                length: to - from,
-                content,
-            });
+            edits.push(Edit { offset: from, length: to - from, content });
         }
     };
 
     let mut first = scan(&mut scanner, &mut line_breaks, &mut has_error);
     if first != Token::Eof {
         let first_start = scanner.offset() + start;
-        add(
-            has_error,
-            INDENT.repeat(initial_level as usize),
-            start,
-            first_start,
-        );
+        add(has_error, INDENT.repeat(initial_level as usize), start, first_start);
     }
     while first != Token::Eof {
         let mut first_end = scanner.offset() + scanner.length() + start;
@@ -1078,19 +1001,11 @@ fn format_range(document: &str, range_start: usize, range_end: usize) -> Vec<Edi
             add(has_error, " ".to_string(), first_end, comment_start);
             first_end = scanner.offset() + scanner.length() + start;
             needs_line_break = second == Token::LineComment;
-            replace = if needs_line_break {
-                indent(level)
-            } else {
-                String::new()
-            };
+            replace = if needs_line_break { indent(level) } else { String::new() };
             second = scan(&mut scanner, &mut line_breaks, &mut has_error);
         }
         if second == Token::CloseBrace || second == Token::CloseBracket {
-            let open = if second == Token::CloseBrace {
-                Token::OpenBrace
-            } else {
-                Token::OpenBracket
-            };
+            let open = if second == Token::CloseBrace { Token::OpenBrace } else { Token::OpenBracket };
             if first != open {
                 level -= 1;
                 replace = indent(level);
@@ -1119,15 +1034,8 @@ fn format_range(document: &str, range_start: usize, range_end: usize) -> Vec<Edi
                         replace = String::new();
                     }
                 }
-                Token::Null
-                | Token::True
-                | Token::False
-                | Token::Number
-                | Token::CloseBrace
-                | Token::CloseBracket => {
-                    if matches!(second, Token::LineComment | Token::BlockComment)
-                        && !needs_line_break
-                    {
+                Token::Null | Token::True | Token::False | Token::Number | Token::CloseBrace | Token::CloseBracket => {
+                    if matches!(second, Token::LineComment | Token::BlockComment) && !needs_line_break {
                         replace = " ".to_string();
                     } else if second != Token::Comma && second != Token::Eof {
                         has_error = true;
@@ -1166,10 +1074,7 @@ mod tests {
             Some(json!({"a": [1, 2], "b": {"c": null}}))
         );
         assert_eq!(parse("{\"a\": 1, \"a\": 2}"), Some(json!({"a": 2})));
-        assert_eq!(
-            parse("{\"a\": \"\\ud83d\\ude00\"}"),
-            Some(json!({"a": "😀"}))
-        );
+        assert_eq!(parse("{\"a\": \"\\ud83d\\ude00\"}"), Some(json!({"a": "😀"})));
         assert_eq!(parse(""), None);
         assert_eq!(parse("{\"a\" 1}"), None);
         assert_eq!(parse("{a: 1}"), None);
@@ -1205,15 +1110,9 @@ mod tests {
             modify(text, &key(&["b", "c"]), Some(&json!(true))).unwrap(),
             "{\n  // keep\n  \"a\": 1,\n  \"b\": {\n    \"c\": true\n  }\n}\n"
         );
-        assert_eq!(
-            modify(text, &key(&["a"]), Some(&json!("x"))).unwrap(),
-            "{\n  // keep\n  \"a\": \"x\"\n}\n"
-        );
+        assert_eq!(modify(text, &key(&["a"]), Some(&json!("x"))).unwrap(), "{\n  // keep\n  \"a\": \"x\"\n}\n");
         assert_eq!(modify(text, &key(&["a"]), None).unwrap(), "{\n}\n");
-        assert_eq!(
-            modify("", &key(&["a"]), Some(&json!(1))).unwrap(),
-            "{\n  \"a\": 1\n}"
-        );
+        assert_eq!(modify("", &key(&["a"]), Some(&json!(1))).unwrap(), "{\n  \"a\": 1\n}");
         assert_eq!(modify(text, &key(&["z"]), None).unwrap(), text);
     }
 }

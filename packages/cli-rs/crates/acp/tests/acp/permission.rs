@@ -7,9 +7,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde_json::{Value, json};
 
 use crate::wire::{
-    Reply, Wire, WireOptions, assert_matches, delivered, ephemeral_event, events, file_diff,
-    interrupted, lock, permission_asked, start_session, start_wire, succeeded, tool_called,
-    tool_started, turn,
+    Reply, Wire, WireOptions, assert_matches, delivered, ephemeral_event, events, file_diff, interrupted, lock,
+    permission_asked, start_session, start_wire, succeeded, tool_called, tool_started, turn,
 };
 
 fn allow_once() -> Reply {
@@ -17,12 +16,7 @@ fn allow_once() -> Reply {
 }
 
 fn decisions(acp: &Wire) -> Vec<Value> {
-    acp.server
-        .state()
-        .replies
-        .iter()
-        .map(|reply| json!([reply["requestID"], reply["decision"]]))
-        .collect()
+    acp.server.state().replies.iter().map(|reply| json!([reply["requestID"], reply["decision"]])).collect()
 }
 
 fn question(session: &str, id: &str) -> Value {
@@ -74,12 +68,12 @@ async fn forwards_allow_once_and_allow_always_selections_to_the_server() {
             permission: Some(Arc::new(|request| {
                 match request["toolCall"]["toolCallId"].as_str().unwrap_or_default() {
                     "call_once" => allow_once(),
-                    "call_always" => Reply::Result(
-                        json!({ "outcome": { "outcome": "selected", "optionId": "always" } }),
-                    ),
-                    "perm_selected_reject" => Reply::Result(
-                        json!({ "outcome": { "outcome": "selected", "optionId": "reject" } }),
-                    ),
+                    "call_always" => {
+                        Reply::Result(json!({ "outcome": { "outcome": "selected", "optionId": "always" } }))
+                    }
+                    "perm_selected_reject" => {
+                        Reply::Result(json!({ "outcome": { "outcome": "selected", "optionId": "reject" } }))
+                    }
                     "perm_cancelled" => Reply::Result(json!({ "outcome": { "outcome": "cancelled" } })),
                     _ => Reply::Error("client permission UI failed".to_owned()),
                 }
@@ -90,10 +84,7 @@ async fn forwards_allow_once_and_allow_always_selections_to_the_server() {
     )
     .await;
 
-    assert_eq!(
-        acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"], "end_turn");
 
     let permissions = lock(&acp.permissions).clone();
     assert_matches(
@@ -134,37 +125,19 @@ async fn forwards_allow_once_and_allow_always_selections_to_the_server() {
     );
 }
 
-async fn cancelling_the_turn_cancels_its_pending_ask(
-    method: &str,
-    prefix: &'static str,
-    outcome: &str,
-) {
+async fn cancelling_the_turn_cancels_its_pending_ask(method: &str, prefix: &'static str, outcome: &str) {
     let acp = start_session(
         WireOptions {
             on_prompt: Some(events(move |call| {
                 let session = call.session_id.as_str();
                 let ask = |id: String| {
-                    if prefix == "perm" {
-                        permission_asked(session, &id, json!({}))
-                    } else {
-                        question(session, &id)
-                    }
+                    if prefix == "perm" { permission_asked(session, &id, json!({})) } else { question(session, &id) }
                 };
-                vec![
-                    delivered(session, &call.id),
-                    ask(format!("{prefix}_pending")),
-                    ask(format!("{prefix}_queued")),
-                ]
+                vec![delivered(session, &call.id), ask(format!("{prefix}_pending")), ask(format!("{prefix}_queued"))]
             })),
-            on_interrupt: Some(Arc::new(|session: String| {
-                Box::pin(async move { vec![interrupted(&session)] })
-            })),
-            permission: Some(Arc::new(|_| {
-                Reply::UntilCancelled(json!({ "outcome": { "outcome": "cancelled" } }))
-            })),
-            elicitation: Some(Arc::new(|_| {
-                Reply::UntilCancelled(json!({ "action": "cancel" }))
-            })),
+            on_interrupt: Some(Arc::new(|session: String| Box::pin(async move { vec![interrupted(&session)] }))),
+            permission: Some(Arc::new(|_| Reply::UntilCancelled(json!({ "outcome": { "outcome": "cancelled" } })))),
+            elicitation: Some(Arc::new(|_| Reply::UntilCancelled(json!({ "action": "cancel" })))),
             ..WireOptions::default()
         },
         json!({ "elicitation": { "form": {} } }),
@@ -172,10 +145,8 @@ async fn cancelling_the_turn_cancels_its_pending_ask(
     .await;
 
     let prompt = tokio::spawn(acp.begin_prompt("hello"));
-    acp.until("the pending ask", || {
-        (lock(&acp.permissions).len() + lock(&acp.elicitations).len() == 1).then_some(())
-    })
-    .await;
+    acp.until("the pending ask", || (lock(&acp.permissions).len() + lock(&acp.elicitations).len() == 1).then_some(()))
+        .await;
     acp.notify("session/cancel", json!({ "sessionId": acp.session_id }));
 
     assert_eq!(prompt.await.unwrap().unwrap()["stopReason"], "cancelled");
@@ -185,29 +156,18 @@ async fn cancelling_the_turn_cancels_its_pending_ask(
             .replies
             .iter()
             .map(|reply| json!([reply["requestID"], reply["decision"]]))
-            .chain(
-                state
-                    .cancelled_forms
-                    .iter()
-                    .map(|form| json!([form["formID"], "cancelled"])),
-            )
+            .chain(state.cancelled_forms.iter().map(|form| json!([form["formID"], "cancelled"])))
             .collect()
     };
-    acp.until("both asks settled", || (settled().len() == 2).then_some(()))
-        .await;
+    acp.until("both asks settled", || (settled().len() == 2).then_some(())).await;
     assert_eq!(
         settled(),
-        vec![
-            json!([format!("{prefix}_pending"), outcome]),
-            json!([format!("{prefix}_queued"), outcome]),
-        ]
+        vec![json!([format!("{prefix}_pending"), outcome]), json!([format!("{prefix}_queued"), outcome]),]
     );
     assert!(acp.server.state().replied_forms.is_empty());
     let received = lock(&acp.received).clone();
-    let asked: Vec<&Value> = received
-        .iter()
-        .filter(|message| message["method"] == method && message.get("id").is_some())
-        .collect();
+    let asked: Vec<&Value> =
+        received.iter().filter(|message| message["method"] == method && message.get("id").is_some()).collect();
     assert_eq!(asked.len(), 1);
     assert!(received.contains(&json!({
         "jsonrpc": "2.0", "method": "$/cancel_request", "params": { "requestId": asked[0]["id"] },
@@ -216,8 +176,7 @@ async fn cancelling_the_turn_cancels_its_pending_ask(
 
 #[tokio::test]
 async fn cancelling_the_turn_cancels_its_pending_permission_request() {
-    cancelling_the_turn_cancels_its_pending_ask("session/request_permission", "perm", "reject")
-        .await;
+    cancelling_the_turn_cancels_its_pending_ask("session/request_permission", "perm", "reject").await;
 }
 
 #[tokio::test]
@@ -240,10 +199,7 @@ async fn withdraws_permission_requests_settled_elsewhere_and_still_asks_the_rema
                 ]
             })),
             fetch: Some(Arc::new(|server, request| {
-                if request["path"]
-                    .as_str()
-                    .is_some_and(|path| path.ends_with("/permission/perm_remaining/reply"))
-                {
+                if request["path"].as_str().is_some_and(|path| path.ends_with("/permission/perm_remaining/reply")) {
                     let session = request["path"].as_str().unwrap().split('/').nth(3).unwrap();
                     server.send(&[succeeded(session)]);
                 }
@@ -262,10 +218,7 @@ async fn withdraws_permission_requests_settled_elsewhere_and_still_asks_the_rema
     .await;
 
     let prompt = tokio::spawn(acp.begin_prompt("hello"));
-    acp.until("permission request", || {
-        (lock(&acp.permissions).len() == 1).then_some(())
-    })
-    .await;
+    acp.until("permission request", || (lock(&acp.permissions).len() == 1).then_some(())).await;
     acp.server.send(&[
         ephemeral_event(
             "permission.replied",
@@ -278,16 +231,11 @@ async fn withdraws_permission_requests_settled_elsewhere_and_still_asks_the_rema
     ]);
 
     assert_eq!(prompt.await.unwrap().unwrap()["stopReason"], "end_turn");
-    let ids: Vec<Value> = lock(&acp.permissions)
-        .iter()
-        .map(|request| request["toolCall"]["toolCallId"].clone())
-        .collect();
+    let ids: Vec<Value> =
+        lock(&acp.permissions).iter().map(|request| request["toolCall"]["toolCallId"].clone()).collect();
     assert_eq!(ids, vec![json!("perm_elsewhere"), json!("perm_remaining")]);
     assert_eq!(decisions(&acp), vec![json!(["perm_remaining", "once"])]);
-    let cancels = lock(&acp.received)
-        .iter()
-        .filter(|message| message["method"] == "$/cancel_request")
-        .count();
+    let cancels = lock(&acp.received).iter().filter(|message| message["method"] == "$/cancel_request").count();
     assert_eq!(cancels, 1);
 }
 
@@ -401,29 +349,17 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
     acp.initialize(json!({})).await;
     let session = acp.new_session(&root, json!([])).await.unwrap();
 
-    acp.prompt(session["sessionId"].as_str().unwrap(), "hello")
-        .await
-        .unwrap();
+    acp.prompt(session["sessionId"].as_str().unwrap(), "hello").await.unwrap();
 
     let permissions = lock(&acp.permissions).clone();
     let diff = |name: &str, old: Value, new: &str| json!({ "type": "diff", "path": file(name), "oldText": old, "newText": new });
-    let contents: Vec<Value> = permissions
-        .iter()
-        .map(|request| {
-            request["toolCall"]
-                .get("content")
-                .cloned()
-                .unwrap_or(Value::Null)
-        })
-        .collect();
+    let contents: Vec<Value> =
+        permissions.iter().map(|request| request["toolCall"].get("content").cloned().unwrap_or(Value::Null)).collect();
     assert_eq!(
         contents,
         vec![
             json!([diff("file.ts", json!("one\r\ntwo\r\n"), "one\r\nthree\r\n")]),
-            json!([
-                diff("first.ts", json!("one\n"), "two\n"),
-                diff("second.ts", json!("alpha\n"), "beta\n"),
-            ]),
+            json!([diff("first.ts", json!("one\n"), "two\n"), diff("second.ts", json!("alpha\n"), "beta\n"),]),
             json!([diff("written.ts", Value::Null, "two\n")]),
             json!([diff("added.ts", Value::Null, "one\n")]),
             json!([diff("gone.ts", json!("gone\n"), "")]),
@@ -439,10 +375,8 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
             { "title": "2 files", "kind": "edit", "locations": [{ "path": file("first.ts") }, { "path": file("second.ts") }] },
         ]),
     );
-    let locations: Vec<Value> = permissions[5..]
-        .iter()
-        .map(|request| request["toolCall"]["locations"].clone())
-        .collect();
+    let locations: Vec<Value> =
+        permissions[5..].iter().map(|request| request["toolCall"]["locations"].clone()).collect();
     assert_eq!(
         locations,
         vec![

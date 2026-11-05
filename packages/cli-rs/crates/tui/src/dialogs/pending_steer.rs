@@ -12,10 +12,7 @@ use crate::app::Tui;
 use crate::routes::session::queued::{self, Action};
 
 pub fn show(tui: &Tui, session: SessionID, message: String) {
-    let options = vec![
-        SelectOption::new("Move to queue", Action::Queue),
-        SelectOption::new("Delete", Action::Cancel),
-    ];
+    let options = vec![SelectOption::new("Move to queue", Action::Queue), SelectOption::new("Delete", Action::Cancel)];
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {

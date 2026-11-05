@@ -39,11 +39,7 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
     let app = &tui.app;
     let theme = tui.page();
     let (width, height) = app.size();
-    let label = if viewer.is_reviewed(file) {
-        "Mark incomplete"
-    } else {
-        "Mark complete"
-    };
+    let label = if viewer.is_reviewed(file) { "Mark incomplete" } else { "Mark complete" };
     let menu_width = WIDTH.min(width);
     let base = theme.background.raised.high;
     let hovered = theme.background.action.primary.hovered;
@@ -56,13 +52,7 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
         .padding_edge(Edge::Left, 1)
         .padding_edge(Edge::Right, 1)
         .bg(base)
-        .child(
-            &Text::new(app, label)
-                .fg(theme.text.base)
-                .selectable(false)
-                .wrap(WrapMode::None)
-                .truncate(true),
-        );
+        .child(&Text::new(app, label).fg(theme.text.base).selectable(false).wrap(WrapMode::None).truncate(true));
     let overlay = View::new(app)
         .absolute()
         .position(Edge::Left, 0)
@@ -116,20 +106,13 @@ pub fn open(viewer: &Viewer, file: usize, x: u16, y: u16) {
                 TuiCommand::inline("escape,ctrl+c", move |_, _| close(&on_close))
                     .title("Close file menu")
                     .group("Diff"),
-                TuiCommand::inline("return", move |_, _| run(&on_run, file))
-                    .title(label)
-                    .group("Diff"),
+                TuiCommand::inline("return", move |_, _| run(&on_run, file)).title(label).group("Diff"),
             ],
             ..KeymapLayer::default()
         })
         .inspect_err(|error| log::error!("{ID} file menu layer: {error}"))
         .ok();
-    *viewer.menu.borrow_mut() = Some(Menu {
-        app: app.clone(),
-        overlay,
-        _layer: layer,
-        _mode: mode,
-    });
+    *viewer.menu.borrow_mut() = Some(Menu { app: app.clone(), overlay, _layer: layer, _mode: mode });
     app.request_redraw();
 }
 

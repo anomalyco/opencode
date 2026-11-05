@@ -22,22 +22,15 @@ enum Choice {
 /// `diff.switch_source` and a click on the source header (`openSwitchDiffDialog`).
 pub fn open(viewer: &Viewer) {
     let Some(tui) = viewer.tui() else { return };
-    let base = viewer
-        .source_base()
-        .map_or_else(|| "Choose…".to_owned(), |base| base.name);
+    let base = viewer.source_base().map_or_else(|| "Choose…".to_owned(), |base| base.name);
     let options: Vec<SelectOption<Choice>> = viewer
         .sources()
         .into_iter()
         .map(|mode| {
-            SelectOption::new(
-                format!("{:<LABEL_WIDTH$}", mode.label()),
-                Choice::Source(mode),
-            )
-            .description(mode.description())
+            SelectOption::new(format!("{:<LABEL_WIDTH$}", mode.label()), Choice::Source(mode))
+                .description(mode.description())
         })
-        .chain([
-            SelectOption::new(format!("{:<LABEL_WIDTH$}", "Base"), Choice::Base).description(base),
-        ])
+        .chain([SelectOption::new(format!("{:<LABEL_WIDTH$}", "Base"), Choice::Base).description(base)])
         .collect();
     let current = Choice::Source(viewer.mode());
     let weak = viewer.weak();
@@ -89,16 +82,13 @@ fn next(viewer: Weak<Viewer>, mut revisions: tokio::sync::watch::Receiver<u64>) 
     let Some(tui) = viewer.upgrade().and_then(|viewer| viewer.tui()) else {
         return;
     };
-    tui.app.spawn(
-        async move { revisions.changed().await.is_ok().then_some(revisions) },
-        move |_, revisions| {
-            let (Some(live), Some(revisions)) = (viewer.upgrade(), revisions) else {
-                return;
-            };
-            observe(&live);
-            next(viewer, revisions);
-        },
-    );
+    tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
+        let (Some(live), Some(revisions)) = (viewer.upgrade(), revisions) else {
+            return;
+        };
+        observe(&live);
+        next(viewer, revisions);
+    });
 }
 
 /// Reads the session's status in `turn` mode and loads again on running to idle; other modes forget it.

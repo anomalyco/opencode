@@ -18,9 +18,7 @@ pub struct Ide {
 impl Ide {
     pub fn start() -> Self {
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let listener = runtime
-            .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
-            .unwrap();
+        let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
         let port = listener.local_addr().unwrap().port();
         let received = Arc::new(Mutex::new(Vec::new()));
         let authorization = Arc::new(Mutex::new(Vec::new()));
@@ -77,13 +75,7 @@ impl Ide {
                 });
             }
         });
-        Self {
-            port,
-            received,
-            authorization,
-            outgoing,
-            _runtime: runtime,
-        }
+        Self { port, received, authorization, outgoing, _runtime: runtime }
     }
 
     pub fn methods(&self) -> Vec<String> {
@@ -97,9 +89,7 @@ impl Ide {
 
     /// Whether a client finished the MCP handshake.
     pub fn initialized(&self) -> bool {
-        self.methods()
-            .iter()
-            .any(|method| method == "notifications/initialized")
+        self.methods().iter().any(|method| method == "notifications/initialized")
     }
 
     /// Sends `{"jsonrpc": "2.0", ...message}` to every client.

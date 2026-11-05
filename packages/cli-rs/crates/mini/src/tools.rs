@@ -12,26 +12,11 @@ use crate::theme::RunTheme;
 /// A structured tool body (`ToolSnapshot`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Snapshot {
-    Code {
-        title: String,
-        content: String,
-        file: Option<String>,
-    },
-    Diff {
-        items: Vec<DiffItem>,
-    },
-    Task {
-        title: String,
-        rows: Vec<String>,
-        tail: String,
-    },
-    Todo {
-        items: Vec<Value>,
-    },
-    Question {
-        items: Vec<(String, String)>,
-        tail: String,
-    },
+    Code { title: String, content: String, file: Option<String> },
+    Diff { items: Vec<DiffItem> },
+    Task { title: String, rows: Vec<String>, tail: String },
+    Todo { items: Vec<Value> },
+    Question { items: Vec<(String, String)>, tail: String },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,11 +43,6 @@ pub fn structured_final(_commit: &Commit) -> bool {
 }
 
 /// The widget of a structured body (`RunEntryContent`'s snapshot cases).
-pub fn structured_widget(
-    app: &App,
-    _snapshot: &Snapshot,
-    _theme: &RunTheme,
-    _mono: bool,
-) -> AnyWidget {
+pub fn structured_widget(app: &App, _snapshot: &Snapshot, _theme: &RunTheme, _mono: bool) -> AnyWidget {
     Text::new(app, "").as_any()
 }

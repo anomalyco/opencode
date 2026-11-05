@@ -64,25 +64,13 @@ impl Server {
 impl Transport for Server {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
         let path = request.url.path().to_owned();
-        let query = request
-            .url
-            .query()
-            .map_or(String::new(), |q| format!("?{q}"));
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), format!("{path}{query}")));
+        let query = request.url.query().map_or(String::new(), |q| format!("?{q}"));
+        self.seen.lock().unwrap().push((request.method.to_owned(), format!("{path}{query}")));
         let location = json!({ "directory": "/project" });
-        let sent = request
-            .body
-            .as_deref()
-            .and_then(|body| serde_json::from_slice::<Value>(body).ok())
-            .unwrap_or(Value::Null);
+        let sent =
+            request.body.as_deref().and_then(|body| serde_json::from_slice::<Value>(body).ok()).unwrap_or(Value::Null);
         if request.method != "GET" {
-            self.writes
-                .lock()
-                .unwrap()
-                .push((path.clone(), sent.clone()));
+            self.writes.lock().unwrap().push((path.clone(), sent.clone()));
         }
         let (status, body) = match (request.method, path.as_str()) {
             // A prompt from home creates its session, then sends to it.
@@ -103,15 +91,14 @@ impl Transport for Server {
             ),
             ("GET", "/api/config") => (200, json!([])),
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", path) if self.routes.get(path).is_some() => (
-                200,
-                json!({ "location": location, "data": self.routes[path] }),
-            ),
+            ("GET", path) if self.routes.get(path).is_some() => {
+                (200, json!({ "location": location, "data": self.routes[path] }))
+            }
             _ => (404, json!({})),
         };
         let body = serde_json::to_vec(&body).unwrap();
-        let slow = path == "/api/experimental/usage/limits"
-            && self.slow_usage.load(std::sync::atomic::Ordering::SeqCst);
+        let slow =
+            path == "/api/experimental/usage/limits" && self.slow_usage.load(std::sync::atomic::Ordering::SeqCst);
         Box::pin(async move {
             if slow {
                 tokio::time::sleep(Duration::from_millis(300)).await;
@@ -131,10 +118,7 @@ fn preferences() -> Value {
 }
 
 fn theme() -> Theme {
-    Catalog::default()
-        .load("opencode", ThemeMode::Dark)
-        .unwrap()
-        .theme
+    Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
 }
 
 /// A temporary state directory holding the fixture's `model.json`.
@@ -157,10 +141,7 @@ fn kit(width: u16, height: u16) -> Kit {
         width,
         height,
         AppOptions {
-            theme: opentui::theme::Theme {
-                background: theme().background.base,
-                ..opentui::theme::Theme::default()
-            },
+            theme: opentui::theme::Theme { background: theme().background.base, ..opentui::theme::Theme::default() },
             light_theme: None,
             ..AppOptions::default()
         },
@@ -174,10 +155,7 @@ fn kit(width: u16, height: u16) -> Kit {
     let state = state();
     let data = Data::with_runtime(
         client,
-        StoreOptions {
-            directory: "/project".into(),
-            ..StoreOptions::default()
-        },
+        StoreOptions { directory: "/project".into(), ..StoreOptions::default() },
         app.runtime(),
     );
     let local = Local::new(
@@ -185,10 +163,7 @@ fn kit(width: u16, height: u16) -> Kit {
         data,
         dialogs,
         toasts,
-        Some(Files {
-            state: state.path().to_owned(),
-            storage: None,
-        }),
+        Some(Files { state: state.path().to_owned(), storage: None }),
         Rc::new(|| None),
         Rc::new(|| Location::new("/project")),
     );
@@ -203,19 +178,12 @@ fn kit(width: u16, height: u16) -> Kit {
             && !local.providers().is_empty()
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
-    Kit {
-        app,
-        local,
-        fixture,
-        _state: state,
-    }
+    Kit { app, local, fixture, _state: state }
 }
 
 impl Kit {
     fn settle(&self, text: &str) {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         assert!(found, "{text:?} never showed:\n{}", self.app.text());
         // Let deferred row updates and refreshes land.
         self.app.wait_until(Duration::from_millis(100), || false);
@@ -265,11 +233,7 @@ fn go_upsell_matches_typescript_when_compact() {
     let kit = kit(80, 20);
     go_upsell::show(
         &kit.local,
-        Offer {
-            reset: Some("3:00 PM".into()),
-            can_continue: Rc::new(|| true),
-            on_subscribe: Rc::new(|| {}),
-        },
+        Offer { reset: Some("3:00 PM".into()), can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) },
     );
     kit.settle("subscribe");
     assert_fixture(&kit.app.render(), "E.16/go-upsell");
@@ -284,14 +248,8 @@ fn dialogs_send_reads_only() {
     kit.settle("left");
     let seen = kit.fixture.seen();
     assert!(seen.iter().all(|(method, _)| method == "GET"), "{seen:?}");
-    assert!(
-        seen.iter().all(|(_, path)| !path.contains("session/stats")),
-        "{seen:?}"
-    );
-    let paths: Vec<&str> = seen
-        .iter()
-        .map(|(_, path)| path.split('?').next().unwrap())
-        .collect();
+    assert!(seen.iter().all(|(_, path)| !path.contains("session/stats")), "{seen:?}");
+    let paths: Vec<&str> = seen.iter().map(|(_, path)| path.split('?').next().unwrap()).collect();
     for read in [
         "/api/model",
         "/api/provider",
@@ -304,10 +262,8 @@ fn dialogs_send_reads_only() {
     }
     // Every read names the location.
     assert!(
-        seen.iter().all(
-            |(_, path)| path.contains("location%5Bdirectory%5D=%2Fproject")
-                || path.contains("location[directory]=/project")
-        ),
+        seen.iter().all(|(_, path)| path.contains("location%5Bdirectory%5D=%2Fproject")
+            || path.contains("location[directory]=/project")),
         "{seen:?}"
     );
 }
@@ -325,8 +281,7 @@ struct Harness {
 fn mount() -> Harness {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
-    let paths =
-        Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     std::fs::create_dir_all(&paths.state).unwrap();
     std::fs::write(paths.state.join("model.json"), preferences().to_string()).unwrap();
     let state = paths.state.clone();
@@ -339,10 +294,7 @@ fn mount() -> Harness {
             client,
             directory: "/project".into(),
             config: Resolved::new(Info::default(), |_| None),
-            roots: Some(Roots {
-                paths,
-                storage_channel: "test".into(),
-            }),
+            roots: Some(Roots { paths, storage_channel: "test".into() }),
             route: Route::Home,
             continue_: false,
             events: false,
@@ -350,20 +302,11 @@ fn mount() -> Harness {
     );
     let local = tui.local.clone();
     let loaded = app.wait_until(Duration::from_secs(5), || {
-        local.ready()
-            && local.catalog_ready()
-            && local.integrations().is_some()
-            && !local.agents().is_empty()
+        local.ready() && local.catalog_ready() && local.integrations().is_some() && !local.agents().is_empty()
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
     // Keys go to the home prompt once it shows its agent and model.
-    let harness = Harness {
-        app,
-        tui,
-        fixture,
-        state,
-        _home: home,
-    };
+    let harness = Harness { app, tui, fixture, state, _home: home };
     harness.wait_for("Build · Claude Sonnet");
     harness.app.wait_until(Duration::from_millis(100), || false);
     harness
@@ -371,17 +314,14 @@ fn mount() -> Harness {
 
 impl Harness {
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
     }
 
     fn model_json(&self) -> Value {
-        serde_json::from_str(&std::fs::read_to_string(self.state.join("model.json")).unwrap())
-            .unwrap()
+        serde_json::from_str(&std::fs::read_to_string(self.state.join("model.json")).unwrap()).unwrap()
     }
 
     /// Waits until `model.json` satisfies `check` (writes run on a worker thread).
@@ -405,10 +345,7 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
     let h = mount();
     let local = h.tui.local.clone();
     // On home the build agent's configured model and variant apply.
-    assert_eq!(
-        local.current(),
-        Some(Model::new("anthropic", "claude-sonnet"))
-    );
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet")));
     assert_eq!(local.variant().as_deref(), Some("high"));
     h.app.press("ctrl+x");
     h.app.press("m");
@@ -419,10 +356,7 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
     let file = h.wait_file(|file| file["recent"][0] == model_ref("openai", "gpt-5-mini"));
     assert_eq!(file["recent"][1], model_ref("anthropic", "claude-haiku"));
     assert_eq!(file["favorite"], json!([model_ref("openai", "gpt-5")]));
-    assert!(
-        !h.tui.dialogs.is_open(),
-        "no variants, so the dialog closes"
-    );
+    assert!(!h.tui.dialogs.is_open(), "no variants, so the dialog closes");
     assert_eq!(local.current(), Some(Model::new("openai", "gpt-5-mini")));
     assert_no_writes(&h.fixture);
 }
@@ -430,25 +364,17 @@ fn leader_m_picks_a_model_and_saves_it_as_recent() {
 #[test]
 fn a_filter_typed_before_the_limits_arrive_stays() {
     let h = mount();
-    h.fixture
-        .slow_usage
-        .store(true, std::sync::atomic::Ordering::SeqCst);
+    h.fixture.slow_usage.store(true, std::sync::atomic::Ordering::SeqCst);
     // The limits load when the dialog opens; the dialog opens again to show the usage action.
     h.app.press("ctrl+x");
     h.app.press("m");
     h.wait_for("Search models");
     h.app.type_text("mini");
     h.wait_for("GPT-5 mini");
-    assert!(
-        !h.app.text().contains("ctrl+u"),
-        "the limits came too early"
-    );
+    assert!(!h.app.text().contains("ctrl+u"), "the limits came too early");
     let screen = h.wait_for("ctrl+u");
     assert!(screen.contains("GPT-5 mini"), "{screen}");
-    assert!(
-        !screen.contains("Claude Haiku"),
-        "the filter was lost:\n{screen}"
-    );
+    assert!(!screen.contains("Claude Haiku"), "the filter was lost:\n{screen}");
 }
 
 #[test]
@@ -465,24 +391,12 @@ fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
     h.app.type_text("hello");
     h.app.press("return");
     let created = h.app.wait_until(Duration::from_secs(5), || {
-        h.fixture
-            .writes
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|(path, _)| path == "/api/session")
+        h.fixture.writes.lock().unwrap().iter().any(|(path, _)| path == "/api/session")
     });
     let writes = h.fixture.writes.lock().unwrap().clone();
     assert!(created, "no session was created: {writes:?}");
-    let (_, body) = writes
-        .iter()
-        .find(|(path, _)| path == "/api/session")
-        .unwrap();
-    assert_eq!(
-        body["model"],
-        json!({ "providerID": "openai", "id": "gpt-5-mini" }),
-        "{body}"
-    );
+    let (_, body) = writes.iter().find(|(path, _)| path == "/api/session").unwrap();
+    assert_eq!(body["model"], json!({ "providerID": "openai", "id": "gpt-5-mini" }), "{body}");
     assert_eq!(body["agent"], "build", "{body}");
 }
 
@@ -507,10 +421,7 @@ fn cycle_commands_move_through_recents_favorites_agents_and_variants() {
     let local = h.tui.local.clone();
     // F2: the first recent model, since the current one is not recent.
     h.app.press("f2");
-    assert_eq!(
-        local.current(),
-        Some(Model::new("anthropic", "claude-haiku"))
-    );
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-haiku")));
     // A favorite cycle moves to the favorite and records it as recent.
     h.tui.keymap.dispatch("model.cycle_favorite", None);
     assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
@@ -520,15 +431,9 @@ fn cycle_commands_move_through_recents_favorites_agents_and_variants() {
     h.wait_for("No variants available");
     // The agent cycle: build, then plan, whose model is the one chosen for a new session.
     h.tui.keymap.dispatch("agent.cycle", None);
-    assert_eq!(
-        local.agent().map(|agent| agent.id.0).as_deref(),
-        Some("plan")
-    );
+    assert_eq!(local.agent().map(|agent| agent.id.0).as_deref(), Some("plan"));
     h.tui.keymap.dispatch("agent.cycle.reverse", None);
-    assert_eq!(
-        local.agent().map(|agent| agent.id.0).as_deref(),
-        Some("build")
-    );
+    assert_eq!(local.agent().map(|agent| agent.id.0).as_deref(), Some("build"));
     assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
     assert_no_writes(&h.fixture);
 }
@@ -553,16 +458,10 @@ fn leader_a_switches_the_agent() {
     h.app.press("ctrl+x");
     h.app.press("a");
     let screen = h.wait_for("Search agents");
-    assert!(
-        !screen.contains("general"),
-        "subagents are hidden:\n{screen}"
-    );
+    assert!(!screen.contains("general"), "subagents are hidden:\n{screen}");
     h.app.press("down");
     h.app.press("return");
-    assert_eq!(
-        h.tui.local.agent().map(|agent| agent.id.0).as_deref(),
-        Some("plan")
-    );
+    assert_eq!(h.tui.local.agent().map(|agent| agent.id.0).as_deref(), Some("plan"));
     assert!(!h.tui.dialogs.is_open());
 }
 
@@ -606,14 +505,11 @@ fn model_json_is_shared_with_the_typescript_client() {
         })
     );
     // TS writes under the same lock, and the running Rust TUI picks it up through its watcher.
-    run(
-        &oracle,
-        &["recent", h.state.to_str().unwrap(), "openai", "gpt-5-mini"],
-    );
+    run(&oracle, &["recent", h.state.to_str().unwrap(), "openai", "gpt-5-mini"]);
     let local = h.tui.local.clone();
-    let reloaded = h.app.wait_until(Duration::from_secs(5), || {
-        local.recent().first() == Some(&Model::new("openai", "gpt-5-mini"))
-    });
+    let reloaded = h
+        .app
+        .wait_until(Duration::from_secs(5), || local.recent().first() == Some(&Model::new("openai", "gpt-5-mini")));
     assert!(reloaded, "the watcher never reloaded: {:?}", local.recent());
     assert_eq!(local.favorite().len(), 2);
 }
@@ -623,11 +519,7 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     let h = mount();
     let local = h.tui.local.clone();
     let storage = Storage::new(&h.state, "test").unwrap();
-    let offer = || Offer {
-        reset: None,
-        can_continue: Rc::new(|| true),
-        on_subscribe: Rc::new(|| {}),
-    };
+    let offer = || Offer { reset: None, can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) };
     let now = 1_800_000_000_000.0;
     go_upsell::offer(&local, offer(), now);
     h.wait_for("Free limit reached");
@@ -646,19 +538,15 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     h.app.press("left");
     h.app.press("left");
     h.app.press("return");
-    let saved = h.app.wait_until(Duration::from_secs(5), || {
-        storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true
-    });
+    let saved =
+        h.app.wait_until(Duration::from_secs(5), || storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true);
     assert!(saved, "{}", storage.load("go-upsell", &json!({})).unwrap());
     assert_no_writes(&h.fixture);
 }
 
 fn assert_no_writes(fixture: &Server) {
     let seen = fixture.seen();
-    assert!(
-        seen.iter().all(|(method, _)| method == "GET"),
-        "a dialog sent a mutating request: {seen:?}"
-    );
+    assert!(seen.iter().all(|(method, _)| method == "GET"), "a dialog sent a mutating request: {seen:?}");
     assert!(seen.iter().all(|(_, path)| !path.contains("session/stats")));
 }
 
@@ -666,8 +554,7 @@ fn assert_no_writes(fixture: &Server) {
 fn oracle() -> Option<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let script = root.join("parity/oracle/E.16-model-json.ts");
-    let present = root.join("../../node_modules").is_dir()
-        && Command::new("bun").arg("--version").output().is_ok();
+    let present = root.join("../../node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
         eprintln!("skipped: needs bun and the workspace node_modules");
         return None;
@@ -679,23 +566,9 @@ fn run(script: &Path, args: &[&str]) -> Value {
     let output = Command::new("bun")
         .arg(script)
         .args(args)
-        .env(
-            "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
-            std::env::temp_dir().join("opencode-rs-e16-bun-cache"),
-        )
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-e16-bun-cache"))
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_str(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .lines()
-            .last()
-            .unwrap(),
-    )
-    .unwrap()
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    serde_json::from_str(String::from_utf8(output.stdout).unwrap().lines().last().unwrap()).unwrap()
 }

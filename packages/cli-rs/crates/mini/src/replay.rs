@@ -39,10 +39,7 @@ pub struct Fragment {
 impl Fragment {
     /// `fragmentRef`.
     pub fn new(message_id: &str, kind: &str, ordinal: u64) -> Self {
-        Self {
-            message_id: message_id.to_owned(),
-            part_id: format!("{kind}:{ordinal}"),
-        }
+        Self { message_id: message_id.to_owned(), part_id: format!("{kind}:{ordinal}") }
     }
 }
 
@@ -86,16 +83,10 @@ impl Fragments {
             fragment.clone(),
             FragmentState {
                 text: text.to_owned(),
-                projected: if visible {
-                    Some(text.to_owned())
-                } else {
-                    current.projected
-                },
+                projected: if visible { Some(text.to_owned()) } else { current.projected },
             },
         );
-        Update {
-            previous: current.text,
-        }
+        Update { previous: current.text }
     }
 
     /// A live delta; `None` when a list already showed it.
@@ -117,13 +108,7 @@ impl Fragments {
     pub fn end(&mut self, fragment: &Fragment, text: &str) -> Update {
         let previous = self
             .0
-            .insert(
-                fragment.clone(),
-                FragmentState {
-                    text: text.to_owned(),
-                    projected: None,
-                },
-            )
+            .insert(fragment.clone(), FragmentState { text: text.to_owned(), projected: None })
             .map(|state| state.text)
             .unwrap_or_default();
         Update { previous }
@@ -132,24 +117,12 @@ impl Fragments {
     /// A locally printed text, replayed after the list (`restore`).
     pub fn restore(&mut self, fragment: &Fragment, text: &str) -> Restore {
         let Some(current) = self.0.get(fragment) else {
-            self.0.insert(
-                fragment.clone(),
-                FragmentState {
-                    text: text.to_owned(),
-                    projected: Some(text.to_owned()),
-                },
-            );
+            self.0.insert(fragment.clone(), FragmentState { text: text.to_owned(), projected: Some(text.to_owned()) });
             return Restore::Append(text.to_owned());
         };
         if let Some(suffix) = text.strip_prefix(current.text.as_str()) {
             let suffix = suffix.to_owned();
-            self.0.insert(
-                fragment.clone(),
-                FragmentState {
-                    text: text.to_owned(),
-                    projected: Some(text.to_owned()),
-                },
-            );
+            self.0.insert(fragment.clone(), FragmentState { text: text.to_owned(), projected: Some(text.to_owned()) });
             return Restore::Append(suffix);
         }
         if current.text.starts_with(text) {
@@ -187,19 +160,12 @@ pub struct Output {
 
 impl Output {
     fn commits(commits: Vec<Commit>) -> Self {
-        Self {
-            commits,
-            ..Self::default()
-        }
+        Self { commits, ..Self::default() }
     }
 
     fn patch(running: bool, status: &str) -> Self {
         Self {
-            patch: Some(Patch {
-                running: Some(running),
-                status: Some(status.to_owned()),
-                usage: None,
-            }),
+            patch: Some(Patch { running: Some(running), status: Some(status.to_owned()), usage: None }),
             ..Self::default()
         }
     }
@@ -250,13 +216,7 @@ pub struct Transcript {
 }
 
 impl Transcript {
-    pub fn new(
-        session_id: &str,
-        thinking: bool,
-        tools: bool,
-        replay: bool,
-        replay_limit: Option<u32>,
-    ) -> Self {
+    pub fn new(session_id: &str, thinking: bool, tools: bool, replay: bool, replay_limit: Option<u32>) -> Self {
         Self {
             session_id: session_id.to_owned(),
             thinking,
@@ -344,24 +304,14 @@ impl Transcript {
         if let (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) =
             (&commit.message_id, &commit.part_id, commit.kind)
         {
-            let prefix = if commit.kind == EntryKind::Reasoning {
-                "Thinking: "
-            } else {
-                ""
-            };
+            let prefix = if commit.kind == EntryKind::Reasoning { "Thinking: " } else { "" };
             let text = commit.text.strip_prefix(prefix).unwrap_or(&commit.text);
-            let fragment = Fragment {
-                message_id: message.clone(),
-                part_id: part.clone(),
-            };
+            let fragment = Fragment { message_id: message.clone(), part_id: part.clone() };
             return match self.fragments.restore(&fragment, text) {
                 Restore::Covered => None,
                 Restore::Append(suffix) if suffix.is_empty() => None,
                 Restore::Append(suffix) if suffix == text => Some(commit.clone()),
-                Restore::Append(suffix) => Some(Commit {
-                    text: suffix,
-                    ..commit.clone()
-                }),
+                Restore::Append(suffix) => Some(Commit { text: suffix, ..commit.clone() }),
                 Restore::Conflict => Some(commit.clone()),
             };
         }
@@ -370,11 +320,7 @@ impl Transcript {
         {
             return self.errors.insert(message.clone()).then(|| commit.clone());
         }
-        if commit
-            .message_id
-            .as_ref()
-            .is_some_and(|message| self.message_ids.contains(message))
-        {
+        if commit.message_id.as_ref().is_some_and(|message| self.message_ids.contains(message)) {
             return None;
         }
         Some(commit.clone())
@@ -407,10 +353,7 @@ impl Transcript {
             let whole = match (&commit.message_id, &commit.part_id, commit.kind) {
                 (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) => self
                     .fragments
-                    .value(&Fragment {
-                        message_id: message.clone(),
-                        part_id: part.clone(),
-                    })
+                    .value(&Fragment { message_id: message.clone(), part_id: part.clone() })
                     .map(|text| match commit.kind {
                         EntryKind::Reasoning if !text.is_empty() => format!("Thinking: {text}"),
                         _ => text.to_owned(),
@@ -418,10 +361,7 @@ impl Transcript {
                 _ => None,
             };
             let commit = match whole {
-                Some(text) => Commit {
-                    text,
-                    ..commit.clone()
-                },
+                Some(text) => Commit { text, ..commit.clone() },
                 None => commit.clone(),
             };
             self.remember(&commit);
@@ -438,12 +378,7 @@ impl Transcript {
         if self.promoted.contains(message_id) {
             return self.user(message_id, text, true);
         }
-        self.pending.insert(
-            message_id.to_owned(),
-            Pending {
-                text: text.to_owned(),
-            },
-        );
+        self.pending.insert(message_id.to_owned(), Pending { text: text.to_owned() });
         Output::default()
     }
 
@@ -452,8 +387,7 @@ impl Transcript {
         if !render || visible || text.trim().is_empty() {
             return Output::default();
         }
-        let commit =
-            Commit::new(EntryKind::User, Source::System, Phase::Start, text).message(message_id);
+        let commit = Commit::new(EntryKind::User, Source::System, Phase::Start, text).message(message_id);
         Output::commits(vec![commit])
     }
 
@@ -495,14 +429,9 @@ impl Transcript {
             .into_iter()
             .filter(|(_, text)| !text.is_empty())
             .map(|(part, text)| {
-                Commit::new(
-                    EntryKind::Assistant,
-                    Source::Assistant,
-                    Phase::Progress,
-                    text,
-                )
-                .message(message)
-                .part_id(part)
+                Commit::new(EntryKind::Assistant, Source::Assistant, Phase::Progress, text)
+                    .message(message)
+                    .part_id(part)
             })
             .collect()
     }
@@ -530,14 +459,9 @@ impl Transcript {
         }
         let status = message["status"].as_str().unwrap_or_default();
         let header = || {
-            let mut commit = Commit::new(
-                EntryKind::System,
-                Source::System,
-                Phase::Start,
-                "Compaction",
-            )
-            .message(id)
-            .part_id("compaction:header");
+            let mut commit = Commit::new(EntryKind::System, Source::System, Phase::Start, "Compaction")
+                .message(id)
+                .part_id("compaction:header");
             commit.compaction = true;
             commit
         };
@@ -552,18 +476,13 @@ impl Transcript {
         }
         let summary = message["summary"].as_str().unwrap_or_default();
         let show = render || status == "running";
-        let fragment = Fragment {
-            message_id: id.to_owned(),
-            part_id: "compaction:summary".into(),
-        };
+        let fragment = Fragment { message_id: id.to_owned(), part_id: "compaction:summary".into() };
         self.fragments.project(&fragment, summary, show);
         if !show {
             return Output::default();
         }
         let part = |text: &str, phase| {
-            Commit::new(EntryKind::Assistant, Source::Assistant, phase, text)
-                .message(id)
-                .part_id("compaction:summary")
+            Commit::new(EntryKind::Assistant, Source::Assistant, phase, text).message(id).part_id("compaction:summary")
         };
         let mut commits = vec![header()];
         if !summary.is_empty() {
@@ -578,10 +497,7 @@ impl Transcript {
     fn assistant(&mut self, message: &Value, render: bool) -> Output {
         let id = message["id"].as_str().unwrap_or_default();
         self.message_ids.insert(id.to_owned());
-        let content = message["content"]
-            .as_array()
-            .map(Vec::as_slice)
-            .unwrap_or_default();
+        let content = message["content"].as_array().map(Vec::as_slice).unwrap_or_default();
         let has_tools = content.iter().any(|item| item["type"] == "tool");
         if has_tools && !self.tools {
             self.remember_tool_message(id);
@@ -652,10 +568,7 @@ impl Transcript {
         let message = data["assistantMessageID"].as_str().unwrap_or_default();
         let ordinal = data["ordinal"].as_u64().unwrap_or_default();
         match kind {
-            "session.renamed" => Output {
-                title: data["title"].as_str().map(str::to_owned),
-                ..Output::default()
-            },
+            "session.renamed" => Output { title: data["title"].as_str().map(str::to_owned), ..Output::default() },
             "session.inbox.enqueued" => {
                 if data["item"]["type"] != "user" {
                     return Output::default();
@@ -678,12 +591,8 @@ impl Transcript {
                 output
             }
             "session.inbox.cancelled" => {
-                self.pending
-                    .remove(data["inboxID"].as_str().unwrap_or_default());
-                Output {
-                    footer: vec![event.clone()],
-                    ..Output::default()
-                }
+                self.pending.remove(data["inboxID"].as_str().unwrap_or_default());
+                Output { footer: vec![event.clone()], ..Output::default() }
             }
             "session.step.started" => Output::patch(true, "assistant responding"),
             "session.text.delta" => {
@@ -716,11 +625,8 @@ impl Transcript {
                 let delta = data["delta"].as_str().unwrap_or_default();
                 match self.fragments.delta(&fragment, delta) {
                     Some(update) if self.thinking => {
-                        let text = if update.previous.is_empty() {
-                            format!("Thinking: {delta}")
-                        } else {
-                            delta.to_owned()
-                        };
+                        let text =
+                            if update.previous.is_empty() { format!("Thinking: {delta}") } else { delta.to_owned() };
                         Output::commits(vec![reasoning_commit(&fragment, text)])
                     }
                     _ => Output::default(),
@@ -772,34 +678,17 @@ impl Transcript {
             }
             "session.execution.started" => {
                 self.root_active = true;
-                Output {
-                    patch: Some(Patch {
-                        running: Some(true),
-                        ..Patch::default()
-                    }),
-                    ..Output::default()
-                }
+                Output { patch: Some(Patch { running: Some(true), ..Patch::default() }), ..Output::default() }
             }
-            "session.execution.succeeded"
-            | "session.execution.failed"
-            | "session.execution.interrupted" => {
+            "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" => {
                 self.root_active = false;
                 let messages: Vec<String> = self.quiet.iter().map(|(id, _)| id.clone()).collect();
-                let commits = messages
-                    .iter()
-                    .flat_map(|id| self.flush_quiet(id))
-                    .collect();
-                Output {
-                    commits,
-                    ..Output::patch(false, "")
-                }
+                let commits = messages.iter().flat_map(|id| self.flush_quiet(id)).collect();
+                Output { commits, ..Output::patch(false, "") }
             }
             kind if kind.starts_with("session.tool.") && !self.tools => {
                 self.remember_tool_message(message);
-                Output {
-                    footer: vec![event.clone()],
-                    ..Output::default()
-                }
+                Output { footer: vec![event.clone()], ..Output::default() }
             }
             kind if kind.starts_with("session.tool.")
                 || kind.starts_with("session.shell.")
@@ -807,10 +696,7 @@ impl Transcript {
                 || kind.starts_with("permission.")
                 || kind.starts_with("form.") =>
             {
-                Output {
-                    footer: vec![event.clone()],
-                    ..Output::default()
-                }
+                Output { footer: vec![event.clone()], ..Output::default() }
             }
             _ => Output::default(),
         }
@@ -823,25 +709,15 @@ fn suffix<'a>(text: &'a str, previous: &str) -> &'a str {
 }
 
 fn text_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
-    Commit::new(
-        EntryKind::Assistant,
-        Source::Assistant,
-        Phase::Progress,
-        text,
-    )
-    .message(&fragment.message_id)
-    .part_id(&fragment.part_id)
+    Commit::new(EntryKind::Assistant, Source::Assistant, Phase::Progress, text)
+        .message(&fragment.message_id)
+        .part_id(&fragment.part_id)
 }
 
 fn reasoning_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
-    Commit::new(
-        EntryKind::Reasoning,
-        Source::Reasoning,
-        Phase::Progress,
-        text,
-    )
-    .message(&fragment.message_id)
-    .part_id(&fragment.part_id)
+    Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, text)
+        .message(&fragment.message_id)
+        .part_id(&fragment.part_id)
 }
 
 /// `errorMessage`: the message, else the tag.
@@ -868,20 +744,10 @@ pub enum Incoming {
 
 /// `projectedMessages`: the newest `limit` messages, oldest first.
 pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<Value>, String> {
-    let mut call = Call::new(
-        "GET",
-        format!("/api/session/{}/message", encode(session)),
-        200,
-        &[400, 401, 404, 500],
-    );
-    call.query("limit", &limit)
-        .map_err(|error| error.to_string())?;
-    call.query("order", "desc")
-        .map_err(|error| error.to_string())?;
-    let list: Value = client
-        .json(call, &RequestOptions::default())
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut call = Call::new("GET", format!("/api/session/{}/message", encode(session)), 200, &[400, 401, 404, 500]);
+    call.query("limit", &limit).map_err(|error| error.to_string())?;
+    call.query("order", "desc").map_err(|error| error.to_string())?;
+    let list: Value = client.json(call, &RequestOptions::default()).await.map_err(|error| error.to_string())?;
     let mut data = list["data"].as_array().cloned().unwrap_or_default();
     data.reverse();
     Ok(data)
@@ -897,11 +763,7 @@ pub async fn active(client: &Client, session: &str) -> bool {
 }
 
 /// Lists the messages and whether the session runs, as a hydration does.
-pub async fn hydration(
-    client: &Client,
-    session: &str,
-    limit: u32,
-) -> Result<(Vec<Value>, bool), String> {
+pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<(Vec<Value>, bool), String> {
     let messages = messages(client, session, limit).await?;
     Ok((messages, active(client, session).await))
 }
@@ -927,12 +789,7 @@ pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProx
 }
 
 /// One connection. `Ok` means the app is gone.
-async fn stream(
-    client: &Client,
-    session: &str,
-    limit: u32,
-    proxy: &AppProxy,
-) -> Result<(), String> {
+async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) -> Result<(), String> {
     let response = client
         .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
         .await
@@ -991,92 +848,41 @@ pub async fn prompt(
 ) -> Result<(), String> {
     let error = |error: opencode_api::error::Error| error.to_string();
     if let Some(agent) = agent {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/agent", encode(session)),
-            204,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("POST", format!("/api/session/{}/agent", encode(session)), 204, &[400, 401, 404]);
         call.json(&json!({ "agent": agent })).map_err(error)?;
-        client
-            .empty(call, &RequestOptions::default())
-            .await
-            .map_err(error)?;
+        client.empty(call, &RequestOptions::default()).await.map_err(error)?;
     }
     if let Some(model) = model {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/model", encode(session)),
-            204,
-            &[400, 401, 404],
-        );
+        let mut call = Call::new("POST", format!("/api/session/{}/model", encode(session)), 204, &[400, 401, 404]);
         call.json(&json!({ "model": model })).map_err(error)?;
-        client
-            .empty(call, &RequestOptions::default())
-            .await
-            .map_err(error)?;
+        client.empty(call, &RequestOptions::default()).await.map_err(error)?;
     }
-    let mut call = Call::new(
-        "POST",
-        format!("/api/session/{}/prompt", encode(session)),
-        200,
-        &[400, 401, 404, 409],
-    );
-    call.json(&json!({ "id": id, "text": text, "delivery": "steer" }))
-        .map_err(error)?;
-    client
-        .json::<Value>(call, &RequestOptions::default())
-        .await
-        .map_err(error)?;
+    let mut call = Call::new("POST", format!("/api/session/{}/prompt", encode(session)), 200, &[400, 401, 404, 409]);
+    call.json(&json!({ "id": id, "text": text, "delivery": "steer" })).map_err(error)?;
+    client.json::<Value>(call, &RequestOptions::default()).await.map_err(error)?;
     Ok(())
 }
 
 /// `model.default` at `directory`: the model a session without one uses, as `(providerID, id)`.
 pub async fn default_model(client: &Client, directory: &str) -> Option<(String, String)> {
-    let mut call = Call::new(
-        "GET",
-        "/api/model/default".to_owned(),
-        200,
-        &[400, 401, 404, 503],
-    );
-    call.query("location", &json!({ "directory": directory }))
-        .ok()?;
+    let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
+    call.query("location", &json!({ "directory": directory })).ok()?;
     let value: Value = client.json(call, &RequestOptions::default()).await.ok()?;
     let data = &value["data"];
-    Some((
-        data["providerID"].as_str()?.to_owned(),
-        data["id"].as_str()?.to_owned(),
-    ))
+    Some((data["providerID"].as_str()?.to_owned(), data["id"].as_str()?.to_owned()))
 }
 
 /// `experimental.session.wait`: returns once the session is idle.
 pub async fn wait(client: &Client, session: &str) -> Result<(), String> {
-    let call = Call::new(
-        "POST",
-        format!("/api/experimental/session/{}/wait", encode(session)),
-        204,
-        &[400, 401, 404],
-    );
-    client
-        .empty(call, &RequestOptions::default())
-        .await
-        .map_err(|error| error.to_string())
+    let call = Call::new("POST", format!("/api/experimental/session/{}/wait", encode(session)), 204, &[400, 401, 404]);
+    client.empty(call, &RequestOptions::default()).await.map_err(|error| error.to_string())
 }
 
 /// `session.interrupt` with `resume: true`.
 pub async fn interrupt(client: &Client, session: &str) -> Result<(), String> {
-    let mut call = Call::new(
-        "POST",
-        format!("/api/session/{}/interrupt", encode(session)),
-        204,
-        &[400, 401, 404],
-    );
-    call.json(&json!({ "resume": true }))
-        .map_err(|error| error.to_string())?;
-    client
-        .empty(call, &RequestOptions::default())
-        .await
-        .map_err(|error| error.to_string())
+    let mut call = Call::new("POST", format!("/api/session/{}/interrupt", encode(session)), 204, &[400, 401, 404]);
+    call.json(&json!({ "resume": true })).map_err(|error| error.to_string())?;
+    client.empty(call, &RequestOptions::default()).await.map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -1084,11 +890,7 @@ mod tests {
     use super::*;
 
     fn texts(output: &Output) -> Vec<(EntryKind, String)> {
-        output
-            .commits
-            .iter()
-            .map(|commit| (commit.kind, commit.text.clone()))
-            .collect()
+        output.commits.iter().map(|commit| (commit.kind, commit.text.clone())).collect()
     }
 
     fn history() -> Vec<Value> {
@@ -1125,23 +927,20 @@ mod tests {
     #[test]
     fn live_deltas_after_a_list_print_only_what_is_new() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
-        transcript.hydrate(&[json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "text", "text": "Hello" }] })], true);
+        transcript.hydrate(
+            &[json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "text", "text": "Hello" }] })],
+            true,
+        );
         let delta = |text: &str| {
             json!({ "type": "session.text.delta", "data": {
             "sessionID": "ses_1", "assistantMessageID": "msg_a", "ordinal": 0, "delta": text } })
         };
         assert!(transcript.event(&delta("Hel")).commits.is_empty());
         assert!(transcript.event(&delta("lo")).commits.is_empty());
-        assert_eq!(
-            texts(&transcript.event(&delta(" world"))),
-            [(EntryKind::Assistant, " world".into())]
-        );
+        assert_eq!(texts(&transcript.event(&delta(" world"))), [(EntryKind::Assistant, " world".into())]);
         let ended = json!({ "type": "session.text.ended", "data": {
             "sessionID": "ses_1", "assistantMessageID": "msg_a", "ordinal": 0, "text": "Hello world!" } });
-        assert_eq!(
-            texts(&transcript.event(&ended)),
-            [(EntryKind::Assistant, "!".into())]
-        );
+        assert_eq!(texts(&transcript.event(&ended)), [(EntryKind::Assistant, "!".into())]);
         let other = json!({ "type": "session.text.delta", "data": {
             "sessionID": "ses_2", "assistantMessageID": "msg_b", "ordinal": 0, "delta": "x" } });
         assert!(transcript.event(&other).commits.is_empty());
@@ -1157,41 +956,14 @@ mod tests {
             json!({ "type": kind, "data": data })
         };
         let delta = |message: &str, text: &str| {
-            event(
-                "session.text.delta",
-                json!({ "assistantMessageID": message, "ordinal": 0, "delta": text }),
-            )
+            event("session.text.delta", json!({ "assistantMessageID": message, "ordinal": 0, "delta": text }))
         };
-        assert!(
-            transcript
-                .event(&delta("msg_a", "Hello"))
-                .commits
-                .is_empty()
-        );
-        assert!(
-            transcript
-                .event(&delta("msg_a", " there"))
-                .commits
-                .is_empty()
-        );
-        let ended = event(
-            "session.step.ended",
-            json!({ "assistantMessageID": "msg_a", "tokens": {} }),
-        );
-        assert_eq!(
-            texts(&transcript.event(&ended)),
-            [(EntryKind::Assistant, "Hello there".into())]
-        );
-        assert!(
-            transcript
-                .event(&delta("msg_b", "Let me look"))
-                .commits
-                .is_empty()
-        );
-        let tool = event(
-            "session.tool.called",
-            json!({ "assistantMessageID": "msg_b", "id": "call_1" }),
-        );
+        assert!(transcript.event(&delta("msg_a", "Hello")).commits.is_empty());
+        assert!(transcript.event(&delta("msg_a", " there")).commits.is_empty());
+        let ended = event("session.step.ended", json!({ "assistantMessageID": "msg_a", "tokens": {} }));
+        assert_eq!(texts(&transcript.event(&ended)), [(EntryKind::Assistant, "Hello there".into())]);
+        assert!(transcript.event(&delta("msg_b", "Let me look")).commits.is_empty());
+        let tool = event("session.tool.called", json!({ "assistantMessageID": "msg_b", "id": "call_1" }));
         assert!(transcript.event(&tool).commits.is_empty());
         let done = event("session.execution.succeeded", json!({}));
         assert!(transcript.event(&done).commits.is_empty());
@@ -1202,13 +974,11 @@ mod tests {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(&[], false);
         assert!(transcript.admitted("msg_p", "hi").commits.is_empty());
-        let delivered = json!({ "type": "session.inbox.delivered", "data": { "sessionID": "ses_1", "inboxID": "msg_p" } });
+        let delivered =
+            json!({ "type": "session.inbox.delivered", "data": { "sessionID": "ses_1", "inboxID": "msg_p" } });
         let output = transcript.event(&delivered);
         assert_eq!(texts(&output), [(EntryKind::User, "hi".into())]);
-        assert_eq!(
-            output.patch.unwrap().status.as_deref(),
-            Some("waiting for assistant")
-        );
+        assert_eq!(output.patch.unwrap().status.as_deref(), Some("waiting for assistant"));
         // The listed user message does not print it again.
         let listed = json!({ "id": "msg_p", "type": "user", "text": "hi" });
         assert!(transcript.message(&listed, true).commits.is_empty());
@@ -1252,10 +1022,7 @@ mod tests {
         assert_eq!(fragments.delta(&part, "c"), None);
         assert_eq!(fragments.delta(&part, "d").unwrap().previous, "abc");
         assert_eq!(fragments.restore(&part, "ab"), Restore::Covered);
-        assert_eq!(
-            fragments.restore(&part, "abcdef"),
-            Restore::Append("ef".into())
-        );
+        assert_eq!(fragments.restore(&part, "abcdef"), Restore::Append("ef".into()));
         assert_eq!(fragments.restore(&part, "xyz"), Restore::Conflict);
         assert_eq!(fragments.end(&part, "final").previous, "abcdef");
     }

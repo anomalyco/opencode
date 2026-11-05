@@ -33,16 +33,7 @@ pub struct OneCellMotion {
 
 impl OneCellMotion {
     fn new(frames: Vec<String>, interval: f64) -> Self {
-        Self {
-            clip: OneCellClip {
-                frames,
-                interval,
-                levels: None,
-            },
-            intro: None,
-            once: false,
-            pace: None,
-        }
+        Self { clip: OneCellClip { frames, interval, levels: None }, intro: None, once: false, pace: None }
     }
 
     /// Whether its frame depends on more than a looping frame index: an intro, a single play, or a pace.
@@ -62,16 +53,9 @@ pub struct OneCellFrame {
 
 /// The frame of `motion` after `elapsed` milliseconds (`oneCellFrame`).
 pub fn one_cell_frame(motion: &OneCellMotion, elapsed: f64) -> OneCellFrame {
-    let intro_duration = motion
-        .intro
-        .as_ref()
-        .map_or(0.0, |intro| intro.frames.len() as f64 * intro.interval);
+    let intro_duration = motion.intro.as_ref().map_or(0.0, |intro| intro.frames.len() as f64 * intro.interval);
     let intro = elapsed < intro_duration;
-    let clip = if intro {
-        motion.intro.as_ref().unwrap_or(&motion.clip)
-    } else {
-        &motion.clip
-    };
+    let clip = if intro { motion.intro.as_ref().unwrap_or(&motion.clip) } else { &motion.clip };
     // Integrate the changing rate so slowing down does not jump or restart the motion. JavaScript computes an
     // integer power by repeated squaring, as `powi` does; `powf` rounds differently.
     let time = match (intro, motion.pace) {
@@ -88,11 +72,7 @@ pub fn one_cell_frame(motion: &OneCellMotion, elapsed: f64) -> OneCellFrame {
     let count = clip.frames.len() as f64;
     // Keep cycle boundaries exact when individual frame intervals are fractional.
     let frame = ((time * count) / (clip.interval * count)).floor();
-    let index = if !intro && motion.once {
-        frame.min(count - 1.0)
-    } else {
-        frame.rem_euclid(count)
-    } as usize;
+    let index = if !intro && motion.once { frame.min(count - 1.0) } else { frame.rem_euclid(count) } as usize;
     OneCellFrame {
         glyph: clip.frames[index].clone(),
         level: clip.levels.as_ref().map_or(1.0, |levels| levels[index]),
@@ -142,22 +122,14 @@ pub fn octant_glyph(mask: u8) -> char {
 }
 
 fn octants(masks: &[u8]) -> Vec<String> {
-    masks
-        .iter()
-        .map(|&mask| octant_glyph(mask).to_string())
-        .collect()
+    masks.iter().map(|&mask| octant_glyph(mask).to_string()).collect()
 }
 
 fn glyphs(text: &str) -> Vec<String> {
     text.chars().map(String::from).collect()
 }
 
-const WORK_PACE: Pace = Pace {
-    initial: 1.2,
-    r#final: 0.96,
-    after: 30_000.0,
-    duration: 30_000.0,
-};
+const WORK_PACE: Pace = Pace { initial: 1.2, r#final: 0.96, after: 30_000.0, duration: 30_000.0 };
 const LOWER: [u8; 6] = [2, 3, 5, 7, 6, 4];
 
 /// The `work_spinner` setting's values (`Config.MiniWorkSpinner`), in the TypeScript table's order.
@@ -185,18 +157,14 @@ pub fn work_spinner(name: &str) -> Option<OneCellMotion> {
             clip: OneCellClip {
                 frames: octants(&[0x14, 0x14, 0x14, 0x14, 0x14, 0x28, 0x28, 0x28, 0x28, 0x28]),
                 interval: 100.0,
-                levels: Some(vec![
-                    0.55, 0.85, 1.0, 0.85, 0.55, 0.55, 0.85, 1.0, 0.85, 0.55,
-                ]),
+                levels: Some(vec![0.55, 0.85, 1.0, 0.85, 0.55, 0.55, 0.85, 1.0, 0.85, 0.55]),
             },
             ..OneCellMotion::new(Vec::new(), 0.0)
         },
         "block-soft-sweep" => OneCellMotion {
             pace: Some(WORK_PACE),
             ..OneCellMotion::new(
-                octants(&[
-                    0x14, 0x14, 0x14, 0x1c, 0x3c, 0x38, 0x28, 0x28, 0x28, 0x38, 0x3c, 0x1c,
-                ]),
+                octants(&[0x14, 0x14, 0x14, 0x1c, 0x3c, 0x38, 0x28, 0x28, 0x28, 0x38, 0x3c, 0x1c]),
                 100.0,
             )
         },
@@ -208,42 +176,31 @@ pub fn work_spinner(name: &str) -> Option<OneCellMotion> {
                     [full, full, full, leading, leading]
                 })
                 .collect::<Vec<_>>();
-            OneCellMotion {
-                pace: Some(WORK_PACE),
-                ..OneCellMotion::new(octants(&frames), 40.0)
-            }
+            OneCellMotion { pace: Some(WORK_PACE), ..OneCellMotion::new(octants(&frames), 40.0) }
         }
         "block-low-duet" => {
             let frames = (0..3)
                 .flat_map(|index| {
                     let heads = (1u8 << LOWER[index]) | (1 << LOWER[(index + 3) % 6]);
-                    let full =
-                        heads | (1 << LOWER[(index + 2) % 6]) | (1 << LOWER[(index + 5) % 6]);
+                    let full = heads | (1 << LOWER[(index + 2) % 6]) | (1 << LOWER[(index + 5) % 6]);
                     [full, full, full, heads]
                 })
                 .collect::<Vec<_>>();
             OneCellMotion::new(octants(&frames), 60.0)
         }
         "block-shuttle" => OneCellMotion::new(octants(&[0x14, 0x28]), 500.0),
-        "block-bridge" => OneCellMotion::new(
-            octants(&[0x14, 0x14, 0x14, 0x3c, 0x28, 0x28, 0x28, 0x3c]),
-            120.0,
-        ),
-        "block-squeeze" => OneCellMotion::new(
-            octants(&[0x14, 0x14, 0x14, 0x10, 0x20, 0x28, 0x28, 0x28, 0x20, 0x10]),
-            100.0,
-        ),
+        "block-bridge" => OneCellMotion::new(octants(&[0x14, 0x14, 0x14, 0x3c, 0x28, 0x28, 0x28, 0x3c]), 120.0),
+        "block-squeeze" => {
+            OneCellMotion::new(octants(&[0x14, 0x14, 0x14, 0x10, 0x20, 0x28, 0x28, 0x28, 0x20, 0x10]), 100.0)
+        }
         "small-toggle" => OneCellMotion::new(glyphs("\u{25ab}\u{25aa}"), 320.0),
         "square-toggle" => OneCellMotion::new(glyphs("\u{25a1}\u{25a0}"), 500.0),
-        "grow-shrink" => {
-            OneCellMotion::new(glyphs("\u{25ab}\u{25ab}\u{25aa}\u{25a0}\u{25aa}"), 180.0)
-        }
+        "grow-shrink" => OneCellMotion::new(glyphs("\u{25ab}\u{25ab}\u{25aa}\u{25a0}\u{25aa}"), 180.0),
         "quadrant-orbit" => OneCellMotion::new(glyphs("\u{2598}\u{259d}\u{2597}\u{2596}"), 160.0),
         "crosshatch" => OneCellMotion::new(glyphs("\u{25a7}\u{25a9}\u{25a8}\u{25a9}"), 240.0),
-        "density-wave" => OneCellMotion::new(
-            glyphs("\u{2591}\u{2591}\u{2591}\u{2592}\u{2593}\u{2588}\u{2593}\u{2592}"),
-            160.0,
-        ),
+        "density-wave" => {
+            OneCellMotion::new(glyphs("\u{2591}\u{2591}\u{2591}\u{2592}\u{2593}\u{2588}\u{2593}\u{2592}"), 160.0)
+        }
         "seed" => seed_work(),
         _ => return None,
     };
@@ -251,9 +208,7 @@ pub fn work_spinner(name: &str) -> Option<OneCellMotion> {
 }
 
 fn seed_levels() -> Vec<f64> {
-    (0..40)
-        .map(|index| 0.3 + (0.7 * (1.0 - ((index as f64 / 40.0) * 2.0 * PI).cos())) / 2.0)
-        .collect()
+    (0..40).map(|index| 0.3 + (0.7 * (1.0 - ((index as f64 / 40.0) * 2.0 * PI).cos())) / 2.0).collect()
 }
 
 fn seed_work() -> OneCellMotion {
@@ -271,37 +226,18 @@ fn seed_work() -> OneCellMotion {
         })
         .collect();
     OneCellMotion {
-        clip: OneCellClip {
-            frames: vec!["\u{25aa}".to_owned(); 40],
-            interval: 40.0,
-            levels: Some(seed_levels()),
-        },
-        intro: Some(OneCellClip {
-            frames: vec!["\u{25aa}".to_owned(); 80],
-            interval: 40.0,
-            levels: Some(intro),
-        }),
+        clip: OneCellClip { frames: vec!["\u{25aa}".to_owned(); 40], interval: 40.0, levels: Some(seed_levels()) },
+        intro: Some(OneCellClip { frames: vec!["\u{25aa}".to_owned(); 80], interval: 40.0, levels: Some(intro) }),
         once: false,
-        pace: Some(Pace {
-            initial: 1.25,
-            r#final: 0.5,
-            after: 30_000.0,
-            duration: 30_000.0,
-        }),
+        pace: Some(Pace { initial: 1.25, r#final: 0.5, after: 30_000.0, duration: 30_000.0 }),
     }
 }
 
 /// The seed's one-time launch, `SEED_LAUNCH`.
 pub fn seed_launch() -> OneCellMotion {
-    let frames = (0..21)
-        .map(|index| if index < 10 { "\u{25ab}" } else { "\u{25aa}" }.to_owned())
-        .collect();
+    let frames = (0..21).map(|index| if index < 10 { "\u{25ab}" } else { "\u{25aa}" }.to_owned()).collect();
     OneCellMotion {
-        clip: OneCellClip {
-            frames,
-            interval: 40.0,
-            levels: Some(seed_levels()[..21].to_vec()),
-        },
+        clip: OneCellClip { frames, interval: 40.0, levels: Some(seed_levels()[..21].to_vec()) },
         intro: None,
         once: true,
         pace: None,

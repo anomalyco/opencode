@@ -18,8 +18,8 @@ use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{Info, Resolved};
 use opencode_parity::{Fixture as Cells, compare, fixtures_dir};
 use opencode_tui::routes::session::form::{
-    display_value, initial_values, selected_row, set_multiselect_custom, set_url_opener,
-    toggle_multiselect, validate, visible_fields,
+    display_value, initial_values, selected_row, set_multiselect_custom, set_url_opener, toggle_multiselect, validate,
+    visible_fields,
 };
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
@@ -54,38 +54,25 @@ impl Transport for Fixture {
             ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": [] })),
             ("GET", "/api/session/ses_root/form") => (200, json!({ "data": list(&self.forms) })),
-            ("GET", "/api/form") => (
-                200,
-                json!({ "location": { "directory": "/project" }, "data": list(&self.global) }),
-            ),
+            ("GET", "/api/form") => {
+                (200, json!({ "location": { "directory": "/project" }, "data": list(&self.global) }))
+            }
             // The goal footer's RPC read (E.14); no goal is set.
             ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
             ("POST" | "DELETE", _) => {
-                let body = request
-                    .body
-                    .as_deref()
-                    .map_or(Value::Null, |body| serde_json::from_slice(body).unwrap());
+                let body = request.body.as_deref().map_or(Value::Null, |body| serde_json::from_slice(body).unwrap());
                 let directory = request
                     .headers
                     .iter()
                     .find(|(name, _)| name == "x-opencode-directory")
                     .map(|(_, value)| value.clone());
-                self.sent.lock().unwrap().push(Sent {
-                    method: request.method,
-                    path,
-                    body,
-                    directory,
-                });
+                self.sent.lock().unwrap().push(Sent { method: request.method, path, body, directory });
                 self.settled.store(true, Ordering::SeqCst);
                 (204, Value::Null)
             }
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -131,53 +118,34 @@ fn mount(fixture: Fixture, route: Route) -> Harness {
             events: false,
         },
     );
-    Harness {
-        app,
-        _tui: tui,
-        fixture,
-    }
+    Harness { app, _tui: tui, fixture }
 }
 
 fn session_form(fields: Value) -> Harness {
     mount(
-        Fixture {
-            forms: vec![form("ses_root", "frm_1", "Deploy settings", fields)],
-            ..Fixture::default()
-        },
-        Route::Session {
-            id: SessionID("ses_root".into()),
-        },
+        Fixture { forms: vec![form("ses_root", "frm_1", "Deploy settings", fields)], ..Fixture::default() },
+        Route::Session { id: SessionID("ses_root".into()) },
     )
 }
 
 impl Harness {
     #[track_caller]
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
-        assert!(
-            found,
-            "{text:?} never showed:\n{screen}\n{:?}",
-            self.fixture.sent.lock().unwrap()
-        );
+        assert!(found, "{text:?} never showed:\n{screen}\n{:?}", self.fixture.sent.lock().unwrap());
         screen
     }
 
     #[track_caller]
     fn wait_gone(&self, text: &str) {
-        let gone = self
-            .app
-            .wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
+        let gone = self.app.wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
     /// Waits for the requests and returns them.
     fn sent(&self, count: usize) -> Vec<Sent> {
-        let arrived = self.app.wait_until(Duration::from_secs(5), || {
-            self.fixture.sent.lock().unwrap().len() >= count
-        });
+        let arrived = self.app.wait_until(Duration::from_secs(5), || self.fixture.sent.lock().unwrap().len() >= count);
         let sent = std::mem::take(&mut *self.fixture.sent.lock().unwrap());
         assert!(arrived, "expected {count} requests, got {sent:?}");
         sent
@@ -207,32 +175,15 @@ fn a_single_choice_submits_on_enter_and_the_prompt_returns() {
         "options": [{ "value": "staging", "label": "Staging" }, { "value": "production", "label": "Production", "description": "Live traffic" }],
     }]));
     let screen = harness.wait_for("Deploy settings");
-    for text in [
-        "1. Staging",
-        "2. Production",
-        "Live traffic",
-        "↑↓ select",
-        "enter submit",
-        "esc dismiss",
-    ] {
+    for text in ["1. Staging", "2. Production", "Live traffic", "↑↓ select", "enter submit", "esc dismiss"] {
         assert!(screen.contains(text), "{text:?}:\n{screen}");
     }
-    assert!(
-        !screen.contains("⇆ tab"),
-        "a single choice has no tabs:\n{screen}"
-    );
+    assert!(!screen.contains("⇆ tab"), "a single choice has no tabs:\n{screen}");
     assert!(!screen.contains(PROMPT), "the prompt hides:\n{screen}");
 
     harness.app.press("down");
     harness.app.press("enter");
-    assert_eq!(
-        harness.sent(1),
-        [reply(
-            "ses_root",
-            "frm_1",
-            json!({ "target": "production" })
-        )]
-    );
+    assert_eq!(harness.sent(1), [reply("ses_root", "frm_1", json!({ "target": "production" }))]);
     harness.wait_for(PROMPT);
     harness.wait_gone("Deploy settings");
 }
@@ -241,10 +192,7 @@ fn a_single_choice_submits_on_enter_and_the_prompt_returns() {
 fn escape_cancels_the_form() {
     let harness = session_form(json!([{ "key": "ok", "type": "boolean", "title": "Continue?" }]));
     let screen = harness.wait_for("Deploy settings");
-    assert!(
-        screen.contains("1. Yes") && screen.contains("2. No"),
-        "{screen}"
-    );
+    assert!(screen.contains("1. Yes") && screen.contains("2. No"), "{screen}");
     harness.app.press("escape");
     assert_eq!(
         harness.sent(1),
@@ -270,10 +218,7 @@ fn every_field_kind_fills_in_and_submits_from_the_review() {
     ]));
     let screen = harness.wait_for("name  count  agree  targets  Submit");
     assert!(screen.contains("Type your answer"), "{screen}");
-    assert!(
-        !screen.contains("reason"),
-        "hidden until agree is no:\n{screen}"
-    );
+    assert!(!screen.contains("reason"), "hidden until agree is no:\n{screen}");
 
     // Text: typed, then committed by Tab.
     harness.app.type_text("Ada");
@@ -311,11 +256,7 @@ fn every_field_kind_fills_in_and_submits_from_the_review() {
     harness.app.press("enter");
     assert_eq!(
         harness.sent(1),
-        [reply(
-            "ses_root",
-            "frm_1",
-            json!({ "name": "Ada", "count": 3, "agree": true, "targets": ["a", "zed"] })
-        )]
+        [reply("ses_root", "frm_1", json!({ "name": "Ada", "count": 3, "agree": true, "targets": ["a", "zed"] }))]
     );
 }
 
@@ -345,10 +286,7 @@ fn an_external_field_needs_acknowledgement() {
         "url": "https://example.com/authorize", "title": "Authorize access",
     }]));
     let screen = harness.wait_for("https://example.com/authorize");
-    assert!(
-        screen.contains("enter open link") && screen.contains("c copy"),
-        "{screen}"
-    );
+    assert!(screen.contains("enter open link") && screen.contains("c copy"), "{screen}");
     harness.app.press("right");
     harness.wait_for("(acknowledgement required)");
     harness.app.press("enter");
@@ -362,16 +300,10 @@ fn an_external_field_needs_acknowledgement() {
     harness.wait_for("enter I finished");
     harness.app.press("enter");
     let screen = harness.wait_for("enter submit");
-    assert!(
-        screen.contains("Authorize access: Acknowledged"),
-        "{screen}"
-    );
+    assert!(screen.contains("Authorize access: Acknowledged"), "{screen}");
     harness.nothing_sent();
     harness.app.press("enter");
-    assert_eq!(
-        harness.sent(1),
-        [reply("ses_root", "frm_1", json!({ "authorization": true }))]
-    );
+    assert_eq!(harness.sent(1), [reply("ses_root", "frm_1", json!({ "authorization": true }))]);
 }
 
 #[test]
@@ -411,10 +343,7 @@ fn a_global_form_shows_over_home_and_replies_with_its_directory() {
     harness.app.press("enter");
     assert_eq!(
         harness.sent(1),
-        [Sent {
-            directory: Some("%2Fproject".into()),
-            ..reply("global", "frm_g", json!({ "token": "abc" }))
-        }]
+        [Sent { directory: Some("%2Fproject".into()), ..reply("global", "frm_g", json!({ "token": "abc" })) }]
     );
     harness.wait_gone("MCP server needs a token");
 }
@@ -428,10 +357,7 @@ fn the_helpers_follow_util_form() {
     let text = |value: &str| Some(FormValue::String(value.to_owned()));
     let string = |extra: Value| {
         let mut field = json!({ "key": "k", "type": "string" });
-        field
-            .as_object_mut()
-            .unwrap()
-            .extend(extra.as_object().unwrap().clone());
+        field.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
         fields(json!([field])).remove(0)
     };
     let cases = [
@@ -470,59 +396,33 @@ fn the_helpers_follow_util_form() {
             Some("Select at most 1"),
         ),
         (
-            fields(json!([{ "key": "m", "type": "multiselect", "options": [{ "value": "a", "label": "A" }] }])).remove(0),
+            fields(json!([{ "key": "m", "type": "multiselect", "options": [{ "value": "a", "label": "A" }] }]))
+                .remove(0),
             Some(FormValue::Array(vec!["z".into()])),
             Some("Select only available options"),
         ),
     ];
     for (field, value, want) in cases {
-        assert_eq!(
-            validate(&field, value.as_ref()).as_deref(),
-            want,
-            "{field:?} {value:?}"
-        );
+        assert_eq!(validate(&field, value.as_ref()).as_deref(), want, "{field:?} {value:?}");
     }
 
     let multi = fields(json!([{ "key": "m", "type": "multiselect",
         "options": [{ "value": "a", "label": "Alpha" }], "default": ["a", "own"] }]))
     .remove(0);
+    assert_eq!(display_value(&multi, Some(&FormValue::Array(vec!["a".into(), "own".into()])), "(none)"), "Alpha, own");
+    assert_eq!(display_value(&multi, Some(&FormValue::Array(Vec::new())), "(none)"), "(none)");
+    assert_eq!(toggle_multiselect(Some(&FormValue::Array(vec!["a".into()])), "a"), Vec::<String>::new());
     assert_eq!(
-        display_value(
-            &multi,
-            Some(&FormValue::Array(vec!["a".into(), "own".into()])),
-            "(none)"
-        ),
-        "Alpha, own"
-    );
-    assert_eq!(
-        display_value(&multi, Some(&FormValue::Array(Vec::new())), "(none)"),
-        "(none)"
-    );
-    assert_eq!(
-        toggle_multiselect(Some(&FormValue::Array(vec!["a".into()])), "a"),
-        Vec::<String>::new()
-    );
-    assert_eq!(
-        set_multiselect_custom(
-            Some(&FormValue::Array(vec!["a".into(), "old".into()])),
-            Some("old"),
-            "new"
-        ),
+        set_multiselect_custom(Some(&FormValue::Array(vec!["a".into(), "old".into()])), Some("old"), "new"),
         ["a", "new"]
     );
 
-    let custom = fields(
-        json!([{ "key": "t", "type": "string", "custom": true, "default": "mine",
-        "options": [{ "value": "a", "label": "A" }] }]),
-    );
+    let custom = fields(json!([{ "key": "t", "type": "string", "custom": true, "default": "mine",
+        "options": [{ "value": "a", "label": "A" }] }]));
     let (answers, typed) = initial_values(&custom);
     assert_eq!(answers.get("t"), Some(&FormValue::String("mine".into())));
     assert_eq!(typed.get("t").map(String::as_str), Some("mine"));
-    assert_eq!(
-        selected_row(custom.first(), answers.get("t")),
-        1,
-        "the custom row"
-    );
+    assert_eq!(selected_row(custom.first(), answers.get("t")), 1, "the custom row");
 
     let conditional = fields(json!([
         { "key": "kind", "type": "string", "options": [{ "value": "x", "label": "X" }] },
@@ -545,22 +445,13 @@ fn the_helpers_follow_util_form() {
 fn parity_form(fields: Value) -> Harness {
     let mut form = form("ses_root", "frm_1", "Deploy settings", fields);
     form["metadata"] = json!({ "message": "Pick how to deploy." });
-    mount(
-        Fixture {
-            forms: vec![form],
-            ..Fixture::default()
-        },
-        Route::Session {
-            id: SessionID("ses_root".into()),
-        },
-    )
+    mount(Fixture { forms: vec![form], ..Fixture::default() }, Route::Session { id: SessionID("ses_root".into()) })
 }
 
 /// The rows of `cells` whose cell at `x` is the prompt's border, cut to `width` columns from `x`.
 fn panel(cells: &Cells, x: u32, width: u32) -> Cells {
-    let rows: Vec<u32> = (0..cells.height)
-        .filter(|&y| cells.cell(x, y).is_some_and(|cell| cell.symbol == "┃"))
-        .collect();
+    let rows: Vec<u32> =
+        (0..cells.height).filter(|&y| cells.cell(x, y).is_some_and(|cell| cell.symbol == "┃")).collect();
     Cells {
         width,
         height: rows.len() as u32,
@@ -576,16 +467,10 @@ fn panel(cells: &Cells, x: u32, width: u32) -> Cells {
 fn assert_panel(harness: &Harness, name: &str) {
     let expected = Cells::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
     let expected = panel(&expected, 0, expected.width);
-    let actual = panel(
-        &Cells::from_capture(&harness.app.render()),
-        2,
-        expected.width,
-    );
+    let actual = panel(&Cells::from_capture(&harness.app.render()), 2, expected.width);
     let comparison = compare(&expected, &actual);
     if !comparison.is_equal() {
-        let path = std::env::temp_dir()
-            .join("opencode-parity")
-            .join(format!("{name}.json"));
+        let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual.to_json()).unwrap();
     }

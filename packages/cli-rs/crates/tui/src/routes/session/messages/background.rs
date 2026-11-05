@@ -76,15 +76,12 @@ impl Hint {
                 self.0.shown.set(true);
             } else {
                 let weak = self.0.this.clone();
-                let timer =
-                    self.0
-                        .app
-                        .set_timeout(Duration::from_millis(remaining as u64), move |_| {
-                            let Some(inner) = weak.upgrade() else { return };
-                            inner.timer.set(None);
-                            inner.shown.set(true);
-                            inner.paint();
-                        });
+                let timer = self.0.app.set_timeout(Duration::from_millis(remaining as u64), move |_| {
+                    let Some(inner) = weak.upgrade() else { return };
+                    inner.timer.set(None);
+                    inner.shown.set(true);
+                    inner.paint();
+                });
                 self.0.timer.set(Some(timer));
             }
         }
@@ -119,9 +116,7 @@ impl Inner {
 /// The running shell or subagent call of the newest unfinished step, and when it started running.
 fn running(messages: &[SessionMessageInfo]) -> Option<(String, f64)> {
     let current = messages.iter().rev().find_map(|message| match message {
-        SessionMessageInfo::Assistant(assistant) if assistant.time.completed.is_none() => {
-            Some(assistant)
-        }
+        SessionMessageInfo::Assistant(assistant) if assistant.time.completed.is_none() => Some(assistant),
         _ => None,
     })?;
     current.content.iter().find_map(|item| match item {
@@ -129,10 +124,7 @@ fn running(messages: &[SessionMessageInfo]) -> Option<(String, f64)> {
             if matches!(tool.state, SessionMessageAssistantToolState::Running(_))
                 && matches!(canonical_tool_name(&tool.name), "shell" | "subagent") =>
         {
-            Some((
-                format!("{}:{}", current.id.as_str(), tool.id),
-                tool.time.ran.unwrap_or(tool.time.created),
-            ))
+            Some((format!("{}:{}", current.id.as_str(), tool.id), tool.time.ran.unwrap_or(tool.time.created)))
         }
         _ => None,
     })

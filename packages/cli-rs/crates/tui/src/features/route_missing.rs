@@ -9,11 +9,7 @@ use crate::routes::Route;
 pub fn mount(tui: &Tui, id: &str, name: &str) -> View {
     let app = &tui.app;
     let theme = tui.page();
-    let text = Text::new(app, format!("Unknown plugin route: {id}/{name}")).fg(theme
-        .text
-        .feedback
-        .warning
-        .base);
+    let text = Text::new(app, format!("Unknown plugin route: {id}/{name}")).fg(theme.text.feedback.warning.base);
     let weak = tui.weak();
     let home = View::new(app)
         .bg(theme.background.action.primary.hovered)
