@@ -1,17 +1,14 @@
 //! The permission prompt (E.9a) over a fixture server: a pending request from the store shows above the
 //! prompt, and each answer sends one reply request (P-REQ: method, path, body).
 
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::{SessionID, SessionInfo};
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Permissions, Resolved};
+use std::sync::{Arc, Mutex};
+
+use opencode_api::generated::SessionInfo;
+use opencode_local::cli_config::Permissions;
+use opencode_tui::Deps;
 use opencode_tui::routes::session::permission::{always_lines, presentation};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 /// A mutating request as the server saw it.
@@ -22,96 +19,64 @@ struct Sent {
     body: Value,
 }
 
-/// Serves the sessions and their pending requests, and records every POST.
+/// The pending requests of the root session and of its child.
 #[derive(Default)]
 struct Fixture {
     root: Vec<Value>,
     child: Vec<Value>,
-    sent: Mutex<Vec<Sent>>,
 }
 
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        let (status, body) = match (request.method, path.as_str()) {
-            ("GET", "/api/session/ses_root") => (200, json!({ "data": session("ses_root", None) })),
-            // The root's children, which a child's arrival reads.
-            ("GET", "/api/session") => (200, json!({ "data": [session("ses_child", Some("ses_root"))], "cursor": {} })),
-            ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": self.root })),
-            ("GET", "/api/session/ses_child/permission") => (200, json!({ "data": self.child })),
-            // The goal footer's RPC read (E.14); no goal is set.
-            ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
-            ("POST", _) => {
-                let body = request.body.as_deref().map_or(Value::Null, |body| serde_json::from_slice(body).unwrap());
-                self.sent.lock().unwrap().push(Sent { method: request.method, path, body });
-                (204, Value::Null)
-            }
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+/// Serves the sessions and their pending requests, and records every POST in `sent`.
+fn fake(fixture: Fixture, sent: Arc<Mutex<Vec<Sent>>>) -> Fake {
+    Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_root") => (200, json!({ "data": session("ses_root", None) })),
+        // The root's children, which a child's arrival reads.
+        ("GET", "/api/session") => (200, json!({ "data": [session("ses_child", Some("ses_root"))], "cursor": {} })),
+        ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": fixture.root })),
+        ("GET", "/api/session/ses_child/permission") => (200, json!({ "data": fixture.child })),
+        // The goal footer's RPC read (E.14); no goal is set.
+        ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
+        ("POST", path) => {
+            sent.lock().unwrap().push(Sent { method: "POST", path: path.to_owned(), body: seen.body.clone() });
+            (204, Value::Null)
+        }
+        _ => support::not_found(),
+    })
 }
 
 fn session(id: &str, parent: Option<&str>) -> Value {
-    json!({
-        "id": id, "parentID": parent, "title": "Fix the parser", "projectID": "project", "cost": 0,
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
+    support::merge(support::session(id, "Fix the parser"), json!({ "parentID": parent }))
 }
 
 fn request(id: &str, session: &str, action: &str, resources: &[&str], save: &[&str]) -> Value {
     json!({ "id": id, "sessionID": session, "action": action, "resources": resources, "save": save })
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
-    fixture: Arc<Fixture>,
+struct Prompt {
+    harness: Harness,
+    sent: Arc<Mutex<Vec<Sent>>>,
 }
 
-fn mount(fixture: Fixture, permissions: Permissions) -> Harness {
-    let fixture = Arc::new(fixture);
-    let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
-    let mut config = Resolved::new(Info::default(), |_| None);
+deref_harness!(Prompt);
+
+fn mount(fixture: Fixture, permissions: Permissions) -> Prompt {
+    let sent = Arc::default();
+    let mut config = support::config(opencode_local::cli_config::Info::default());
     config.permissions = permissions;
-    let app = TestApp::new(100, 30);
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config,
-            roots: None,
-            route: Route::Session { id: SessionID("ses_root".into()) },
-            continue_: false,
-            events: false,
-        },
-    );
-    Harness { app, tui, fixture }
+    let deps = Deps {
+        config,
+        route: support::session_route("ses_root"),
+        ..support::deps(Arc::new(fake(fixture, Arc::clone(&sent))))
+    };
+    Prompt { harness: support::mount(100, 30, deps), sent }
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}\n{:?}", self.fixture.sent.lock().unwrap());
-        screen
-    }
-
+impl Prompt {
     /// Waits for the replies and returns them.
     fn replies(&self, count: usize) -> Vec<Sent> {
-        let arrived = self.app.wait_until(Duration::from_secs(5), || self.fixture.sent.lock().unwrap().len() >= count);
-        let sent = std::mem::take(&mut *self.fixture.sent.lock().unwrap());
+        let arrived = self.app.wait_until(WAIT, || self.sent.lock().unwrap().len() >= count);
+        let sent = std::mem::take(&mut *self.sent.lock().unwrap());
         assert!(arrived, "expected {count} replies, got {sent:?}");
         sent
     }
@@ -197,7 +162,7 @@ fn a_subagent_rejection_asks_what_to_do_differently() {
     harness.app.type_text("oops");
     harness.wait_for("oops");
     harness.app.press("ctrl+c");
-    assert!(harness.app.wait_until(Duration::from_secs(5), || { !harness.app.text().contains("oops") }));
+    assert!(harness.app.wait_until(WAIT, || { !harness.app.text().contains("oops") }));
     harness.wait_for("Reject permission");
     harness.app.type_text("use rg");
     harness.wait_for("use rg");
@@ -216,7 +181,7 @@ fn ctrl_f_toggles_fullscreen_and_escape_minimizes_first() {
     harness.wait_for("ctrl+f minimize");
     harness.app.press("escape");
     harness.wait_for("ctrl+f fullscreen");
-    assert!(harness.fixture.sent.lock().unwrap().is_empty());
+    assert!(harness.sent.lock().unwrap().is_empty());
     harness.app.press("ctrl+f");
     harness.wait_for("ctrl+f minimize");
     harness.app.press("enter");

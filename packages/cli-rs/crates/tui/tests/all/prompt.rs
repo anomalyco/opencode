@@ -1,14 +1,13 @@
 //! The prompt (E.2) over a fixture server that records requests: editing through the `input.*`
 //! layer, submit, queue, history, drafts, shell mode, clear, interrupt, and a new session from home.
 
-use crate::support::wait;
-
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::support::WAIT;
 use bytes::Bytes;
 use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
@@ -20,7 +19,6 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
-use wait::WAIT;
 
 /// A request the fixture saw: method, path, and JSON body.
 type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;

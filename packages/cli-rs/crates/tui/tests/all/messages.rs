@@ -2,67 +2,38 @@
 //! queued), shell, skill, notice and switch messages, errors and retries, the revert banner, the
 //! background hint, images, and the free-limit stop that offers OpenCode Go.
 
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::{SessionID, SessionMessageInfo, V2Event};
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved, Session};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use std::sync::Arc;
+
+use opencode_api::generated::{SessionMessageInfo, V2Event};
+use opencode_local::cli_config::{Info, Session};
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 const ID: &str = "ses_m";
 
 /// Serves one session, its messages, its pending inbox items, and the revert clear.
-struct Fixture {
-    session: Value,
-    messages: Vec<Value>,
-    inbox: Vec<Value>,
-    log: Arc<Mutex<Vec<String>>>,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        Box::pin(async move {
-            self.log.lock().unwrap().push(format!("{} {path}", request.method));
-            let session = format!("/api/session/{ID}");
-            let (status, body) = match (request.method, path.as_str()) {
-                ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
-                ("GET", p) if p == session => (200, json!({ "data": self.session })),
-                ("GET", p) if p == format!("{session}/message") => {
-                    let page: Vec<_> = self.messages.iter().rev().cloned().collect();
-                    (200, json!({ "data": page, "cursor": {} }))
-                }
-                ("GET", p) if p == format!("{session}/inbox") => (200, json!({ "data": self.inbox })),
-                ("GET", p) if p == format!("{session}/permission") => (200, json!({ "data": [] })),
-                ("DELETE", p) if p == format!("{session}/revert") => (204, Value::Null),
-                _ => (404, json!({})),
-            };
-            let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
+    Fake::new(move |seen| {
+        let path = format!("/api/session/{ID}");
+        match (seen.method.as_str(), seen.path.as_str()) {
+            ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+            ("GET", p) if p == path => (200, json!({ "data": session })),
+            ("GET", p) if p == format!("{path}/message") => {
+                let page: Vec<_> = messages.iter().rev().cloned().collect();
+                (200, json!({ "data": page, "cursor": {} }))
+            }
+            ("GET", p) if p == format!("{path}/inbox") => (200, json!({ "data": inbox })),
+            ("GET", p) if p == format!("{path}/permission") => (200, json!({ "data": [] })),
+            ("DELETE", p) if p == format!("{path}/revert") => (204, Value::Null),
+            _ => support::not_found(),
+        }
+    })
 }
 
 fn session(extra: Value) -> Value {
-    let mut session = json!({
-        "id": ID, "title": "Messages", "projectID": "project", "cost": 0, "agent": "build",
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    });
-    for (key, value) in extra.as_object().unwrap() {
-        session[key] = value.clone();
-    }
-    session
+    support::merge(support::merge(support::session(ID, "Messages"), json!({ "agent": "build" })), extra)
 }
 
 fn user(id: &str, created: u64, text: &str) -> Value {
@@ -77,47 +48,31 @@ fn assistant(id: &str, created: u64, content: Value) -> Value {
     })
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
-    log: Arc<Mutex<Vec<String>>>,
+struct Screen {
+    harness: Harness,
+    log: Log,
 }
 
-fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, info: Info) -> Harness {
+deref_harness!(Screen);
+
+fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, info: Info) -> Screen {
     // A message that does not decode would drop its whole page.
     for message in &messages {
         if let Err(error) = serde_json::from_value::<SessionMessageInfo>(message.clone()) {
             panic!("{message} does not decode: {error}");
         }
     }
-    let log = Arc::new(Mutex::new(Vec::new()));
-    let fixture = Fixture { session, messages, inbox, log: log.clone() };
-    let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
-    let app = TestApp::new(80, height);
-    let info = Info { animations: Some(false), ..info };
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID(ID.into()) },
-            continue_: false,
-            events: false,
-        },
-    );
-    Harness { app, tui, log }
+    let fake = fake(session, messages, inbox);
+    let log = fake.log();
+    let deps = Deps {
+        config: support::config(Info { animations: Some(false), ..info }),
+        route: Route::Session { id: opencode_api::generated::SessionID(ID.into()) },
+        ..support::deps(Arc::new(fake))
+    };
+    Screen { harness: support::mount(80, height, deps), log }
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}\nrequests: {:?}", self.log.lock().unwrap());
-        screen
-    }
-
+impl Screen {
     fn apply(&self, kind: &str, seq: u64, data: Value) {
         let event: V2Event = serde_json::from_value(json!({
             "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
@@ -183,7 +138,7 @@ fn compactions_show_their_status_summary_and_queue() {
     assert!(screen.contains("─ ◇ Compaction queued ─"), "{screen}");
     // The running compaction waits for the turn, after the rest; the queued one comes last.
     in_order(&screen, &["1.3K in", "Second question", "✗ Compaction", "cancelled", "⋯ Compaction", "◇"]);
-    assert!(h.log.lock().unwrap().contains(&format!("GET /api/session/{ID}/inbox")));
+    assert!(support::lines(&h.log).contains(&format!("GET /api/session/{ID}/inbox")));
 }
 
 #[test]
@@ -234,7 +189,7 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
 
     // A click on a subagent's completion opens its session.
     h.app.click(8, h.row("Explore finished"));
-    assert!(h.app.wait_until(Duration::from_secs(5), || matches!(
+    assert!(h.app.wait_until(WAIT, || matches!(
         h.tui.route(),
         Route::Session { id } if id.0 == "ses_child"
     )));
@@ -303,9 +258,9 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
     assert!(!screen.contains("Undo this"), "{screen}");
 
     h.app.click(10, h.row("messages reverted"));
-    assert!(h.app.wait_until(Duration::from_secs(5), || {
-        h.log.lock().unwrap().contains(&format!("DELETE /api/session/{ID}/revert"))
-    }));
+    assert!(
+        h.app.wait_until(WAIT, || { support::lines(&h.log).contains(&format!("DELETE /api/session/{ID}/revert")) })
+    );
 }
 
 #[test]
@@ -334,7 +289,7 @@ fn a_long_running_shell_call_shows_the_background_hint() {
             "executed": true, "content": [{ "type": "text", "text": "done" }],
         }),
     );
-    assert!(h.app.wait_until(Duration::from_secs(5), || { !h.app.text().contains("background") }));
+    assert!(h.app.wait_until(WAIT, || { !h.app.text().contains("background") }));
 }
 
 #[test]

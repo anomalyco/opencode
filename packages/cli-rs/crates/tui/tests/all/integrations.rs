@@ -6,25 +6,17 @@
 //! each flow and check the requests it sent (P-REQ). No test touches a real service or opens a browser: the
 //! URL opener is a sink.
 
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
 use opencode_api::generated::IntegrationID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Resolved, decode_text};
-use opencode_local::paths::Paths;
 use opencode_parity::assert_fixture;
-use opencode_tui::app::Roots;
-use opencode_tui::{Deps, Route, Tui};
-use opentui::prelude::*;
-use opentui::testing::TestApp;
+use opencode_tui::{Args, Deps, Route};
 use serde_json::{Value, json};
-
-use crate::support::wait::WAIT;
 
 const DIRECTORY: &str = "/tmp/opencode/app";
 /// The location query every integration request carries.
@@ -98,89 +90,43 @@ fn attempt() -> Value {
     })
 }
 
-/// Serves the integrations, the catalog, and every write; logs every request.
-struct Fixture {
-    integrations: Arc<Mutex<Value>>,
-    /// What OAuth and command status polls answer.
-    status: Arc<Mutex<Value>>,
-    /// The OAuth attempt's mode.
-    mode: &'static str,
-    log: Arc<Mutex<Vec<Logged>>>,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let full = match request.url.query() {
-            Some(query) => format!("{path}?{query}"),
-            None => path.clone(),
-        };
-        self.log.lock().unwrap().push((request.method.to_owned(), full, body.clone()));
-        let location = json!({ "directory": DIRECTORY });
-        let (status, body) = match (request.method, path.as_str()) {
-            ("GET", "/api/location") => (
-                200,
-                json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
-            ),
-            ("GET", "/api/integration") => {
-                (200, json!({ "location": location, "data": self.integrations.lock().unwrap().clone() }))
-            }
-            ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-                    "request": { "settings": {}, "headers": {}, "body": {} },
-                }] }),
-            ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "m", "modelID": "m", "providerID": "openai", "name": "Model M",
-                    "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-                    "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-                    "enabled": true, "limit": { "context": 1000, "output": 100 },
-                }] }),
-            ),
-            ("GET", "/api/provider") => (
-                200,
-                json!({ "location": location, "data": [{
+/// Serves the integrations, the catalog, and every write; logs every request. `status` is what OAuth and
+/// command status polls answer, and `mode` the OAuth attempt's mode.
+fn fake(integrations: Value, status: Arc<Mutex<Value>>, mode: &'static str) -> Fake {
+    Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (
+            200,
+            json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+        ),
+        ("GET", "/api/integration") => (200, list(DIRECTORY, integrations.clone())),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/model") => (200, list(DIRECTORY, json!([support::model("openai", "m", "Model M")]))),
+        ("GET", "/api/provider") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([{
                     "id": "openai", "integrationID": "openai", "name": "OpenAI", "activation": "auto", "package": "openai",
-                }] }),
+                }]),
             ),
-            ("GET", "/api/config") => (200, json!([])),
-            ("GET", "/api/command") => (200, json!({ "location": location, "data": [] })),
-            ("GET", "/api/mcp") => (200, json!({ "location": location, "data": [] })),
-            // A wrong key is rejected with the server's message.
-            ("POST", "/api/integration/anthropic/connect/key") => {
-                (400, json!({ "_tag": "BadRequest", "message": "Invalid API key" }))
-            }
-            ("POST", path) if path.ends_with("/connect/oauth") => {
-                let mut attempt = attempt();
-                attempt["mode"] = json!(self.mode);
-                (200, json!({ "location": location, "data": attempt }))
-            }
-            ("POST", path) if path.ends_with("/connect/command") => (
-                200,
-                json!({ "location": location, "data": { "attemptID": "att_cmd", "time": { "created": 1, "expires": 2 } } }),
-            ),
-            ("GET", path) if path.contains("/connect/") => {
-                (200, json!({ "location": location, "data": self.status.lock().unwrap().clone() }))
-            }
-            ("POST" | "PATCH" | "DELETE", _) => (204, Value::Null),
-            _ => (404, json!({})),
-        };
-        let bytes = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(bytes))])),
-            })
-        })
-    }
+        ),
+        ("GET", "/api/mcp") => (200, list(DIRECTORY, json!([]))),
+        // A wrong key is rejected with the server's message.
+        ("POST", "/api/integration/anthropic/connect/key") => {
+            (400, json!({ "_tag": "BadRequest", "message": "Invalid API key" }))
+        }
+        ("POST", path) if path.ends_with("/connect/oauth") => {
+            let mut attempt = attempt();
+            attempt["mode"] = json!(mode);
+            (200, list(DIRECTORY, attempt))
+        }
+        ("POST", path) if path.ends_with("/connect/command") => {
+            (200, list(DIRECTORY, json!({ "attemptID": "att_cmd", "time": { "created": 1, "expires": 2 } })))
+        }
+        ("GET", path) if path.contains("/connect/") => (200, list(DIRECTORY, status.lock().unwrap().clone())),
+        ("POST" | "PATCH" | "DELETE", _) => (204, Value::Null),
+        _ => support::base(seen, DIRECTORY),
+    })
 }
 
 fn pending() -> Value {
@@ -188,13 +134,14 @@ fn pending() -> Value {
 }
 
 struct Kit {
-    app: TestApp,
-    tui: Rc<Tui>,
+    harness: Harness,
     status: Arc<Mutex<Value>>,
-    log: Arc<Mutex<Vec<Logged>>>,
+    log: Log,
     opened: Rc<RefCell<Vec<String>>>,
     _home: tempfile::TempDir,
 }
+
+deref_harness!(Kit);
 
 impl Kit {
     fn new() -> Self {
@@ -203,73 +150,32 @@ impl Kit {
 
     fn with(integrations: Value, mode: &'static str) -> Self {
         let home = tempfile::tempdir().unwrap();
-        let root = home.path().to_owned();
-        let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into())).unwrap();
-        let log = Arc::new(Mutex::new(Vec::new()));
         let status = Arc::new(Mutex::new(pending()));
-        let transport = Fixture {
-            integrations: Arc::new(Mutex::new(integrations)),
-            status: status.clone(),
-            mode,
-            log: log.clone(),
+        let fake = fake(integrations, status.clone(), mode);
+        let log = fake.log();
+        let deps = Deps {
+            directory: DIRECTORY.into(),
+            config: support::config(support::decode(r#"{ "theme": { "name": "opencode", "mode": "dark" } }"#)),
+            roots: support::roots(support::home_paths(home.path()), "test"),
+            route: Route::Home,
+            ..support::deps(Arc::new(fake))
         };
-        let client = Client::with_transport("http://opencode.local", Arc::new(transport)).unwrap();
-        let theme =
-            opencode_ui::theme::Catalog::default().load("opencode", opencode_ui::theme::ThemeMode::Dark).unwrap().theme;
-        // As the TS screen, the app clears with the page background the backdrop blends over.
-        let app = TestApp::with_options(
-            100,
-            40,
-            AppOptions {
-                theme: opentui::theme::Theme { background: theme.background.base, ..opentui::theme::Theme::default() },
-                light_theme: None,
-                ..AppOptions::default()
-            },
-        );
-        let info = decode_text(r#"{ "theme": { "name": "opencode", "mode": "dark" } }"#).unwrap();
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: DIRECTORY.into(),
-                config: Resolved::new(info, |_| None),
-                roots: Some(Roots { paths, storage_channel: "test".into() }),
-                route: Route::Home,
-                continue_: false,
-                events: false,
-            },
-        );
+        let harness = support::mount_on(support::dark_app(100, 40), deps, Args::default());
         // Never a browser: record what would open.
         let opened = Rc::new(RefCell::new(Vec::new()));
         {
             let opened = opened.clone();
-            *tui.local.open_url.borrow_mut() = Rc::new(move |url: &str| {
+            *harness.tui.local.open_url.borrow_mut() = Rc::new(move |url: &str| {
                 opened.borrow_mut().push(url.to_owned());
                 Ok(())
             });
         }
-        let kit = Self { app, tui, status, log, opened, _home: home };
+        let kit = Self { harness, status, log, opened, _home: home };
         kit.wait_for("Model M");
         // The integrations are read at startup, so the dialog opens on the list.
         let read = kit.app.wait_until(WAIT, || kit.tui.local.integrations().is_some());
         assert!(read, "the integrations were never read");
         kit
-    }
-
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
-    fn only_dialog(&self) {
-        let host = self.tui.dialogs.host().id();
-        for child in self.app.root().children() {
-            if child.id() != host {
-                child.visible(false);
-            }
-        }
     }
 
     fn connect(&self) {
@@ -296,7 +202,11 @@ impl Kit {
 
     /// Mutating requests, in order, with their bodies.
     fn writes(&self) -> Vec<Logged> {
-        self.log.lock().unwrap().iter().filter(|(method, _, _)| method != "GET").cloned().collect()
+        let log = self.log.lock().unwrap();
+        log.iter()
+            .filter(|seen| seen.method != "GET")
+            .map(|seen| (seen.method.clone(), seen.url(), seen.body.clone()))
+            .collect()
     }
 
     fn wait_writes(&self, count: usize) -> Vec<Logged> {
@@ -306,7 +216,7 @@ impl Kit {
     }
 
     fn reads(&self, prefix: &str) -> usize {
-        self.log.lock().unwrap().iter().filter(|(method, url, _)| method == "GET" && url.starts_with(prefix)).count()
+        self.log.lock().unwrap().iter().filter(|seen| seen.method == "GET" && seen.url().starts_with(prefix)).count()
     }
 }
 

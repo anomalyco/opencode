@@ -5,7 +5,7 @@
 //! - `session.json` and `prompt-history.jsonl` keep what another client wrote, prompts submitted before
 //!   the history loads are kept, and `session.deleted` prunes its pin.
 
-use crate::support::wait;
+use crate::support::WAIT;
 
 use std::path::Path;
 use std::rc::Rc;
@@ -164,7 +164,7 @@ impl Setup {
     }
 
     fn wait(&self, what: &str, check: impl Fn() -> bool) {
-        let done = self.app.wait_until(wait::WAIT, &check);
+        let done = self.app.wait_until(WAIT, &check);
         assert!(done, "{what} never happened:\n{}", self.app.text());
     }
 
@@ -311,7 +311,7 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
     let history = History::load(&app, Some(state.path().to_owned()));
     let entry = json!({ "text": "early", "pasted": [] });
     history.append(&app, entry.clone());
-    let saved = app.wait_until(wait::WAIT, || {
+    let saved = app.wait_until(WAIT, || {
         std::fs::read_to_string(&file)
             .is_ok_and(|text| text == "{\"text\":\"old\",\"pasted\":[]}\n{\"text\":\"early\",\"pasted\":[]}\n")
     });

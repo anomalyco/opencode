@@ -1,7 +1,7 @@
 //! The user's `keybinds` and `tabs` from `cli.json` (rs-user-keys), fed as the bytes real terminals send: legacy,
 //! Kitty (Ghostty adds the Num Lock bit, `CSI 92;133u`), and xterm's modifyOtherKeys.
 
-use crate::support::wait::WAIT;
+use crate::support::WAIT;
 
 use std::rc::Rc;
 use std::sync::Arc;
