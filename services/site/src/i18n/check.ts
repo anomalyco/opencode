@@ -82,17 +82,18 @@ function contentEntries(base: unknown, overlay: unknown, at: string, unused: str
   }
   const join = (key: string) => (at ? `${at}.${key}` : key)
   if (Array.isArray(base)) {
-    if (keyedList(base)) {
-      const ids = itemIds(base)
+    const list: readonly unknown[] = base
+    if (keyedList(list)) {
+      const ids = itemIds(list)
       const items = (isRecord(overlay) ? overlay : {}) as Record<string, unknown>
       Object.keys(items)
         .filter((id) => !ids.includes(id))
         .forEach((id) => unused.push(`content:${join(id)}`))
-      return base.flatMap((item, index) => contentEntries(item, items[ids[index]], join(ids[index]), unused))
+      return list.flatMap((item, index) => contentEntries(item, items[ids[index]], join(ids[index]), unused))
     }
     const items = Array.isArray(overlay) ? overlay : []
-    items.slice(base.length).forEach((_, index) => unused.push(`content:${join(String(base.length + index))}`))
-    return base.flatMap((item, index) => contentEntries(item, items[index], join(String(index)), unused))
+    items.slice(list.length).forEach((_, index) => unused.push(`content:${join(String(list.length + index))}`))
+    return list.flatMap((item, index) => contentEntries(item, items[index], join(String(index)), unused))
   }
   if (!isRecord(base)) return []
   const values = (isRecord(overlay) ? overlay : {}) as Record<string, unknown>

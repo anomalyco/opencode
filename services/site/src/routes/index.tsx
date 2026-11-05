@@ -62,7 +62,6 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
-import { dict as en } from "~/i18n/en"
 import { homeMarkdown } from "~/lib/home-markdown"
 import { repoStats, type RepoStats } from "~/lib/github"
 import { inlineKey } from "~/lib/direction"
@@ -94,7 +93,7 @@ export default function Home() {
   // Its own meta description (140–155 characters). Until a locale translates it, the locale keeps
   // the tagline and hero subtitle it already has in its language.
   const description = () =>
-    language.locale() === "en" || i18n.t("home.meta.description") !== en["home.meta.description"]
+    i18n.translated("home.meta.description")
       ? i18n.t("home.meta.description")
       : joinSentences([i18n.t("app.meta.description"), ...content().hero.subtitle])
   const title = () => designCopy("home.hero.title", content().hero.title)

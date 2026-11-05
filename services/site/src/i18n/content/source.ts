@@ -2,7 +2,8 @@ import { allProductPages, extensions, productDetails, type PageSlug } from "~/co
 import { extensionPages, type ExtensionSlug } from "~/component/site/extension-data"
 import { anomalyProducts } from "~/component/site/links"
 import { announcements } from "~/component/site/announcement"
-import { translator, type Translate } from "~/i18n"
+import { interpolate, type Translate } from "~/i18n"
+import { english } from "~/i18n/english"
 import { brandContent } from "~/lib/brand-content"
 import { byos } from "~/lib/byos"
 import { downloadContent, pairContent, productDownloads } from "~/lib/download-content"
@@ -13,7 +14,7 @@ import { pressContent } from "~/lib/press-content"
  * The structured page copy that lives beside its data (product-data.ts, extension-data.ts, links.ts),
  * gathered by slug so each locale's file can translate it without touching hrefs, clips or commands.
  * The English data files stay the source of truth; the Markdown versions and llms.txt read them directly.
- * `t` is the English dict; i18n/check.ts passes a marking one to tell its leaves apart.
+ * `t` is the English dict; script/i18n-slices.ts passes a recording one to find the English the browser needs.
  */
 export function contentSource(t: Translate) {
   return {
@@ -89,7 +90,7 @@ export function contentSource(t: Translate) {
   }
 }
 
-export const source = contentSource(translator("en"))
+export const source = contentSource((key, params) => interpolate(english[key], params))
 
 export type Content = typeof source
 

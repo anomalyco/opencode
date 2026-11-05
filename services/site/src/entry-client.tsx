@@ -1,10 +1,9 @@
 // @refresh reload
 import { mount, StartClient } from "@solidjs/start/client"
-import { loadLanguage } from "~/i18n/content"
-import { parseLocale } from "~/lib/language"
+import { loadSlice } from "~/i18n/content"
 
-// The page's language arrives before hydration, so the first client render matches the server's.
-const locale = parseLocale(document.documentElement.dataset.locale) ?? "en"
-void loadLanguage(locale)
+// The strings every page shows arrive before hydration (the server preloads them, i18n/preload.tsx),
+// so the first client render matches the server's. Each page route loads its own before it runs.
+void loadSlice("shell")
   .catch(() => undefined)
   .then(() => mount(() => <StartClient />, document.getElementById("app")!))
