@@ -192,6 +192,7 @@ describe("sidebar peek", () => {
       [PEEK_DOCK_OPENED_EVENT, PEEK_DOCK_CLOSED_EVENT, edge, PEEK_DOCK_OPENED_EVENT],
       peeking(),
     ).state
+
     expect(redock).toEqual({ status: "handing-off", attempt: 5 })
     expect(transitionSidebarPeek(redock, { type: "dock.settled", attempt: 2 })).toBe(redock)
   })
