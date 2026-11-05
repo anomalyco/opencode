@@ -491,6 +491,7 @@ export const dict = {
   "toast.permissions.autoaccept.off.description": "Permission requests will require approval",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "toast.language.loadFailed.title": "Failed to load {{language}}",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",

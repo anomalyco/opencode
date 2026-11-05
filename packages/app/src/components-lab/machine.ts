@@ -139,3 +139,91 @@ function show(
 function unchanged(state: LabStageState): LabStageTransition {
   return { state, effects: [] }
 }
+
+/**
+ * How a press reached the tree. A folder opens and closes only by a click or Space in the tree, so moving by arrows
+ * (which selects as it goes) or a selection from elsewhere leaves it as it is.
+ */
+export type LabTreeGesture = "none" | "pointer" | "space"
+
+/**
+ * While browsing the tree by keys, a story that focuses something as it mounts (a dialog, a field) would take the
+ * keys away. A press or Tab anywhere ends browsing; a few returns at most, so a story that traps focus still wins.
+ */
+export type LabBrowseState =
+  | { readonly status: "idle"; readonly gesture: LabTreeGesture }
+  | { readonly status: "browsing"; readonly redirects: 1 | 2 | 3; readonly gesture: LabTreeGesture }
+
+export type LabBrowseEvent =
+  | { readonly type: "pointer.down"; readonly inTree: boolean }
+  | { readonly type: "pointer.ended" }
+  | { readonly type: "key.down"; readonly key: string; readonly inTree: boolean }
+  | { readonly type: "key.ended" }
+  | { readonly type: "window.blurred" }
+  | { readonly type: "story.opened"; readonly fromTree: boolean }
+  /** Focus moved into the stage. */
+  | { readonly type: "stage.focused" }
+
+export type LabBrowseEffect = { readonly type: "focus.tree" }
+
+export type LabBrowseTransition = {
+  readonly state: LabBrowseState
+  readonly effects: readonly LabBrowseEffect[]
+}
+
+export const INITIAL_LAB_BROWSE_STATE: LabBrowseState = Object.freeze({ status: "idle", gesture: "none" })
+
+export function transitionLabBrowse(state: LabBrowseState, event: LabBrowseEvent): LabBrowseTransition {
+  if (event.type === "pointer.down") {
+    const gesture = event.inTree ? "pointer" : "none"
+
+    return { state: state.status === "idle" && state.gesture === gesture ? state : idle(gesture), effects: [] }
+  }
+
+  if (event.type === "key.down") {
+    if (event.key === "Tab") return { state: INITIAL_LAB_BROWSE_STATE, effects: [] }
+
+    return { state: withGesture(state, event.key === " " && event.inTree ? "space" : "none"), effects: [] }
+  }
+
+  if (event.type === "pointer.ended")
+    return { state: state.gesture === "pointer" ? withGesture(state, "none") : state, effects: [] }
+
+  if (event.type === "key.ended")
+    return { state: state.gesture === "space" ? withGesture(state, "none") : state, effects: [] }
+
+  if (event.type === "window.blurred") return { state: INITIAL_LAB_BROWSE_STATE, effects: [] }
+
+  if (event.type === "story.opened") {
+    if (!event.fromTree) return { state: idle(state.gesture), effects: [] }
+
+    return { state: { status: "browsing", redirects: 3, gesture: state.gesture }, effects: [] }
+  }
+
+  if (state.status === "idle") return { state, effects: [] }
+
+  return {
+    state:
+      state.redirects === 1
+        ? idle(state.gesture)
+        : { status: "browsing", redirects: state.redirects === 3 ? 2 : 1, gesture: state.gesture },
+    effects: [{ type: "focus.tree" }],
+  }
+}
+
+/** A selection of a folder toggles it only while a click or Space in the tree caused it. */
+export function selectShouldToggleFolder(state: LabBrowseState) {
+  return state.gesture !== "none"
+}
+
+function idle(gesture: LabTreeGesture): LabBrowseState {
+  return gesture === "none" ? INITIAL_LAB_BROWSE_STATE : { status: "idle", gesture }
+}
+
+function withGesture(state: LabBrowseState, gesture: LabTreeGesture): LabBrowseState {
+  if (state.gesture === gesture) return state
+
+  if (state.status === "idle") return idle(gesture)
+
+  return { ...state, gesture }
+}

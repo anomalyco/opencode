@@ -96,6 +96,43 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
+// The Arabic dictionary chunks: built (`_assets/ar-<hash>.js`) and dev (`.../i18n/ar.ts`), for the app and the UI.
+const arabic = /\/(?:_assets\/ar-[\w-]+\.js|i18n\/ar\.ts)(?:\?|$)/
+
+async function pickArabic(page: Page) {
+  const { settings } = await open(page)
+  await settings.locator('[data-action="settings-language"]').click()
+  await page.getByRole("listbox").getByRole("option", { name: "العربية", exact: true }).click()
+
+  return settings
+}
+
+test("a language switch keeps settings on screen and flips direction only with the new strings", async ({ page }) => {
+  const chunks = await holdRoute(page, arabic)
+  const html = page.locator("html")
+  const settings = await pickArabic(page)
+  await chunks.arrived
+
+  await expect(settings.getByText("Language", { exact: true })).toBeVisible()
+  await expect(html).toHaveAttribute("dir", "ltr")
+  await expect(html).toHaveAttribute("lang", "en")
+
+  chunks.release()
+  await expect(settings.getByText("اللغة", { exact: true })).toBeVisible()
+  await expect(html).toHaveAttribute("dir", "rtl")
+  await expect(html).toHaveAttribute("lang", "ar")
+})
+
+test("a language whose chunk fails to load keeps English and says so", async ({ page }) => {
+  await page.route(arabic, (route) => route.abort("failed"))
+  const settings = await pickArabic(page)
+
+  await expect(page.getByText("Failed to load العربية", { exact: true })).toBeVisible()
+  await expect(settings.getByText("Language", { exact: true })).toBeVisible()
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr")
+  await expect(settings.locator('[data-action="settings-language"]')).toContainText("English")
+})
+
 test("Questions settings default independently of old Permissions settings and survive reload", async ({ page }) => {
   const { settings } = await open(page, {
     seed: {
