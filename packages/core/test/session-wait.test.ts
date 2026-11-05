@@ -26,7 +26,7 @@ const awaited: Session.ID[] = []
 let duringIdle: Effect.Effect<void> = Effect.void
 const execution = Layer.mock(SessionExecution.Service, {
   awaitIdle: (sessionID) =>
-    Effect.sync(() => awaited.push(sessionID)).pipe(Effect.flatMap(() => Effect.suspend(() => duringIdle))),
+    Effect.sync(() => awaited.push(sessionID)).pipe(Effect.andThen(Effect.suspend(() => duringIdle))),
 })
 const it = testEffect(
   AppNodeBuilder.build(
