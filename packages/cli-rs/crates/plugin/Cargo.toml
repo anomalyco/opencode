@@ -13,3 +13,12 @@ workspace = true
 opentui.workspace = true
 opencode-ui.workspace = true
 log.workspace = true
+# Native plugins (P.4): the C ABI, and dlopen.
+opencode-plugin-abi.workspace = true
+libloading.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
