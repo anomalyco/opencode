@@ -32,6 +32,7 @@ import { Skill } from "@opencode/schema/skill"
 import { Model } from "@opencode/schema/model"
 import { Permission } from "@opencode/schema/permission"
 import { Location } from "@opencode/schema/location"
+import { Workspace } from "@opencode/schema/workspace"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
@@ -41,6 +42,8 @@ import { PublicSessionMessage } from "./message.js"
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
 }).annotate({ identifier: "SessionActive" })
+
+const ExperimentalPlacement = Schema.Struct({ workspaceID: Schema.optional(Workspace.ID) }).pipe(Schema.optional)
 
 const PublicSessionInfo = Schema.Struct({
   ...Struct.omit(Session.Info.fields, ["location"]),
@@ -170,6 +173,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
           location: Location.PublicRef.pipe(Schema.optional),
+          experimental: ExperimentalPlacement,
           metadata: Session.Metadata.pipe(Schema.optional),
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
@@ -180,7 +184,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.create",
           summary: "Create session",
           description:
-            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
+            "Create a session at the requested location. A child inherits its parent's location unless experimental.workspaceID selects another workspace.",
         }),
       ),
     )
@@ -322,7 +326,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.move", "/api/session/:sessionID/move", {
         params: { sessionID: Session.ID },
-        payload: Schema.Struct({ ...Location.PublicRef.fields, delivery: SessionInbox.Delivery.pipe(Schema.optional) }),
+        payload: Schema.Struct({
+          ...Location.PublicRef.fields,
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
+          experimental: ExperimentalPlacement,
+        }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, InvalidRequestError],
       }).annotateMerge(

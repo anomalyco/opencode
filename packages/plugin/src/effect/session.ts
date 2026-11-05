@@ -1,4 +1,4 @@
-import type { ExperimentalSessionApi, SessionApi } from "@opencode/client/effect/api"
+import type { ExperimentalSessionApi, SessionApi, SessionCreateInput } from "@opencode/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
@@ -201,7 +201,6 @@ export interface SessionHooks {
 export type SessionDomain = Pick<
   SessionApi<unknown>,
   | "list"
-  | "create"
   | "get"
   | "remove"
   | "switchAgent"
@@ -217,5 +216,8 @@ export type SessionDomain = Pick<
   | "context"
 > &
   Pick<ExperimentalSessionApi<unknown>, "wait" | "instructions"> & {
+    readonly create: (
+      input?: SessionCreateInput & { readonly location?: { readonly workspace?: string } },
+    ) => ReturnType<SessionApi<unknown>["create"]>
     readonly hook: ModelHooks<SessionHooks>
   }

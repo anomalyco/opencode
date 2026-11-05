@@ -1,5 +1,14 @@
 export * as Plugin from "./plugin.js"
 export type { StorageEntry, StorageScanOptions, StorageScanResult } from "../storage.js"
+export { EnvironmentFiles } from "./environment-files.js"
+export type {
+  ExperimentalWorkspaceDomain,
+  WorkspaceConnectionInput,
+  WorkspaceDriver,
+  WorkspaceEditor,
+  WorkspaceEnvironment,
+  WorkspaceInfo,
+} from "./workspace.js"
 
 export { Agent } from "@opencode/schema/agent"
 export { Artifact } from "@opencode/schema/artifact"
@@ -17,4 +26,5 @@ export { Rpc } from "@opencode/schema/rpc"
 export { Skill } from "@opencode/schema/skill"
 export { Vcs } from "@opencode/schema/vcs"
 export { WebSearch } from "@opencode/schema/websearch"
+export { Workspace } from "@opencode/schema/workspace"
 export { Worktree } from "@opencode/schema/worktree"

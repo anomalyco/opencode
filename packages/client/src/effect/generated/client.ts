@@ -269,6 +269,13 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalWorkspaceProvidersOutput,
+  ExperimentalWorkspaceCreateInput,
+  ExperimentalWorkspaceCreateOutput,
+  ExperimentalWorkspaceProvisionInput,
+  ExperimentalWorkspaceProvisionOutput,
+  ExperimentalWorkspaceDestroyInput,
+  ExperimentalWorkspaceDestroyOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -454,6 +461,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
         agent: input?.["agent"],
         model: input?.["model"],
         location: input?.["location"],
+        experimental: input?.["experimental"],
         metadata: input?.["metadata"],
         permissions: input?.["permissions"],
       },
@@ -523,7 +531,7 @@ const EndpointSessionMove = (raw: RawClient["server.session"]) => (input: Sessio
   preserveEffect<SessionMoveOutput>()(
     raw["session.move"]({
       params: { sessionID: input["sessionID"] },
-      payload: { directory: input["directory"], delivery: input["delivery"] },
+      payload: { directory: input["directory"], delivery: input["delivery"], experimental: input["experimental"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -1715,6 +1723,41 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalWorkspaceProviders = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalWorkspaceProvidersOutput>()(
+    raw["workspace.providers"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalWorkspaceCreate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalWorkspaceCreateInput) =>
+    preserveEffect<ExperimentalWorkspaceCreateOutput>()(
+      raw["workspace.create"]({ payload: { id: input["id"], provider: input["provider"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalWorkspaceProvision =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalWorkspaceProvisionInput) =>
+    preserveEffect<ExperimentalWorkspaceProvisionOutput>()(
+      raw["workspace.provision"]({ params: { workspaceID: input["workspaceID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalWorkspaceDestroy =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalWorkspaceDestroyInput) =>
+    preserveEffect<ExperimentalWorkspaceDestroyOutput>()(
+      raw["workspace.destroy"]({ params: { workspaceID: input["workspaceID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1745,6 +1788,12 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw) },
+  workspace: {
+    providers: EndpointExperimentalWorkspaceProviders(raw),
+    create: EndpointExperimentalWorkspaceCreate(raw),
+    provision: EndpointExperimentalWorkspaceProvision(raw),
+    destroy: EndpointExperimentalWorkspaceDestroy(raw),
+  },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

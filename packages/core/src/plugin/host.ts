@@ -30,6 +30,7 @@ import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
+import { WorkspaceDriver } from "../workspace/driver.js"
 import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
@@ -77,6 +78,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const instructionEntries = yield* InstructionEntry.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
+  const workspaces = yield* Workspace.Service
+  const workspaceDrivers = yield* WorkspaceDriver.RegistryService
   const worktrees = yield* Worktree.Service
   const worktreeStrategies = yield* WorktreeStrategies.Service
   const currentWorktreeStrategies = location.workspaceID ? undefined : worktreeStrategies
@@ -86,13 +89,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       workspaceID: current.workspaceID,
       project: current.project,
     })
-  const locationRef = (input?: { readonly location?: { readonly directory?: string; readonly workspace?: string } }) =>
-    input?.location === undefined
+  const locationRef = (
+    input?: { readonly location?: { readonly directory?: string; readonly workspace?: string } },
+    workspaceID?: Workspace.ID,
+  ) =>
+    input?.location === undefined && workspaceID === undefined
       ? undefined
       : Location.Ref.make({
-          directory: AbsolutePath.make(input.location.directory ?? location.directory),
+          directory: AbsolutePath.make(input?.location?.directory ?? location.directory),
           workspaceID:
-            input.location.workspace === undefined ? location.workspaceID : Workspace.ID.make(input.location.workspace),
+            input?.location?.workspace === undefined
+              ? workspaceID ?? location.workspaceID
+              : Workspace.ID.make(input.location.workspace),
         })
   const isCurrentLocation = (ref: Location.Ref) =>
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
@@ -116,6 +124,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
 
   const decodeWorktree = Schema.decodeUnknownEffect(Worktree.Info)
   const decodeWorktrees = Schema.decodeUnknownEffect(Schema.Array(Worktree.ListEntry))
+
+  const driverError = (cause: unknown) =>
+    cause instanceof WorkspaceDriver.Error ? cause : new WorkspaceDriver.Error({ cause })
 
   const listAgents = Effect.fn("PluginHost.listAgents")((ref: Location.Ref) =>
     atLocation(
@@ -316,6 +327,39 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
               },
             })
           }),
+      },
+      workspace: {
+        providers: workspaceDrivers.list,
+        transform: (callback) =>
+          workspaceDrivers.transform((editor) =>
+            callback({
+              add: (name, driver) =>
+                editor.add(name, {
+                  create: (input) => driver.create(input).pipe(Effect.mapError(driverError)),
+                  connect: (input) => driver.connect(input).pipe(Effect.mapError(driverError)),
+                  suspendForIdle: (input) => driver.suspendForIdle(input).pipe(Effect.mapError(driverError)),
+                  destroy: (input) => driver.destroy(input).pipe(Effect.mapError(driverError)),
+                }),
+              remove: editor.remove,
+            }),
+          ),
+        create: (input) =>
+          workspaces.create({
+            id: input.id === undefined ? undefined : Workspace.ID.make(input.id),
+            provider: input.provider,
+          }),
+        provision: (id) =>
+          workspaces
+            .provision(Workspace.ID.make(id))
+            .pipe(
+              Effect.map((info) => ({
+                id: info.id,
+                provider: info.provider,
+                createdAt: info.createdAt,
+                lastUsedAt: info.lastUsedAt,
+              })),
+            ),
+        destroy: (id) => workspaces.destroy(Workspace.ID.make(id)),
       },
     },
     generate: {
@@ -567,22 +611,15 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
       list: sessions.list,
-      create: (input) =>
-        sessions.create({
-          id: input?.id,
-          title: input?.title,
-          agent: input?.agent,
-          model: input?.model,
-          metadata: input?.metadata,
-          permissions: input?.permissions,
-          ...(input?.parentID === undefined
-            ? {
-                location:
-                  input?.location ??
-                  Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
-              }
-            : { parentID: input.parentID }),
-        }),
+      create: (input) => {
+        const ref = locationRef(input, input?.experimental?.workspaceID)
+        return sessions.create({
+          ...input,
+          ...(input?.parentID
+            ? { parentID: input.parentID, location: ref }
+            : { location: ref ?? Location.Ref.make(location) }),
+        })
+      },
       get: (input) => sessions.get(input.sessionID),
       remove: (input) => sessions.remove(input.sessionID),
       switchAgent: sessions.switchAgent,
@@ -599,7 +636,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         if (input.permissions !== undefined)
           yield* sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
       }),
-      move: sessions.move,
+      move: (input) => sessions.move({ ...input, workspaceID: input.experimental?.workspaceID }),
       synthetic: sessions.synthetic,
       interrupt: (input) =>
         sessions
@@ -649,6 +686,8 @@ export const requirements = LayerNode.group([
   Tool.node,
   Vcs.node,
   WebSearch.node,
+  Workspace.node,
+  WorkspaceDriver.node,
   Worktree.node,
   WorktreeStrategies.node,
   Generate.node,

@@ -3,6 +3,7 @@ import { HttpApi, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/http-a
 import { SchemaErrorMiddleware } from "./middleware/schema-error.js"
 import { GenerateGroup } from "./groups/generate.js"
 import { ExperimentalGroup } from "./groups/experimental.js"
+import { WorkspaceEndpoints } from "./groups/workspace.js"
 import { VoiceGroup } from "./groups/voice.js"
 import { MessageGroup } from "./groups/message.js"
 import { ModelGroup } from "./groups/model.js"
@@ -35,6 +36,8 @@ import { WorktreeGroup } from "./groups/worktree.js"
 import { VcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
+
+const ExperimentalRoutes = ExperimentalGroup.add(...WorkspaceEndpoints)
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof AgentGroup, LocationId>
@@ -100,7 +103,7 @@ type ApiGroups<
   | typeof WorktreeGroup
   | typeof GenerateGroup
   | typeof VoiceGroup
-  | typeof ExperimentalGroup
+  | typeof ExperimentalRoutes
   | typeof CredentialGroup
   | typeof ProjectGroup
   | LocationGroups<LocationId>
@@ -187,7 +190,7 @@ const makeApiFromGroup = <
     .add(RpcGroup.middleware(locationMiddleware))
     .add(eventGroup)
     .add(makePtyGroup(locationMiddleware))
-    .add(ExperimentalGroup)
+    .add(ExperimentalRoutes)
     .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)

@@ -23,6 +23,7 @@ import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
 import { makeSchedule } from "./schedule"
+import { makeWorkspace } from "./workspace"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
@@ -33,8 +34,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
     const schedule = yield* makeSchedule
+    const workspace = yield* makeWorkspace
 
     return handlers
+      .handle("workspace.providers", () => workspace.providers())
+      .handle("workspace.create", (ctx) => workspace.create(ctx.payload))
+      .handle("workspace.provision", (ctx) => workspace.provision(ctx.params.workspaceID))
+      .handle("workspace.destroy", (ctx) => workspace.destroy(ctx.params.workspaceID))
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))

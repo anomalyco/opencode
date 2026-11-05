@@ -42,6 +42,8 @@ import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
 import { WebSearch } from "@opencode/core/websearch"
+import { Workspace } from "@opencode/core/workspace"
+import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
@@ -131,6 +133,8 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Vcs.node,
       Watcher.node,
       WebSearch.node,
+      Workspace.node,
+      WorkspaceDriver.node,
       Worktree.node,
       WorktreeStrategies.node,
     ]),

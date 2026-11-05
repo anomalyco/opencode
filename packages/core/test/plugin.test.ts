@@ -12,6 +12,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
 import { Event } from "@opencode/schema/config"
+import { Workspace } from "@opencode/schema/workspace"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Session } from "@opencode/core/session"
 import { SessionSchema } from "@opencode/core/session/schema"
@@ -515,14 +516,20 @@ it.live("retains Promise plugin groups for later registrations and ignores a dis
 it.effect("normalizes Promise plugin API inputs through JSON", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
-    const created: boolean[] = []
+    const sessions = yield* Session.Service
+    const id = Session.ID.create()
+    const workspaceID = Workspace.ID.create()
     yield* plugins.activate([
       {
         ...fromPromise({
           id: "promise-input",
           async setup(ctx) {
-            await ctx.session.create({ title: "Promise session", agent: undefined })
-            created.push(true)
+            await ctx.session.create({
+              id,
+              title: "Promise session",
+              agent: undefined,
+              location: { directory: ctx.location.directory, workspace: workspaceID },
+            })
           },
         }),
         revision: "1",
@@ -530,7 +537,7 @@ it.effect("normalizes Promise plugin API inputs through JSON", () =>
     ])
     yield* plugins.awaitActivation
 
-    expect(created).toEqual([true])
+    expect((yield* sessions.get(id)).location.workspaceID).toBe(workspaceID)
   }),
 )
 

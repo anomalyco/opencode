@@ -101,18 +101,29 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.create",
         Effect.fn(function* (ctx) {
+          const parentID = ctx.payload.parentID
+          const workspaceID = ctx.payload.experimental?.workspaceID
+          // Look up only a missing directory; create owns parent validation and adopts an existing session ID first.
+          const parent =
+            parentID && workspaceID && !ctx.payload.location
+              ? yield* session.get(parentID).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.undefined))
+              : undefined
           return {
             data: yield* session
               .create({
-                id: ctx.payload.id,
-                title: ctx.payload.title,
-                agent: ctx.payload.agent,
-                model: ctx.payload.model,
-                metadata: ctx.payload.metadata,
-                permissions: ctx.payload.permissions,
-                ...(ctx.payload.parentID === undefined
-                  ? { location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) } }
-                  : { parentID: ctx.payload.parentID }),
+                ...ctx.payload,
+                ...(parentID !== undefined && workspaceID === undefined
+                  ? { parentID, location: undefined }
+                  : {
+                      parentID,
+                      location: {
+                        directory:
+                          ctx.payload.location?.directory ??
+                          parent?.location.directory ??
+                          AbsolutePath.make(process.cwd()),
+                        workspaceID,
+                      },
+                    }),
               })
               .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
           }
@@ -269,6 +280,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             .move({
               sessionID: ctx.params.sessionID,
               directory: ctx.payload.directory,
+              workspaceID: ctx.payload.experimental?.workspaceID,
               delivery: ctx.payload.delivery,
             })
             .pipe(

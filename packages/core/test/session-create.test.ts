@@ -120,7 +120,6 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
-  // @ts-expect-error child sessions inherit their parent's location.
   session.create({ parentID: Session.ID.create(), location })
 }
 void assertCreateInputTypes

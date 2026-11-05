@@ -36,6 +36,7 @@ import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
+import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { HttpRouter } from "effect/http"
@@ -83,6 +84,7 @@ const applicationServiceNodes = [
   SessionRestart.node,
   Schedule.node,
   Workspace.node,
+  WorkspaceDriver.node,
   FileWatch.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)

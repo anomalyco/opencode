@@ -2,6 +2,8 @@ import { expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Database } from "@opencode/core/database/database"
+import { makeMemoryDriver } from "@opencode/core/environment/index"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
@@ -15,6 +17,7 @@ import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Model } from "@opencode/schema/model"
+import { Workspace } from "@opencode/schema/workspace"
 import { Effect } from "effect"
 import { initRepo } from "./fixture/git"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -73,13 +76,14 @@ it.effect("groups available models by provider with paging", () =>
         model.enabled = false
       })
     })
-    yield* OpenCodeTools.Plugin.effect(pluginHost)
+    yield* OpenCodeTools.Plugin.effect(pluginHost).pipe(Effect.provideService(Flag.Overrides, "-workspaces"))
     // The caller runs on `test`, which sorts first despite `other` coming earlier alphabetically.
     const session = yield* sessions.create({
       location: Location.Ref.make({ directory: location.directory }),
       model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("alpha") }),
     })
     const registry = yield* Tool.Service
+    expect((yield* registry.list()).filter((tool) => tool.name.startsWith("workspace_"))).toEqual([])
     const run = (input: Record<string, unknown>) =>
       executeTool(registry, {
         sessionID: session.id,
@@ -141,6 +145,53 @@ it.effect("groups available models by provider with paging", () =>
     })
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
+  }),
+)
+
+it.live("provisions a workspace and keeps its placement on a directory-only session_move", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const sessions = yield* Session.Service
+    const registry = yield* Tool.Service
+    const ctx = yield* PluginHost.make(plugins, "test")
+    const calls: string[] = []
+    yield* ctx.experimental.workspace.transform((editor) =>
+      editor.add("memory", {
+        create: ({ workspaceID }) =>
+          Effect.sync(() => {
+            calls.push(workspaceID)
+            return { binding: {} }
+          }),
+        connect: () => Effect.succeed(makeMemoryDriver()),
+        suspendForIdle: () => Effect.void,
+        destroy: () => Effect.void,
+      }),
+    )
+    yield* OpenCodeTools.Plugin.effect(ctx).pipe(Effect.provideService(Flag.Overrides, "workspaces"))
+    const parent = yield* sessions.create({ location: ctx.location })
+    const run = (code: string) =>
+      executeTool(registry, {
+        sessionID: parent.id,
+        ...toolIdentity,
+        call: { type: "tool-call", id: code, name: "execute", input: { code } },
+      }).pipe(Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")))
+    expect(yield* run("return await tools.opencode.workspace_providers({})")).toContain("memory")
+    const created = yield* run('return await tools.opencode.workspace_create({ provider: "memory" })')
+    const workspaceID = Workspace.ID.make(created.workspaceID)
+    expect(created.provider).toBe("memory")
+    expect(calls).toEqual([workspaceID])
+    const child = yield* ctx.session.create({
+      parentID: parent.id,
+      location: { directory: AbsolutePath.make(path.join(ctx.location.directory, "source")), workspace: workspaceID },
+    })
+    expect(child.location.workspaceID).toBe(workspaceID)
+    const directory = AbsolutePath.make(path.join(ctx.location.directory, "destination"))
+    yield* run(`return await tools.opencode.session_move(${JSON.stringify({ sessionID: child.id, directory })})`)
+    yield* sessions.wait(child.id)
+    expect((yield* sessions.get(child.id)).location).toEqual({ directory, workspaceID })
+    expect(yield* run(`return await tools.opencode.workspace_destroy({ workspaceID: "${workspaceID}" })`)).toEqual({
+      destroyed: true,
+    })
   }),
 )
 

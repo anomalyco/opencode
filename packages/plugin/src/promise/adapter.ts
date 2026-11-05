@@ -7,6 +7,7 @@ import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
 import type { ToolFailures, ToolHooks } from "../effect/tool.js"
+import type { WorkspaceConnectionInput } from "../effect/workspace.js"
 import { AssertInput } from "../permission.js"
 import type { Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
@@ -252,6 +253,11 @@ export function fromPromise(plugin: Plugin) {
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(runtime)(effect)
 
+        const workspaceConnection = (input: WorkspaceConnectionInput) => ({
+          ...input,
+          saveBinding: (binding: Schema.JsonObject) => run(input.saveBinding(binding)),
+        })
+
         const promiseExecutor =
           (execute: Tool.Info["execute"]): Info["execute"] =>
           (input, context) =>
@@ -292,6 +298,10 @@ export function fromPromise(plugin: Plugin) {
               }),
             )
 
+        const createSession = adaptApiMethod<PromiseContext["session"]["create"]>(
+          SessionEndpoints["session.create"],
+          host.session.create,
+        )
         const context2: PromiseContext = {
           app: host.app,
           location: host.location,
@@ -370,6 +380,29 @@ export function fromPromise(plugin: Plugin) {
                       default: editor.default,
                     })
                   }),
+                ),
+            },
+            workspace: {
+              providers: () => run(host.experimental.workspace.providers()),
+              create: (input) => run(host.experimental.workspace.create(input)),
+              provision: (id) => run(host.experimental.workspace.provision(id)),
+              destroy: (id) => run(host.experimental.workspace.destroy(id)),
+              transform: (callback) =>
+                register(
+                  host.experimental.workspace.transform((editor) =>
+                    callback({
+                      add: (name, driver) =>
+                        editor.add(name, {
+                          create: (input) => attempt((signal) => driver.create(input, { signal })),
+                          connect: (input) =>
+                            attempt((signal) => driver.connect(workspaceConnection(input), { signal })),
+                          suspendForIdle: (input) =>
+                            attempt((signal) => driver.suspendForIdle(workspaceConnection(input), { signal })),
+                          destroy: (input) => attempt((signal) => driver.destroy(input, { signal })),
+                        }),
+                      remove: editor.remove,
+                    }),
+                  ),
                 ),
             },
           },
@@ -625,7 +658,15 @@ export function fromPromise(plugin: Plugin) {
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
             list: adaptApiMethod(SessionEndpoints["session.list"], host.session.list),
-            create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
+            create: (input) =>
+              createSession(
+                input?.location?.workspace === undefined
+                  ? input
+                  : {
+                      ...input,
+                      experimental: { ...input.experimental, workspaceID: input.location.workspace },
+                    },
+              ),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
             remove: adaptApiMethod(SessionEndpoints["session.remove"], host.session.remove),
             switchAgent: adaptApiMethod(SessionEndpoints["session.switchAgent"], host.session.switchAgent),

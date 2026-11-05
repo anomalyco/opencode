@@ -88,7 +88,7 @@ export function batch<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return run(effect, false)
 }
 
-/** Runs the effect as shutdown: States changed inside it close permanently and never notify again. */
+/** Runs Location shutdown: changed Location states close permanently; global states stay live. */
 export function shutdown<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return run(effect, true)
 }
@@ -101,7 +101,7 @@ function run<A, E, R>(effect: Effect.Effect<A, E, R>, shutdown: boolean) {
       const batch: Batch = { active: true, shutdown, notifications: new Set() }
       const exit = yield* restore(effect.pipe(Effect.provideService(CurrentBatch, batch))).pipe(Effect.exit)
       batch.active = false
-      // A shutdown batch never collects notifications: changed() closes the State instead.
+      // A Location shutdown batch never collects notifications.
       const notifications = yield* Effect.forEach(batch.notifications, (notify) => restore(notify).pipe(Effect.exit))
       // Aggregate ordinary failures across domains, while allowing cancellation to stop observer work.
       yield* Exit.asVoidAll([exit, ...notifications])
@@ -152,6 +152,8 @@ export const inherit = Effect.fnUntraced(function* () {
 
 export interface Options<State, Editor> {
   readonly name?: string
+  /** Global state outlives the Location shutdown batch that disposes a plugin's registrations. */
+  readonly scope?: "location" | "global"
   /** Creates the empty base value for every rebuild. */
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific editor API. */
@@ -226,7 +228,7 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
       const batch = yield* CurrentBatch
       if (batch?.active) {
         if (batch.shutdown) {
-          closed = true
+          closed = options.scope !== "global"
           return
         }
         batch.notifications.add(notify)
