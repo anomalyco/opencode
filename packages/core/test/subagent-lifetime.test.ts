@@ -14,6 +14,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
@@ -30,27 +31,30 @@ const llmLayer = TestLLM.testLayer({ fallback: TestLLM.text("Review complete", "
 const it = testEffect(
   Layer.merge(
     llmLayer,
-    AppNodeBuilder.build(LayerNode.group([Session.node, Job.node, SubagentJob.node, LocationServiceMap.node]), [
-      Global.node.replace(tempGlobalLayer),
-      offlineModels,
-      Watcher.node.replace(Watcher.configured({ enabled: false })),
-      LayerNodePlatform.llmClient.replace(llmLayer),
-      SessionRunnerModel.node.replace(
-        Layer.succeed(SessionRunnerModel.Service, {
-          resolve: () =>
-            Effect.succeed(
-              SessionRunnerModel.resolved(
-                LanguageModel.make({ id: "review", provider: "test", route: OpenAIChat.route }),
-                {
-                  capabilities: { tools: true, input: ["text"], output: ["text"] },
-                  cost: [],
-                  limit: { context: 200_000, output: 32_000 },
-                },
+    AppNodeBuilder.build(
+      LayerNode.group([Session.node, Job.node, SubagentJob.node, SessionExecution.node, LocationServiceMap.node]),
+      [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        Watcher.node.replace(Watcher.configured({ enabled: false })),
+        LayerNodePlatform.llmClient.replace(llmLayer),
+        SessionRunnerModel.node.replace(
+          Layer.succeed(SessionRunnerModel.Service, {
+            resolve: () =>
+              Effect.succeed(
+                SessionRunnerModel.resolved(
+                  LanguageModel.make({ id: "review", provider: "test", route: OpenAIChat.route }),
+                  {
+                    capabilities: { tools: true, input: ["text"], output: ["text"] },
+                    cost: [],
+                    limit: { context: 200_000, output: 32_000 },
+                  },
+                ),
               ),
-            ),
-        }),
-      ),
-    ]),
+          }),
+        ),
+      ],
+    ),
   ),
 )
 
@@ -439,6 +443,28 @@ describe("subagent observer lifetime", () => {
       expect(notices[0]?.text).not.toContain("descendant done")
       expect(yield* jobs.pendingBackground).toEqual([])
       expect(yield* llm.requests()).toHaveLength(3)
+    }),
+  )
+
+  it.live("a no-input wake after a child reported sends no second report", () =>
+    Effect.gen(function* () {
+      const execution = yield* SessionExecution.Service
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      yield* llm.push(TestLLM.text("done", "done"))
+
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Check the tests" })
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      expect(yield* reports(f.parent.id)).toHaveLength(1)
+      const requests = (yield* llm.requests()).length
+
+      // The wake a silent descendant's release sends: no input, so no model step.
+      yield* execution.wake(f.child.id)
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+      expect(yield* reports(f.parent.id)).toHaveLength(1)
+      expect(yield* llm.requests()).toHaveLength(requests)
     }),
   )
 })

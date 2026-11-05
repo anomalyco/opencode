@@ -26,6 +26,8 @@ export type Snapshot = {
   readonly job: Job.Info | undefined
   readonly recovery: Job.Recovery | undefined
   readonly remembered: boolean
+  /** The child's newest answer when the period began; undefined when that was never read. */
+  readonly baseline: { readonly id: SessionMessage.ID | undefined } | undefined
 }
 
 export type Deps = {
@@ -49,23 +51,9 @@ export const make = (deps: Deps) => {
   // Children whose last succeeded period held its report for background work. Process-local: after
   // a restart, recovery and background notices wake the child instead.
   const held = new Set<SessionSchema.ID>()
-
-  const started = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-    const job = yield* deps.jobs.get(sessionID)
-    if (job?.status === "running") jobPeriods.add(sessionID)
-    // A finished entry from an earlier generation must not make a re-prompt silently reconcile.
-    else jobPeriods.delete(sessionID)
-  })
-
-  const snapshot = Effect.fnUntraced(function* (sessionID: SessionSchema.ID): Effect.fn.Return<Snapshot> {
-    const remembered = jobPeriods.delete(sessionID)
-    return {
-      blocked: yield* deps.jobs.isBlocked(sessionID),
-      job: yield* deps.jobs.get(sessionID),
-      recovery: yield* deps.jobs.recovery(sessionID),
-      remembered,
-    }
-  })
+  // A child's newest answer when its busy period began, so settlement can tell a period that
+  // produced no new answer. Process-local, like held.
+  const baselines = new Map<SessionSchema.ID, SessionMessage.ID | undefined>()
 
   // The same assistant message the SubagentJob run and restart recovery read: the newest
   // completed assistant answer, whose text becomes the report body.
@@ -76,11 +64,34 @@ export const make = (deps: Deps) => {
     )
   })
 
+  const started = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+    const job = yield* deps.jobs.get(sessionID)
+    if (job?.status === "running") jobPeriods.add(sessionID)
+    // A finished entry from an earlier generation must not make a re-prompt silently reconcile.
+    else jobPeriods.delete(sessionID)
+    baselines.delete(sessionID)
+    if (!(yield* deps.store.get(sessionID))?.parentID) return
+    baselines.set(sessionID, (yield* lastAssistant(sessionID))?.id)
+  })
+
+  const snapshot = Effect.fnUntraced(function* (sessionID: SessionSchema.ID): Effect.fn.Return<Snapshot> {
+    const remembered = jobPeriods.delete(sessionID)
+    const baseline = baselines.has(sessionID) ? { id: baselines.get(sessionID) } : undefined
+    baselines.delete(sessionID)
+    return {
+      blocked: yield* deps.jobs.isBlocked(sessionID),
+      job: yield* deps.jobs.get(sessionID),
+      recovery: yield* deps.jobs.recovery(sessionID),
+      remembered,
+      baseline,
+    }
+  })
+
   const report = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, outcome: Outcome, snap: Snapshot) {
     // Shutdown keeps the claim, and restart owns the report that resumes it.
     if (outcome.type === "interrupted" && outcome.reason === "shutdown") return
     // Every settlement decides afresh; a period that holds again re-adds the child below.
-    held.delete(sessionID)
+    const owed = held.delete(sessionID)
     const child = yield* deps.store.get(sessionID)
     if (!child?.parentID) return
     const parentID = child.parentID
@@ -113,6 +124,9 @@ export const make = (deps: Deps) => {
     // compaction or a recovered notice settles that way, and a spawn that never ran reports
     // through the tool's inline error instead.
     if (status === "completed" && assistant === undefined) return
+    // A no-input wake (a silent descendant's release, or a resume) runs no model step and must not
+    // re-send an answer the parent already has.
+    if (status === "completed" && !owed && snap.baseline !== undefined && snap.baseline.id === assistant?.id) return
     const output = status === "completed" ? SubagentCompletion.text(assistant) : undefined
     const error = outcome.type === "failed" ? outcome.error.message : undefined
     const notificationID = live?.notificationID
