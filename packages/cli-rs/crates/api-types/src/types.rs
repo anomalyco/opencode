@@ -28,7 +28,7 @@ pub struct ServerInfo {
     pub capabilities: Option<ServerInfoCapabilities>,
 }
 
-/// Output of [`Client::server_info`].
+/// Output of `Client::server_info`.
 pub type ServerInfoOutput = ServerInfo;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -37,10 +37,10 @@ pub struct PairingCode {
     pub expires_in: i64,
 }
 
-/// Output of [`Client::server_pair`].
+/// Output of `Client::server_pair`.
 pub type ServerPairOutput = PairingCode;
 
-/// Input of [`Client::server_connect`].
+/// Input of `Client::server_connect`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ServerConnectInput {
     pub code: String,
@@ -51,7 +51,7 @@ pub struct PairingSession {
     pub token: String,
 }
 
-/// Output of [`Client::server_connect`].
+/// Output of `Client::server_connect`.
 pub type ServerConnectOutput = PairingSession;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -60,7 +60,7 @@ pub struct LocationQueryInput {
     pub directory: Option<String>,
 }
 
-/// Input of [`Client::location_get`].
+/// Input of `Client::location_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct LocationGetInput {
     pub location: Option<LocationQueryInput>,
@@ -149,10 +149,10 @@ pub struct LocationPublicInfo {
     pub project: LocationPublicInfoProject,
 }
 
-/// Output of [`Client::location_get`].
+/// Output of `Client::location_get`.
 pub type LocationGetOutput = LocationPublicInfo;
 
-/// Input of [`Client::agent_list`].
+/// Input of `Client::agent_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AgentListInput {
     pub location: Option<LocationQueryInput>,
@@ -650,7 +650,7 @@ pub struct AgentListOutput {
     pub data: Vec<AgentInfo>,
 }
 
-/// Input of [`Client::agent_get`].
+/// Input of `Client::agent_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AgentGetInput {
     pub agent_id: AgentID,
@@ -663,7 +663,7 @@ pub struct AgentGetOutput {
     pub data: AgentInfo,
 }
 
-/// Input of [`Client::plugin_list`].
+/// Input of `Client::plugin_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginListInput {
     pub location: Option<LocationQueryInput>,
@@ -842,7 +842,7 @@ pub struct PluginListOutput {
     pub data: Vec<PluginInfo>,
 }
 
-/// Input of [`Client::plugin_gui`].
+/// Input of `Client::plugin_gui`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginGuiInput {
     pub location: Option<LocationQueryInput>,
@@ -862,7 +862,7 @@ pub struct PluginGuiOutput {
     pub data: PluginGuiBundle,
 }
 
-/// Input of [`Client::plugin_check`].
+/// Input of `Client::plugin_check`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginCheckInput {
     pub location: Option<LocationQueryInput>,
@@ -875,7 +875,7 @@ pub struct PluginCheckOutput {
     pub data: Vec<PluginInfo>,
 }
 
-/// Input of [`Client::plugin_update`].
+/// Input of `Client::plugin_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginUpdateInput {
     pub location: Option<LocationQueryInput>,
@@ -1027,7 +1027,7 @@ impl From<&str> for SessionsCursor {
     }
 }
 
-/// Input of [`Client::session_list`].
+/// Input of `Client::session_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionListInput {
     pub limit: Option<i64>,
@@ -1360,10 +1360,10 @@ pub struct SessionsResponse {
     pub cursor: SessionsResponseCursor,
 }
 
-/// Output of [`Client::session_list`].
+/// Output of `Client::session_list`.
 pub type SessionListOutput = SessionsResponse;
 
-/// Input of [`Client::session_create`].
+/// Input of `Client::session_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionCreateInput {
     pub id: Option<Option<SessionID>>,
@@ -1376,7 +1376,7 @@ pub struct SessionCreateInput {
     pub permissions: Option<Option<PermissionRuleset>>,
 }
 
-/// Output of [`Client::session_create`].
+/// Output of `Client::session_create`.
 pub type SessionCreateOutput = SessionInfo;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1384,49 +1384,49 @@ pub struct SessionActive {
     pub r#type: String,
 }
 
-/// Output of [`Client::session_active`].
+/// Output of `Client::session_active`.
 pub type SessionActiveOutput = IndexMap<String, SessionActive>;
 
-/// Input of [`Client::session_get`].
+/// Input of `Client::session_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionGetInput {
     pub session_id: SessionID,
 }
 
-/// Output of [`Client::session_get`].
+/// Output of `Client::session_get`.
 pub type SessionGetOutput = SessionInfo;
 
-/// Input of [`Client::session_remove`].
+/// Input of `Client::session_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionRemoveInput {
     pub session_id: SessionID,
 }
 
-/// Input of [`Client::session_fork`].
+/// Input of `Client::session_fork`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionForkInput {
     pub session_id: SessionID,
     pub before: Option<SessionMessageID>,
 }
 
-/// Output of [`Client::session_fork`].
+/// Output of `Client::session_fork`.
 pub type SessionForkOutput = SessionInfo;
 
-/// Input of [`Client::session_switch_agent`].
+/// Input of `Client::session_switch_agent`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionSwitchAgentInput {
     pub session_id: SessionID,
     pub agent: AgentID,
 }
 
-/// Input of [`Client::session_switch_model`].
+/// Input of `Client::session_switch_model`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionSwitchModelInput {
     pub session_id: SessionID,
     pub model: ModelRef,
 }
 
-/// Input of [`Client::session_update`].
+/// Input of `Client::session_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionUpdateInput {
     pub session_id: SessionID,
@@ -1477,7 +1477,7 @@ impl<'de> Deserialize<'de> for SessionInboxDelivery {
     }
 }
 
-/// Input of [`Client::session_move`].
+/// Input of `Client::session_move`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionMoveInput {
     pub session_id: SessionID,
@@ -1599,7 +1599,7 @@ pub struct PromptInputSkillAttachment {
     pub mention: Option<PromptMention>,
 }
 
-/// Input of [`Client::session_prompt`].
+/// Input of `Client::session_prompt`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionPromptInput {
     pub session_id: SessionID,
@@ -1736,10 +1736,10 @@ pub struct SessionInboxUser {
     pub delivery: SessionInboxDelivery,
 }
 
-/// Output of [`Client::session_prompt`].
+/// Output of `Client::session_prompt`.
 pub type SessionPromptOutput = SessionInboxUser;
 
-/// Input of [`Client::session_command`].
+/// Input of `Client::session_command`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionCommandInput {
     pub session_id: SessionID,
@@ -1751,7 +1751,7 @@ pub struct SessionCommandInput {
     pub delivery: Option<Option<SessionInboxDelivery>>,
 }
 
-/// Input of [`Client::session_synthetic`].
+/// Input of `Client::session_synthetic`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionSyntheticInput {
     pub session_id: SessionID,
@@ -1783,10 +1783,10 @@ pub struct SessionInboxSynthetic {
     pub delivery: SessionInboxDelivery,
 }
 
-/// Output of [`Client::session_synthetic`].
+/// Output of `Client::session_synthetic`.
 pub type SessionSyntheticOutput = SessionInboxSynthetic;
 
-/// Input of [`Client::session_shell`].
+/// Input of `Client::session_shell`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionShellInput {
     pub session_id: SessionID,
@@ -1794,7 +1794,7 @@ pub struct SessionShellInput {
     pub command: String,
 }
 
-/// Input of [`Client::session_compact`].
+/// Input of `Client::session_compact`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionCompactInput {
     pub session_id: SessionID,
@@ -1816,10 +1816,10 @@ pub struct SessionInboxCompaction {
     pub delivery: SessionInboxDelivery,
 }
 
-/// Output of [`Client::session_compact`].
+/// Output of `Client::session_compact`.
 pub type SessionCompactOutput = SessionInboxCompaction;
 
-/// Input of [`Client::session_revert_stage`].
+/// Input of `Client::session_revert_stage`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionRevertStageInput {
     pub session_id: SessionID,
@@ -1827,22 +1827,22 @@ pub struct SessionRevertStageInput {
     pub files: Option<bool>,
 }
 
-/// Output of [`Client::session_revert_stage`].
+/// Output of `Client::session_revert_stage`.
 pub type SessionRevertStageOutput = SessionRevert;
 
-/// Input of [`Client::session_revert_clear`].
+/// Input of `Client::session_revert_clear`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionRevertClearInput {
     pub session_id: SessionID,
 }
 
-/// Input of [`Client::session_revert_commit`].
+/// Input of `Client::session_revert_commit`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionRevertCommitInput {
     pub session_id: SessionID,
 }
 
-/// Input of [`Client::session_context`].
+/// Input of `Client::session_context`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionContextInput {
     pub session_id: SessionID,
@@ -2599,10 +2599,10 @@ impl SessionMessageInfo {
     }
 }
 
-/// Output of [`Client::session_context`].
+/// Output of `Client::session_context`.
 pub type SessionContextOutput = Vec<SessionMessageInfo>;
 
-/// Input of [`Client::session_diff`].
+/// Input of `Client::session_diff`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionDiffInput {
     pub session_id: SessionID,
@@ -2611,10 +2611,10 @@ pub struct SessionDiffInput {
     pub context: Option<i64>,
 }
 
-/// Output of [`Client::session_diff`].
+/// Output of `Client::session_diff`.
 pub type SessionDiffOutput = Vec<FileDiffInfo>;
 
-/// Input of [`Client::session_inbox_list`].
+/// Input of `Client::session_inbox_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionInboxListInput {
     pub session_id: SessionID,
@@ -2678,17 +2678,17 @@ impl SessionInboxInfo {
     }
 }
 
-/// Output of [`Client::session_inbox_list`].
+/// Output of `Client::session_inbox_list`.
 pub type SessionInboxListOutput = Vec<SessionInboxInfo>;
 
-/// Input of [`Client::session_inbox_cancel`].
+/// Input of `Client::session_inbox_cancel`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionInboxCancelInput {
     pub session_id: SessionID,
     pub inbox_id: SessionMessageID,
 }
 
-/// Input of [`Client::session_inbox_update`].
+/// Input of `Client::session_inbox_update`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionInboxUpdateInput {
     pub session_id: SessionID,
@@ -2696,7 +2696,7 @@ pub struct SessionInboxUpdateInput {
     pub delivery: SessionInboxDelivery,
 }
 
-/// Input of [`Client::session_generate`].
+/// Input of `Client::session_generate`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionGenerateInput {
     pub session_id: SessionID,
@@ -2708,7 +2708,7 @@ pub struct SessionGenerateOutput {
     pub text: String,
 }
 
-/// Input of [`Client::session_interrupt`].
+/// Input of `Client::session_interrupt`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionInterruptInput {
     pub session_id: SessionID,
@@ -2720,26 +2720,26 @@ pub struct SessionInterruptResponse {
     pub interrupted: bool,
 }
 
-/// Output of [`Client::session_interrupt`].
+/// Output of `Client::session_interrupt`.
 pub type SessionInterruptOutput = SessionInterruptResponse;
 
-/// Input of [`Client::session_background`].
+/// Input of `Client::session_background`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionBackgroundInput {
     pub session_id: SessionID,
 }
 
-/// Input of [`Client::session_message_get`].
+/// Input of `Client::session_message_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionMessageGetInput {
     pub session_id: SessionID,
     pub message_id: SessionMessageID,
 }
 
-/// Output of [`Client::session_message_get`].
+/// Output of `Client::session_message_get`.
 pub type SessionMessageGetOutput = SessionMessageInfo;
 
-/// Input of [`Client::session_form_list`].
+/// Input of `Client::session_form_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionFormListInput {
     pub session_id: String,
@@ -3098,10 +3098,10 @@ pub struct FormInfo {
     pub fields: FormFields,
 }
 
-/// Output of [`Client::session_form_list`].
+/// Output of `Client::session_form_list`.
 pub type SessionFormListOutput = Vec<FormInfo>;
 
-/// Input of [`Client::session_form_create`].
+/// Input of `Client::session_form_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionFormCreateInput {
     pub session_id: String,
@@ -3111,10 +3111,10 @@ pub struct SessionFormCreateInput {
     pub fields: FormFields,
 }
 
-/// Output of [`Client::session_form_create`].
+/// Output of `Client::session_form_create`.
 pub type SessionFormCreateOutput = FormInfo;
 
-/// Input of [`Client::session_form_get`].
+/// Input of `Client::session_form_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionFormGetInput {
     pub session_id: String,
@@ -3220,10 +3220,10 @@ pub struct FormDetail {
     pub state: FormState,
 }
 
-/// Output of [`Client::session_form_get`].
+/// Output of `Client::session_form_get`.
 pub type SessionFormGetOutput = FormDetail;
 
-/// Input of [`Client::session_form_reply`].
+/// Input of `Client::session_form_reply`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionFormReplyInput {
     pub session_id: String,
@@ -3231,7 +3231,7 @@ pub struct SessionFormReplyInput {
     pub answer: FormAnswer,
 }
 
-/// Input of [`Client::session_form_cancel`].
+/// Input of `Client::session_form_cancel`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionFormCancelInput {
     pub session_id: String,
@@ -3239,14 +3239,14 @@ pub struct SessionFormCancelInput {
     pub message: Option<String>,
 }
 
-/// Input of [`Client::session_environment`].
+/// Input of `Client::session_environment`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionEnvironmentInput {
     pub session_id: SessionID,
     pub variables: IndexMap<String, String>,
 }
 
-/// Input of [`Client::session_view`].
+/// Input of `Client::session_view`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SessionViewInput {
     pub session_id: SessionID,
@@ -3296,7 +3296,7 @@ impl<'de> Deserialize<'de> for ExperimentalSessionStatsInputTools {
     }
 }
 
-/// Input of [`Client::experimental_session_stats`].
+/// Input of `Client::experimental_session_stats`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionStatsInput {
     pub from: Option<f64>,
@@ -3424,10 +3424,10 @@ pub struct SessionStatsInfo {
     pub models: Vec<SessionStatsModelUsage>,
 }
 
-/// Output of [`Client::experimental_session_stats`].
+/// Output of `Client::experimental_session_stats`.
 pub type ExperimentalSessionStatsOutput = SessionStatsInfo;
 
-/// Input of [`Client::experimental_session_import`].
+/// Input of `Client::experimental_session_import`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionImportInput {
     pub info: SessionInfo,
@@ -3435,10 +3435,10 @@ pub struct ExperimentalSessionImportInput {
     pub location: Option<Option<LocationPublicRef>>,
 }
 
-/// Output of [`Client::experimental_session_import`].
+/// Output of `Client::experimental_session_import`.
 pub type ExperimentalSessionImportOutput = SessionInfo;
 
-/// Input of [`Client::experimental_session_export`].
+/// Input of `Client::experimental_session_export`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionExportInput {
     pub session_id: SessionID,
@@ -3451,10 +3451,10 @@ pub struct SessionTransferData {
     pub messages: Vec<SessionMessageInfo>,
 }
 
-/// Output of [`Client::experimental_session_export`].
+/// Output of `Client::experimental_session_export`.
 pub type ExperimentalSessionExportOutput = SessionTransferData;
 
-/// Input of [`Client::experimental_session_skill`].
+/// Input of `Client::experimental_session_skill`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionSkillInput {
     pub session_id: SessionID,
@@ -3462,13 +3462,13 @@ pub struct ExperimentalSessionSkillInput {
     pub resume: Option<bool>,
 }
 
-/// Input of [`Client::experimental_session_wait`].
+/// Input of `Client::experimental_session_wait`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionWaitInput {
     pub session_id: SessionID,
 }
 
-/// Input of [`Client::experimental_session_instructions_entry_list`].
+/// Input of `Client::experimental_session_instructions_entry_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionInstructionsEntryListInput {
     pub session_id: SessionID,
@@ -3515,10 +3515,10 @@ pub struct InstructionEntryInfo {
     pub value: serde_json::Value,
 }
 
-/// Output of [`Client::experimental_session_instructions_entry_list`].
+/// Output of `Client::experimental_session_instructions_entry_list`.
 pub type ExperimentalSessionInstructionsEntryListOutput = Vec<InstructionEntryInfo>;
 
-/// Input of [`Client::experimental_session_instructions_entry_put`].
+/// Input of `Client::experimental_session_instructions_entry_put`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionInstructionsEntryPutInput {
     pub session_id: SessionID,
@@ -3526,7 +3526,7 @@ pub struct ExperimentalSessionInstructionsEntryPutInput {
     pub value: serde_json::Value,
 }
 
-/// Input of [`Client::experimental_session_instructions_entry_remove`].
+/// Input of `Client::experimental_session_instructions_entry_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionInstructionsEntryRemoveInput {
     pub session_id: SessionID,
@@ -3536,7 +3536,7 @@ pub struct ExperimentalSessionInstructionsEntryRemoveInput {
 /// `Event.Seq`
 pub type EventSeq = i64;
 
-/// Input of [`Client::experimental_session_log`].
+/// Input of `Client::experimental_session_log`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSessionLogInput {
     pub session_id: SessionID,
@@ -5246,7 +5246,7 @@ impl SessionLogItem {
     }
 }
 
-/// Output of [`Client::experimental_session_log`].
+/// Output of `Client::experimental_session_log`.
 pub type ExperimentalSessionLogOutput = SessionLogItem;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -5356,7 +5356,7 @@ impl<'de> Deserialize<'de> for MessageListInputType {
     }
 }
 
-/// Input of [`Client::message_list`].
+/// Input of `Client::message_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MessageListInput {
     pub session_id: SessionID,
@@ -5380,10 +5380,10 @@ pub struct SessionMessagesResponse {
     pub cursor: SessionMessagesResponseCursor,
 }
 
-/// Output of [`Client::message_list`].
+/// Output of `Client::message_list`.
 pub type MessageListOutput = SessionMessagesResponse;
 
-/// Input of [`Client::model_list`].
+/// Input of `Client::model_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModelListInput {
     pub location: Option<LocationQueryInput>,
@@ -5711,7 +5711,7 @@ pub struct ModelListOutput {
     pub data: Vec<ModelInfo>,
 }
 
-/// Input of [`Client::model_default`].
+/// Input of `Client::model_default`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModelDefaultInput {
     pub location: Option<LocationQueryInput>,
@@ -5724,7 +5724,7 @@ pub struct ModelDefaultOutput {
     pub data: Option<ModelInfo>,
 }
 
-/// Input of [`Client::experimental_generate_text`].
+/// Input of `Client::experimental_generate_text`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalGenerateTextInput {
     pub prompt: String,
@@ -5779,7 +5779,7 @@ impl From<&str> for GenerateImageAspect {
     }
 }
 
-/// Input of [`Client::experimental_generate_image`].
+/// Input of `Client::experimental_generate_image`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalGenerateImageInput {
     pub model: ModelRef,
@@ -5821,7 +5821,7 @@ pub struct GenerateImageResult {
     pub native: Option<GenerateNative>,
 }
 
-/// Output of [`Client::experimental_generate_image`].
+/// Output of `Client::experimental_generate_image`.
 pub type ExperimentalGenerateImageOutput = GenerateImageResult;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -5975,7 +5975,7 @@ impl GenerateDecisionQuestion {
     }
 }
 
-/// Input of [`Client::experimental_generate_decisions`].
+/// Input of `Client::experimental_generate_decisions`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalGenerateDecisionsInput {
     pub model: ModelRef,
@@ -6085,7 +6085,7 @@ pub struct GenerateDecisionResult {
     pub native: Option<GenerateNative>,
 }
 
-/// Output of [`Client::experimental_generate_decisions`].
+/// Output of `Client::experimental_generate_decisions`.
 pub type ExperimentalGenerateDecisionsOutput = GenerateDecisionResult;
 
 /// `VoiceTransportType`
@@ -6189,7 +6189,7 @@ impl VoiceTransportInput {
     }
 }
 
-/// Input of [`Client::experimental_voice_session`].
+/// Input of `Client::experimental_voice_session`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalVoiceSessionInput {
     pub model: String,
@@ -6249,7 +6249,7 @@ pub struct ExperimentalVoiceSessionOutput {
     pub transport: VoiceTransport,
 }
 
-/// Input of [`Client::provider_list`].
+/// Input of `Client::provider_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProviderListInput {
     pub location: Option<LocationQueryInput>,
@@ -6381,7 +6381,7 @@ pub struct ProviderListOutput {
     pub data: Vec<ProviderInfo>,
 }
 
-/// Input of [`Client::provider_get`].
+/// Input of `Client::provider_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProviderGetInput {
     pub provider_id: ProviderID,
@@ -6394,7 +6394,7 @@ pub struct ProviderGetOutput {
     pub data: ProviderInfo,
 }
 
-/// Input of [`Client::integration_list`].
+/// Input of `Client::integration_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationListInput {
     pub location: Option<LocationQueryInput>,
@@ -6669,7 +6669,7 @@ pub struct IntegrationListOutput {
     pub data: Vec<IntegrationInfo>,
 }
 
-/// Input of [`Client::integration_get`].
+/// Input of `Client::integration_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationGetInput {
     pub integration_id: IntegrationID,
@@ -6682,7 +6682,7 @@ pub struct IntegrationGetOutput {
     pub data: IntegrationInfo,
 }
 
-/// Input of [`Client::integration_connect_key`].
+/// Input of `Client::integration_connect_key`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationConnectKeyInput {
     pub integration_id: IntegrationID,
@@ -6692,7 +6692,7 @@ pub struct IntegrationConnectKeyInput {
     pub label: Option<String>,
 }
 
-/// Input of [`Client::integration_connect_external`].
+/// Input of `Client::integration_connect_external`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationConnectExternalInput {
     pub integration_id: IntegrationID,
@@ -6702,7 +6702,7 @@ pub struct IntegrationConnectExternalInput {
     pub label: Option<String>,
 }
 
-/// Input of [`Client::integration_oauth_connect`].
+/// Input of `Client::integration_oauth_connect`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthConnectInput {
     pub integration_id: IntegrationID,
@@ -6811,7 +6811,7 @@ pub struct IntegrationOauthConnectOutput {
     pub data: IntegrationAttempt,
 }
 
-/// Input of [`Client::integration_oauth_status`].
+/// Input of `Client::integration_oauth_status`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthStatusInput {
     pub integration_id: IntegrationID,
@@ -6888,7 +6888,7 @@ pub struct IntegrationOauthStatusOutput {
     pub data: IntegrationAttemptStatus,
 }
 
-/// Input of [`Client::integration_oauth_complete`].
+/// Input of `Client::integration_oauth_complete`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthCompleteInput {
     pub integration_id: IntegrationID,
@@ -6897,7 +6897,7 @@ pub struct IntegrationOauthCompleteInput {
     pub code: Option<String>,
 }
 
-/// Input of [`Client::integration_oauth_cancel`].
+/// Input of `Client::integration_oauth_cancel`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationOauthCancelInput {
     pub integration_id: IntegrationID,
@@ -6905,7 +6905,7 @@ pub struct IntegrationOauthCancelInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::integration_command_connect`].
+/// Input of `Client::integration_command_connect`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationCommandConnectInput {
     pub integration_id: IntegrationID,
@@ -6927,7 +6927,7 @@ pub struct IntegrationCommandConnectOutput {
     pub data: IntegrationCommandAttempt,
 }
 
-/// Input of [`Client::integration_command_status`].
+/// Input of `Client::integration_command_status`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationCommandStatusInput {
     pub integration_id: IntegrationID,
@@ -7012,7 +7012,7 @@ pub struct IntegrationCommandStatusOutput {
     pub data: IntegrationCommandAttemptStatus,
 }
 
-/// Input of [`Client::integration_command_cancel`].
+/// Input of `Client::integration_command_cancel`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntegrationCommandCancelInput {
     pub integration_id: IntegrationID,
@@ -7020,14 +7020,14 @@ pub struct IntegrationCommandCancelInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::experimental_integration_wellknown_add`].
+/// Input of `Client::experimental_integration_wellknown_add`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalIntegrationWellknownAddInput {
     pub location: Option<LocationQueryInput>,
     pub url: String,
 }
 
-/// Input of [`Client::mcp_list`].
+/// Input of `Client::mcp_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct McpListInput {
     pub location: Option<LocationQueryInput>,
@@ -7116,7 +7116,7 @@ pub struct McpListOutput {
     pub data: Vec<McpServer>,
 }
 
-/// Input of [`Client::mcp_resource_catalog`].
+/// Input of `Client::mcp_resource_catalog`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct McpResourceCatalogInput {
     pub location: Option<LocationQueryInput>,
@@ -7316,7 +7316,7 @@ impl ExperimentalMcpAddInputConfig {
     }
 }
 
-/// Input of [`Client::experimental_mcp_add`].
+/// Input of `Client::experimental_mcp_add`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalMcpAddInput {
     pub server: String,
@@ -7324,28 +7324,28 @@ pub struct ExperimentalMcpAddInput {
     pub config: ExperimentalMcpAddInputConfig,
 }
 
-/// Input of [`Client::experimental_mcp_remove`].
+/// Input of `Client::experimental_mcp_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpRemoveInput {
     pub server: String,
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::experimental_mcp_connect`].
+/// Input of `Client::experimental_mcp_connect`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpConnectInput {
     pub server: String,
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::experimental_mcp_disconnect`].
+/// Input of `Client::experimental_mcp_disconnect`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpDisconnectInput {
     pub server: String,
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::experimental_mcp_client_token`].
+/// Input of `Client::experimental_mcp_client_token`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMcpClientTokenInput {
     pub location: Option<LocationQueryInput>,
@@ -7439,10 +7439,10 @@ pub struct CredentialEntry {
     pub value: CredentialValue,
 }
 
-/// Output of [`Client::credential_list`].
+/// Output of `Client::credential_list`.
 pub type CredentialListOutput = Vec<CredentialEntry>;
 
-/// Input of [`Client::credential_create`].
+/// Input of `Client::credential_create`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CredentialCreateInput {
     pub id: Option<CredentialID>,
@@ -7452,29 +7452,29 @@ pub struct CredentialCreateInput {
     pub activate: Option<bool>,
 }
 
-/// Output of [`Client::credential_create`].
+/// Output of `Client::credential_create`.
 pub type CredentialCreateOutput = CredentialEntry;
 
-/// Input of [`Client::credential_update`].
+/// Input of `Client::credential_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CredentialUpdateInput {
     pub credential_id: CredentialID,
     pub label: String,
 }
 
-/// Input of [`Client::credential_activate`].
+/// Input of `Client::credential_activate`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CredentialActivateInput {
     pub credential_id: CredentialID,
 }
 
-/// Input of [`Client::credential_remove`].
+/// Input of `Client::credential_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CredentialRemoveInput {
     pub credential_id: CredentialID,
 }
 
-/// Input of [`Client::project_list`].
+/// Input of `Client::project_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProjectListInput {
     pub archived: Option<bool>,
@@ -7556,10 +7556,10 @@ pub struct Project {
     pub sandboxes: Vec<String>,
 }
 
-/// Output of [`Client::project_list`].
+/// Output of `Client::project_list`.
 pub type ProjectListOutput = Vec<Project>;
 
-/// Input of [`Client::project_update`].
+/// Input of `Client::project_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ProjectUpdateInput {
     pub project_id: ProjectID,
@@ -7569,10 +7569,10 @@ pub struct ProjectUpdateInput {
     pub commands: Option<ProjectCommands>,
 }
 
-/// Output of [`Client::project_update`].
+/// Output of `Client::project_update`.
 pub type ProjectUpdateOutput = Project;
 
-/// Input of [`Client::form_list`].
+/// Input of `Client::form_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FormListInput {
     pub location: Option<LocationQueryInput>,
@@ -7584,7 +7584,7 @@ pub struct FormListOutput {
     pub data: Vec<FormInfo>,
 }
 
-/// Input of [`Client::permission_request_list`].
+/// Input of `Client::permission_request_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionRequestListInput {
     pub location: Option<LocationQueryInput>,
@@ -7656,7 +7656,7 @@ pub struct PermissionRequestListOutput {
     pub data: Vec<PermissionRequest>,
 }
 
-/// Input of [`Client::permission_saved_list`].
+/// Input of `Client::permission_saved_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionSavedListInput {
     pub project_id: Option<ProjectID>,
@@ -7715,10 +7715,10 @@ pub struct PermissionSavedInfo {
     pub time: PermissionSavedInfoTime,
 }
 
-/// Output of [`Client::permission_saved_list`].
+/// Output of `Client::permission_saved_list`.
 pub type PermissionSavedListOutput = Vec<PermissionSavedInfo>;
 
-/// Input of [`Client::permission_saved_update`].
+/// Input of `Client::permission_saved_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionSavedUpdateInput {
     pub id: PermissionSavedID,
@@ -7726,16 +7726,16 @@ pub struct PermissionSavedUpdateInput {
     pub resource: Option<String>,
 }
 
-/// Output of [`Client::permission_saved_update`].
+/// Output of `Client::permission_saved_update`.
 pub type PermissionSavedUpdateOutput = PermissionSavedInfo;
 
-/// Input of [`Client::permission_saved_remove`].
+/// Input of `Client::permission_saved_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionSavedRemoveInput {
     pub id: PermissionSavedID,
 }
 
-/// Input of [`Client::permission_create`].
+/// Input of `Client::permission_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionCreateInput {
     pub session_id: SessionID,
@@ -7754,23 +7754,23 @@ pub struct PermissionCreateOutput {
     pub effect: PermissionEffect,
 }
 
-/// Input of [`Client::permission_list`].
+/// Input of `Client::permission_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionListInput {
     pub session_id: SessionID,
 }
 
-/// Output of [`Client::permission_list`].
+/// Output of `Client::permission_list`.
 pub type PermissionListOutput = Vec<PermissionRequest>;
 
-/// Input of [`Client::permission_get`].
+/// Input of `Client::permission_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PermissionGetInput {
     pub session_id: SessionID,
     pub request_id: PermissionID,
 }
 
-/// Output of [`Client::permission_get`].
+/// Output of `Client::permission_get`.
 pub type PermissionGetOutput = PermissionRequest;
 
 /// `Permission.Reply`
@@ -7817,7 +7817,7 @@ impl<'de> Deserialize<'de> for PermissionReply {
     }
 }
 
-/// Input of [`Client::permission_reply`].
+/// Input of `Client::permission_reply`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PermissionReplyInput {
     pub session_id: SessionID,
@@ -7826,14 +7826,14 @@ pub struct PermissionReplyInput {
     pub message: Option<String>,
 }
 
-/// Input of [`Client::file_read`].
+/// Input of `Client::file_read`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileReadInput {
     pub location: Option<LocationQueryInput>,
     pub path: String,
 }
 
-/// Input of [`Client::file_list`].
+/// Input of `Client::file_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileListInput {
     pub location: Option<LocationQueryInput>,
@@ -7892,7 +7892,7 @@ pub struct FileListOutput {
     pub data: Vec<FileSystemEntry>,
 }
 
-/// Input of [`Client::file_find`].
+/// Input of `Client::file_find`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileFindInput {
     pub location: Option<LocationQueryInput>,
@@ -7907,7 +7907,7 @@ pub struct FileFindOutput {
     pub data: Vec<FileSystemEntry>,
 }
 
-/// Input of [`Client::experimental_file_write`].
+/// Input of `Client::experimental_file_write`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFileWriteInput {
     pub location: Option<LocationQueryInput>,
@@ -7926,21 +7926,21 @@ pub struct ExperimentalFileWriteOutput {
     pub data: FileSystemWrite,
 }
 
-/// Input of [`Client::experimental_file_watch`].
+/// Input of `Client::experimental_file_watch`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFileWatchInput {
     pub location: Option<LocationQueryInput>,
     pub path: String,
 }
 
-/// Input of [`Client::experimental_file_unwatch`].
+/// Input of `Client::experimental_file_unwatch`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalFileUnwatchInput {
     pub location: Option<LocationQueryInput>,
     pub path: String,
 }
 
-/// Input of [`Client::command_list`].
+/// Input of `Client::command_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CommandListInput {
     pub location: Option<LocationQueryInput>,
@@ -7959,7 +7959,7 @@ pub struct CommandListOutput {
     pub data: Vec<CommandInfo>,
 }
 
-/// Input of [`Client::skill_list`].
+/// Input of `Client::skill_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SkillListInput {
     pub location: Option<LocationQueryInput>,
@@ -7983,7 +7983,7 @@ pub struct SkillListOutput {
     pub data: Vec<SkillInfo>,
 }
 
-/// Input of [`Client::rpc_call`].
+/// Input of `Client::rpc_call`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RpcCallInput {
     pub rpc_id: String,
@@ -7998,10 +7998,10 @@ pub struct RpcOutput {
     pub output: Option<serde_json::Value>,
 }
 
-/// Output of [`Client::rpc_call`].
+/// Output of `Client::rpc_call`.
 pub type RpcCallOutput = RpcOutput;
 
-/// Input of [`Client::event_subscribe`].
+/// Input of `Client::event_subscribe`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventSubscribeInput {
     pub types: Option<Vec<String>>,
@@ -9566,10 +9566,10 @@ impl V2Event {
     }
 }
 
-/// Output of [`Client::event_subscribe`].
+/// Output of `Client::event_subscribe`.
 pub type EventSubscribeOutput = V2Event;
 
-/// Input of [`Client::pty_list`].
+/// Input of `Client::pty_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyListInput {
     pub location: Option<LocationQueryInput>,
@@ -9581,7 +9581,7 @@ pub struct PtyListOutput {
     pub data: Vec<Pty>,
 }
 
-/// Input of [`Client::pty_create`].
+/// Input of `Client::pty_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyCreateInput {
     pub location: Option<LocationQueryInput>,
@@ -9598,7 +9598,7 @@ pub struct PtyCreateOutput {
     pub data: Pty,
 }
 
-/// Input of [`Client::pty_get`].
+/// Input of `Client::pty_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyGetInput {
     pub pty_id: PtyID,
@@ -9617,7 +9617,7 @@ pub struct PtyUpdateInputSize {
     pub cols: i64,
 }
 
-/// Input of [`Client::pty_update`].
+/// Input of `Client::pty_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyUpdateInput {
     pub pty_id: PtyID,
@@ -9632,14 +9632,14 @@ pub struct PtyUpdateOutput {
     pub data: Pty,
 }
 
-/// Input of [`Client::pty_remove`].
+/// Input of `Client::pty_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyRemoveInput {
     pub pty_id: PtyID,
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::pty_connect_token`].
+/// Input of `Client::pty_connect_token`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PtyConnectTokenInput {
     pub pty_id: PtyID,
@@ -9656,7 +9656,7 @@ pub struct PtyConnectTokenOutput {
 /// `PersistentPty.ReadLines`
 pub type PersistentPtyReadLines = i64;
 
-/// Input of [`Client::experimental_persistent_pty_read`].
+/// Input of `Client::experimental_persistent_pty_read`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyReadInput {
     pub session_id: SessionID,
@@ -9688,19 +9688,19 @@ pub struct PersistentPtyReadResult {
     pub screen: PersistentPtyReadResultScreen,
 }
 
-/// Output of [`Client::experimental_persistent_pty_read`].
+/// Output of `Client::experimental_persistent_pty_read`.
 pub type ExperimentalPersistentPtyReadOutput = Option<PersistentPtyReadResult>;
 
-/// Input of [`Client::experimental_persistent_pty_list`].
+/// Input of `Client::experimental_persistent_pty_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyListInput {
     pub session_id: SessionID,
 }
 
-/// Output of [`Client::experimental_persistent_pty_list`].
+/// Output of `Client::experimental_persistent_pty_list`.
 pub type ExperimentalPersistentPtyListOutput = Vec<PersistentPtyInfo>;
 
-/// Input of [`Client::experimental_persistent_pty_create`].
+/// Input of `Client::experimental_persistent_pty_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyCreateInput {
     pub session_id: SessionID,
@@ -9712,7 +9712,7 @@ pub struct ExperimentalPersistentPtyCreateInput {
     pub size: Option<PersistentPtyInfoSize>,
 }
 
-/// Output of [`Client::experimental_persistent_pty_create`].
+/// Output of `Client::experimental_persistent_pty_create`.
 pub type ExperimentalPersistentPtyCreateOutput = PersistentPtyInfo;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9731,16 +9731,16 @@ pub struct ExperimentalPersistentPtyHandoffOutput {
     pub handoff: Option<PersistentPtyHandoff>,
 }
 
-/// Input of [`Client::experimental_persistent_pty_get`].
+/// Input of `Client::experimental_persistent_pty_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyGetInput {
     pub pty_id: PtyID,
 }
 
-/// Output of [`Client::experimental_persistent_pty_get`].
+/// Output of `Client::experimental_persistent_pty_get`.
 pub type ExperimentalPersistentPtyGetOutput = PersistentPtyInfo;
 
-/// Input of [`Client::experimental_persistent_pty_update`].
+/// Input of `Client::experimental_persistent_pty_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyUpdateInput {
     pub pty_id: PtyID,
@@ -9749,10 +9749,10 @@ pub struct ExperimentalPersistentPtyUpdateInput {
     pub title: Option<Option<String>>,
 }
 
-/// Output of [`Client::experimental_persistent_pty_update`].
+/// Output of `Client::experimental_persistent_pty_update`.
 pub type ExperimentalPersistentPtyUpdateOutput = PersistentPtyInfo;
 
-/// Input of [`Client::experimental_persistent_pty_snapshot`].
+/// Input of `Client::experimental_persistent_pty_snapshot`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtySnapshotInput {
     pub pty_id: PtyID,
@@ -9766,23 +9766,23 @@ pub struct PersistentPtySnapshot {
     pub cursor: PersistentPtyReadResultScreenCursor,
 }
 
-/// Output of [`Client::experimental_persistent_pty_snapshot`].
+/// Output of `Client::experimental_persistent_pty_snapshot`.
 pub type ExperimentalPersistentPtySnapshotOutput = PersistentPtySnapshot;
 
-/// Input of [`Client::experimental_persistent_pty_remove`].
+/// Input of `Client::experimental_persistent_pty_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyRemoveInput {
     pub pty_id: PtyID,
 }
 
-/// Input of [`Client::experimental_persistent_pty_connect_token`].
+/// Input of `Client::experimental_persistent_pty_connect_token`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPersistentPtyConnectTokenInput {
     pub pty_id: PtyID,
     pub x_opencode_ticket: Option<String>,
 }
 
-/// Output of [`Client::experimental_persistent_pty_connect_token`].
+/// Output of `Client::experimental_persistent_pty_connect_token`.
 pub type ExperimentalPersistentPtyConnectTokenOutput = PtyTicketConnectToken;
 
 /// `MediaHash`
@@ -9820,7 +9820,7 @@ impl From<&str> for MediaHash {
     }
 }
 
-/// Input of [`Client::experimental_media_get`].
+/// Input of `Client::experimental_media_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMediaGetInput {
     pub hash: MediaHash,
@@ -9969,7 +9969,7 @@ pub struct ScheduleEnds {
     pub times: Option<i64>,
 }
 
-/// Input of [`Client::experimental_schedule_create`].
+/// Input of `Client::experimental_schedule_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalScheduleCreateInput {
     pub session_id: SessionID,
@@ -10289,52 +10289,52 @@ pub struct ScheduleInfo {
     pub time: PermissionSavedInfoTime,
 }
 
-/// Output of [`Client::experimental_schedule_create`].
+/// Output of `Client::experimental_schedule_create`.
 pub type ExperimentalScheduleCreateOutput = ScheduleInfo;
 
-/// Input of [`Client::experimental_schedule_list`].
+/// Input of `Client::experimental_schedule_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalScheduleListInput {
     pub session_id: SessionID,
 }
 
-/// Output of [`Client::experimental_schedule_list`].
+/// Output of `Client::experimental_schedule_list`.
 pub type ExperimentalScheduleListOutput = Vec<ScheduleInfo>;
 
-/// Input of [`Client::experimental_schedule_get`].
+/// Input of `Client::experimental_schedule_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalScheduleGetInput {
     pub schedule_id: ScheduleID,
 }
 
-/// Output of [`Client::experimental_schedule_get`].
+/// Output of `Client::experimental_schedule_get`.
 pub type ExperimentalScheduleGetOutput = ScheduleInfo;
 
-/// Input of [`Client::experimental_schedule_pause`].
+/// Input of `Client::experimental_schedule_pause`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalSchedulePauseInput {
     pub schedule_id: ScheduleID,
 }
 
-/// Output of [`Client::experimental_schedule_pause`].
+/// Output of `Client::experimental_schedule_pause`.
 pub type ExperimentalSchedulePauseOutput = ScheduleInfo;
 
-/// Input of [`Client::experimental_schedule_resume`].
+/// Input of `Client::experimental_schedule_resume`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalScheduleResumeInput {
     pub schedule_id: ScheduleID,
 }
 
-/// Output of [`Client::experimental_schedule_resume`].
+/// Output of `Client::experimental_schedule_resume`.
 pub type ExperimentalScheduleResumeOutput = ScheduleInfo;
 
-/// Input of [`Client::experimental_schedule_delete`].
+/// Input of `Client::experimental_schedule_delete`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalScheduleDeleteInput {
     pub schedule_id: ScheduleID,
 }
 
-/// Input of [`Client::experimental_artifacts_providers`].
+/// Input of `Client::experimental_artifacts_providers`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsProvidersInput {
     pub location: Option<LocationQueryInput>,
@@ -10436,7 +10436,7 @@ impl From<&str> for ArtifactProviderID {
     }
 }
 
-/// Input of [`Client::experimental_artifacts_list`].
+/// Input of `Client::experimental_artifacts_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsListInput {
     pub location: Option<LocationQueryInput>,
@@ -10505,7 +10505,7 @@ pub struct ExperimentalArtifactsListOutput {
     pub data: Vec<ArtifactInfo>,
 }
 
-/// Input of [`Client::experimental_artifacts_create`].
+/// Input of `Client::experimental_artifacts_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsCreateInput {
     pub location: Option<LocationQueryInput>,
@@ -10522,7 +10522,7 @@ pub struct ExperimentalArtifactsCreateOutput {
     pub data: ArtifactInfo,
 }
 
-/// Input of [`Client::experimental_artifacts_get`].
+/// Input of `Client::experimental_artifacts_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsGetInput {
     pub artifact_id: ArtifactID,
@@ -10541,7 +10541,7 @@ pub struct ExperimentalArtifactsGetOutput {
     pub data: ArtifactContent,
 }
 
-/// Input of [`Client::experimental_artifacts_update`].
+/// Input of `Client::experimental_artifacts_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsUpdateInput {
     pub artifact_id: ArtifactID,
@@ -10558,14 +10558,14 @@ pub struct ExperimentalArtifactsUpdateOutput {
     pub data: ArtifactInfo,
 }
 
-/// Input of [`Client::experimental_artifacts_delete`].
+/// Input of `Client::experimental_artifacts_delete`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsDeleteInput {
     pub artifact_id: ArtifactID,
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::experimental_artifacts_view`].
+/// Input of `Client::experimental_artifacts_view`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalArtifactsViewInput {
     pub artifact_id: ArtifactID,
@@ -10664,7 +10664,7 @@ impl<'de> Deserialize<'de> for JobStatus {
     }
 }
 
-/// Input of [`Client::experimental_job_list`].
+/// Input of `Client::experimental_job_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalJobListInput {
     pub session_id: Option<SessionID>,
@@ -10761,10 +10761,10 @@ impl JobInfo {
     }
 }
 
-/// Output of [`Client::experimental_job_list`].
+/// Output of `Client::experimental_job_list`.
 pub type ExperimentalJobListOutput = Vec<JobInfo>;
 
-/// Input of [`Client::shell_list`].
+/// Input of `Client::shell_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellListInput {
     pub location: Option<LocationQueryInput>,
@@ -10776,7 +10776,7 @@ pub struct ShellListOutput {
     pub data: Vec<ShellInfo>,
 }
 
-/// Input of [`Client::shell_create`].
+/// Input of `Client::shell_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellCreateInput {
     pub location: Option<LocationQueryInput>,
@@ -10792,7 +10792,7 @@ pub struct ShellCreateOutput {
     pub data: ShellInfo,
 }
 
-/// Input of [`Client::shell_get`].
+/// Input of `Client::shell_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellGetInput {
     pub id: ShellID,
@@ -10805,7 +10805,7 @@ pub struct ShellGetOutput {
     pub data: ShellInfo,
 }
 
-/// Input of [`Client::shell_output`].
+/// Input of `Client::shell_output`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellOutputInput {
     pub id: ShellID,
@@ -10820,14 +10820,14 @@ pub struct ShellOutputOutput {
     pub data: SessionMessageShellOutput,
 }
 
-/// Input of [`Client::shell_remove`].
+/// Input of `Client::shell_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellRemoveInput {
     pub id: ShellID,
     pub location: Option<LocationQueryInput>,
 }
 
-/// Input of [`Client::reference_list`].
+/// Input of `Client::reference_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ReferenceListInput {
     pub location: Option<LocationQueryInput>,
@@ -10896,7 +10896,7 @@ pub struct ReferenceListOutput {
     pub data: Vec<ReferenceInfo>,
 }
 
-/// Input of [`Client::worktree_list`].
+/// Input of `Client::worktree_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WorktreeListInput {
     pub project_id: ProjectID,
@@ -10912,10 +10912,10 @@ pub struct WorktreeDirectory {
 /// `Worktree.List`
 pub type WorktreeList = Vec<WorktreeDirectory>;
 
-/// Output of [`Client::worktree_list`].
+/// Output of `Client::worktree_list`.
 pub type WorktreeListOutput = WorktreeList;
 
-/// Input of [`Client::worktree_create`].
+/// Input of `Client::worktree_create`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WorktreeCreateInput {
     pub project_id: ProjectID,
@@ -10930,10 +10930,10 @@ pub struct WorktreeInfo {
     pub directory: AbsolutePath,
 }
 
-/// Output of [`Client::worktree_create`].
+/// Output of `Client::worktree_create`.
 pub type WorktreeCreateOutput = WorktreeInfo;
 
-/// Input of [`Client::worktree_remove`].
+/// Input of `Client::worktree_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WorktreeRemoveInput {
     pub project_id: ProjectID,
@@ -10941,20 +10941,20 @@ pub struct WorktreeRemoveInput {
     pub force: bool,
 }
 
-/// Input of [`Client::worktree_refresh`].
+/// Input of `Client::worktree_refresh`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WorktreeRefreshInput {
     pub project_id: ProjectID,
 }
 
-/// Input of [`Client::vcs_init`].
+/// Input of `Client::vcs_init`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsInitInput {
     pub location: Option<LocationQueryInput>,
     pub provider: Option<String>,
 }
 
-/// Input of [`Client::vcs_get`].
+/// Input of `Client::vcs_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsGetInput {
     pub location: Option<LocationQueryInput>,
@@ -10981,7 +10981,7 @@ pub struct VcsGetOutput {
     pub data: VcsInfo,
 }
 
-/// Input of [`Client::vcs_base`].
+/// Input of `Client::vcs_base`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsBaseInput {
     pub location: Option<LocationQueryInput>,
@@ -11041,7 +11041,7 @@ pub struct VcsBaseOutput {
     pub data: Option<VcsBase>,
 }
 
-/// Input of [`Client::vcs_status`].
+/// Input of `Client::vcs_status`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsStatusInput {
     pub location: Option<LocationQueryInput>,
@@ -11061,7 +11061,7 @@ pub struct VcsStatusOutput {
     pub data: Vec<VcsFileStatus>,
 }
 
-/// Input of [`Client::vcs_branch_list`].
+/// Input of `Client::vcs_branch_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VcsBranchListInput {
     pub location: Option<LocationQueryInput>,
@@ -11163,7 +11163,7 @@ impl<'de> Deserialize<'de> for VcsUntracked {
     }
 }
 
-/// Input of [`Client::vcs_diff`].
+/// Input of `Client::vcs_diff`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VcsDiffInput {
     pub location: Option<LocationQueryInput>,
@@ -11179,7 +11179,7 @@ pub struct VcsDiffOutput {
     pub data: Vec<FileDiffInfo>,
 }
 
-/// Input of [`Client::debug_heap_dump`].
+/// Input of `Client::debug_heap_dump`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DebugHeapDumpInput {
     pub directory: Option<String>,
@@ -11206,10 +11206,10 @@ pub struct DebugHeapDumpOutput {
     pub memory: DebugHeapDumpOutputMemory,
 }
 
-/// Output of [`Client::debug_location_list`].
+/// Output of `Client::debug_location_list`.
 pub type DebugLocationListOutput = Vec<LocationPublicRef>;
 
-/// Input of [`Client::debug_location_evict`].
+/// Input of `Client::debug_location_evict`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DebugLocationEvictInput {
     pub location: Option<LocationQueryInput>,
@@ -11315,10 +11315,10 @@ impl ExperimentalMigrationV1StatusOutput2 {
     }
 }
 
-/// Output of [`Client::experimental_migration_v1_status`].
+/// Output of `Client::experimental_migration_v1_status`.
 pub type ExperimentalMigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput2;
 
-/// Input of [`Client::websearch_providers`].
+/// Input of `Client::websearch_providers`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WebsearchProvidersInput {
     pub location: Option<LocationQueryInput>,
@@ -11371,7 +11371,7 @@ pub struct WebsearchProvidersOutput {
     pub data: Vec<WebSearchProvider>,
 }
 
-/// Input of [`Client::websearch_query`].
+/// Input of `Client::websearch_query`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WebsearchQueryInput {
     pub location: Option<LocationQueryInput>,
@@ -11408,7 +11408,7 @@ pub struct WebsearchQueryOutput {
     pub data: WebsearchQueryOutputData,
 }
 
-/// Input of [`Client::experimental_usage_limits`].
+/// Input of `Client::experimental_usage_limits`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalUsageLimitsInput {
     pub location: Option<LocationQueryInput>,
@@ -11610,7 +11610,7 @@ pub struct ExperimentalUsageLimitsOutput {
     pub data: Option<UsageLimitsInfo>,
 }
 
-/// Input of [`Client::config_get`].
+/// Input of `Client::config_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ConfigGetInput {
     pub location: Option<LocationQueryInput>,
@@ -12623,7 +12623,7 @@ impl ConfigEntry {
     }
 }
 
-/// Output of [`Client::config_get`].
+/// Output of `Client::config_get`.
 pub type ConfigGetOutput = Vec<ConfigEntry>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12633,10 +12633,10 @@ pub struct ConfigShellOption {
     pub acceptable: bool,
 }
 
-/// Output of [`Client::config_shells`].
+/// Output of `Client::config_shells`.
 pub type ConfigShellsOutput = Vec<ConfigShellOption>;
 
-/// Input of [`Client::experimental_config_update`].
+/// Input of `Client::experimental_config_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalConfigUpdateInput {
     pub shell: Option<String>,
@@ -12653,7 +12653,7 @@ pub struct InvalidRequestError {
     pub field: Option<String>,
 }
 
-impl crate::error::TaggedError for InvalidRequestError {
+impl crate::TaggedError for InvalidRequestError {
     const TAG: &'static str = "InvalidRequestError";
 }
 
@@ -12664,7 +12664,7 @@ pub struct UnauthorizedError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for UnauthorizedError {
+impl crate::TaggedError for UnauthorizedError {
     const TAG: &'static str = "UnauthorizedError";
 }
 
@@ -12676,7 +12676,7 @@ pub struct LocationNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for LocationNotFoundError {
+impl crate::TaggedError for LocationNotFoundError {
     const TAG: &'static str = "LocationNotFoundError";
 }
 
@@ -12689,7 +12689,7 @@ pub struct ServiceUnavailableError {
     pub service: Option<String>,
 }
 
-impl crate::error::TaggedError for ServiceUnavailableError {
+impl crate::TaggedError for ServiceUnavailableError {
     const TAG: &'static str = "ServiceUnavailableError";
 }
 
@@ -12702,7 +12702,7 @@ pub struct AgentNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for AgentNotFoundError {
+impl crate::TaggedError for AgentNotFoundError {
     const TAG: &'static str = "AgentNotFoundError";
 }
 
@@ -12715,7 +12715,7 @@ pub struct PluginNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for PluginNotFoundError {
+impl crate::TaggedError for PluginNotFoundError {
     const TAG: &'static str = "PluginNotFoundError";
 }
 
@@ -12726,7 +12726,7 @@ pub struct InvalidCursorError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for InvalidCursorError {
+impl crate::TaggedError for InvalidCursorError {
     const TAG: &'static str = "InvalidCursorError";
 }
 
@@ -12739,7 +12739,7 @@ pub struct SessionNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for SessionNotFoundError {
+impl crate::TaggedError for SessionNotFoundError {
     const TAG: &'static str = "SessionNotFoundError";
 }
 
@@ -12754,7 +12754,7 @@ pub struct MessageNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for MessageNotFoundError {
+impl crate::TaggedError for MessageNotFoundError {
     const TAG: &'static str = "MessageNotFoundError";
 }
 
@@ -12767,7 +12767,7 @@ pub struct ConflictError {
     pub resource: Option<String>,
 }
 
-impl crate::error::TaggedError for ConflictError {
+impl crate::TaggedError for ConflictError {
     const TAG: &'static str = "ConflictError";
 }
 
@@ -12779,7 +12779,7 @@ pub struct CommandNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for CommandNotFoundError {
+impl crate::TaggedError for CommandNotFoundError {
     const TAG: &'static str = "CommandNotFoundError";
 }
 
@@ -12791,7 +12791,7 @@ pub struct CommandExecutionError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for CommandExecutionError {
+impl crate::TaggedError for CommandExecutionError {
     const TAG: &'static str = "CommandExecutionError";
 }
 
@@ -12804,7 +12804,7 @@ pub struct SessionBusyError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for SessionBusyError {
+impl crate::TaggedError for SessionBusyError {
     const TAG: &'static str = "SessionBusyError";
 }
 
@@ -12817,7 +12817,7 @@ pub struct UnknownError {
     pub r#ref: Option<String>,
 }
 
-impl crate::error::TaggedError for UnknownError {
+impl crate::TaggedError for UnknownError {
     const TAG: &'static str = "UnknownError";
 }
 
@@ -12829,7 +12829,7 @@ pub struct FormNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for FormNotFoundError {
+impl crate::TaggedError for FormNotFoundError {
     const TAG: &'static str = "FormNotFoundError";
 }
 
@@ -12841,7 +12841,7 @@ pub struct FormInvalidAnswerError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for FormInvalidAnswerError {
+impl crate::TaggedError for FormInvalidAnswerError {
     const TAG: &'static str = "FormInvalidAnswerError";
 }
 
@@ -12853,7 +12853,7 @@ pub struct FormAlreadySettledError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for FormAlreadySettledError {
+impl crate::TaggedError for FormAlreadySettledError {
     const TAG: &'static str = "FormAlreadySettledError";
 }
 
@@ -12865,7 +12865,7 @@ pub struct SkillNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for SkillNotFoundError {
+impl crate::TaggedError for SkillNotFoundError {
     const TAG: &'static str = "SkillNotFoundError";
 }
 
@@ -12880,7 +12880,7 @@ pub struct InstructionEntryValueTooLargeError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for InstructionEntryValueTooLargeError {
+impl crate::TaggedError for InstructionEntryValueTooLargeError {
     const TAG: &'static str = "InstructionEntryValueTooLargeError";
 }
 
@@ -12893,7 +12893,7 @@ pub struct ProviderNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ProviderNotFoundError {
+impl crate::TaggedError for ProviderNotFoundError {
     const TAG: &'static str = "ProviderNotFoundError";
 }
 
@@ -12908,7 +12908,7 @@ pub struct ModelNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ModelNotFoundError {
+impl crate::TaggedError for ModelNotFoundError {
     const TAG: &'static str = "ModelNotFoundError";
 }
 
@@ -12924,7 +12924,7 @@ pub struct UnsupportedModelError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for UnsupportedModelError {
+impl crate::TaggedError for UnsupportedModelError {
     const TAG: &'static str = "UnsupportedModelError";
 }
 
@@ -12994,7 +12994,7 @@ pub struct ProviderRequestError {
     pub retry_after_ms: Option<i64>,
 }
 
-impl crate::error::TaggedError for ProviderRequestError {
+impl crate::TaggedError for ProviderRequestError {
     const TAG: &'static str = "ProviderRequestError";
 }
 
@@ -13007,7 +13007,7 @@ pub struct IntegrationNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for IntegrationNotFoundError {
+impl crate::TaggedError for IntegrationNotFoundError {
     const TAG: &'static str = "IntegrationNotFoundError";
 }
 
@@ -13022,7 +13022,7 @@ pub struct IntegrationAttemptNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for IntegrationAttemptNotFoundError {
+impl crate::TaggedError for IntegrationAttemptNotFoundError {
     const TAG: &'static str = "IntegrationAttemptNotFoundError";
 }
 
@@ -13037,7 +13037,7 @@ pub struct IntegrationMethodNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for IntegrationMethodNotFoundError {
+impl crate::TaggedError for IntegrationMethodNotFoundError {
     const TAG: &'static str = "IntegrationMethodNotFoundError";
 }
 
@@ -13049,7 +13049,7 @@ pub struct McpServerNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for McpServerNotFoundError {
+impl crate::TaggedError for McpServerNotFoundError {
     const TAG: &'static str = "McpServerNotFoundError";
 }
 
@@ -13060,7 +13060,7 @@ pub struct ForbiddenError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ForbiddenError {
+impl crate::TaggedError for ForbiddenError {
     const TAG: &'static str = "ForbiddenError";
 }
 
@@ -13073,7 +13073,7 @@ pub struct ProjectNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ProjectNotFoundError {
+impl crate::TaggedError for ProjectNotFoundError {
     const TAG: &'static str = "ProjectNotFoundError";
 }
 
@@ -13085,7 +13085,7 @@ pub struct PermissionSavedNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for PermissionSavedNotFoundError {
+impl crate::TaggedError for PermissionSavedNotFoundError {
     const TAG: &'static str = "PermissionSavedNotFoundError";
 }
 
@@ -13098,7 +13098,7 @@ pub struct PermissionNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for PermissionNotFoundError {
+impl crate::TaggedError for PermissionNotFoundError {
     const TAG: &'static str = "PermissionNotFoundError";
 }
 
@@ -13110,7 +13110,7 @@ pub struct FileNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for FileNotFoundError {
+impl crate::TaggedError for FileNotFoundError {
     const TAG: &'static str = "FileNotFoundError";
 }
 
@@ -13124,7 +13124,7 @@ pub struct RpcError {
     pub data: Option<serde_json::Value>,
 }
 
-impl crate::error::TaggedError for RpcError {
+impl crate::TaggedError for RpcError {
     const TAG: &'static str = "RpcError";
 }
 
@@ -13178,7 +13178,7 @@ pub struct RpcInternalError {
     pub data: Option<serde_json::Value>,
 }
 
-impl crate::error::TaggedError for RpcInternalError {
+impl crate::TaggedError for RpcInternalError {
     const TAG: &'static str = "RpcInternalError";
 }
 
@@ -13191,7 +13191,7 @@ pub struct PtyNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for PtyNotFoundError {
+impl crate::TaggedError for PtyNotFoundError {
     const TAG: &'static str = "PtyNotFoundError";
 }
 
@@ -13203,7 +13203,7 @@ pub struct PtyFeatureUnsupportedError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for PtyFeatureUnsupportedError {
+impl crate::TaggedError for PtyFeatureUnsupportedError {
     const TAG: &'static str = "PtyFeatureUnsupportedError";
 }
 
@@ -13216,7 +13216,7 @@ pub struct ScheduleNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ScheduleNotFoundError {
+impl crate::TaggedError for ScheduleNotFoundError {
     const TAG: &'static str = "ScheduleNotFoundError";
 }
 
@@ -13229,7 +13229,7 @@ pub struct ArtifactNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ArtifactNotFoundError {
+impl crate::TaggedError for ArtifactNotFoundError {
     const TAG: &'static str = "ArtifactNotFoundError";
 }
 
@@ -13241,7 +13241,7 @@ pub struct ShellNotFoundError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for ShellNotFoundError {
+impl crate::TaggedError for ShellNotFoundError {
     const TAG: &'static str = "ShellNotFoundError";
 }
 
@@ -13260,7 +13260,7 @@ pub struct WorktreeError {
     pub data: WorktreeErrorData,
 }
 
-impl crate::error::TaggedError for WorktreeError {
+impl crate::TaggedError for WorktreeError {
     const TAG: &'static str = "WorktreeError";
 }
 
@@ -13273,6 +13273,6 @@ pub struct VcsInitNotSupportedError {
     pub message: String,
 }
 
-impl crate::error::TaggedError for VcsInitNotSupportedError {
+impl crate::TaggedError for VcsInitNotSupportedError {
     const TAG: &'static str = "VcsInitNotSupportedError";
 }

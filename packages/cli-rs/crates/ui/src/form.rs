@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 
 use indexmap::IndexMap;
-use opencode_api::generated::{
+use opencode_api_types::js::number_to_string;
+use opencode_api_types::{
     FormField, FormOption, FormValue, FormWhen, FormWhenOp, FormWhenValue, SessionMessageShellExit,
 };
-use opencode_api::js::number_to_string;
 /// A choice row: an option, or Yes and No for a boolean (`FormRow`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
@@ -229,7 +229,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
                     Err(_) => return Some(format!("Invalid pattern: {pattern}")),
                 }
             }
-            use opencode_api::generated::FormStringFieldFormat as Format;
+            use opencode_api_types::FormStringFieldFormat as Format;
             let format = match &field.format {
                 Some(Format::Email) if !email(text) => Some("Expected an email address"),
                 Some(Format::Uri) if url::Url::parse(text).is_err() => Some("Expected a URL"),

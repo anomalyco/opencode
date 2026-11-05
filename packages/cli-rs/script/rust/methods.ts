@@ -51,7 +51,7 @@ export function emitMethod(types: Types, method: Method) {
     })
     const defaults = lines.every((line) => types.isDefault(line.type) || line.type === "bytes::Bytes")
     types.items.push(
-      `/// Input of [\`Client::${name.replace(/^r#/, "")}\`].\n#[derive(Debug, Clone, PartialEq${defaults ? ", Default" : ""})]\npub struct ${input} {\n${lines.map((line) => line.line).join("\n")}\n}`,
+      `/// Input of \`Client::${name.replace(/^r#/, "")}\`.\n#[derive(Debug, Clone, PartialEq${defaults ? ", Default" : ""})]\npub struct ${input} {\n${lines.map((line) => line.line).join("\n")}\n}`,
     )
   }
   const outputName = types.name(`${method.prefix}Output`)
@@ -63,7 +63,7 @@ export function emitMethod(types: Types, method: Method) {
       return types.objects(representation, outputName, outputName)
     }
     const type = types.type(representation, outputName)
-    types.items.push(`/// Output of [\`Client::${name.replace(/^r#/, "")}\`].\npub type ${outputName} = ${type};`)
+    types.items.push(`/// Output of \`Client::${name.replace(/^r#/, "")}\`.\npub type ${outputName} = ${type};`)
     return outputName
   })()
 

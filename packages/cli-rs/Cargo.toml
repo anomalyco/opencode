@@ -14,6 +14,7 @@ unsafe_code = "deny"
 [workspace.dependencies]
 opencode-acp = { path = "crates/acp" }
 opencode-api = { path = "crates/api" }
+opencode-api-types = { path = "crates/api-types" }
 opencode-drive = { path = "crates/drive" }
 opencode-latex = { path = "crates/latex" }
 opencode-local = { path = "crates/local" }

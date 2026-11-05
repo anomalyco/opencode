@@ -964,6 +964,7 @@ dependencies = [
  "indexmap",
  "log",
  "memchr",
+ "opencode-api-types",
  "percent-encoding",
  "rand",
  "reqwest",
@@ -976,6 +977,16 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "url",
+]
+
+[[package]]
+name = "opencode-api-types"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "indexmap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1202,7 +1213,7 @@ dependencies = [
  "chrono",
  "indexmap",
  "log",
- "opencode-api",
+ "opencode-api-types",
  "opencode-parity",
  "opentui",
  "regex",
