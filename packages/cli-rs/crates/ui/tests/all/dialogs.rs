@@ -255,6 +255,40 @@ fn toasts_time_out_queue_while_paused_and_run_their_action() {
     assert!(kit.app.render().text().trim().is_empty());
 }
 
+#[test]
+fn a_drag_over_a_toast_selects_its_text_without_running_the_action() {
+    let kit = kit(70, 12);
+    let toasts = toasts(&kit);
+    let ran = Rc::new(RefCell::new(0));
+    let count = ran.clone();
+    toasts.show(
+        toast::ToastOptions::new(toast::Variant::Info, "copy this message")
+            .action("Open", move || *count.borrow_mut() += 1),
+    );
+    let screen = kit.app.render().text();
+    let (y, line) = screen
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.contains("copy this message"))
+        .unwrap();
+    let x = line[..line.find("copy").unwrap()].chars().count() as u16;
+    kit.app.drag((x, y as u16), (x + 8, y as u16));
+    kit.app.render();
+    assert_eq!(*ran.borrow(), 0);
+    assert_eq!(kit.app.app().selected_text().as_deref(), Some("copy this"));
+    // Hovering restyles the action in place.
+    let action = line[..line.find('›').unwrap()].chars().count() as u16;
+    kit.app.hover(action, y as u16);
+    let capture = kit.app.render();
+    let cell = capture.cell(action.into(), y as u32).unwrap();
+    assert!(cell.attributes.contains(opentui::style::Attributes::BOLD));
+    // A plain click still runs it.
+    kit.app.advance(Duration::from_millis(600));
+    kit.app.click(x, y as u16);
+    kit.app.render();
+    assert_eq!(*ran.borrow(), 1);
+}
+
 fn models() -> Vec<SelectOption<&'static str>> {
     let mut disabled = SelectOption::new("Disabled", "off").category("Anthropic");
     disabled.disabled = true;
