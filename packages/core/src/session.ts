@@ -54,7 +54,6 @@ import {
   DestinationNotDirectoryError,
   DestinationUnavailableError,
 } from "./session/move.js"
-import { ForkNotice } from "./session/fork-notice.js"
 import { SessionModelTransport } from "./session/model-transport.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
@@ -84,6 +83,12 @@ export const ListInput = SessionStore.ListInput
 export type ListInput = SessionStore.ListInput
 
 const DefaultListLimit = 50
+
+/** Forks copy subagent launches, but those subagents still report to the original. */
+const forkNotice = (parent: SessionSchema.Info) =>
+  `This session is a fork of ${parent.id}${parent.title === undefined ? "" : ` ("${parent.title}")`}. ` +
+  "Subagents started before the fork belong to the original and report there, not here. " +
+  "Don't wait for them; start a new subagent if this fork needs that work."
 
 type CreateBaseInput = {
   id?: SessionSchema.ID
@@ -381,23 +386,13 @@ const layer = Layer.effect(
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         const forked = yield* result.get(sessionID).pipe(Effect.orDie)
-        const children = yield* store.list({ parentID: parent.id }).pipe(Effect.orDie)
-        // The copy is the only writer before this point, so the scan's last row is the last copied message: a
-        // `before` boundary is the first message left behind, and a running assistant or shell at the boundary is
-        // skipped by the copy's settlement filter. Append-only: the notice is a new admission after the copied rows,
-        // so the copied prompt-cache prefix stays byte-identical. It waits in the inbox as a steer and never wakes
-        // this fork's runner on creation.
-        const { subagents, copiedThrough } = yield* ForkNotice.collect({ db, sessionID, children, jobs })
+        // Appended after the copied rows, so the prompt-cache prefix stays byte-identical. It waits in the inbox as a
+        // steer and doesn't wake the fork.
         yield* result
           .synthetic({
             sessionID,
             description: "Fork notice",
-            text: ForkNotice.text({
-              forkOf: parent.id,
-              title: parent.title,
-              copiedThrough,
-              subagents,
-            }),
+            text: forkNotice(parent),
             metadata: { source: "fork", forkOf: parent.id },
             resume: false,
           })

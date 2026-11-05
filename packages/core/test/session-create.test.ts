@@ -16,7 +16,6 @@ import { Hash } from "@opencode/util/hash"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
 import { Instructions } from "@opencode/core/instructions/index"
-import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
@@ -54,7 +53,6 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       Session.node,
-      Job.node,
       SessionTransfer.node,
       InstructionEntry.node,
     ]),
@@ -75,7 +73,6 @@ const durableIt = testEffect(
       SessionProjector.node,
       SessionStore.node,
       Session.node,
-      Job.node,
       SessionTransfer.node,
       InstructionEntry.node,
     ]),
@@ -119,118 +116,6 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
   session
     .log({ sessionID, follow })
     .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !Bus.isSynced(item)))
-
-type TextPart = { readonly type: "text"; readonly text: string }
-
-type SubagentCall = {
-  readonly callID: string
-  /** The input the model sent; `background: true` asks for a background launch. */
-  readonly input: Record<string, unknown>
-  /** Defaults to a plain "started" text part. */
-  readonly content?: readonly [TextPart, ...TextPart[]]
-  readonly metadata?: Record<string, string>
-  /** The child whose completion arrives before the step settles, as a synthetic report. */
-  readonly report?: Session.ID
-}
-
-const started: readonly [TextPart] = [{ type: "text", text: "started" }]
-
-/** Publishes one settled assistant step whose calls launch subagents, so each history test states only its case. */
-const subagentStep = (input: { readonly sessionID: Session.ID; readonly calls: ReadonlyArray<SubagentCall> }) =>
-  Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const session = yield* Session.Service
-    const { db } = yield* Database.Service
-    const assistantMessageID = SessionMessage.ID.create()
-    const publishCall = (call: SubagentCall) =>
-      Effect.gen(function* () {
-        yield* bus.publish(SessionEvent.Tool.Input.Started, {
-          sessionID: input.sessionID,
-          assistantMessageID,
-          id: call.callID,
-          name: "subagent",
-        })
-        yield* bus.publish(SessionEvent.Tool.Input.Ended, {
-          sessionID: input.sessionID,
-          assistantMessageID,
-          id: call.callID,
-          text: JSON.stringify(call.input),
-        })
-        yield* bus.publish(SessionEvent.Tool.Called, {
-          sessionID: input.sessionID,
-          assistantMessageID,
-          id: call.callID,
-          input: call.input,
-          executed: true,
-        })
-        yield* bus.publish(SessionEvent.Tool.Success, {
-          sessionID: input.sessionID,
-          assistantMessageID,
-          id: call.callID,
-          content: call.content ?? started,
-          metadata: call.metadata,
-          executed: true,
-        })
-      })
-    yield* bus.publish(SessionEvent.Step.Started, {
-      sessionID: input.sessionID,
-      assistantMessageID,
-      agent: Agent.ID.make("build"),
-      model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
-      started: 0,
-    })
-    // Callers promote their opening prompt first, so a report promoted here only consumes the report.
-    for (const call of input.calls) {
-      yield* publishCall(call)
-      if (call.report === undefined) continue
-      yield* session.synthetic({
-        sessionID: input.sessionID,
-        text: `<subagent sessionID="${call.report}" state="completed">\ndone\n</subagent>`,
-        resume: false,
-      })
-      yield* SessionInbox.promote(db, bus, input.sessionID, "steer")
-    }
-    yield* bus.publish(SessionEvent.Step.Ended, {
-      sessionID: input.sessionID,
-      assistantMessageID,
-      finish: "stop",
-      cost: Money.USD.make(0),
-      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-    })
-  })
-
-/** Starts a child with a running subagent job, so a fork notice names its work as outstanding. */
-const runningChild = (parentID: Session.ID, title: string) =>
-  Effect.gen(function* () {
-    const session = yield* Session.Service
-    const jobs = yield* Job.Service
-    const child = yield* session.create({ parentID, title })
-    yield* jobs.start({
-      id: child.id,
-      type: "subagent",
-      title,
-      recovery: {
-        kind: "subagent",
-        parentSessionID: parentID,
-        childSessionID: child.id,
-        agent: "reviewer",
-        description: title,
-      },
-      run: Effect.never,
-    })
-    return child
-  })
-
-/** The fork notice still waiting in the inbox, before a promote delivers it. */
-const noticeText = (forkID: Session.ID) =>
-  Effect.gen(function* () {
-    const session = yield* Session.Service
-    const notices = (yield* session.inbox(forkID)).filter((item) => item.type === "synthetic")
-    expect(notices).toHaveLength(1)
-    const notice = notices[0]
-    if (notice?.type !== "synthetic") return yield* Effect.die(new Error("Fork notice not found"))
-    return notice.payload.text
-  })
 
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
@@ -746,17 +631,19 @@ describe("Session.create", () => {
       const parentContext = yield* session.context(parent.id)
       const forkContext = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
-      const [notice] = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
-      const copy = yield* noticeText(forked.id)
+      const notices = (yield* session.inbox(forked.id)).filter((item) => item.type === "synthetic")
 
-      expect(notice).toMatchObject({
-        sessionID: forked.id,
-        delivery: "steer",
-        payload: { description: "Fork notice", metadata: { source: "fork", forkOf: parent.id } },
-      })
-      expect(copy).toContain(`This session is a fork of ${parent.id} ("Parent"), copied through its message at`)
-      expect(copy).toContain("work started before the fork keeps reporting to the original, not here.")
-      expect(copy).not.toContain("Don't wait for these")
+      expect(notices).toMatchObject([
+        {
+          sessionID: forked.id,
+          delivery: "steer",
+          payload: {
+            description: "Fork notice",
+            text: `This session is a fork of ${parent.id} ("Parent"). Subagents started before the fork belong to the original and report there, not here. Don't wait for them; start a new subagent if this fork needs that work.`,
+            metadata: { source: "fork", forkOf: parent.id },
+          },
+        },
+      ])
       expect(forked).toMatchObject({ title: "Parent (fork #1)", fork: { sessionID: parent.id } })
       expect(forked.parentID).toBeUndefined()
       expect(forkContext).toMatchObject([Expected.user("First"), { type: "synthetic", text: "parent note" }])
@@ -769,7 +656,6 @@ describe("Session.create", () => {
       })
       expect(history[1]).toMatchObject({
         type: "session.inbox.enqueued",
-        durable: { seq: 5 },
         data: { sessionID: forked.id, item: { type: "synthetic", delivery: "steer" } },
       })
       expect(yield* SessionInbox.find(db, forkContext[0].id)).toBeUndefined()
@@ -794,11 +680,7 @@ describe("Session.create", () => {
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       const forkedContext = yield* session.context(forked.id)
       expect(forkedContext.map((message) => message.type)).toEqual(["user", "synthetic", "synthetic", "user"])
-      expect(forkedContext.at(-2)).toMatchObject({
-        type: "synthetic",
-        id: notice?.id,
-        text: expect.stringContaining(`This session is a fork of ${parent.id} ("Parent")`),
-      })
+      expect(forkedContext.at(-2)).toMatchObject({ type: "synthetic", id: notices[0]?.id })
       expect(forkedContext.at(-1)).toMatchObject({ text: "Child continues" })
       expect(
         Array.from(yield* Stream.runCollect(logEvents(session, forked.id))).map(
@@ -806,184 +688,6 @@ describe("Session.create", () => {
         ),
       ).toEqual([0, 5, 6, 7, 8])
       expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
-    }),
-  )
-
-  it.effect("names copied launches that never reported, and not the ones that did", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location })
-      yield* session.prompt({ sessionID: parent.id, text: "Launch subagents", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-      const unreported = Session.ID.create()
-      const backgrounded = Session.ID.create()
-      const reported = Session.ID.create()
-      const completed = Session.ID.create()
-
-      yield* subagentStep({
-        sessionID: parent.id,
-        calls: [
-          {
-            callID: "call_unreported",
-            input: { background: true, description: "review the diff" },
-            metadata: { sessionID: unreported, status: "running" },
-          },
-          {
-            callID: "call_backgrounded",
-            // No `background: true`: the foreground call was moved to the background while it blocked.
-            input: { description: "review the diff" },
-            content: [
-              {
-                type: "text",
-                text: `The subagent is working in the background (sessionID: ${backgrounded}). You will be notified automatically when it finishes.`,
-              },
-            ],
-            metadata: { sessionID: backgrounded, status: "running" },
-          },
-          {
-            callID: "call_reported",
-            input: { background: true, description: "check the tests" },
-            metadata: { sessionID: reported, status: "running" },
-            report: reported,
-          },
-          {
-            callID: "call_launch",
-            input: { background: true, description: "review the diff" },
-            metadata: { sessionID: completed, status: "running" },
-          },
-          {
-            callID: "call_followup",
-            input: { sessionID: completed, description: "review the diff" },
-            content: [
-              { type: "text", text: `<subagent sessionID="${completed}" state="completed">\ndone\n</subagent>` },
-            ],
-            metadata: { sessionID: completed, status: "completed" },
-          },
-        ],
-      })
-
-      const forked = yield* session.fork({ sessionID: parent.id })
-      const text = yield* noticeText(forked.id)
-
-      expect(text).toContain(`- ${unreported} "review the diff" (unreported)`)
-      expect(text).toContain(`- ${backgrounded} "review the diff" (unreported)`)
-      expect(text).not.toContain(reported)
-      expect(text).not.toContain(completed)
-      expect(text).toContain(
-        "Don't wait for these. Their results won't arrive here. Start a new subagent if this fork needs that work.",
-      )
-    }),
-  )
-
-  it.effect("names only subagents created at or before the last copied message", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const jobs = yield* Job.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location, title: "Original" })
-      // Both children predate the cutoff, so only a running job makes one outstanding.
-      const earlier = yield* runningChild(parent.id, "review the diff")
-      const finished = yield* session.create({ parentID: parent.id, title: "done review" })
-      yield* jobs.start({
-        id: finished.id,
-        type: "subagent",
-        title: "already finished",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent.id,
-          childSessionID: finished.id,
-          agent: "reviewer",
-          description: "already finished",
-        },
-        run: Effect.succeed("done"),
-      })
-      yield* jobs.wait({ id: finished.id })
-
-      yield* TestClock.setTime(1_000)
-      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-
-      yield* TestClock.setTime(2_000)
-      const second = yield* session.prompt({ sessionID: parent.id, text: "Second", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-
-      yield* TestClock.setTime(3_000)
-      const later = yield* runningChild(parent.id, "check the tests")
-
-      const forked = yield* session.fork({ sessionID: parent.id, before: second.id })
-      const text = yield* noticeText(forked.id)
-
-      expect(text).toContain(`- ${earlier.id} "review the diff" (running)`)
-      expect(text).not.toContain(later.id)
-      expect(text).not.toContain(finished.id)
-      expect(text).toContain(
-        "Don't wait for these. Their results won't arrive here. Start a new subagent if this fork needs that work.",
-      )
-      // The copied history ends at First; Second is the boundary the fork left behind.
-      expect(text).toContain(`copied through its message at ${DateTime.formatIso(DateTime.makeUnsafe(1_000))}`)
-      expect(text).not.toContain(DateTime.formatIso(DateTime.makeUnsafe(2_000)))
-      yield* jobs.cancel(earlier.id)
-      yield* jobs.cancel(later.id)
-    }),
-  )
-
-  it.effect("tells a fork that starts with none of the original's messages", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const jobs = yield* Job.Service
-      const { db } = yield* Database.Service
-      const parent = yield* session.create({ location, title: "Original" })
-      // Created at the clock's start, so a cutoff defaulted to 0 would wrongly keep it.
-      const child = yield* runningChild(parent.id, "review the diff")
-      yield* TestClock.setTime(1_000)
-      const first = yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
-      yield* SessionInbox.promote(db, bus, parent.id, "steer")
-
-      const forked = yield* session.fork({ sessionID: parent.id, before: first.id })
-      const text = yield* noticeText(forked.id)
-
-      expect(text).toContain(
-        `This session is a fork of ${parent.id} ("Original"). It starts with none of the original's messages`,
-      )
-      expect(text).toContain("work started before the fork keeps reporting to the original, not here.")
-      expect(text).not.toContain("copied through")
-      expect(text).not.toContain(child.id)
-      expect(yield* session.context(forked.id)).toEqual([])
-      yield* jobs.cancel(child.id)
-    }),
-  )
-
-  durableIt.effect("admits a fork notice when the copy fills a statement", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const transfer = yield* SessionTransfer.Service
-      const template = yield* session.create({ location })
-      const sessionID = Session.ID.create()
-      // One collect page, and a merged-parts read that binds exactly the 100 ids its statement holds.
-      const messages = Array.from({ length: 101 }, (_, index) =>
-        SessionMessage.Assistant.make({
-          id: SessionMessage.ID.create(),
-          type: "assistant",
-          agent: Agent.defaultID,
-          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
-          content: [{ type: "text" as const, text: `step ${index}` }],
-          time: { created: DateTime.makeUnsafe(index), completed: DateTime.makeUnsafe(index) },
-        }),
-      )
-
-      yield* transfer.import({ data: { info: { ...template, id: sessionID }, messages }, location })
-
-      const forked = yield* session.fork({ sessionID })
-      const text = yield* noticeText(forked.id)
-
-      expect(text).toContain(
-        `This session is a fork of ${sessionID} (untitled), copied through its message at ${DateTime.formatIso(DateTime.makeUnsafe(100))}`,
-      )
-      expect(text).not.toContain("Don't wait for these")
     }),
   )
 
