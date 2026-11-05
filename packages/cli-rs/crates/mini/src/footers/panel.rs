@@ -134,6 +134,10 @@ impl<A: Clone> Panel<A> {
         &self.input
     }
 
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
     pub fn entries(&self) -> &[Entry<A>] {
         &self.entries
     }

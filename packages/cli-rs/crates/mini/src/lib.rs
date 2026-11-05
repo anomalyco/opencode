@@ -45,6 +45,8 @@ pub struct Input {
     /// `--replay-limit`, else `mini.replay_limit`.
     pub replay_limit: Option<u32>,
     pub config: Info,
+    /// The global paths: `cli.json` for `/settings` and `model.json` for saved variants.
+    pub paths: opencode_local::paths::Paths,
     pub version: String,
     pub trace: Option<signals::Trace>,
     /// When the command started, for `OPENCODE_SHOW_TTFD`.
