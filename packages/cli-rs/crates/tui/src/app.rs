@@ -435,13 +435,18 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::dialogs::theme_list::install(&tui);
     crate::dialogs::status::install(&tui);
     crate::dialogs::pair::install(&tui);
-    crate::features::highlights::install(&tui, deps.continue_);
-    crate::features::devtools::mount(&tui, &shell);
     crate::dialogs::model::install(&tui);
     crate::dialogs::integration::install(&tui);
     crate::plugins::host::install(&tui);
     tui.startup.aim(&deps.route, deps.continue_);
     tui.navigate(deps.route);
+    // After the first route's reads, as in TS, where they start during mount and the event stream connects later.
+    // Otherwise `session.active` can answer first and read again the running sessions the route's family read brings.
+    if deps.events {
+        connect(&tui);
+    }
+    crate::features::highlights::install(&tui, deps.continue_);
+    crate::features::devtools::mount(&tui, &shell);
     crate::features::startup::run(&tui, deps.continue_);
     tui
 }
@@ -667,9 +672,14 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
         }
     });
 
-    if !connect {
-        return;
+    // Offline until the connection reports connected, so reads behind `refresh` wait for it as in TS.
+    if connect {
+        tui.data.set_online(false);
     }
+}
+
+/// Starts the event connection.
+fn connect(tui: &Rc<Tui>) {
     let (connection, _task) = opencode_store::connection::connect(&tui.data, events::Options::default());
     let mut state = connection.watch();
     let proxy = tui.app.proxy();
