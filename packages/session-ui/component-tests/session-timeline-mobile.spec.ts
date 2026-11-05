@@ -41,9 +41,11 @@ story.describe("touch timeline", () => {
       const chevron = menu?.querySelector("button")?.getBoundingClientRect()
 
       if (!menu || !chevron) throw new Error("The chevron is not rendered")
+
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
         acceptNode: (node) => (menu.contains(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
       })
+
       const lines: DOMRect[] = []
 
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {

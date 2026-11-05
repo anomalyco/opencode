@@ -172,7 +172,7 @@ story(
     // click until well after the menu has gone rather than the settled state.
     const frames = await message.evaluateHandle((element) => {
       const slots = ["user-message-copy-wrapper", "user-message-menu"]
-      const samples = slots.map(() => [] as number[])
+      const samples = slots.map((): number[] => [])
       const closed = { frames: 0 }
 
       const done = new Promise<number[][]>((resolve) => {
