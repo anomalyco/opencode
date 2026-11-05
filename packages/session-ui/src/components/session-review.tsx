@@ -40,6 +40,8 @@ import {
   transitionReviewCommentModes,
   type LineCommentEvent,
 } from "./line-comment-machine"
+import { createReviewFocusDriver } from "./review-focus-driver"
+import { reviewFocusPinnedFile } from "./review-focus-machine"
 import type { LineCommentEditorProps } from "./line-comment"
 import { normalize, text, type ViewDiff } from "./session-diff"
 
@@ -158,7 +160,6 @@ function diffId(file: string): string | undefined {
 
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
-  let focusToken = 0
   let frame: number | undefined
   const i18n = useI18n()
   const fileComponent = useFileComponent()
@@ -249,7 +250,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   }
 
   const pinned = (file: string) =>
-    props.focusedComment?.file === file ||
+    reviewFocusPinnedFile(focus.state()) === file ||
     props.focusedFile === file ||
     reviewFileCommentMode(commentModes(), file).status !== "idle"
 
@@ -300,63 +301,44 @@ export const SessionReview = (props: SessionReviewProps) => {
     return previewSelectedLines(contents, range)
   }
 
-  createEffect(() => {
-    const focus = props.focusedComment
+  const focus = createReviewFocusDriver({
+    focusedComment: () => props.focusedComment,
+    // Before the diffs load, wait for them instead of failing the request.
+    isAvailable: (target) => {
+      if (!hasDiffs()) return true
+      const diff = itemsMap()[target.file]
 
-    if (!focus) return
+      return diff !== undefined && (diff.additions !== 0 || diff.deletions !== 0)
+    },
+    root: () => scroll,
+    findComment: (file, commentId) => {
+      const anchor = anchors.get(file)?.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`)
 
-    untrack(() => {
-      focusToken++
-      const token = focusToken
+      if (!(anchor instanceof HTMLElement)) return
 
-      const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
+      if (anchor.style.pointerEvents === "none" || anchor.style.opacity === "0") return
 
-      if (comment) dispatchComment(focus.file, { type: "comment.focused", id: comment.id, range: comment.selection })
+      return anchor
+    },
+    findFallback: (file) => anchors.get(file),
+    scrollTo: (target) => {
+      if (!scroll) return
+      const rootRect = scroll.getBoundingClientRect()
+      const targetRect = target.getBoundingClientRect()
+      const next = scroll.scrollTop + targetRect.top - rootRect.top - rootRect.height / 2 + targetRect.height / 2
+      scroll.scrollTop = Math.max(0, next)
+    },
+    onOpenComment: (file, commentId) => {
+      const comment = (props.comments ?? []).find((item) => item.file === file && item.id === commentId)
 
+      if (comment) dispatchComment(file, { type: "comment.focused", id: comment.id, range: comment.selection })
+    },
+    onExpandFile: (file) => {
       const current = open()
 
-      if (!current.includes(focus.file)) {
-        handleChange([...current, focus.file])
-      }
-
-      const scrollTo = (attempt: number) => {
-        if (token !== focusToken) return
-
-        const root = scroll
-
-        if (!root) return
-
-        const wrapper = anchors.get(focus.file)
-        const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
-
-        const ready =
-          anchor instanceof HTMLElement && anchor.style.pointerEvents !== "none" && anchor.style.opacity !== "0"
-
-        const target = ready ? anchor : wrapper
-
-        if (!target) {
-          if (attempt >= 120) return
-          requestAnimationFrame(() => scrollTo(attempt + 1))
-
-          return
-        }
-
-        const rootRect = root.getBoundingClientRect()
-        const targetRect = target.getBoundingClientRect()
-        const offset = targetRect.top - rootRect.top
-        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
-        root.scrollTop = Math.max(0, next)
-
-        if (ready) return
-
-        if (attempt >= 120) return
-        requestAnimationFrame(() => scrollTo(attempt + 1))
-      }
-
-      requestAnimationFrame(() => scrollTo(0))
-
-      requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
-    })
+      if (!current.includes(file)) handleChange([...current, file])
+    },
+    onAcknowledge: () => props.onFocusedCommentChange?.(null),
   })
 
   return (
@@ -619,6 +601,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                               anchors.set(file, el)
                               nodes.set(file, el)
                               queue()
+                              focus.poke()
                             }}
                           >
                             <Show when={expanded()}>
@@ -663,6 +646,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     disableLineNumbers={props.disableLineNumbers}
                                     onRendered={() => {
                                       props.onDiffRendered?.()
+                                      focus.poke()
                                     }}
                                     enableLineSelection={props.onLineComment != null}
                                     enableGutterUtility={props.onLineComment != null}
