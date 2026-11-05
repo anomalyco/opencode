@@ -120,3 +120,50 @@ test("provider in cooldown is not retried until its cooldown expires", async () 
     await close(upstream);
   }
 });
+
+
+test("adaptive routing prefers the provider with lower observed latency", async () => {
+  const calls = { slow: 0, fast: 0 };
+  const slow = mockProvider(async (_req, res) => {
+    calls.slow += 1;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ choices: [{ message: { content: "slow" } }] }));
+  });
+  const fast = mockProvider(async (_req, res) => {
+    calls.fast += 1;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ choices: [{ message: { content: "fast" } }] }));
+  });
+  const slowUrl = await listen(slow), fastUrl = await listen(fast);
+  const gateway = createServer({
+    routing: { mode: "adaptive", latencyWeight: 1, failurePenaltyMs: 5000 },
+    requestTimeoutMs: 3000,
+    providers: [
+      { id: "slow", baseURL: slowUrl + "/v1", priority: 10, enabled: true, models: [
+        { alias: "ocu/slow", upstreamModel: "slow" }, { alias: "ocu/auto", upstreamModel: "slow" }
+      ] },
+      { id: "fast", baseURL: fastUrl + "/v1", priority: 10, enabled: true, models: [
+        { alias: "ocu/fast", upstreamModel: "fast" }, { alias: "ocu/auto", upstreamModel: "fast" }
+      ] }
+    ]
+  });
+  const base = await listen(gateway);
+  const ask = async (model) => fetch(base + "/v1/chat/completions", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: "ping" }] })
+  });
+  try {
+    assert.equal((await ask("ocu/slow")).status, 200);
+    assert.equal((await ask("ocu/fast")).status, 200);
+    const response = await ask("ocu/auto");
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).choices[0].message.content, "fast");
+    assert.equal(calls.slow, 1);
+    assert.equal(calls.fast, 2);
+    const status = await fetch(base + "/ocu/status").then((r) => r.json());
+    assert.equal(status.routingMode, "adaptive");
+    assert.equal(status.providers.find((p) => p.id === "fast").successes, 2);
+  } finally {
+    await close(gateway); await close(slow); await close(fast);
+  }
+});
