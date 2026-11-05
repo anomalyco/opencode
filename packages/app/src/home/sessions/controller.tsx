@@ -26,7 +26,15 @@ import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { pathKey } from "@/workspaces/path-key"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { createSessionExporter } from "@/session/commands/export-session"
+import {
+  createSessionDeleteState,
+  selectSessionDeleteView,
+  SESSION_DELETE_TIMEOUT_MS,
+  transitionSessionDelete,
+  type SessionDeleteEffect,
+  type SessionDeleteEvent,
+} from "@/session/delete-machine"
 import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
@@ -359,77 +367,91 @@ export function createHomeSessionsController(home: HomeController) {
       })
   }
 
-  const exportSession = async (server: ServerConnection.Key, session: SessionInfo) => {
+  const exporter = createSessionExporter()
+
+  const serverContext = (server: ServerConnection.Key) => {
     const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
     const ctx = conn ? home.server.context(conn) : undefined
 
-    if (!ctx) return
-
-    try {
-      const data = await fetchSessionExport({ sessionID: session.id, api: ctx.sdk.api })
-      const filename = sessionExportFilename(data.info)
-
-      if (!(await saveSessionExport(filename, data, platform))) return
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
-      })
-    } catch (cause) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: cause instanceof Error ? cause.message : language.t("toast.session.export.failed.description"),
-      })
-    }
-  }
-
-  const remove = async (server: ServerConnection.Key, session: SessionInfo) => {
-    const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
-    const ctx = conn ? home.server.context(conn) : undefined
-
-    if (!conn || !ctx) return false
-    const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
-    const rows = homeRowTops()
-    // The data layer hides the session at once, keeps it hidden after session.deleted, and shows it again if the
-    // request fails, so the cached index drops it only once the server has.
-    const request = ctx.data.session.remove(session.id)
-    animateHomeRowsUp(rows)
-
-    return request
-      .then(() => {
-        queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
-          current?.filter((item) => !ids.includes(item.id)),
-        )
-        notifySessionTabsRemoved({
-          server: ServerConnection.key(conn),
-          directory: session.location.directory,
-          sessionIDs: ids,
-        })
-
-        return true
-      })
-      .catch((cause) => {
-        showToast({
-          title: language.t("session.delete.failed.title"),
-          description: errorMessage(cause, language.t("session.delete.failed.title")),
-        })
-
-        return false
-      })
-      .finally(() => {
-        void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
-      })
+    return conn && ctx ? { conn, ctx } : undefined
   }
 
   function DeleteDialog(props: { server: ServerConnection.Key; session: SessionInfo }) {
     const name = () => sessionTitle(props.session.title) ?? language.t("command.session.new")
+    const [deleteState, setDeleteState] = createSignal(createSessionDeleteState(props.session.id))
+    let timer: ReturnType<typeof setTimeout> | undefined
 
-    const confirm = async () => {
-      dialog.close()
-      await remove(props.server, props.session)
+    const dispatch = (event: SessionDeleteEvent) => {
+      const next = transitionSessionDelete(untrack(deleteState), event)
+
+      if (next.state !== untrack(deleteState)) setDeleteState(next.state)
+      next.effects.forEach(run)
     }
+
+    // Read when the user confirms, before the delete hides the session and its children from the list.
+    const deleteTarget = () => {
+      const ctx = serverContext(props.server)?.ctx
+
+      return ctx ? { removedIDs: sessionTreeIDs(ctx.data.session.list(), props.session.id) } : undefined
+    }
+
+    function run(effect: SessionDeleteEffect) {
+      if (effect.type === "delete.run") {
+        const target = serverContext(props.server)
+
+        if (!target) return dispatch({ type: "delete.failed", attempt: effect.attempt, cause: undefined })
+        const rows = homeRowTops()
+        // The data layer hides the session at once, keeps it hidden after session.deleted, and shows it again if the
+        // request fails, so the cached index drops it only once the server has.
+        const request = Promise.try(() => target.ctx.data.session.remove(effect.sessionID))
+        animateHomeRowsUp(rows)
+        void request
+          .finally(() => void queryClient.invalidateQueries({ queryKey: ["home-sessions", target.conn], exact: true }))
+          .then(
+            () => dispatch({ type: "delete.succeeded", attempt: effect.attempt, target: effect.target }),
+            (cause: unknown) => dispatch({ type: "delete.failed", attempt: effect.attempt, cause }),
+          )
+
+        return
+      }
+
+      if (effect.type === "dialog.close") return dialog.close()
+
+      if (effect.type === "session.removed") {
+        const conn = serverContext(props.server)?.conn
+
+        if (conn)
+          queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+            current?.filter((item) => !effect.target.removedIDs.includes(item.id)),
+          )
+        notifySessionTabsRemoved({
+          server: props.server,
+          directory: props.session.location.directory,
+          sessionIDs: [...effect.target.removedIDs],
+        })
+
+        return
+      }
+
+      if (effect.type === "toast.delete-failed")
+        return showToast({
+          title: language.t("session.delete.failed.title"),
+          description:
+            effect.cause === undefined ? undefined : errorMessage(effect.cause, language.t("session.delete.failed.title")),
+        })
+
+      clearTimeout(timer)
+      timer = undefined
+
+      if (effect.type === "timer.cancel") return
+      timer = setTimeout(
+        () => dispatch({ type: "delete.timed-out", attempt: effect.attempt }),
+        SESSION_DELETE_TIMEOUT_MS,
+      )
+    }
+
+    onCleanup(() => dispatch({ type: "disposed" }))
+    const busy = () => selectSessionDeleteView(deleteState()).busy
 
     return (
       <Dialog fit>
@@ -440,10 +462,14 @@ export function createHomeSessionsController(home: HomeController) {
           />
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+          <Button variant="ghost" autofocus disabled={busy()} onClick={() => dispatch({ type: "cancel.requested" })}>
             {language.t("common.cancel")}
           </Button>
-          <Button variant="danger" onClick={confirm}>
+          <Button
+            variant="danger"
+            disabled={busy()}
+            onClick={() => dispatch({ type: "confirm.requested", target: deleteTarget() })}
+          >
             {language.t("session.delete.button")}
           </Button>
         </DialogFooter>
@@ -532,7 +558,10 @@ export function createHomeSessionsController(home: HomeController) {
         })
       },
       rename,
-      export: exportSession,
+      export: (server: ServerConnection.Key, session: SessionInfo) =>
+        exporter.export({ server, sessionID: session.id }),
+      exporting: (server: ServerConnection.Key, session: SessionInfo) =>
+        exporter.exporting({ server, sessionID: session.id }),
       showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
         dialog.show(() => <DeleteDialog server={server} session={session} />),
     },

@@ -500,6 +500,7 @@ export const dict = {
   "toast.session.export.success.description": "Saved session to {{filename}}",
   "toast.session.export.failed.title": "Failed to export session",
   "toast.session.export.failed.description": "An error occurred while exporting the session",
+  "toast.session.import.pending": "Importing session…",
   "toast.session.copyID.failed.title": "Failed to copy session ID",
   "toast.session.copyID.failed.description": "An error occurred while copying the session ID",
   "toast.project.copyID.failed.title": "Failed to copy project ID",

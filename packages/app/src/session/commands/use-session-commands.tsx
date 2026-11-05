@@ -8,11 +8,11 @@ import { useFile, selectionFromLines, type FileSelection } from "@/workspaces/fi
 import { useLanguage } from "@/runtime/i18n/language"
 import { useComposerState } from "@/composer/persistence"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { showToast } from "@/shell/notifications/toast"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { useSessionExporter } from "@/session/commands/export-session"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
@@ -73,9 +73,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const prompt = useComposerState()
   const serverSDK = useServerSDK()
+  const server = useServer()
   const data = useData()
   const settings = useSettings()
   const platform = usePlatform()
+  const exporter = useSessionExporter()
   const pluginScoped = usePluginScoped()
   const pluginClaims = usePluginClaims()
 
@@ -184,7 +186,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const [commandsState, setCommandsState] = createSignal(createSessionCommandsState())
-  const exportFetches = new Map<number, AbortController>()
   let forkModule: typeof import("@/session/commands/fork-dialog") | undefined
 
   const dispatchCommands = (event: SessionCommandsEvent) => {
@@ -202,61 +203,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         () => dispatchCommands({ type: "compact.succeeded", attempt: effect.attempt, sessionID: effect.sessionID }),
         (cause: unknown) =>
           dispatchCommands({ type: "compact.failed", attempt: effect.attempt, sessionID: effect.sessionID, cause }),
-      )
-
-      return
-    }
-
-    if (effect.type === "export.fetch") {
-      const controller = new AbortController()
-      exportFetches.set(effect.attempt, controller)
-      fetchSessionExport({ sessionID: effect.sessionID, api: serverSDK.api, signal: controller.signal })
-        .finally(() => exportFetches.delete(effect.attempt))
-        .then(
-          (exported) =>
-            dispatchCommands({
-              type: "export.fetched",
-              attempt: effect.attempt,
-              sessionID: effect.sessionID,
-              data: exported,
-            }),
-          (cause: unknown) =>
-            dispatchCommands({
-              type: "export.failed",
-              attempt: effect.attempt,
-              sessionID: effect.sessionID,
-              message: cause instanceof Error ? cause.message : undefined,
-            }),
-        )
-
-      return
-    }
-
-    if (effect.type === "export.abort") {
-      exportFetches.get(effect.attempt)?.abort()
-      exportFetches.delete(effect.attempt)
-
-      return
-    }
-
-    if (effect.type === "export.save") {
-      const filename = sessionExportFilename(effect.data.info)
-      Promise.try(() => saveSessionExport(filename, effect.data, platform)).then(
-        (saved) =>
-          dispatchCommands({
-            type: "export.saved",
-            attempt: effect.attempt,
-            sessionID: effect.sessionID,
-            filename,
-            saved,
-          }),
-        (cause: unknown) =>
-          dispatchCommands({
-            type: "export.failed",
-            attempt: effect.attempt,
-            sessionID: effect.sessionID,
-            message: cause instanceof Error ? cause.message : undefined,
-          }),
       )
 
       return
@@ -282,28 +228,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    if (effect.type === "toast.request-failed") {
-      showToast({ title: formatServerError(effect.cause, language.t, language.t("common.requestFailed")) })
-
-      return
-    }
-
-    if (effect.type === "toast.exported") {
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename: effect.filename }),
-      })
-
-      return
-    }
-
-    showToast({
-      variant: "error",
-      title: language.t("toast.session.export.failed.title"),
-      description: effect.message ?? language.t("toast.session.export.failed.description"),
-    })
+    showToast({ title: formatServerError(effect.cause, language.t, language.t("common.requestFailed")) })
   }
 
   createEffect(
@@ -318,7 +243,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const exportSession = () => {
     const sessionID = actions.session.identity.params.id
 
-    if (sessionID) dispatchCommands({ type: "export.requested", sessionID })
+    if (sessionID) exporter.export({ server: server.key, sessionID })
   }
 
   const copySessionID = async () => {
@@ -551,7 +476,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.export"),
       description: language.t("command.session.export.description"),
       slash: "export",
-      disabled: !actions.session.identity.params.id,
+      disabled:
+        !actions.session.identity.params.id ||
+        exporter.exporting({ server: server.key, sessionID: actions.session.identity.params.id }),
       onSelect: exportSession,
     }),
     sessionCommand({

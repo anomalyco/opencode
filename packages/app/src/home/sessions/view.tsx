@@ -96,7 +96,8 @@ export type HomeSessionsViewProps = {
     title: string,
     signal: AbortSignal,
   ) => Promise<boolean>
-  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
+  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => void
+  isExportingSession: (server: ServerConnection.Key, session: SessionInfo) => boolean
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
@@ -860,7 +861,10 @@ function HomeSessionRow(
             >
               {props.language.t("common.rename")}
             </Menu.Item>
-            <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
+            <Menu.Item
+              disabled={props.isExportingSession(props.server, props.record.session)}
+              onSelect={() => props.onExportSession(props.server, props.record.session)}
+            >
               {props.language.t("common.export")}…
             </Menu.Item>
             <Menu.Separator />
