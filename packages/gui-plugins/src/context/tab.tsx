@@ -1,8 +1,10 @@
-import { createMemo, on, onCleanup, onMount, For, Show } from "solid-js"
+import { createMemo, createSignal, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { checksum } from "@opencode/util/encode"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
+import { Loader } from "@opencode/ui/loader"
 import { Accordion } from "@opencode/ui/accordion"
 import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
 import { showToast } from "@opencode/ui/toast"
@@ -15,6 +17,17 @@ import { createKeyed, usePlugin, type MountedSession } from "@opencode/plugin/gu
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 import { createSessionContextFormatter } from "./format"
+import {
+  createContextScrollState,
+  createSessionExportState,
+  selectSessionExporting,
+  transitionContextScroll,
+  transitionSessionExport,
+  type ContextScrollEffect,
+  type ContextScrollEvent,
+  type SessionExportEffect,
+  type SessionExportEvent,
+} from "./machine"
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
@@ -37,13 +50,7 @@ function RawMessageContent(props: { message: SessionMessageInfo; onRendered: () 
   })
 
   return (
-    <File
-      mode="text"
-      file={file()}
-      overflow="wrap"
-      class="select-text"
-      onRendered={() => requestAnimationFrame(props.onRendered)}
-    />
+    <File mode="text" file={file()} overflow="wrap" class="select-text" onRendered={props.onRendered} />
   )
 }
 
@@ -201,95 +208,190 @@ export default function SessionContextTab(props: { session: MountedSession }) {
     { label: "stats.lastActivity", value: () => formatter().time(context()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
 
-  const exportSession = async () => {
-    const sessionID = props.session.id
+  const [exportState, setExportState] = createSignal(createSessionExportState())
+  const exportControllers = new Map<number, AbortController>()
+  const exporting = () => selectSessionExporting(exportState(), props.session.key)
 
-    if (!sessionID) return
+  const dispatchExport = (event: SessionExportEvent) => {
+    const next = transitionSessionExport(exportState(), event)
 
-    try {
-      const data = await fetchSessionExport({
-        sessionID,
-        api: props.session.server.client,
-      })
+    setExportState(next.state)
+    next.effects.forEach(
+      (effect) =>
+        void Promise.try(() => runExport(effect)).catch((cause: unknown) => console.error("[context] export", cause)),
+    )
+  }
 
-      const filename = sessionExportFilename(data.info)
+  const runExport = (effect: SessionExportEffect) => {
+    if (effect.type === "export.fetch") {
+      const controller = new AbortController()
+      const failed = (cause: unknown) =>
+        dispatchExport({
+          type: "export.failed",
+          attempt: effect.attempt,
+          sessionKey: effect.sessionKey,
+          message: cause instanceof Error ? cause.message : undefined,
+        })
 
-      if (!(await system.save({ name: filename, content: JSON.stringify(data, null, 2) }))) return
-      showToast({
+      exportControllers.set(effect.attempt, controller)
+      // Runs inside the click that asked for it, so the routed session is the one being exported.
+      const api = props.session.server.client
+      void Promise.try(() => fetchSessionExport({ sessionID: effect.sessionID, api, signal: controller.signal }))
+        .then(
+          (data) =>
+            dispatchExport({ type: "export.fetched", attempt: effect.attempt, sessionKey: effect.sessionKey, data }),
+          failed,
+        )
+        .finally(() => exportControllers.delete(effect.attempt))
+
+      return
+    }
+
+    if (effect.type === "export.save") {
+      const filename = sessionExportFilename(effect.data.info)
+
+      void Promise.try(() => system.save({ name: filename, content: JSON.stringify(effect.data, null, 2) })).then(
+        (saved) =>
+          dispatchExport({
+            type: "export.saved",
+            attempt: effect.attempt,
+            sessionKey: effect.sessionKey,
+            filename,
+            saved,
+          }),
+        (cause: unknown) =>
+          dispatchExport({
+            type: "export.failed",
+            attempt: effect.attempt,
+            sessionKey: effect.sessionKey,
+            message: cause instanceof Error ? cause.message : undefined,
+          }),
+      )
+
+      return
+    }
+
+    if (effect.type === "export.abort") return exportControllers.get(effect.attempt)?.abort()
+
+    if (effect.type === "toast.exported") {
+      return void showToast({
         variant: "success",
         // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
         icon: () => <Icon name="circle-check" />,
         title: ctx.t("export.success.title"),
-        description: ctx.t("export.success.description", { filename }),
-      })
-    } catch (err) {
-      showToast({
-        variant: "error",
-        title: ctx.t("export.failed.title"),
-        description: err instanceof Error ? err.message : ctx.t("export.failed.description"),
+        description: ctx.t("export.success.description", { filename: effect.filename }),
       })
     }
+
+    showToast({
+      variant: "error",
+      title: ctx.t("export.failed.title"),
+      description: effect.message ?? ctx.t("export.failed.description"),
+    })
   }
 
-  let scroll: HTMLDivElement | undefined
+  const exportSession = () => {
+    if (!props.session.id) return
+    dispatchExport({ type: "export.requested", sessionKey: props.session.key, sessionID: props.session.id })
+  }
+
+  onCleanup(() => dispatchExport({ type: "disposed" }))
+
+  let scrollState = createContextScrollState()
+  let scroller: HTMLDivElement | undefined
   let frame: number | undefined
-  let pending: { x: number; y: number } | undefined
+  // The session the scroll machine last targeted; a switch writes its final offset after props.session moved on.
+  let scrollSession: MountedSession | undefined
+  const contentChanged: ContextScrollEvent = { type: "content.changed" }
+  const interacted: ContextScrollEvent = { type: "interacted" }
 
-  const restoreScroll = () => {
-    const el = scroll
+  const dispatchScroll = (event: ContextScrollEvent) => {
+    const next = transitionContextScroll(scrollState, event)
 
-    if (!el) return
-
-    const s = layout.scroll.get(props.session, "context")
-
-    if (!s) return
-
-    if (el.scrollTop !== s.y) el.scrollTop = s.y
-
-    if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+    scrollState = next.state
+    next.effects.forEach(
+      (effect) =>
+        void Promise.try(() => runScroll(effect)).catch((cause: unknown) => console.error("[context] scroll", cause)),
+    )
   }
 
-  const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    pending = {
-      x: event.currentTarget.scrollLeft,
-      y: event.currentTarget.scrollTop,
+  const runScroll = (effect: ContextScrollEffect) => {
+    if (effect.type === "save.write") {
+      const session = props.session.key === effect.sessionKey ? props.session : scrollSession
+
+      if (session?.key === effect.sessionKey) layout.scroll.set(session, "context", effect.position)
+
+      return
     }
 
-    if (frame !== undefined) return
+    if (frame !== undefined) cancelAnimationFrame(frame)
+    frame = undefined
+
+    if (effect.type === "frame.cancel") return
 
     frame = requestAnimationFrame(() => {
       frame = undefined
 
-      const next = pending
-      pending = undefined
+      if (effect.kind === "save") return dispatchScroll({ type: "save.flushed", attempt: effect.attempt })
 
-      if (!next) return
-
-      layout.scroll.set(props.session, "context", next)
+      dispatchScroll({ type: "restore.applied", attempt: effect.attempt, applied: restoreScroll() })
     })
   }
 
-  // Restores the stored scroll a frame after the messages change; on mount the viewport ref restores it.
+  /** Applies the stored offset, or the top for a session without one, and returns where the scroller moved to. */
+  const restoreScroll = () => {
+    const el = scroller
+
+    if (!el) return
+    const stored = layout.scroll.get(props.session, "context") ?? { x: 0, y: 0 }
+    const before = { x: el.scrollLeft, y: el.scrollTop }
+
+    if (el.scrollTop !== stored.y) el.scrollTop = stored.y
+
+    if (el.scrollLeft !== stored.x) el.scrollLeft = stored.x
+
+    if (el.scrollTop === before.y && el.scrollLeft === before.x) return
+
+    return { x: el.scrollLeft, y: el.scrollTop }
+  }
+
+  // Follows the routed session and whether its stored layout can be read.
   createKeyed(
-    createMemo(on(messages, (list) => list, { defer: true })),
-    () => void requestAnimationFrame(restoreScroll),
+    () => ({ session: props.session, active: layout.ready() && props.session.location !== undefined }),
+    (target) => {
+      dispatchScroll({ type: "target.synced", sessionKey: target.session.key, active: target.active })
+      scrollSession = target.session
+    },
+    { equals: (previous, next) => previous.session.key === next.session.key && previous.active === next.active },
   )
 
-  onCleanup(() => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
-  })
+  // New messages grow the content, so a restore clamped by shorter content can now reach its offset.
+  createKeyed(
+    createMemo(on(messages, (list) => list, { defer: true })),
+    () => dispatchScroll(contentChanged),
+  )
+
+  // Writes the offset the save frame has not stored yet.
+  onCleanup(() => dispatchScroll({ type: "disposed" }))
 
   return (
     <div
       class="@container h-full overflow-y-auto"
       data-scrollable
       ref={(el) => {
-        scroll = el
-        // The ref runs before the content renders into the element.
-        onMount(restoreScroll)
+        scroller = el
+        // Input of the user's own takes over from restoring, even before it scrolls.
+        makeEventListener(el, "wheel", () => dispatchScroll(interacted), { passive: true })
+        makeEventListener(el, "pointerdown", () => dispatchScroll(interacted), { passive: true })
+        makeEventListener(el, "touchstart", () => dispatchScroll(interacted), { passive: true })
+        makeEventListener(el, "keydown", () => dispatchScroll(interacted))
       }}
-      onScroll={handleScroll}
+      onScroll={(event) =>
+        dispatchScroll({
+          type: "scrolled",
+          position: { x: event.currentTarget.scrollLeft, y: event.currentTarget.scrollTop },
+        })
+      }
     >
       <div data-slot="session-usage-content" class="px-4 pt-4 pb-6 flex flex-col gap-6 md:px-6 md:pb-10 md:gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
@@ -314,15 +416,20 @@ export default function SessionContextTab(props: { session: MountedSession }) {
               size="small"
               variant="ghost"
               class="gap-1.5 px-2 text-text-weak hover:text-text-base"
+              disabled={!props.session.id || exporting()}
               onClick={exportSession}
             >
-              <Icon name="download" size="small" />
+              <Show when={exporting()} fallback={<Icon name="download" size="small" />}>
+                <Loader class="size-4 shrink-0" />
+              </Show>
               <span>{ctx.t("export.session")}</span>
             </Button>
           </div>
           <Accordion multiple>
             <For each={messages()}>
-              {(message) => <RawMessage message={message} onRendered={restoreScroll} time={formatter().time} />}
+              {(message) => (
+                <RawMessage message={message} onRendered={() => dispatchScroll(contentChanged)} time={formatter().time} />
+              )}
             </For>
           </Accordion>
         </div>
