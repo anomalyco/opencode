@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   PICKER_FOCUS_TIMEOUT_MS,
   PICKER_MAX_SESSIONS,
-  initialPickerState,
+  createPickerState,
   pickerBrowsing,
   pickerFilterText,
   pickerFocusRequest,
@@ -29,7 +29,7 @@ const openedMobile: PickerEvent = {
 }
 
 // Folds the events in order and returns the last transition.
-const replay = (events: readonly PickerEvent[], state: PickerState = initialPickerState) =>
+const replay = (events: readonly PickerEvent[], state: PickerState = createPickerState()) =>
   events.reduce<PickerTransition>((last, event) => transitionPicker(last.state, event), { state, effects: [] })
 
 describe("transitionPicker", () => {

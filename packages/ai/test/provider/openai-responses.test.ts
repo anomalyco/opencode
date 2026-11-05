@@ -1459,6 +1459,28 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("keeps the system code when a WebSocket fails to connect", () =>
+    Effect.gen(function* () {
+      const socket = Object.assign(new EventTarget(), { readyState: globalThis.WebSocket.CONNECTING, close: () => {} })
+      const failed = Object.assign(new Event("error"), {
+        error: Object.assign(new Error("Failed to connect"), { code: "ENOTFOUND" }),
+      })
+      queueMicrotask(() => socket.dispatchEvent(failed))
+      const error = yield* WebSocketTransport.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- waitOpen only listens for events on this branch.
+        socket as unknown as globalThis.WebSocket,
+        { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
+      ).pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        code: "ENOTFOUND",
+        phase: "connect",
+        delivery: "not-sent",
+      })
+    }),
+  )
+
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
       yield* LLMClient.generate({

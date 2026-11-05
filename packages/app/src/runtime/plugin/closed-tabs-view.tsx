@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createUniqueId, type JSX } from "solid-js"
+import { For, Show, createMemo, createSignal, createUniqueId, onCleanup, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -17,6 +17,14 @@ import {
   type ClosedSideTab,
   type ClosedTabsModifier,
 } from "./closed-tabs"
+import {
+  createDeferredMenuState,
+  selectDeferredMenuHover,
+  selectDeferredMenuOpen,
+  transitionDeferredMenu,
+  type DeferredMenuEffect,
+  type DeferredMenuEvent,
+} from "./deferred-menu-machine"
 
 const MENU_LIMIT = 10
 
@@ -143,6 +151,68 @@ function ClosedTabsItems(props: { entries: readonly ClosedSideTab[]; onReopen: (
   )
 }
 
+/**
+ * Drives `deferred-menu-machine.ts` for a menu whose chosen item runs once the closing menu has returned focus to its
+ * trigger, and the tab strip has passed it on to the selected tab. Releasing that focus first lets the item move it
+ * where its tab needs it, e.g. into a new terminal, without the strip taking it back for the tab it remembers.
+ */
+export function createDeferredMenu<T>(options: { onChoose: (choice: T) => void; onNewTab?: () => void }) {
+  const [state, setState] = createSignal(createDeferredMenuState<T>())
+  // Events an effect raises synchronously wait behind that effect.
+  const queue: DeferredMenuEvent<T>[] = []
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: DeferredMenuEvent<T>) => {
+    queue.push(event)
+
+    if (queue.length === 1) untrack(drain)
+  }
+
+  const drain = () => {
+    const event = queue[0]
+
+    if (!event) return
+
+    try {
+      const next = transitionDeferredMenu(untrack(state), event)
+
+      setState(() => next.state)
+      next.effects.forEach((effect) =>
+        Promise.try(() => run(effect)).catch((cause: unknown) => console.error("[plugin] menu choice failed", cause)),
+      )
+    } finally {
+      queue.shift()
+    }
+
+    drain()
+  }
+
+  const run = (effect: DeferredMenuEffect<T>) => {
+    if (effect.type === "open.new-tab") return options.onNewTab?.()
+
+    if (effect.type === "timer.start") {
+      clearTimeout(timer)
+      timer = setTimeout(() => dispatch({ type: "timer.fired", attempt: effect.attempt }), effect.delay)
+
+      return
+    }
+
+    if (effect.type === "timer.stop") {
+      clearTimeout(timer)
+      timer = undefined
+
+      return
+    }
+
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    options.onChoose(effect.choice)
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return { state, dispatch }
+}
+
 const MODIFIER_LABEL = {
   mac: { alt: "⌥", shift: "⇧", ctrl: "⌃", meta: "⌘" },
   other: { alt: "Alt", shift: "Shift", ctrl: "Ctrl", meta: "Win" },
@@ -163,13 +233,12 @@ export function NewTabButton(props: {
   const global = closedTabsSwap() === "global"
   const held = createModifierHeld(modifier)
   const label = MODIFIER_LABEL[/(Mac|iPhone|iPad)/.test(navigator.platform) ? "mac" : "other"][modifier]
-  const [state, setState] = createStore({ hover: false, open: false })
   const available = () => props.entries.length > 0
-  const swapped = () => state.open || (available() && held() && (global || state.hover))
-  // What the press that is opening the menu asked for, read when Kobalte reports the open.
-  let intent: "menu" | "new" = "new"
   // A chosen entry reopens once the closing menu has returned focus, as the "+" menu does.
-  let chosen: string | undefined
+  const menu = createDeferredMenu<string>({ onChoose: (key) => props.onReopen(key), onNewTab: () => props.onNewTab() })
+
+  const swapped = () =>
+    selectDeferredMenuOpen(menu.state()) || (available() && held() && (global || selectDeferredMenuHover(menu.state())))
 
   return (
     <Tooltip
@@ -193,13 +262,10 @@ export function NewTabButton(props: {
         modal={false}
         placement="bottom-start"
         gutter={4}
-        open={state.open}
-        onOpenChange={(open) => {
-          if (!open) return setState("open", false)
-
-          if (intent === "menu" && available()) return setState("open", true)
-          props.onNewTab()
-        }}
+        open={selectDeferredMenuOpen(menu.state())}
+        onOpenChange={(open) =>
+          menu.dispatch({ type: "open.change", open, available: available(), defaultIntent: "new" })
+        }
       >
         <Menu.Trigger
           as={IconButton}
@@ -210,38 +276,31 @@ export function NewTabButton(props: {
           size="large"
           aria-label={swapped() ? language.t("home.recentlyClosed") : language.t("session.tab.add")}
           aria-haspopup="menu"
-          onPointerEnter={() => setState("hover", true)}
-          onPointerLeave={() => setState("hover", false)}
+          onPointerEnter={() => menu.dispatch({ type: "hover", hover: true })}
+          onPointerLeave={() => menu.dispatch({ type: "hover", hover: false })}
           onPointerDown={(event: PointerEvent) => {
             // The tablist redirects focus entering it to the selected tab, which counts as focus-outside and closes
             // the menu.
             event.preventDefault()
-            intent = swapped() || hasModifier(event, modifier) ? "menu" : "new"
+            menu.dispatch({ type: "arm", intent: swapped() || hasModifier(event, modifier) ? "menu" : "new" })
           }}
           onKeyDown={(event: KeyboardEvent) => {
-            intent = event.key === "ArrowDown" || event.key === "ArrowUp" || swapped() ? "menu" : "new"
+            // Only a key that activates the trigger arms it; a modifier pressed alone opens nothing.
+            if (!["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) return menu.dispatch({ type: "disarm" })
+            menu.dispatch({
+              type: "arm",
+              intent: event.key === "ArrowDown" || event.key === "ArrowUp" || swapped() ? "menu" : "new",
+            })
           }}
+          onBlur={() => menu.dispatch({ type: "disarm" })}
           onContextMenu={(event: MouseEvent) => {
-            if (!available()) return
-            event.preventDefault()
-            setState("open", true)
+            if (available()) event.preventDefault()
+            menu.dispatch({ type: "context.menu", available: available() })
           }}
         />
         <Menu.Portal>
-          <Menu.Content
-            class="min-w-64"
-            onCloseAutoFocus={() => {
-              const key = chosen
-
-              if (!key) return
-              chosen = undefined
-              setTimeout(() => {
-                if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-                props.onReopen(key)
-              })
-            }}
-          >
-            <ClosedTabsItems entries={props.entries} onReopen={(key) => (chosen = key)} />
+          <Menu.Content class="min-w-64" onCloseAutoFocus={() => menu.dispatch({ type: "close.autofocus" })}>
+            <ClosedTabsItems entries={props.entries} onReopen={(choice) => menu.dispatch({ type: "select", choice })} />
           </Menu.Content>
         </Menu.Portal>
       </Menu>

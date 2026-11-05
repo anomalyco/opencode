@@ -339,6 +339,7 @@ export function createTerminalModel(input: {
 
         if (!info) return undefined
 
+        void dispatch(target.server, { type: "terminal.created", sessionID: target.id, terminal: info })
         await dispatch(target.server, { type: "session.refresh", sessionID: target.id })
         selection(target).set({ id: info.id })
         dispatchFocus({ type: "pending.resolved", request, id: info.id })

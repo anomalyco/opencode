@@ -1,23 +1,22 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { frameLoop } from "@opencode/ui/motion"
-import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
-import { useSessionHashScroll } from "../use-session-hash-scroll"
+import { createTimelineCursor } from "./cursor"
+import { cursorMessageID, freshCursorMessageID, hasFreshCursorOrSeek, SCROLL_MOVED_EVENT } from "./cursor-machine"
 import { createTimelineFollow } from "./follow"
 import {
   canRequestFillProbe,
   canRequestScrollPage,
-  canSeekHistory,
   createTimelineHistoryState,
   DISPOSED_HISTORY_EVENT,
   FILL_REQUESTED_EVENT,
   HISTORY_LOAD_TIMEOUT_MS,
   HISTORY_RETRY_COOLDOWN_MS,
   HISTORY_SCROLL_THRESHOLD,
+  historySeekStatus,
   SCROLL_TOP_EVENT,
   SEEK_REQUESTED_EVENT,
   transitionTimelineHistory,
@@ -26,14 +25,12 @@ import {
 } from "./history-machine"
 import { createTimelineModel } from "./model"
 
-export function createSessionTimelineInteraction(session: SessionModel) {
-  const layout = useLayout()
+/** `visible`: the conversation is on screen, not behind another narrow-screen view. */
+export function createSessionTimelineInteraction(session: SessionModel, visible: Accessor<boolean>) {
   const location = useLocation<{ reveal?: string }>()
   const timeline = createTimelineModel({ session })
 
   const [state, setState] = createStore<{
-    messageID: string | undefined
-    pendingMessage: string | undefined
     scroll: { overflow: boolean; jump: boolean }
     /** The composer region's height; the timeline scrolls on underneath it and fades out at its top. */
     inset: number
@@ -43,8 +40,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       visible: HTMLDivElement | undefined
     }
   }>({
-    messageID: undefined,
-    pendingMessage: undefined,
     scroll: {
       overflow: false,
       jump: false,
@@ -75,8 +70,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
   let page = (_direction: 1 | -1) => {}
 
-  let scrollMark = 0
-  let messageMark = 0
   let scrollStateFrame: (() => void) | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   const [historyState, setHistoryState] = createSignal(createTimelineHistoryState())
@@ -88,8 +81,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   const visibleUserMessages = timeline.visibleUserMessages
   const anchor = (id: string) => `message-${id}`
 
-  const cursor = () => {
-    if (!scroller) return state.messageID
+  // The prompt at the top of the view, or the last chosen one when no prompt header is mounted there.
+  const promptInView = () => {
+    if (!scroller) return cursorMessageID(untrack(cursor.state))
     const box = scroller.getBoundingClientRect()
     const line = box.top + 100
 
@@ -118,13 +112,11 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
     if (near) return near.id
 
-    return list.filter((item) => item.top <= line).at(-1)?.id ?? list[0]?.id ?? state.messageID
+    return list.filter((item) => item.top <= line).at(-1)?.id ?? list[0]?.id ?? cursorMessageID(untrack(cursor.state))
   }
 
-  const setActiveMessage = (message: SessionMessageUser | undefined) => {
-    messageMark = scrollMark
-    setState("messageID", message?.id)
-  }
+  const setActiveMessage = (messageID: string | undefined) =>
+    cursor.dispatch({ type: "message.select", messageID, following: untrack(follow.following) })
 
   const jumpThreshold = (element: HTMLDivElement) => Math.max(400, element.clientHeight)
 
@@ -160,35 +152,32 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     )
   }
 
-  const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
+  const cursor = createTimelineCursor({
     sessionKey: session.identity.sessionKey,
-    sessionID: () => session.identity.params.id,
-    messagesReady: timeline.ready,
+    viewReady: createMemo(() => !!session.identity.params.id && timeline.ready() && !!state.refs.scroller && visible()),
+    following: follow.following,
     visibleUserMessages,
-    historySeekable: () => canSeekHistory(historyState()),
-    seekHistory: () => dispatchHistory(SEEK_REQUESTED_EVENT),
-    currentMessageId: () => state.messageID,
-    pendingMessage: () => state.pendingMessage,
-    setPendingMessage: (value) => setState("pendingMessage", value),
-    setActiveMessage,
-    follow: {
-      detach,
-      toBottom: () => {
-        follow.dispatch({ type: "follow" })
-        scrollToEnd()
-      },
-    },
+    syncing: () => timeline.resource.loading,
+    revertMessageID: session.data.revertMessageID,
+    oldestMessageID: oldestMessage,
+    historyStatus: createMemo(() => historySeekStatus(historyState())),
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
-    scheduleScrollState,
-    consumePendingMessage: (key) => layout.pendingMessage.consume(key),
+    detach,
+    toEnd: () => {
+      follow.dispatch({ type: "follow" })
+      scrollToEnd()
+
+      if (scroller) scheduleScrollState(scroller)
+    },
+    seekHistory: () => dispatchHistory(SEEK_REQUESTED_EVENT),
   })
 
   let resumeFrame: (() => void) | undefined
 
   const resume = (behavior?: ScrollBehavior) => {
-    setState("messageID", undefined)
+    cursor.clear()
     const attempt = follow.beginReturn()
     // Scrolls on the next frame, before it paints. A submit resumes from its key handler right after changing the
     // DOM, where reading the scroll range would force a layout that the frame then repeats. Input that stops
@@ -203,7 +192,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
       return false
     })
-    clearMessageHash()
 
     if (scroller) scheduleScrollState(scroller)
   }
@@ -212,7 +200,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     const messages = visibleUserMessages()
 
     if (messages.length === 0) return
-    const current = state.messageID && messageMark === scrollMark ? state.messageID : cursor()
+    const current = freshCursorMessageID(untrack(cursor.state)) ?? promptInView()
     const base = current ? messages.findIndex((message) => message.id === current) : messages.length
     const target = (base === -1 ? messages.length : base) + offset
 
@@ -224,18 +212,17 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       return
     }
 
-    detach()
-    scrollToMessage(messages[target], "auto")
+    cursor.jump(messages[target].id, "auto")
   }
 
   // A gesture inside a nested scrollable region scrolls that region, not the timeline.
   const markUserScroll = (target?: EventTarget | null) => {
-    if (!scroller) return
+    if (!scroller || !hasFreshCursorOrSeek(untrack(cursor.state))) return
     const element = target instanceof Element ? target : undefined
     const nested = element?.closest("[data-scrollable]")
 
     if (nested && nested !== scroller) return
-    scrollMark += 1
+    cursor.dispatch(SCROLL_MOVED_EVENT)
   }
 
   const setScrollRef = (element: HTMLDivElement | undefined) => {
@@ -366,44 +353,17 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
 
   createEffect(
-    on(
-      () => visibleUserMessages().at(-1)?.id,
-      (lastID, previousID) => {
-        if (lastID && previousID && lastID > previousID) setState("messageID", undefined)
-      },
-      { defer: true },
-    ),
-  )
-  createEffect(
-    on(
-      session.identity.sessionKey,
-      () => {
-        setState("messageID", undefined)
-        setState("pendingMessage", undefined)
-        setState("scroll", { overflow: false, jump: false })
-      },
-      { defer: true },
-    ),
+    on(session.identity.sessionKey, () => setState("scroll", { overflow: false, jump: false }), { defer: true }),
   )
   createEffect(
     on(
       () => session.identity.params.id,
       (id, previous) => {
-        if (!id || !previous || id === previous || state.messageID || state.pendingMessage || location.hash) return
+        // A switch resets the cursor, so only a `#message-<id>` or other hash can hold the new session elsewhere.
+        if (!id || !previous || id === previous || location.hash) return
         follow.dispatch({ type: "follow" })
         scrollToEnd()
       },
-    ),
-  )
-  createEffect(
-    on(
-      follow.following,
-      (value) => {
-        if (!value) return
-        setState("messageID", undefined)
-        clearMessageHash()
-      },
-      { defer: true },
     ),
   )
   createEffect(() => {
@@ -454,8 +414,16 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     actions: {
       navigateMessage,
       page: (direction: 1 | -1) => page(direction),
-      revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
-      revealPart: (target: string) => revealPart(target),
+      // Find and tool reveals move the view like a scroll, so the chosen prompt is no longer where navigation starts.
+      revealMessage: (id: string, partID?: string) => {
+        cursor.dispatch(SCROLL_MOVED_EVENT)
+        revealMessage(id, partID)
+      },
+      revealPart: (target: string) => {
+        cursor.dispatch(SCROLL_MOVED_EVENT)
+
+        return revealPart(target)
+      },
       resume,
       setActiveMessage,
     },

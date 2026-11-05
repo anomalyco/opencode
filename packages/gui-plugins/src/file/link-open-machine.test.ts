@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   LINK_OPEN_TIMEOUT_MS,
-  initialLinkOpenState,
+  createLinkOpenState,
   transitionLinkOpen,
   type LinkOpenEvent,
   type LinkOpenState,
@@ -37,7 +37,7 @@ const synced = (attempt: number, fields: Partial<Extract<LinkOpenEvent, { type: 
 })
 
 // Folds the events in order and returns the last transition.
-const replay = (events: readonly LinkOpenEvent[], state: LinkOpenState = initialLinkOpenState) =>
+const replay = (events: readonly LinkOpenEvent[], state: LinkOpenState = createLinkOpenState()) =>
   events.reduce<LinkOpenTransition>((last, event) => transitionLinkOpen(last.state, event), { state, effects: [] })
 
 describe("transitionLinkOpen", () => {
@@ -92,7 +92,7 @@ describe("transitionLinkOpen", () => {
   })
 
   test("a click claims an attempt and starts resolving before any await", () => {
-    expect(transitionLinkOpen(initialLinkOpenState, { ...click, base: "docs" })).toEqual({
+    expect(transitionLinkOpen(createLinkOpenState(), { ...click, base: "docs" })).toEqual({
       state: {
         status: "resolving",
         attempt: 1,
@@ -245,7 +245,9 @@ describe("transitionLinkOpen", () => {
     const loading = replay([click, resolvedFile(1)])
 
     expect(transitionLinkOpen(loading.state, resolvedFile(1)).state).toBe(loading.state)
-    expect(transitionLinkOpen(initialLinkOpenState, resolvedFile(0)).state).toBe(initialLinkOpenState)
+    const idle = createLinkOpenState()
+
+    expect(transitionLinkOpen(idle, resolvedFile(0)).state).toBe(idle)
   })
 
   test("disposal aborts the click in flight and ignores everything after it", () => {
@@ -254,6 +256,6 @@ describe("transitionLinkOpen", () => {
     expect(disposed).toEqual({ state: { status: "disposed" }, effects: [{ type: "abort", attempt: 1 }] })
     expect(transitionLinkOpen(disposed.state, click).state).toBe(disposed.state)
     expect(transitionLinkOpen(disposed.state, resolvedFile(1)).effects).toEqual([])
-    expect(transitionLinkOpen(initialLinkOpenState, { type: "disposed" }).effects).toEqual([])
+    expect(transitionLinkOpen(createLinkOpenState(), { type: "disposed" }).effects).toEqual([])
   })
 })

@@ -25,6 +25,8 @@ export type ServerConnectControllerOptions =
       readonly removeTabs: (key: ServerConnection.Key) => void
       /** Closes the dialog. `saved` is the server a successful save stored. */
       readonly onClose: (saved: ServerConnection.Http | undefined) => void
+      /** True once the dialog starts closing, so a check that finishes during its exit animation saves nothing. */
+      readonly closing?: Accessor<boolean>
     }
 
 export function createServerConnectController(options: ServerConnectControllerOptions) {
@@ -143,6 +145,13 @@ export function createServerConnectController(options: ServerConnectControllerOp
   // Runs once the dialog is in the stack, so a server removed before then closes this dialog, not the one below.
   if (options.surface === "dialog" && options.original)
     createEffect(on(options.original, (original) => dispatch({ type: "original.synced", original })))
+
+  if (options.surface === "dialog" && options.closing) {
+    const closing = options.closing
+    createEffect(() => {
+      if (closing()) dispatch({ type: "disposed" })
+    })
+  }
 
   onCleanup(() => dispatch({ type: "disposed" }))
 

@@ -243,7 +243,9 @@ export function createActiveSessionRegion(input: {
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
 
-  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = (target) =>
+    revert.to(target.messageID, target.sessionID)
+
   const fork = useSessionFork()
   const forkMessage: NonNullable<SessionUserActions["fork"]> = (target) => fork(target).then(() => undefined)
 
@@ -427,14 +429,24 @@ export function ActiveSessionComposerRegion(props: {
   const openRoute = useOpenSessionRoute()
 
   // Only the server's LocationNotFoundError for the session's own Location replaces the composer.
-  const missing = createMemo(() => {
-    const ref = location().missing
-    const info = props.session.data.info()
+  // A refetched session info (on reconnect) must not remount the keyed view and close its open menu.
+  const missing = createMemo(
+    () => {
+      const ref = location().missing
+      const info = props.session.data.info()
 
-    if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
+      if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
 
-    return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
-  })
+      return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
+    },
+    undefined,
+    {
+      equals: (previous, next) =>
+        previous?.directory === next?.directory &&
+        previous?.sessionID === next?.sessionID &&
+        previous?.projectID === next?.projectID,
+    },
+  )
 
   // Subagents count while their session runs, or while their blocking call waits for its child session.
   const subagents = createMemo<SessionActivityItem[]>(() =>

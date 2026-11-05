@@ -5,13 +5,12 @@ import { artifactMime } from "@opencode/util/artifact"
 import { bytesToBase64 } from "@opencode/util/base64"
 import { checksum } from "@opencode/util/encode"
 import { showToast } from "@opencode/ui/toast"
-import { createQuery, useQueries, useQueryClient } from "@tanstack/solid-query"
+import { createQuery, focusManager, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createKeyed,
-  createVisitState,
   type LineRange,
   type MountedSession,
   type SessionScreen,
@@ -19,7 +18,6 @@ import {
 } from "@opencode/plugin/gui"
 import type Review from "./index"
 import {
-  expandReviewFolders,
   filterRenderableDiff,
   isReviewFolder,
   normalizePath,
@@ -30,12 +28,51 @@ import {
   reviewRootDirectory,
 } from "./kinds"
 import {
+  INITIAL_REVIEW_FOLDER_STATE,
+  reviewExpandedDiffs,
+  reviewFolderCandidates,
+  reviewFolderLabels,
+  sameReviewFolderSource,
+  transitionReviewFolders,
+  type ReviewFolderEffect,
+  type ReviewFolderEvent,
+  type ReviewFolderSource,
+  type ReviewFolderState,
+} from "./folder-machine"
+import {
+  INITIAL_REVIEW_RENDER_STATE,
+  reviewMobileReady,
+  reviewPanelReady,
+  transitionReviewRender,
+  type ReviewRenderEvent,
+  type ReviewRenderState,
+} from "./render-machine"
+import {
   INITIAL_REVIEW_SCROLL_STATE,
+  REVIEW_SCROLL_INTERACTED,
+  REVIEW_SCROLL_RESTORE_REQUESTED,
+  canRestoreReviewScroll,
+  canSaveReviewScroll,
   sameReviewScrollContext,
   transitionReviewScroll,
   type ReviewScrollEvent,
   type ReviewScrollState,
 } from "./scroll-machine"
+import {
+  INITIAL_REVIEW_DIFF_STATE,
+  REVIEW_DIFF_TIMEOUT_MS,
+  reviewDiffReady,
+  reviewDiffView,
+  sameReviewDiffTarget,
+  transitionReviewDiff,
+  type ReviewDiffContext,
+  type ReviewDiffEffect,
+  type ReviewDiffEvent,
+  type ReviewDiffRows,
+  type ReviewDiffState,
+  type ReviewDiffTarget,
+  type ReviewDiffView,
+} from "./machine"
 
 export type ChangeMode = "git" | "branch" | "turn"
 
@@ -43,8 +80,14 @@ type FileSelection = { startLine: number; endLine: number; startChar: number; en
 
 export type Demand = { tree: number; files: number; panel: number; details: number }
 
-/** The narrow review's list and the animation frame that scrolls it to a focused file. */
+/** The narrow review's list and the animation frame that restores its scroll or scrolls it to a focused file. */
 type ScrollTarget = { element?: HTMLDivElement; frame?: number }
+
+/** The frame, then task, that a session switch waits for before the review renders. */
+type RenderGate = { frame?: number; timer?: ReturnType<typeof setTimeout> }
+
+/** The diff request the driver runs: its abort controller and its timeout. */
+type DiffRequest = { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
 
 const selectionFromLines = (range: LineRange): FileSelection => ({
   startLine: Math.min(range.start, range.end),
@@ -76,7 +119,51 @@ export function createReviewModel(input: {
     initializingGit: {},
   })
 
-  const [rendered, setRendered] = createVisitState(false)
+  // The machines keep numbers, not the visit objects that tell routing visits apart.
+  const visits = { ids: new WeakMap<MountedSession["visit"], number>(), last: 0 }
+
+  const visitID = (visit: MountedSession["visit"]) => {
+    const existing = visits.ids.get(visit)
+
+    if (existing !== undefined) return existing
+    visits.last += 1
+    visits.ids.set(visit, visits.last)
+
+    return visits.last
+  }
+
+  const [renderState, setRenderState] = createSignal<ReviewRenderState>(INITIAL_REVIEW_RENDER_STATE)
+  const renderGate: RenderGate = {}
+
+  const dispatchRender = (event: ReviewRenderEvent) => {
+    const next = transitionReviewRender(untrack(renderState), event)
+
+    setRenderState(next.state)
+    next.effects.forEach((effect) => {
+      if (renderGate.frame !== undefined) cancelAnimationFrame(renderGate.frame)
+      clearTimeout(renderGate.timer)
+      renderGate.frame = undefined
+      renderGate.timer = undefined
+
+      if (effect.type === "frame.cancel") return
+
+      renderGate.frame = requestAnimationFrame(() => {
+        renderGate.frame = undefined
+        renderGate.timer = setTimeout(() => {
+          renderGate.timer = undefined
+          dispatchRender({ type: "frame.settled", attempt: effect.attempt })
+        }, 0)
+      })
+    })
+  }
+
+  // After a session switch the review renders a frame later, so the switch paints first. The gate follows the model's
+  // own routed session, which a panel can hold before the route publishes it, and keeps it while no session routes.
+  createKeyed(
+    () => visitID(view().visit),
+    (id) => dispatchRender({ type: "visit.synced", visitID: id }),
+  )
+  onCleanup(() => dispatchRender({ type: "disposed" }))
 
   // The routed session's review state. Desktop loads it asynchronously; until it has, its defaults are not the
   // session's choice, so nothing shows them or requests their diff, and changes wait to apply over the stored state.
@@ -87,23 +174,6 @@ export function createReviewModel(input: {
 
   // A memo, so the store a session switch reopens does not recompute the diffs, kinds and tree rows it feeds.
   const selectedFile = createMemo(() => stored()?.file)
-
-  // After a session switch the review renders a frame later, so the switch paints first.
-  createKeyed(
-    () => view().visit,
-    () => {
-      const run = { ended: false }
-
-      onCleanup(() => {
-        run.ended = true
-      })
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (!run.ended) setRendered(true)
-        }, 0)
-      })
-    },
-  )
 
   const vcs = createMemo(() => view().server.data.location.vcs.info({ directory: directory() }))
 
@@ -161,29 +231,122 @@ export function createReviewModel(input: {
 
   const turnKey = () => [ctx.id, view().server.id, "session-turn", view().id] as const
 
-  const diffQuery = createQuery(() => {
-    const value = mode()
-    const turn = value === "turn"
+  const diffContext = createMemo(
+    (): ReviewDiffContext => {
+      const project = view().project
 
-    return {
-      queryKey: turn ? turnKey() : ([...vcsKey(), value] as const),
+      if (project && !project.vcs) return { kind: "no-vcs" }
+
       // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
-      enabled: !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs,
-      refetchOnMount: "always" as const,
-      // A finished turn does not change on focus or filesystem events; refresh it when the session goes idle.
-      refetchOnWindowFocus: !turn,
-      queryFn: turn
-        ? () => view().server.client.session.diff({ sessionID: view().id })
-        : () =>
-            view()
-              .server.client.vcs.diff({
-                location: { directory: directory() },
-                mode: value === "git" ? "working" : value,
-                untracked: "folders",
-              })
-              .then((result) => result.data),
-    }
-  })
+      if (!stored()) return { kind: "waiting" }
+      const connected = view().server.connected
+
+      if (!project) return connected ? { kind: "waiting" } : { kind: "offline" }
+      const value = mode()
+      const serverID = view().server.id
+
+      const target: ReviewDiffTarget =
+        value === "turn"
+          ? { kind: "turn", serverID, sessionID: view().id }
+          : {
+              kind: "vcs",
+              serverID,
+              directory: directory(),
+              mode: value,
+              branch: vcs()?.branch.current ?? "",
+              defaultBranch: vcs()?.branch.default ?? "",
+            }
+
+      return { kind: "ready", target, connected, demanded: wantsReview() }
+    },
+    undefined,
+    { equals: sameDiffContext },
+  )
+
+  const [diffState, setDiffState] = createSignal<ReviewDiffState>(INITIAL_REVIEW_DIFF_STATE)
+  const diffRequest: DiffRequest = {}
+
+  // The diffs a target last loaded stay in the query cache, so returning to a mode or directory shows them at once.
+  const diffKey = (target: ReviewDiffTarget) =>
+    target.kind === "turn"
+      ? [ctx.id, target.serverID, "session-turn", target.sessionID]
+      : [ctx.id, target.serverID, "session-vcs", target.directory, target.branch, target.defaultBranch, target.mode]
+
+  const dispatchDiff = (event: ReviewDiffEvent) => {
+    const next = transitionReviewDiff(untrack(diffState), event)
+
+    setDiffState(next.state)
+    next.effects.forEach(runDiffEffect)
+  }
+
+  const runDiffEffect = (effect: ReviewDiffEffect) => {
+    clearTimeout(diffRequest.timer)
+    diffRequest.controller?.abort()
+
+    if (effect.type === "abort") return
+    const attempt = effect.attempt
+    const controller = new AbortController()
+
+    const timer = setTimeout(() => {
+      controller.abort()
+      dispatchDiff({ type: "fetch.timed-out", attempt })
+    }, REVIEW_DIFF_TIMEOUT_MS)
+
+    diffRequest.controller = controller
+    diffRequest.timer = timer
+    // The machine drops the answer of a request it no longer waits for, aborted or not.
+    void requestDiff(effect.target, AbortSignal.any([ctx.signal, controller.signal])).then(
+      (rows) => {
+        clearTimeout(timer)
+        const loaded: ReviewDiffRows = { rows, version: Date.now() }
+
+        queryClient.setQueryData(diffKey(effect.target), loaded)
+        dispatchDiff({ type: "fetch.succeeded", attempt, rows: loaded })
+      },
+      (cause: unknown) => {
+        clearTimeout(timer)
+        dispatchDiff({ type: "fetch.failed", attempt, message: cause instanceof Error ? cause.message : String(cause) })
+      },
+    )
+  }
+
+  const requestDiff = (target: ReviewDiffTarget, signal: AbortSignal) => {
+    const client = view().server.client
+
+    if (target.kind === "turn") return client.session.diff({ sessionID: target.sessionID }, { signal })
+
+    return client.vcs
+      .diff(
+        {
+          location: { directory: target.directory },
+          mode: target.mode === "git" ? "working" : target.mode,
+          untracked: "folders",
+        },
+        { signal },
+      )
+      .then((result) => result.data)
+  }
+
+  createKeyed(diffContext, (context) =>
+    dispatchDiff({
+      type: "context.changed",
+      context:
+        context.kind === "ready"
+          ? { ...context, cached: queryClient.getQueryData<ReviewDiffRows>(diffKey(context.target)) }
+          : context,
+    }),
+  )
+
+  // A finished turn does not change on focus or filesystem events; the machine refreshes only Git changes then.
+  onCleanup(
+    focusManager.subscribe((focused) => {
+      if (focused) dispatchDiff({ type: "window.focused" })
+    }),
+  )
+  onCleanup(() => dispatchDiff({ type: "disposed" }))
+
+  // A connection or demand change alone keeps the view, so the diffs it shows are not computed again.
+  const diffView = createMemo(() => reviewDiffView(diffState()), undefined, { equals: sameDiffView })
 
   // The session details' changes row: the session directory's working tree, loaded only while the details show.
   const detailsKey = () => [ctx.id, view().server.id, "session-details", view().directory] as const
@@ -203,7 +366,8 @@ export function createReviewModel(input: {
   }))
 
   const refresh = debounce(() => {
-    void queryClient.invalidateQueries({ queryKey: vcsKey() })
+    dispatchDiff({ type: "refresh", source: "vcs" })
+    dispatchFolders({ type: "refresh" })
     void queryClient.invalidateQueries({ queryKey: detailsKey() })
   }, 100)
 
@@ -232,79 +396,145 @@ export function createReviewModel(input: {
   )
 
   createKeyed(opened, () => {
-    if (diffQuery.isFetching) return
-
     if (input.demand.tree > 0) {
       refresh()
 
       return
     }
 
-    if (view().server.connected && view().project?.vcs) void diffQuery.refetch()
+    dispatchDiff({ type: "side.opened" })
   })
 
-  const rows = (): FileDiffInfo[] => (diffQuery.isFetched ? (diffQuery.data ?? []) : [])
+  const noRows: readonly FileDiffInfo[] = []
+
+  const rows = () => {
+    const current = diffView()
+
+    return current.status === "ready" ? current.rows : noRows
+  }
 
   // Git lists an untracked folder as one row. Once the change tree opens it, the folder lists its entries one level
-  // deep; they stay loaded while it is closed again, until the changes' source changes.
-  const [openFolders, setOpenFolders] = createSignal<readonly string[]>([])
+  // deep; they stay loaded while it is closed again, until the changes' source changes or the folder goes away.
+  const [folderState, setFolderState] = createSignal<ReviewFolderState>(INITIAL_REVIEW_FOLDER_STATE)
+  const folderRequests = new Map<number, DiffRequest>()
 
-  createKeyed(
-    () => [...vcsKey(), mode()].join("\0"),
-    () => setOpenFolders([]),
-  )
+  const dispatchFolders = (event: ReviewFolderEvent) => {
+    const next = transitionReviewFolders(untrack(folderState), event)
 
-  const folderQueries = useQueries(() => ({
-    queries: openFolders().map((folder) => ({
-      queryKey: [...vcsKey(), mode(), "folder", folder] as const,
-      enabled: view().server.connected && mode() !== "turn",
-      queryFn: () =>
-        view()
-          .server.client.vcs.diff({
-            location: {
-              directory: reviewFolderDirectory(reviewRootDirectory(view().project?.worktree ?? directory()), folder),
-            },
-            mode: mode() === "branch" ? "branch" : "working",
+    setFolderState(next.state)
+    next.effects.forEach(runFolderEffect)
+  }
+
+  const runFolderEffect = (effect: ReviewFolderEffect) => {
+    if (effect.type === "abort") {
+      const request = folderRequests.get(effect.attempt)
+
+      folderRequests.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller?.abort()
+
+      return
+    }
+
+    const attempt = effect.attempt
+    const request: DiffRequest = {}
+
+    folderRequests.set(attempt, request)
+    // A retry waits out its backoff first; the request's own deadline starts with it.
+    request.timer = setTimeout(() => {
+      const controller = new AbortController()
+
+      request.controller = controller
+      request.timer = setTimeout(() => {
+        if (!folderRequests.delete(attempt)) return
+        controller.abort()
+        dispatchFolders({ type: "fetch.timed-out", folder: effect.folder, attempt })
+      }, REVIEW_DIFF_TIMEOUT_MS)
+      void view()
+        .server.client.vcs.diff(
+          {
+            location: { directory: reviewFolderDirectory(effect.source.root, effect.folder) },
+            mode: effect.source.mode === "branch" ? "branch" : "working",
             untracked: "folders",
-          })
-          .then((result) => result.data),
-    })),
-  }))
+          },
+          { signal: AbortSignal.any([ctx.signal, controller.signal]) },
+        )
+        .then(
+          (result) => {
+            if (!folderRequests.delete(attempt)) return
+            clearTimeout(request.timer)
+            dispatchFolders({ type: "fetch.succeeded", folder: effect.folder, attempt, entries: result.data })
+          },
+          () => {
+            if (!folderRequests.delete(attempt)) return
+            clearTimeout(request.timer)
+            dispatchFolders({ type: "fetch.failed", folder: effect.folder, attempt })
+          },
+        )
+    }, effect.delay)
+  }
 
-  const diffs = createMemo(() =>
-    expandReviewFolders(
-      rows(),
-      new Map(openFolders().map((folder, index) => [folder, folderQueries[index]?.data ?? []] as const)),
-    ),
-  )
+  const folderSource = createMemo(
+    (): ReviewFolderSource | undefined => {
+      const context = diffContext()
 
-  // An opened folder's entry count, and whether its listing stopped before showing or checking every entry.
-  const folderLabels = createMemo(
-    () =>
-      new Map(
-        openFolders().flatMap((folder, index) => {
-          const entries = folderQueries[index]?.data
+      if (context.kind !== "ready" || context.target.kind !== "vcs") return undefined
 
-          if (!entries) return []
-          const shown = entries.filter((entry) => !entry.more).length
-          const label = entries.some((entry) => entry.more) ? ctx.t("folder.more", { count: shown }) : `${shown}`
-
-          return [[normalizePath(folder), label] as const]
-        }),
-      ),
-  )
-
-  // The tree's expanded state belongs to the session screen's file model.
-  createKeyed(
-    () => {
-      const next = diffs()
-        .map((diff) => diff.file)
-        .filter((file) => isReviewFolder(file) && !openFolders().includes(file))
-        .filter((file) => screen.file.tree.state(normalizePath(file))?.expanded)
-
-      return next.length > 0 && next
+      return {
+        serverID: context.target.serverID,
+        root: reviewRootDirectory(view().project?.worktree ?? directory()),
+        directory: context.target.directory,
+        mode: context.target.mode,
+        branch: context.target.branch,
+        defaultBranch: context.target.defaultBranch,
+      }
     },
-    (next) => setOpenFolders((list) => [...list, ...next]),
+    undefined,
+    {
+      equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewFolderSource(previous, next)),
+    },
+  )
+
+  // The tree's expanded state belongs to the session screen's file model, which the change tree and the file
+  // browser share.
+  const expandedFolders = createMemo(
+    () =>
+      new Set(
+        reviewFolderCandidates(rows(), folderState()).filter(
+          (folder) => screen.file.tree.state(normalizePath(folder))?.expanded === true,
+        ),
+      ),
+    undefined,
+    { equals: (previous, next) => previous.size === next.size && [...previous].every((folder) => next.has(folder)) },
+  )
+
+  // Syncs the folders the tree expands, and the changes that list them, into the folder requests.
+  createKeyed(
+    () => ({
+      source: folderSource(),
+      connected: view().server.connected,
+      rows: rows(),
+      expanded: expandedFolders(),
+    }),
+    (context) => dispatchFolders({ type: "context.changed", context }),
+    {
+      equals: (previous, next) =>
+        previous.source === next.source &&
+        previous.connected === next.connected &&
+        previous.rows === next.rows &&
+        previous.expanded === next.expanded,
+    },
+  )
+  onCleanup(() => dispatchFolders({ type: "disposed" }))
+
+  const diffs = createMemo(() => reviewExpandedDiffs(rows(), folderState()))
+
+  // A loaded folder's entry count, whether its listing stopped before showing or checking every entry, or its failure.
+  const folderLabels = createMemo(() =>
+    reviewFolderLabels(folderState(), {
+      more: (count) => ctx.t("folder.more", { count }),
+      failed: ctx.t("folder.failed"),
+    }),
   )
 
   const renderable = createMemo(() => diffs().filter(filterRenderableDiff))
@@ -323,24 +553,9 @@ export function createReviewModel(input: {
   const count = () => rows().length
   const hasChanges = () => count() > 0
 
-  const ready = () => {
-    // A project without VCS never enables diffQuery, so its status stays "pending" forever.
-    const project = view().project
+  const ready = () => reviewDiffReady(diffState())
 
-    if (project && !project.vcs) return true
-
-    if (!stored()) return false
-
-    return !diffQuery.isPending
-  }
-
-  const lifetime = { disposed: false }
-
-  onCleanup(() => {
-    lifetime.disposed = true
-  })
-
-  const alive = () => !lifetime.disposed && !ctx.signal.aborted
+  const alive = () => untrack(diffState).status !== "disposed" && !ctx.signal.aborted
 
   // Initializes Git for the routed session. The request keeps that session's object, so its server and location stay
   // its own. Cache refresh follows the request's session; only error feedback depends on which session is routed.
@@ -588,18 +803,6 @@ export function createReviewModel(input: {
   const scroller: ScrollTarget = {}
   const [hasScroller, setHasScroller] = createSignal(false)
   const [scrollState, setScrollState] = createSignal<ReviewScrollState>(INITIAL_REVIEW_SCROLL_STATE)
-  // The machine keeps numbers, not the visit objects that tell routing visits apart.
-  const visits = { ids: new WeakMap<MountedSession["visit"], number>(), last: 0 }
-
-  const visitID = (visit: MountedSession["visit"]) => {
-    const existing = visits.ids.get(visit)
-
-    if (existing !== undefined) return existing
-    visits.last += 1
-    visits.ids.set(visit, visits.last)
-
-    return visits.last
-  }
 
   const dispatchScroll = (event: ReviewScrollEvent) => {
     const next = transitionReviewScroll(untrack(scrollState), event)
@@ -610,6 +813,17 @@ export function createReviewModel(input: {
       scroller.frame = undefined
 
       if (effect.type === "frame.cancel") return
+
+      if (effect.type === "frame.restore") {
+        scroller.frame = requestAnimationFrame(() => {
+          scroller.frame = undefined
+
+          if (canRestoreReviewScroll(untrack(scrollState), effect.attempt)) restoreScroll()
+          dispatchScroll({ type: "restore.stepped", attempt: effect.attempt })
+        })
+
+        return
+      }
 
       // Scrolls the list to the file's diff, and settles once the diff stays at the top as the list above renders.
       scroller.frame = requestAnimationFrame(() => {
@@ -623,8 +837,31 @@ export function createReviewModel(input: {
     })
   }
 
+  // Returns the narrow list to the stored scroll, as far as the diffs rendered so far reach.
+  const restoreScroll = () => {
+    const element = scroller.element
+
+    if (!element || element.clientHeight === 0 || element.clientWidth === 0) return
+    const stored = layout.scroll.get(view(), "review")
+
+    if (!stored || (stored.x === 0 && stored.y === 0)) return
+    const top = Math.min(stored.y, Math.max(0, element.scrollHeight - element.clientHeight))
+    const left = Math.min(stored.x, Math.max(0, element.scrollWidth - element.clientWidth))
+
+    if (element.scrollTop !== top) element.scrollTop = top
+
+    if (element.scrollLeft !== left) element.scrollLeft = left
+  }
+
   createKeyed(
-    () => ({ visitID: visitID(view().visit), narrow: layout.narrow(), scroller: hasScroller(), ready: ready() }),
+    () => ({
+      visitID: visitID(view().visit),
+      narrow: layout.narrow(),
+      scroller: hasScroller(),
+      ready: ready(),
+      layoutReady: layout.ready(),
+      commentFocused: screen.comment.focus.current() !== null,
+    }),
     (context) => dispatchScroll({ type: "context.synced", context }),
     { equals: sameReviewScrollContext },
   )
@@ -641,11 +878,9 @@ export function createReviewModel(input: {
   // A session that goes idle has finished its turn, which may have changed files.
   createKeyed(idled, () => {
     refresh()
+    dispatchDiff({ type: "refresh", source: "turn" })
     void queryClient.invalidateQueries({ queryKey: turnKey() })
   })
-
-  const deferRender = () => !rendered()
-  const panelRendered = createMemo<boolean>((previous) => previous || !deferRender(), false)
 
   return {
     screen,
@@ -673,9 +908,14 @@ export function createReviewModel(input: {
       update: updateComment,
     },
     count,
-    deferRender,
     details: (): FileDiffInfo[] | undefined => (detailsQuery.isFetched ? (detailsQuery.data ?? []) : undefined),
-    diffVersion: () => diffQuery.dataUpdatedAt,
+    /** What the review shows: diffs, or why there are none yet. */
+    diff: diffView,
+    diffVersion: () => {
+      const current = diffView()
+
+      return current.status === "ready" ? current.version : 0
+    },
     diffs,
     folderLabels,
     renderable,
@@ -687,11 +927,6 @@ export function createReviewModel(input: {
     loadDiff,
     readFile,
     mode,
-    noGit: createMemo(() => {
-      const project = view().project
-
-      return !!project && !project.vcs
-    }),
     filter: () => state.filter,
     setFilter: (value: string) => setState("filter", value),
     open: () => stored()?.open ?? [],
@@ -703,9 +938,16 @@ export function createReviewModel(input: {
 
         draft.open = unique
       }),
+    /** The narrow review mounts its list: one paint after each session switch. */
+    mobileReady: () => reviewMobileReady(renderState()),
     options,
-    panelRendered,
+    /** The wide panel mounts: one paint after the first visit, then across session switches. */
+    panelReady: () => reviewPanelReady(renderState()),
     ready,
+    retry: () => {
+      dispatchDiff({ type: "retry" })
+      dispatchFolders({ type: "retry" })
+    },
     setMode: (value: ChangeMode) =>
       update((draft) => {
         draft.mode = value
@@ -715,9 +957,37 @@ export function createReviewModel(input: {
       scroller.element = element
       setHasScroller(!!element)
     },
-    /** The user scrolled the narrow review: it stops scrolling to a focused file. */
-    cancelScroll: () => dispatchScroll({ type: "interacted" }),
+    /** The user scrolled, touched or keyed the narrow review: it stops restoring and scrolling to a focused file. */
+    interacted: () => dispatchScroll(REVIEW_SCROLL_INTERACTED),
+    /** The narrow list mounted, or its diffs or wrapping changed: it returns to the stored scroll while restoring. */
+    requestRestore: () => dispatchScroll(REVIEW_SCROLL_RESTORE_REQUESTED),
+    /** Stores the narrow list's scroll once the user, a focused file or a focused comment placed it. */
+    saveScroll: (session: MountedSession, element: HTMLDivElement) => {
+      if (!canSaveReviewScroll(untrack(scrollState))) return
+
+      if (element.clientHeight === 0 || element.clientWidth === 0) return
+      layout.scroll.set(session, "review", { x: element.scrollLeft, y: element.scrollTop })
+    },
   }
 }
 
 export type ReviewModel = ReturnType<typeof createReviewModel>
+
+function sameDiffContext(previous: ReviewDiffContext, next: ReviewDiffContext) {
+  if (previous.kind !== "ready" || next.kind !== "ready") return previous.kind === next.kind
+
+  return (
+    previous.connected === next.connected &&
+    previous.demanded === next.demanded &&
+    sameReviewDiffTarget(previous.target, next.target)
+  )
+}
+
+function sameDiffView(previous: ReviewDiffView, next: ReviewDiffView) {
+  if (previous.status === "ready" && next.status === "ready")
+    return previous.rows === next.rows && previous.version === next.version
+
+  if (previous.status === "error" && next.status === "error") return previous.failure === next.failure
+
+  return previous.status === next.status
+}

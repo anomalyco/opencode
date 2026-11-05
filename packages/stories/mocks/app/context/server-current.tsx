@@ -49,6 +49,11 @@ const fallbackData = {
   },
 }
 
+const fallbackHandoff = {
+  get: () => undefined,
+  forSession: () => ({ set() {}, settle() {}, clear() {} }),
+}
+
 type ActiveServerValue = {
   conn: ServerConnection.Any
   key: ServerConnection.Key
@@ -64,7 +69,7 @@ export function useServer() {
 
   if (active) return active
 
-  return { ctx: { data: fallbackData } }
+  return { ctx: { data: fallbackData, handoff: fallbackHandoff } }
 }
 
 export function useData() {

@@ -1,4 +1,4 @@
-import { batch, createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import { createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
 import { builtins } from "./builtins"
 import { PluginGuiLoader, type PluginGui } from "./plugins"
@@ -52,16 +52,18 @@ export function PluginRoot(props: ParentProps) {
 
   const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
 
-  // The GUIs of the plugins on the app's own server, as main sends them; undefined until main first sends them. The web
-  // runs built-ins only.
-  const [plugins, setPlugins] = createSignal<readonly PluginGui[] | undefined>(bridge ? undefined : [])
-  // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Extensions › Plugins shows
-  // them.
-  const [reserved, setReserved] = createSignal<readonly string[]>([])
+  // The GUIs of the plugins on the app's own server, as main sends them, and the plugins whose GUI cannot load because a
+  // built-in claims the id, which Extensions › Plugins shows. Settled once the loader first publishes, even empty after
+  // a failure. The web runs built-ins only.
+  const [loaded, setLoaded] = createSignal<{
+    settled: boolean
+    plugins: readonly PluginGui[]
+    reserved: readonly string[]
+  }>({ settled: !bridge, plugins: [], reserved: [] })
 
   // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.
   const definitions = createMemo<readonly Entry[]>(
-    () => [...localBuiltins, ...(plugins() ?? []).map((plugin) => plugin.definition)],
+    () => [...localBuiltins, ...loaded().plugins.map((plugin) => plugin.definition)],
     [],
     {
       equals: (a, b) => a.length === b.length && a.every((definition, index) => definition === b[index]),
@@ -76,12 +78,8 @@ export function PluginRoot(props: ParentProps) {
         value={
           bridge && {
             bridge,
-            set: (next, ids) =>
-              batch(() => {
-                setPlugins(next)
-                setReserved(ids)
-              }),
-            reserved,
+            set: (plugins, reserved) => setLoaded({ settled: true, plugins, reserved }),
+            reserved: () => loaded().reserved,
           }
         }
       >
@@ -93,12 +91,12 @@ export function PluginRoot(props: ParentProps) {
           apis={apis.apis}
           whenMounted={apis.whenMounted}
           ipc={bridge ? (token) => ipcs.client(token) : undefined}
-          plugin={(id) => plugins()?.find((plugin) => plugin.definition.id === id)}
+          plugin={(id) => loaded().plugins.find((plugin) => plugin.definition.id === id)}
           generation={ipcs.generation}
           ipcFailed={ipcs.failed}
         >
           <PluginStyles />
-          <PluginThemes loaded={() => plugins() !== undefined} />
+          <PluginThemes loaded={() => loaded().settled} />
           {PluginHotReload && (
             <Suspense>
               <PluginHotReload />

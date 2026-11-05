@@ -1,9 +1,9 @@
 import { showToast } from "@opencode/ui/toast"
-import { createMemo, createRoot, lazy, onCleanup, Suspense, type JSX } from "solid-js"
+import { createRoot, lazy, onCleanup, Suspense, type JSX } from "solid-js"
 import { Command, createKeyed, MenuItem, Server, Style, type ServerEntry, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Ssh, type SshConfig, type SshItem } from "./contract"
-import { SshCover, type SshOffer } from "./cover"
+import { SshCover } from "./cover"
 import type definition from "./index"
 import { sshName, sshServerState } from "./name"
 import { createSshController } from "./state"
@@ -51,11 +51,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         }),
       ),
     error: () => showToast({ variant: "error", title: ctx.t("common.requestFailed") }),
+    path: () => router.path(),
   })
 
-  // A visit to the routed page: a new token each time another tab or page is routed, whether or not a cover shows.
-  const visit = createMemo(() => ({ path: router.path() }))
-  const offer: SshOffer = { visit: undefined }
   const styled = { added: false }
   const byKey = (key: string) => (key.startsWith("ssh:") ? ssh.item(key.slice(4)) : undefined)
 
@@ -113,7 +111,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           <Row row={row} id={id} ssh={ssh} />
         </Suspense>
       ),
-      cover: () => <SshCover id={id} visit={visit()} ssh={ssh} offer={offer} />,
+      cover: () => <SshCover id={id} ssh={ssh} />,
     }
   }
 

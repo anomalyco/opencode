@@ -98,7 +98,7 @@ const layer = Layer.effect(
         const split = messages.map((message) => SessionBlob.split(message.data))
         const media =
           split.some((row) => row.moved) &&
-          (yield* SessionBlob.enabledFor(instances, {
+          (yield* SessionBlob.enabledFor(instances, app, {
             ...input.data.info,
             projectID: project.id,
             location: input.location,

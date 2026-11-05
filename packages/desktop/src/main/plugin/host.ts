@@ -64,6 +64,15 @@ import { getLastFocusedWindow, getMainWindows, onMainWindow } from "../windows"
 import { PluginError } from "./error"
 import { createLifecycle, type ErrorLog, type Instance, type Revision } from "./lifecycle"
 import { createManager } from "./manager"
+import {
+  createHostState,
+  isCurrentHostWatch,
+  sameHostEndpoint,
+  transitionHost,
+  type HostCommand,
+  type HostEndpoint,
+  type HostEvent,
+} from "./host-machine"
 import { evaluateMain } from "./module"
 import { getStore } from "../storage/store"
 import { createStorage } from "./storage"
@@ -92,8 +101,8 @@ type ListedPlugin = {
 }
 
 /**
- * What main keeps of the plugin listing besides the plugins: the ids a built-in claims, the plugins with a server
- * part and those that export `./tui` (Extensions › Plugins tags those parts), and the follow of the server.
+ * What main keeps of the plugin listing besides the plugins: the ids a built-in claims, and the plugins with a server
+ * part and those that export `./tui` (Extensions › Plugins tags those parts).
  */
 type Inventory = {
   reserved: readonly string[]
@@ -105,10 +114,15 @@ type Inventory = {
    * New plugins whose bundle main could not read, with why: listed in Extensions › Plugins until a listing reads them.
    */
   unreadable: ReadonlyMap<string, string>
-  /** Aborts the current follow of the app's own server. */
-  watch?: AbortController
-  /** Stops following the server's connections. */
-  stop?: () => void
+}
+
+/** One listing of the app's own server, applied only while it is the current one. */
+type Listing = {
+  readonly plugins: ReadonlyMap<string, ListedPlugin>
+  readonly reserved: readonly string[]
+  readonly parts: Pick<Inventory, "server" | "tui" | "unsupported" | "unreadable">
+  /** Bundles this listing found to run only on other systems, by id, at their revision. */
+  readonly skipped: ReadonlyMap<string, string>
 }
 
 const loadClient = () => import("@opencode/client")
@@ -116,10 +130,18 @@ const loadClient = () => import("@opencode/client")
 /** The client of the app's own server, made once the client module loaded and again when the endpoint changes. */
 type SidecarClient = {
   module?: Awaited<ReturnType<typeof loadClient>>
-  key?: string
-  client?: OpenCodeClient
+  active?: { readonly endpoint: HostEndpoint; readonly client: OpenCodeClient }
   /** The client plugins read while the server is unreachable. */
   unavailable?: OpenCodeClient
+}
+
+/** What following the app's own server holds open: its credential subscription, stream, listing and timers. */
+type HostResources = {
+  unfollow?: () => void
+  watch?: AbortController
+  watchTimer?: ReturnType<typeof setTimeout>
+  list?: AbortController
+  listTimer?: ReturnType<typeof setTimeout>
 }
 
 /** An Ipc method with its spec erased: Ipcs of every spec share one table, and `call` runs the spec's codecs. */
@@ -209,7 +231,7 @@ export function createHost(input: {
   // Each live instance's catalog and messages, so a locale change reaches them.
   const translations = new Set<Translation>()
   const closed = new Set<(win: BrowserWindow) => void>()
-  const status = { sequence: 0, menubarQueued: false, listing: false, relist: false }
+  let nextEntry = 0
 
   const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
   const changed = () => broadcast(new PluginsChanged({ list: installed() }))
@@ -264,20 +286,7 @@ export function createHost(input: {
     })
   }
 
-  const publishMenubar = () => {
-    status.menubarQueued = false
-
-    // While quitting the menu keeps its items, a kept plugin's among them; resuming publishes it again.
-    if (isQuitting(input.appState())) return
-    refreshMenu()
-    broadcast(new PluginMenubarItemsChanged({ items: listMenubarItems() }))
-  }
-
-  const scheduleMenubar = () => {
-    if (status.menubarQueued) return
-    status.menubarQueued = true
-    queueMicrotask(publishMenubar)
-  }
+  const scheduleMenubar = () => dispatch({ type: "menubar.scheduled" })
 
   const listMenubarItems = (): BridgeMenubarItem[] =>
     menubarItems().map((entry) => {
@@ -391,66 +400,156 @@ export function createHost(input: {
     }))
   }
 
+  const loadModule = async () => (sidecar.module ??= await loadClient())
+
+  const sidecarEndpoint = (): HostEndpoint | undefined => {
+    const credentials = SidecarCredentials.get()
+
+    if (!credentials) return undefined
+
+    return { url: credentials.url, authorization: SidecarCredentials.authorization(credentials, credentials.url) }
+  }
+
+  const clientFor = (module: NonNullable<SidecarClient["module"]>, endpoint: HostEndpoint) => {
+    if (sidecar.active && sameHostEndpoint(sidecar.active.endpoint, endpoint)) return sidecar.active.client
+    const headers: Record<string, string> = endpoint.authorization ? { authorization: endpoint.authorization } : {}
+    const client = module.OpenCode.make({ baseUrl: endpoint.url, headers })
+    sidecar.active = { endpoint, client }
+
+    return client
+  }
+
   const sidecarClient = () => {
-    const endpoint = server("sidecar")
+    const endpoint = sidecarEndpoint()
 
     if (!endpoint || !sidecar.module) return undefined
-    const key = JSON.stringify([endpoint.url, endpoint.headers])
 
-    if (sidecar.key !== key)
-      Object.assign(sidecar, {
-        key,
-        client: sidecar.module.OpenCode.make({ baseUrl: endpoint.url, headers: { ...endpoint.headers } }),
-      })
-
-    return sidecar.client
+    return clientFor(sidecar.module, endpoint)
   }
 
   // Follows the app's own server, as the TUI does: lists its plugins on each connection and each `plugin.updated`.
   // Every connection and reconnect of the server starts a new follow, so a new endpoint is followed at once.
-  const watchPlugins = async () => {
-    sidecar.module ??= await loadClient()
-    const client = sidecarClient()
+  let following = createHostState()
+  const resources: HostResources = {}
 
-    if (!client || isQuitting(input.appState())) return
-    inventory.watch?.abort()
-    const watch = new AbortController()
-    inventory.watch = watch
-    void followPlugins(client, watch.signal)
+  const quitting = () => isQuitting(input.appState())
+
+  const dispatch = (event: HostEvent<Listing>) => {
+    const next = transitionHost(following, event)
+    following = next.state
+    // Each command runs on its own, so one that throws cannot keep the rest from running.
+    next.commands.forEach((command) =>
+      Promise.try(() => perform(command)).catch((cause: unknown) =>
+        input.log("plugin host command failed", { command: command.type, cause: String(cause) }),
+      ),
+    )
   }
 
-  const follow = () =>
-    void watchPlugins().catch((cause: unknown) => input.log("plugin watch failed", { cause: String(cause) }))
+  const perform = (command: HostCommand<Listing>) => {
+    switch (command.type) {
+      case "subscribe-credentials":
+        resources.unfollow = SidecarCredentials.onChange(() =>
+          dispatch({ type: "endpoint.changed", endpoint: sidecarEndpoint(), quitting: quitting() }),
+        )
 
-  const followPlugins = async (client: OpenCodeClient, signal: AbortSignal) => {
-    while (!signal.aborted) {
-      await readEvents(client, signal).catch(() => undefined)
+        return
+      case "unsubscribe-credentials":
+        resources.unfollow?.()
+        resources.unfollow = undefined
 
-      if (signal.aborted) return
-      // The stream ended while the endpoint stayed the same; subscribe again after a pause.
-      await new Promise((resolve) => setTimeout(resolve, 1_000))
+        return
+      case "start-watch":
+        return void watchPlugins(command.attempt, command.endpoint)
+      case "schedule-watch-retry":
+        clearTimeout(resources.watchTimer)
+        resources.watchTimer = setTimeout(
+          () => dispatch({ type: "watch.retry-due", attempt: command.attempt, quitting: quitting() }),
+          command.delayMs,
+        )
+
+        return
+      case "cancel-watch":
+        resources.watch?.abort()
+        resources.watch = undefined
+        clearTimeout(resources.watchTimer)
+        resources.watchTimer = undefined
+
+        return
+      case "start-list":
+        return void listPlugins(command.attempt, command.endpoint, command.timeoutMs)
+      case "cancel-list":
+        resources.list?.abort()
+        resources.list = undefined
+        clearTimeout(resources.listTimer)
+        resources.listTimer = undefined
+
+        return
+      case "apply-listing":
+        command.listing.skipped.forEach((revision, id) => skipped.set(id, revision))
+
+        return applyPlugins(command.listing.plugins, command.listing.reserved, command.listing.parts)
+      case "log-list-error":
+        return input.log("plugin listing failed", { cause: String(command.cause) })
+      case "queue-menubar":
+        return queueMicrotask(() => dispatch({ type: "menubar.flushed", quitting: quitting() }))
+      case "publish-menubar":
+        refreshMenu()
+
+        return broadcast(new PluginMenubarItemsChanged({ items: listMenubarItems() }))
     }
   }
 
-  const readEvents = async (client: OpenCodeClient, signal: AbortSignal) => {
+  // Reads the server's event stream until it ends or the machine cancels it; an ended stream retries after a pause.
+  const watchPlugins = async (attempt: number, endpoint: HostEndpoint) => {
+    resources.watch?.abort()
+    const controller = new AbortController()
+    resources.watch = controller
+
+    const module = await loadModule().catch((cause: unknown) => {
+      input.log("plugin watch failed", { cause: String(cause) })
+    })
+
+    if (module && !controller.signal.aborted && isCurrentHostWatch(following, attempt))
+      await readEvents(clientFor(module, endpoint), attempt, controller.signal).catch(() => undefined)
+
+    if (!controller.signal.aborted) dispatch({ type: "watch.ended", attempt, quitting: quitting() })
+  }
+
+  const readEvents = async (client: OpenCodeClient, attempt: number, signal: AbortSignal) => {
     for await (const event of client.event.subscribe({ signal }))
-      if (event.type === "plugin.updated" || event.type === "server.connected") relistPlugins()
+      if (event.type === "plugin.updated" || event.type === "server.connected")
+        dispatch({ type: "relist.requested", watchAttempt: attempt, quitting: quitting() })
+  }
+
+  // Lists the plugins once, bounded by a timeout; the machine applies the result only while this listing is current.
+  const listPlugins = async (attempt: number, endpoint: HostEndpoint, timeoutMs: number) => {
+    resources.list?.abort()
+    clearTimeout(resources.listTimer)
+    const controller = new AbortController()
+    resources.list = controller
+    resources.listTimer = setTimeout(
+      () => dispatch({ type: "list.timed-out", attempt, quitting: quitting() }),
+      timeoutMs,
+    )
+
+    const event = await readListing(endpoint, controller.signal).then(
+      (listing): HostEvent<Listing> => ({ type: "list.succeeded", attempt, listing, quitting: quitting() }),
+      (cause: unknown): HostEvent<Listing> => ({ type: "list.failed", attempt, cause, quitting: quitting() }),
+    )
+
+    // Cancelled or timed out: the machine already moved on.
+    if (controller.signal.aborted) return
+    clearTimeout(resources.listTimer)
+    resources.list = undefined
+    resources.listTimer = undefined
+    dispatch(event)
   }
 
   // Lists the plugins on the app's own server that ship a `./gui-experimental` bundle and reads each bundle there. A
   // listing that fails is logged and keeps what main runs.
-  const listPlugins = async () => {
-    sidecar.module ??= await loadClient()
-    const client = sidecarClient()
-
-    if (!client || isQuitting(input.appState())) return
-
-    const listed = await client.plugin.list().then(
-      (result) => result.data,
-      (cause: unknown) => void input.log("plugin listing failed", { cause: String(cause) }),
-    )
-
-    if (!listed) return
+  const readListing = async (endpoint: HostEndpoint, signal: AbortSignal): Promise<Listing> => {
+    const client = clientFor(await loadModule(), endpoint)
+    const listed = (await client.plugin.list(undefined, { signal })).data
 
     const shipped = listed.filter(shipsPluginGui)
     const reserved = shipped.flatMap((plugin) => (pluginIdAvailable(plugin.id, definitions) ? [] : [plugin.id]))
@@ -462,12 +561,15 @@ export function createHost(input: {
       unreadable: new Map<string, string>(),
     }
 
+    const found = new Map<string, string>()
+
     const read = await Promise.all(
-      shipped.filter((plugin) => !reserved.includes(plugin.id)).map((plugin) => readPlugin(client, plugin.id, parts)),
+      shipped
+        .filter((plugin) => !reserved.includes(plugin.id))
+        .map((plugin) => readPlugin(client, plugin.id, { ...parts, skipped: found }, signal)),
     )
 
-    if (isQuitting(input.appState())) return
-    applyPlugins(new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved, parts)
+    return { plugins: new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved, parts, skipped: found }
   }
 
   // Reads a plugin's bundle and evaluates each new revision once. A read that fails is logged and keeps the bundle
@@ -476,13 +578,19 @@ export function createHost(input: {
   const readPlugin = async (
     client: OpenCodeClient,
     id: string,
-    parts: { readonly unsupported: Set<string>; readonly unreadable: Map<string, string> },
+    parts: {
+      readonly unsupported: Set<string>
+      readonly unreadable: Map<string, string>
+      readonly skipped: Map<string, string>
+    },
+    signal: AbortSignal,
   ) => {
     const previous = plugins.get(id)
 
-    const bundle = await client.plugin.gui({ id }).then(
+    const bundle = await client.plugin.gui({ id }, { signal }).then(
       (result) => result.data,
       (cause: unknown) => {
+        if (signal.aborted) return
         input.log("plugin bundle read failed", { id, cause: String(cause) })
 
         if (!previous) parts.unreadable.set(id, cause instanceof Error ? cause.message : String(cause))
@@ -495,7 +603,8 @@ export function createHost(input: {
 
     if (skipped.get(id) === bundle.revision) return void parts.unsupported.add(id)
 
-    if (isQuitting(input.appState())) return undefined
+    // A listing that was cancelled, timed out or outlived the app evaluates nothing more.
+    if (signal.aborted || quitting()) return undefined
 
     const loaded = await evaluateMain(bundle.code).then(
       (value) => ({ ok: true as const, value }),
@@ -503,7 +612,7 @@ export function createHost(input: {
     )
 
     if (!loaded.ok || runsOn(loaded.value, os)) return [id, { bundle, loaded }] as const
-    skipped.set(id, bundle.revision)
+    parts.skipped.set(id, bundle.revision)
 
     return void parts.unsupported.add(id)
   }
@@ -552,21 +661,6 @@ export function createHost(input: {
     })
   }
 
-  // One listing at a time; a change during a listing lists once more.
-  const relistPlugins = () => {
-    if (status.listing) return void (status.relist = true)
-    status.listing = true
-    void listPlugins()
-      .catch((cause: unknown) => input.log("plugin listing failed", { cause: String(cause) }))
-      .finally(() => {
-        status.listing = false
-
-        if (!status.relist) return
-        status.relist = false
-        relistPlugins()
-      })
-  }
-
   // What every window loads: the plugins main runs, and the ids a built-in claims.
   const pluginGuis = () => ({
     plugins: [...plugins].map(([id, plugin]) => ({
@@ -612,7 +706,7 @@ export function createHost(input: {
     function add<T>(registry: Registry<T>, item: T | (() => T | undefined)): Cleanup {
       if (signal.aborted) return () => {}
 
-      const key = `${id}/${++status.sequence}`
+      const key = `${id}/${++nextEntry}`
       entries.set(key, { registry: registry.id, plugin: id, value: item })
 
       if (registry.id === MenubarItem.id) scheduleMenubar()
@@ -882,31 +976,26 @@ export function createHost(input: {
   )
 
   // Plugins listed from the server before a stop are known already; the listing that follows reconciles the rest.
-  const start = async () => {
-    inventory.stop ??= SidecarCredentials.onChange(follow)
-    follow()
-    await Promise.all(
-      [...local.map((definition) => definition.id), ...plugins.keys()].map((id) => lifecycle.activate(id)),
-    )
-  }
+  const activateAll = () =>
+    Promise.all([...local.map((definition) => definition.id), ...plugins.keys()].map((id) => lifecycle.activate(id)))
 
   return {
     /**
      * Activates every enabled main plugin, then follows the app's own server for plugin GUIs. The app calls this once
      * its first window is up.
      */
-    start,
+    async start() {
+      dispatch({ type: "started", endpoint: sidecarEndpoint(), quitting: quitting() })
+      await activateAll()
+    },
     /** Starts again what `stop` stopped, once a restart handoff failed. */
     async resume() {
-      scheduleMenubar()
-      await start()
+      dispatch({ type: "resumed", endpoint: sidecarEndpoint(), quitting: quitting() })
+      await activateAll()
     },
     /** Stops every main plugin but one a restart handoff keeps, and the follow of the server; awaits their cleanups. */
     async stop() {
-      inventory.stop?.()
-      inventory.stop = undefined
-      inventory.watch?.abort()
-      inventory.watch = undefined
+      dispatch({ type: "stopped" })
       await lifecycle.stop()
     },
     /** Activates the plugin whose id the Ipc's id names, ahead of `start`. */

@@ -33,6 +33,7 @@ import { sessionRouteView } from "./resolution-machine"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
+import { ComposerFocusProvider } from "./composer/focus"
 
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
@@ -48,9 +49,11 @@ export function TargetSessionRouteContent() {
       <ModelsProvider directory={directory()}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
-          <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
-            {(pending) => <PreparingSession sessionID={params.id} pending={pending()} />}
-          </Show>
+          <ComposerFocusProvider sessionID={params.id}>
+            <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
+              {(pending) => <PreparingSession sessionID={params.id} pending={pending()} />}
+            </Show>
+          </ComposerFocusProvider>
         </SessionRouteErrorBoundary>
       </ModelsProvider>
     </>
@@ -96,7 +99,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
             </div>
           </div>
         </div>
-        <PreparingComposer pending={props.pending} />
+        <PreparingComposer sessionID={props.sessionID} pending={props.pending} />
       </DataProvider>
     </SessionStatePanel>
   )

@@ -69,9 +69,15 @@ const NONE: readonly PickerEffect[] = []
 
 const CANCEL: readonly PickerEffect[] = [{ type: "cancel-focus-timer" }]
 
-const NO_FOCUS: PickerFocus = { status: "none" }
+// Fresh objects, never shared constants: the renderer keeps this state in a Solid store, which writes into the
+// objects it holds.
+export function createPickerState(): PickerState {
+  return { status: "active", issued: 0, filters: {}, focus: noFocus() }
+}
 
-export const initialPickerState: PickerState = { status: "active", issued: 0, filters: {}, focus: NO_FOCUS }
+function noFocus(): PickerFocus {
+  return { status: "none" }
+}
 
 export function transitionPicker(state: PickerState, event: PickerEvent): PickerTransition {
   if (state.status === "disposed") return { state, effects: NONE }
@@ -82,7 +88,8 @@ export function transitionPicker(state: PickerState, event: PickerEvent): Picker
   if (event.type === "picker.opened") {
     const filters = patch(state.filters, event.sessionKey, { text: event.query, browsing: true })
 
-    if (event.background) return update(state, filters, ownedBy(state.focus, event.sessionKey) ? NO_FOCUS : state.focus)
+    if (event.background)
+      return update(state, filters, ownedBy(state.focus, event.sessionKey) ? noFocus() : state.focus)
 
     const request = state.issued + 1
 
@@ -106,7 +113,7 @@ export function transitionPicker(state: PickerState, event: PickerEvent): Picker
     return update(
       state,
       patch(state.filters, event.sessionKey, { browsing: event.browsing }),
-      cancel ? NO_FOCUS : state.focus,
+      cancel ? noFocus() : state.focus,
     )
   }
 
@@ -114,7 +121,7 @@ export function transitionPicker(state: PickerState, event: PickerEvent): Picker
     return update(
       state,
       patch(state.filters, event.sessionKey, { browsing: false }),
-      ownedBy(state.focus, event.sessionKey) ? NO_FOCUS : state.focus,
+      ownedBy(state.focus, event.sessionKey) ? noFocus() : state.focus,
     )
 
   if (event.type === "launcher.closed") {
@@ -123,12 +130,12 @@ export function transitionPicker(state: PickerState, event: PickerEvent): Picker
       state.focus.target.kind === "launcher" &&
       state.focus.target.tabId === event.tabId
 
-    return update(state, state.filters, cancel ? NO_FOCUS : state.focus)
+    return update(state, state.filters, cancel ? noFocus() : state.focus)
   }
 
   const ended = state.focus.status === "requested" && state.focus.request === event.request
 
-  return update(state, state.filters, ended ? NO_FOCUS : state.focus)
+  return update(state, state.filters, ended ? noFocus() : state.focus)
 }
 
 export function pickerFilterText(state: PickerState, sessionKey: string) {

@@ -1,6 +1,13 @@
 import { abort } from "@opencode/util/abort"
 import { isLineRangeHash, parsePathLineSuffix } from "@opencode/util/path"
 import type { ReadMarkdownImage } from "../context/markdown"
+import {
+  INITIAL_MARKDOWN_IMAGES_STATE,
+  selectMarkdownImageUrl,
+  transitionMarkdownImages,
+  type MarkdownImagesEffect,
+  type MarkdownImagesEvent,
+} from "./markdown-image-machine"
 
 export function localImagePath(source: string) {
   // Marked percent-encodes image sources, so `C:\tmp\chart.png` arrives as `C:%5Ctmp%5Cchart.png`.
@@ -63,63 +70,87 @@ function decodePath(value: string) {
   }
 }
 
-type ImageEntry = { controller: AbortController; result: Promise<string | undefined>; url?: string }
-
 export function createMarkdownImages(read: ReadMarkdownImage) {
-  const entries = new Map<string, ImageEntry>()
+  let state = INITIAL_MARKDOWN_IMAGES_STATE
+  let root: HTMLElement | undefined
+  const pending = new Map<number, { controller?: AbortController; timer: ReturnType<typeof setTimeout> }>()
+
+  const images = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll<HTMLImageElement>("img[data-local-image]"))
+
+  const syncDom = (container: HTMLElement) =>
+    images(container).forEach((image) => {
+      const url = selectMarkdownImageUrl(state, image.dataset.localImage ?? "")
+
+      if (url && image.getAttribute("src") !== url) image.src = url
+    })
+
+  const dispatch = (event: MarkdownImagesEvent) => {
+    const next = transitionMarkdownImages(state, event)
+    const changed = next.state !== state
+    state = next.state
+
+    if (changed && root) syncDom(root)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: MarkdownImagesEffect) => {
+    if (effect.type === "revoke-url") return URL.revokeObjectURL(effect.url)
+
+    if (effect.type === "cancel") {
+      const item = pending.get(effect.attempt)
+      pending.delete(effect.attempt)
+
+      if (!item) return
+      clearTimeout(item.timer)
+      abort(item.controller)
+
+      return
+    }
+
+    if (effect.type === "wait") {
+      const retry = { type: "retry.due", path: effect.path, attempt: effect.attempt } as const
+      pending.set(effect.attempt, { timer: setTimeout(() => dispatch(retry), effect.delayMs) })
+
+      return
+    }
+
+    const controller = new AbortController()
+    const result = { path: effect.path, attempt: effect.attempt }
+    const timer = setTimeout(() => dispatch({ type: "read.timed-out", ...result }), effect.timeoutMs)
+    pending.set(effect.attempt, { controller, timer })
+    void read(effect.path, controller.signal)
+      .then(async (blob) => {
+        if (controller.signal.aborted) return
+
+        if (!blob) return dispatch({ type: "read.empty", ...result })
+
+        // SVG documents must not inherit the app origin if opened outside the image element.
+        if (blob.type === "image/svg+xml") {
+          const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`
+
+          return dispatch({ type: "read.succeeded", ...result, url, revoke: false })
+        }
+
+        dispatch({ type: "read.succeeded", ...result, url: URL.createObjectURL(blob), revoke: true })
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        dispatch({ type: "read.failed", ...result })
+      })
+  }
 
   return {
-    update(root: HTMLElement) {
-      const images = Array.from(root.querySelectorAll<HTMLImageElement>("img[data-local-image]"))
-      const paths = new Set(images.map((image) => image.dataset.localImage))
-      entries.forEach((entry, path) => {
-        if (paths.has(path)) return
-        abort(entry.controller)
-
-        if (entry.url) URL.revokeObjectURL(entry.url)
-        entries.delete(path)
-      })
-      images.forEach((image) => {
-        const path = image.dataset.localImage
-
-        if (!path) return
-        const existing = entries.get(path)
-
-        const entry: ImageEntry = existing ?? {
-          controller: new AbortController(),
-          result: Promise.resolve(undefined),
-        }
-
-        if (!existing) {
-          entries.set(path, entry)
-          entry.result = read(path, entry.controller.signal)
-            .then(async (blob) => {
-              if (!blob || entry.controller.signal.aborted) return
-
-              // SVG documents must not inherit the app origin if opened outside the image element.
-              if (blob.type === "image/svg+xml")
-                return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`
-              entry.url = URL.createObjectURL(blob)
-
-              return entry.url
-            })
-            .catch(() => undefined)
-        }
-
-        void entry.result.then((url) => {
-          if (!url || entry.controller.signal.aborted || !root.contains(image) || image.dataset.localImage !== path)
-            return
-          image.src = url
-        })
-      })
+    update(container: HTMLElement) {
+      root = container
+      const paths = new Set(images(container).flatMap((image) => image.dataset.localImage || []))
+      dispatch({ type: "paths.synced", paths })
+      // Newly inserted images of an already loaded path get their `src` before paint.
+      syncDom(container)
     },
     dispose() {
-      entries.forEach((entry) => {
-        abort(entry.controller)
-
-        if (entry.url) URL.revokeObjectURL(entry.url)
-      })
-      entries.clear()
+      root = undefined
+      dispatch({ type: "disposed" })
     },
   }
 }

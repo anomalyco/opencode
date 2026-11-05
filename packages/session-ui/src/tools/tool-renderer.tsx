@@ -2,6 +2,7 @@
 import {
   Component,
   batch,
+  createComputed,
   createEffect,
   createMemo,
   createSignal,
@@ -14,6 +15,7 @@ import {
   Switch,
   Index,
   on,
+  untrack,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -63,9 +65,22 @@ import {
   readImagePath,
   type ExecuteToolCall,
 } from "../message/current-tool-state"
-import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
+import { AssistantReasoningContent } from "../message/message-content"
+import { createCopyFeedback } from "../components/copy"
 import { stripAnsi } from "./ansi"
-import { followShellOutput } from "./shell-output"
+import { createShellFollower } from "./shell-output"
+import {
+  createShellRunState,
+  shellRunProps,
+  subagentRunProps,
+  transitionShellRun,
+  transitionSubagentRun,
+  viewShellRun,
+  viewSubagentRun,
+  INITIAL_SUBAGENT_RUN_STATE,
+  type ShellRunEvent,
+  type SubagentRunState,
+} from "./run-machine"
 import { LinkedText } from "../components/linked-text"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
@@ -1721,7 +1736,6 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const delegating = () => props.status === "streaming"
 
     const input = createMemo(() => toolInput(props.input))
     const metadata = createMemo(() => toolMetadata(props.metadata))
@@ -1732,27 +1746,26 @@ ToolRegistry.register({
 
     const title = createMemo(() => taskAgentName(input().agent, data.store.agent) ?? i18n.t("ui.tool.agent.default"))
 
-    const background = createMemo(() => {
-      return metadata().background === true || (props.status === "completed" && metadata().status === "running")
-    })
+    const run = createMemo((state: SubagentRunState) => {
+      const id = childSessionId()
+      const childBusy = !!id && (data.store.session_status[id]?.type ?? "idle") !== "idle"
+
+      return transitionSubagentRun(state, {
+        type: "sync",
+        props: subagentRunProps({ status: props.status, metadata: metadata() }, childBusy),
+      })
+    }, INITIAL_SUBAGENT_RUN_STATE)
+
+    const view = createMemo(() => viewSubagentRun(run()))
 
     const subtitle = createMemo(() => {
       const value = input().description || childSessionId()
 
       if (!value) return value
 
-      if (background()) return `${value} (background)`
+      if (view().background) return `${value} (background)`
 
       return value
-    })
-
-    const running = createMemo(() => {
-      if (props.status === "streaming" || props.status === "running") return true
-      const id = childSessionId()
-
-      if (!id) return false
-
-      return (data.store.session_status[id]?.type ?? "idle") !== "idle"
     })
 
     const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
@@ -1786,7 +1799,7 @@ ToolRegistry.register({
         <div data-component="task-tool-surface">
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <Show when={running()}>
+              <Show when={view().running}>
                 <SessionProgressIndicatorV2 />
               </Show>
               <span data-component="task-tool-title">{title()}</span>
@@ -1806,11 +1819,11 @@ ToolRegistry.register({
 
     return (
       <Show
-        when={delegating()}
+        when={view().delegating}
         fallback={
           <BasicTool
             icon="task"
-            status={props.status}
+            status={view().basicStatus}
             trigger={trigger()}
             hideDetails
             triggerAsLink
@@ -1875,26 +1888,18 @@ function ConsoleOutput(props: { command?: string; output: string }) {
 // The button sits beside its section's <pre>, not inside it, so selecting and copying text never picks it up.
 function ConsoleCopy(props: { text: string; label: string }) {
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-  const label = () => (copied() ? i18n.t("ui.message.copied") : props.label)
-
-  const copy = async () => {
-    if (!props.text) return
-
-    if (!(await writeClipboard(props.text))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const copy = createCopyFeedback()
+  const label = () => (copy.copied() ? i18n.t("ui.message.copied") : props.label)
 
   return (
     <div data-slot="bash-copy">
       <Tooltip value={label()} placement="top">
         <IconButton
-          icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+          icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
           size="normal"
           variant="ghost-muted"
           onMouseDown={(event) => event.preventDefault()}
-          onClick={copy}
+          onClick={() => copy.copy(props.text)}
           aria-label={label()}
         />
       </Tooltip>
@@ -2082,26 +2087,20 @@ function ExecuteDetailsSection(props: {
   children: JSX.Element
 }) {
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-
-  const copy = async () => {
-    if (!(await writeClipboard(props.copy))) return
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const copy = createCopyFeedback()
 
   return (
     <section data-slot="execute-details-section">
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
         <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
-        <Tooltip value={copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+        <Tooltip value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
           <IconButton
-            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+            icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
             size="normal"
             variant="ghost-muted"
-            aria-label={copied() ? i18n.t("ui.message.copied") : props.copyLabel}
-            onClick={copy}
+            aria-label={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+            onClick={() => copy.copy(props.copy)}
           />
         </Tooltip>
       </header>
@@ -2234,50 +2233,61 @@ ToolRegistry.register({
   render(props) {
     const i18n = useI18n()
     const data = useData()
-    const streaming = () => props.status === "streaming"
-    const metadata = createMemo(() => toolMetadata(props.metadata))
 
-    const pending = () => {
-      const id = metadata().shellID
-
-      return streaming() || props.status === "running" || (id !== undefined && data.shellRunning?.(id) === true)
-    }
-
-    const sawStreaming = streaming()
-    const command = createMemo(() => toolInput(props.input).command ?? metadata().command ?? "")
-
-    function Output() {
-      const [streamed, setStreamed] = createSignal("")
-
-      // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
-      const saved = createMemo(() =>
-        metadata().status === "exited" || metadata().status === "timeout" || metadata().status === "killed"
-          ? props.output
-          : undefined,
+    const runProps = () =>
+      shellRunProps(
+        {
+          status: props.status,
+          input: toolInput(props.input),
+          metadata: toolMetadata(props.metadata),
+          output: props.output,
+        },
+        (id) => data.shellRunning?.(id) === true,
       )
 
+    const [run, setRun] = createSignal(createShellRunState(untrack(runProps)))
+
+    const dispatch = (event: ShellRunEvent) => {
+      const next = transitionShellRun(untrack(run), event)
+
+      if (next !== untrack(run)) setRun(next)
+    }
+
+    // Synchronous, so the row never renders a pass with the previous phase.
+    createComputed(on(runProps, (value) => dispatch({ type: "sync", props: value }), { defer: true }))
+    const view = createMemo(() => viewShellRun(run()))
+    // The trigger animates the command in only when the row mounted while the model was still writing it.
+    const animateCommand = untrack(run).status === "writing"
+
+    function Output() {
+      const followID = createMemo(() => view().follow?.id)
+      const followRunning = createMemo(() => view().follow?.running === true)
+
       createEffect(() => {
-        if (saved() !== undefined) return
-        const id = metadata().shellID
+        const id = followID()
         const load = data.shellOutput
 
         if (id === undefined || !load) return
-        onCleanup(followShellOutput({ id, directory: data.directory, running: pending(), load, onOutput: setStreamed }))
+
+        const follower = createShellFollower({
+          id,
+          directory: data.directory,
+          running: untrack(followRunning),
+          load,
+          onOutput: (output) => dispatch({ type: "output.received", shellID: id, output }),
+        })
+
+        createEffect(on(followRunning, (running) => follower.setRunning(running), { defer: true }))
+        onCleanup(follower.dispose)
       })
 
-      const output = createMemo(() =>
-        stripAnsi(saved() ?? ((metadata().shellID !== undefined && streamed()) || props.output || "")).replace(
-          /\r\n?/g,
-          "\n",
-        ),
-      )
-
-      return <ConsoleOutput command={command()} output={output()} />
+      return <ConsoleOutput command={view().command} output={view().output} />
     }
 
     return (
       <BasicTool
         {...props}
+        status={view().basicStatus}
         icon="console"
         rail={false}
         hasContent
@@ -2287,18 +2297,18 @@ ToolRegistry.register({
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+                <TextShimmer text={i18n.t("ui.tool.shell")} active={view().pending} />
               </span>
               <Show when={!open()}>
                 <Show
-                  when={command()}
+                  when={view().command}
                   fallback={
-                    <Show when={streaming()}>
+                    <Show when={view().writingPlaceholder}>
                       <span data-slot="basic-tool-tool-subtitle">{i18n.t("ui.tool.shell.writingCommand")}</span>
                     </Show>
                   }
                 >
-                  {(command) => <ShellSubmessage text={command()} animate={sawStreaming} />}
+                  {(command) => <ShellSubmessage text={command()} animate={animateCommand} />}
                 </Show>
               </Show>
             </div>
