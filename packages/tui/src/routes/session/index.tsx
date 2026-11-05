@@ -265,24 +265,6 @@ export function Session(props: {
   const toast = useToast()
   const restorePrompt = usePromptRestore()
   const client = useClient()
-  const autoApproved = new Set<string>()
-  createEffect(() => {
-    if (local.permission.mode !== "autoaccept") return
-    permissions().forEach((request) => {
-      if (autoApproved.has(request.id)) return
-      autoApproved.add(request.id)
-      void data.session.permission
-        .reply({
-          sessionID: request.sessionID,
-          decision: "once",
-          requestID: request.id,
-        })
-        .catch((error) => {
-          autoApproved.delete(request.id)
-          toast.error(error)
-        })
-    })
-  })
   const editor = useEditorContext()
   const [rowsSynced, setRowsSynced] = createSignal(false)
   const rows = createSessionRows(
