@@ -17,6 +17,7 @@ use opencode_api::error::Error as ApiError;
 use opencode_api::generated::*;
 use opencode_api::transport::SseResponse;
 use opencode_ui::tool_info::{tool_inline_info, tool_output_text};
+use serde_json::value::RawValue;
 use serde_json::{Map, Value, json};
 use tokio::sync::watch;
 
@@ -98,10 +99,11 @@ pub async fn run(input: Input) -> Result<(), String> {
         .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
         .await
         .map_err(|error| error.error_message())?;
-    let mut stream = Box::pin(SseResponse::<Value>::new(response.response).events(|| {}));
-    if !matches!(stream.next().await, Some(Ok(_))) {
+    let mut events = Box::pin(SseResponse::<Box<RawValue>>::new(response.response).events(|| {}));
+    if !matches!(events.next().await, Some(Ok(_))) {
         return Err("Event stream disconnected before prompt admission".into());
     }
+    let stream = Box::pin(events.filter_map(|event| std::future::ready(parse(event))));
     let session_id = input.session_id.clone();
     let run = Rc::new(Run {
         input,
@@ -122,6 +124,25 @@ pub async fn run(input: Input) -> Result<(), String> {
     let result = run.clone().execute(stream).await;
     run.abort.send_replace(true);
     result
+}
+
+/// Parses an event for `Run::handle`. Text and reasoning deltas, most of a reply, reach no branch there, so a
+/// borrowed read of the type drops them without building their tree.
+fn parse(event: Result<Box<RawValue>, ApiError>) -> Option<Result<Value, ApiError>> {
+    #[derive(serde::Deserialize)]
+    struct Head<'a> {
+        #[serde(rename = "type")]
+        kind: &'a str,
+    }
+    let raw = match event {
+        Ok(raw) => raw,
+        Err(error) => return Some(Err(error)),
+    };
+    let head = serde_json::from_str::<Head>(raw.get());
+    if head.is_ok_and(|head| matches!(head.kind, "session.text.delta" | "session.reasoning.delta")) {
+        return None;
+    }
+    Some(serde_json::from_str(raw.get()).map_err(|error| ApiError::MalformedResponse(error.to_string())))
 }
 
 impl Run {
