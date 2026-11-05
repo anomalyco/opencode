@@ -12,13 +12,17 @@ import type {
 } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
-import type { mountCodeBlocks } from "./plugin-host.fixture"
+import type { JSHandle } from "@playwright/test"
+import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
 /** What the code block cases drive from the page. */
 type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the theme preview case drives from the page. */
+type ThemesHost = ReturnType<typeof mountThemes>
 
 /** What the scoped-registration case keeps from inside its plugin. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
@@ -1738,6 +1742,118 @@ story(
     })
   },
 )
+
+story("a theme preview survives a system light/dark flip and a plugin theme arriving, and is never saved", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+  const host: JSHandle<ThemesHost> = await page.evaluateHandle(async (fixture) => {
+    const { mountThemes, Theme } = await import(fixture)
+    // The frame's own provider saved its scheme; this window follows the system.
+    localStorage.setItem("opencode-color-scheme", "system")
+    localStorage.removeItem("opencode-theme-id")
+    localStorage.removeItem("opencode-theme-css-light")
+    localStorage.removeItem("opencode-theme-css-dark")
+    const variant = {
+      palette: {
+        neutral: "#101418",
+        ink: "#e6edf3",
+        primary: "#009fff",
+        success: "#3fb950",
+        warning: "#d29922",
+        error: "#f85149",
+        info: "#a371f7",
+      },
+    }
+
+    const host: ThemesHost = mountThemes({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Theme, {
+                $schema: "https://opencode.ai/desktop-theme.json",
+                name: "Midnight",
+                id: "midnight",
+                light: variant,
+                dark: variant,
+              }),
+          }),
+        },
+      ],
+    })
+    host.previewScheme("light")
+
+    return host
+  }, fixture)
+
+  const read = () =>
+    host.evaluate((host) => ({
+      theme: document.documentElement.dataset.theme,
+      shown: document.documentElement.dataset.colorScheme,
+      mode: host.mode(),
+      scheme: localStorage.getItem("opencode-color-scheme"),
+      id: localStorage.getItem("opencode-theme-id"),
+      cached: [localStorage.getItem("opencode-theme-css-light"), localStorage.getItem("opencode-theme-css-dark")].map(
+        (css) => css !== null,
+      ),
+    }))
+
+  // A media change reaches the provider's listener before one added after it.
+  const flip = async (colorScheme: "light" | "dark") => {
+    const changed = await page.evaluateHandle(() => ({
+      done: new Promise<void>((resolve) =>
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => resolve(), { once: true }),
+      ),
+    }))
+    await page.emulateMedia({ colorScheme })
+    await changed.evaluate((changed) => changed.done)
+  }
+
+  // The plugin's theme arrives while the preview is up.
+  await expect.poll(() => host.evaluate((host) => host.status("acme"))).toBe("active")
+  const previewed = await read()
+
+  await flip("light")
+  await flip("dark")
+  const flipped = await read()
+
+  await host.evaluate((host) => host.preview("acme:midnight"))
+  const midnight = await read()
+
+  await host.evaluate((host) => host.cancel())
+  const cancelled = await read()
+
+  await host.evaluate((host) => {
+    host.preview("acme:midnight")
+    host.commit()
+  })
+  const committed = await read()
+  await host.evaluate((host) => host.unmount())
+
+  expect({ previewed, flipped, midnight, cancelled, committed }).toEqual({
+    previewed: { theme: "oc-2", shown: "light", mode: "light", scheme: "system", id: null, cached: [false, false] },
+    flipped: { theme: "oc-2", shown: "light", mode: "light", scheme: "system", id: null, cached: [false, false] },
+    midnight: {
+      theme: "acme:midnight",
+      shown: "light",
+      mode: "light",
+      scheme: "system",
+      id: null,
+      cached: [false, false],
+    },
+    cancelled: { theme: "oc-2", shown: "dark", mode: "dark", scheme: "system", id: null, cached: [false, false] },
+    committed: {
+      theme: "acme:midnight",
+      shown: "dark",
+      mode: "dark",
+      scheme: "system",
+      id: "acme:midnight",
+      cached: [true, true],
+    },
+  })
+})
 
 story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
