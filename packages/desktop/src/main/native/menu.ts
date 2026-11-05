@@ -1,5 +1,5 @@
-import { BrowserWindow, Menu } from "electron"
-import type { MenuItemConstructorOptions } from "electron"
+import { Menu } from "electron"
+import type { BrowserWindow, MenuItemConstructorOptions } from "electron"
 import {
   DESKTOP_MENU,
   desktopMenuKey,
@@ -13,10 +13,12 @@ import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
 import { runDesktopMenuAction } from "./menu-actions"
+import { createMenuState, transitionMenu, type MenuEvent, type MenubarProvider } from "./menu-machine"
 import { nativeT } from "./translations"
 
 type Deps = {
-  trigger: (id: string) => void
+  /** The window a menu command or action applies to. */
+  targetWindow: () => BrowserWindow | null
   installCli: () => void
   createWindow: () => void
   openExternal: (url: string) => void
@@ -34,27 +36,37 @@ export type MenubarEntry = {
   run(): void
 }
 
-let menubar: () => readonly MenubarEntry[] = () => []
+const installation = { state: createMenuState<Deps>() }
 
-let installed: Deps | undefined
-
-/** Contributions are read on every build; setting a provider rebuilds an installed menu. */
-export function setMenubarProvider(provider: () => readonly MenubarEntry[]) {
-  menubar = provider
-  refreshMenu()
+function dispatch(event: MenuEvent<Deps>) {
+  const next = transitionMenu(installation.state, event)
+  installation.state = next.state
+  next.commands.forEach((command) => build(command.deps, command.provider))
 }
 
-/** Rebuilds an installed menu after its contributions changed. */
+/** Contributions are read on every build; setting a provider rebuilds an installed menu. */
+export function setMenubarProvider(provider: MenubarProvider) {
+  dispatch({ type: "provider.changed", provider })
+}
+
+/** Rebuilds an installed menu after its contributions or translations changed. */
 export function refreshMenu() {
-  if (installed) createMenu(installed)
+  dispatch({ type: "refreshed" })
 }
 
 export function createMenu(deps: Deps) {
-  installed = deps
+  dispatch({ type: "installed", deps })
+}
 
+/** Later contributions and translations no longer rebuild the menu. */
+export function disposeMenu() {
+  dispatch({ type: "disposed" })
+}
+
+function build(deps: Deps, provider: MenubarProvider) {
   if (process.platform !== "darwin") return
 
-  const extra = menubar()
+  const extra = provider()
 
   const template = DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "macos")).map((menu) =>
     nativeMenu(
@@ -126,13 +138,18 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
 
   if (entry.command) {
     const command = entry.command
-    item.click = () => deps.trigger(command)
+
+    item.click = () => {
+      const win = deps.targetWindow()
+
+      if (win) sendMenuCommand(win, command)
+    }
   }
 
   if (entry.action) {
     const action = entry.action
     item.click = () =>
-      runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
+      runDesktopMenuAction(deps.targetWindow(), action, {
         installCli: deps.installCli,
         createWindow: deps.createWindow,
         relaunch: deps.relaunch,

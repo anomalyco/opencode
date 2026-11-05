@@ -17,7 +17,8 @@ import { windowHandlers } from "./ipc-handlers/window"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
-import { createMenu, sendMenuCommand } from "./native/menu"
+import { createMenu, disposeMenu, refreshMenu } from "./native/menu"
+import { onNativeTranslations } from "./native/translations"
 import { DesktopCli } from "./service/desktop-cli"
 import { getLastFocusedWindow } from "./windows"
 
@@ -46,11 +47,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const runFork = Effect.runForkWith(yield* Effect.context())
 
   const menu = {
-    trigger: (id: string) => {
-      const win = getLastFocusedWindow()
-
-      if (win) sendMenuCommand(win, id)
-    },
+    targetWindow: getLastFocusedWindow,
     installCli: () => runFork(showCliInstaller(desktopCli)),
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
@@ -84,6 +81,14 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const onWindowCreated = (_event: Electron.Event, win: BrowserWindow) => wire(win)
   const stopDisconnects = handoff.onDisconnect(lifecycle.deepLinks.disconnect)
   yield* Effect.addFinalizer(() => Effect.sync(stopDisconnects))
+  // A language the renderer pushes rebuilds the menu once it is installed.
+  const stopTranslations = onNativeTranslations(refreshMenu)
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      stopTranslations()
+      disposeMenu()
+    }),
+  )
 
   yield* Effect.sync(() => {
     app.on("browser-window-created", onWindowCreated)
