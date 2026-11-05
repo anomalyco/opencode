@@ -260,7 +260,7 @@ function filteredFor(
 
 export function createKeybindSettingsController(
   input: {
-    command: Pick<CommandContext, "catalog" | "options" | "keybinds">
+    command: Pick<CommandContext, "catalog" | "options" | "suspend">
     /** The ids of the installed GUI plugins; remembered commands of any other plugin are not listed. */
     plugins?: () => ReadonlySet<string>
     settings: {
@@ -321,6 +321,7 @@ export function createKeybindSettingsController(
 
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
   const pageActive = () => input.active?.() ?? true
+  let release: (() => void) | undefined
 
   const dispatch = (event: KeybindCaptureEvent) =>
     untrack(() => {
@@ -332,9 +333,19 @@ export function createKeybindSettingsController(
     })
 
   function run(effect: KeybindCaptureEffect) {
-    if (effect.type === "keybinds.suspend") return input.command.keybinds(false)
+    if (effect.type === "keybinds.suspend") {
+      release?.()
+      release = input.command.suspend()
 
-    if (effect.type === "keybinds.resume") return input.command.keybinds(true)
+      return
+    }
+
+    if (effect.type === "keybinds.resume") {
+      release?.()
+      release = undefined
+
+      return
+    }
 
     if (effect.type === "binding.set") return input.settings.keybinds.set(effect.id, effect.value)
 

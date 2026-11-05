@@ -19,7 +19,11 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
             { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" },
           ],
           options: [],
-          keybinds: (enabled) => suppression.push(enabled),
+          suspend: () => {
+            suppression.push(false)
+
+            return () => suppression.push(true)
+          },
         },
         plugins: plugins && (() => plugins),
         settings: {
