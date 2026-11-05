@@ -81,9 +81,23 @@ test("content that grows after the settling tail still follows", () => {
 test("pause ends as soon as the viewport stops overflowing", () => {
   expect(transitionAutoScroll(PAUSED_WORKING, { type: "resize", overflow: false }).state).toBe(FOLLOWING)
   expect(transitionAutoScroll(PAUSED_IDLE, { type: "resize", overflow: false }).state).toBe(IDLE)
-  expect(transitionAutoScroll(PAUSED_IDLE, { type: "scroller.changed", overflow: false }).state).toBe(IDLE)
   expect(transitionAutoScroll(PAUSED_WORKING, { type: "pause", overflow: false }).state).toBe(FOLLOWING)
   expect(transitionAutoScroll(FOLLOWING, { type: "pause", overflow: false }).state).toBe(FOLLOWING)
+})
+
+test("a viewport ref change keeps the pause until the new viewport measures", () => {
+  const detached = transitionAutoScroll(PAUSED_IDLE, { type: "scroller.detached" }).state
+
+  const remounted = run(
+    detached,
+    { type: "scroller.changed", overflow: false },
+    { type: "scroller.changed", overflow: false },
+  )
+
+  expect(remounted.state).toBe(PAUSED_IDLE)
+  expect(remounted.effects).toEqual([])
+
+  expect(transitionAutoScroll(remounted.state, { type: "resize", overflow: false }).state).toBe(IDLE)
 })
 
 test("text selection pauses only while content still moves", () => {

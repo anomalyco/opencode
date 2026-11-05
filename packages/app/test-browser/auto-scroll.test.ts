@@ -70,6 +70,19 @@ test("keeps the user's pause when Suspense reattaches the scroll viewport", asyn
   expect(view.viewport.scrollTop).toBe(0)
 })
 
+test("keeps the user's pause when the viewport ref is cleared and set again", () => {
+  const view = mount({ working: () => true })
+  view.viewport.scrollTop = 50
+  view.scroll.pause()
+
+  view.scroll.scrollRef(undefined)
+  view.scroll.scrollRef(view.viewport)
+  view.scroll.scrollToBottom()
+
+  expect(view.scroll.userScrolled()).toBe(true)
+  expect(view.viewport.scrollTop).toBe(50)
+})
+
 test("a user scroll next to the last programmatic target pauses instead of snapping back", () => {
   const view = mount({ working: () => true })
   view.viewport.scrollTop = 0

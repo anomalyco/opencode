@@ -128,8 +128,9 @@ function transitionPaused(state: Paused, event: Exclude<AutoScrollEvent, { type:
   switch (event.type) {
     case "working.changed":
       return to(event.working === state.working ? state : paused(event.working, state.detached), NONE)
+    // A new viewport is measured only once it renders; the first `resize` ends the pause if it cannot scroll.
     case "scroller.changed":
-      return to(event.overflow ? paused(state.working, false) : resumed(state, false), NONE)
+      return to(paused(state.working, false), NONE)
     case "scroller.detached":
       return to(state.detached ? state : paused(state.working, true), NONE)
     case "scroller.reattached":
