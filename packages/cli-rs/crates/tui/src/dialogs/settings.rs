@@ -15,7 +15,7 @@ use opencode_local::serial::Serial;
 use opencode_local::watch::Watch;
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{Choice, Detail, SelectOption, SelectProps, select};
 use opencode_ui::theme::ModeSetting;
 use opentui::keymap::Disposer;
@@ -799,17 +799,13 @@ pub fn install(tui: &Rc<Tui>) {
             .title(title)
             .group("System")
             .palette()
-            .slash(Slash { name: slash.to_owned(), aliases: Vec::new(), arguments: false })
+            .slash(slash)
     };
-    let layer = KeymapLayer {
-        mode: Some(GLOBAL_MODE.to_owned()),
-        commands: vec![
-            command("opencode.settings", "Open settings", "settings", |tui| show(tui, None))
-                .suggested(opentui::keymap::Condition::Always),
-            command("opencode.debug", "View debug info", "debug", super::debug::show),
-        ],
-        ..KeymapLayer::default()
-    };
+    let layer = KeymapLayer::global(vec![
+        command("opencode.settings", "Open settings", "settings", |tui| show(tui, None))
+            .suggested(opentui::keymap::Condition::Always),
+        command("opencode.debug", "View debug info", "debug", super::debug::show),
+    ]);
     match tui.keymap.layer(layer) {
         Ok(disposer) => tui.settings.layers.borrow_mut().push(disposer),
         Err(error) => log::error!("settings keymap layer: {error}"),

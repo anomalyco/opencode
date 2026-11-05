@@ -229,18 +229,15 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         let step = step.clone();
         Rc::new(move || step(1))
     };
-    cx.layer(KeymapLayer {
-        commands: vec![
-            bind("return", "Confirm Go option", confirm),
-            bind("left", "Previous Go option", previous.clone()),
-            bind("up", "Previous Go option", previous.clone()),
-            bind("shift+tab", "Previous Go option", previous),
-            bind("right", "Next Go option", next.clone()),
-            bind("down", "Next Go option", next.clone()),
-            bind("tab", "Next Go option", next),
-        ],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        bind("return", "Confirm Go option", confirm),
+        bind("left", "Previous Go option", previous.clone()),
+        bind("up", "Previous Go option", previous.clone()),
+        bind("shift+tab", "Previous Go option", previous),
+        bind("right", "Next Go option", next.clone()),
+        bind("down", "Next Go option", next.clone()),
+        bind("tab", "Next Go option", next),
+    ]));
 
     let button = |index: usize| {
         let label = Text::new(app, ACTIONS[index]);
@@ -418,14 +415,13 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         let state = Rc::downgrade(&state);
         Condition::when(move || state.upgrade().is_some_and(|state| state.attempt.borrow().is_some()))
     };
-    cx.layer(KeymapLayer {
-        enabled,
-        commands: vec![
+    cx.layer(
+        KeymapLayer::new(vec![
             TuiCommand::inline("return", open).title("Open authorization URL").group("Dialog"),
             TuiCommand::inline("c", copy).title("Copy authorization details").group("Dialog"),
-        ],
-        ..KeymapLayer::default()
-    });
+        ])
+        .enabled(enabled),
+    );
     // Closing cancels a pending attempt.
     let closing = state.clone();
     cx.on_close(opentui::keymap::Disposer::new(move || closing.close()));

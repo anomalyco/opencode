@@ -45,13 +45,10 @@ pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
             let step = |direction: isize| {
                 bind!(viewer, |viewer, _: Option<&str>, _: Option<&KeyEvent>| viewer.step(direction))
             };
-            cx.layer(KeymapLayer {
-                commands: vec![
-                    TuiCommand::inline("left", step(-1)).title("Previous image").group("Dialog"),
-                    TuiCommand::inline("right", step(1)).title("Next image").group("Dialog"),
-                ],
-                ..KeymapLayer::default()
-            });
+            cx.layer(KeymapLayer::new(vec![
+                TuiCommand::inline("left", step(-1)).title("Previous image").group("Dialog"),
+                TuiCommand::inline("right", step(1)).title("Next image").group("Dialog"),
+            ]));
             viewer.draw();
             let root = viewer.root.clone();
             // The dialog owns the viewer; its handlers hold weak references.
@@ -59,7 +56,7 @@ pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
             root
         },
         None,
-        DialogOptions { size: DialogSize::XLarge, key: Some("prompt-image-viewer".to_owned()) },
+        DialogOptions::new(DialogSize::XLarge).key("prompt-image-viewer"),
     );
 }
 

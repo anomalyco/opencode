@@ -96,14 +96,7 @@ fn pending(tui: &Tui) {
         move |cx| {
             let spinner =
                 Spinner::new(&cx.app).color(cx.theme.text.muted).label("Forking session…").animations(animations);
-            layout_with(
-                cx,
-                &header(cx, HeaderProps { title: "Fork session".into(), ..HeaderProps::default() }),
-                &spinner,
-                None,
-                DIALOG_LIST_INSET,
-                1,
-            )
+            layout_with(cx, &header(cx, HeaderProps::new("Fork session")), &spinner, None, DIALOG_LIST_INSET, 1)
         },
         None,
         large(),
@@ -119,5 +112,5 @@ pub(crate) fn restored(text: &str) -> serde_json::Value {
 }
 
 fn large() -> DialogOptions {
-    DialogOptions { size: DialogSize::Large, ..DialogOptions::default() }
+    DialogOptions::new(DialogSize::Large)
 }

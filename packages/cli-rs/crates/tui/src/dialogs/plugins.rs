@@ -19,7 +19,7 @@ use opencode_api::generated::{
 use opencode_plugin::{Definition, Setup, Source, Status};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, select};
 use opencode_ui::theme::Theme;
@@ -34,18 +34,14 @@ pub const ID: &str = "opencode.plugins";
 pub fn plugin() -> Definition<Tui> {
     Definition::new(ID, |setup: &mut Setup<'_, Tui>| {
         let weak = setup.host().weak();
-        setup.layer(KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![
-                TuiCommand::new("plugins.list", bind!(weak, |tui, _, _| show(&tui)))
-                    .bind(Bind::Default)
-                    .title("Plugins")
-                    .group("System")
-                    .palette()
-                    .slash(Slash { name: "plugins".to_owned(), aliases: Vec::new(), arguments: false }),
-            ],
-            ..KeymapLayer::default()
-        });
+        setup.layer(KeymapLayer::global(vec![
+            TuiCommand::new("plugins.list", bind!(weak, |tui, _, _| show(&tui)))
+                .bind(Bind::Default)
+                .title("Plugins")
+                .group("System")
+                .palette()
+                .slash("plugins"),
+        ]));
     })
 }
 
@@ -169,7 +165,7 @@ impl Manager {
                 view
             },
             None,
-            DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+            DialogOptions::new(DialogSize::Large),
         );
     }
 
@@ -552,11 +548,7 @@ impl Manager {
         };
         // The select is still handling the key that opened the error.
         tui.app.defer(bind!(tui, |tui, _| {
-            tui.dialogs.replace(
-                |cx| error_details::view(&tui, cx, props),
-                None,
-                DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
-            );
+            tui.dialogs.replace(|cx| error_details::view(&tui, cx, props), None, DialogOptions::new(DialogSize::Large));
         }));
     }
 }

@@ -10,8 +10,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{PairingCode, ServerInfo};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, header, layout};
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
-use opentui::keymap::Disposer;
+use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -23,18 +22,15 @@ pub fn install(tui: &Rc<Tui>) {
         .title("Pair device")
         .group("System")
         .palette()
-        .slash(Slash { name: "pair".to_owned(), aliases: vec!["web".to_owned()], arguments: false });
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-        // `appBindingCommands`: the configured keybind (`none` by default).
-        KeymapLayer { bindings: vec!["server.pair".to_owned()], ..KeymapLayer::default() },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("pair keymap layer: {error}");
-        }
-    }
+        .slash(Slash::new("pair").aliases(["web"]));
+    tui.keymap.install(
+        "pair",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appBindingCommands`: the configured keybind (`none` by default).
+            KeymapLayer::default().bindings(["server.pair"]),
+        ],
+    );
 }
 
 /// `DialogPair`, large and centered, in place of any open dialog.
@@ -48,10 +44,10 @@ pub fn show(tui: &Tui) {
             if let Some(tui) = weak.upgrade() {
                 load(&tui, cx, &body);
             }
-            layout(cx, &header(cx, HeaderProps { title: "Pair".to_owned(), ..HeaderProps::default() }), &body, None)
+            layout(cx, &header(cx, HeaderProps::new("Pair")), &body, None)
         },
         None,
-        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+        DialogOptions::new(DialogSize::Large),
     );
 }
 

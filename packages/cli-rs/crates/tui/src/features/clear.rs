@@ -7,11 +7,10 @@ use std::rc::Rc;
 use opencode_local::cli_config::NewLocation;
 use opencode_store::Location;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 
 use crate::app::Tui;
 use crate::routes::Route;
-use opentui::keymap::Disposer;
 
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new("session.clear", bind!(tui, |tui, _, _| clear(&tui, true)))
@@ -19,12 +18,8 @@ pub fn install(tui: &Rc<Tui>) {
         .title("Clear session")
         .group("Session")
         .palette()
-        .slash(Slash { name: "clear".to_owned(), aliases: Vec::new(), arguments: false });
-    let layer = KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() };
-    // The layer lives as long as the keymap, which the TUI owns.
-    if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-        log::error!("clear keymap layer: {error}");
-    }
+        .slash("clear");
+    tui.keymap.install("clear", [KeymapLayer::global(vec![command])]);
 }
 
 /// `session.clear`, or `session.new` when `close_tab` is false.

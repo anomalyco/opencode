@@ -15,7 +15,7 @@ use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
-use opencode_ui::keymap::{Bind, COMMAND_PALETTE_COMMAND, GLOBAL_MODE, Keybinds, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, COMMAND_PALETTE_COMMAND, Keybinds, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions};
 use opencode_ui::toast::Toasts;
 use opencode_ui::{help, palette};
@@ -522,54 +522,45 @@ fn install_keys(tui: &Rc<Tui>) {
     // reaches them over a dialog, and separate layers bind their keys.
     let weak = tui.weak();
     let command = |id: &str, run: fn(&Tui)| TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui))).bind(Bind::Off);
-    let bindings = |mode: Option<&str>, names: &[&str]| KeymapLayer {
-        mode: mode.map(str::to_owned),
-        bindings: names.iter().map(|name| (*name).to_owned()).collect(),
-        ..KeymapLayer::default()
-    };
-    let commands = KeymapLayer {
-        mode: Some(GLOBAL_MODE.to_owned()),
-        commands: vec![
-            command("app.exit", |tui| {
-                crate::features::title::clear(tui);
-                crate::features::attention::program_status::clear(tui);
-                tui.app.quit();
-            })
-            .title("Exit the app")
+    let commands = KeymapLayer::global(vec![
+        command("app.exit", |tui| {
+            crate::features::title::clear(tui);
+            crate::features::attention::program_status::clear(tui);
+            tui.app.quit();
+        })
+        .title("Exit the app")
+        .group("System")
+        .palette()
+        .slash(slash("exit", &["quit", "q"])),
+        command("help.show", |tui| help::show(&tui.dialogs))
+            .title("Help")
             .group("System")
             .palette()
-            .slash(slash("exit", &["quit", "q"])),
-            command("help.show", |tui| help::show(&tui.dialogs))
-                .title("Help")
-                .group("System")
-                .palette()
-                .slash(slash("help", &[])),
-            command("session.list", crate::dialogs::session_list::show)
-                .title("Switch session")
-                .group("Session")
-                .palette()
-                .suggested(has_sessions(&tui.weak()))
-                .slash(slash("sessions", &["resume", "continue"])),
-            command("session.new", |tui| crate::features::clear::clear(tui, false))
-                .title("New session")
-                .group("Session")
-                .palette()
-                .suggested(route_is_session(&tui.weak()))
-                .slash(slash("new", &[])),
-            command("open.menu", crate::dialogs::open::show)
-                .title("Open session or project")
-                .group("Session")
-                .palette()
-                .slash(slash("open", &["projects", "project"])),
-            command(COMMAND_PALETTE_COMMAND, |tui| {
-                palette::show(&tui.dialogs, crate::dialogs::settings::palette_options(tui))
-            }),
-        ],
-        ..KeymapLayer::default()
-    };
+            .slash(slash("help", &[])),
+        command("session.list", crate::dialogs::session_list::show)
+            .title("Switch session")
+            .group("Session")
+            .palette()
+            .suggested(has_sessions(&tui.weak()))
+            .slash(slash("sessions", &["resume", "continue"])),
+        command("session.new", |tui| crate::features::clear::clear(tui, false))
+            .title("New session")
+            .group("Session")
+            .palette()
+            .suggested(route_is_session(&tui.weak()))
+            .slash(slash("new", &[])),
+        command("open.menu", crate::dialogs::open::show)
+            .title("Open session or project")
+            .group("Session")
+            .palette()
+            .slash(slash("open", &["projects", "project"])),
+        command(COMMAND_PALETTE_COMMAND, |tui| {
+            palette::show(&tui.dialogs, crate::dialogs::settings::palette_options(tui))
+        }),
+    ]);
     // `app.exit`'s keys work unless the focused prompt has text (`app.tsx:1329-1335`).
-    let exit = KeymapLayer {
-        enabled: {
+    let exit = KeymapLayer::default()
+        .enabled({
             let app = tui.app.clone();
             let textarea = tui.textarea.clone();
             Condition::when(move || {
@@ -578,15 +569,14 @@ fn install_keys(tui: &Rc<Tui>) {
                     .as_ref()
                     .is_none_or(|textarea| !is_focused(&app, textarea) || textarea.text().is_empty())
             })
-        },
-        ..bindings(None, &["app.exit"])
-    };
+        })
+        .bindings(["app.exit"]);
     let layers = [
         commands,
         // Part of `appBindingCommands` (`app.tsx:150-186`); E.20 binds its own commands.
-        bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"]),
+        KeymapLayer::default().bindings([COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"]),
         // `appGlobalBindingCommands` (`app.tsx:117`).
-        bindings(Some(GLOBAL_MODE), &["session.list", "session.new", "open.menu"]),
+        KeymapLayer::global(Vec::new()).bindings(["session.list", "session.new", "open.menu"]),
         exit,
     ];
     for layer in layers {
@@ -713,11 +703,7 @@ fn has_sessions(tui: &Weak<Tui>) -> Condition {
 }
 
 fn slash(name: &str, aliases: &[&str]) -> Slash {
-    Slash {
-        name: name.to_owned(),
-        aliases: aliases.iter().map(|alias| (*alias).to_owned()).collect(),
-        arguments: false,
-    }
+    Slash::new(name).aliases(aliases.iter().copied())
 }
 
 /// The opentui theme the renderer clears with: the page background and text.

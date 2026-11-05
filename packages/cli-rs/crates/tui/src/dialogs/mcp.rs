@@ -16,7 +16,7 @@ use opencode_api::generated::{
 use opencode_store::{Catalog, Location};
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
@@ -34,22 +34,15 @@ pub fn install(tui: &Rc<Tui>) {
         .title("MCP servers")
         .group("Agent")
         .palette()
-        .slash(Slash { name: "mcps".to_owned(), aliases: Vec::new(), arguments: false });
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-        // `appGlobalBindingCommands`.
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            bindings: vec!["mcp.list".to_owned()],
-            ..KeymapLayer::default()
-        },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("mcp keymap layer: {error}");
-        }
-    }
+        .slash("mcps");
+    tui.keymap.install(
+        "mcp",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appGlobalBindingCommands`.
+            KeymapLayer::global(Vec::new()).bindings(["mcp.list"]),
+        ],
+    );
 }
 
 /// Opens the dialog (`mcp.list`).

@@ -19,7 +19,7 @@ use opencode_local::jsonl::empty_prompt;
 use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::{ScannerOptions, ScannerStyle, Spinner, SpinnerColor, scanner_colors, scanner_frames};
 use opencode_ui::theme::Theme;
 use opentui::input::Keymap;
@@ -883,135 +883,122 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     let command = |id: &str, title: &str, group: &str, action: fn(&Inner, &Tui) -> bool| {
         TuiCommand::new(id, run(action)).title(title).group(group).bind(Bind::Off)
     };
-    let bindings = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
 
     let layers = vec![
         // The prompt's commands (`promptCommands`); only `prompt.queue` is in the palette.
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![
-                command("prompt.clear", "Clear prompt", "Prompt", |prompt, tui| {
-                    prompt.clear(tui);
+        KeymapLayer::global(vec![
+            command("prompt.clear", "Clear prompt", "Prompt", |prompt, tui| {
+                prompt.clear(tui);
+                tui.dialogs.clear();
+                true
+            }),
+            command("prompt.submit", "Submit prompt", "Prompt", |prompt, tui| {
+                if prompt.focused()
+                    && prompt.rc().is_some_and(|rc| super::submit::submit(&rc, SessionInboxDelivery::Steer))
+                {
                     tui.dialogs.clear();
-                    true
-                }),
-                command("prompt.submit", "Submit prompt", "Prompt", |prompt, tui| {
-                    if prompt.focused()
-                        && prompt.rc().is_some_and(|rc| super::submit::submit(&rc, SessionInboxDelivery::Steer))
-                    {
-                        tui.dialogs.clear();
-                    }
-                    true
-                }),
-                command("prompt.queue", "Queue prompt", "Prompt", |prompt, tui| {
-                    // An open popup first completes a server command, else keeps the key.
-                    if prompt.focused()
-                        && !prompt
-                            .autocomplete
-                            .get()
-                            .is_some_and(|complete| complete.visible().is_some() && !complete.complete_queueable())
-                        && prompt.rc().is_some_and(|rc| super::submit::submit(&rc, SessionInboxDelivery::Queue))
-                    {
-                        tui.dialogs.clear();
-                    }
-                    true
-                })
-                .palette(),
-                command("session.interrupt", "Interrupt session", "Session", |prompt, tui| {
-                    if prompt.focused() {
-                        prompt.interrupt(tui);
-                    }
-                    true
-                })
-                .enabled(when(|prompt, _| prompt.busy.get())),
-                command("session.background", "Background blocking tools", "Session", |prompt, tui| {
-                    if prompt.focused() {
-                        prompt.background(tui);
-                    }
-                    true
-                })
-                .enabled(when(|prompt, _| prompt.busy.get())),
-                command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
-                    crate::dialogs::skill::show(tui, Some(prompt.location(tui)), insert_skill(prompt.this.clone()));
-                    true
-                })
-                .palette()
-                .slash(Slash { name: "skills".to_owned(), aliases: Vec::new(), arguments: false }),
-                autocomplete::cd::command(inner.this.clone()),
-                super::r#move::command(inner.this.clone()),
-                command("prompt.editor_context.clear", "Remove editor context", "Prompt", |prompt, tui| {
-                    prompt.dismiss_editor_context(tui);
+                }
+                true
+            }),
+            command("prompt.queue", "Queue prompt", "Prompt", |prompt, tui| {
+                // An open popup first completes a server command, else keeps the key.
+                if prompt.focused()
+                    && !prompt
+                        .autocomplete
+                        .get()
+                        .is_some_and(|complete| complete.visible().is_some() && !complete.complete_queueable())
+                    && prompt.rc().is_some_and(|rc| super::submit::submit(&rc, SessionInboxDelivery::Queue))
+                {
                     tui.dialogs.clear();
-                    true
-                })
-                .palette()
-                .enabled(when(|prompt, tui| prompt.editor_context(tui).is_some())),
-                command("prompt.editor", "Open editor", "Session", |prompt, tui| {
-                    if let Some(prompt) = prompt.rc() {
-                        super::external_editor::open(tui, &prompt);
-                    }
-                    true
-                })
-                .palette()
-                .slash(Slash { name: "editor".to_owned(), aliases: Vec::new(), arguments: false }),
-                command("prompt.paste", "Paste", "Prompt", |prompt, _| {
-                    if let Some(prompt) = prompt.rc() {
-                        super::paste::from_clipboard(&prompt);
-                    }
-                    true
-                }),
-                command("prompt.images.view", "View image attachments", "Prompt", |prompt, tui| {
-                    super::attach::view(tui, prompt);
-                    true
-                })
-                .palette()
-                .enabled(when(|prompt, _| super::attach::has_images(prompt))),
-            ],
-            ..KeymapLayer::default()
-        },
+                }
+                true
+            })
+            .palette(),
+            command("session.interrupt", "Interrupt session", "Session", |prompt, tui| {
+                if prompt.focused() {
+                    prompt.interrupt(tui);
+                }
+                true
+            })
+            .enabled(when(|prompt, _| prompt.busy.get())),
+            command("session.background", "Background blocking tools", "Session", |prompt, tui| {
+                if prompt.focused() {
+                    prompt.background(tui);
+                }
+                true
+            })
+            .enabled(when(|prompt, _| prompt.busy.get())),
+            command("prompt.skills", "Skills", "Prompt", |prompt, tui| {
+                crate::dialogs::skill::show(tui, Some(prompt.location(tui)), insert_skill(prompt.this.clone()));
+                true
+            })
+            .palette()
+            .slash("skills"),
+            autocomplete::cd::command(inner.this.clone()),
+            super::r#move::command(inner.this.clone()),
+            command("prompt.editor_context.clear", "Remove editor context", "Prompt", |prompt, tui| {
+                prompt.dismiss_editor_context(tui);
+                tui.dialogs.clear();
+                true
+            })
+            .palette()
+            .enabled(when(|prompt, tui| prompt.editor_context(tui).is_some())),
+            command("prompt.editor", "Open editor", "Session", |prompt, tui| {
+                if let Some(prompt) = prompt.rc() {
+                    super::external_editor::open(tui, &prompt);
+                }
+                true
+            })
+            .palette()
+            .slash("editor"),
+            command("prompt.paste", "Paste", "Prompt", |prompt, _| {
+                if let Some(prompt) = prompt.rc() {
+                    super::paste::from_clipboard(&prompt);
+                }
+                true
+            }),
+            command("prompt.images.view", "View image attachments", "Prompt", |prompt, tui| {
+                super::attach::view(tui, prompt);
+                true
+            })
+            .palette()
+            .enabled(when(|prompt, _| super::attach::has_images(prompt))),
+        ]),
         super::stash::layer(inner),
-        KeymapLayer { priority: 1, bindings: bindings(&["prompt.queue"]), ..KeymapLayer::default() },
-        KeymapLayer {
-            bindings: bindings(&[
-                "prompt.submit",
-                "prompt.editor",
-                "prompt.editor_context.clear",
-                "prompt.images.view",
-                "prompt.stash",
-                "prompt.stash.pop",
-                "prompt.stash.list",
-                "prompt.skills",
-                "session.interrupt",
-                "session.background",
-                super::r#move::COMMAND,
-            ]),
-            ..KeymapLayer::default()
-        },
-        KeymapLayer { target: Some(target), bindings: bindings(&["prompt.paste"]), ..KeymapLayer::default() },
+        KeymapLayer::default().priority(1).bindings(["prompt.queue"]),
+        KeymapLayer::default().bindings([
+            "prompt.submit",
+            "prompt.editor",
+            "prompt.editor_context.clear",
+            "prompt.images.view",
+            "prompt.stash",
+            "prompt.stash.pop",
+            "prompt.stash.list",
+            "prompt.skills",
+            "session.interrupt",
+            "session.background",
+            super::r#move::COMMAND,
+        ]),
+        KeymapLayer::default().target(target).bindings(["prompt.paste"]),
         // Ctrl+C clears a prompt with text; on an empty one it reaches `app.exit`.
-        KeymapLayer {
-            target: Some(target),
-            enabled: when(|prompt, _| !prompt.textarea.text().is_empty()),
-            bindings: bindings(&["prompt.clear"]),
-            ..KeymapLayer::default()
-        },
+        KeymapLayer::default()
+            .enabled(when(|prompt, _| !prompt.textarea.text().is_empty()))
+            .target(target)
+            .bindings(["prompt.clear"]),
         // History moves the cursor first, then steps (`prompt.history.*`).
-        KeymapLayer {
-            priority: 1,
-            target: Some(target),
-            commands: vec![
-                TuiCommand::new(
-                    "prompt.history.previous",
-                    run(|prompt, tui| history::previous(prompt, &tui.prompt.history)),
-                )
-                .title("Previous prompt history")
+        KeymapLayer::new(vec![
+            TuiCommand::new(
+                "prompt.history.previous",
+                run(|prompt, tui| history::previous(prompt, &tui.prompt.history)),
+            )
+            .title("Previous prompt history")
+            .group("Prompt"),
+            TuiCommand::new("prompt.history.next", run(|prompt, tui| history::next(prompt, &tui.prompt.history)))
+                .title("Next prompt history")
                 .group("Prompt"),
-                TuiCommand::new("prompt.history.next", run(|prompt, tui| history::next(prompt, &tui.prompt.history)))
-                    .title("Next prompt history")
-                    .group("Prompt"),
-            ],
-            ..KeymapLayer::default()
-        },
+        ])
+        .target(target)
+        .priority(1),
     ]
     .into_iter()
     .chain(super::shell::layers(inner, target));

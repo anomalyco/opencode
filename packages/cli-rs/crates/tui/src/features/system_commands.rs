@@ -17,7 +17,7 @@ use std::rc::Rc;
 use opencode_api::client::RequestOptions;
 use opencode_local::cli_config::{CursorStyle, DiffWrap, Info, PromptPaste, Resolved};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
 use opentui::native::{Control, MouseTracking};
@@ -35,11 +35,7 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
         TuiCommand::new(id, bind!(tui, |tui, _, _| run(&tui))).bind(Bind::Off).title(title).group("System")
     };
     let commands = vec![
-        command("location.reload", "Reload configuration", reload).palette().slash(Slash {
-            name: "reload".to_owned(),
-            aliases: Vec::new(),
-            arguments: false,
-        }),
+        command("location.reload", "Reload configuration", reload).palette().slash("reload"),
         command("docs.open", "Open docs", |tui| {
             // TS ignores a failure here.
             let _ = crate::features::links::open_url(DOCS);
@@ -86,9 +82,9 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
     ];
     let ids: Vec<String> = commands.iter().filter_map(|c| c.id.clone()).collect();
     let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
+        KeymapLayer::global(commands),
         // `appBindingCommands` (`app.tsx:150-186`).
-        KeymapLayer { bindings: ids, ..KeymapLayer::default() },
+        KeymapLayer::default().bindings(ids),
     ];
     install_effects(tui);
     layers

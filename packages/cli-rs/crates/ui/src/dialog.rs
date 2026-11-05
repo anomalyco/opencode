@@ -56,6 +56,17 @@ pub struct DialogOptions {
     pub key: Option<String>,
 }
 
+impl DialogOptions {
+    pub fn new(size: DialogSize) -> Self {
+        Self { size, key: None }
+    }
+
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
+}
+
 type OnClose = Box<dyn FnOnce()>;
 
 struct Entry {
@@ -139,19 +150,18 @@ impl Dialogs {
                 dialogs.pop();
             })
         };
-        let layer = self.0.keymap.layer(KeymapLayer {
-            mode: Some(MODAL_MODE.to_owned()),
-            enabled: open,
-            commands: vec![
+        let layer = self.0.keymap.layer(
+            KeymapLayer::new(vec![
                 crate::keymap::TuiCommand::inline("escape", close(false, weak.clone()))
                     .title("Close dialog")
                     .group("Dialog"),
                 crate::keymap::TuiCommand::inline("ctrl+c", close(true, weak.clone()))
                     .title("Close dialog")
                     .group("Dialog"),
-            ],
-            ..KeymapLayer::default()
-        });
+            ])
+            .mode(MODAL_MODE)
+            .enabled(open),
+        );
         *self.0.layer.borrow_mut() = layer.ok();
 
         let backdrop_weak = weak.clone();
@@ -414,6 +424,13 @@ pub struct HeaderProps {
     pub gap: Option<u32>,
     /// Muted line below the title.
     pub description: Option<String>,
+}
+
+impl HeaderProps {
+    /// A header with the title text and the default close label.
+    pub fn new(title: impl Into<String>) -> Self {
+        Self { title: title.into(), ..Self::default() }
+    }
 }
 
 /// `DialogHeader`.
