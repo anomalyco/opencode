@@ -234,11 +234,10 @@ export const GithubCopilotPlugin = define({
               : model.package === "@opencode/ai/providers/openai"
                 ? "responses"
                 : undefined,
+            loaded.baseURL ?? baseURL(),
           )
           model.package = route.package
-          model.settings = Provider.mergeOverlay(model.settings, {
-            baseURL: route.baseURL(loaded.baseURL ?? baseURL()),
-          })
+          model.settings = Provider.mergeOverlay(model.settings, { baseURL: route.baseURL })
         })
       }
     })

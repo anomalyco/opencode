@@ -133,7 +133,7 @@ function usable(model: RemoteModel): model is UsableModel {
 }
 
 function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Model.Info) {
-  const route = routeFor(remote.id, endpoint(remote.supported_endpoints))
+  const route = routeFor(remote.id, endpoint(remote.supported_endpoints), baseURL)
   const image =
     (remote.capabilities.supports.vision ?? false) ||
     (remote.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/"))
@@ -159,7 +159,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     family: previous?.family ?? Model.Family.make(remote.capabilities.family),
     name: previous?.name ?? remote.name,
     package: route.package,
-    settings: Provider.mergeOverlay(previous?.settings, { baseURL: route.baseURL(baseURL) }),
+    settings: Provider.mergeOverlay(previous?.settings, { baseURL: route.baseURL }),
     headers: previous?.headers,
     body: previous?.body,
     capabilities: {
@@ -200,13 +200,13 @@ const PACKAGES = {
 } as const satisfies Record<Endpoint, string>
 
 /** The native package and base URL for the Copilot API that serves a model. */
-export function routeFor(modelID: string, advertised: Endpoint | undefined) {
+export function routeFor(modelID: string, advertised: Endpoint | undefined, root: string) {
   const selected = advertised ?? fallbackEndpoint(modelID)
   return {
     endpoint: selected,
     package: PACKAGES[selected],
     // Copilot serves Anthropic Messages under /v1 and its OpenAI APIs at the root.
-    baseURL: (root: string) => (selected === "messages" ? `${root}/v1` : root),
+    baseURL: selected === "messages" ? `${root}/v1` : root,
   }
 }
 
