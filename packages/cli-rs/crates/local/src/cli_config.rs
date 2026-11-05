@@ -728,6 +728,8 @@ pub struct Resolved {
     pub permissions: Permissions,
     pub tps: bool,
     pub tabs: ResolvedTabs,
+    /// `HERDR_ENV=1` when resolved, so [`Resolved::with_info`] resolves a reload the same way.
+    herdr: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -761,6 +763,7 @@ impl Resolved {
             Some(true) => TabsMode::On,
             Some(false) => TabsMode::Off,
         });
+        let herdr = environment("HERDR_ENV").as_deref() == Some("1");
         Self {
             attention: ResolvedAttention {
                 notifications: attention.notifications.unwrap_or(false),
@@ -785,14 +788,21 @@ impl Resolved {
             tps: session.tps.unwrap_or(true),
             tabs: ResolvedTabs {
                 mode,
-                enabled: mode == TabsMode::On
-                    || (mode == TabsMode::Auto && environment("HERDR_ENV").as_deref() != Some("1")),
+                enabled: mode == TabsMode::On || (mode == TabsMode::Auto && !herdr),
                 scope: tabs.scope.unwrap_or(TabsScope::Cwd),
                 layout: tabs.layout.unwrap_or(TabsLayout::Horizontal),
                 indicators: tabs.indicators.unwrap_or(TabsIndicators::Status),
             },
             info,
+            herdr,
         }
+    }
+
+    /// `info` resolved in the environment this config was resolved in, for a live update.
+    pub fn with_info(&self, info: Info) -> Self {
+        Self::new(info, |name| {
+            (name == "HERDR_ENV" && self.herdr).then(|| "1".to_owned())
+        })
     }
 
     /// The `keybinds` overrides for `Keybinds::resolve`.
@@ -901,5 +911,8 @@ mod tests {
             (name == "HERDR_ENV").then(|| "1".to_string())
         });
         assert!(!herdr.tabs.enabled);
+        // A reload keeps the environment of the first resolve.
+        assert!(!herdr.with_info(Info::default()).tabs.enabled);
+        assert!(resolved.with_info(Info::default()).tabs.enabled);
     }
 }
