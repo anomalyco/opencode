@@ -21,6 +21,8 @@ pub(super) struct TestHost {
     pub toasts: RefCell<Vec<(Toast, Option<String>, String)>>,
     pub routes: RefCell<Vec<(String, String)>>,
     pub remounts: Cell<usize>,
+    /// The mode it reports, whatever the theme's background.
+    pub mode: Cell<ThemeMode>,
 }
 
 impl Host for TestHost {
@@ -32,6 +34,10 @@ impl Host for TestHost {
 
     fn theme(&self) -> Theme {
         Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
+    }
+
+    fn theme_mode(&self) -> ThemeMode {
+        self.mode.get()
     }
 
     fn keymap(&self) -> &DialogKeymap {
@@ -69,6 +75,7 @@ pub(super) fn host() -> Rc<TestHost> {
         toasts: RefCell::default(),
         routes: RefCell::default(),
         remounts: Cell::new(0),
+        mode: Cell::new(ThemeMode::Dark),
     })
 }
 
