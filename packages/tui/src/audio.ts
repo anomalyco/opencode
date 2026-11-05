@@ -2,6 +2,10 @@ import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound }
 import { readFile } from "node:fs/promises"
 
 let audio: Audio | null | undefined
+// Once the backend fails to start there is nothing to recover by probing
+// again: a second attempt reprints the backend diagnostics without a device
+// to bind. The flag stays until dispose().
+let unavailable = false
 const sounds = new Map<string, Promise<AudioSound | null>>()
 
 function getAudio() {
@@ -21,6 +25,7 @@ function getAudio() {
 }
 
 export function loadSoundFile(file: string) {
+  if (unavailable) return Promise.resolve(null)
   const current = getAudio()
   if (!current) return Promise.resolve(null)
   const cached = sounds.get(file)
@@ -36,13 +41,21 @@ export function loadSoundFile(file: string) {
 }
 
 export function play(sound: AudioSound, options?: AudioPlayOptions) {
+  if (unavailable) return null
   const current = getAudio()
   if (!current) return null
-  if (!current.isStarted() && !current.start()) return null
+  if (!current.isStarted() && !current.start()) {
+    unavailable = true
+    current.dispose()
+    audio = null
+    sounds.clear()
+    return null
+  }
   return current.play(sound, options)
 }
 
 export function dispose() {
+  unavailable = false
   audio?.dispose()
   audio = undefined
   sounds.clear()
