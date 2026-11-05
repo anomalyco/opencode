@@ -76,6 +76,7 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
         replay: args.replay().or(mini.replay).unwrap_or(true),
         replay_limit: args.replay_limit.map(|limit| limit as u32).or(mini.replay_limit.map(|limit| limit.0 as u32)),
         config,
+        paths: paths.clone(),
         version: crate::help::VERSION.to_owned(),
         start,
     };

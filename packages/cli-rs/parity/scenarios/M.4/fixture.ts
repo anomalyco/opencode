@@ -97,3 +97,42 @@ export const server = () =>
     events: (id) => turn(id),
     after: (id) => [user(id, "bump a", 100)],
   })
+
+const listed = (data: unknown[]) => ({ location: { directory: "/tmp/mini" }, data })
+
+const model = (providerID: string, id: string, name: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  modelID: id,
+  providerID,
+  name,
+  capabilities: { tools: true, input: ["text"], output: ["text"] },
+  variants: [],
+  time: { released: 0 },
+  cost: [],
+  status: "active",
+  enabled: true,
+  limit: { context: 1000, output: 100 },
+  ...extra,
+})
+
+const free = [{ input: 0, output: 0, cache: { read: 0, write: 0 } }]
+
+// Two providers: the session's `demo/model` and another model with variants, and opencode's free model.
+export const catalog = [
+  {
+    path: "/api/provider",
+    json: listed([
+      { id: "demo", name: "Demo", activation: "auto", package: "demo" },
+      { id: "opencode", name: "OpenCode Zen", activation: "auto", package: "opencode" },
+    ]),
+  },
+  {
+    path: "/api/model",
+    json: listed([
+      model("demo", "model", "Demo Model"),
+      model("demo", "other", "Other Model", { variants: [{ id: "high" }, { id: "max" }] }),
+      model("demo", "old", "Old Model", { status: "deprecated" }),
+      model("opencode", "zen", "Zen", { cost: free }),
+    ]),
+  },
+]
