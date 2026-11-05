@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
-import { holdRoute } from "../utils/app"
+import { SERVER, holdRoute } from "../utils/app"
+import { installSseTransport } from "../utils/sse-transport"
 import { terminalScreen, terminalText } from "../utils/terminal"
 import { openSession } from "../utils/workspace"
 
@@ -311,6 +312,37 @@ test("after a server restart, showing the terminal again restores it from a new 
   await side(page).getByRole("tab", { name: "Build", exact: true }).click()
   await expect.poll(() => terminalText(page, screen)).toBe("before-restart\nafter-restart")
   await expect(side(page).getByText("Terminal disconnected", { exact: true })).toHaveCount(0)
+  expect(persistentPty.sockets.map((socket) => socket.cursor)).toEqual([
+    Buffer.byteLength(output),
+    Buffer.byteLength(output + "after-restart\r\n"),
+  ])
+})
+
+test("once a restarted server reconnects, the shown terminal restores itself from a new snapshot", async ({ page }) => {
+  const output = "before-restart\r\n"
+  const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
+
+  const { persistentPty } = await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_handoff", sessionID: SESSION, title: "Build", output }] },
+  })
+
+  await openSide(page)
+  await side(page).getByRole("tab", { name: "Build", exact: true }).click()
+  const screen = terminalScreen(page, "pty_handoff")
+  await expect.poll(() => terminalText(page, screen)).toBe("before-restart")
+
+  // The terminal socket closes first; the event stream drops and reconnects to the restarted server after it.
+  await persistentPty.restart()
+  await expect(side(page).getByText("Terminal disconnected", { exact: true })).toBeVisible()
+  persistentPty.output("pty_handoff", "after-restart\r\n")
+  const connection = await transport.waitForConnection()
+  await transport.disconnect()
+  await transport.waitForConnection({ after: connection.id })
+
+  await expect.poll(() => terminalText(page, screen)).toBe("before-restart\nafter-restart")
+  await expect(side(page).getByText("Terminal disconnected", { exact: true })).toHaveCount(0)
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "true")
   expect(persistentPty.sockets.map((socket) => socket.cursor)).toEqual([
     Buffer.byteLength(output),
     Buffer.byteLength(output + "after-restart\r\n"),

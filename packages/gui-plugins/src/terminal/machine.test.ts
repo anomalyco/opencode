@@ -3,6 +3,7 @@ import type { PersistentPtyInfo } from "@opencode/client"
 import {
   initialState,
   serverAvailable,
+  sessionConnection,
   sessionView,
   tabHidden,
   transition,
@@ -246,6 +247,52 @@ describe("terminal machine", () => {
     expect(transition(loading, { type: "session.loaded", sessionID: "ses_1" }).commands).toEqual([
       { type: "load-list", sessionID: "ses_1", attempt: 3 },
     ])
+  })
+
+  test("a session's connection moves to a reconnect only once that connection lists it", () => {
+    expect(sessionConnection(initialState, "ses_1")).toBe(0)
+
+    const first = listed()
+
+    expect(sessionConnection(first, "ses_1")).toBe(1)
+
+    // A refresh, and a refresh that fails, keep the connection the known list came from.
+    const refreshed = replay(
+      [
+        { type: "session.refresh", sessionID: "ses_1" },
+        { type: "list.loaded", sessionID: "ses_1", attempt: 3, items: [info("pty_1")] },
+        { type: "session.refresh", sessionID: "ses_1" },
+        { type: "list.failed", sessionID: "ses_1", attempt: 4, error: "boom" },
+      ],
+      first,
+    ).state
+
+    expect(sessionConnection(refreshed, "ses_1")).toBe(1)
+
+    // A restarted server: the list stays at the old connection while support is checked and the list loads again.
+    const checking = transition(refreshed, { type: "server.connected" }).state
+
+    expect(sessionConnection(checking, "ses_1")).toBe(1)
+
+    const relisting = transition(checking, { type: "capability.checked", attempt: 5, supported: true }).state
+
+    expect(sessionConnection(relisting, "ses_1")).toBe(1)
+
+    const failed = transition(relisting, { type: "list.failed", sessionID: "ses_1", attempt: 6, error: "boom" }).state
+
+    expect(sessionConnection(failed, "ses_1")).toBe(1)
+
+    const relisted = replay(
+      [
+        { type: "server.connected" },
+        { type: "capability.checked", attempt: 7, supported: true },
+        { type: "list.loaded", sessionID: "ses_1", attempt: 8, items: [info("pty_1")] },
+      ],
+      failed,
+    ).state
+
+    expect(sessionConnection(relisted, "ses_1")).toBe(3)
+    expect(sessionConnection(relisted, "ses_2")).toBe(0)
   })
 
   test("a failed support check shows its error with a retry that checks again", () => {
