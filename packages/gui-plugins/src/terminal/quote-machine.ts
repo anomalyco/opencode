@@ -1,3 +1,5 @@
+import { createDispatch } from "./dispatch"
+
 /** How long the selection must stay unchanged before the toolbar reads it. */
 export const TERMINAL_QUOTE_SETTLE_MS = 150
 
@@ -296,36 +298,15 @@ export function quotePosition(size: QuoteSize, bounds: QuoteRect, anchor: QuoteA
 }
 
 /**
- * The toolbar's driver loop: applies one event at a time and runs its effects. An effect may dispatch synchronously;
- * its event waits until the current one has applied. A throwing effect never stalls the queue.
+ * The toolbar's driver loop (`createDispatch`). A throwing effect has no failure event: the transition already left
+ * the toolbar in its next state, so the error surfaces as an unhandled rejection and later events keep applying.
  */
 export function createQuoteDispatch(driver: {
   readonly read: () => QuoteState
   readonly write: (state: QuoteState) => void
   readonly run: (effect: QuoteEffect) => void
 }) {
-  const queue: QuoteEvent[] = []
-
-  const apply = (event: QuoteEvent) => {
-    const current = driver.read()
-    const next = transitionQuote(current, event)
-
-    if (next.state !== current) driver.write(next.state)
-    next.effects.forEach((effect) => void Promise.try(() => driver.run(effect)))
-  }
-
-  const dispatch = (event: QuoteEvent) => {
-    queue.push(event)
-
-    if (queue.length > 1) return
-
-    while (queue.length > 0) {
-      void Promise.try(apply, queue[0])
-      queue.shift()
-    }
-  }
-
-  return dispatch
+  return createDispatch<QuoteState, QuoteEvent, QuoteEffect>({ ...driver, transition: transitionQuote })
 }
 
 type Active = Exclude<QuoteState, { status: "disposed" }>
