@@ -23,13 +23,17 @@ function replay(events: SessionUINavigateEvent[]) {
   }, [])
 }
 
-test("clicking subagent A, then B, lands on B even when A's sync settles last", () => {
-  const [a, b, syncedB, lateA] = replay([
+test("clicking subagent A, then B, lands on B whenever A's sync settles", () => {
+  const clicks: SessionUINavigateEvent[] = [
     { type: "child.requested", origin: parent, targetSessionID: "ses_a" },
     { type: "child.requested", origin: parent, targetSessionID: "ses_b" },
+  ]
+  const [a, b, syncedB, lateA] = replay([
+    ...clicks,
     { type: "child.synced", attempt: 2 },
     { type: "child.synced", attempt: 1 },
   ])
+  const [, , earlyA, thenB] = replay([...clicks, { type: "child.synced", attempt: 1 }, { type: "child.synced", attempt: 2 }])
 
   // Nothing touches the tab or the route until the sync settles.
   expect(a?.effects).toEqual([{ type: "child.sync", attempt: 1, targetSessionID: "ses_a" }])
@@ -37,6 +41,9 @@ test("clicking subagent A, then B, lands on B even when A's sync settles last", 
   expect(syncedB?.effects).toEqual([{ type: "child.navigate", origin: parent, targetSessionID: "ses_b" }])
   expect(lateA?.state).toBe(syncedB!.state)
   expect(lateA?.effects).toEqual([])
+  expect(earlyA?.state).toBe(b!.state)
+  expect(earlyA?.effects).toEqual([])
+  expect(thenB?.effects).toEqual([{ type: "child.navigate", origin: parent, targetSessionID: "ses_b" }])
 })
 
 test.each<[string, SessionUINavigateEvent]>([
