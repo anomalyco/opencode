@@ -18,6 +18,7 @@ const MUTED: Color = Color::hex(0x808080);
 const TEXT: Color = Color::hex(0xeeeeee);
 const BACKDROP: Color = Color::hex(0x0a0a0a);
 const ACCENT: Color = Color::hex(0xfab283);
+const PAGE: Color = Color::hex(0x1a1b26);
 
 // The TypeScript screen is transparent, while an opentui-rust app clears the screen with its theme background.
 fn test_app(width: u16) -> TestApp {
@@ -89,6 +90,26 @@ fn prompt_scanner_matches_create_frames_and_create_colors() {
         .interval(Duration::from_millis(40));
     app.root().add(&spinner);
     assert_filmstrip(&app, "scanner");
+}
+
+#[test]
+fn prompt_scanner_blends_into_the_page_background() {
+    let app = test_app(8);
+    let options = ScannerOptions {
+        style: ScannerStyle::Blocks,
+        inactive_factor: 0.6,
+        min_alpha: 0.3,
+        ..ScannerOptions::new(ACCENT)
+    };
+    let page = View::new(&app).bg(PAGE);
+    page.add(
+        &Spinner::new(&app)
+            .frames(&scanner_frames(&options))
+            .color(scanner_colors(&options))
+            .interval(Duration::from_millis(40)),
+    );
+    app.root().add(&page);
+    assert_filmstrip(&app, "scanner-page");
 }
 
 #[test]
