@@ -390,6 +390,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const [store, setStore] = createStore<{ registrations: CommandRegistration[] }>({
       registrations: [],
     })
+
     const [suspendState, setSuspendState] = createSignal(INITIAL_KEYBIND_SUSPEND_STATE)
 
     const warnedDuplicates = new Set<string>()

@@ -45,6 +45,7 @@ describe("inbox branch machine", () => {
 
   test("starts the next lookup as soon as one slot frees, even when another hangs", () => {
     const keys = ["k1", "k2", "k3", "k4", "k5", "k6"]
+
     const started = transitionInboxBranch(INITIAL_INBOX_BRANCH_STATE, {
       type: "enqueue",
       targets: keys.map((key) => target(key)),
@@ -80,6 +81,7 @@ describe("inbox branch machine", () => {
 
   test("rests a location after its retries and wakes it when its server reconnects", () => {
     const connected = run(INITIAL_INBOX_BRANCH_STATE, { type: "connections.changed", connected: ["srv", "other"] })
+
     const failed = run(
       connected,
       { type: "enqueue", targets: [target("a"), target("b"), target("c", "other")] },
