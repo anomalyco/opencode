@@ -184,3 +184,60 @@ export function TabPreviewPopover(props: {
   )
 }
 
+function follow(trigger: HTMLElement, card: HTMLElement) {
+  rects = undefined
+  watch(trigger, card)
+  place(trigger, card)
+
+  // The card has no height while it mounts, so clamp again once it's laid out.
+  if (rects) return
+  measureFrame = requestAnimationFrame(() => {
+    measureFrame = undefined
+    place(trigger, card)
+  })
+}
+
+// Moves the card straight to the pointer, with no spring.
+function place(trigger: HTMLElement, card: HTMLElement) {
+  if (!card.isConnected || prefersReducedMotion()) return
+  card.style.transform = `translateY(${cursorOffset(trigger, card)}px)`
+}
+
+// Keeps the pointer level with the middle of the row-sized slot the card would sit in by default, so the offset is 0
+// at the row's centre and runs continuously across row boundaries, clamped to the sidebar.
+function cursorOffset(trigger: HTMLElement, card: HTMLElement) {
+  const measured = rects ?? measure(trigger, card)
+
+  // The card has no height until it's attached, so a measurement taken as it mounts isn't kept.
+  if (measured.card > 0) rects = measured
+  const top = pointerY - measured.row.height / 2
+  const clamped = Math.min(Math.max(top, measured.bounds.top), measured.bounds.bottom - measured.card)
+
+  return clamped - measured.row.top
+}
+
+function measure(trigger: HTMLElement, card: HTMLElement) {
+  const bounds = (trigger.closest('[data-slot="vertical-tabs"]') ?? trigger).getBoundingClientRect()
+
+  return { row: trigger.getBoundingClientRect(), bounds, card: card.offsetHeight }
+}
+
+// While a card is up, scrolling or resizing the tabs moves the rows under the cached rects, so measure again and
+// re-clamp the card even if the pointer stays still.
+function watch(trigger: HTMLElement, card: HTMLElement) {
+  const refresh = () => {
+    rects = undefined
+    place(trigger, card)
+  }
+
+  const observer = new ResizeObserver(refresh)
+  observer.observe(trigger.closest('[data-slot="vertical-tabs"]') ?? trigger)
+  window.addEventListener("scroll", refresh, { capture: true, passive: true })
+  window.addEventListener("resize", refresh, { passive: true })
+  unwatch = () => {
+    observer.disconnect()
+    window.removeEventListener("scroll", refresh, { capture: true })
+    window.removeEventListener("resize", refresh)
+  }
+}
+
