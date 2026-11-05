@@ -120,7 +120,8 @@ pub struct Inner {
     running: View,
     /// The session ran at the last refresh; the keymap conditions read it, as they must not lock the store.
     busy: Cell<bool>,
-    spinner: Spinner,
+    /// The scanner, only while the session runs, as `<Show when={busy}>` mounts it; dropping it stops its timer.
+    spinner: RefCell<Option<Spinner>>,
     pub(crate) mode: Cell<Mode>,
     /// The `PromptInfo` being edited; `text` follows the textarea.
     pub(crate) prompt: RefCell<Value>,
@@ -287,13 +288,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .border_sides(Sides::LEFT)
         .border_chars(Some(border_chars('╹', ' ', ' ')))
         .child(&edge);
-    // The scanner in the agent's color; `[⋯]` with animations off (`component/prompt/index.tsx:1913-1919`).
-    let spinner = Spinner::new(app)
-        .frames(&scanner_frames(&scanner(theme.border.base)))
-        .interval(Duration::from_millis(40))
-        .still("[⋯]")
-        .animations(opencode_ui::motion::enabled(tui.config().info.animations));
-    let running = View::new(app).margin_edge(Edge::Left, 1).shrink(0.0).child(&spinner).visible(false);
+    let running = View::new(app).margin_edge(Edge::Left, 1).shrink(0.0).visible(false);
     let footer = Text::new(app, "").truncate(true).wrap(WrapMode::None);
     let staging = super::r#move::Move::new(app, opencode_ui::motion::enabled(tui.config().info.animations));
     let editor_file = Text::new(app, "").truncate(true).wrap(WrapMode::None).shrink(1.0);
@@ -332,7 +327,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         hovered: Cell::new(false),
         running,
         busy: Cell::new(false),
-        spinner,
+        spinner: RefCell::new(None),
         mode: Cell::new(Mode::Normal),
         prompt: RefCell::new(empty_prompt()),
         interrupt: Cell::new(0),
@@ -423,9 +418,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     tui.settings.on_change(bind!(inner, |inner, tui| {
         let cursor = crate::features::system_commands::cursor(&tui.config());
         inner.textarea.cursor_style(cursor.0, cursor.1);
-        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
-        inner.spinner.set_animations(animations);
-        inner.staging.set_animations(animations);
+        inner.staging.set_animations(opencode_ui::motion::enabled(tui.config().info.animations));
         inner.refresh(tui);
     }));
     // Home drops the last session's selection; a session follows its directory (`editor.reconnect`).
@@ -618,12 +611,6 @@ impl Inner {
             Mode::Shell => theme.text.action.primary.selected,
             Mode::Normal => agent_color.unwrap_or(theme.border.base),
         };
-        self.spinner.set_color(if opencode_ui::motion::enabled(tui.config().info.animations) {
-            scanner_colors(&scanner(agent_color.unwrap_or(theme.border.base)))
-        } else {
-            SpinnerColor::from(theme.text.muted)
-        });
-
         let display = match (&catalog, &selection) {
             (Some(catalog), Some(selection)) => {
                 let (model, provider) = catalog.labels(selection.model.as_ref());
@@ -652,6 +639,7 @@ impl Inner {
 
         let running = self.running(tui);
         self.busy.set(running);
+        self.show_spinner(tui, &theme, running, agent_color.unwrap_or(theme.border.base));
         self.running.visible(running);
         let staged = !running && self.staging.render(&theme);
         self.footer.visible(!staged);
@@ -692,6 +680,34 @@ impl Inner {
         self.editor_file.set_text(vec![file.fg(color)]);
         self.mount_footer(tui);
         self.app.request_redraw();
+    }
+
+    /// The scanner in the agent's color, `[⋯]` with animations off (`component/prompt/index.tsx:1913-1919`). It
+    /// mounts when the session starts running and drops when it stops, so it starts at its first frame each time
+    /// and no timer runs while idle.
+    fn show_spinner(&self, tui: &Tui, theme: &Theme, running: bool, color: Color) {
+        let mut spinner = self.spinner.borrow_mut();
+        if !running {
+            if spinner.take().is_some() {
+                self.running.clear();
+            }
+            return;
+        }
+        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+        let color = if animations { scanner_colors(&scanner(color)) } else { SpinnerColor::from(theme.text.muted) };
+        if let Some(spinner) = spinner.as_ref() {
+            spinner.set_animations(animations);
+            spinner.set_color(color);
+            return;
+        }
+        let mounted = Spinner::new(&self.app)
+            .frames(&scanner_frames(&scanner(theme.border.base)))
+            .interval(Duration::from_millis(40))
+            .still("[⋯]")
+            .animations(animations)
+            .color(color);
+        self.running.add(&mounted);
+        *spinner = Some(mounted);
     }
 
     /// Mounts the `prompt.footer` slots again when their input changed (E.14).

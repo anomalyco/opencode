@@ -34,7 +34,9 @@ pub struct Move {
     timer: Cell<Option<TimerId>>,
     app: App,
     root: View,
-    spinner: Spinner,
+    /// The progress spinner, only while there is progress, so no timer runs while idle.
+    spinner: RefCell<Option<Spinner>>,
+    animations: Cell<bool>,
     dots_text: Text,
     label: Text,
 }
@@ -42,7 +44,6 @@ pub struct Move {
 impl Move {
     /// The footer row, hidden until something is staged; it goes where the location shows.
     pub fn new(app: &App, animations: bool) -> Self {
-        let spinner = Spinner::new(app).animations(animations);
         let dots_text = Text::new(app, "").wrap(WrapMode::None);
         let label = Text::new(app, "(new worktree)").wrap(WrapMode::None).truncate(true);
         let root = View::new(app)
@@ -51,7 +52,6 @@ impl Move {
             .min_height(0)
             .shrink(1.0)
             .padding_edge(Edge::Left, 3)
-            .child(&spinner)
             .child(&dots_text)
             .child(&label)
             .visible(false);
@@ -63,14 +63,18 @@ impl Move {
             timer: Cell::new(None),
             app: app.clone(),
             root,
-            spinner,
+            spinner: RefCell::new(None),
+            animations: Cell::new(animations),
             dots_text,
             label,
         }
     }
 
     pub fn set_animations(&self, enabled: bool) {
-        self.spinner.set_animations(enabled);
+        self.animations.set(enabled);
+        if let Some(spinner) = &*self.spinner.borrow() {
+            spinner.set_animations(enabled);
+        }
     }
 
     pub fn root(&self) -> &View {
@@ -106,9 +110,21 @@ impl Move {
         let pending = self.pending_new().is_some();
         let shown = progress.is_some() || pending;
         self.root.visible(shown);
-        self.spinner.set_color(accent);
-        self.spinner.set_label(progress.clone());
-        self.spinner.visible(progress.is_some());
+        let mut spinner = self.spinner.borrow_mut();
+        if progress.is_none()
+            && let Some(spinner) = spinner.take()
+        {
+            spinner.detach();
+        }
+        if let Some(progress) = &progress {
+            let spinner = spinner.get_or_insert_with(|| {
+                let spinner = Spinner::new(&self.app).animations(self.animations.get());
+                self.root.insert(0, &spinner);
+                spinner
+            });
+            spinner.set_color(accent);
+            spinner.set_label(Some(progress.clone()));
+        }
         self.dots_text.set_text(vec![".".repeat(self.dots.get()).fg(theme.text.muted)]);
         self.dots_text.visible(progress.is_some());
         self.label.set_text(vec!["(new worktree)".fg(accent)]);
