@@ -76,6 +76,11 @@ export type Event =
   | { readonly type: "terminal.updated"; readonly sessionID: string; readonly terminal: PersistentPtyInfo }
   /** This client changed a listed terminal's info. */
   | { readonly type: "terminal.replaced"; readonly sessionID: string; readonly terminal: PersistentPtyInfo }
+  /**
+   * This client created a terminal. It joins a known list at once: the refresh that follows can lose to a newer one
+   * the server's `persistent-pty.added` started, and the tab must be listed when it is selected.
+   */
+  | { readonly type: "terminal.created"; readonly sessionID: string; readonly terminal: PersistentPtyInfo }
   | { readonly type: "sessions.removed"; readonly sessionIDs: readonly string[] }
 
 export type Command =
@@ -321,6 +326,11 @@ function supported(state: Supported, event: Event): Transition {
     // A terminal the list doesn't have yet arrives with the next list; this client changes only listed ones.
     return event.type === "terminal.updated" ? load(state, event.sessionID) : unchanged(state)
   }
+
+  if (event.type === "terminal.created")
+    return (list?.status === "ready" || list?.status === "refreshing") && !listed(list.items, event.terminal.id)
+      ? changed(put(state, event.sessionID, { ...list, items: [...list.items, event.terminal] }))
+      : unchanged(state)
 
   if (event.type === "sessions.removed" && event.sessionIDs.some((id) => id in state.sessions))
     return changed({ ...state, sessions: omit(state.sessions, event.sessionIDs) })
