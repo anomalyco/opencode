@@ -101,11 +101,12 @@ enum Mode {
     Slash,
 }
 
-/// A prompt waiting in the server's inbox (`FooterQueuedPrompt`, without its text, which M.3's menu shows).
+/// A prompt waiting in the server's inbox (`FooterQueuedPrompt`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Queued {
     pub id: String,
     pub delivery: Delivery,
+    pub prompt: RunPrompt,
 }
 
 type Notice = Box<dyn Fn(&str)>;
@@ -167,6 +168,8 @@ struct State {
     catalog: Catalog,
     agent: String,
     queued: Vec<Queued>,
+    /// Pending prompts with an action in flight.
+    flights: std::collections::HashSet<String>,
     submitting: bool,
     /// A paste in flight: a submit waits for it.
     pasting: bool,
@@ -444,9 +447,12 @@ impl Prompt {
         let mut state = self.0.state.borrow_mut();
         match event["type"].as_str() {
             Some("session.inbox.enqueued") if data["item"]["type"] == "user" => {
-                let delivery = delivery(&data["item"]["delivery"]);
                 if !state.queued.iter().any(|queued| queued.id == id) {
-                    state.queued.push(Queued { id, delivery });
+                    state.queued.push(Queued {
+                        id,
+                        delivery: delivery(&data["item"]["delivery"]),
+                        prompt: RunPrompt::from_message(&data["item"]["payload"]),
+                    });
                 }
             }
             Some("session.inbox.delivery.changed") => {
@@ -462,18 +468,65 @@ impl Prompt {
     }
 
     /// A prompt this client admitted (`mergePending`).
-    pub fn admitted(&self, id: &str, delivery: Delivery) {
+    pub fn admitted(&self, id: &str, delivery: Delivery, prompt: &RunPrompt) {
         let mut state = self.0.state.borrow_mut();
         if !state.queued.iter().any(|queued| queued.id == id) {
             state.queued.push(Queued {
                 id: id.to_owned(),
                 delivery,
+                prompt: prompt.copy(),
             });
         }
     }
 
+    /// The session's pending prompts, oldest first.
     pub fn queued(&self) -> Vec<Queued> {
         self.0.state.borrow().queued.clone()
+    }
+
+    /// `queuedPromptAction` for M.3's pending-prompts panel: moves the prompt to `delivery`, or cancels it with
+    /// `None` (`queued_prompt.delete`). Calls `done` with whether it worked; a failure shows in the status row.
+    pub fn queued_action(
+        &self,
+        id: &str,
+        delivery: Option<Delivery>,
+        done: impl FnOnce(bool) + 'static,
+    ) {
+        self.0.queued_action(id, delivery, None, Box::new(done));
+    }
+
+    /// `queued_prompt.undo`: cancels the pending prompt and appends it to the composer's draft.
+    pub fn undo(&self, id: &str, done: impl FnOnce(bool) + 'static) {
+        let inner = &self.0;
+        let current = inner.current();
+        if current.shell && !current.text.is_empty() {
+            inner.status("leave shell mode before undoing a queued prompt");
+            return done(false);
+        }
+        let weak = Rc::downgrade(inner);
+        let id = id.to_owned();
+        let queued = inner
+            .state
+            .borrow()
+            .queued
+            .iter()
+            .find(|queued| queued.id == id)
+            .map(|queued| queued.prompt.clone());
+        let Some(prompt) = queued else {
+            return done(false);
+        };
+        inner.queued_action(
+            &id,
+            None,
+            Some("undo"),
+            Box::new(move |ok| {
+                if let Some(inner) = weak.upgrade().filter(|_| ok) {
+                    let next = inner.current().append(&prompt);
+                    inner.restore(&next, None);
+                }
+                done(ok);
+            }),
+        );
     }
 
     /// Clears the draft (`requestExit`'s first press). False when there was nothing to clear.
@@ -1205,19 +1258,55 @@ impl Inner {
 
     /// `onQueuedPromptSteer`: steers a queued prompt.
     fn steer(self: &Rc<Self>, id: String) {
-        let Some(target) = self.target.borrow().clone() else {
-            return;
-        };
         self.state.borrow_mut().submitting = true;
         let weak = Rc::downgrade(self);
+        self.queued_action(
+            &id,
+            Some(Delivery::Steer),
+            None,
+            Box::new(move |_| {
+                if let Some(inner) = weak.upgrade() {
+                    inner.state.borrow_mut().submitting = false;
+                }
+            }),
+        );
+    }
+
+    /// `queuedPromptAction`: one request per pending prompt at a time; a second one while it runs reports
+    /// failure without a request (`createSingleFlight`).
+    fn queued_action(
+        self: &Rc<Self>,
+        id: &str,
+        delivery: Option<Delivery>,
+        label: Option<&str>,
+        done: Box<dyn FnOnce(bool)>,
+    ) {
+        let Some(target) = self.target.borrow().clone() else {
+            return done(false);
+        };
+        if !self.state.borrow_mut().flights.insert(id.to_owned()) {
+            return done(false);
+        }
+        let label = label
+            .unwrap_or(match delivery {
+                None => "delete",
+                Some(delivery) => delivery.as_str(),
+            })
+            .to_owned();
+        let weak = Rc::downgrade(self);
+        let id = id.to_owned();
         self.app.spawn(
-            async move { api::deliver(&target.client, &target.session, &id, Delivery::Steer).await },
+            {
+                let id = id.clone();
+                async move { api::queued_action(&target.client, &target.session, &id, delivery).await }
+            },
             move |_, result| {
                 let Some(inner) = weak.upgrade() else { return };
-                inner.state.borrow_mut().submitting = false;
-                if let Err(error) = result {
-                    inner.status(&format!("failed to steer pending prompt: {error}"));
+                inner.state.borrow_mut().flights.remove(&id);
+                if let Err(error) = &result {
+                    inner.status(&format!("failed to {label} pending prompt: {error}"));
                 }
+                done(result.is_ok());
             },
         );
     }
@@ -1844,6 +1933,7 @@ async fn inbox(client: &Client, session: &str) -> Vec<Queued> {
                 .map(|item| Queued {
                     id: item["id"].as_str().unwrap_or_default().to_owned(),
                     delivery: delivery(&item["delivery"]),
+                    prompt: RunPrompt::from_message(&item["payload"]),
                 })
                 .collect()
         })
