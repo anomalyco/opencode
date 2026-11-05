@@ -50,7 +50,11 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
     });
     let mini = config.mini.clone().unwrap_or_default();
     // The TUI's tasks need a multi-threaded runtime: `App::runtime` uses the one it runs inside.
-    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("opencode-mini").build()?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .thread_name("opencode-mini")
+        .build()?;
     let server = runtime.block_on(connect(context))?;
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let input = Input {
