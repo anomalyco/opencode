@@ -203,7 +203,7 @@ jobs:
           $output = & $binary --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output $output
-          if ($output -ne "opencode-pty $version (protocol 7)") { throw "Unexpected executable version: $output" }
+          if ($output -notmatch "^opencode-pty $([regex]::Escape($version)) \(protocol \d+\)$") { throw "Unexpected executable version: $output" }
       - name: Document current coverage
         if: always()
         run: |

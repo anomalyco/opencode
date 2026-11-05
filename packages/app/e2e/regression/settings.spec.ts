@@ -468,6 +468,42 @@ test("several servers share one selected server across per-server pages", async 
   await expect(settings.getByRole("button", { name: "Edit server", exact: true })).toBeVisible()
 })
 
+for (const server of [
+  { name: "Signed-out box", url: REMOTE_SERVER, password: "secret" },
+  // Nothing answers on this server.
+  { name: "Offline box", url: "http://127.0.0.1:4099" },
+]) {
+  test(`a project route on an unavailable server falls back to its Projects page (${server.name})`, async ({
+    page,
+  }) => {
+    const remote = "/remote/settings-demo"
+    await mockWorkspace(page, {
+      name: "Settings demo",
+      directory,
+      provider: NO_PROVIDER,
+      sessions: [],
+      seed: { tabs: [] },
+    })
+
+    if (server.password)
+      await mockRemoteServer(page, { name: server.name, directory: remote, password: server.password })
+
+    if (!server.password) await seed(page, { servers: [{ url: server.url, name: server.name }] })
+    await page.goto(
+      `/settings?server=${encodeURIComponent(server.url)}&project=${encodeURIComponent(remote)}&tab=general`,
+    )
+    const settings = page.getByTestId("settings-screen")
+    await expect(settings.getByRole("status").filter({ hasText: `Can't reach ${server.name}` })).toBeVisible()
+    await expect(settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get("server") === server.url &&
+        url.searchParams.get("tab") === "projects" &&
+        !url.searchParams.has("project"),
+    )
+  })
+}
+
 test("project list menus rename, edit, add, and stay inside the scrollport", async ({ page }) => {
   const projects = ["rebase", "dinocms", "opencode", "Playground"].map((name, index) =>
     project({ id: `project-${index}`, directory: `/projects/${name}`, name }),
@@ -1965,6 +2001,65 @@ test("providers: switching Console accounts keeps the list until the new workspa
   await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
   await expect(trigger).toHaveText("Anomaly")
   await expect(connected).not.toHaveAttribute("data-flashed")
+})
+
+test("models: a Console provider picked on Providers opens its collapsed group, then the search types normally", async ({
+  page,
+}) => {
+  const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
+
+  const { settings } = await open(page, {
+    provider: {
+      all: [
+        {
+          id: "opencode",
+          integrationID: "opencode",
+          name: "Anomaly / OpenCode",
+          models: model("console-model", "Console Model"),
+        },
+        {
+          id: "console-google",
+          canonical: "google",
+          integrationID: "opencode",
+          name: "Anomaly / Google",
+          models: model("managed-gemini", "Managed Gemini"),
+        },
+      ],
+      connected: ["opencode", "console-google"],
+      default: {},
+    },
+    integrations: [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: [{ type: "credential", id: "cred_anomaly", label: "Anomaly", method: "oauth" }],
+      },
+    ],
+  })
+
+  const group = settings
+    .locator('[data-component="settings-models-console"]')
+    .getByRole("button", { name: /^OpenCode Console/ })
+
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  await group.click()
+  await expect(group).toHaveAttribute("aria-expanded", "false")
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const connected = settings.locator('[data-component="connected-providers-section"]')
+  await connected.getByRole("button", { name: "2 providers available", exact: true }).click()
+  await connected.getByRole("button", { name: "Google", exact: true }).click()
+
+  // The nested provider mounts only inside the expanded Console group, so the reveal opens the group first.
+  const google = settings.locator('[data-component="provider-model-group"][data-provider="console-google"]')
+  await expect(group).toHaveAttribute("aria-expanded", "true")
+  await expect(google.locator(".provider-model-group-trigger")).toBeFocused()
+
+  const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
+  await search.pressSequentially("gemini")
+  await expect(search).toHaveValue("gemini")
+  await expect(settings.getByRole("switch", { name: "Managed Gemini", exact: true })).toBeVisible()
 })
 
 test("the add server dialog keeps focus above fullscreen settings", async ({ page }) => {

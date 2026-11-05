@@ -225,6 +225,44 @@ describe("terminal machine", () => {
     )
   })
 
+  // The create answer and the server's `persistent-pty.added` race: the creator's refresh can lose to the one the event
+  // started, which answers later. The new tab is listed meanwhile, so selecting it settles focus at once.
+  test("a terminal this client created is listed before a newer refresh answers", () => {
+    const own = transition(listed(), { type: "session.refresh", sessionID: "ses_1" }).state
+    const added = transition(own, { type: "session.refresh", sessionID: "ses_1" }).state
+    const lost = transition(added, { type: "list.loaded", sessionID: "ses_1", attempt: 3, items: [info("pty_1")] })
+
+    expect(lost.state).toBe(added)
+
+    const created = transition(lost.state, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") })
+
+    expect(created.commands).toEqual([])
+    expect(sessionView(created.state, "ses_1")).toEqual({ type: "ready", items: [info("pty_1"), info("pty_2")] })
+
+    const settled = transition(created.state, {
+      type: "list.loaded",
+      sessionID: "ses_1",
+      attempt: 4,
+      items: [info("pty_1"), info("pty_2")],
+    })
+
+    expect(sessionView(settled.state, "ses_1")).toEqual({ type: "ready", items: [info("pty_1"), info("pty_2")] })
+
+    // A terminal already listed, or a list not known yet, changes nothing.
+    expect(
+      transition(created.state, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") }).state,
+    ).toBe(created.state)
+
+    const loading = replay([
+      { type: "session.loaded", sessionID: "ses_1" },
+      { type: "capability.checked", attempt: 1, supported: true },
+    ]).state
+
+    expect(transition(loading, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") }).state).toBe(
+      loading,
+    )
+  })
+
   test("answers for a removed session are ignored", () => {
     const loading = replay([
       { type: "session.loaded", sessionID: "ses_1" },
