@@ -18,7 +18,7 @@ use opencode_api::generated::{
     SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction,
     SessionMessageID, SessionMessageInfo,
 };
-use opencode_local::cli_config::{Markdown as MarkdownMode, TurnTokens, Visibility};
+use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
 use opencode_store::{Changes, LoadMore, MessageExt, State};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
@@ -45,6 +45,33 @@ pub const BACKFILL_CHUNK: usize = 60;
 #[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
 
+#[derive(Clone, Copy, PartialEq)]
+struct RowSettings {
+    conceal: bool,
+    tps: bool,
+    turn_tokens: Option<TurnTokens>,
+    image_preview: bool,
+    hide_thinking: bool,
+}
+
+impl RowSettings {
+    fn read(config: &Resolved) -> Self {
+        let session = config.info.session.clone().unwrap_or_default();
+        Self {
+            conceal: session.markdown.unwrap_or(MarkdownMode::Rendered) == MarkdownMode::Rendered,
+            tps: config.tps,
+            turn_tokens: config
+                .info
+                .debug
+                .as_ref()
+                .and_then(|debug| debug.turn_tokens)
+                .filter(|tokens| *tokens != TurnTokens::Enabled(false)),
+            image_preview: session.image_preview.unwrap_or(false),
+            hide_thinking: session.thinking.unwrap_or(Visibility::Hide) == Visibility::Hide,
+        }
+    }
+}
+
 struct Inner {
     root: View,
     scroll: ScrollBox,
@@ -59,11 +86,8 @@ struct Inner {
     syntax: SyntaxTheme,
     thinking_syntax: SyntaxTheme,
     renderers: CodeBlockRenderers,
-    conceal: bool,
-    tps: bool,
-    turn_tokens: Option<TurnTokens>,
-    image_preview: bool,
-    hide_thinking: Cell<bool>,
+    /// The `session` and `debug` settings the rows show with, as the config has them now.
+    view: Cell<RowSettings>,
     groups: Rc<grouping::Settings>,
     session: RefCell<Option<SessionID>>,
     location: RefCell<Option<Location>>,
@@ -144,8 +168,6 @@ impl Transcript {
         let revert = revert::Banner::new(tui, &theme);
         scroll.add(background.root());
         scroll.add(revert.root());
-        let session = tui.config.info.session.clone().unwrap_or_default();
-        let image_preview = session.image_preview.unwrap_or(false);
         let syntax = opencode_ui::code::syntax_theme(&theme);
         let inner = Rc::new_cyclic(|this| Inner {
             root,
@@ -161,19 +183,7 @@ impl Transcript {
             syntax,
             theme,
             renderers: crate::plugins::host::code_blocks(tui),
-            conceal: session.markdown.unwrap_or(MarkdownMode::Rendered) == MarkdownMode::Rendered,
-            tps: tui.config.tps,
-            turn_tokens: tui
-                .config
-                .info
-                .debug
-                .as_ref()
-                .and_then(|debug| debug.turn_tokens)
-                .filter(|tokens| *tokens != TurnTokens::Enabled(false)),
-            image_preview,
-            hide_thinking: Cell::new(
-                session.thinking.unwrap_or(Visibility::Hide) == Visibility::Hide,
-            ),
+            view: Cell::new(RowSettings::read(&tui.config())),
             groups: grouping::Settings::new(&tui.settings.info()),
             session: RefCell::default(),
             location: RefCell::default(),
@@ -366,7 +376,14 @@ impl Inner {
         let weak = self.this.clone();
         tui.settings.on_change(move |tui| {
             let Some(inner) = weak.upgrade() else { return };
-            if inner.groups.read(&tui.settings.info()) {
+            let view = RowSettings::read(&tui.config());
+            let before = inner.view.replace(view);
+            let groups = inner.groups.read(&tui.settings.info());
+            if before.hide_thinking != view.hide_thinking {
+                dispose(tui, inner.layer.take());
+                inner.register(tui);
+            }
+            if groups || before != view {
                 inner.render(tui, |_| true);
             }
         });
@@ -407,11 +424,10 @@ impl Inner {
         self.register(tui);
     }
 
-    /// `session.toggle.thinking` (`index.tsx:1163-1180`). The mode lives for this view; the
-    /// `cli.json` write waits for a config update API.
+    /// `session.toggle.thinking` (`index.tsx:1163-1180`): writes `session.thinking`, which the rows follow.
     fn register(&self, tui: &Tui) {
         let weak = self.this.clone();
-        let title = if self.hide_thinking.get() {
+        let title = if self.view.get().hide_thinking {
             "Expand thinking"
         } else {
             "Collapse thinking"
@@ -421,10 +437,18 @@ impl Inner {
             let Some(tui) = inner.tui.upgrade() else {
                 return;
             };
-            inner.hide_thinking.set(!inner.hide_thinking.get());
-            inner.render(&tui, |_| true);
-            dispose(&tui, inner.layer.take());
-            inner.register(&tui);
+            let next = if inner.view.get().hide_thinking {
+                Visibility::Show
+            } else {
+                Visibility::Hide
+            };
+            crate::dialogs::settings::update(&tui, move |draft| {
+                crate::dialogs::settings::set_path(
+                    draft,
+                    &["session", "thinking"],
+                    next.as_str().into(),
+                );
+            });
             tui.dialogs.clear();
         })
         .title(title)
@@ -476,7 +500,8 @@ impl Inner {
                 .into_iter()
                 .map(|(id, _)| id)
                 .collect();
-            let mut rows = reduce(messages, self.turn_tokens.is_some());
+            let view = self.view.get();
+            let mut rows = reduce(messages, view.turn_tokens.is_some());
             rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id)));
             let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
             // Compactions waiting in the inbox go last (`createSessionRows`).
@@ -501,7 +526,7 @@ impl Inner {
                 state,
                 keys: &keys,
                 directory: info.map(|info| info.location.directory.as_str()),
-                image_preview: self.image_preview,
+                image_preview: view.image_preview,
                 session: &session,
                 agents: catalogs
                     .and_then(|data| data.agent.as_deref())
@@ -517,12 +542,12 @@ impl Inner {
                 syntax: &self.syntax,
                 thinking_syntax: &self.thinking_syntax,
                 renderers: &self.renderers,
-                conceal: self.conceal,
-                hide_thinking: self.hide_thinking.get(),
+                conceal: view.conceal,
+                hide_thinking: view.hide_thinking,
                 groups: &self.groups,
-                tps: self.tps,
-                verbose_tokens: self.turn_tokens == Some(TurnTokens::Verbose),
-                animations: opencode_ui::motion::enabled(tui.config.info.animations),
+                tps: view.tps,
+                verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
+                animations: opencode_ui::motion::enabled(tui.config().info.animations),
                 mode,
                 width,
                 session_agent: info

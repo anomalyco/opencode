@@ -101,7 +101,7 @@ fn reconnecting(tui: &Tui) -> View {
         } else {
             "Connection lost…"
         })
-        .animations(opencode_ui::motion::enabled(tui.config.info.animations));
+        .animations(opencode_ui::motion::enabled(tui.config().info.animations));
     let note = Text::new(
         app,
         if managed {
@@ -206,7 +206,7 @@ fn set_migration(tui: &Tui, progress: Option<String>) {
     let spinner = Spinner::new(app)
         .color(theme.text.feedback.info.base)
         .label(progress)
-        .animations(opencode_ui::motion::enabled(tui.config.info.animations));
+        .animations(opencode_ui::motion::enabled(tui.config().info.animations));
     let view = View::new(app)
         .absolute()
         .z_index(10_000)

@@ -2,13 +2,17 @@
 //!
 //! [`SETTINGS`] is the TS `settings` table. The dialog lists them by category with the current value as the
 //! footer; Enter and Right step to the next value, Left to the previous one. Each change is one `cli.json`
-//! update by path, run on a blocking thread because the file lock blocks. [`Live`] holds the config as the last
-//! write left it, so the dialogs, the DevTools bar, and the theme follow a change without a restart.
+//! update by path, queued on a worker thread because the file lock blocks. [`Live`] holds the resolved config
+//! that every reader queries; writes and outside `cli.json` edits replace it, so everything follows a change
+//! without a restart.
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell};
+use std::collections::VecDeque;
 use std::rc::{Rc, Weak};
 
-use opencode_local::cli_config::{CliConfig, Info, merge};
+use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, merge};
+use opencode_local::serial::Serial;
+use opencode_local::watch::Watch;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{Choice, Detail, SelectOption, SelectProps, select};
@@ -495,81 +499,104 @@ pub const SETTINGS: &[Setting] = &[
     ),
 ];
 
-/// A listener of config changes made through [`update`].
+/// A listener of config changes, from [`update`] or an outside `cli.json` edit.
 type Listener = Rc<dyn Fn(&Tui)>;
 
-/// The config as the last settings write left it, and the write state. One per TUI.
+/// What a write runs when it lands, in the order writes were queued.
+type Done = Box<dyn FnOnce(&Tui)>;
+
+/// The resolved config now, which every reader queries, and the write state. One per TUI.
 pub struct Live {
-    info: RefCell<Info>,
+    resolved: RefCell<Resolved>,
+    /// `--auto`, which wins over `session.permissions` (`context/permission.tsx`).
+    auto: bool,
     config: Option<CliConfig>,
-    saving: Cell<bool>,
+    /// Runs writes and reloads one at a time, in order, off the UI thread.
+    serial: Option<Serial>,
+    done: RefCell<VecDeque<Done>>,
+    watch: RefCell<Option<Watch>>,
     listeners: RefCell<Vec<Listener>>,
     layers: RefCell<Vec<Disposer>>,
 }
 
+/// A write or reload that finished on the serial worker.
+enum Loaded {
+    Written(Result<Info, String>),
+    Reloaded(Info),
+}
+
 impl Live {
     /// `config` is `None` without real roots: changes then stay in memory.
-    pub fn new(info: Info, config: Option<CliConfig>) -> Self {
+    pub fn new(mut resolved: Resolved, auto: bool, config: Option<CliConfig>) -> Self {
+        if auto {
+            resolved.permissions = Permissions::Autoaccept;
+        }
         Self {
-            info: RefCell::new(info),
+            resolved: RefCell::new(resolved),
+            auto,
+            serial: config.as_ref().map(|_| Serial::new("cli-config")),
             config,
-            saving: Cell::new(false),
+            done: RefCell::default(),
+            watch: RefCell::default(),
             listeners: RefCell::default(),
             layers: RefCell::default(),
         }
     }
 
+    /// The resolved config now (`useConfig().data`). Keep the borrow short: a change replaces it.
+    pub fn config(&self) -> Ref<'_, Resolved> {
+        self.resolved.borrow()
+    }
+
     pub fn info(&self) -> Info {
-        self.info.borrow().clone()
+        self.resolved.borrow().info.clone()
     }
 
     /// Whether an `experimental` flag is on now.
     pub fn experiment(&self, name: &str) -> bool {
-        self.info.borrow().experiment(name)
+        self.resolved.borrow().info.experiment(name)
     }
 
-    /// Whether a write is in flight; changes are ignored until it ends, as in TS.
-    pub fn saving(&self) -> bool {
-        self.saving.get()
-    }
-
-    /// Calls `listener` after each change [`update`] applies.
+    /// Calls `listener` after each config change.
     pub fn on_change(&self, listener: impl Fn(&Tui) + 'static) {
         self.listeners.borrow_mut().push(Rc::new(listener));
     }
+
+    fn resolve(&self, info: Info) -> Resolved {
+        let mut resolved = self.resolved.borrow().with_info(info);
+        if self.auto {
+            resolved.permissions = Permissions::Autoaccept;
+        }
+        resolved
+    }
 }
 
-/// `config.update(draft => ...)` by JSON path, off the UI thread, then [`apply`]. A failed write shows an error
-/// toast. Ignored while another write is in flight.
+/// `config.update(draft => ...)` by JSON path, then [`apply`]. Writes queue behind each other off the UI thread,
+/// so none is dropped. A failed write shows an error toast.
 pub fn update(tui: &Tui, change: impl FnOnce(&mut Value) + Send + 'static) {
+    write(tui, change, |_| {});
+}
+
+/// [`update`], then `done` once the write landed or failed.
+fn write(
+    tui: &Tui,
+    change: impl FnOnce(&mut Value) + Send + 'static,
+    done: impl FnOnce(&Tui) + 'static,
+) {
     let live = &tui.settings;
-    if live.saving.replace(true) {
-        return;
-    }
-    let Some(config) = live.config.clone() else {
+    let (Some(config), Some(serial)) = (live.config.clone(), live.serial.as_ref()) else {
         let mut value = live.info().to_value();
         change(&mut value);
-        live.saving.set(false);
         apply(tui, merge(&[Some(value)]));
+        done(tui);
         return;
     };
-    let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            tokio::task::spawn_blocking(move || config.update_value(change))
-                .await
-                .map_err(|error| error.to_string())
-                .and_then(|result| result.map_err(|error| error.to_string()))
-        },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            tui.settings.saving.set(false);
-            match result {
-                Ok(info) => apply(&tui, info),
-                Err(error) => tui.toasts.error(error),
-            }
-        },
-    );
+    live.done.borrow_mut().push_back(Box::new(done));
+    let proxy = tui.app.proxy();
+    serial.run(move || {
+        let result = config.update_value(change).map_err(|error| error.to_string());
+        let _ = proxy.send(Loaded::Written(result));
+    });
 }
 
 /// Sets `path` to `value`, creating the objects on the way (`dialog-config.tsx:463-468`).
@@ -596,11 +623,16 @@ pub fn set_path(root: &mut Value, path: &[&str], value: Value) {
 }
 
 /// Takes `info` as the current config and carries out what TS does reactively: the theme follows `theme.*`,
-/// and listeners run.
+/// the frame, tabs, and leader timeout follow the rest, and listeners run.
 fn apply(tui: &Tui, info: Info) {
-    let before = tui.settings.info.replace(info.clone());
+    let next = tui.settings.resolve(info);
+    if *tui.settings.config() == next {
+        return;
+    }
+    let before = tui.settings.resolved.replace(next);
+    let info = tui.settings.info();
     let theme = |info: &Info| info.theme.clone().unwrap_or_default();
-    let (old, new) = (theme(&before), theme(&info));
+    let (old, new) = (theme(&before.info), theme(&info));
     let mut changed = false;
     {
         let mut state = tui.theme.borrow_mut();
@@ -621,10 +653,15 @@ fn apply(tui: &Tui, info: Info) {
     if changed {
         tui.theme_changed();
     }
+    let leader = tui.settings.config().leader_timeout;
+    tui.keymap.set_leader_timeout(leader);
+    crate::tabs::route_changed(tui);
+    crate::frame::refresh(tui);
     let listeners = tui.settings.listeners.borrow().clone();
     for listener in listeners {
         listener(tui);
     }
+    tui.app.request_redraw();
 }
 
 /// The value of `setting` now: the config's, else the default (the active theme for `theme.name`).
@@ -668,8 +705,9 @@ pub fn display(tui: &Tui, setting: &Setting) -> String {
 }
 
 /// Steps `SETTINGS[index]` by `direction` and writes it (`change` in `dialog-config.tsx`).
-pub fn change(tui: &Tui, index: usize, direction: i32) {
-    if tui.settings.saving() {
+/// While `saving` holds, the dialog's previous step is still being written and this one is ignored, as in TS.
+fn change(tui: &Tui, saving: &Rc<Cell<bool>>, index: usize, direction: i32) {
+    if saving.get() {
         return;
     }
     let Some(setting) = SETTINGS.get(index) else {
@@ -696,7 +734,13 @@ pub fn change(tui: &Tui, index: usize, direction: i32) {
         return;
     }
     let path = setting.path;
-    update(tui, move |draft| set_path(draft, path, next));
+    saving.set(true);
+    let saving = saving.clone();
+    write(
+        tui,
+        move |draft| set_path(draft, path, next),
+        move |_| saving.set(false),
+    );
 }
 
 /// The dialog rows.
@@ -756,11 +800,12 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                 return opentui::prelude::View::new(&cx.app);
             };
             let selected = Rc::new(Cell::new(current));
+            let saving = Rc::new(Cell::new(false));
             let step = |direction: i32| {
-                let (weak, selected) = (weak.clone(), selected.clone());
+                let (weak, selected, saving) = (weak.clone(), selected.clone(), saving.clone());
                 move |_: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| {
                     if let Some(tui) = weak.upgrade() {
-                        change(&tui, selected.get(), direction);
+                        change(&tui, &saving, selected.get(), direction);
                     }
                 }
             };
@@ -777,7 +822,7 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                 move |option| selected.set(option.value)
             }));
             props.on_select = Some(Rc::new({
-                let weak = weak.clone();
+                let (weak, saving) = (weak.clone(), saving.clone());
                 move |option| {
                     let Some(tui) = weak.upgrade() else { return };
                     // `open`: Enter on Theme opens the theme list, which comes back here.
@@ -791,7 +836,7 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                         super::theme_list::show(&tui, Some(back));
                         return;
                     }
-                    change(&tui, option.value, 1);
+                    change(&tui, &saving, option.value, 1);
                 }
             }));
             props.bindings = vec![
@@ -873,6 +918,44 @@ pub fn install(tui: &Rc<Tui>) {
         Ok(disposer) => tui.settings.layers.borrow_mut().push(disposer),
         Err(error) => log::error!("settings keymap layer: {error}"),
     }
+    install_reload(tui);
+}
+
+/// Applies what the serial worker finished, and reloads `cli.json` after its directory changed, as
+/// `ConfigProvider`'s watch does. A reload runs on the same worker as the writes, so it never lands out of order.
+fn install_reload(tui: &Rc<Tui>) {
+    let weak = tui.weak();
+    tui.app.on_message(move |_, loaded: &Loaded| {
+        let Some(tui) = weak.upgrade() else { return };
+        match loaded {
+            Loaded::Written(result) => {
+                match result {
+                    Ok(info) => apply(&tui, info.clone()),
+                    Err(error) => tui.toasts.error(error.clone()),
+                }
+                let done = tui.settings.done.borrow_mut().pop_front();
+                if let Some(done) = done {
+                    done(&tui);
+                }
+            }
+            Loaded::Reloaded(info) => apply(&tui, info.clone()),
+        }
+    });
+    let live = &tui.settings;
+    let (Some(config), Some(serial)) = (live.config.clone(), live.serial.clone()) else {
+        return;
+    };
+    let proxy = tui.app.proxy();
+    let watch = config.clone().watch(move || {
+        let (config, proxy) = (config.clone(), proxy.clone());
+        // A failed read keeps the config as it is (`.catch(() => {})`).
+        serial.run(move || {
+            if let Ok(info) = config.get() {
+                let _ = proxy.send(Loaded::Reloaded(info));
+            }
+        });
+    });
+    *live.watch.borrow_mut() = watch;
 }
 
 /// A JSON number as JS writes it: whole numbers without a fraction.

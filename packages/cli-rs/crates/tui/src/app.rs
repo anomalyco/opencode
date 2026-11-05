@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
 use opencode_api::generated::SessionInfo;
-use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, ThemeMode as ConfigMode};
+use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigMode};
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
@@ -66,14 +66,13 @@ pub struct Tui {
     pub dialogs: Dialogs,
     pub toasts: Toasts,
     pub theme: RefCell<ThemeState>,
-    pub config: Resolved,
     pub directory: String,
     /// The prompt textarea while it has the keymap's edit bindings (E.2 fills it). The keymap's
     /// `textarea_enabled` holds while it is focused.
     pub textarea: Rc<RefCell<Option<Textarea>>>,
     /// Prompt history, drafts, and catalogs, shared by every prompt (E.2).
     pub prompt: crate::prompt::editor::Shared,
-    /// The config as settings writes left it (E.18a).
+    /// The live config: settings writes and `cli.json` edits replace it (E.18a).
     pub settings: crate::dialogs::settings::Live,
     /// The model and agent state (E.16).
     pub local: Rc<crate::dialogs::model::Local>,
@@ -138,6 +137,11 @@ impl Tui {
 
     pub fn weak(&self) -> Weak<Tui> {
         self.this.clone()
+    }
+
+    /// The resolved config now (`useConfig().data`). Keep the borrow short: a change replaces it.
+    pub fn config(&self) -> std::cell::Ref<'_, Resolved> {
+        self.settings.config()
     }
 
     /// TUI storage (`useStorage`), when the TUI has real roots.
@@ -304,11 +308,7 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
 }
 
 /// [`mount`] with the startup arguments.
-pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
-    // `--auto` wins over `session.permissions` (`context/permission.tsx`).
-    if args.auto {
-        deps.config.permissions = Permissions::Autoaccept;
-    }
+pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let runtime = app.runtime();
     let _guard = runtime.enter();
     let data = Data::with_runtime(
@@ -366,11 +366,12 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
             storage: files.as_ref().and_then(|files| files.storage.clone()),
         });
 
+    let plugins = crate::plugins::host::registry(&deps.config.info);
     let settings = crate::dialogs::settings::Live::new(
-        deps.config.info.clone(),
+        deps.config,
+        args.auto,
         files.as_ref().map(|files| files.config.clone()),
     );
-    let plugins = crate::plugins::host::registry(&deps.config.info);
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
         local: crate::dialogs::model::Local::new(
             app,
@@ -387,7 +388,6 @@ pub fn mount_with(app: &App, mut deps: Deps, args: Args) -> Rc<Tui> {
         dialogs,
         toasts,
         theme: RefCell::new(theme),
-        config: deps.config,
         directory: deps.directory,
         textarea,
         prompt: crate::prompt::editor::Shared::new(
