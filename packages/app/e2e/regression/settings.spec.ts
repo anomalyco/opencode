@@ -786,6 +786,45 @@ test("clearing project fields sends explicit removal values", async ({ page }) =
   }
 })
 
+test("Enter removes a custom project icon, and a failed save stays marked until it is sent again", async ({ page }) => {
+  const { settings } = await open(page)
+  await openProject(page)
+  const icon = settings.getByRole("button", { name: "Project icon", exact: true })
+  await expect(icon.locator("img")).toHaveCount(1)
+
+  // Keyboard and touch users never hover, so activating the icon alone removes it.
+  const cleared = patched(page)
+  await icon.focus()
+  await page.keyboard.press("Enter")
+  expect((await cleared).postDataJSON()).toEqual({ icon: { color: "orange", override: "" } })
+  await expect(icon.locator("img")).toHaveCount(0)
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
+
+  // Only the next save fails.
+  let failed = false
+
+  await page.route(new RegExp(`/api/project/${projectID}(\\?|$)`), (route) => {
+    if (route.request().method() !== "PATCH" || failed) return route.fallback()
+    failed = true
+
+    return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "down" }) })
+  })
+
+  const blue = settings.getByRole("button", { name: "Select blue color", exact: true })
+  const retry = settings.getByRole("button", { name: "Try again", exact: true })
+  await blue.click()
+  await expect(retry).toBeVisible()
+  await expect(icon).toHaveAttribute("aria-invalid", "true")
+  await expect(blue).toHaveAttribute("aria-pressed", "true")
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
+
+  const resent = patched(page)
+  await retry.click()
+  expect((await resent).postDataJSON()).toEqual({ icon: { color: "blue", override: "" } })
+  await expect(retry).toHaveCount(0)
+  await expect(icon).not.toHaveAttribute("aria-invalid")
+})
+
 test("shortcuts list Search sessions once and unbind a shortcut while recording it", async ({ page }) => {
   // Opening Settings from Home registers Home's Find, which must not add a second Search sessions.
   const { settings } = await open(page)
