@@ -75,6 +75,7 @@ test("closing @ aborts its session search, and reopening on the same word waits 
     searches[0]?.done.resolve()
     await flush()
     await value.type("", { search: false })
+    await value.type("@auth", { search: false })
     await value.type("@auth ", { search: false })
     expect(searches.map((search) => search.word)).toEqual(["auth", "auth"])
     expect(value.editor.state.popover.type).toBe("context")
