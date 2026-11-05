@@ -13,6 +13,7 @@ mod complete;
 mod composer;
 mod config_live;
 mod diffs;
+mod drive;
 mod editor;
 mod form;
 mod integrations;
