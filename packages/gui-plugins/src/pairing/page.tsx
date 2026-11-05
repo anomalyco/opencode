@@ -224,9 +224,14 @@ export default function PairingPage(props: {
               </p>
             </Show>
             <Show when={pageView().screenError}>
-              <p class="text-text-danger-base" role="alert">
-                {ctx.t("screenActive.error")}
-              </p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-text-danger-base" role="alert">
+                  {ctx.t("screenActive.error")}
+                </p>
+                <ui.Button size="small" variant="ghost" onClick={() => dispatch({ type: "screen.retry" })}>
+                  {ctx.t("retry")}
+                </ui.Button>
+              </div>
             </Show>
             <Show when={pageView().unavailable}>
               <p class="text-text-danger-base" role="alert">

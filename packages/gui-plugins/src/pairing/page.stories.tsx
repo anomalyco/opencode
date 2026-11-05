@@ -42,5 +42,5 @@ export const SetupFails = story({ enabled: false, fails: true })
 /** Pairing's main side is not running, so remote access cannot be turned on and pairing is unavailable. */
 export const WithoutMainProcess = story({ enabled: false }, false)
 
-/** The display sleep setting cannot be read; after the retries, its switch stays enabled so flipping it tries again. */
+/** The display sleep setting cannot be read at first; after the retries, Try again reads it and the switch stays enabled. */
 export const ScreenSettingFails = story({ enabled: true, screenFails: true })

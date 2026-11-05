@@ -460,7 +460,7 @@ describe("transitionPairing", () => {
 })
 
 describe("the display sleep setting", () => {
-  test("reads that give up keep the switch enabled, so flipping it tries again", () => {
+  test("reads that give up offer Try again and keep the switch enabled", () => {
     const exhausted = failReads(started, "screen")
 
     expect(exhausted.effects.flatMap((effect) => (effect.type === "wait" ? [effect.delayMs] : []))).toEqual([
@@ -475,6 +475,22 @@ describe("the display sleep setting", () => {
       screenError: true,
       screenDisabled: false,
       screenChecked: false,
+    })
+
+    // "Try again" reads the setting afresh, with its own retries.
+    const retried = step(exhausted.state, { type: "screen.retry" })
+    const read = exhausted.state.issued + 1
+
+    expect(retried.effects).toEqual([
+      { type: "read-screen", generation: 1, attempt: read, timeoutMs: SCREEN_TIMEOUT_MS },
+    ])
+    expect(retried.state.screen).toEqual({ status: "loading", generation: 1, attempt: read, step: "reading", failures: 0 })
+    expect(viewPairingPage(retried.state)).toMatchObject({ screenError: false, screenDisabled: true })
+    expect(step(retried.state, { type: "screen.retry" }).state).toBe(retried.state)
+    expect(step(retried.state, { type: "screen.read.succeeded", attempt: read, enabled: true }).state.screen).toEqual({
+      status: "ready",
+      generation: 1,
+      enabled: true,
     })
 
     const toggled = step(exhausted.state, { type: "screen.toggled", enabled: true })

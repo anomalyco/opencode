@@ -145,6 +145,8 @@ export type PairingEvent =
   | { readonly type: "screen.read.failed"; readonly attempt: number }
   /** The user flipped the "Keep screen active" switch. */
   | { readonly type: "screen.toggled"; readonly enabled: boolean }
+  /** The user clicked "Try again" beside the display sleep setting's error. */
+  | { readonly type: "screen.retry" }
   | { readonly type: "screen.change.succeeded"; readonly attempt: number }
   /** The display sleep setting's change failed or timed out. */
   | { readonly type: "screen.change.failed"; readonly attempt: number }
@@ -286,6 +288,7 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
     event.type === "screen.read.succeeded" ||
     event.type === "screen.read.failed" ||
     event.type === "screen.toggled" ||
+    event.type === "screen.retry" ||
     event.type === "screen.change.succeeded" ||
     event.type === "screen.change.failed" ||
     (event.type === "wait.ended" && event.for === "screen")
@@ -398,8 +401,8 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
 }
 
 /**
- * The display sleep setting. It reads and retries as remote access does, and stays switchable after a failure, so
- * flipping the switch is the way to try again. Nothing else depends on it.
+ * The display sleep setting. It reads and retries as remote access does. After a failure, "Try again" reads it
+ * afresh, and the switch stays enabled, so flipping it sets the value outright. Nothing else depends on it.
  */
 function transitionScreen(
   state: PairingState,
@@ -410,6 +413,7 @@ function transitionScreen(
         | "screen.read.succeeded"
         | "screen.read.failed"
         | "screen.toggled"
+        | "screen.retry"
         | "screen.change.succeeded"
         | "screen.change.failed"
         | "wait.ended"
@@ -418,6 +422,19 @@ function transitionScreen(
 ): PairingTransition {
   const screen = state.screen
   const attempt = state.issued + 1
+
+  if (event.type === "screen.retry") {
+    if (screen.status !== "failed") return { state, effects: NONE }
+
+    return {
+      state: {
+        ...state,
+        issued: attempt,
+        screen: { status: "loading", generation: screen.generation, attempt, step: "reading", failures: 0 },
+      },
+      effects: [{ type: "read-screen", generation: screen.generation, attempt, timeoutMs: SCREEN_TIMEOUT_MS }],
+    }
+  }
 
   if (event.type === "screen.read.succeeded" || event.type === "screen.read.failed") {
     if (screen.status !== "loading" || screen.step !== "reading" || screen.attempt !== event.attempt)
@@ -797,6 +814,7 @@ export function viewPairingPage(state: PairingState) {
       (screen.status === "failed" && screen.previous === true),
     // A failed read or change keeps the switch enabled, so flipping it tries again.
     screenDisabled: screen.status !== "ready" && screen.status !== "failed",
+    // The error shows with "Try again", which reads the setting again.
     screenError: screen.status === "failed",
     // Pending main is still starting; anything else that leaves it inactive keeps pairing from turning on.
     unavailable: remote.status === "inactive" || !state.server,
