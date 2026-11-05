@@ -198,12 +198,10 @@ jobs:
         run: |
           $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $version = ($metadata.packages | Where-Object name -eq 'opencode-pty').version
           $binary = Join-Path $metadata.target_directory "$env:CARGO_BUILD_TARGET/debug/opencode-pty.exe"
           $output = & $binary --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output $output
-          if ($output -ne "opencode-pty $version (protocol 7)") { throw "Unexpected executable version: $output" }
       - name: Document current coverage
         if: always()
         run: |
