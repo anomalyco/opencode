@@ -244,11 +244,10 @@ const plugins = () => <Plugins />
 const listed = (f: string) => f.includes("team.plugins")
 const large = { width: 100, height: 30 }
 await render("E.18b/plugins", plugins, listed, large)
-// Tall enough that the grown list needs no scroll: a Rust scroll right after the rows grow ends at the bottom
-// (follow-up in steps/rs-tui-system.md).
+// The grown list overflows, so the selection scrolls into view once the new rows are laid out.
 await render("E.18b/plugins-internal", plugins, (f) => listed(f) || f.includes("hide internal"), {
   ...large,
-  height: 60,
+  height: 40,
   act: async (setup) => {
     setup.mockInput.pressKey("a", { ctrl: true })
     await Bun.sleep(50)
