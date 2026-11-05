@@ -55,7 +55,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
   let revealPart = (_target: string) => false
 
-  let scrollToEnd = (_behavior?: ScrollBehavior, _read?: boolean) => {}
+  let scrollToEnd = (_behavior?: ScrollBehavior) => {}
 
   let page = (_direction: 1 | -1) => {}
 
@@ -181,7 +181,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       const before = follow.peek()
       follow.dispatch({ type: "return.run", attempt })
 
-      if (follow.peek() !== before) scrollToEnd(behavior, true)
+      if (follow.peek() !== before) scrollToEnd(behavior)
 
       return false
     })
@@ -428,7 +428,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
         },
       },
       setScrollRef,
-      setScrollToEnd: (scroll: (behavior?: ScrollBehavior, read?: boolean) => void) => {
+      setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
         scrollToEnd = scroll
       },
       setPage: (scroll: (direction: 1 | -1) => void) => {

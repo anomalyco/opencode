@@ -9,8 +9,8 @@ export const ZOOM_SLACK = 4
 // A scroll range at or below this does not overflow.
 export const MIN_OVERFLOW = 1
 
-/** A revealed tool call (`partID`) or the unread-messages notice, whose top edge stays put until the reader scrolls. */
-export type FollowAnchor = { readonly key: string; readonly partID?: string }
+/** A revealed tool call, whose top edge stays put until the reader scrolls. */
+export type FollowAnchor = { readonly key: string; readonly partID: string }
 
 /**
  * The reader's contact with the timeline. A held pointer or touch is what separates the reader's own upward scroll
@@ -26,7 +26,7 @@ export type FollowState =
   | { readonly type: "returning"; readonly attempt: number; readonly gesture?: FollowGesture }
   /** Stays where the reader is. `endPending`: a scroll landed within the zoom slack of the end and may have reached it. */
   | { readonly type: "detached"; readonly gesture?: FollowGesture; readonly endPending: boolean }
-  /** Holds a revealed tool call or the unread-messages notice in place. */
+  /** Holds a revealed tool call in place. */
   | { readonly type: "anchored"; readonly anchor: FollowAnchor }
 
 export type FollowEvent =
