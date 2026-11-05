@@ -159,10 +159,10 @@ story.describe("message actions menu", () => {
 story(
   "fades the footer and chevron out once, without flicker, as an outside click closes the menu",
   async ({ mount, page }) => {
-    const timeline = await mount("current-prompt-message--pending")
-    const message = timeline.locator('[data-component="user-message"]')
+    // The timeline keeps a run's meta line shown while one of its menus is open, so mount it rather than a bare message.
+    const timeline = await mount("current-session-timeline-rows--prompt-runs")
+    const message = timeline.locator('[data-component="user-message"]').first()
 
-    await timeline.getByLabel("Delivery state").selectOption("delivered")
     await message.locator('[data-slot="user-message-text"]').hover()
     await message.getByRole("button", { name: "More actions", exact: true }).click()
     await expect(page.getByRole("menu")).toBeVisible()
@@ -212,18 +212,24 @@ story("keeps pending steer actions usable after a request fails", async ({ mount
   const queue = page.getByRole("menuitem", { name: "Move to queue", exact: true })
   const remove = page.getByRole("menuitem", { name: "Delete", exact: true })
   const failures = timeline.getByLabel("Failed actions")
+  const bubble = timeline.locator('[data-slot="user-message-text"]')
+
+  // The chevron shows only while its bubble is hovered, and a closing menu leaves the pointer over the menu's place.
+  const open = async () => {
+    await bubble.hover()
+    await more.click()
+  }
 
   await timeline.getByLabel("Actions fail").check()
-  await timeline.locator('[data-slot="user-message-text"]').hover()
-  await more.click()
+  await open()
   await queue.click()
   await expect(failures).toHaveText("1")
-  await more.click()
+  await open()
   await expect(queue).toBeEnabled()
   await expect(remove).toBeEnabled()
   await remove.click()
   await expect(failures).toHaveText("2")
-  await more.click()
+  await open()
   await expect(remove).toBeEnabled()
 })
 
