@@ -3,6 +3,7 @@ import {
   applyMarkdownWorkerResponse,
   applyProjectionBlocks,
   shouldReleaseMarkdownWorkerState,
+  type MarkdownWorkerLaneTarget,
   type MarkdownWorkerRequest,
   type MarkdownWorkerResponse,
   type MarkdownWorkerState,
@@ -283,7 +284,8 @@ function dispose(state: MarkdownWorkerReady, field: LaneField, key: string): Mar
 
   if (!lane && !stream && !projection) return { state, effects: EMPTY_WORKER_EFFECTS }
   const ids = !lane ? [] : lane.queued === undefined ? [lane.active] : [lane.active, lane.queued]
-  const post: MarkdownWorkerEffect = { type: "post", attempt: state.attempts, message: { type: "dispose", key } }
+
+  const post = disposeEffect(state, field === "projectLanes" ? "project" : "highlight", key)
 
   const next = withLane(
     {
@@ -306,7 +308,7 @@ function message(state: MarkdownWorkerReady, response: MarkdownWorkerResponse): 
   // The main thread already settled this request: disposed, aborted or superseded.
   if (!entry) return { state, effects: EMPTY_WORKER_EFFECTS }
 
-  if (response.type === "error" || response.type === "superseded") return refused(state, entry, response)
+  if (response.type === "error") return refused(state, entry, response)
 
   if (response.type === "parse" && entry.type === "parse")
     return {
@@ -335,7 +337,7 @@ function projected(
       state: { ...next.state, projections: without(state.projections, entry.key) },
       effects: [
         { type: "reject", ids: [entry.id], reason: OUT_OF_SYNC },
-        { type: "post", attempt: state.attempts, message: { type: "dispose", key: entry.key } },
+        disposeEffect(state, "project", entry.key),
         ...next.effects,
       ],
     }
@@ -391,11 +393,7 @@ function highlighted(
       highlightStreams: streams,
       generationFloor: Math.max(state.generationFloor, dropped.generation),
     },
-    effects: [
-      resolve,
-      { type: "post", attempt: state.attempts, message: { type: "dispose", key: evicted } },
-      ...next.effects,
-    ],
+    effects: [resolve, disposeEffect(state, "highlight", evicted), ...next.effects],
   }
 }
 
@@ -404,18 +402,17 @@ function highlighted(
 function refused(
   state: MarkdownWorkerReady,
   entry: WorkerRequest,
-  response: Extract<MarkdownWorkerResponse, { type: "error" | "superseded" }>,
+  response: Extract<MarkdownWorkerResponse, { type: "error" }>,
 ): MarkdownWorkerTransition {
-  const reason: WorkerRejectReason =
-    response.type === "superseded" ? SUPERSEDED : { kind: "error", message: response.message }
-
-  const reject: MarkdownWorkerEffect = { type: "reject", ids: [entry.id], reason }
+  const reject: MarkdownWorkerEffect = {
+    type: "reject",
+    ids: [entry.id],
+    reason: { kind: "error", message: response.message },
+  }
 
   if (entry.type === "parse")
     return { state: { ...state, failures: 0, requests: without(state.requests, entry.id) }, effects: [reject] }
   const next = advance(state, entry)
-
-  if (response.type === "superseded") return { state: next.state, effects: [reject, ...next.effects] }
   const stream = entry.type === "highlight" ? state.highlightStreams.get(entry.key) : undefined
 
   return {
@@ -426,12 +423,12 @@ function refused(
         entry.type === "highlight" ? without(state.highlightStreams, entry.key) : state.highlightStreams,
       generationFloor: Math.max(state.generationFloor, stream?.generation ?? 0),
     },
-    effects: [
-      reject,
-      { type: "post", attempt: state.attempts, message: { type: "dispose", key: entry.key } },
-      ...next.effects,
-    ],
+    effects: [reject, disposeEffect(state, entry.type, entry.key), ...next.effects],
   }
+}
+
+function disposeEffect(state: MarkdownWorkerReady, target: MarkdownWorkerLaneTarget, key: string): MarkdownWorkerEffect {
+  return { type: "post", attempt: state.attempts, message: { type: "dispose", target, key } }
 }
 
 // Settles a key's active request and posts its queued snapshot, if any.
