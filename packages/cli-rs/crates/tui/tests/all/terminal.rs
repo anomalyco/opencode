@@ -15,8 +15,11 @@ use opencode_local::cli_config::{self, Resolved};
 use opencode_local::paths::Paths;
 use opencode_tui::app::Roots;
 use opencode_tui::{Deps, Route, Tui};
+use opentui::keymap::RunResult;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+
+use crate::support::wait::WAIT;
 
 const CHANNEL: &str = "test";
 
@@ -163,7 +166,19 @@ fn mount(persistent_pty: bool, selection: Option<Value>) -> Harness {
 
 impl Harness {
     fn wait(&self, check: impl Fn(&Self) -> bool) -> bool {
-        self.app.wait_until(Duration::from_secs(5), || check(self))
+        self.app.wait_until(WAIT, || check(self))
+    }
+
+    /// Runs a terminal command once it is registered: the layer follows `/api/info` a tick after the list request
+    /// goes out.
+    fn run(&self, command: &str) {
+        assert!(
+            self.wait(|harness| matches!(
+                harness.tui.keymap.dispatch(command, None),
+                RunResult::Ok
+            )),
+            "{command} never ran"
+        );
     }
 
     fn requests(&self, method: &str, path: &str) -> Vec<Logged> {
@@ -205,7 +220,7 @@ impl Harness {
     /// size a claim needs.
     fn frames(&self, count: usize) -> Vec<Vec<u8>> {
         let mut frames = Vec::new();
-        self.app.wait_until(Duration::from_secs(5), || {
+        self.app.wait_until(WAIT, || {
             self.app.render();
             let mut remotes = self.remotes.lock().unwrap();
             while let Ok(frame) = remotes[0].sent.try_recv() {
@@ -225,7 +240,7 @@ fn slash_terminal_creates_a_terminal_in_the_session_directory_and_selects_it() {
             .requests("GET", "/api/experimental/session/ses_a/terminal")
             .is_empty()
     }));
-    harness.tui.keymap.dispatch("session.terminal", None);
+    harness.run("session.terminal");
     assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
     let create = harness.requests("POST", "/api/experimental/session/ses_a/terminal");
     assert_eq!(
@@ -249,7 +264,7 @@ fn input_written_before_the_pane_mounts_waits_for_the_replay_and_replaces_the_cl
             .requests("GET", "/api/experimental/session/ses_a/terminal")
             .is_empty()
     }));
-    harness.tui.keymap.dispatch("terminal.toggle", None);
+    harness.run("terminal.toggle");
     harness.attach();
     // `processStream`: pending input goes out instead of the size-only claim.
     assert_eq!(
