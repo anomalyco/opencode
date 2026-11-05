@@ -47,7 +47,13 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
         Effect.catchTags({
           ACPCatalogLoadError: (error) => ACPClient.classify(error.cause),
           ACPCatalogNotReadyError: (error) =>
-            Effect.fail(new ACPError.ServiceFailureError({ safeMessage: error.message, errorName: "CatalogNotReady" })),
+            Effect.fail(
+              new ACPError.ServiceFailureError({
+                safeMessage: error.message,
+                errorName: "CatalogNotReady",
+                ...(error.reason === "plugins" ? { service: "plugin", retryable: true } : {}),
+              }),
+            ),
         }),
         Effect.mapError((error) => (error instanceof RequestError ? error : ACPError.toRequestError(error))),
         Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logError("ACP request failed", cause)),
