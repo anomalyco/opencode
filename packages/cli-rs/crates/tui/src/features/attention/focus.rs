@@ -4,6 +4,8 @@
 //! The focus is unknown until the first report, so a `focused` or `blurred` request waits on a terminal that
 //! reports focus. `app::mount` calls [`install`] once.
 
+use opencode_ui::bind;
+
 use crate::app::Tui;
 
 /// The terminal focus (`FocusState`).
@@ -47,12 +49,11 @@ pub fn skip(when: When, focus: Focus) -> Option<Skip> {
 
 /// Follows the terminal's focus reports.
 pub fn install(tui: &Tui) {
-    let weak = tui.weak();
-    tui.app.on_terminal_focus(move |_, focused| {
-        if let Some(tui) = weak.upgrade() {
-            tui.attention.focus.set(if focused { Focus::Focused } else { Focus::Blurred });
-        }
-    });
+    tui.app.on_terminal_focus(bind!(tui, |tui, _, focused| tui.attention.focus.set(if focused {
+        Focus::Focused
+    } else {
+        Focus::Blurred
+    })));
 }
 
 #[cfg(test)]

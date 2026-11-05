@@ -2,6 +2,7 @@
 
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opentui::prelude::*;
@@ -9,12 +10,8 @@ use opentui::prelude::*;
 use crate::dialogs::model::Local;
 
 pub fn show(local: &Rc<Local>) {
-    let weak = Rc::downgrade(local);
     local.dialogs.replace(
-        move |cx| {
-            let Some(local) = weak.upgrade() else {
-                return View::new(&cx.app);
-            };
+        bind!(local, |local, cx| {
             let options = local
                 .agents()
                 .into_iter()
@@ -30,14 +27,12 @@ pub fn show(local: &Rc<Local>) {
             props.search_in_title = true;
             props.title_placeholder = Some("Search agents".to_owned());
             props.current = local.agent().map(|agent| agent.id.0);
-            let weak = Rc::downgrade(&local);
-            props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {
-                let Some(local) = weak.upgrade() else { return };
+            props.on_select = Some(Rc::new(bind!(local, |local, option: &SelectOption<String>| {
                 local.set_agent(&option.value);
                 local.dialogs.clear();
-            }));
+            })));
             select::select(cx, props).0
-        },
+        }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );

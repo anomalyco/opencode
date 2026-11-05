@@ -15,6 +15,7 @@ use base64::Engine;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{ExperimentalPersistentPtySnapshotInput, PtyID};
 use opencode_api::pty::{self, ConnectInput, Incoming, Message, Role, Size};
+use opencode_ui::bind;
 use opentui::input::{KeyEvent, MouseEventKind};
 use opentui::prelude::*;
 use opentui::widget::{TerminalData, TerminalView};
@@ -101,15 +102,7 @@ impl Pane {
         });
         pane.apply_theme();
         pane.wire();
-        let weak = Rc::downgrade(&pane);
-        tui.terminals.attach_writer(
-            pty,
-            Rc::new(move |data: &[u8]| {
-                if let Some(pane) = weak.upgrade() {
-                    pane.send_input(data.to_vec());
-                }
-            }),
-        );
+        tui.terminals.attach_writer(pty, Rc::new(bind!(pane, |pane, data: &[u8]| pane.send_input(data.to_vec()))));
         pane.connect(tui);
         pane
     }
@@ -164,12 +157,11 @@ impl Pane {
             }
         });
         let weak = Rc::downgrade(self);
-        self.shown.on_terminal_resize(move |_, cols, rows| {
-            let Some(pane) = weak.upgrade() else { return };
+        self.shown.on_terminal_resize(bind!(weak, |pane, _, cols, rows| {
             pane.state.borrow_mut().terminal_size = Some(Size { cols, rows });
             pane.resume();
             pane.process();
-        });
+        }));
         let weak = Rc::downgrade(self);
         self.shown.on_focus(move |_, focused| {
             if let (Some(pane), true) = (weak.upgrade(), focused)
@@ -179,8 +171,7 @@ impl Pane {
             }
         });
         let weak = Rc::downgrade(self);
-        self.root.on_resize(move |_, rect| {
-            let Some(pane) = weak.upgrade() else { return };
+        self.root.on_resize(bind!(weak, |pane, _, rect| {
             let size = Size { cols: (rect.width as u16).saturating_sub(2).max(1), rows: rect.height as u16 };
             let claim = {
                 let mut state = pane.state.borrow_mut();
@@ -190,7 +181,7 @@ impl Pane {
             if claim {
                 pane.interact();
             }
-        });
+        }));
         // TS composes this with the terminal's own focus handler the same way: a press anywhere claims control.
         let weak = Rc::downgrade(self);
         self.root.on_mouse(move |_, event| {

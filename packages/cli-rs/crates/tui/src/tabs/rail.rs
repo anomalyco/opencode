@@ -8,6 +8,7 @@ use std::rc::Weak;
 
 use opencode_api::generated::SessionID;
 use opencode_store::Location;
+use opencode_ui::bind;
 use opencode_ui::theme::tint;
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use opentui::prelude::*;
@@ -535,12 +536,7 @@ impl Component for Rail {
         let on_close = x == i32::from(width) - 2;
         let weak = self.tui.clone();
         let defer = |cx: &mut Cx<'_>, run: Box<dyn FnOnce(&Tui)>| {
-            let weak = weak.clone();
-            cx.defer(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    run(&tui);
-                }
-            });
+            cx.defer(bind!(weak, |tui, _| run(&tui)));
         };
         match event.kind {
             MouseEventKind::Moved => {

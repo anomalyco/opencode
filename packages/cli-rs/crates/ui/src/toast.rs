@@ -4,6 +4,7 @@
 //! [`Toasts`] is the `ToastProvider` and the `<Toast />` view together: one toast at a time in the top right
 //! corner, a queue behind it, a timer that dismisses it, pause while hovered, and an optional action.
 
+use crate::bind;
 use crate::theme::{Theme, ThemeError};
 use opentui::prelude::*;
 use std::cell::{Cell, RefCell};
@@ -192,12 +193,13 @@ impl Toasts {
         self.0.remaining.set(duration);
         self.0.started.set(self.0.app.now());
         let weak = Rc::downgrade(&self.0);
-        let timer = self.0.app.set_timeout(duration, move |_cx| {
-            if let Some(inner) = weak.upgrade() {
+        let timer = self.0.app.set_timeout(
+            duration,
+            bind!(weak, |inner, _cx| {
                 inner.timer.set(None);
                 Toasts(inner).dismiss();
-            }
-        });
+            }),
+        );
         self.0.timer.set(Some(timer));
     }
 
@@ -300,8 +302,7 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
         .child(&body);
     let weak: Weak<Inner> = Rc::downgrade(&toasts.0);
     // Restyled in place: a new surface would drop a text selection that a press on the toast has started.
-    surface.on_hover(move |_cx, over| {
-        let Some(inner) = weak.upgrade() else { return };
+    surface.on_hover(bind!(weak, |inner, _cx, over| {
         inner.hovered.set(over);
         restyle(&affordance, &inner.theme.borrow(), over);
         let toasts = Toasts(inner);
@@ -310,7 +311,7 @@ fn surface(toasts: &Toasts, toast: &ToastOptions, pending: usize) -> View {
         } else {
             toasts.resume();
         }
-    });
+    }));
     let weak: Weak<Inner> = Rc::downgrade(&toasts.0);
     surface.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
         if !matches!(event.kind, MouseEventKind::Up(_)) {

@@ -13,6 +13,7 @@ use std::rc::{Rc, Weak};
 use opencode_local::cli_config::{CliConfig, Info, Permissions, Resolved, merge};
 use opencode_local::serial::Serial;
 use opencode_local::watch::Watch;
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{Choice, Detail, SelectOption, SelectProps, select};
@@ -707,15 +708,10 @@ pub fn palette_options(tui: &Tui) -> Vec<SelectOption<String>> {
         .iter()
         .map(|setting| {
             let id = setting.id();
-            let weak = tui.weak();
             let open = id.clone();
             let mut option = SelectOption::new(setting.title, format!("setting:{id}"))
                 .category(setting.category)
-                .on_select(move |_| {
-                    if let Some(tui) = weak.upgrade() {
-                        show(&tui, Some(&open));
-                    }
-                });
+                .on_select(bind!(tui, |tui, _| show(&tui, Some(&open))));
             if !setting.keywords.is_empty() {
                 option.search_text = Some(setting.keywords.join(" "));
             }
@@ -731,19 +727,12 @@ pub fn show(tui: &Tui, current: Option<&str>) {
     let current = current.and_then(|id| SETTINGS.iter().position(|setting| setting.id() == id)).unwrap_or(0);
     let weak = tui.weak();
     tui.dialogs.replace(
-        move |cx| {
-            let Some(tui) = weak.upgrade() else {
-                return opentui::prelude::View::new(&cx.app);
-            };
+        bind!(weak, |tui, cx| {
             let selected = Rc::new(Cell::new(current));
             let saving = Rc::new(Cell::new(false));
             let step = |direction: i32| {
                 let (weak, selected, saving) = (weak.clone(), selected.clone(), saving.clone());
-                move |_: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| {
-                    if let Some(tui) = weak.upgrade() {
-                        change(&tui, &saving, selected.get(), direction);
-                    }
-                }
+                bind!(weak, |tui, _: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| change(&tui, &saving, selected.get(), direction))
             };
             let mut props = SelectProps::new("Settings", options(&tui));
             props.search_in_title = true;
@@ -759,21 +748,15 @@ pub fn show(tui: &Tui, current: Option<&str>) {
             }));
             props.on_select = Some(Rc::new({
                 let (weak, saving) = (weak.clone(), saving.clone());
-                move |option| {
-                    let Some(tui) = weak.upgrade() else { return };
+                bind!(weak, |tui, option| {
                     // `open`: Enter on Theme opens the theme list, which comes back here.
                     if SETTINGS[option.value].is_theme() {
-                        let weak = weak.clone();
-                        let back: Rc<dyn Fn()> = Rc::new(move || {
-                            if let Some(tui) = weak.upgrade() {
-                                show(&tui, Some("theme.name"));
-                            }
-                        });
+                        let back: Rc<dyn Fn()> = Rc::new(bind!(weak, |tui| show(&tui, Some("theme.name"))));
                         super::theme_list::show(&tui, Some(back));
                         return;
                     }
                     change(&tui, &saving, option.value, 1);
-                }
+                })
             }));
             props.bindings = vec![
                 TuiCommand::inline("left", step(-1)).title("Previous value").group("Settings"),
@@ -782,7 +765,7 @@ pub fn show(tui: &Tui, current: Option<&str>) {
             let (view, handle) = select(cx, props);
             refresh_on_change(&tui, Rc::downgrade(cx), move |tui| handle.set_options(options(tui)));
             view
-        },
+        }, else opentui::prelude::View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );
@@ -811,17 +794,12 @@ pub(crate) fn refresh_on_change(tui: &Tui, cx: Weak<opencode_ui::dialog::DialogC
 /// Registers `opencode.settings` (`/settings`) and `opencode.debug` (`/debug`) as `app.tsx:1044-1128` does.
 pub fn install(tui: &Rc<Tui>) {
     let command = |id: &str, title: &str, slash: &str, run: fn(&Tui)| {
-        let weak = tui.weak();
-        TuiCommand::new(id, move |_, _| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui);
-            }
-        })
-        .bind(Bind::Off)
-        .title(title)
-        .group("System")
-        .palette()
-        .slash(Slash { name: slash.to_owned(), aliases: Vec::new(), arguments: false })
+        TuiCommand::new(id, bind!(tui, |tui, _, _| run(&tui)))
+            .bind(Bind::Off)
+            .title(title)
+            .group("System")
+            .palette()
+            .slash(Slash { name: slash.to_owned(), aliases: Vec::new(), arguments: false })
     };
     let layer = KeymapLayer {
         mode: Some(GLOBAL_MODE.to_owned()),
@@ -842,9 +820,7 @@ pub fn install(tui: &Rc<Tui>) {
 /// Applies what the serial worker finished, and reloads `cli.json` after its directory changed, as
 /// `ConfigProvider`'s watch does. A reload runs on the same worker as the writes, so it never lands out of order.
 fn install_reload(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    tui.app.on_message(move |_, loaded: &Loaded| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_message(bind!(tui, |tui, _, loaded: &Loaded| {
         match loaded {
             Loaded::Written(result) => {
                 match result {
@@ -858,7 +834,7 @@ fn install_reload(tui: &Rc<Tui>) {
             }
             Loaded::Reloaded(info) => apply(&tui, info.clone()),
         }
-    });
+    }));
     let live = &tui.settings;
     let (Some(config), Some(serial)) = (live.config.clone(), live.serial.clone()) else {
         return;

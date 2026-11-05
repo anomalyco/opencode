@@ -17,6 +17,7 @@ use opencode_api::generated::{FormField, FormID, FormValue, SessionFormCancelInp
 use opencode_store::forms::{Form, GLOBAL};
 use opencode_store::location::Location;
 use opencode_store::{Changes, State};
+use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -700,22 +701,20 @@ impl Inner {
             return;
         };
         self.set_error("");
-        let weak = Rc::downgrade(self);
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
         let url = field.url.clone();
         tui.app.spawn(
             async move { tokio::task::spawn_blocking(move || open_url(&url)).await.unwrap_or(false) },
-            move |_, opened| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(self, |inner, _, opened| {
                 if opened {
                     inner.draft.borrow_mut().external_ready.insert(field.key.clone());
                 } else {
                     inner.set_error("Could not open the browser. Copy the URL and continue manually.");
                 }
                 inner.changed();
-            },
+            }),
         );
     }
 
@@ -799,35 +798,35 @@ impl Inner {
 
     fn install(self: &Rc<Self>, tui: &Tui) {
         // Typing on the custom row opens its editor with the key (`keymap.intercept`).
-        let weak = Rc::downgrade(self);
-        *self.intercept.borrow_mut() = Some(tui.keymap.keymap().intercept_key(0, false, move |context| {
-            let Some(inner) = weak.upgrade() else { return };
-            if !inner.is_live() || inner.is_textual() || !inner.other() {
-                return;
-            }
-            let editing = inner.draft.borrow().editing;
-            if editing && inner.editor_focused() {
-                return;
-            }
-            let event = &context.event;
-            let modified = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SUPER, Modifiers::HYPER, Modifiers::META]
-                .iter()
-                .any(|modifier| event.modifiers.contains(*modifier));
-            let KeyCode::Char(c) = event.code else { return };
-            if modified || (!editing && c == ' ') || c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
-                return;
-            }
-            let Some(field) = inner.answer_field() else {
-                return;
-            };
-            inner.update_custom(&field, &format!("{}{c}", inner.input()));
-            inner.draft.borrow_mut().editing = true;
-            context.consume();
-            inner.changed();
-        }));
-        let weak = Rc::downgrade(self);
-        let paste = tui.app.on_paste(move |_, text| {
-            let Some(inner) = weak.upgrade() else { return };
+        *self.intercept.borrow_mut() = Some(tui.keymap.keymap().intercept_key(
+            0,
+            false,
+            bind!(self, |inner, context| {
+                if !inner.is_live() || inner.is_textual() || !inner.other() {
+                    return;
+                }
+                let editing = inner.draft.borrow().editing;
+                if editing && inner.editor_focused() {
+                    return;
+                }
+                let event = &context.event;
+                let modified = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SUPER, Modifiers::HYPER, Modifiers::META]
+                    .iter()
+                    .any(|modifier| event.modifiers.contains(*modifier));
+                let KeyCode::Char(c) = event.code else { return };
+                if modified || (!editing && c == ' ') || c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
+                    return;
+                }
+                let Some(field) = inner.answer_field() else {
+                    return;
+                };
+                inner.update_custom(&field, &format!("{}{c}", inner.input()));
+                inner.draft.borrow_mut().editing = true;
+                context.consume();
+                inner.changed();
+            }),
+        ));
+        let paste = tui.app.on_paste(bind!(self, |inner, _, text| {
             if !inner.is_live() {
                 return;
             }
@@ -835,13 +834,8 @@ impl Inner {
             if inner.paste_custom(&value) {
                 inner.changed();
             }
-        });
-        let weak = Rc::downgrade(self);
-        let resize = tui.app.on_resize(move |_, _, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.render();
-            }
-        });
+        }));
+        let resize = tui.app.on_resize(bind!(self, |inner, _, _, _| inner.render()));
         self.handlers.borrow_mut().extend([paste, resize]);
     }
 
@@ -864,13 +858,13 @@ impl Inner {
     }
 
     fn command(self: &Rc<Self>, bind: &str, title: &str, action: Action) -> TuiCommand {
-        let weak = Rc::downgrade(self);
-        TuiCommand::inline(bind, move |_, _| {
-            if let Some(inner) = weak.upgrade() {
+        TuiCommand::inline(
+            bind,
+            bind!(self, |inner, _, _| {
                 action(&inner);
                 inner.changed();
-            }
-        })
+            }),
+        )
         .title(title)
         .group("Form")
     }
@@ -887,43 +881,38 @@ impl Inner {
             ..KeymapLayer::default()
         };
         if !confirm && self.answer_field().is_some() {
-            let weak = Rc::downgrade(self);
             layers.push(layer(
                 0,
                 vec![
-                    TuiCommand::new("prompt.paste", move |_, _| {
-                        if let Some(inner) = weak.upgrade() {
-                            inner.paste_clipboard();
-                        }
-                    })
-                    .title("Paste from clipboard")
-                    .group("Form"),
+                    TuiCommand::new("prompt.paste", bind!(self, |inner, _, _| inner.paste_clipboard()))
+                        .title("Paste from clipboard")
+                        .group("Form"),
                 ],
             ));
         }
         if (editing || textual) && !confirm {
-            let clear = Rc::downgrade(self);
-            let up = Rc::downgrade(self);
             let dismiss = if textual { "Dismiss form" } else { "Close answer edit" };
             layers.push(layer(
                 1,
                 vec![
-                    TuiCommand::new("prompt.clear", move |_, _| {
-                        let Some(inner) = clear.upgrade() else { return };
-                        let text = inner.editor_text().unwrap_or_default();
-                        if !text.is_empty() {
-                            if let Some((_, textarea)) = inner.editor.borrow().as_ref() {
-                                textarea.set_text("");
+                    TuiCommand::new(
+                        "prompt.clear",
+                        bind!(self, |inner, _, _| {
+                            let text = inner.editor_text().unwrap_or_default();
+                            if !text.is_empty() {
+                                if let Some((_, textarea)) = inner.editor.borrow().as_ref() {
+                                    textarea.set_text("");
+                                }
+                                return;
                             }
-                            return;
-                        }
-                        if inner.is_textual() {
-                            inner.cancel();
-                            return;
-                        }
-                        inner.draft.borrow_mut().editing = false;
-                        inner.changed();
-                    })
+                            if inner.is_textual() {
+                                inner.cancel();
+                                return;
+                            }
+                            inner.draft.borrow_mut().editing = false;
+                            inner.changed();
+                        }),
+                    )
                     .title("Clear answer edit")
                     .group("Form"),
                     self.command("escape", dismiss, |inner| {
@@ -941,21 +930,22 @@ impl Inner {
                         let text = inner.editor_text().unwrap_or_default();
                         inner.submit_input(text.trim(), -1);
                     }),
-                    TuiCommand::inline("up", move |_, _| {
-                        let Some(inner) = up.upgrade() else {
-                            return false;
-                        };
-                        let top = inner.editor.borrow().as_ref().is_some_and(|(_, textarea)| textarea.cursor().0 == 0);
-                        if inner.is_textual() || !top || inner.draft.borrow().selected == 0 {
-                            return false;
-                        }
-                        let mut draft = inner.draft.borrow_mut();
-                        draft.editing = false;
-                        draft.selected -= 1;
-                        drop(draft);
-                        inner.changed();
-                        true
-                    })
+                    TuiCommand::inline(
+                        "up",
+                        bind!(self, |inner, _, _| {
+                            let top =
+                                inner.editor.borrow().as_ref().is_some_and(|(_, textarea)| textarea.cursor().0 == 0);
+                            if inner.is_textual() || !top || inner.draft.borrow().selected == 0 {
+                                return false;
+                            }
+                            let mut draft = inner.draft.borrow_mut();
+                            draft.editing = false;
+                            draft.selected -= 1;
+                            drop(draft);
+                            inner.changed();
+                            true
+                        }),
+                    )
                     .title("Leave answer edit")
                     .group("Form"),
                     self.command("return", "Submit answer edit", |inner| {
@@ -983,15 +973,10 @@ impl Inner {
             ));
         }
         if !editing && !textual {
-            let exit = Rc::downgrade(self);
             let mut commands = vec![
-                TuiCommand::new("app.exit", move |_, _| {
-                    if let Some(inner) = exit.upgrade() {
-                        inner.cancel();
-                    }
-                })
-                .title("Dismiss form")
-                .group("Form"),
+                TuiCommand::new("app.exit", bind!(self, |inner, _, _| inner.cancel()))
+                    .title("Dismiss form")
+                    .group("Form"),
                 self.command("left,h", "Previous field", |inner| inner.move_tab(-1)),
                 self.command("right,l", "Next field", |inner| inner.move_tab(1)),
                 self.command("tab", "Next field", |inner| inner.move_tab(1)),
@@ -1022,15 +1007,15 @@ impl Inner {
             } else {
                 let total = self.rows().len() + usize::from(self.has_custom());
                 for index in 0..total.min(9) {
-                    let weak = Rc::downgrade(self);
                     commands.push(
-                        TuiCommand::inline((index + 1).to_string(), move |_, _| {
-                            if let Some(inner) = weak.upgrade() {
+                        TuiCommand::inline(
+                            (index + 1).to_string(),
+                            bind!(self, |inner, _, _| {
                                 inner.draft.borrow_mut().selected = index;
                                 inner.select_option();
                                 inner.changed();
-                            }
-                        })
+                            }),
+                        )
                         .title(format!("Select answer {}", index + 1))
                         .group("Form"),
                     );
@@ -1066,13 +1051,10 @@ impl Inner {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let weak = Rc::downgrade(self);
-        tui.app.defer(move |_| {
-            if let Some(inner) = weak.upgrade() {
-                inner.render_queued.set(false);
-                inner.render();
-            }
-        });
+        tui.app.defer(bind!(self, |inner, _| {
+            inner.render_queued.set(false);
+            inner.render();
+        }));
     }
 
     fn render(self: &Rc<Self>) {
@@ -1153,15 +1135,13 @@ impl Inner {
         textarea.set_text(&initial);
         textarea.perform(EditorAction::BufferEnd);
         if matches!(kind, Editor::Custom(_)) {
-            let weak = Rc::downgrade(self);
-            textarea.on_change(move |_, text| {
-                let Some(inner) = weak.upgrade() else { return };
+            textarea.on_change(bind!(self, |inner, _, text| {
                 let Some(field) = inner.answer_field() else {
                     return;
                 };
                 inner.update_custom(&field, text);
                 inner.render_soon();
-            });
+            }));
         }
         *self.editor.borrow_mut() = Some((kind, textarea.clone()));
         textarea
@@ -1217,12 +1197,7 @@ impl Inner {
                 view.add(&Text::new(app, description.clone()).fg(theme.text.muted));
             }
             let link = Text::new(app, field.url.clone()).fg(theme.text.action.primary.base);
-            let weak = Rc::downgrade(self);
-            link.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.open_external();
-                }
-            });
+            link.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.open_external()));
             view.add(&link);
             let acknowledged = draft.answers.get(&field.key) == Some(&FormValue::Bool(true));
             let status = if acknowledged {
@@ -1279,22 +1254,17 @@ impl Inner {
             if index < fields.len() {
                 item.padding_edge(Edge::Right, 2);
             }
-            let weak = Rc::downgrade(self);
-            item.on_hover(move |_, over| {
-                let Some(inner) = weak.upgrade() else { return };
+            item.on_hover(bind!(self, |inner, _, over| {
                 let next = over.then_some(index);
                 if inner.tab_hover.replace(next) != next {
                     inner.render_soon();
                 }
-            });
-            let weak = Rc::downgrade(self);
+            }));
             let target = (index < fields.len()).then_some(index);
-            item.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.select_tab_from_mouse(target);
-                    inner.render_soon();
-                }
-            });
+            item.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
+                inner.select_tab_from_mouse(target);
+                inner.render_soon();
+            }));
             row.add(&item);
         }
         row
@@ -1381,22 +1351,17 @@ impl Inner {
 
     /// Hover selects a row; a click answers with it.
     fn option_mouse(self: &Rc<Self>, item: &View, index: usize) {
-        let weak = Rc::downgrade(self);
-        item.on_hover(move |_, over| {
-            let Some(inner) = weak.upgrade() else { return };
+        item.on_hover(bind!(self, |inner, _, over| {
             if over && inner.draft.borrow().selected != index {
                 inner.draft.borrow_mut().selected = index;
                 inner.render_soon();
             }
-        });
-        let weak = Rc::downgrade(self);
-        item.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.draft.borrow_mut().selected = index;
-                inner.select_option();
-                inner.render_soon();
-            }
-        });
+        }));
+        item.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
+            inner.draft.borrow_mut().selected = index;
+            inner.select_option();
+            inner.render_soon();
+        }));
     }
 
     fn review_view(
@@ -1486,9 +1451,7 @@ impl Inner {
             hints.add(&hint("↑↓", "scroll"));
         }
         let enter = hint("enter", self.action_label());
-        let weak = Rc::downgrade(self);
-        enter.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        enter.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
             if inner.confirm() {
                 inner.submit();
             }
@@ -1496,26 +1459,18 @@ impl Inner {
                 inner.acknowledge_external();
             }
             inner.render_soon();
-        });
+        }));
         hints.add(&enter);
         if external {
             let copy = hint("c", "copy");
-            let weak = Rc::downgrade(self);
-            copy.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.copy_external();
-                    inner.render_soon();
-                }
-            });
+            copy.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
+                inner.copy_external();
+                inner.render_soon();
+            }));
             hints.add(&copy);
         }
         let dismiss = hint("esc", if draft.editing && !textual { "close" } else { "dismiss" });
-        let weak = Rc::downgrade(self);
-        dismiss.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.cancel();
-            }
-        });
+        dismiss.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.cancel()));
         hints.add(&dismiss);
         let footer = View::new(app)
             .row()

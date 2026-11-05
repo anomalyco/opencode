@@ -18,6 +18,7 @@ use opencode_local::cli_config::Permissions;
 use opencode_local::jsonl::empty_prompt;
 use opencode_store::location::Location;
 use opencode_store::{Changes, SessionStatus};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::{ScannerOptions, ScannerStyle, Spinner, SpinnerColor, scanner_colors, scanner_frames};
 use opencode_ui::theme::Theme;
@@ -419,16 +420,14 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     });
     inner.layers.borrow_mut().push(mentions);
     // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does.
-    let weak = Rc::downgrade(&inner);
-    tui.settings.on_change(move |tui| {
-        let Some(inner) = weak.upgrade() else { return };
+    tui.settings.on_change(bind!(inner, |inner, tui| {
         let cursor = crate::features::system_commands::cursor(&tui.config());
         inner.textarea.cursor_style(cursor.0, cursor.1);
         let animations = opencode_ui::motion::enabled(tui.config().info.animations);
         inner.spinner.set_animations(animations);
         inner.staging.set_animations(animations);
         inner.refresh(tui);
-    });
+    }));
     // Home drops the last session's selection; a session follows its directory (`editor.reconnect`).
     match session {
         None => tui.prompt.editor.clear_selection(),
@@ -599,11 +598,9 @@ impl Inner {
         }
         // After the change that made it ready: a submit can navigate, which drops this prompt.
         let weak = self.this.clone();
-        tui.app.defer(move |_| {
-            if let Some(prompt) = weak.upgrade() {
-                super::submit::submit(&prompt, delivery);
-            }
-        });
+        tui.app.defer(bind!(weak, |prompt, _| {
+            super::submit::submit(&prompt, delivery);
+        }));
     }
 
     /// Repaints the border, the metadata row, and the footer from the current state.
@@ -794,24 +791,18 @@ fn border_chars(vertical: char, bottom_left: char, horizontal: char) -> [char; 1
 
 /// Text changes update the prompt; Submit (from `input.submit`) submits.
 fn connect(inner: &Rc<Inner>) {
-    let weak = Rc::downgrade(inner);
-    inner.textarea.on_change(move |_, text| {
-        if let Some(prompt) = weak.upgrade() {
-            prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
-            parts::sync(&prompt);
-            prompt.parts_changed();
-            if let Some(complete) = prompt.autocomplete.get() {
-                complete.on_input(text);
-            }
+    inner.textarea.on_change(bind!(inner, |prompt, _, text| {
+        prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
+        parts::sync(&prompt);
+        prompt.parts_changed();
+        if let Some(complete) = prompt.autocomplete.get() {
+            complete.on_input(text);
         }
-    });
+    }));
     super::paste::connect(inner);
-    let weak = Rc::downgrade(inner);
-    inner.textarea.on_submit(move |_, _| {
-        if let Some(prompt) = weak.upgrade() {
-            super::submit::submit(&prompt, SessionInboxDelivery::Steer);
-        }
-    });
+    inner.textarea.on_submit(bind!(inner, |prompt, _, _| {
+        super::submit::submit(&prompt, SessionInboxDelivery::Steer);
+    }));
 }
 
 /// The footer's location brightens under the pointer, and a click opens the working directory dialog (E.20,
@@ -819,24 +810,22 @@ fn connect(inner: &Rc<Inner>) {
 fn connect_location(inner: &Rc<Inner>) {
     // `onSizeChange` of the status box: the label shortens to the room the footer plugins leave.
     let weak = Rc::downgrade(inner);
-    inner.location_box.on_resize(move |_, rect| {
-        let Some(prompt) = weak.upgrade() else { return };
+    inner.location_box.on_resize(bind!(weak, |prompt, _, rect| {
         let width = rect.width.max(0.0) as u16;
         if prompt.location_width.replace(width) != width
             && let Some(tui) = prompt.tui.upgrade()
         {
             prompt.refresh(&tui);
         }
-    });
+    }));
     let weak = Rc::downgrade(inner);
-    inner.footer.on_hover(move |_, hovered| {
-        let Some(prompt) = weak.upgrade() else { return };
+    inner.footer.on_hover(bind!(weak, |prompt, _, hovered| {
         prompt.hovered.set(hovered);
         if let Some(tui) = prompt.tui.upgrade() {
             prompt.footer.mouse_pointer(opencode_ui::click_pointer(!prompt.running(&tui)));
             prompt.refresh(&tui);
         }
-    });
+    }));
     let weak = Rc::downgrade(inner);
     inner.footer.on_mouse(move |_, event| {
         if event.kind != MouseEventKind::Up(MouseButton::Left) {
@@ -856,27 +845,24 @@ fn connect_location(inner: &Rc<Inner>) {
 pub(crate) fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
     inner.read_catalog(tui);
     for task in metadata::sync(&tui.data, &inner.location(tui)) {
-        let weak = Rc::downgrade(inner);
-        tui.app.spawn(task, move |_, result| {
-            let Some(prompt) = weak.upgrade() else { return };
-            let Some(tui) = prompt.tui.upgrade() else {
-                return;
-            };
-            match result {
-                Ok(()) => prompt.read_catalog(&tui),
-                Err(error) => log::warn!("prompt catalog: {error}"),
-            }
-        });
+        tui.app.spawn(
+            task,
+            bind!(inner, |prompt, _, result| {
+                let Some(tui) = prompt.tui.upgrade() else {
+                    return;
+                };
+                match result {
+                    Ok(()) => prompt.read_catalog(&tui),
+                    Err(error) => log::warn!("prompt catalog: {error}"),
+                }
+            }),
+        );
     }
 }
 
 /// The skills dialog's pick: an `@skill` mention at the cursor (`prompt.skills`).
 fn insert_skill(prompt: Weak<Inner>) -> crate::dialogs::skill::OnSelect {
-    Rc::new(move |_, id| {
-        if let Some(prompt) = prompt.upgrade() {
-            parts::insert_skill(&prompt, &id.0);
-        }
-    })
+    Rc::new(bind!(prompt, |prompt, _, id| parts::insert_skill(&prompt, &id.0)))
 }
 
 /// The prompt's layers (`component/prompt/index.tsx:644-1096`).

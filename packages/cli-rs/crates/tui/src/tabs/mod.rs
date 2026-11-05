@@ -20,6 +20,7 @@ use opencode_api::generated::{
 };
 use opencode_local::storage::Storage;
 use opencode_store::{Changes, SessionStatus, State};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::input::{KeyCode, Modifiers};
 use opentui::keymap::{Condition, Disposer};
@@ -221,9 +222,7 @@ pub fn install(tui: &Rc<Tui>) {
         *tui.tabs._watch.borrow_mut() = storage.watch(move || {
             let _ = proxy.send(Reload);
         });
-        let weak = tui.weak();
-        tui.app.on_message(move |_, _: &Reload| {
-            let Some(tui) = weak.upgrade() else { return };
+        tui.app.on_message(bind!(tui, |tui, _, _: &Reload| {
             if let Some(storage) = tui.storage() {
                 let file = load(&storage);
                 if *tui.tabs.file.borrow() != file {
@@ -232,16 +231,15 @@ pub fn install(tui: &Rc<Tui>) {
                 }
                 crate::frame::reload(&tui, &storage);
             }
-        });
+        }));
     }
     let weak = tui.weak();
-    tui.app.on_message(move |_, Written(revision, file)| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_message(bind!(weak, |tui, _, Written(revision, file)| {
         if *revision == tui.tabs.writes.get() && *tui.tabs.file.borrow() != *file {
             *tui.tabs.file.borrow_mut() = file.clone();
             changed(&tui);
         }
-    });
+    }));
     // Terminal focus reports set the focus. TS also counts `useKeyboard`: the keymap consumes shortcuts before
     // it (`E.12/tab-strip` posts no `session.view` after them), but typed text reaches it (`H.5/permission-reply`
     // posts `session.view` without a focus report).
@@ -254,13 +252,10 @@ pub fn install(tui: &Rc<Tui>) {
             acknowledge(&tui);
         }
     });
-    let weak = tui.weak();
-    tui.app.on_terminal_focus(move |_, focused| {
-        if let Some(tui) = weak.upgrade() {
-            tui.tabs.focused.set(Some(focused));
-            acknowledge(&tui);
-        }
-    });
+    tui.app.on_terminal_focus(bind!(tui, |tui, _, focused| {
+        tui.tabs.focused.set(Some(focused));
+        acknowledge(&tui);
+    }));
     install_commands(tui);
 }
 
@@ -279,15 +274,11 @@ fn install_commands(tui: &Rc<Tui>) {
     let weak = tui.weak();
     let command = |id: &str, title: &str, palette: bool, run: Rc<dyn Fn(&Tui)>| {
         let target = weak.clone();
-        let command = TuiCommand::new(id, move |_, _| {
-            if let Some(tui) = target.upgrade() {
-                run(&tui);
-            }
-        })
-        .bind(Bind::Off)
-        .title(title)
-        .group("Session")
-        .enabled(enabled(&weak));
+        let command = TuiCommand::new(id, bind!(target, |tui, _, _| run(&tui)))
+            .bind(Bind::Off)
+            .title(title)
+            .group("Session")
+            .enabled(enabled(&weak));
         if palette { command.palette() } else { command }
     };
     let mut commands = vec![
@@ -718,11 +709,9 @@ fn acknowledge(tui: &Tui) {
     // Recorded before the request, so event-driven syncs do not post the same watermark again.
     tabs.acknowledged.borrow_mut().insert(session.clone(), idle);
     let client = tui.data.client().clone();
-    let weak = tui.weak();
     tui.app.spawn(
         async move { client.session_view(&SessionViewInput { session_id: id, idle }, &Default::default()).await },
-        move |cx, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, cx, result| {
             let tabs = &tui.tabs;
             if result.is_ok() {
                 if let Some(timer) = tabs.retry.take() {
@@ -740,13 +729,13 @@ fn acknowledge(tui: &Tui) {
             }
             let delay = (VIEW_RETRY_DELAY * 2u32.saturating_pow(tabs.attempt.get())).min(VIEW_RETRY_MAX_DELAY);
             tabs.attempt.set(tabs.attempt.get() + 1);
-            let weak = tui.weak();
-            tabs.retry.set(Some(cx.set_timeout(delay, move |_| {
-                if let Some(tui) = weak.upgrade() {
+            tabs.retry.set(Some(cx.set_timeout(
+                delay,
+                bind!(tui, |tui, _| {
                     tui.tabs.retry.set(None);
                     acknowledge(&tui);
-                }
-            })));
-        },
+                }),
+            )));
+        }),
     );
 }

@@ -13,6 +13,7 @@ use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigM
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
 use opencode_ui::keymap::{Bind, COMMAND_PALETTE_COMMAND, GLOBAL_MODE, Keybinds, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions};
@@ -295,6 +296,13 @@ impl Tui {
     }
 }
 
+impl opencode_ui::bind::WeakRef for Tui {
+    type Target = Tui;
+    fn weak_ref(&self) -> Weak<Tui> {
+        self.weak()
+    }
+}
+
 /// Builds the TUI on `app`. The returned handle owns it; drop it after the app stops.
 pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     mount_with(app, deps, Args::default())
@@ -495,34 +503,25 @@ fn install_keys(tui: &Rc<Tui>) {
     // The leader sequence expires on a timer (`leader.timeout`).
     let weak = tui.weak();
     let timer = Rc::new(Cell::new(None::<TimerId>));
-    tui.app.on_key(move |cx, _| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_key(bind!(weak, |tui, cx, _| {
         if let Some(previous) = timer.take() {
             cx.cancel_timer(previous);
         }
         let Some(deadline) = tui.keymap.leader_deadline() else {
             return;
         };
-        let weak = tui.weak();
-        timer.set(Some(cx.set_timeout(deadline.saturating_duration_since(cx.now()), move |cx| {
-            if let Some(tui) = weak.upgrade() {
+        timer.set(Some(cx.set_timeout(
+            deadline.saturating_duration_since(cx.now()),
+            bind!(tui, |tui, cx| {
                 tui.keymap.expire_leader(cx.now());
-            }
-        })));
-    });
+            }),
+        )));
+    }));
 
     // As `app.tsx:1303-1335`: the commands live in a global layer without bindings, so the palette
     // reaches them over a dialog, and separate layers bind their keys.
     let weak = tui.weak();
-    let command = |id: &str, run: fn(&Tui)| {
-        let weak = weak.clone();
-        TuiCommand::new(id, move |_, _| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui);
-            }
-        })
-        .bind(Bind::Off)
-    };
+    let command = |id: &str, run: fn(&Tui)| TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui))).bind(Bind::Off);
     let bindings = |mode: Option<&str>, names: &[&str]| KeymapLayer {
         mode: mode.map(str::to_owned),
         bindings: names.iter().map(|name| (*name).to_owned()).collect(),
@@ -602,38 +601,25 @@ fn install_theme(tui: &Rc<Tui>) {
     if let Some(colors) = tui.app.palette().as_ref().map(TerminalColors::from_palette) {
         tui.theme.borrow_mut().palette(colors);
     }
-    let weak = tui.weak();
-    tui.app.on_theme_mode(move |_, mode| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_theme_mode(bind!(tui, |tui, _, mode| {
         tui.theme.borrow_mut().terminal_mode(mode);
         tui.theme_changed();
-    });
+    }));
     // TS reads the palette again on `?997` (`theme.tsx:263-268`), so `system` follows a terminal theme switch.
-    let weak = tui.weak();
-    tui.app.on_color_scheme(move |_| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_color_scheme(bind!(tui, |tui, _| {
         tui.theme.borrow_mut().colors_changed();
         tui.theme_changed();
-    });
-    let weak = tui.weak();
-    tui.app.on_palette(move |_, palette| {
-        let Some(tui) = weak.upgrade() else { return };
+    }));
+    tui.app.on_palette(bind!(tui, |tui, _, palette| {
         tui.theme.borrow_mut().palette(TerminalColors::from_palette(palette));
         tui.theme_changed();
-    });
-    let weak = tui.weak();
-    let pending = tui.keymap.keymap().on_pending_sequence(move |sequence| {
-        let Some(tui) = weak.upgrade() else { return };
+    }));
+    let pending = tui.keymap.keymap().on_pending_sequence(bind!(tui, |tui, sequence| {
         if sequence.is_empty() && tui.restyle.take() {
             // After the key that ended the sequence, and any dialog its command opened.
-            let weak = tui.weak();
-            tui.app.defer(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    tui.restyle_route();
-                }
-            });
+            tui.app.defer(bind!(tui, |tui, _| tui.restyle_route()));
         }
-    });
+    }));
     tui.layers.borrow_mut().push(pending);
     // Custom themes are read from disk off the UI thread, then applied.
     let Some(files) = &tui.files else {
@@ -644,7 +630,6 @@ fn install_theme(tui: &Rc<Tui>) {
         files.config.path().parent().unwrap_or(files.config.path()),
         std::path::Path::new(&tui.directory),
     );
-    let weak = tui.weak();
     tui.app.spawn(
         async move {
             tokio::task::spawn_blocking(move || opencode_ui::theme::discover(&directories))
@@ -652,14 +637,13 @@ fn install_theme(tui: &Rc<Tui>) {
                 .ok()
                 .and_then(Result::ok)
         },
-        move |_, themes| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, themes| {
             match themes {
                 Some(themes) => tui.theme.borrow_mut().custom_themes(themes),
                 None => tui.theme.borrow_mut().discovery_failed(),
             }
             tui.theme_changed();
-        },
+        }),
     );
 }
 
@@ -675,12 +659,9 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
             tui.sync();
         }
     });
-    let weak = tui.weak();
-    tui.app.on_message(move |_, StatusChanged(state)| {
-        if let Some(tui) = weak.upgrade() {
-            crate::features::overlays::connection_changed(&tui, state);
-        }
-    });
+    tui.app.on_message(bind!(tui, |tui, _, StatusChanged(state)| crate::features::overlays::connection_changed(
+        &tui, state
+    )));
 
     let proxy = tui.app.proxy();
     let mut revisions = tui.data.subscribe();

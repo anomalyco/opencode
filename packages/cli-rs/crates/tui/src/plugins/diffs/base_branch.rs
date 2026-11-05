@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, VcsBranchListInput};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions};
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
 use opentui::prelude::*;
@@ -75,34 +76,24 @@ pub fn open(viewer: &Viewer) {
             props.placeholder = Some("Search local and remote branches".to_owned());
             props.skip_filter = true;
             props.current = current;
-            props.on_filter = Some(Rc::new({
-                let weak = weak.clone();
-                move |filter: &str| {
-                    if let Some(picker) = weak.upgrade() {
-                        *picker.filter.borrow_mut() = filter.to_owned();
-                        picker.debounce();
+            props.on_filter = Some(Rc::new(bind!(weak, |picker, filter: &str| {
+                *picker.filter.borrow_mut() = filter.to_owned();
+                picker.debounce();
+            })));
+            props.on_select = Some(Rc::new(bind!(weak, |picker, option: &SelectOption<String>| {
+                let Some(tui) = picker.tui.upgrade() else {
+                    return;
+                };
+                let reference = option.value.clone();
+                let weak = picker.viewer.clone();
+                let key = picker.key.clone();
+                tui.app.defer(bind!(weak, |viewer, _| {
+                    if let Some(tui) = viewer.tui() {
+                        tui.dialogs.clear();
                     }
-                }
-            }));
-            props.on_select = Some(Rc::new({
-                let weak = weak.clone();
-                move |option: &SelectOption<String>| {
-                    let Some(picker) = weak.upgrade() else { return };
-                    let Some(tui) = picker.tui.upgrade() else {
-                        return;
-                    };
-                    let reference = option.value.clone();
-                    let weak = picker.viewer.clone();
-                    let key = picker.key.clone();
-                    tui.app.defer(move |_| {
-                        let Some(viewer) = weak.upgrade() else { return };
-                        if let Some(tui) = viewer.tui() {
-                            tui.dialogs.clear();
-                        }
-                        viewer.choose_base(&key, reference);
-                    });
-                }
-            }));
+                    viewer.choose_base(&key, reference);
+                }));
+            })));
             let empty: Rc<dyn Fn() -> AnyWidget> = Rc::new({
                 let weak = weak.clone();
                 let app = cx.app.clone();
@@ -153,13 +144,14 @@ impl Picker {
         if let Some(timer) = self.timer.take() {
             tui.app.cancel_timer(timer);
         }
-        let weak = Rc::downgrade(self);
-        self.timer.set(Some(tui.app.set_timeout(SEARCH_DEBOUNCE, move |_| {
-            let Some(picker) = weak.upgrade() else { return };
-            picker.timer.set(None);
-            let search = picker.filter.borrow().clone();
-            picker.fetch(search);
-        })));
+        self.timer.set(Some(tui.app.set_timeout(
+            SEARCH_DEBOUNCE,
+            bind!(self, |picker, _| {
+                picker.timer.set(None);
+                let search = picker.filter.borrow().clone();
+                picker.fetch(search);
+            }),
+        )));
     }
 
     /// `branches`: a resource of the debounced search, read again only when the search changes.
@@ -177,11 +169,9 @@ impl Picker {
         self.refresh();
         let client = tui.data.client().clone();
         let input = VcsBranchListInput { location: self.location.clone(), search: Some(search), limit: Some(LIMIT) };
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move { client.vcs_branch_list(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(picker) = weak.upgrade() else { return };
+            bind!(self, |picker, _, result| {
                 if picker.request.get() != request {
                     return;
                 }
@@ -193,7 +183,7 @@ impl Picker {
                     }
                 };
                 picker.refresh();
-            },
+            }),
         );
     }
 

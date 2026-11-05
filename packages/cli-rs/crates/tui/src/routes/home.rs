@@ -2,6 +2,7 @@
 //! `component/logo.tsx`). The session list is a dialog (E.11a).
 
 use opencode_store::Changes;
+use opencode_ui::bind;
 use opencode_ui::theme::{Theme, tint};
 use opentui::prelude::*;
 
@@ -69,10 +70,8 @@ impl Home {
         let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&center).child(&footer);
         let forms = crate::features::home_forms::mount(tui, &root);
         // The logo and the side padding follow the terminal size (`useTerminalDimensions`).
-        let weak = tui.weak();
         let size = std::cell::Cell::new((width, height));
-        root.on_resize(move |cx, _| {
-            let Some(tui) = weak.upgrade() else { return };
+        root.on_resize(bind!(tui, |tui, cx, _| {
             let (width, height) = cx.app().size();
             if size.replace((width, height)) == (width, height) {
                 return;
@@ -80,7 +79,7 @@ impl Home {
             center.padding_x(padding(width));
             paint_logo(&tui.app, &logo, &tui.page(), width, height);
             tui.app.request_redraw();
-        });
+        }));
         Self { root, prompt, forms, slot }
     }
 }

@@ -3,6 +3,7 @@
 
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -15,17 +16,13 @@ pub fn show(tui: &Tui, directory: &str) {
     if tui.app.selected_text().is_some() {
         return;
     }
-    let weak = tui.weak();
     let directory = directory.to_owned();
     tui.dialogs.replace(
-        move |cx| {
-            let Some(tui) = weak.upgrade() else {
-                return View::new(&cx.app);
-            };
+        bind!(tui, |tui, cx| {
             let mut props = SelectProps::new("Working directory", options(&tui, &directory));
             props.render_filter = false;
             select::select(cx, props).0
-        },
+        }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );
@@ -34,11 +31,7 @@ pub fn show(tui: &Tui, directory: &str) {
 fn options(tui: &Rc<Tui>, directory: &str) -> Vec<SelectOption<String>> {
     let action = |run: fn(&Tui, &str)| {
         let (weak, directory) = (tui.weak(), directory.to_owned());
-        move |_: &opencode_ui::dialog::Dialogs| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui, &directory);
-            }
-        }
+        bind!(weak, |tui, _: &opencode_ui::dialog::Dialogs| run(&tui, &directory))
     };
     vec![
         SelectOption::new("Copy path", "location.copy".to_owned()).description(directory).on_select(action(

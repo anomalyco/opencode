@@ -4,6 +4,7 @@
 //! with `fuzzysort`'s scores and order ([`fuzzy`]), keyboard and mouse selection, actions with their shortcuts in
 //! the footer, and the `dialog.select.*` commands. It returns a [`Select`] handle, the TS `DialogSelectRef`.
 
+use crate::bind;
 use crate::dialog::{
     DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, Dialogs, FocusId, FooterAction, FooterProps, HeaderProps, header,
     layout_view,
@@ -430,12 +431,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
             return;
         }
-        let weak = weak.clone();
-        cx.app().defer(move |_cx| {
-            if let Some(inner) = weak.upgrade() {
-                Select(inner).wheeled();
-            }
-        });
+        cx.app().defer(bind!(weak, |inner, _cx| Select(inner).wheeled()));
     });
 
     let props = &handle.0.props;
@@ -467,19 +463,15 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     }
     if let Some(input) = &input {
         let weak = Rc::downgrade(&handle.0);
-        input.on_change(move |_cx, value| {
-            let Some(inner) = weak.upgrade() else { return };
+        input.on_change(bind!(weak, |inner, _cx, value| {
             let select = Select(inner);
             if select.0.props.locked {
                 return;
             }
             select.filter_changed(value.to_owned());
-        });
+        }));
         let weak = Rc::downgrade(&handle.0);
-        cx.editor(move || {
-            let Some(inner) = weak.upgrade() else {
-                return false;
-            };
+        cx.editor(bind!(weak, |inner| {
             let select = Select(inner);
             let focused = select.0.input.as_ref().is_some_and(|input| input.is_focused());
             if !focused || select.filter().is_empty() {
@@ -487,7 +479,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
             }
             select.set_filter("");
             true
-        });
+        }));
         cx.focus(input);
     }
     handle.render();
@@ -884,13 +876,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let weak = Rc::downgrade(&self.0);
         let command = |id: &str, title: &str, run: fn(&Select<T>)| {
             let weak: Weak<Inner<T>> = weak.clone();
-            TuiCommand::new(id, move |_, _| {
-                if let Some(inner) = weak.upgrade() {
-                    run(&Select(inner));
-                }
-            })
-            .title(title)
-            .group("Dialog")
+            TuiCommand::new(id, bind!(weak, |inner, _, _| run(&Select(inner)))).title(title).group("Dialog")
         };
         let mut commands = vec![
             command("dialog.select.prev", "Previous item", |s| s.step(-1)),
@@ -912,14 +898,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         for action in self.props().actions.iter().filter(|action| !action.hidden) {
             let weak = weak.clone();
             let run = action.clone();
-            let mut item = TuiCommand::new(action.command.clone(), move |_, _| {
-                if let Some(inner) = weak.upgrade() {
-                    Select(inner).trigger(&run);
-                }
-            })
-            // Resolved without a selection so moving through the list does not rebuild the layer.
-            .title((action.title)(None))
-            .group("Dialog");
+            let mut item =
+                TuiCommand::new(action.command.clone(), bind!(weak, |inner, _, _| Select(inner).trigger(&run)))
+                    // Resolved without a selection so moving through the list does not rebuild the layer.
+                    .title((action.title)(None))
+                    .group("Dialog");
             if let Some(bind) = &action.bind {
                 item = item.bind(Bind::Key(bind.clone()));
             }
@@ -933,18 +916,19 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         }
         commands.extend(self.props().bindings.iter().cloned());
         if self.props().on_cancel.is_some() {
-            let weak = weak.clone();
             commands.push(
-                TuiCommand::inline("escape", move |_, _| {
-                    let Some(inner) = weak.upgrade() else { return };
-                    if inner.cx.app.selected_text().is_some() {
-                        inner.cx.app.clear_selection();
-                        return;
-                    }
-                    if let Some(cancel) = &inner.props.on_cancel {
-                        cancel();
-                    }
-                })
+                TuiCommand::inline(
+                    "escape",
+                    bind!(weak, |inner, _, _| {
+                        if inner.cx.app.selected_text().is_some() {
+                            inner.cx.app.clear_selection();
+                            return;
+                        }
+                        if let Some(cancel) = &inner.props.on_cancel {
+                            cancel();
+                        }
+                    }),
+                )
                 .title("Back")
                 .group("Dialog"),
             );
@@ -952,22 +936,14 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         if self.props().section_navigation {
             let (up, down) = (weak.clone(), weak.clone());
             commands.push(
-                TuiCommand::inline("alt+up", move |_, _| {
-                    if let Some(inner) = up.upgrade() {
-                        Select(inner).move_section(-1);
-                    }
-                })
-                .title("Previous section")
-                .group("Dialog"),
+                TuiCommand::inline("alt+up", bind!(up, |inner, _, _| Select(inner).move_section(-1)))
+                    .title("Previous section")
+                    .group("Dialog"),
             );
             commands.push(
-                TuiCommand::inline("alt+down", move |_, _| {
-                    if let Some(inner) = down.upgrade() {
-                        Select(inner).move_section(1);
-                    }
-                })
-                .title("Next section")
-                .group("Dialog"),
+                TuiCommand::inline("alt+down", bind!(down, |inner, _, _| Select(inner).move_section(1)))
+                    .title("Next section")
+                    .group("Dialog"),
             );
         }
         self.0.cx.layer(KeymapLayer::<FocusId> { commands, ..KeymapLayer::default() });
@@ -1163,8 +1139,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     fn row_mouse(&self, row: &View, value: T) {
         let weak = Rc::downgrade(&self.0);
-        row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_cx, event| {
-            let Some(inner) = weak.upgrade() else { return };
+        row.mouse_pointer(MousePointer::POINTER).on_mouse(bind!(weak, |inner, _cx, event| {
             let select = Select(inner);
             if select.props().locked {
                 return;
@@ -1200,7 +1175,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 }
                 _ => {}
             }
-        });
+        }));
     }
 
     fn render_footer(&self) {
@@ -1225,11 +1200,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 FooterAction::new((action.title)(selected.as_ref()))
                     .key(label)
                     .disabled(self.action_disabled(action))
-                    .on_trigger(move || {
-                        if let Some(inner) = weak.upgrade() {
-                            Select(inner).trigger(&run);
-                        }
-                    }),
+                    .on_trigger(bind!(weak, |inner| Select(inner).trigger(&run))),
             ));
         }
         let dynamic = props.dynamic_hints.as_ref().map(|hints| hints());

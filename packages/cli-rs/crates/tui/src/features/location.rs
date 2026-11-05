@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use opencode_api::generated::SessionID;
 use opencode_store::{Error, Location};
+use opencode_ui::bind;
 
 use crate::app::Tui;
 use crate::routes::Route;
@@ -104,7 +105,6 @@ fn sync(tui: &Tui, location: Option<Location>) {
     let target = tui.data.read(|state| (*state.default_location() != location).then(|| location.clone()));
     tui.location.error.borrow_mut().take();
     let data = tui.data.clone();
-    let weak = tui.weak();
     tui.app.spawn(
         async move {
             let mut tries = 0;
@@ -119,8 +119,7 @@ fn sync(tui: &Tui, location: Option<Location>) {
                 }
             }
         },
-        move |_, result: Result<(), Error>| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, result: Result<(), Error>| {
             let Err(error) = result else { return };
             let current = tui.location.reference.borrow().clone();
             if !not_found(&error) || tui.location.generation.get() != attempt || current.as_ref() != Some(&location) {
@@ -128,7 +127,7 @@ fn sync(tui: &Tui, location: Option<Location>) {
             }
             *tui.location.error.borrow_mut() = Some(location);
             tui.resync();
-        },
+        }),
     );
 }
 

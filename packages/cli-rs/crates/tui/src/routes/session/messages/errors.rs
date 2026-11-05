@@ -12,6 +12,7 @@ use chrono::{Local as Clock, TimeZone};
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantRetry, SessionMessageInfo, SessionStructuredError,
 };
+use opencode_ui::bind;
 use opentui::prelude::*;
 
 use super::list::Context;
@@ -223,14 +224,16 @@ impl Retry {
         self.0.root.visible(retry.is_some());
         if self.0.render() > 0 {
             let weak = self.0.this.clone();
-            self.0.timer.set(Some(self.0.app.set_interval(Duration::from_secs(1), move |_| {
-                let Some(inner) = weak.upgrade() else { return };
-                if inner.render() == 0
-                    && let Some(timer) = inner.timer.take()
-                {
-                    inner.app.cancel_timer(timer);
-                }
-            })));
+            self.0.timer.set(Some(self.0.app.set_interval(
+                Duration::from_secs(1),
+                bind!(weak, |inner, _| {
+                    if inner.render() == 0
+                        && let Some(timer) = inner.timer.take()
+                    {
+                        inner.app.cancel_timer(timer);
+                    }
+                }),
+            )));
         }
     }
 }
@@ -457,17 +460,14 @@ fn stopped(tui: &Tui, recalled: Option<String>, offer: Option<Option<String>>) {
     let expected = textarea.text();
     let weak = tui.weak();
     let check = textarea.clone();
-    let submit = tui.weak();
     go_upsell::offer(
         &tui.local,
         go_upsell::Offer {
             reset,
             can_continue: Rc::new(move || weak.upgrade().is_some() && check.text() == expected),
-            on_subscribe: Rc::new(move || {
-                if let Some(tui) = submit.upgrade() {
-                    tui.keymap.dispatch("prompt.submit", None);
-                }
-            }),
+            on_subscribe: Rc::new(bind!(tui, |tui| {
+                tui.keymap.dispatch("prompt.submit", None);
+            })),
         },
         now(),
     );

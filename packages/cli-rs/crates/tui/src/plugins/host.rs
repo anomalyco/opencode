@@ -11,6 +11,7 @@ use opencode_plugin::loader::native::Native;
 use opencode_plugin::loader::{Backend, Configured, Loader};
 use opencode_plugin::{Definition, Registry, SlotInput, SlotMount, Slotted, Toast};
 use opencode_store::Changes;
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::Theme;
@@ -143,12 +144,10 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     loader.reconcile(tui, &tui.plugins);
     let watches: Rc<RefCell<Vec<(PathBuf, opencode_local::watch::Watch)>>> = Rc::default();
     watch(tui, &loader, &watches);
-    let weak = tui.weak();
-    tui.app.on_message(move |_, _: &PluginsChanged| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_message(bind!(tui, |tui, _, _: &PluginsChanged| {
         loader.reconcile(&tui, &tui.plugins);
         watch(&tui, &loader, &watches);
-    });
+    }));
 }
 
 /// Watches the loader's directories that are not watched yet. A watch that stops seeing its directory costs a

@@ -5,6 +5,7 @@
 use std::rc::Rc;
 
 use opencode_api::generated::V2Event;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 
@@ -23,16 +24,11 @@ pub fn install(tui: &Rc<Tui>) {
     };
     let commands: Vec<TuiCommand> = (1..=9)
         .map(|slot| {
-            let weak = weak.clone();
-            TuiCommand::new(format!("session.quick_switch.{slot}"), move |_, _| {
-                if let Some(tui) = weak.upgrade() {
-                    quick_switch(&tui, slot);
-                }
-            })
-            .bind(Bind::Off)
-            .title(format!("Switch to session in quick slot {slot}"))
-            .group("Session")
-            .enabled(enabled())
+            TuiCommand::new(format!("session.quick_switch.{slot}"), bind!(weak, |tui, _, _| quick_switch(&tui, slot)))
+                .bind(Bind::Off)
+                .title(format!("Switch to session in quick slot {slot}"))
+                .group("Session")
+                .enabled(enabled())
         })
         .collect();
     let names = commands.iter().filter_map(|command| command.id.clone()).collect();

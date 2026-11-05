@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::rc::Weak;
 
 use opencode_api::generated::SessionID;
+use opencode_ui::bind;
 use opencode_ui::theme::{Theme, tint};
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use opentui::prelude::*;
@@ -402,12 +403,7 @@ impl Component for Strip {
         };
         let weak = self.tui.clone();
         let defer = |cx: &mut Cx<'_>, run: Box<dyn FnOnce(&Tui)>| {
-            let weak = weak.clone();
-            cx.defer(move |_| {
-                if let Some(tui) = weak.upgrade() {
-                    run(&tui);
-                }
-            });
+            cx.defer(bind!(weak, |tui, _| run(&tui)));
         };
         match event.kind {
             MouseEventKind::Moved => {

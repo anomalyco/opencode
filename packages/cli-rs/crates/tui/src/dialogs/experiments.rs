@@ -6,6 +6,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::select::{SelectOption, SelectProps, select};
@@ -53,10 +54,7 @@ pub fn toggle(tui: &Tui, id: &'static str) {
 pub fn show(tui: &Tui) {
     let weak = tui.weak();
     tui.dialogs.replace(
-        move |cx| {
-            let Some(tui) = weak.upgrade() else {
-                return opentui::prelude::View::new(&cx.app);
-            };
+        bind!(weak, |tui, cx| {
             let any = !EXPERIMENTS.is_empty();
             let selected = Rc::new(RefCell::new(EXPERIMENTS.first().map(|e| e.id)));
             let mut props = SelectProps::new("Experiments", options(&tui));
@@ -65,14 +63,7 @@ pub fn show(tui: &Tui) {
                 let selected = selected.clone();
                 move |option| *selected.borrow_mut() = Some(option.value)
             }));
-            props.on_select = Some(Rc::new({
-                let weak = weak.clone();
-                move |option| {
-                    if let Some(tui) = weak.upgrade() {
-                        toggle(&tui, option.value);
-                    }
-                }
-            }));
+            props.on_select = Some(Rc::new(bind!(weak, |tui, option| toggle(&tui, option.value))));
             if any {
                 let bind = |key: &str, title: &str| {
                     let (weak, selected) = (weak.clone(), selected.clone());
@@ -90,7 +81,7 @@ pub fn show(tui: &Tui) {
             let (view, handle) = select(cx, props);
             settings::refresh_on_change(&tui, Rc::downgrade(cx), move |tui| handle.set_options(options(tui)));
             view
-        },
+        }, else opentui::prelude::View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );

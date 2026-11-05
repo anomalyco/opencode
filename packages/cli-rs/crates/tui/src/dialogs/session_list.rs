@@ -18,6 +18,7 @@ use opencode_api::generated::{
 use opencode_local::cli_config::TabsScope;
 use opencode_store::SessionStatus;
 use opencode_store::state::State as Store;
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
@@ -66,39 +67,22 @@ pub fn show(tui: &Tui) {
             let weak = Rc::downgrade(&list);
             let mut props = SelectProps::dynamic(
                 "Sessions",
-                Rc::new({
-                    let weak = weak.clone();
-                    move |filter: &str| {
-                        let Some(list) = weak.upgrade() else {
-                            return Vec::new();
-                        };
-                        list.state.borrow_mut().filter = filter.to_owned();
-                        list.options()
-                    }
-                }),
+                Rc::new(bind!(weak, |list, filter: &str| {
+                    list.state.borrow_mut().filter = filter.to_owned();
+                    list.options()
+                })),
             );
             props.title_view = Some(list.title.as_any());
             props.search_in_title = true;
             props.title_placeholder = Some(list.placeholder());
             props.skip_filter = true;
             props.current = current;
-            props.on_filter = Some(Rc::new({
-                let weak = weak.clone();
-                move |_: &str| {
-                    if let Some(list) = weak.upgrade() {
-                        list.debounce_search();
-                    }
+            props.on_filter = Some(Rc::new(bind!(weak, |list, _: &str| list.debounce_search())));
+            props.on_move = Some(Rc::new(bind!(weak, |list, _: &SelectOption<SessionID>| {
+                if list.state.borrow_mut().to_delete.take().is_some() {
+                    list.refresh_later();
                 }
-            }));
-            props.on_move = Some(Rc::new({
-                let weak = weak.clone();
-                move |_: &SelectOption<SessionID>| {
-                    let Some(list) = weak.upgrade() else { return };
-                    if list.state.borrow_mut().to_delete.take().is_some() {
-                        list.refresh_later();
-                    }
-                }
-            }));
+            })));
             props.on_select = Some(Rc::new({
                 let weak = weak.clone();
                 move |option: &SelectOption<SessionID>| {
@@ -107,36 +91,28 @@ pub fn show(tui: &Tui) {
                     };
                     let id = option.value.clone();
                     let app = tui.app.clone();
-                    let weak = tui.weak();
-                    app.defer(move |_| {
-                        let Some(tui) = weak.upgrade() else { return };
+                    app.defer(bind!(tui, |tui, _| {
                         // Closed first, so the new view takes the focus.
                         tui.dialogs.clear();
                         tui.navigate(Route::Session { id });
-                    });
+                    }));
                 }
             }));
             let tabs = list.tui.upgrade().is_some_and(|tui| tui.config().tabs.enabled);
             props.actions = vec![
                 SelectAction {
                     hidden: tabs,
-                    ..SelectAction::new("session.pin.toggle", "pin/unpin", {
-                        let weak = weak.clone();
-                        move |option: &SelectOption<SessionID>| {
-                            if let Some(list) = weak.upgrade() {
-                                list.toggle_pin(&option.value);
-                            }
-                        }
-                    })
+                    ..SelectAction::new(
+                        "session.pin.toggle",
+                        "pin/unpin",
+                        bind!(weak, |list, option: &SelectOption<SessionID>| list.toggle_pin(&option.value)),
+                    )
                 },
-                SelectAction::new("session.delete", "delete", {
-                    let weak = weak.clone();
-                    move |option: &SelectOption<SessionID>| {
-                        if let Some(list) = weak.upgrade() {
-                            list.delete(&option.value);
-                        }
-                    }
-                }),
+                SelectAction::new(
+                    "session.delete",
+                    "delete",
+                    bind!(weak, |list, option: &SelectOption<SessionID>| list.delete(&option.value)),
+                ),
                 SelectAction::new("session.rename", "rename", {
                     let weak = weak.clone();
                     move |option: &SelectOption<SessionID>| {
@@ -145,26 +121,14 @@ pub fn show(tui: &Tui) {
                         };
                         let (id, title) = (option.value.clone(), option.title.clone());
                         let app = tui.app.clone();
-                        let weak = tui.weak();
-                        app.defer(move |_| {
-                            if let Some(tui) = weak.upgrade() {
-                                crate::dialogs::rename::show(&tui, id, Some(title));
-                            }
-                        });
+                        app.defer(bind!(tui, |tui, _| crate::dialogs::rename::show(&tui, id, Some(title))));
                     }
                 }),
             ];
             props.bindings = vec![
-                TuiCommand::inline("ctrl+a", {
-                    let weak = weak.clone();
-                    move |_, _| {
-                        if let Some(list) = weak.upgrade() {
-                            list.toggle_all_projects();
-                        }
-                    }
-                })
-                .title(if all_projects { "Show current directory sessions" } else { "Show all project sessions" })
-                .group("Dialog"),
+                TuiCommand::inline("ctrl+a", bind!(weak, |list, _, _| list.toggle_all_projects()))
+                    .title(if all_projects { "Show current directory sessions" } else { "Show all project sessions" })
+                    .group("Dialog"),
             ];
             props.dynamic_hints = Some(Rc::new({
                 let weak = weak.clone();
@@ -251,7 +215,6 @@ impl List {
         };
         let directory = picker_directory(&tui);
         let client = tui.data.client().clone();
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
                 let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
@@ -263,15 +226,14 @@ impl List {
                 .await;
                 (location.ok(), projects.unwrap_or_default())
             },
-            move |_, (location, projects)| {
-                let Some(list) = weak.upgrade() else { return };
+            bind!(self, |list, _, (location, projects)| {
                 {
                     let mut state = list.state.borrow_mut();
                     state.location = location;
                     state.projects = projects;
                 }
                 list.fetch();
-            },
+            }),
         );
     }
 
@@ -288,15 +250,13 @@ impl List {
         };
         self.refresh();
         let client = tui.data.client().clone();
-        let weak = Rc::downgrade(self);
         let input = location.map(|location| list_input(&location, &query, all_projects));
         tui.app.spawn(
             async move {
                 // TS throws "Location unavailable" here, which degrades like a failed read.
                 read(&client, &input?).await
             },
-            move |_, sessions| {
-                let Some(list) = weak.upgrade() else { return };
+            bind!(self, |list, _, sessions| {
                 {
                     let mut state = list.state.borrow_mut();
                     if state.request != request {
@@ -311,7 +271,7 @@ impl List {
                     });
                 }
                 list.refresh();
-            },
+            }),
         );
     }
 
@@ -320,24 +280,25 @@ impl List {
         if let Some(timer) = self.timer.take() {
             app.cancel_timer(timer);
         }
-        let weak = Rc::downgrade(self);
-        self.timer.set(Some(app.set_timeout(SEARCH_DEBOUNCE, move |_| {
-            let Some(list) = weak.upgrade() else { return };
-            list.timer.set(None);
-            let changed = {
-                let mut state = list.state.borrow_mut();
-                let next = state.filter.clone();
-                let changed = next.trim() != state.search.trim();
-                state.search = next;
-                changed
-            };
-            // A resource refetches only when its source changes; the trimmed query is the source.
-            if changed {
-                list.fetch();
-                return;
-            }
-            list.refresh();
-        })));
+        self.timer.set(Some(app.set_timeout(
+            SEARCH_DEBOUNCE,
+            bind!(self, |list, _| {
+                list.timer.set(None);
+                let changed = {
+                    let mut state = list.state.borrow_mut();
+                    let next = state.filter.clone();
+                    let changed = next.trim() != state.search.trim();
+                    state.search = next;
+                    changed
+                };
+                // A resource refetches only when its source changes; the trimmed query is the source.
+                if changed {
+                    list.fetch();
+                    return;
+                }
+                list.refresh();
+            }),
+        )));
     }
 
     fn toggle_all_projects(self: &Rc<Self>) {
@@ -388,8 +349,7 @@ impl List {
         let id = id.clone();
         tui.app.spawn(
             async move { client.session_remove(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(list) = weak.upgrade() else { return };
+            bind!(weak, |list, _, result| {
                 match result {
                     Ok(()) => {
                         if let Some(results) = &mut list.state.borrow_mut().results {
@@ -407,19 +367,14 @@ impl List {
                     }
                 }
                 list.refresh();
-            },
+            }),
         );
     }
 
     /// Refreshes after the current select handler returns.
     fn refresh_later(self: &Rc<Self>) {
         let Some(app) = self.app() else { return };
-        let weak = Rc::downgrade(self);
-        app.defer(move |_| {
-            if let Some(list) = weak.upgrade() {
-                list.refresh();
-            }
-        });
+        app.defer(bind!(self, |list, _| list.refresh()));
     }
 
     fn refresh(&self) {
