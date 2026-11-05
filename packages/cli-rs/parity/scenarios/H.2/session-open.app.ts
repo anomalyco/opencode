@@ -18,7 +18,6 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "The parser drops the last token.",
-      deviation: ["V01-plain-transcript"],
     },
     {
       event: {

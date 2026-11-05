@@ -86,9 +86,6 @@
     {
       "checkpoint": "open",
       "until": "Why does the parser fail?",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.5/ide/open"
     },
     {
@@ -113,9 +110,6 @@
     {
       "checkpoint": "selected",
       "until": "parser.ts#3-5",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.5/ide/selected"
     },
     {
@@ -134,9 +128,6 @@
     {
       "checkpoint": "mentioned",
       "until": "see @src/parser.ts#3-5",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.5/ide/mentioned"
     }
   ],

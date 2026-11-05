@@ -87,9 +87,6 @@
     {
       "checkpoint": "open",
       "until": "The parser drops the last token.",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "H.2/session-open/open"
     },
     {

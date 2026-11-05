@@ -158,9 +158,6 @@
     {
       "checkpoint": "open",
       "until": "message reverted",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "E.6b/messages/open"
     }
   ],
