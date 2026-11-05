@@ -11,9 +11,5 @@ export function SlotScope(props: { name: string; children: JSX.Element }) {
 
 export function Slot(props: { name: string; children: JSX.Element }) {
   const scope = useContext(SlotName)
-  return (
-    <Show when={scope === undefined || scope === props.name}>
-      {props.children}
-    </Show>
-  )
+  return <Show when={scope === undefined || scope === props.name}>{props.children}</Show>
 }

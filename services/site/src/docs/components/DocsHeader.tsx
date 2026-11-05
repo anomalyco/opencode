@@ -76,7 +76,13 @@ export function DocsHeader(props: { currentSlug: string }) {
         >
           <form method="dialog" class="search-bar">
             <span aria-hidden="true">&gt;</span>
-            <input data-search-input type="search" placeholder="Search docs" aria-label="Search docs" autocomplete="off" />
+            <input
+              data-search-input
+              type="search"
+              placeholder="Search docs"
+              aria-label="Search docs"
+              autocomplete="off"
+            />
             <button type="submit" aria-label="Close search">
               Esc
             </button>

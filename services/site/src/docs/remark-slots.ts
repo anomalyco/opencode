@@ -11,7 +11,9 @@ export default function remarkSlots() {
       if (!isJsx(node) || !node.name || !/^[A-Z]/.test(node.name)) return
       node.children = node.children.map((child) => {
         if (!isJsx(child)) return child
-        const slot = child.attributes.find((attribute) => attribute.type === "mdxJsxAttribute" && attribute.name === "slot")
+        const slot = child.attributes.find(
+          (attribute) => attribute.type === "mdxJsxAttribute" && attribute.name === "slot",
+        )
         if (!slot || typeof slot.value !== "string") return child
         return {
           ...child,

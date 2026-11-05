@@ -5,8 +5,7 @@ and clients live in `packages/`.
 
 | Service                    | Purpose                                | Deployment                       |
 | -------------------------- | -------------------------------------- | -------------------------------- |
-| [`site`](./site)           | The opencode.ai website                | `deploy-site.yml`, `cf`          |
-| [`www`](./www)             | V2 documentation at `/v2`              | `deploy-www.yml`, Wrangler       |
+| [`site`](./site)           | The opencode.ai website and V2 docs    | `deploy-site.yml`, `cf`          |
 | [`updates`](./updates)     | Release metadata and update selection  | `release.yml`, Wrangler          |
 | [`files`](./files)         | Public file distribution at `/files/*` | `deploy-files.yml`, Wrangler     |
 | [`changelog`](./changelog) | Release notes at `/changelog`          | `deploy-changelog.yml`, Wrangler |

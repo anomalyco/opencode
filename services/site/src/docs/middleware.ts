@@ -69,12 +69,18 @@ async function asset(href: string, url: URL, request: Request) {
   if (binding) return binding.fetch(new Request(new URL(href.replace(/(.)\/$/, "$1"), url), request))
   if (!import.meta.env.DEV) return notFound()
   const { renderDocsMarkdown, renderDocsPage } = await import("./render")
-  const slug = href.slice(`${base}docs`.length).replace(/\.md$/, "").replace(/^\/|\/$/g, "") || "index"
+  const slug =
+    href
+      .slice(`${base}docs`.length)
+      .replace(/\.md$/, "")
+      .replace(/^\/|\/$/g, "") || "index"
   const body = href.endsWith(".md")
     ? await renderDocsMarkdown(slug)
     : await renderDocsPage(slug, { stylesheet: "/src/docs/styles/global.css", script: "/src/docs/client.ts" })
   if (body === undefined) return notFound()
-  return new Response(body, { headers: { "Content-Type": href.endsWith(".md") ? markdownType : "text/html; charset=utf-8" } })
+  return new Response(body, {
+    headers: { "Content-Type": href.endsWith(".md") ? markdownType : "text/html; charset=utf-8" },
+  })
 }
 
 function redirect(location: string, status: number) {

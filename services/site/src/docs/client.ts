@@ -5,6 +5,9 @@ type PagefindResult = { url: string; excerpt: string; meta: { title: string } }
 type Pagefind = { search(query: string): Promise<{ results: { data(): Promise<PagefindResult> }[] }> }
 
 let pagefind: Promise<Pagefind> | undefined
+// Pagefind is loaded from its built file on first search. Through `Function` because Vite would wrap
+// a plain import() in its preload helper, a second script on every page for a file it can't preload.
+const load = new Function("url", "return import(url)") as (url: string) => Promise<Pagefind>
 const dialog = document.querySelector<HTMLDialogElement>("[data-search-dialog]")
 const input = document.querySelector<HTMLInputElement>("[data-search-input]")
 const results = document.querySelector<HTMLElement>("[data-search-results]")
@@ -30,7 +33,7 @@ input?.addEventListener("input", async () => {
   }
   const path = dialog.dataset.pagefindPath
   if (!path) return
-  pagefind ??= import(/* @vite-ignore */ path)
+  pagefind ??= load(path)
   const search = await (await pagefind).search(query)
   const pages = await Promise.all(search.results.slice(0, 8).map((result) => result.data()))
   const base = dialog.dataset.baseUrl ?? "/"

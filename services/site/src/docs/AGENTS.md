@@ -2,12 +2,25 @@
 
 ## Structure
 
-- This folder owns the documentation data model, content, frontend, and styling.
-- Documentation content lives in `content/` and is loaded by `../content.config.ts`.
+- This folder is the V2 docs at `/v2` on the site: content, components, styles, build and serving. Keep docs code here; the site's shared files only plug it in (`vite.config.ts`, `src/middleware.ts`, `script/build.ts`, `cloudflare.config.ts`).
+- Content lives in `content/` as MDX. A file's path is its URL: `content/cli/keybinds.mdx` is `/v2/docs/cli/keybinds/`. Other repositories read some of these files by path, so don't move them without checking.
 - `lib/navigation.ts` is the source of truth for header sections and sidebar ordering.
-- The thin route entrypoints live in `../pages/docs/`; keep docs implementation details here.
-- Do not add a documentation frontend framework; this folder owns the UI directly.
-- Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` applies the site and docs base paths.
+- `frontmatter.ts` is the frontmatter schema; a page that doesn't match it fails the build.
+- `config.ts` holds the mount path (`/v2/`). Build URLs from it (`docsHref`), never from the site's base. MDX reads it as `import.meta.env.BASE_URL`.
+- Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` adds `/v2/docs`.
+- Components used in MDX are registered in `document.tsx`. Named slots work as in Astro: `<div slot="go">` inside a component becomes that slot's content (`remark-slots.ts`, `components/Slot.tsx`).
+
+## Rendering
+
+- Pages are plain HTML. They never hydrate and never load the site's styles, fonts or scripts; the site's never load the docs'. A page links `styles/global.css` and the one browser script, `client.ts`.
+- Interactive pieces (search, copy buttons, tabs, the status link) are delegated listeners in `client.ts`, keyed on `data-*` attributes the components render. Don't add Solid state or effects to docs components; they only run on the server.
+- The theme script is inline in `layouts/DocsLayout.tsx` so pages never flash. Navigation is ordinary page loads, made instant by Speculation Rules and cross-document view transitions.
+- `vite.ts` compiles MDX the way Astro's MDX integration did (GitHub-flavoured Markdown, smart punctuation, Shiki with the github-light and github-dark themes, GitHub-style heading ids), so the markup and `global.css` stay unchanged.
+
+## Build and serving
+
+- `script/build.ts` runs after the site's `vite build` (from `script/build.ts` at the site root): it prerenders every page, every content page's Markdown twin (`/v2/docs/config.md`), `llms.txt` and the sitemap into `.output/public`, builds the Pagefind index and checks every link.
+- The Worker never renders docs. `middleware.ts` serves the prerendered files: docs URLs reach it first (`runWorkerFirst` in `cloudflare.config.ts`), so a page's URL answers `Accept: text/markdown` with its twin. `vite dev` has no prerendered files, so the development server renders on request.
 
 ## Writing Style
 
@@ -23,5 +36,5 @@
 
 ## Validation
 
-- Run `bun typecheck` and `bun run build` from `services/www` after changes.
-- Check desktop and mobile layouts when changing navigation or shared styles.
+- Run `bun typecheck` and `bun run build` from `services/site` after changes. The build fails on invalid frontmatter, MDX errors and broken links.
+- Check desktop and mobile layouts, light and dark, when changing navigation or shared styles.

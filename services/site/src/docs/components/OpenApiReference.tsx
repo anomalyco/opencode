@@ -12,7 +12,9 @@ const operations = Object.entries(paths).flatMap(([path, item]) =>
   methods.flatMap((method) => {
     const operation = item[method]
     if (!operation) return []
-    return [{ ...operation, path, method, id: operation.operationId ?? `${method}-${path}`.replace(/[^a-z0-9]+/gi, "-") }]
+    return [
+      { ...operation, path, method, id: operation.operationId ?? `${method}-${path}`.replace(/[^a-z0-9]+/gi, "-") },
+    ]
   }),
 )
 const groups = [...new Set(operations.map((operation) => operation.tags?.[0] ?? "other"))].map((tag) => ({
@@ -198,7 +200,9 @@ function Operation(props: { operation: (typeof operations)[number] }) {
               {([status, response]) => (
                 <div class="api-response">
                   <div class="api-response-heading">
-                    <code class={status.startsWith("2") ? "api-status api-status-success" : "api-status"}>{status}</code>
+                    <code class={status.startsWith("2") ? "api-status api-status-success" : "api-status"}>
+                      {status}
+                    </code>
                     <span>{response.description ?? "Response"}</span>
                   </div>
                   <For each={Object.entries(response.content ?? {})}>

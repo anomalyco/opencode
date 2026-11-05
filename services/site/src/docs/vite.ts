@@ -48,7 +48,9 @@ export function docs(): Plugin {
       const code = await compileMdx(source, id)
       const result = await transformAsync(code, {
         filename: id,
-        presets: [[solid, { generate: this.environment.config.consumer === "server" ? "ssr" : "dom", hydratable: false }]],
+        presets: [
+          [solid, { generate: this.environment.config.consumer === "server" ? "ssr" : "dom", hydratable: false }],
+        ],
         parserOpts: { plugins: ["jsx"] },
         configFile: false,
         babelrc: false,
