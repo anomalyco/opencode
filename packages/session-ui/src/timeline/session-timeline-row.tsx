@@ -185,7 +185,8 @@ export function createSessionTimelineRowRenderer(input: {
   const arrivalRendered = { type: "rendered" as const, messageID: "" }
 
   const noRows: readonly TimelineRow.TimelineRow[] = []
-  const arrivalSync = { type: "sync" as const, sessionID: "", rows: noRows, busy: false, at: 0 }
+  const arrivalSync = { type: "sync" as const, sessionID: "", rows: noRows, busy: false }
+  const arrivalGrown = { type: "grown" as const, messageID: "" }
 
   const syncArrivals = () => {
     const sessionID = input.sessionID()
@@ -197,7 +198,6 @@ export function createSessionTimelineRowRenderer(input: {
     arrivalSync.sessionID = sessionID
     arrivalSync.rows = rows
     arrivalSync.busy = busy
-    arrivalSync.at = performance.now()
     arrivals = transitionSteerArrival(arrivals, arrivalSync)
   }
 
@@ -218,13 +218,19 @@ export function createSessionTimelineRowRenderer(input: {
       return true
     })
 
+  const grown = (messageID: string) => {
+    arrivalGrown.messageID = messageID
+    arrivals = transitionSteerArrival(arrivals, arrivalGrown)
+  }
+
   // A run's gaps and meta lines snap while a steer arrives, because the arriving row grows in. Any other change, such
   // as a steer delivered into the run above, springs every gap and meta line together, so the bubbles below hold still.
+  // Springs read this on every frame, so it holds for exactly as long as the grow runs.
   const runSnaps = () =>
     untrack(() => {
       syncArrivals()
 
-      return shouldSnapUserRun(arrivals, performance.now())
+      return shouldSnapUserRun(arrivals)
     })
 
   // The newest delivered prompt; reverting it undoes the last turn, so its menu calls the action Undo.
@@ -681,7 +687,7 @@ export function createSessionTimelineRowRenderer(input: {
   const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
     <div
       ref={(el) => {
-        if (props.grow) growIn(el)
+        if (props.grow) growIn(el, () => grown(props.row.userMessageID))
       }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
@@ -1459,8 +1465,8 @@ function outcomeNoticeKey(state: string | undefined) {
  * steer's meta line stays in view: a steer that starts a pending run shows its line once the row has settled, and one
  * that joins a pending run carries the run's line down along the growing edge while the bubble fades into the space.
  */
-function growIn(el: HTMLElement) {
-  if (prefersReducedMotion()) return
+function growIn(el: HTMLElement, onDone: () => void) {
+  if (prefersReducedMotion()) return onDone()
   const height = Spring.fromDuration(0, { duration: 0.2, bounce: 0 })
   const opacity = Spring.fromDuration(0, { duration: 0.3, bounce: 0 }).set(1)
   const content = el.firstElementChild instanceof HTMLElement ? el.firstElementChild : undefined
@@ -1527,10 +1533,15 @@ function growIn(el: HTMLElement) {
       }
 
       el.toggleAttribute("data-timeline-grow", false)
+      onDone()
 
       return false
     },
   )
 
-  onCleanup(remove)
+  // A row that unmounts mid-grow, as the virtualizer recycles it, ends its grow too; a second report is a no-op.
+  onCleanup(() => {
+    remove()
+    onDone()
+  })
 }

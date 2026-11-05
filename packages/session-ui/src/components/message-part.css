@@ -524,6 +524,23 @@
     }
   }
 
+  /* Without hover the chevron always shows, so the first line keeps room for it instead of fading text under it. The
+     float also widens a short bubble, so a one-word prompt stays readable. 20px spans the 20px button, less the 12px
+     text padding it overlaps, plus a 4px gap at the 8px inset. */
+  @media not (hover: hover) {
+    [data-slot="user-message-text"]:has(> [data-slot="user-message-menu"])::before {
+      content: "";
+      float: inline-end;
+      width: 20px;
+      height: 1lh;
+    }
+
+    [data-slot="user-message-text"] > [data-slot="user-message-menu"] {
+      padding: 0;
+      background: none;
+    }
+  }
+
   [data-slot="user-message-copy-wrapper"] [data-slot="user-message-menu"] {
     position: static;
     padding: 0;

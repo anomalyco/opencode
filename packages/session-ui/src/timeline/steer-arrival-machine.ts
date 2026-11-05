@@ -5,7 +5,8 @@ import type { TimelineRow } from "./timeline-row"
  * Which user messages grow in as they render. `seen` holds the message IDs of the session's rows so far: user messages,
  * shells and assistant messages. A user message counts as a steer only when it lands below a seen row while the session
  * works, so the first page and history loaded above it appear as they are. `arriving` holds steers whose rows have not
- * rendered yet; rendering one, or the session going idle, removes it. `arrivedAt` is when the latest steer landed.
+ * rendered yet; rendering one, or the session going idle, removes it. `growing` holds steers whose rows are growing in;
+ * the grow finishing, or the row unmounting, removes it.
  */
 export type SteerArrivalState =
   | {
@@ -13,7 +14,7 @@ export type SteerArrivalState =
       readonly sessionID: string
       readonly seen: ReadonlySet<string>
       readonly arriving: ReadonlySet<string>
-      readonly arrivedAt: number
+      readonly growing: ReadonlySet<string>
     }
   | { readonly status: "disposed" }
 
@@ -23,10 +24,9 @@ export type SteerArrivalEvent =
       readonly sessionID: string
       readonly rows: readonly TimelineRow.TimelineRow[]
       readonly busy: boolean
-      /** `performance.now()` at the sync. */
-      readonly at: number
     }
   | { readonly type: "rendered"; readonly messageID: string }
+  | { readonly type: "grown"; readonly messageID: string }
   | { readonly type: "disposed" }
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -36,11 +36,8 @@ export const INITIAL_STEER_ARRIVAL_STATE: SteerArrivalState = Object.freeze({
   sessionID: "",
   seen: EMPTY,
   arriving: EMPTY,
-  arrivedAt: -Infinity,
+  growing: EMPTY,
 })
-
-// A run's gaps and meta lines snap for this long after a steer lands, while its row grows in.
-const RUN_SNAP_MS = 100
 
 export const DISPOSED_STEER_ARRIVAL_STATE: SteerArrivalState = Object.freeze({ status: "disposed" })
 
@@ -57,7 +54,15 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
     const arriving = new Set(state.arriving)
     arriving.delete(event.messageID)
 
-    return { ...state, arriving }
+    return { ...state, arriving, growing: new Set([...state.growing, event.messageID]) }
+  }
+
+  if (event.type === "grown") {
+    if (!state.growing.has(event.messageID)) return state
+    const growing = new Set(state.growing)
+    growing.delete(event.messageID)
+
+    return { ...state, growing }
   }
 
   const rows = event.rows
@@ -68,7 +73,7 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
       sessionID: event.sessionID,
       seen: new Set(rows.flatMap((row) => rowAnchor(row) ?? [])),
       arriving: EMPTY,
-      arrivedAt: -Infinity,
+      growing: EMPTY,
     }
 
   const unseen = rows.some((row) => {
@@ -99,7 +104,7 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
     sessionID: state.sessionID,
     seen: unseen ? new Set([...state.seen, ...rows.flatMap((row) => rowAnchor(row) ?? [])]) : state.seen,
     arriving: !event.busy ? EMPTY : steers.length > 0 ? new Set([...state.arriving, ...steers]) : state.arriving,
-    arrivedAt: steers.length > 0 ? event.at : state.arrivedAt,
+    growing: state.growing,
   }
 }
 
@@ -107,9 +112,12 @@ export function shouldGrowUserMessage(state: SteerArrivalState, messageID: strin
   return state.status === "tracking" && state.arriving.has(messageID)
 }
 
-/** Whether a run's gaps and meta lines snap at `now`, because a steer just landed and grows in, rather than spring. */
-export function shouldSnapUserRun(state: SteerArrivalState, now: number) {
-  return state.status === "tracking" && now - state.arrivedAt < RUN_SNAP_MS
+/**
+ * Whether a run's gaps and meta lines snap rather than spring: while a steer is landing or growing in, the growing row
+ * moves the run, so springing as well would make the bubbles jump.
+ */
+export function shouldSnapUserRun(state: SteerArrivalState) {
+  return state.status === "tracking" && (state.arriving.size > 0 || state.growing.size > 0)
 }
 
 // Each row stands for the message that produced it; message IDs are unique across user, shell and assistant messages.
