@@ -14,7 +14,7 @@ import { it } from "./lib/effect"
 const fixture = Effect.gen(function* () {
   const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
   const state: {
-    skills: unknown[]
+    skills: unknown[] | undefined
     files: Record<string, string>
     requests: string[]
   } = { skills: [], files: {}, requests: [] }
@@ -25,6 +25,8 @@ const fixture = Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest
       const url = new URL(request.url, base)
       state.requests.push(url.href)
+      if (url.pathname === "/catalog/index.json" && state.skills === undefined)
+        return HttpServerResponse.text("Unavailable", { status: 503 })
       const body =
         url.pathname === "/catalog/index.json" ? JSON.stringify({ skills: state.skills }) : state.files[url.pathname]
       return HttpServerResponse.text(body ?? "Not Found", { status: body === undefined ? 404 : 200 })
@@ -33,7 +35,8 @@ const fixture = Effect.gen(function* () {
   return {
     cache: tmp.path,
     base,
-    pull: (skills: unknown[], files: Record<string, string> = {}) =>
+    // Pass `undefined` for skills to make the catalog index unavailable.
+    pull: (skills: unknown[] | undefined, files: Record<string, string> = {}) =>
       Effect.gen(function* () {
         state.skills = skills
         state.files = files
@@ -149,6 +152,32 @@ describe("SkillDiscovery.pull", () => {
       })
       expect(yield* Effect.promise(() => Bun.file(path.join(root, "SKILL.md")).text())).toBe("# New")
       expect(yield* Effect.promise(() => Bun.file(path.join(root, "old.md")).exists())).toBe(false)
+    }),
+  )
+
+  it.live(
+    "keeps cached skills when the index is unavailable",
+    Effect.gen(function* () {
+      const catalog = yield* fixture
+      const first = yield* catalog.pull([{ name: "deploy", version: "1", files: ["SKILL.md"] }], {
+        "/catalog/deploy/SKILL.md": "# Deploy",
+      })
+      const offline = yield* catalog.pull(undefined)
+
+      expect(offline.directories).toEqual(first.directories)
+      expect(offline.requests.every((request) => request === `${catalog.base}index.json`)).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(path.join(offline.directories[0], "SKILL.md")).text())).toBe(
+        "# Deploy",
+      )
+    }),
+  )
+
+  it.live(
+    "returns nothing when the index is unavailable and nothing is cached",
+    Effect.gen(function* () {
+      const catalog = yield* fixture
+      const result = yield* catalog.pull(undefined)
+      expect(result.directories).toEqual([])
     }),
   )
 })
