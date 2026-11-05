@@ -1,6 +1,5 @@
 import { sampledChecksum } from "@opencode/util/encode"
 import {
-  areFilesEqual,
   areOptionsEqual,
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,
@@ -36,15 +35,7 @@ import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
 import { createFileFind } from "../pierre/file-find"
-import {
-  applyViewerScheme,
-  clearReadyWatcher,
-  createReadyWatcher,
-  getViewerHost,
-  getViewerRoot,
-  notifyShadowReady,
-  observeViewerScheme,
-} from "../pierre/file-runtime"
+import { applyViewerScheme, getViewerHost, getViewerRoot, observeViewerScheme } from "../pierre/file-runtime"
 import {
   findCodeSelectionSide,
   findDiffLineNumber,
@@ -52,6 +43,21 @@ import {
   findFileLineNumber,
   readShadowLineSelection,
 } from "../pierre/file-selection"
+import {
+  diffExpectsRows,
+  INITIAL_VIEWER_RENDER_STATE,
+  POOL_INIT_TIMEOUT_MS,
+  readPoolState,
+  ROWS_READY_TIMEOUT_MS,
+  selectMountedSpec,
+  selectRevision,
+  transitionViewerRender,
+  type ViewerInstanceSpec,
+  type ViewerRenderEffect,
+  type ViewerRenderEvent,
+  type ViewerRenderRequest,
+  type ViewerTarget,
+} from "../pierre/render-machine"
 import { restoreShadowTextSelection } from "../pierre/selection-bridge"
 import {
   createFileSelectionState,
@@ -168,7 +174,6 @@ type ViewerConfig = {
   mode: FileSelectionMode
   enableLineSelection: () => boolean
   selectedLines: () => SelectedLineRange | null | undefined
-  commentedLines: () => SelectedLineRange[]
   callbacks: SelectionCallbacks
 
   // mode-specific callbacks
@@ -180,7 +185,6 @@ type ViewerConfig = {
   applySelection: (range: SelectedLineRange | null) => void
   /** Adjusts a range Pierre reports before the machine stores it. */
   normalize?: (range: SelectedLineRange | null) => SelectedLineRange | null | undefined
-  markCommented: (root: ShadowRoot, ranges: SelectedLineRange[]) => void
 }
 
 type PointerMove = {
@@ -206,9 +210,6 @@ function useFileViewer(config: ViewerConfig) {
   // Pointer moves reuse one hit and one event so hovering and dragging allocate nothing per move.
   const hit: MouseHit = { line: undefined, numberColumn: false, side: undefined }
   const moveEvent: PointerMove = { type: "pointer.move", buttons: 0, line: undefined, side: undefined }
-
-  const ready = createReadyWatcher()
-  const [rendered, setRendered] = createSignal(0)
 
   const getRoot = () => getViewerRoot(container)
   const getHost = () => getViewerHost(container)
@@ -367,41 +368,6 @@ function useFileViewer(config: ViewerConfig) {
   })
 
   createEffect(() => {
-    rendered()
-    const ranges = config.commentedLines()
-    const root = getRoot()
-
-    if (!root) return
-
-    if (ranges.length === 0) {
-      config.markCommented(root, ranges)
-
-      return
-    }
-
-    let frame: number | undefined
-
-    const mark = () => {
-      if (frame !== undefined) cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        frame = undefined
-        config.markCommented(root, ranges)
-      })
-    }
-
-    const observer = new MutationObserver(mark)
-
-    observer.observe(root, { childList: true, subtree: true })
-    mark()
-
-    onCleanup(() => {
-      observer.disconnect()
-
-      if (frame !== undefined) cancelAnimationFrame(frame)
-    })
-  })
-
-  createEffect(() => {
     const range = config.selectedLines() ?? null
     untrack(() => dispatch({ type: "selection.controlled", range }))
   })
@@ -419,10 +385,7 @@ function useFileViewer(config: ViewerConfig) {
     makeEventListener(document, "selectionchange", handleSelectionChange)
   })
 
-  onCleanup(() => {
-    clearReadyWatcher(ready)
-    dispatch({ type: "disposed" })
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     get wrapper() {
@@ -443,9 +406,6 @@ function useFileViewer(config: ViewerConfig) {
     set overlay(v: HTMLDivElement) {
       overlay = v
     },
-    ready,
-    rendered,
-    setRendered,
     getRoot,
     getHost,
     find,
@@ -465,11 +425,6 @@ type Viewer = ReturnType<typeof useFileViewer>
 
 type RenderTarget = {
   cleanUp: () => void
-}
-
-type AnnotationTarget<A> = {
-  setLineAnnotations: (annotations: A[]) => void
-  rerender: () => void
 }
 
 type VirtualStrategy = {
@@ -495,75 +450,256 @@ function useSearchHandle(opts: {
   })
 }
 
-function useAnnotationRerender<A>(opts: {
+type ViewerRenderConfig<I extends RenderTarget, O> = {
   viewer: Viewer
-  current: () => AnnotationTarget<A> | undefined
-  annotations: () => A[]
-}) {
-  const applied = new WeakSet<AnnotationTarget<A>>()
-  createEffect(() => {
-    opts.viewer.rendered()
-    const active = opts.current()
-
-    if (!active) return
-    const annotations = opts.annotations()
-
-    // renderViewer always draws with empty annotations, so skip the extra rerender
-    // when this instance has nothing applied and nothing to apply.
-    if (annotations.length === 0 && !applied.has(active)) return
-
-    if (annotations.length === 0) applied.delete(active)
-    else applied.add(active)
-    active.setLineAnnotations(annotations)
-    active.rerender()
-    requestAnimationFrame(() => opts.viewer.find.refresh({ reset: true }))
-  })
-}
-
-function notifyRendered(opts: {
-  viewer: Viewer
+  /** Pierre options; a change redraws, and a draw always uses the latest ones. */
+  options: () => O
+  /** Reads every other input a draw depends on; a change requests a new draw. */
+  request: () => ViewerRenderRequest
+  create: (spec: ViewerInstanceSpec, options: O) => I
+  /** Applies options to a kept instance and returns whether its rows must render again. */
+  update: (instance: I, options: O) => boolean
+  draw: (instance: I, spec: ViewerInstanceSpec, forceRender: boolean) => void
   isReady: (root: ShadowRoot) => boolean
-  settleFrames?: number
-  onReady: () => void
-}) {
-  notifyShadowReady({
-    state: opts.viewer.ready,
-    container: opts.viewer.container,
-    getRoot: opts.viewer.getRoot,
-    isReady: opts.isReady,
-    settleFrames: opts.settleFrames,
-    onReady: opts.onReady,
-  })
+  annotations: () => unknown[]
+  applyAnnotations: (instance: I) => void
+  commentedLines: () => SelectedLineRange[]
+  markCommented: (root: ShadowRoot, ranges: SelectedLineRange[]) => void
+  /** Scrolls a range into a virtualized window; returns false while rows cannot be measured yet. */
+  reveal?: (instance: I, spec: ViewerInstanceSpec, range: SelectedLineRange) => boolean
+  onRendered: () => void
 }
 
-function renderViewer<I extends RenderTarget>(opts: {
-  viewer: Viewer
-  current: I | undefined
-  reset?: boolean
-  create: () => I
-  update?: (value: I) => void
-  assign: (value: I) => void
-  draw: (value: I) => void
-  onReady: () => void
-}) {
-  clearReadyWatcher(opts.viewer.ready)
-  const reset = opts.reset === true && opts.current !== undefined
+type ViewerRender<I> = {
+  instance: () => I | undefined
+  requestReveal: (range: SelectedLineRange | undefined) => void
+}
 
-  if (reset) opts.current?.cleanUp()
-  const next = reset || !opts.current ? opts.create() : opts.current
+function useViewerRender<I extends RenderTarget, O>(config: ViewerRenderConfig<I, O>): ViewerRender<I> {
+  const viewer = config.viewer
+  let state = INITIAL_VIEWER_RENDER_STATE
+  let instance: I | undefined
+  let observer: MutationObserver | undefined
+  let poolTimer: ReturnType<typeof setTimeout> | undefined
+  let rowsTimer: ReturnType<typeof setTimeout> | undefined
+  let settleFrame: number | undefined
+  let findFrame: number | undefined
+  let releaseHeight: VoidFunction | undefined
+  const [revision, setRevision] = createSignal(selectRevision(state))
 
-  if (reset || !opts.current) {
-    opts.viewer.container.innerHTML = ""
-    opts.assign(next)
-  } else {
-    opts.update?.(next)
+  const cancelAsync = () => {
+    observer?.disconnect()
+    observer = undefined
+    clearTimeout(poolTimer)
+    clearTimeout(rowsTimer)
+    poolTimer = undefined
+    rowsTimer = undefined
+
+    if (settleFrame !== undefined) cancelAnimationFrame(settleFrame)
+    settleFrame = undefined
   }
 
-  opts.draw(next)
+  const watchRows = (attempt: number) => {
+    const done = () => {
+      observer?.disconnect()
+      observer = undefined
+      clearTimeout(rowsTimer)
+      rowsTimer = undefined
+      dispatch({ type: "rows.ready", attempt })
+    }
 
-  applyViewerScheme(opts.viewer.getHost())
-  opts.viewer.setRendered((value) => value + 1)
-  opts.onReady()
+    const watchRoot = (root: ShadowRoot) => {
+      observer?.disconnect()
+      observer = new MutationObserver(() => {
+        if (config.isReady(root)) done()
+      })
+      observer.observe(root, { childList: true, subtree: true })
+    }
+
+    const root = viewer.getRoot()
+
+    if (root && config.isReady(root)) return done()
+
+    rowsTimer = setTimeout(() => {
+      rowsTimer = undefined
+      dispatch({ type: "rows.timed-out", attempt })
+    }, ROWS_READY_TIMEOUT_MS)
+
+    if (root) return watchRoot(root)
+
+    observer = new MutationObserver(() => {
+      const next = viewer.getRoot()
+
+      if (!next) return
+
+      if (config.isReady(next)) return done()
+      watchRoot(next)
+    })
+    observer.observe(viewer.container, { childList: true, subtree: true })
+  }
+
+  const run = (effect: ViewerRenderEffect) => {
+    if (effect.type === "cancel-async") return cancelAsync()
+
+    if (effect.type === "await-pool") {
+      poolTimer = setTimeout(() => {
+        poolTimer = undefined
+        dispatch({ type: "pool.timed-out", attempt: effect.attempt })
+      }, POOL_INIT_TIMEOUT_MS)
+      void effect.pool.initialize().then(
+        () => dispatch({ type: "pool.settled", attempt: effect.attempt, ok: true }),
+        () => dispatch({ type: "pool.settled", attempt: effect.attempt, ok: false }),
+      )
+
+      return
+    }
+
+    if (effect.type === "preserve-height") {
+      releaseHeight ??= preserve(viewer)
+
+      return
+    }
+
+    if (effect.type === "release-height") {
+      releaseHeight?.()
+      releaseHeight = undefined
+
+      return
+    }
+
+    if (effect.type === "draw") {
+      if (effect.action === "reset") {
+        instance?.cleanUp()
+        instance = undefined
+      }
+
+      const options = config.options()
+      const forceRender = instance ? config.update(instance, options) : false
+
+      if (!instance) {
+        viewer.container.innerHTML = ""
+        instance = config.create(effect.spec, options)
+      }
+
+      config.draw(instance, effect.spec, forceRender)
+      applyViewerScheme(viewer.getHost())
+
+      return
+    }
+
+    if (effect.type === "sync-annotations")
+      return dispatch({ type: "annotations.synced", count: config.annotations().length })
+
+    if (effect.type === "apply-annotations") {
+      if (!instance) return
+      config.applyAnnotations(instance)
+
+      if (findFrame !== undefined) cancelAnimationFrame(findFrame)
+      findFrame = requestAnimationFrame(() => {
+        findFrame = undefined
+        viewer.find.refresh({ reset: true })
+      })
+
+      return
+    }
+
+    if (effect.type === "watch-rows") return watchRows(effect.attempt)
+
+    if (effect.type === "schedule-settle-frame") {
+      settleFrame = requestAnimationFrame(() => {
+        settleFrame = undefined
+        dispatch({ type: "settle.frame", attempt: effect.attempt })
+      })
+
+      return
+    }
+
+    if (effect.type === "reapply-selection") return viewer.reapplySelection()
+
+    if (effect.type === "try-reveal") {
+      const spec = selectMountedSpec(state)
+
+      if (!instance || !spec) return
+
+      if (!config.reveal || config.reveal(instance, spec, effect.range)) dispatch({ type: "reveal.completed" })
+
+      return
+    }
+
+    if (effect.type === "refresh-find") return viewer.find.refresh({ reset: true })
+
+    if (effect.type === "notify-rendered") return config.onRendered()
+
+    instance?.cleanUp()
+    instance = undefined
+
+    if (findFrame !== undefined) cancelAnimationFrame(findFrame)
+  }
+
+  // Effects can dispatch again synchronously (rows already drawn, annotations synced after a draw).
+  const dispatch = (event: ViewerRenderEvent) => {
+    const step = transitionViewerRender(state, event)
+    const changed = selectRevision(step.state) !== selectRevision(state)
+    state = step.state
+    step.effects.forEach(run)
+
+    if (changed && state.status !== "disposed") setRevision(selectRevision(state))
+  }
+
+  createEffect(() => {
+    config.options()
+    const request = config.request()
+    untrack(() => dispatch({ type: "render.requested", request }))
+  })
+
+  // Each draw syncs annotations itself, so only later changes dispatch here.
+  createEffect(
+    on(config.annotations, (annotations) => dispatch({ type: "annotations.synced", count: annotations.length }), {
+      defer: true,
+    }),
+  )
+
+  createEffect(() => {
+    revision()
+    const ranges = config.commentedLines()
+    const root = viewer.getRoot()
+
+    if (!root) return
+
+    if (ranges.length === 0) {
+      config.markCommented(root, ranges)
+
+      return
+    }
+
+    let frame: number | undefined
+
+    const mark = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        config.markCommented(root, ranges)
+      })
+    }
+
+    const watch = new MutationObserver(mark)
+
+    watch.observe(root, { childList: true, subtree: true })
+    mark()
+
+    onCleanup(() => {
+      watch.disconnect()
+
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    })
+  })
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return {
+    instance: () => instance,
+    requestReveal: (range) => dispatch({ type: "reveal.requested", range }),
+  }
 }
 
 function preserve(viewer: Viewer) {
@@ -673,22 +809,6 @@ function createSharedVirtualStrategy(host: () => HTMLDivElement | undefined, ena
       return result.virtualizer
     },
     cleanup: release,
-  }
-}
-
-// Pierre draws nothing until its worker pool initializes, and a virtualizer that first sees an empty file at the top
-// of its scroller anchors the file's bottom edge, then scrolls to the end once the rows arrive.
-function createPoolReady() {
-  const [settled, setSettled] = createSignal(false)
-
-  return (pool: ReturnType<typeof getWorkerPool>) => {
-    if (!pool || pool.isInitialized() || settled()) return true
-    void pool
-      .initialize()
-      .catch(() => undefined)
-      .then(() => setSettled(true))
-
-    return false
   }
 }
 
@@ -805,9 +925,8 @@ function ViewerShell(props: {
 // ---------------------------------------------------------------------------
 
 function TextViewer<T>(props: TextFileProps<T>) {
-  let instance: PierreFile<T> | VirtualizedFile<T> | undefined
-  let instanceVirtualizer: Virtualizer | undefined
   let viewer!: Viewer
+  let render!: ViewerRender<PierreFile<T> | VirtualizedFile<T>>
 
   const [local, others] = splitProps(props, textKeys)
 
@@ -821,11 +940,10 @@ function TextViewer<T>(props: TextFileProps<T>) {
   const virtual = createMemo(() => lineCount() > virtualizeLineThreshold)
 
   const virtuals = createLocalVirtualStrategy(() => viewer.wrapper, virtual)
-  const poolReady = createPoolReady()
 
   // Rows that are not drawn yet cannot show a range; the machine keeps it and the ready callback applies it again.
   const applySelection = (range: SelectedLineRange | null) => {
-    const current = instance
+    const current = render.instance()
 
     if (!current) return
 
@@ -866,13 +984,11 @@ function TextViewer<T>(props: TextFileProps<T>) {
     mode: "text",
     enableLineSelection: () => props.enableLineSelection === true,
     selectedLines: () => local.selectedLines,
-    commentedLines: () => local.commentedLines ?? [],
     callbacks: local,
     lineForElement: parseLine,
     lineForNode: findFileLineNumber,
     sideForNode: findCodeSelectionSide,
     applySelection,
-    markCommented: markCommentedFileLines,
   })
 
   const options = createMemo(() => ({
@@ -881,77 +997,61 @@ function TextViewer<T>(props: TextFileProps<T>) {
     ...viewer.lineCallbacks,
   }))
 
-  const notify = () => {
-    notifyRendered({
-      viewer,
-      isReady: (root) => {
-        if (virtual()) return root.querySelector("[data-line]") != null
-
-        return root.querySelectorAll("[data-line]").length >= lineCount()
-      },
-      onReady: () => {
-        viewer.reapplySelection()
-        viewer.find.refresh({ reset: true })
-        local.onRendered?.()
-      },
-    })
-  }
-
   useSearchHandle({
     search: () => local.search,
     find: viewer.find,
   })
 
-  // -- render instance --
+  // Cleanups run in reverse, so the instance is cleaned up before the virtualizer it uses.
+  onCleanup(() => virtuals.cleanup())
 
-  createEffect(() => {
-    const opts = options()
-    const workerPool = getWorkerPool()
-    const virtualizer = virtuals.get()
-
-    if (virtualizer && !poolReady(workerPool)) return
-    // An instance keeps the virtualizer it was built with; options and contents update in place.
-    const reset = instance !== undefined && instanceVirtualizer !== virtualizer
-    const forceRender = !reset && instance !== undefined && !areOptionsEqual(instance.options, opts)
-
-    renderViewer({
-      viewer,
-      current: instance,
-      reset,
-      create: () =>
-        virtualizer
-          ? new VirtualizedFile<T>(opts, virtualizer, codeMetrics, workerPool)
-          : new PierreFile<T>(opts, workerPool),
-      update: (value) => value.setOptions(opts),
-      assign: (value) => {
-        instance = value
-        instanceVirtualizer = virtualizer
-      },
-      draw: (value) => {
-        value.render({
-          file: local.file,
-          forceRender,
-          lineAnnotations: [],
-          containerWrapper: viewer.container,
-        })
-      },
-      onReady: notify,
-    })
-  })
-
-  useAnnotationRerender<LineAnnotation<T>>({
+  // An instance keeps the virtualizer and pool it was built with; options and contents update in place.
+  render = useViewerRender({
     viewer,
-    current: () => instance,
+    options,
+    request: () => {
+      const workerPool = getWorkerPool()
+
+      return {
+        spec: {
+          virtualizer: virtuals.get(),
+          workerPool,
+          hunkSeparators: undefined,
+          target: { kind: "text", file: local.file },
+        },
+        pool: readPoolState(workerPool),
+        settleFrames: 0,
+        preserveHeight: false,
+        expectsRows: true,
+      }
+    },
+    create: (spec, opts) =>
+      spec.virtualizer
+        ? new VirtualizedFile<T>(opts, spec.virtualizer, codeMetrics, spec.workerPool)
+        : new PierreFile<T>(opts, spec.workerPool),
+    update: (instance, opts) => {
+      const forceRender = !areOptionsEqual(instance.options, opts)
+      instance.setOptions(opts)
+
+      return forceRender
+    },
+    draw: (instance, spec, forceRender) => {
+      if (spec.target.kind !== "text") return
+      instance.render({ file: spec.target.file, forceRender, lineAnnotations: [], containerWrapper: viewer.container })
+    },
+    isReady: (root) => {
+      if (virtual()) return root.querySelector("[data-line]") != null
+
+      return root.querySelectorAll("[data-line]").length >= lineCount()
+    },
     annotations: () => local.annotations ?? [],
-  })
-
-  // -- cleanup --
-
-  onCleanup(() => {
-    instance?.cleanUp()
-    instance = undefined
-    instanceVirtualizer = undefined
-    virtuals.cleanup()
+    applyAnnotations: (instance) => {
+      instance.setLineAnnotations(local.annotations ?? [])
+      instance.rerender()
+    },
+    commentedLines: () => local.commentedLines ?? [],
+    markCommented: markCommentedFileLines,
+    onRendered: () => local.onRendered?.(),
   })
 
   return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
@@ -962,14 +1062,8 @@ function TextViewer<T>(props: TextFileProps<T>) {
 // ---------------------------------------------------------------------------
 
 function DiffViewer<T>(props: DiffFileProps<T>) {
-  let instance: FileDiff<T> | undefined
-  let instanceVirtualizer: Virtualizer | undefined
-  let instanceWorkerPool: ReturnType<typeof getWorkerPool>
-  let instanceVirtualHunkSeparators: FileDiffOptions<T, undefined>["hunkSeparators"] | undefined
-  let instanceFileDiff: FileDiffMetadata | undefined
-  let instanceBefore: FileContents | undefined
-  let instanceAfter: FileContents | undefined
   let viewer!: Viewer
+  let render!: ViewerRender<FileDiff<T>>
 
   const [local, others] = splitProps(props, diffKeys)
 
@@ -979,11 +1073,11 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   const fixSelection = (range: SelectedLineRange | null) => {
     const fixed = fixDiffSelection(viewer.getRoot(), range)
 
-    return fixed === null && instance instanceof VirtualizedFileDiff ? range : fixed
+    return fixed === null && render.instance() instanceof VirtualizedFileDiff ? range : fixed
   }
 
   const applySelection = (range: SelectedLineRange | null) => {
-    const active = instance
+    const active = render.instance()
 
     if (!active) return
     const fixed = fixSelection(range)
@@ -995,7 +1089,6 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     mode: "diff",
     enableLineSelection: () => props.enableLineSelection === true,
     selectedLines: () => local.selectedLines,
-    commentedLines: () => local.commentedLines ?? [],
     callbacks: local,
     lineForElement: findDiffLineNumber,
     sideForElement: diffMouseSide,
@@ -1003,15 +1096,12 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     sideForNode: diffSelectionSide,
     applySelection,
     normalize: fixSelection,
-    markCommented: markCommentedDiffLines,
   })
 
   const virtuals = createSharedVirtualStrategy(
     () => viewer.container,
     () => local.virtualize !== false,
   )
-
-  const poolReady = createPoolReady()
 
   const large = createMemo(() => {
     if (local.fileDiff) {
@@ -1047,178 +1137,122 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     return { ...perf, disableLineNumbers: props.disableLineNumbers ?? true }
   })
 
-  // A virtualized diff only renders rows near the viewport, so jumping to a selection must scroll it into range first.
-  let pendingReveal: SelectedLineRange | undefined
-
-  const revealSelection = () => {
-    const active = instance
-    const range = pendingReveal
-
-    if (!active || !range) return
-
-    if (!(active instanceof VirtualizedFileDiff) || !instanceVirtualizer) {
-      pendingReveal = undefined
-
-      return
-    }
-
-    const position = active.getLinePosition(Math.min(range.start, range.end), range.side)
-    const root = instanceVirtualizer.getRoot()
-
-    // Keep the request until the diff has a layout to measure; the next render retries it.
-    if (!position || !root) return
-    pendingReveal = undefined
-    const top = instanceVirtualizer.getOffsetInScrollContainer(viewer.container) + position.top
-    const scrollTop = instanceVirtualizer.getScrollTop()
-    const height = root instanceof Document ? window.innerHeight : root.clientHeight
-
-    if (top >= scrollTop && top + position.height <= scrollTop + height) return
-    instanceVirtualizer.scrollTo({ top: top - height / 2 })
-  }
-
-  createEffect(
-    on(
-      () => local.selectedLines,
-      (range) => {
-        pendingReveal = range ?? undefined
-        revealSelection()
-      },
-    ),
-  )
-
-  const notify = (done?: VoidFunction) => {
-    notifyRendered({
-      viewer,
-      isReady: (root) => root.querySelector("[data-line]") != null,
-      settleFrames: 1,
-      onReady: () => {
-        done?.()
-        viewer.reapplySelection()
-        revealSelection()
-        viewer.find.refresh({ reset: true })
-        local.onRendered?.()
-      },
-    })
-  }
-
   useSearchHandle({
     search: () => local.search,
     find: viewer.find,
   })
 
-  // -- render instance --
+  const cacheKey = (contents: string) =>
+    large() ? sampledChecksum(contents) : sampledChecksum(contents, contents.length)
 
-  createEffect(() => {
-    const opts = options()
-    // Worker render options override per-viewer options, including the large-file fallback.
-    const workerPool = getWorkerPool(large() ? "none" : "word-line")
-    const virtualizer = virtuals.get()
+  const target = (): ViewerTarget => {
+    if (local.fileDiff) return { kind: "diff-patch", fileDiff: local.fileDiff }
 
-    if (virtualizer && !poolReady(workerPool)) return
-    const beforeContents = local.before?.contents ?? ""
-    const afterContents = local.after?.contents ?? ""
-    const done = preserve(viewer)
+    if (!local.before || !local.after) return { kind: "diff-empty" }
 
-    onCleanup(done)
-
-    const cacheKey = (contents: string) => {
-      if (!large()) return sampledChecksum(contents, contents.length)
-
-      return sampledChecksum(contents)
+    return {
+      kind: "diff-files",
+      before: { ...local.before, cacheKey: cacheKey(local.before.contents) },
+      after: { ...local.after, cacheKey: cacheKey(local.after.contents) },
     }
+  }
 
-    const before = local.before
-      ? { ...local.before, contents: beforeContents, cacheKey: cacheKey(beforeContents) }
-      : undefined
+  // Cleanups run in reverse, so the instance is cleaned up before it releases the shared virtualizer.
+  onCleanup(() => virtuals.cleanup())
 
-    const after = local.after
-      ? { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) }
-      : undefined
+  // Pierre beta virtualized instances retain their first diff target and resolve separator metrics at construction.
+  // Plain timeline diffs keep the instance as content streams; virtualized viewers reset only when that is unsafe.
+  render = useViewerRender({
+    viewer,
+    options,
+    request: () => {
+      // Worker render options override per-viewer options, including the large-file fallback.
+      const workerPool = getWorkerPool(large() ? "none" : "word-line")
+      const virtualizer = virtuals.get()
+      const next = target()
 
-    const targetChanged =
-      local.fileDiff !== undefined
-        ? instanceFileDiff !== local.fileDiff
-        : instanceFileDiff !== undefined ||
-          before === undefined ||
-          after === undefined ||
-          instanceBefore === undefined ||
-          instanceAfter === undefined ||
-          !areFilesEqual(instanceBefore, before) ||
-          !areFilesEqual(instanceAfter, after)
+      return {
+        spec: {
+          virtualizer,
+          workerPool,
+          hunkSeparators: virtualizer ? options().hunkSeparators : undefined,
+          target: next,
+        },
+        pool: readPoolState(workerPool),
+        settleFrames: 1,
+        preserveHeight: true,
+        expectsRows: diffExpectsRows(next, options().expandUnchanged),
+      }
+    },
+    create: (spec, opts) =>
+      spec.virtualizer
+        ? new VirtualizedFileDiff<T>(opts, spec.virtualizer, virtualMetrics, spec.workerPool)
+        : new FileDiff<T>(opts, spec.workerPool),
+    update: (instance, opts) => {
+      const forceRender = !areOptionsEqual(instance.options, opts)
+      instance.setOptions(opts)
 
-    // Pierre beta virtualized instances retain their first diff target and resolve separator metrics at construction.
-    // Plain timeline diffs can retain the instance as content streams; virtualized viewers reset only when that is unsafe.
-    const reset =
-      instance !== undefined &&
-      (instanceVirtualizer !== virtualizer ||
-        instanceWorkerPool !== workerPool ||
-        (virtualizer !== undefined && (instanceVirtualHunkSeparators !== opts.hunkSeparators || targetChanged)))
-
-    const forceRender = !reset && instance !== undefined && !areOptionsEqual(instance.options, opts)
-
-    renderViewer({
-      viewer,
-      current: instance,
-      reset,
-      create: () =>
-        virtualizer
-          ? new VirtualizedFileDiff<T>(opts, virtualizer, virtualMetrics, workerPool)
-          : new FileDiff<T>(opts, workerPool),
-      update: (value) => value.setOptions(opts),
-      assign: (value) => {
-        instance = value
-        instanceVirtualizer = virtualizer
-        instanceWorkerPool = workerPool
-        instanceVirtualHunkSeparators = virtualizer ? opts.hunkSeparators : undefined
-        instanceFileDiff = local.fileDiff
-        instanceBefore = before
-        instanceAfter = after
-      },
-      draw: (value) => {
-        if (local.fileDiff) {
-          value.render({
-            fileDiff: local.fileDiff,
-            forceRender,
-            lineAnnotations: [],
-            containerWrapper: viewer.container,
-          })
-
-          return
-        }
-
-        if (!before || !after) return
-
-        value.render({
-          oldFile: before,
-          newFile: after,
+      return forceRender
+    },
+    draw: (instance, spec, forceRender) => {
+      if (spec.target.kind === "diff-patch") {
+        instance.render({
+          fileDiff: spec.target.fileDiff,
           forceRender,
           lineAnnotations: [],
           containerWrapper: viewer.container,
         })
-      },
-      onReady: () => notify(done),
-    })
-  })
 
-  useAnnotationRerender<DiffLineAnnotation<T>>({
-    viewer,
-    current: () => instance,
+        return
+      }
+
+      if (spec.target.kind !== "diff-files") return
+
+      instance.render({
+        oldFile: spec.target.before,
+        newFile: spec.target.after,
+        forceRender,
+        lineAnnotations: [],
+        containerWrapper: viewer.container,
+      })
+    },
+    isReady: (root) => root.querySelector("[data-line]") != null,
     annotations: () => local.annotations ?? [],
+    applyAnnotations: (instance) => {
+      instance.setLineAnnotations(local.annotations ?? [])
+      instance.rerender()
+    },
+    commentedLines: () => local.commentedLines ?? [],
+    markCommented: markCommentedDiffLines,
+    // A virtualized diff only renders rows near the viewport, so jumping to a selection must scroll it into range.
+    reveal: (instance, spec, range) => {
+      const virtualizer = spec.virtualizer
+
+      if (!(instance instanceof VirtualizedFileDiff) || !virtualizer) return true
+
+      const position = instance.getLinePosition(Math.min(range.start, range.end), range.side)
+      const root = virtualizer.getRoot()
+
+      // Keep the request until the diff has a layout to measure; the next ready draw retries it.
+      if (!position || !root) return false
+
+      const top = virtualizer.getOffsetInScrollContainer(viewer.container) + position.top
+      const scrollTop = virtualizer.getScrollTop()
+      const height = root instanceof Document ? window.innerHeight : root.clientHeight
+
+      if (top < scrollTop || top + position.height > scrollTop + height) virtualizer.scrollTo({ top: top - height / 2 })
+
+      return true
+    },
+    onRendered: () => local.onRendered?.(),
   })
 
-  // -- cleanup --
-
-  onCleanup(() => {
-    instance?.cleanUp()
-    instance = undefined
-    instanceVirtualizer = undefined
-    instanceWorkerPool = undefined
-    instanceVirtualHunkSeparators = undefined
-    instanceFileDiff = undefined
-    instanceBefore = undefined
-    instanceAfter = undefined
-    virtuals.cleanup()
-  })
+  createEffect(
+    on(
+      () => local.selectedLines,
+      (range) => render.requestReveal(range ?? undefined),
+    ),
+  )
 
   return <ViewerShell mode="diff" viewer={viewer} class={local.class} classList={local.classList} />
 }

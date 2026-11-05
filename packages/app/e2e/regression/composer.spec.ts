@@ -681,8 +681,15 @@ test("an opened session in another Location names its model from a loaded catalo
       }),
     )
 
+    // A click before the catalog loads waits for it, and Escape gives up the wait, so the dialog cannot pop up later.
+    await control.click()
+    await expect(control).toHaveAttribute("aria-busy", "true")
+    await page.keyboard.press("Escape")
+    await expect(control).not.toHaveAttribute("aria-busy")
+
     // A click before the catalog loads opens the dialog once it does.
     await control.click()
+    await expect(control).toHaveAttribute("aria-busy", "true")
     held.release()
     await Promise.all(loaded)
     await expect(page.getByRole("dialog")).toBeVisible()

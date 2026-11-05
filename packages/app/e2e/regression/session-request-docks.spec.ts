@@ -210,6 +210,49 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
 
+test("sends one permission reply and closes the dock when it lands, before permission.replied", async ({ page }) => {
+  await mockServer(page, {
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "shell",
+          patterns: ["git status"],
+          metadata: {},
+          always: [],
+        },
+      ],
+    },
+  })
+  const replies: unknown[] = []
+  const released = Promise.withResolvers<void>()
+  // Answers without the `permission.replied` event the server also publishes, so only the reply can close the dock.
+  await page.route(/\/api\/session\/ses_request_docks\/permission\/permission-request\/reply/, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    replies.push(route.request().postDataJSON())
+    await released.promise
+    await route.fulfill({ status: 204 })
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const actions = permission.locator('[data-slot="permission-footer-actions"]')
+  await permission.getByRole("button", { name: "Allow once" }).dblclick()
+  await expect.poll(() => replies.length).toBe(1)
+
+  for (const name of ["Deny", "Allow always", "Allow once"])
+    await expect(actions.getByRole("button", { name, exact: true })).toBeDisabled()
+
+  released.resolve()
+  await expect(permission).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toBeVisible()
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+  expect(replies).toEqual([{ decision: "once" }])
+})
+
 test("names the MCP tool, the hook's message and the full input in the permission dock", async ({ page }) => {
   const body = "x".repeat(3000)
   await mockServer(page, {

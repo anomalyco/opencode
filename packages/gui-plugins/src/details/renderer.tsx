@@ -4,6 +4,7 @@ import type Details from "./index"
 import { DetailsHeader, type DetailsMenus } from "./popover"
 import { BuiltinSlot, onIdle } from "@opencode/plugin/gui/builtin"
 import type { McpControllers } from "./server-panel"
+import type { WorkspaceMoveControllers } from "./workspace-menu"
 
 const setup: Plugin.Setup<typeof Details> = (ctx) => {
   const sessions = ctx.sessions
@@ -11,6 +12,8 @@ const setup: Plugin.Setup<typeof Details> = (ctx) => {
   const menus: DetailsMenus = new Set()
   // MCP toggles and error dialogs outlive the popover or drawer that started them.
   const mcp: McpControllers = new Map()
+  // Moves and their recovery dialogs outlive the location menu, which closes when the user picks a destination.
+  const moves: WorkspaceMoveControllers = new Map()
 
   const DetailsPanel = lazy(() =>
     Promise.all([import("./panel"), import("./details.css?inline")]).then(([panel, css]) => {
@@ -53,7 +56,7 @@ const setup: Plugin.Setup<typeof Details> = (ctx) => {
     at: "session.location.workspace",
     render: (input) => (
       <Suspense>
-        <LocationWorkspace {...input} />
+        <LocationWorkspace {...input} moves={moves} />
       </Suspense>
     ),
   })

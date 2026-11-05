@@ -672,6 +672,64 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(panel.getByText("contents:frontend/app.ts", { exact: true })).toBeVisible()
 })
 
+test("the file tree follows a folder the review closes and lists a recreated folder's files", async ({ page }) => {
+  const directory = "C:/OpenCode/TreeFollow"
+  const disk = { src: true }
+
+  const workspace = await openSession(page, {
+    name: "TreeFollow",
+    vcsDiff: [fileDiff("src/a.ts")],
+    fileList: (path) => {
+      if (!disk.src) return path ? [] : [fileNode(directory, "README.md")]
+
+      if (path === "src") return [fileNode(directory, "src/a.ts")]
+
+      return path ? [] : [fileNode(directory, "src", "directory"), fileNode(directory, "README.md")]
+    },
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_treefollow: { review: true } },
+      storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: true } },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
+  // Only the selected tab's tree is visible; the file browser stays mounted, hidden, behind the review.
+  const folder = panel.getByRole("treeitem", { name: "src" })
+  const file = panel.getByRole("treeitem", { name: "a.ts" })
+
+  await openReviewLauncher(panel)
+  await expect(file).toBeVisible()
+  await openFileLauncher(panel)
+  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toBeVisible()
+
+  // The review shares the workspace's folders: closing one there closes it in the file browser too.
+  await panel.locator("#session-side-panel-review-tab").click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await tab("Open file").click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await expect(file).toHaveCount(0)
+
+  // A deleted folder takes its files with it, so they show again once it is recreated and opened.
+  await folder.click()
+  await expect(file).toBeVisible()
+  disk.src = false
+  await workspace.push([filesystemEvent(directory, "src", "unlink")])
+  await expect(folder).toHaveCount(0)
+  disk.src = true
+  await workspace.push([filesystemEvent(directory, "src", "add")])
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(file).toBeVisible()
+})
+
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
   // Enough lines to scroll the code view, ending in the draft's name.
   const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
