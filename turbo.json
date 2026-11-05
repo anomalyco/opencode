@@ -23,6 +23,9 @@
     "typecheck:tsc": {
       "dependsOn": ["transit"]
     },
+    "@opencode/client-core#typecheck:tsc": {
+      "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
+    },
     "@opencode/cli#typecheck:tsc": {
       "dependsOn": ["transit", "@opencode/core#typecheck:tsc"]
     },

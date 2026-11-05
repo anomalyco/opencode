@@ -196,6 +196,21 @@
         "solid-js",
       ],
     },
+    "packages/client-core": {
+      "name": "@opencode/client-core",
+      "version": "2.2.5",
+      "dependencies": {
+        "@opencode/core": "workspace:*",
+        "@opencode/schema": "workspace:*",
+        "@opencode/util": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+      },
+    },
     "packages/codemode": {
       "name": "@opencode/codemode",
       "version": "2.2.5",
@@ -1920,6 +1935,8 @@
     "@opencode/cli": ["@opencode/cli@workspace:packages/cli"],
 
     "@opencode/client": ["@opencode/client@workspace:packages/client"],
+
+    "@opencode/client-core": ["@opencode/client-core@workspace:packages/client-core"],
 
     "@opencode/codemode": ["@opencode/codemode@workspace:packages/codemode"],
 

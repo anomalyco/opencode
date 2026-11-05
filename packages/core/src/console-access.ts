@@ -73,10 +73,14 @@ const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 
-/** The Console's config document. `library` decodes where it's used, so a malformed one can't drop its policies. */
+/**
+ * The Console's config document. `library` and `telemetry` decode where they're used, so a malformed one can't drop
+ * its policies.
+ */
 export const Config = Schema.Struct({
   ...ConfigIntegration.Remote.fields,
   library: Schema.Unknown.pipe(Schema.optional),
+  telemetry: Schema.Unknown.pipe(Schema.optional),
 })
 export type Config = typeof Config.Type
 
@@ -164,6 +168,15 @@ export function refresh(http: HttpClient.HttpClient, credential: Credential.OAut
             },
     }
   })
+}
+
+/** Ends a device sign-in's whole session (RFC 7009). The Console answers success even for unknown tokens. */
+export function revoke(http: HttpClient.HttpClient, credential: Credential.OAuth, clientID: string) {
+  return send(http, `${server(credential)}/auth/oauth/revoke`, {
+    token: credential.refresh,
+    token_type_hint: "refresh_token",
+    client_id: clientID,
+  }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk), Effect.scoped, Effect.timeout(Duration.seconds(5)))
 }
 
 /** The credential's workspace config, or `undefined` when the Console serves none for it. */
