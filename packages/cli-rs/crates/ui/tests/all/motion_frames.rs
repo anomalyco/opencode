@@ -172,6 +172,24 @@ fn a_dropped_spinner_stops_its_timer() {
 }
 
 #[test]
+fn a_hidden_spinner_requests_no_frames_until_shown() {
+    let app = test_app(12);
+    let row = View::new(&app).visible(false);
+    let spinner = Spinner::new(&app).label("Working");
+    row.add(&spinner);
+    app.root().add(&row);
+    app.render();
+    app.advance(Duration::from_millis(80));
+    app.render();
+    app.advance(Duration::from_millis(400));
+    assert!(!app.needs_frame(), "a hidden spinner keeps time without drawing");
+    row.visible(true);
+    assert_eq!((spinner.frame(), app.render().text()), (6, "⠦ Working".to_owned()));
+    app.advance(Duration::from_millis(80));
+    assert!(app.needs_frame(), "a shown spinner redraws on its interval again");
+}
+
+#[test]
 fn fade_in_settles_and_a_disabled_fade_shows_at_once() {
     let app = test_app(16);
     app.root().add(&FadeInText::new(&app, "Welcome back").fg(MUTED).enabled(false));
