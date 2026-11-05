@@ -869,3 +869,32 @@ fn optional_id(value: &str, active: Option<TerminalId>) -> Result<TerminalId> {
         parse_id(value)
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discover_rejects_another_protocol_version() {
+        let directory = env::temp_dir().join(format!(
+            "opencode-pty-client-{:032x}",
+            rand::random::<u128>()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join(crate::daemon::REGISTRATION_FILE),
+            serde_json::to_vec(&serde_json::json!({
+                "instance_id": "old", "pid": 1, "protocol": 7,
+                "socket": directory.join("missing.sock"), "token": "t", "features": ["rename"],
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let error = TerminalClient::discover(&directory).err().unwrap();
+        let _ = std::fs::remove_dir_all(&directory);
+        assert_eq!(
+            error.to_string(),
+            "opencode-pty protocol mismatch: service=7, client=8"
+        );
+    }
+}

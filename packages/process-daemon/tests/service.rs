@@ -370,9 +370,12 @@ fn foreground_process_tracks_deepest_tty_attached_job() {
             Instant::now() < deadline,
             "timed out waiting for foreground process"
         );
-        service
-            .list(ProcessMode::Pty)
+        // `get` refreshes the foreground process like `list` does.
+        let info = service
+            .get(terminal.id)
             .expect("foreground process refreshed");
+        assert_eq!(info.mode, ProcessMode::Pty);
+        assert!(info.pipe.is_none());
         match controller.events.recv_timeout(Duration::from_millis(50)) {
             Ok(StreamEvent::ForegroundProcessChanged {
                 process: Some(process),
