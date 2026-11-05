@@ -47,6 +47,13 @@ import {
   type StoryArgs,
   type StoryModule,
 } from "./catalog"
+import {
+  createLabStageState,
+  labStageView,
+  transitionLabStage,
+  type LabStageEffect,
+  type LabStageEvent,
+} from "./machine"
 import { applyMotionPatch, motionFields, motionScopes, motionValues, sameMotion, storyMotion } from "./motion"
 
 // How long Play holds each state at full speed. Slow motion doubles it while the motion itself runs 4× longer, so
@@ -323,33 +330,60 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
   const fields = labFields(entry)
   const names = entry.states.map((state) => state.name)
   const [args, setArgs] = createStore<StoryArgs>(stateArgs(entry, 0))
-  const [index, setIndex] = createSignal(0)
+  const [stageState, setStageState] = createSignal(createLabStageState(names))
+  const view = createMemo(() => labStageView(stageState()))
   const [canvas, setCanvas] = createSignal<HTMLDivElement>()
+  const [panel, setPanel] = createSignal<HTMLElement>()
   const component = entry.component
   const fallback = component && ((values: StoryArgs) => <Dynamic component={component} {...values} />)
   // Switching to a state that shares the current render function keeps the mounted instance, so its transitions play.
-  const render = () => entry.states[index()]?.render ?? entry.render ?? fallback
+  const render = () => entry.states[view().index]?.render ?? entry.render ?? fallback
   let timer: ReturnType<typeof setTimeout> | undefined
-  // The state Play is moving to. Any other change is a hand's, and a hand's change stops Play.
-  let advancing: number | undefined
 
   // A state is a variant: its chip, a digit, `[` and `]` and Play all apply it, so the panel shows where it is.
   const preset = (next: number): void => store.preset(next === 0 ? "default" : (names[next] ?? "default"))
 
-  const step = (by: number) => preset((index() + by + names.length) % names.length)
+  // One batch, so a state with its own render function never renders with the previous state's args.
+  const dispatch = (event: LabStageEvent) =>
+    batch(() => {
+      const next = transitionLabStage(untrack(stageState), event)
+      setStageState(next.state)
+      next.effects.forEach(perform)
+    })
 
-  const pause = () => clearTimeout(timer)
+  const perform = (effect: LabStageEffect) => {
+    if (effect.type === "timer.schedule") {
+      clearTimeout(timer)
+      timer = setTimeout(
+        () => dispatch({ type: "tick", attempt: effect.attempt }),
+        (hold * (motionGlobals.slow.value ? 2 : 1)) / motionGlobals.speed.value,
+      )
 
-  const play = () => {
-    clearTimeout(timer)
-    timer = setTimeout(
-      () => {
-        advancing = (index() + 1) % names.length
-        preset(advancing)
-        play()
-      },
-      (hold * (motionGlobals.slow.value ? 2 : 1)) / motionGlobals.speed.value,
-    )
+      return
+    }
+
+    if (effect.type === "timer.clear") return clearTimeout(timer)
+
+    if (effect.type === "state.apply") {
+      setArgs(reconcile(stateArgs(entry, effect.index)))
+
+      if (effect.preset === "now") preset(effect.index)
+
+      // Undo or a reset moved the state: bring the other knobs to the state's args too.
+      if (effect.preset === "later")
+        queueMicrotask(() => {
+          if (untrack(stageState).status !== "disposed") preset(effect.index)
+        })
+
+      return
+    }
+
+    // Coalesced: a story registers its replay buttons one by one.
+    if (effect.type === "motion.queue") return queueMicrotask(() => dispatch({ type: "motion.flushed" }))
+    const next = storyMotion(entry.motion)
+
+    if (!sameMotion(next, motion)) return setShown(next)
+    store.sync(motionValues(motion))
   }
 
   const [first, ...rest] = names
@@ -365,15 +399,15 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
                 id: "previous",
                 label: language.t("lab.previous"),
                 icon: "M200 48 80 128l120 80ZM48 48h16v160H48Z",
-                run: () => step(-1),
+                run: () => dispatch({ type: "step", delta: -1 }),
               },
-              { id: "play", label: language.t("lab.play"), icon: "play", run: play },
-              { id: "pause", label: language.t("lab.pause"), icon: "pause", run: () => clearTimeout(timer) },
+              { id: "play", label: language.t("lab.play"), icon: "play", run: () => dispatch({ type: "play" }) },
+              { id: "pause", label: language.t("lab.pause"), icon: "pause", run: () => dispatch({ type: "pause" }) },
               {
                 id: "next",
                 label: language.t("lab.next"),
                 icon: "M56 48l120 80-120 80ZM192 48h16v160h-16Z",
-                run: () => step(1),
+                run: () => dispatch({ type: "step", delta: 1 }),
               },
             ],
             { labels: false },
@@ -407,23 +441,11 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
           applyMotionPatch(motion, patch)
 
           if (!("state" in patch)) {
-            if (meta.source !== "preset") pause()
+            if (meta.source !== "preset") dispatch({ type: "pause" })
 
             return setArgs(Object.fromEntries(Object.entries(patch).filter(([key]) => key in fields)))
           }
-
-          // One batch, so a state with its own render function never renders with the previous state's args.
-          const next = Math.max(0, names.indexOf(String(values.state)))
-
-          if (next !== advancing) pause()
-          advancing = undefined
-          batch(() => {
-            setArgs(reconcile(stateArgs(entry, next)))
-            setIndex(next)
-          })
-
-          // Undo or a reset moved the state: bring the other knobs to the state's args too.
-          if (meta.source !== "preset") queueMicrotask(() => preset(next))
+          dispatch({ type: "panel.state", name: String(values.state), fromPreset: meta.source === "preset" })
         },
       },
     )
@@ -443,30 +465,34 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
         session: false,
         empty: language.t("lab.noControls"),
         hints: { digits: "always" },
+        onReady: (handle) => setPanel(handle.element),
       }),
     )
 
-    // A rebuild stays on the state it was showing.
-    if (rest.length > 0) untrack(() => preset(index()))
+    // A rebuild stays on the state it was showing, and its fresh knobs show that state's args.
+    if (rest.length > 0)
+      untrack(() => {
+        setArgs(reconcile(stateArgs(entry, view().index)))
+        preset(view().index)
+      })
   })
 
-  // Coalesced: a story registers its replay buttons one by one.
-  let queued = false
-  onCleanup(
-    motionTuning.subscribe(() => {
-      if (queued) return
-      queued = true
-      queueMicrotask(() => {
-        queued = false
-        const next = storyMotion(entry.motion)
+  // Toolbar items take a fixed `disabled`, so the buttons follow Play here, again whenever the panel mounts.
+  createEffect(() => {
+    const element = panel()
+    const stage = view()
+    const button = (id: string) =>
+      element?.querySelector<HTMLButtonElement>(`[data-field="play"] button[data-item="${id}"]`)
+    const play = button("play")
+    const pause = button("pause")
 
-        if (!sameMotion(next, motion)) return setShown(next)
-        store.sync(motionValues(motion))
-      })
-    }),
-  )
+    if (play) play.disabled = !stage.canPlay
 
-  onCleanup(() => clearTimeout(timer))
+    if (pause) pause.disabled = !stage.canPause
+  })
+
+  onCleanup(motionTuning.subscribe(() => dispatch({ type: "motion.changed" })))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   makeEventListener(window, "keydown", (event) => {
     const digit = Number(event.key)
@@ -475,7 +501,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
 
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return
     event.preventDefault()
-    preset(digit - 1)
+    dispatch({ type: "select", index: digit - 1 })
   })
 
   return (
@@ -485,7 +511,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
       ref={setCanvas}
       class="flex size-full overflow-auto bg-v2-background-bg-base [contain:layout]"
       classList={{ "items-center justify-center p-8": !entry.fullscreen, "flex-col": entry.fullscreen }}
-      onPointerDown={pause}
+      onPointerDown={() => dispatch({ type: "pause" })}
     >
       <Workspace>
         <Plugin file={entry.file}>
