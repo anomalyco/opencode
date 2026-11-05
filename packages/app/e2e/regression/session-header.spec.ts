@@ -715,6 +715,46 @@ test.describe("revert", () => {
     await expect(prompt).toHaveText("Unsent draft")
   })
 
+  test("a second /undo before the staged event rewinds one prompt further, and /redo retires the toast", async ({
+    page,
+  }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+    const { session, editor } = await openSession(page, { ...workspace, onRevertStage: (input) => staged.push(input) })
+    const prompt = page.getByRole("textbox", { name: "Prompt" })
+    const undoToast = page.getByRole("button", { name: "Undo", exact: true })
+
+    const slash = async (command: string) => {
+      await editor.press("ControlOrMeta+a")
+      await editor.press("Backspace")
+      await editor.pressSequentially(`/${command}`)
+      await expect(
+        page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]'),
+      ).toContainText(`/${command}`)
+      await editor.press("Enter")
+    }
+
+    // The mock server never sends session.revert.staged, so each step must build on the last request's result.
+    await slash("undo")
+    await expect(prompt).toHaveText("Second prompt")
+    await expect(undoToast).toBeVisible()
+    await slash("undo")
+    await expect(prompt).toHaveText("First prompt")
+    expect(staged).toEqual([
+      { sessionID: session.id, messageID: "msg_second" },
+      { sessionID: session.id, messageID: "msg_first" },
+    ])
+
+    const cleared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === `/api/session/${session.id}/revert`,
+    )
+
+    await slash("redo")
+    expect((await cleared).ok()).toBe(true)
+    await expect(undoToast).toHaveCount(0)
+  })
+
   test("Undo after switching tabs restages the earlier revert in the Session it came from", async ({ page }) => {
     const staged: { sessionID: string; messageID: string }[] = []
     const cleared: string[] = []

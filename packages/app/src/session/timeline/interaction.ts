@@ -1,4 +1,3 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
@@ -121,8 +120,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     return list.filter((item) => item.top <= line).at(-1)?.id ?? list[0]?.id ?? cursorMessageID(untrack(cursor.state))
   }
 
-  const setActiveMessage = (message: SessionMessageUser | undefined) =>
-    cursor.dispatch({ type: "message.select", messageID: message?.id, following: untrack(follow.following) })
+  const setActiveMessage = (messageID: string | undefined) =>
+    cursor.dispatch({ type: "message.select", messageID, following: untrack(follow.following) })
 
   const jumpThreshold = (element: HTMLDivElement) => Math.max(400, element.clientHeight)
 
