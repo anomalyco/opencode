@@ -33,9 +33,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
   const project = () => data.project.get(props.projectID)
 
   const [machine, setMachine] = createSignal(
-    createLocationMissingState(
-      untrack(() => server.ctx.sync.worktrees.cached(props.projectID) ?? project()?.worktrees ?? []),
-    ),
+    createLocationMissingState(untrack(() => server.ctx.sync.worktrees.cached(props.projectID) ?? [])),
   )
 
   const view = createMemo(() => selectLocationMissingView(machine(), props.directory))

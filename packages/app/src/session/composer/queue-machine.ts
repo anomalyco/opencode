@@ -729,7 +729,7 @@ function withActive(state: Mutating, active: ActiveOperation): QueueState {
   return isConcurrent(active) ? { ...state, active } : state
 }
 
-function closeEdit(state: Extract<QueueState, { edit: ActiveEdit }>): QueueState {
+function closeEdit(state: Extract<QueueState, { edit: ActiveEdit }>): LiveQueueState {
   const base = { seq: state.seq, items: state.items, gone: state.gone, moved: state.moved }
 
   if (state.status === "editing") return { ...base, status: "idle" }
