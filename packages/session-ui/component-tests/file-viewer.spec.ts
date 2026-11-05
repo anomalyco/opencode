@@ -119,6 +119,19 @@ story("does not end a drag that a fast second press replaced", async ({ mount, p
   await expect.poll(ends).toEqual([{ start: 10, end: 12 }])
 })
 
+story("releases the pinned height when a diff becomes empty", async ({ mount, page }) => {
+  await mount("components-markdown--compact-result")
+  await page.evaluate(async (fixture) => (await import(fixture)).mountChangingDiff(40), fixture)
+  const root = page.getByTestId("file-viewer-fixture")
+  await expect(root.locator('[data-line-type="change-addition"]').first()).toBeVisible()
+  const pinned = () => page.evaluate(async (fixture) => (await import(fixture)).controls.pinnedHeight(), fixture)
+  await expect.poll(pinned).toBe("")
+
+  await page.evaluate(async (fixture) => (await import(fixture)).controls.clearDiff(), fixture)
+  await expect(root.locator('[data-line-type="change-addition"]')).toHaveCount(0)
+  await expect.poll(pinned).toBe("")
+})
+
 story("scrolls a virtualized diff to an off-screen selection", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountDiffViewer(480), fixture)
