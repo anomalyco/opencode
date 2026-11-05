@@ -13,7 +13,7 @@
     "validate": "bun script/validate-links.ts",
     "test": "bun --cwd site test",
     "typecheck": "astro check && bun --cwd site check --no-script",
-    "typecheck:tsc": "astro check && bun --cwd site x tsc --noEmit"
+    "typecheck:tsc": "astro check && tsc -p site --noEmit"
   },
   "dependencies": {
     "@astrojs/mdx": "7.0.5",

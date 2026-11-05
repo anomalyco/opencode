@@ -50,6 +50,8 @@ describe("legacy redirects", () => {
     const stats = get("/stats/models", { search: "?range=7d", method: "POST", locale: "de" })
     expect(stats?.status).toBe(308)
     expect(stats?.headers.get("Location")).toBe("/data/models?range=7d")
+    expect(get("/stats")?.headers.get("Location")).toBe("/data")
+    expect(get("/stats/")?.headers.get("Location")).toBe("/data/")
     expect(get("/statsig")).toBeUndefined()
     const share = get("/s/abc123")
     expect(share?.status).toBe(301)
