@@ -742,8 +742,8 @@ impl Writer {
         }
     }
 
-    /// Markdown for assistant text, and for code bodies in Markdown such as reasoning. Code in other languages is
-    /// M.4's (tool output); it renders as Markdown text here.
+    /// Markdown for assistant text, and for code bodies in Markdown such as reasoning. Code in other languages (an
+    /// unknown tool's metadata as JSON) renders as Markdown text too (`parity/deviations/M06-mini-output.md`).
     fn markdown(&self, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
         let app = self.scrollback.app();
         let theme = &self.theme;
