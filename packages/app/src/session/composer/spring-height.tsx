@@ -354,7 +354,7 @@ export function Grow<T>(props: {
   onClosed?: () => void
   children: JSX.Element | ((item: NonNullable<T>) => JSX.Element)
 }) {
-  // Read once, on mount, as a caller may compute it with a side effect (the queue's `appearing.delete(id)`).
+  // Read once, on mount: a row that grows in when it is added does not grow again when it changes.
   const appear = !!props.when && !!props.appear
   let current = createGrowState(!!props.when)
   const [state, setState] = createSignal(current)
