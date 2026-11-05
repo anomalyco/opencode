@@ -8,7 +8,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use opencode_api::client::Client;
 use opencode_api::events::{self, Connection};
-use opencode_api::generated::SessionInfo;
 use opencode_local::cli_config::{CliConfig, Info, Resolved, ThemeMode as ConfigMode};
 use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
@@ -110,10 +109,6 @@ pub struct Tui {
     /// A theme change arrived while a key sequence was pending; remount once it ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
-    /// What keymap conditions and [`crate::dialogs::model::Local`] read, cached at each sync: they run inside
-    /// keymap queries, which may come while the store is locked.
-    has_sessions: Cell<bool>,
-    routed: RefCell<Option<SessionInfo>>,
     connection: RefCell<Option<Connection>>,
     layers: RefCell<Vec<Disposer>>,
     this: Weak<Tui>,
@@ -173,7 +168,6 @@ impl Tui {
             view.root().detach();
         }
         *self.route.borrow_mut() = route.clone();
-        self.cache();
         // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
             crate::features::location::home(self);
@@ -201,7 +195,6 @@ impl Tui {
         if changes.is_empty() {
             return;
         }
-        self.cache();
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &changes);
         }
@@ -211,24 +204,6 @@ impl Tui {
         crate::tabs::sync(self, &changes);
         crate::frame::refresh(self);
         crate::features::attention::program_status::sync(self);
-    }
-
-    fn cache(&self) {
-        let route = self.route();
-        let (has_sessions, routed) = self.data.read(|state| {
-            let routed = match &route {
-                Route::Session { id } => state.session(id).cloned(),
-                _ => None,
-            };
-            (!state.sessions().is_empty(), routed)
-        });
-        self.has_sessions.set(has_sessions);
-        *self.routed.borrow_mut() = routed;
-    }
-
-    /// The routed session as the last sync read it.
-    pub(crate) fn routed(&self) -> Option<SessionInfo> {
-        self.routed.borrow().clone()
     }
 
     /// Syncs the route view with everything, after state outside the store changed.
@@ -373,8 +348,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
             dialogs.clone(),
             toasts.clone(),
             local_files,
-            crate::dialogs::model::route_fn(this.clone()),
-            crate::dialogs::model::location_fn(this.clone()),
+            this.clone(),
         ),
         app: app.clone(),
         data,
@@ -407,8 +381,6 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         painted: RefCell::new(page),
         restyle: Cell::new(false),
         seen: Cell::new(0),
-        has_sessions: Cell::new(false),
-        routed: RefCell::new(None),
         connection: RefCell::new(None),
         layers: RefCell::new(Vec::new()),
         this: this.clone(),
@@ -420,7 +392,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     // (terminal support, the client MCP) can arrive before mount ends. TS subscribes synchronously during mount, before
     // its event stream yields anything.
     crate::features::events::install(&tui);
-    install_wakeups(&tui, deps.events);
+    let wakeups = install_wakeups(&tui, deps.events);
     crate::tabs::install(&tui);
     crate::terminal::install(&tui);
     crate::client_mcp::install(&tui);
@@ -445,9 +417,8 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     tui.navigate(deps.route);
     // After the first route's reads, as in TS, where they start during mount and the event stream connects later.
     // Otherwise `session.active` can answer first and read again the running sessions the route's family read brings.
-    if deps.events {
-        connect(&tui);
-    }
+    let status = deps.events.then(|| connect(&tui));
+    pump(&tui, wakeups, status);
     crate::features::highlights::install(&tui, deps.continue_);
     crate::features::devtools::mount(&tui, &shell);
     crate::features::startup::run(&tui, deps.continue_);
@@ -553,7 +524,7 @@ fn install_keys(tui: &Rc<Tui>) {
             .title("Switch session")
             .group("Session")
             .palette()
-            .suggested(has_sessions(&tui.weak()))
+            .suggested(any_session(&tui.weak()))
             .slash(slash("sessions", &["resume", "continue"])),
         command("session.new", |tui| crate::features::clear::clear(tui, false))
             .title("New session")
@@ -649,8 +620,16 @@ fn install_theme(tui: &Rc<Tui>) {
     );
 }
 
-/// Wakes the UI on store flushes and connection changes, one queued wake at a time.
-fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
+/// The store's flushes and signals, subscribed before anything can flush or signal, until [`pump`] forwards them.
+struct Wakeups {
+    revisions: tokio::sync::watch::Receiver<u64>,
+    signals: tokio::sync::broadcast::Receiver<opencode_api::generated::V2Event>,
+    /// A [`DataChanged`] is queued.
+    pending: Arc<AtomicBool>,
+}
+
+/// Handles the wakes on the UI thread and subscribes to the store.
+fn install_wakeups(tui: &Rc<Tui>, connect: bool) -> Wakeups {
     let pending = Arc::new(AtomicBool::new(false));
     let clear = pending.clone();
     let weak = tui.weak();
@@ -665,36 +644,63 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
         &tui, state
     )));
 
-    let proxy = tui.app.proxy();
-    let mut revisions = tui.data.subscribe();
-    tui.app.runtime().spawn(async move {
-        while revisions.changed().await.is_ok() {
-            if !pending.swap(true, Ordering::SeqCst) && proxy.send(DataChanged).is_err() {
-                return;
-            }
-        }
-    });
-
     // Offline until the connection reports connected, so reads behind `refresh` wait for it as in TS.
     if connect {
         tui.data.set_online(false);
     }
+    Wakeups { revisions: tui.data.subscribe(), signals: tui.data.signals(), pending }
 }
 
-/// Starts the event connection.
-fn connect(tui: &Rc<Tui>) {
-    let (connection, _task) = opencode_store::connection::connect(&tui.data, events::Options::default());
-    let mut state = connection.watch();
+/// One task forwards store flushes (one queued wake at a time), store signals, and connection changes to the UI.
+fn pump(tui: &Tui, wakeups: Wakeups, mut status: Option<tokio::sync::watch::Receiver<events::State>>) {
+    use tokio::sync::broadcast::error::RecvError;
+    let Wakeups { mut revisions, mut signals, pending } = wakeups;
     let proxy = tui.app.proxy();
     tui.app.runtime().spawn(async move {
+        if let Some(status) = &mut status
+            && proxy.send(StatusChanged(status.borrow_and_update().clone())).is_err()
+        {
+            return;
+        }
         loop {
-            let current = state.borrow_and_update().clone();
-            if proxy.send(StatusChanged(current)).is_err() || state.changed().await.is_err() {
+            let sent = tokio::select! {
+                biased;
+                changed = revisions.changed() => match changed {
+                    Ok(()) => pending.swap(true, Ordering::SeqCst) || proxy.send(DataChanged).is_ok(),
+                    Err(_) => false,
+                },
+                signal = signals.recv() => match signal {
+                    Ok(event) => proxy.send(crate::features::events::Signal(event)).is_ok(),
+                    Err(RecvError::Lagged(skipped)) => {
+                        log::warn!("the UI skipped {skipped} server events");
+                        true
+                    }
+                    Err(RecvError::Closed) => false,
+                },
+                changed = async { status.as_mut()?.changed().await.ok() }, if status.is_some() => match changed {
+                    Some(()) => {
+                        let current = status.as_mut().map(|status| status.borrow_and_update().clone());
+                        current.is_none_or(|current| proxy.send(StatusChanged(current)).is_ok())
+                    }
+                    None => {
+                        status = None;
+                        true
+                    }
+                },
+            };
+            if !sent {
                 return;
             }
         }
     });
+}
+
+/// Starts the event connection and returns its state.
+fn connect(tui: &Rc<Tui>) -> tokio::sync::watch::Receiver<events::State> {
+    let (connection, _task) = opencode_store::connection::connect(&tui.data, events::Options::default());
+    let state = connection.watch();
     *tui.connection.borrow_mut() = Some(connection);
+    state
 }
 
 fn textarea_focused(app: &App, textarea: &Rc<RefCell<Option<Textarea>>>) -> Condition {
@@ -714,9 +720,11 @@ fn route_is_session(tui: &Weak<Tui>) -> Condition {
     }))
 }
 
-fn has_sessions(tui: &Weak<Tui>) -> Condition {
+fn any_session(tui: &Weak<Tui>) -> Condition {
     let weak = tui.clone();
-    Condition::When(Rc::new(move || weak.upgrade().is_some_and(|tui| tui.has_sessions.get())))
+    Condition::When(Rc::new(move || {
+        weak.upgrade().is_some_and(|tui| tui.data.read(|state| !state.sessions().is_empty()))
+    }))
 }
 
 fn slash(name: &str, aliases: &[&str]) -> Slash {

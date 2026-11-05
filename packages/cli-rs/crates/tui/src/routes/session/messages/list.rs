@@ -1019,8 +1019,7 @@ fn terminal(assistant: &SessionMessageAssistant) -> bool {
 
 /// What rows read while they render.
 pub struct Context<'a> {
-    /// Never call into the keymap or `tui.data.read` from a row: the store is locked while rows
-    /// render, and its mutex is not reentrant.
+    /// Rows render under `tui.data.read`; a nested read reuses its guard, and a store write from a row panics.
     pub tui: &'a Tui,
     /// The store, locked while rows render.
     pub state: &'a State,

@@ -275,11 +275,12 @@ fn limit_notice(
     });
     let resets = reset.map_or_else(String::new, |at| format!("Resets {}. ", usage::format_reset(at)));
     let key = Some(cx.keys.model_list.clone().unwrap_or_else(|| "/models".to_owned()));
-    let models = local.models();
-    let name = models
-        .iter()
-        .find(|model| model.provider_id == message.model.provider_id && model.id == message.model.id)
-        .map_or_else(|| message.model.id.clone(), |model| model.name.clone());
+    let name = local.models(|models| {
+        models
+            .iter()
+            .find(|model| model.provider_id == message.model.provider_id && model.id == message.model.id)
+            .map_or_else(|| message.model.id.clone(), |model| model.name.clone())
+    });
     match error.r#type.as_str() {
         "provider.go-limit" => {
             let title = match body.and_then(|body| json_string(body, "limitName")) {

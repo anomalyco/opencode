@@ -16,7 +16,6 @@ use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::model_pref::Model;
 use opencode_local::storage::Storage;
 use opencode_parity::{assert_fixture, fixtures_dir};
-use opencode_store::location::Location;
 use opencode_store::{Data, Options as StoreOptions};
 use opencode_tui::dialogs::go_upsell::{self, Offer};
 use opencode_tui::dialogs::model::{self, Files, Local};
@@ -149,8 +148,7 @@ fn kit(width: u16, height: u16) -> Kit {
         dialogs,
         toasts,
         Some(Files { state: state.path().to_owned(), storage: None }),
-        Rc::new(|| None),
-        Rc::new(|| Location::new("/project")),
+        std::rc::Weak::new(),
     );
     local.load();
     local.load_usage(false);
@@ -160,7 +158,7 @@ fn kit(width: u16, height: u16) -> Kit {
             && local.integrations().is_some()
             && matches!(local.usage(), Some(Some(_)))
             && !local.agents().is_empty()
-            && !local.providers().is_empty()
+            && !local.providers(|providers| providers.is_empty())
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
     Kit { app, local, fixture, _state: state }
@@ -207,7 +205,7 @@ fn usage_dialogs_match_typescript() {
     kit.app.press("down");
     kit.settle("Grok Code");
     assert_fixture(&kit.app.render(), "E.16/usage-down");
-    let sonnet = kit.local.models().into_iter().next().unwrap();
+    let sonnet = kit.local.models(|models| models[0].clone());
     usage_model::show(&kit.local, sonnet);
     kit.settle("remaining");
     assert_fixture(&kit.app.render(), "E.16/usage-model");
