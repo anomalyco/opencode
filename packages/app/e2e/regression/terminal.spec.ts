@@ -373,11 +373,21 @@ test("selected terminal output quotes into the composer", async ({ page }) => {
   await side(page).getByRole("tab", { name: "Build", exact: true }).click()
   const screen = terminalScreen(page, "pty_quote")
   await expect.poll(() => terminalText(page, screen)).toBe("quote-me")
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection", exact: true })
+  await expect(toolbar).toBeVisible()
 
-  await page
-    .getByRole("toolbar", { name: "Quote selection", exact: true })
-    .getByRole("button", { name: "Quote" })
-    .click()
+  // A right click opens a context menu without a pointerup; it neither closes the toolbar nor blocks later reads.
+  await page.locator("body").dispatchEvent("pointerdown", { button: 2 })
+  await page.locator("body").dispatchEvent("contextmenu")
+  await expect(toolbar).toBeVisible()
+
+  // A cancelled touch ends without a pointerup too; the selection it left in place gets its toolbar back.
+  await page.locator("body").dispatchEvent("pointerdown", { button: 0 })
+  await expect(toolbar).toHaveCount(0)
+  await page.locator("body").dispatchEvent("pointercancel")
+  await expect(toolbar).toBeVisible()
+
+  await toolbar.getByRole("button", { name: "Quote" }).click()
   await expect(page.locator('[data-component="composer"]').getByText("quote-me")).toBeVisible()
 })
 

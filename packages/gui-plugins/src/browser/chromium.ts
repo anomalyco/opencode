@@ -26,7 +26,17 @@ import {
   type PickerEffect,
   type PickerEvent,
 } from "./picker-machine"
-import { createProfiling, type Recording } from "./profiling"
+import { createProfiling } from "./profiling"
+import type { SharedTrace } from "./profiling-machine"
+import {
+  createDialogGateState,
+  selectDialog,
+  selectDialogTarget,
+  selectOpenDialog,
+  transitionDialogGate,
+  type DialogGateEvent,
+  type RunStopReason,
+} from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
   allowedDestination,
@@ -42,8 +52,8 @@ import type { PaneElement } from "./ipc"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
-/** State every page of the pane shares: the element ref allocator and the app-wide trace recording. */
-export type Shared = { ref: () => string; recording?: Recording }
+/** State every page of the pane shares: the element ref allocator and the owner of the app-wide trace. */
+export type Shared = { ref: () => string; trace?: SharedTrace }
 
 // Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
 const retainedOperations: readonly Browser.Method[] = [
@@ -137,6 +147,31 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   if (direction === "in") return zoomSteps.find((step) => step > current + 0.001) ?? current
 
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
+}
+
+/** Ends a running command's wait when it is interrupted. */
+type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
+
+/** What a command that stopped, or never started, tells the agent. */
+function runStopError(reason: RunStopReason) {
+  switch (reason) {
+    case "dialog-open":
+      return new Error(
+        'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
+      )
+    case "dialog-interrupted":
+      return new Error(
+        'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
+      )
+    case "cancelled":
+      return new Error(
+        "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
+      )
+    case "closed":
+      return new Error(
+        "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
+      )
+  }
 }
 
 export type BrowserPage = ReturnType<typeof createBrowserPage>
@@ -281,10 +316,9 @@ export function createBrowserPage(
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
-  const dialogs = new Set<() => void>()
-  let dialog: { type: string; message: string; defaultValue: string } | null = null
-  let dialogURL = ""
-  let dialogRevision = 0
+  let dialogGate = createDialogGateState()
+  // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
+  const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, frame.url)
@@ -339,6 +373,23 @@ export function createBrowserPage(
           )
       }
     })
+  }
+
+  const dispatchDialog = (event: DialogGateEvent) => {
+    const next = transitionDialogGate(dialogGate, event)
+    dialogGate = next.state
+    next.effects.forEach((effect) => {
+      if (effect.type === "publish") return publish()
+      const run = runs.get(effect.runID)
+
+      if (!run) return
+      runs.delete(effect.runID)
+
+      if (effect.abort) run.controller.abort()
+      run.interrupted.reject(runStopError(effect.reason))
+    })
+
+    return next.reply
   }
 
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
@@ -489,22 +540,16 @@ export function createBrowserPage(
       }
     })
   })
-  cdp.on("Page.javascriptDialogOpening", (event) => {
-    dialogURL = event.url
-    dialogRevision++
-    dialog = {
-      type: event.type,
+  cdp.on("Page.javascriptDialogOpening", (event) =>
+    dispatchDialog({
+      type: "dialog.opened",
+      url: event.url,
+      dialogType: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
-      defaultValue: event.defaultPrompt ?? "",
-    }
-    dialogs.forEach((reject) => reject())
-    publish()
-  })
-  cdp.on("Page.javascriptDialogClosed", () => {
-    dialogRevision++
-    dialog = null
-    publish()
-  })
+      defaultPrompt: event.defaultPrompt ?? "",
+    }),
+  )
+  cdp.on("Page.javascriptDialogClosed", () => dispatchDialog({ type: "dialog.closed" }))
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
@@ -606,80 +651,31 @@ export function createBrowserPage(
     detail,
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
-      abortError(signal)
+      // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
+      // cancellation that arrives while it still inspects its target interrupts it.
+      const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted })
 
-      if (closed())
-        throw new Error(
-          "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
-        )
-
-      if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
-        await dispatchPicker({ type: "pointer.command" })
-
-      if (dialog && command.action.type !== "dialog")
-        throw new Error(
-          'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
-        )
-
-      if (command.inspect) return { value: await inspect(command.action), files: [] }
-
-      if (command.target && JSON.stringify(await inspect(command.action)) !== JSON.stringify(command.target))
-        throw new Error(
-          "Browser target changed while permission was pending. Take a fresh snapshot or listing and request the action again; it was not executed.",
-        )
-
-      if (
-        command.generation !== undefined &&
-        command.generation !== documentGeneration(documentState) &&
-        !retainedOperations.includes(command.action.type)
-      )
-        throw new Error(
-          "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
-        )
-      const modal = Promise.withResolvers<never>()
-      const cancelled = Promise.withResolvers<never>()
-      // The action underneath the race keeps running after a dialog wins it; it checks this
-      // signal before each further step, so a validation alert on one field stops the rest.
-      // A navigation is left alone: its beforeunload dialog is answered through browser.dialog
-      // and the pending load then proceeds or not.
-      const run = new AbortController()
-
-      const cancel = () => {
-        run.abort()
-        cancelled.reject(
-          new Error(
-            "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
-          ),
-        )
-      }
-
+      if (reply?.status !== "accepted") throw runStopError(reply?.reason ?? "closed")
+      const runID = reply.runID
+      // The action underneath the race keeps running after an interruption wins it; it checks this
+      // signal before each further step.
+      const run = { controller: new AbortController(), interrupted: Promise.withResolvers<never>() }
+      runs.set(runID, run)
+      const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
-      const reject = () => {
-        if (command.action.type !== "navigate") run.abort()
-        modal.reject(
-          new Error(
-            'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
-          ),
-        )
-      }
-
-      if (command.action.type !== "dialog") dialogs.add(reject)
-
       try {
-        return await Promise.race([
-          execute(command.action, command.files, run.signal, command.target),
-          modal.promise,
-          cancelled.promise,
-        ])
+        return await Promise.race([perform(command, run.controller.signal), run.interrupted.promise])
       } finally {
         signal.removeEventListener("abort", cancel)
-        dialogs.delete(reject)
+        runs.delete(runID)
+        dispatchDialog({ type: "run.finished", runID })
       }
     },
     async dispose() {
       if (closed()) return
       dispatch({ type: "disposed" })
+      dispatchDialog({ type: "disposed" })
       void dispatchPicker({ type: "disposed" })
       clearTimeout(pickerTimer)
       detachNetwork?.()
@@ -693,6 +689,30 @@ export function createBrowserPage(
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },
+  }
+
+  async function perform(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+    if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
+      await dispatchPicker({ type: "pointer.command" })
+
+    if (command.inspect) return { value: await inspect(command.action), files: [] }
+
+    if (command.target && JSON.stringify(await inspect(command.action)) !== JSON.stringify(command.target))
+      throw new Error(
+        "Browser target changed while permission was pending. Take a fresh snapshot or listing and request the action again; it was not executed.",
+      )
+
+    if (
+      command.generation !== undefined &&
+      command.generation !== documentGeneration(documentState) &&
+      !retainedOperations.includes(command.action.type)
+    )
+      throw new Error(
+        "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
+      )
+    abortError(signal)
+
+    return execute(command.action, command.files, signal, command.target)
   }
 
   async function execute(
@@ -997,7 +1017,9 @@ export function createBrowserPage(
 
       case "dialog": {
         if (action.action !== "get") {
-          if (!dialog)
+          const open = selectOpenDialog(dialogGate)
+
+          if (!open)
             throw new Error(
               'This tab has no JavaScript dialog to handle. browser.dialog({tabID,action:"get"}) returns null when none is open; continue without accepting or dismissing one.',
             )
@@ -1005,10 +1027,10 @@ export function createBrowserPage(
             accept: action.action === "accept",
             promptText: action.promptText,
           })
-          dialog = null
+          dispatchDialog({ type: "dialog.handled", revision: open.revision })
         }
 
-        return result({ tab: state(), dialog })
+        return result({ tab: state(), dialog: selectDialog(dialogGate) })
       }
 
       case "files.upload":
@@ -1106,10 +1128,7 @@ export function createBrowserPage(
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
     // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
     if (action.type === "dialog")
-      return {
-        resources: [dialog ? dialogURL : contents.getURL()],
-        key: `${documentGeneration(documentState)}:${dialogRevision}:${Boolean(dialog)}`,
-      }
+      return selectDialogTarget(dialogGate, documentGeneration(documentState), contents.getURL())
 
     const fileIDs =
       action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []

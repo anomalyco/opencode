@@ -509,6 +509,40 @@ test.describe("location", () => {
     })
   }
 
+  test("an app launch that never answers releases the Open in controls", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.clock.install()
+
+    const mock = await mockWorkspace(page, {
+      ...workspace,
+      seed: {
+        storage: { ...reviewTabs(worktree, "ses_location"), "opencode.global.dat:plugin.file.app": { app: "vscode" } },
+      },
+    })
+
+    // An editor that does not detach keeps its launch running until the user closes it.
+    await page.goto(
+      `/e2e/utils/windows-menu.html?${new URLSearchParams({
+        server: mock.server,
+        path: sessionHref("ses_location", "sidecar"),
+        os: "macos",
+        openApps: "1",
+        holdOpen: "1",
+      })}`,
+    )
+    await expectSessionTitle(page, "Location session")
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
+    await open.click()
+    await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")
+    await expect(open).toBeDisabled()
+
+    await page.clock.fastForward(10_000)
+    await expect(open).toBeEnabled()
+    await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+  })
+
   test.describe("touch", () => {
     test.use({ hasTouch: true })
 

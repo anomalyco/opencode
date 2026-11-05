@@ -113,22 +113,50 @@ story("paints a still of the page in place of the native view while a resize han
   const visible = await handle.evaluate((element) => {
     const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
     const box = element.getBoundingClientRect()
-    const at = { bubbles: true, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
-    element.dispatchEvent(new MouseEvent("mousedown", { ...at, detail: 1 }))
-    document.dispatchEvent(new MouseEvent("mouseup", at))
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointerup", at))
     const click = read()
-    element.dispatchEvent(new MouseEvent("mousedown", { ...at, detail: 1 }))
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
     const pressed = read()
-    document.dispatchEvent(new MouseEvent("mousemove", { ...at, clientX: at.clientX - 40 }))
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
 
     return { click, pressed, dragging: read() }
   })
 
   expect(visible).toEqual({ click: "true", pressed: "true", dragging: "false" })
   await expect(still).toBeVisible()
-  await page.mouse.up()
+  await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    document.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: box.x, clientY: box.y }),
+    )
+  })
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
+})
+
+story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+
+  // Alt+Tab mid-drag delivers no pointerup; the page must not stay locked behind a still.
+  await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+  })
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(handle).toHaveAttribute("data-dragging", "")
+
+  await handle.evaluate(() => window.dispatchEvent(new FocusEvent("blur")))
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+  await expect(handle).not.toHaveAttribute("data-dragging")
+  expect(await handle.evaluate(() => document.body.style.userSelect)).toBe("")
 })
 
 story("never flies a still of a page the tab has navigated away from", async ({ page }) => {
@@ -609,6 +637,14 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
   await address.press("Enter")
+  await expect(address).not.toBeFocused()
+  await expect(address).toHaveValue("https://example.com/")
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
+
+  // Focusing and leaving the field before the browser reports keeps the submitted address.
+  await address.focus()
+  await expect(address).toHaveValue("https://example.com/")
+  await address.press("Escape")
   await expect(address).not.toBeFocused()
   await expect(address).toHaveValue("https://example.com/")
   await expect(root.getByText("Open a page", { exact: true })).toBeHidden()

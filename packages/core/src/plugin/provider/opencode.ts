@@ -1,8 +1,16 @@
-import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore } from "effect"
+import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import {
+  FetchHttpClient,
+  HttpBody,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+  HttpMethod,
+} from "effect/http"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
@@ -389,17 +397,14 @@ export const OpencodePlugin = define<
               providerID,
             }),
           )
-          const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-            .execute(request)
-            .pipe(
-              Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-              Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
-              Effect.scoped,
-              Effect.timeoutOrElse({
-                duration: Duration.seconds(25),
-                orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
-              }),
-            )
+          const response = yield* follow(http, request).pipe(
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
+            Effect.scoped,
+            Effect.timeoutOrElse({
+              duration: Duration.seconds(25),
+              orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+            }),
+          )
           if (response.providerID !== providerID) {
             return yield* Effect.fail(
               new Error(`OpenCode web search returned provider ${response.providerID} instead of ${providerID}`),
@@ -627,23 +632,79 @@ function organizationName(credential: Credential.Value) {
   return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
 }
 
+const MAX_REDIRECTS = 5
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+// Headers that name or authenticate the caller. They stay with the Console's origin when a redirect leaves it.
+const CREDENTIAL_HEADERS = new Set(["authorization", "cookie", "proxy-authorization", "x-org-id"])
+
+// The Console answers skill downloads with a presigned-storage redirect and web search through a gateway that may
+// redirect too, so a redirect is a normal answer. Following it here, instead of letting fetch follow it, bounds the
+// hops and keeps the connection's credentials from crossing an origin boundary.
+function follow(
+  http: HttpClient.HttpClient,
+  request: HttpClientRequest.HttpClientRequest,
+  redirects = 0,
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError | Error, Scope.Scope> {
+  // Scoped per hop so a caller's timeout or interruption aborts the request in flight.
+  return HttpClient.withScope(http)
+    .execute(request)
+    .pipe(
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+      Effect.flatMap((response) => {
+        const location = response.headers.location
+        if (!REDIRECT_STATUSES.has(response.status) || !location) return HttpClientResponse.filterStatusOk(response)
+        if (redirects >= MAX_REDIRECTS) return Effect.fail(new Error(`Too many redirects (more than ${MAX_REDIRECTS})`))
+        return Effect.flatMap(redirectTarget(request, location), (target) =>
+          // Release this hop's connection before the next request instead of holding it until the download ends.
+          HttpClientResponse.stream(Effect.succeed(response)).pipe(
+            Stream.runDrain,
+            // The redirect's own body is irrelevant, so failing to read it must not fail the download.
+            Effect.ignore,
+            Effect.andThen(follow(http, redirected(request, target, response.status), redirects + 1)),
+          ),
+        )
+      }),
+    )
+}
+
+function redirectTarget(request: HttpClientRequest.HttpClientRequest, location: string) {
+  return Effect.try({
+    try: () => {
+      const target = new URL(location, request.url)
+      if (target.protocol !== "http:" && target.protocol !== "https:")
+        throw new Error(`redirect to unsupported protocol ${target.protocol}`)
+      return target
+    },
+    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+  })
+}
+
+function redirected(request: HttpClientRequest.HttpClientRequest, target: URL, status: number) {
+  // A 303 always, and a 301 or 302 after a POST, become a bodyless GET, as fetch would send them.
+  const get = status === 303 || ((status === 301 || status === 302) && request.method === "POST")
+  const headers =
+    target.origin === new URL(request.url).origin
+      ? request.headers
+      : Object.fromEntries(Object.entries(request.headers).filter(([name]) => !CREDENTIAL_HEADERS.has(name)))
+  // `HttpClientRequest.method` is typed `string`, while `make` only accepts a known method.
+  // The `href` string keeps the location's query exactly as sent: a `URL` would decode and re-encode it,
+  // which breaks a presigned archive download whose signature covers the encoding.
+  return HttpClientRequest.make(get ? "GET" : (request.method as HttpMethod.HttpMethod))(target.href, {
+    headers,
+    body: get ? HttpBody.empty : request.body,
+  })
+}
+
 function downloadSkill(http: HttpClient.HttpClient, server: string, slug: string, headers: Record<string, string>) {
   return Effect.gen(function* () {
     if (!SkillDiscovery.isSafeSegment(slug)) return yield* Effect.fail(new Error(`unsafe skill slug: ${slug}`))
-    const bundle = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-      .execute(
-        HttpClientRequest.get(`${server}/api/v2/library/skills/${encodeURIComponent(slug)}`).pipe(
-          HttpClientRequest.acceptJson,
-          HttpClientRequest.setHeaders(headers),
-        ),
-      )
-      .pipe(
-        // The connection's credentials must not follow a redirect to another server.
-        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-        Effect.flatMap(HttpClientResponse.schemaBodyJson(SkillBundle)),
-        Effect.scoped,
-        Effect.timeout("30 seconds"),
-      )
+    const bundle = yield* follow(
+      http,
+      HttpClientRequest.get(`${server}/api/v2/library/skills/${encodeURIComponent(slug)}`).pipe(
+        HttpClientRequest.acceptJson,
+        HttpClientRequest.setHeaders(headers),
+      ),
+    ).pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(SkillBundle)), Effect.scoped, Effect.timeout("30 seconds"))
     if (bundle.slug !== slug) return yield* Effect.fail(new Error(`expected skill ${slug}, received ${bundle.slug}`))
     const unsafe = bundle.files.find((file) => !SkillDiscovery.isSafeRelativePath(file.path))
     if (unsafe) return yield* Effect.fail(new Error(`unsafe skill file path: ${unsafe.path}`))

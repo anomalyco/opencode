@@ -34,8 +34,10 @@ export function createTimelineCursor(input: {
   detach: () => void
   toEnd: () => void
   seekHistory: () => void
+  /** The route opens the session on a tool call instead of its end. */
+  revealing: () => boolean
 }) {
-  const location = useLocation<{ reveal?: string }>()
+  const location = useLocation()
   const navigate = useNavigate()
   const [cursorState, setCursorState] = createSignal(createTimelineCursorState())
   let seekFrame: number | undefined
@@ -85,7 +87,7 @@ export function createTimelineCursor(input: {
           type: "hash.applied",
           attempt: effect.attempt,
           hash: location.hash.slice(1),
-          reveal: !!location.state?.reveal,
+          reveal: input.revealing(),
         })
       })
 

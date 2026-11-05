@@ -11,7 +11,6 @@ import { useLocal } from "@/providers/models/selection"
 import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
-import { useWorkspaceLocation } from "@/workspaces/location"
 import { createWorktree } from "@/workspaces/create"
 import { showToast } from "@/shell/notifications/toast"
 import type { DraftMcpControls } from "./mcp"
@@ -72,6 +71,7 @@ type Started = Awaited<ReturnType<NewSessionComposerAdapter["start"]>>
 export function createNewSessionComposerAdapter(props: {
   draftID: string
   worktree: () => string
+  root: () => string
   branch: () => string | undefined
   submitted: () => void
   mcp: DraftMcpControls
@@ -84,7 +84,6 @@ export function createNewSessionComposerAdapter(props: {
   const server = useServer()
   const serverSDK = useServerSDK()
   const tabs = useTabs()
-  const location = useWorkspaceLocation()
   const language = useLanguage()
   const model = createComposerModelSelection({ agent: () => local.agent.current() })
   const controls = createComposerControls({ model })
@@ -97,11 +96,7 @@ export function createNewSessionComposerAdapter(props: {
     working: () => false,
     submitted: props.submitted,
     start(selection, submission, message) {
-      const currentDirectory = location().directory
-
-      const projectDirectory =
-        data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
-
+      const projectDirectory = props.root()
       const worktree = props.worktree()
       const directory = worktree === "main" ? projectDirectory : worktree
       const sessionID = Session.ID.create()

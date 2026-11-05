@@ -1,68 +1,165 @@
-import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
+import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
+import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
+import {
+  createPresenceState,
+  DISPOSED_PRESENCE_EVENT,
+  ELEMENT_CHANGED_EVENT,
+  HIDE_INSTANT_EVENT,
+  NO_EXIT,
+  PRESENCE_DEFAULT_EXIT_MS,
+  PRESENCE_EXIT_GRACE_MS,
+  REDUCED_PRESENCE_EVENT,
+  SHOW_PRESENCE_EVENT,
+  TRANSITION_END_EVENT,
+  countNewAnimations,
+  maxCssTimeMs,
+  selectPresencePhase,
+  transitionPresence,
+  type PresenceEvent,
+  type PresenceExit,
+} from "./presence-machine"
 
-// Keeps an element mounted while its CSS exit animation runs. Reduced motion needs no special case: when the styles
-// drop the animation, the computed name is "none" and the element hides at once.
-export function createPresence(props: { show: Accessor<boolean>; element: Accessor<HTMLElement | null> }) {
-  const styles = createMemo(() => {
-    const element = props.element()
+// Keeps an element mounted while its CSS exit animation or transition runs. A fallback timer from the computed
+// duration hides it when no end event comes (a detached element, a hidden ancestor), and Reduce Motion hides it at once.
+// `instant` skips the exit, for a change that should not animate.
+export function createPresence(props: {
+  show: Accessor<boolean>
+  element: Accessor<HTMLElement | null>
+  instant?: Accessor<boolean>
+}) {
+  let current = createPresenceState(untrack(props.show))
+  const [phase, setPhase] = createSignal(selectPresencePhase(current))
+  let tracked: HTMLElement | null = null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const started = { type: "animation.started" as const, name: "", current: "" }
+  const ended = { type: "animation.ended" as const, name: "" }
 
-    if (!element) return
+  const dispatch = (event: PresenceEvent) => {
+    const previous = current
+    const next = transitionPresence(previous, event)
 
-    return getComputedStyle(element)
-  })
+    if (next === previous) return
+    current = next
 
-  const animationName = () => styles()?.animationName ?? "none"
-  const [state, setState] = createSignal<"present" | "hiding" | "hidden">(props.show() ? "present" : "hidden")
-  // The last animation the element started. A different name when hiding means an exit animation is running.
-  let started = "none"
+    // A hiding state is only replaced on the way out of hiding; counting down returns the same object.
+    if (previous.status === "hiding") {
+      clearTimeout(timer)
+      timer = undefined
+    }
 
-  createEffect((previous) => {
-    const show = props.show()
+    if (next.status === "hiding") {
+      const attempt = next.attempt
+      timer = setTimeout(() => dispatch({ type: "timeout", attempt }), next.timeoutMs)
+    }
 
-    untrack(() => {
-      if (previous === show) return
+    if (next.status !== "disposed") setPhase(selectPresencePhase(next))
+  }
 
-      if (show) {
-        // Forget the previous exit animation so the next hide runs it again.
-        started = "none"
+  const onAnimationStart = (event: AnimationEvent) => {
+    const element = tracked
 
-        return setState("present")
-      }
+    if (!element || event.target !== element || current.status !== "present") return
+    started.name = event.animationName
+    started.current = getComputedStyle(element).animationName || "none"
+    dispatch(started)
+  }
 
-      const current = animationName()
+  const onAnimationEnd = (event: AnimationEvent) => {
+    if (event.target !== tracked) return
+    ended.name = event.animationName
+    dispatch(ended)
+  }
 
-      if (current === "none" || styles()?.display === "none") return setState("hidden")
+  const onTransitionEnd = (event: TransitionEvent) => {
+    if (event.target === tracked) dispatch(TRANSITION_END_EVENT)
+  }
 
-      setState(started === current ? "hidden" : "hiding")
-    })
-
-    return show
-  }, props.show())
+  const detach = (element: HTMLElement) => {
+    element.removeEventListener("animationstart", onAnimationStart)
+    element.removeEventListener("animationend", onAnimationEnd)
+    element.removeEventListener("animationcancel", onAnimationEnd)
+    element.removeEventListener("transitionend", onTransitionEnd)
+    element.removeEventListener("transitioncancel", onTransitionEnd)
+  }
 
   createEffect(() => {
     const element = props.element()
 
-    if (!element) return
+    if (element === tracked) return
+    const previous = tracked
 
-    const start = (event: AnimationEvent) => {
-      if (event.target === element) started = animationName()
-    }
+    if (previous) detach(previous)
+    tracked = element
+    element?.addEventListener("animationstart", onAnimationStart)
+    element?.addEventListener("animationend", onAnimationEnd)
+    element?.addEventListener("animationcancel", onAnimationEnd)
+    element?.addEventListener("transitionend", onTransitionEnd)
+    element?.addEventListener("transitioncancel", onTransitionEnd)
 
-    const end = (event: AnimationEvent) => {
-      if (event.target === element && animationName().includes(event.animationName) && state() === "hiding")
-        setState("hidden")
-    }
+    if (previous) untrack(() => dispatch(ELEMENT_CHANGED_EVENT))
+  })
 
-    element.addEventListener("animationstart", start)
-    element.addEventListener("animationcancel", end)
-    element.addEventListener("animationend", end)
+  createEffect(() => {
+    const show = props.show()
+    const instant = props.instant?.() ?? false
 
-    onCleanup(() => {
-      element.removeEventListener("animationstart", start)
-      element.removeEventListener("animationcancel", end)
-      element.removeEventListener("animationend", end)
+    untrack(() => {
+      if (show) return dispatch(SHOW_PRESENCE_EVENT)
+
+      if (instant || prefersReducedMotion()) return dispatch(HIDE_INSTANT_EVENT)
+
+      if (current.status !== "present") return
+      dispatch({ type: "hide", exit: measureExit(tracked, current.started) })
     })
   })
 
-  return { present: () => state() !== "hidden", state }
+  onCleanup(
+    observeReducedMotion(() => {
+      if (prefersReducedMotion()) dispatch(REDUCED_PRESENCE_EVENT)
+    }),
+  )
+
+  onCleanup(() => {
+    if (tracked) detach(tracked)
+    tracked = null
+    dispatch(DISPOSED_PRESENCE_EVENT)
+  })
+
+  return { present: () => phase() !== "hidden", state: phase }
+}
+
+function measureExit(element: HTMLElement | null, started: string): PresenceExit {
+  if (!element?.isConnected) return NO_EXIT
+  const styles = getComputedStyle(element)
+
+  if (styles.display === "none") return NO_EXIT
+  const names = styles.animationName || "none"
+  const count = countNewAnimations(names, started)
+
+  if (count > 0)
+    return {
+      kind: "animation",
+      names,
+      count,
+      timeoutMs: exitTimeout(maxCssTimeMs(styles.animationDuration, styles.animationDelay)),
+    }
+
+  const ms = maxCssTimeMs(styles.transitionDuration, styles.transitionDelay)
+
+  if (ms <= 0 || !styles.transitionProperty || styles.transitionProperty === "none") return NO_EXIT
+
+  // Only transitions that are running now hold the element: an idle `transition-colors` rule must not. Without the
+  // Web Animations API (happy-dom), trust the computed transition.
+  const transitions =
+    "getAnimations" in element
+      ? element.getAnimations().filter((animation) => "transitionProperty" in animation).length
+      : 1
+
+  if (transitions === 0) return NO_EXIT
+
+  return { kind: "transition", count: transitions, timeoutMs: exitTimeout(ms) }
+}
+
+function exitTimeout(ms: number) {
+  return (ms > 0 ? ms : PRESENCE_DEFAULT_EXIT_MS) + PRESENCE_EXIT_GRACE_MS
 }

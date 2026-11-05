@@ -57,7 +57,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     return [
       {
         items: (query: string) => format(load.items(query)),
-        search: (query: string) => load.search(query).then(format),
+        search: (query: string, signal: AbortSignal) => load.search(query, signal).then(format),
       },
     ]
   })
@@ -65,14 +65,6 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
   const items = (query: string) => {
     const entries = loaders
       .flatMap((loader) => loader.items(query))
-      .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
-
-    return query ? entries : entries.slice(0, RECENT_LIMIT)
-  }
-
-  const sessions = async (query: string) => {
-    const entries = (await Promise.all(loaders.map((loader) => loader.search(query))))
-      .flat()
       .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
 
     return query ? entries : entries.slice(0, RECENT_LIMIT)
@@ -112,11 +104,12 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       )
   }
 
+  // Each server is its own source, so a slow or failing server never holds back or hides another's sessions.
   return (
     <CommandPaletteView
       placeholder={language.t("home.sessions.search.placeholder")}
       items={items}
-      sources={[sessions]}
+      sources={loaders.map((loader) => loader.search)}
       highlight={() => {}}
       select={select}
       close={() => dialog.close()}

@@ -556,6 +556,26 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     await expectRefreshKeeps(page, service.name, service.path, service.item)
   }
 
+  // A refresh that fails keeps the list it had, with its footer and its row's count.
+  state.fail = true
+
+  const failed = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/plugin" && response.status() === 500,
+  )
+
+  await page.keyboard.press("Escape")
+  await expect(menu("Skills")).toBeHidden()
+  await open("Plugins")
+  await failed
+  await expect(menu("Plugins")).toHaveAttribute("aria-busy", "false")
+  await expect(menu("Plugins").getByText("supermemory", { exact: true })).toBeVisible()
+  await expect(menu("Plugins").getByText("Configuration file")).toBeVisible()
+  await expect(menu("Plugins").getByRole("alert")).toHaveCount(0)
+  await expect(
+    summary.getByRole("button", { name: "Plugins", exact: true }).locator(".session-service-count"),
+  ).toHaveText("2")
+  state.fail = false
+
   state.extra = true
   await expectRefreshKeeps(page, "Plugins", "/api/plugin", "supermemory")
   await expect(menu("Plugins").getByText("daytona", { exact: true })).toBeVisible()

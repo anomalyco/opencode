@@ -90,7 +90,8 @@ export interface MockServerConfig {
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
-  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  // `directory` is the requested `location[directory]`, such as an untracked folder the review opened.
+  vcsDiff?: unknown[] | ((input: { mode?: string; directory: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
@@ -109,6 +110,10 @@ export interface MockServerConfig {
   // Without it, permission replies answer 501 MockUnsupported.
   onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
+  // Records form replies. The mock keeps listing a replied form unless `forms` stops returning it.
+  onFormReply?: (input: { sessionID: string; formID: string; body: unknown }) => void
+  // Web search providers (`GET /api/websearch/provider`), none by default.
+  websearchProviders?: Resolvable<unknown[]>
   // MCP servers. A list serves every workspace; a function receives the requested directory.
   mcp?: unknown[] | ((directory: string) => unknown[])
   // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
@@ -897,7 +902,8 @@ function mockHandlers(
           }),
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
-        websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
+        websearchProviders: () =>
+          Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
         worktreeList: () =>
@@ -993,7 +999,7 @@ function mockHandlers(
           Effect.sync(() => ({
             location: location(config),
             data: Predicate.isFunction(config.vcsDiff)
-              ? config.vcsDiff({ mode: ctx.query.mode })
+              ? config.vcsDiff({ mode: ctx.query.mode, directory: requestDirectory(config, ctx.request) })
               : (config.vcsDiff ?? []),
           })),
         fsList: (ctx) =>
@@ -1217,7 +1223,10 @@ function mockHandlers(
               (form) => Predicate.isObject(form) && form.sessionID === ctx.params.sessionID,
             ),
           }),
-        sessionFormReply: () => noContent,
+        sessionFormReply: (ctx) =>
+          Effect.sync(() =>
+            config.onFormReply?.({ sessionID: ctx.params.sessionID, formID: ctx.params.formID, body: ctx.payload }),
+          ).pipe(Effect.andThen(noContent)),
         sessionFormCancel: () => noContent,
         sessionBackground: (ctx) =>
           Effect.sync(() => config.onBackground?.({ sessionID: ctx.params.sessionID })).pipe(Effect.andThen(noContent)),

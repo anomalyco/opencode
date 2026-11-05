@@ -1,4 +1,5 @@
 import type { TerminalFailure, TerminalSize } from "./connection"
+import { createDispatch } from "./dispatch"
 
 /** How long loading ghostty-web and its WASM binary may take before the pane fails. */
 export const GHOSTTY_LOAD_TIMEOUT_MS = 30_000
@@ -207,44 +208,17 @@ export function paneEffectFailed<L>(effect: PaneEffect<L>): PaneEvent<L, never> 
     return { type: "connection.failed", failure: "failed" }
 }
 
-/**
- * The pane's driver loop: applies one event at a time and runs its effects. An effect may dispatch synchronously; its
- * event waits until the current one has applied. A throwing effect reports `paneEffectFailed(effect)`, and nothing
- * that throws stalls the queue.
- */
+/** The pane's driver loop (`createDispatch`); a throwing effect reports `paneEffectFailed(effect)`. */
 export function createPaneDispatch<L, T>(driver: {
   readonly read: () => PaneState<T>
   readonly write: (state: PaneState<T>) => void
   readonly run: (effect: PaneEffect<L>) => void
 }) {
-  const queue: PaneEvent<L, T>[] = []
-
-  const apply = (event: PaneEvent<L, T>) => {
-    const next = transitionPane(driver.read(), event)
-
-    driver.write(next.state)
-    next.effects.forEach((effect) => {
-      void Promise.try(() => driver.run(effect)).catch((cause: unknown) => {
-        const failure = paneEffectFailed(effect)
-
-        if (!failure) throw cause
-        dispatch(failure)
-      })
-    })
-  }
-
-  const dispatch = (event: PaneEvent<L, T>) => {
-    queue.push(event)
-
-    if (queue.length > 1) return
-
-    while (queue.length > 0) {
-      void Promise.try(apply, queue[0])
-      queue.shift()
-    }
-  }
-
-  return dispatch
+  return createDispatch<PaneState<T>, PaneEvent<L, T>, PaneEffect<L>>({
+    ...driver,
+    transition: transitionPane,
+    failed: paneEffectFailed,
+  })
 }
 
 function failed<T>(failure: TerminalFailure, term: T | undefined): PaneState<T> {

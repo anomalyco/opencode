@@ -115,6 +115,34 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   expect(prompts[1]?.text).toBe("@home now")
 })
 
+test("closing the @ menu aborts its session search", async ({ page }) => {
+  const view = await openSession(page, {
+    name: "SessionMentionAbort",
+    findFiles: () => [],
+    sessions: [{ id: "ses_mention_abort_source", title: "Review the plan" }],
+    seed: { tabs: ["ses_mention_abort_source"] },
+  })
+
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  const search = await holdRoute(page, /\/api\/session\?.*search=auth(&|$)/)
+
+  try {
+    await view.editor.pressSequentially("@auth")
+    const request = await search.arrived
+
+    const failed = page.waitForEvent("requestfailed", {
+      predicate: (candidate) => candidate === request,
+      timeout: 10_000,
+    })
+
+    await view.editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    expect((await failed).failure()?.errorText).toBe("net::ERR_ABORTED")
+  } finally {
+    search.release()
+  }
+})
+
 test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
   page,
   context,
@@ -1149,6 +1177,33 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
 })
 
+test("an attachment pasted mid-sentence leaves the text and the caret where they were", async ({ page }) => {
+  const { editor } = await openDraft(page, {
+    name: "ComposerDraft",
+    provider: NO_PROVIDER,
+    onFileWrite: () => undefined,
+  })
+
+  await editor.click()
+  await page.keyboard.type("Hello world")
+  await editor.press("Home")
+
+  for (let count = 0; count < "Hello".length; count++) await editor.press("ArrowRight")
+
+  const text = await editor.evaluateHandle((element) => element.firstChild)
+
+  await editor.evaluate((element) => {
+    const data = new DataTransfer()
+    data.items.add(new File(["Attachment fixture"], "notes.txt", { type: "text/plain" }))
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("notes.txt")
+  // A rewrite of the editor would replace this node, even when it put the caret back in the same place.
+  expect(await editor.evaluate((element, node) => element.firstChild === node, text)).toBe(true)
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("Hello, world")
+})
+
 test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
   const editor = await draft(page)
   await page.keyboard.type("worktree off the latest dev")
@@ -1446,6 +1501,33 @@ for (const row of [
     await expect(scroll).toHaveText("Enter shell command… git status")
   })
 }
+
+test("a sent shell command returns the composer to prompt mode, and ! enters shell mode again", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ShellSend",
+    sessions: [{ id: "ses_shell_send", title: "Shell send" }],
+  })
+
+  const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+  await editor.pressSequentially("git status")
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/ses_shell_send/shell"),
+  )
+
+  await editor.press("Enter")
+  expect((await sent).postDataJSON()).toMatchObject({ command: "git status" })
+  await expect(editor).toBeEmpty()
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await expect(page.getByRole("button", { name: /^Exit/ })).toHaveCount(0)
+
+  // The editor reads the draft's mode, so it agrees with the draft the send reset.
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+})
 
 test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
   const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })

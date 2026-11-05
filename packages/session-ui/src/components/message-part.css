@@ -556,7 +556,7 @@
   }
 
   @media (hover: hover) {
-    [data-slot="text-part-meta"]:hover [data-slot="text-part-meta-speed"] {
+    [data-slot="text-part-meta-speed"] {
       display: inline-flex;
     }
   }
