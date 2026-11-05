@@ -63,7 +63,8 @@ pub fn run(input: Input) -> anyhow::Result<()> {
     };
     let theme = theme::resolve(&theme_input);
     // The transcript always starts one row below the terminal's earlier output.
-    let writer = Writer::new(footer.clone(), Scrollback::new(&app)?, theme.clone(), settings.mono, true);
+    let mut writer = Writer::new(footer.clone(), Scrollback::new(&app)?, theme.clone(), settings.mono, true);
+    writer.set_shell_output(settings.shell_output == Visibility::Show);
     let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
     let footers = Footers::new(&app, &prompt, &theme, settings.mono);
     let status = Text::new(&app, "").wrap(WrapMode::None).truncate(true).height(1).shrink(0.0);
@@ -344,13 +345,15 @@ impl Mini {
             state.model = model;
             state.usage = None;
         });
-        *self.transcript.borrow_mut() = Some(Transcript::new(
+        let mut transcript = Transcript::new(
             &session.id,
             self.settings.thinking == Visibility::Show,
             self.settings.tools == Visibility::Show,
             self.input.replay,
             self.input.replay_limit,
-        ));
+        );
+        transcript.directory = Some(session.directory.clone());
+        *self.transcript.borrow_mut() = Some(transcript);
         *self.session.borrow_mut() = Some(session.clone());
         self.prompt.set_agent(session.agent.as_deref().unwrap_or_default());
         self.prompt.open(&self.client, &session.id, &session.directory, target.resume);
