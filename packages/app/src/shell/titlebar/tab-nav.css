@@ -56,6 +56,11 @@
   display: block;
 }
 
+/* The muted spinner's dim dots vanish against the dark tab, leaving only the head visible. */
+[data-color-scheme="dark"] [data-titlebar-tab] [data-mark="busy"] {
+  color: var(--v2-icon-icon-base);
+}
+
 [data-titlebar-tab] [data-slot="tab-close"] > button {
   transition: none;
 }
