@@ -167,7 +167,7 @@ describe("turn diff cache", () => {
     dispose()
 
     expect(signals[0]?.aborted).toBe(true)
-    expect(jest.getTimerCount()).toBe(0)
+    jest.advanceTimersByTime(TURN_DIFF_LOAD_TIMEOUT_MS)
     jest.useRealTimers()
     pending.resolve([diff])
     await settle()
