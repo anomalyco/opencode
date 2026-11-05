@@ -6,13 +6,12 @@
 //!
 //! The cell-level proofs are the P-APP scenarios `E.12/tab-strip` and `E.12/rail-resize`.
 
-use crate::support::wait;
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::support::WAIT;
 use opencode_api::client::Client;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_local::cli_config::{self, Resolved};
@@ -23,7 +22,6 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
-use wait::WAIT;
 
 const CHANNEL: &str = "test";
 

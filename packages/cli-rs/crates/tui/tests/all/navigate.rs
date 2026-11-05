@@ -1,73 +1,48 @@
 //! Scrolling, message navigation, the scrollbar, and groups (E.8) over a long fixture session.
 
-use crate::support::wait;
+use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved, Session, Verbosity};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use opencode_local::cli_config::{Info, Session, Verbosity};
+use opencode_tui::Deps;
 use serde_json::{Value, json};
-use wait::WAIT;
 
 /// Serves the same messages for every session, newest page first, `limit` at a time, with a cursor that
-/// counts the messages older than the page.
-struct Fixture {
-    messages: Vec<Value>,
-    older: Arc<AtomicUsize>,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        let query: HashMap<String, String> = request.url.query_pairs().into_owned().collect();
-        Box::pin(async move {
-            let id = path.strip_prefix("/api/session/").and_then(|rest| rest.split('/').next()).unwrap_or_default();
-            let session = format!("/api/session/{id}");
-            let (status, body) = match request.method {
-                "GET" if path == "/api/session" => (200, json!({ "data": [], "cursor": {} })),
-                "GET" if path == session => (200, json!({ "data": info(id) })),
-                "GET" if path == format!("{session}/message") => {
-                    let limit: usize = query.get("limit").map_or(20, |limit| limit.parse().unwrap());
-                    let end = match query.get("cursor") {
-                        Some(cursor) => {
-                            self.older.fetch_add(1, Ordering::SeqCst);
-                            cursor.parse().unwrap()
-                        }
-                        None => self.messages.len(),
-                    };
-                    let start = end.saturating_sub(limit);
-                    let page: Vec<_> = self.messages[start..end].iter().rev().cloned().collect();
-                    let next = (start > 0).then(|| start.to_string());
-                    (200, json!({ "data": page, "cursor": { "next": next } }))
-                }
-                "GET" if path == format!("{session}/permission") => (200, json!({ "data": [] })),
-                _ => (404, json!({})),
-            };
-            let body = serde_json::to_vec(&body).unwrap();
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+/// counts the messages older than the page; `older` counts the reads of an older page.
+fn fake(messages: Vec<Value>, older: Arc<AtomicUsize>) -> Fake {
+    Fake::new(move |seen| {
+        let path = seen.path.as_str();
+        let id = path.strip_prefix("/api/session/").and_then(|rest| rest.split('/').next()).unwrap_or_default();
+        let session = format!("/api/session/{id}");
+        match seen.method.as_str() {
+            "GET" if path == "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+            "GET" if path == session => (200, json!({ "data": info(id) })),
+            "GET" if path == format!("{session}/message") => {
+                let limit = seen.param("limit");
+                let limit: usize = if limit.is_empty() { 20 } else { limit.parse().unwrap() };
+                let cursor = seen.param("cursor");
+                let end = if cursor.is_empty() {
+                    messages.len()
+                } else {
+                    older.fetch_add(1, Ordering::SeqCst);
+                    cursor.parse().unwrap()
+                };
+                let start = end.saturating_sub(limit);
+                let page: Vec<_> = messages[start..end].iter().rev().cloned().collect();
+                let next = (start > 0).then(|| start.to_string());
+                (200, json!({ "data": page, "cursor": { "next": next } }))
+            }
+            "GET" if path == format!("{session}/permission") => (200, json!({ "data": [] })),
+            _ => support::not_found(),
+        }
+    })
 }
 
 fn info(id: &str) -> Value {
-    json!({
-        "id": id, "title": "Navigation", "projectID": "project", "cost": 0, "agent": "build",
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
+    support::merge(support::session(id, "Navigation"), json!({ "agent": "build" }))
 }
 
 fn user(id: &str, created: u64, text: &str) -> Value {
@@ -113,45 +88,27 @@ fn turns(count: u64) -> Vec<Value> {
         .collect()
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
+struct Nav {
+    harness: Harness,
     older: Arc<AtomicUsize>,
 }
 
-fn open(messages: Vec<Value>, info: Info) -> Harness {
+deref_harness!(Nav);
+
+fn open(messages: Vec<Value>, info: Info) -> Nav {
     let last = messages.len() / 2;
     let older = Arc::new(AtomicUsize::new(0));
-    let fixture = Fixture { messages, older: older.clone() };
-    let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
+    let fake = fake(messages, older.clone());
+    let deps =
+        Deps { config: support::config(info), route: support::session_route("ses_n"), ..support::deps(Arc::new(fake)) };
     // The transcript keeps the 15-row view these cases were written for (E.12 took the session header and
     // the column gaps out, so it grew by five rows at 80x30).
-    let app = TestApp::new(80, 25);
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID("ses_n".into()) },
-            continue_: false,
-            events: false,
-        },
-    );
-    let h = Harness { app, tui, older };
+    let h = Nav { harness: support::mount(80, 25, deps), older };
     h.wait_for(&format!("Answer {last} three."));
     h
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
+impl Nav {
     fn press(&self, key: &str) -> String {
         self.app.press(key);
         self.app.advance(Duration::from_millis(1));
@@ -204,15 +161,15 @@ fn line_half_page_and_page_scroll_by_their_distances() {
     let h = open(turns(30), Info::default());
     let start = h.app.text();
     let anchor = "Answer 30 one.";
-    let at = Harness::row(&start, anchor).unwrap();
+    let at = Nav::row(&start, anchor).unwrap();
     assert!(!start.contains("Jump to latest"), "{start}");
 
     // `session.line.up` (ctrl+alt+y) moves the content down one row.
     let screen = h.press("ctrl+alt+y");
-    assert_eq!(Harness::row(&screen, anchor), Some(at + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, anchor), Some(at + 1), "{screen}");
     assert!(screen.contains("Jump to latest ↓"), "{screen}");
     let screen = h.press("ctrl+alt+e");
-    assert_eq!(Harness::row(&screen, anchor), Some(at), "{screen}");
+    assert_eq!(Nav::row(&screen, anchor), Some(at), "{screen}");
 
     // Half a page is a quarter of the view, a page half of it (`index.tsx:933-968`); the view is 15
     // rows tall at 80x30 with the prompt below it.
@@ -228,7 +185,7 @@ fn line_half_page_and_page_scroll_by_their_distances() {
         h.press("pagedown");
     }
     let bottom = h.app.text();
-    assert_eq!(Harness::row(&bottom, anchor), Some(at), "{bottom}");
+    assert_eq!(Nav::row(&bottom, anchor), Some(at), "{bottom}");
     assert!(!bottom.contains("Jump to latest"), "{bottom}");
 }
 
@@ -266,7 +223,7 @@ fn first_loads_the_history_and_jump_to_latest_returns() {
     h.press("ctrl+g");
     let screen = h.wait_for("┃  Question 1\n");
     assert_eq!(h.older.load(Ordering::SeqCst), 1, "one request for every page");
-    assert_eq!(Harness::row(&screen, "Question 1"), Some(TOP + 2), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 2), "{screen}");
     assert!(screen.contains("Jump to latest ↓"), "{screen}");
 
     // A click on "Jump to latest" is `session.last`.
@@ -325,31 +282,31 @@ fn message_navigation_aligns_messages_with_the_top() {
     // (`anchors.messagePositions`). The previous message above the view's top is turn 29's reply,
     // aligned one row above its text.
     let screen = settle(&h, h.dispatch("session.message.previous"));
-    assert_eq!(Harness::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
     assert!(screen.contains("Jump to latest ↓"), "{screen}");
     // Then the question before it, its box on the top row.
     let screen = settle(&h, h.dispatch("session.message.previous"));
-    assert_eq!(Harness::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
     // Next steps from the last jump, whatever the view shows.
     let screen = settle(&h, h.dispatch("session.message.next"));
-    assert_eq!(Harness::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
     // User-only skips the replies.
     let screen = settle(&h, h.dispatch("session.message.user.next"));
-    assert_eq!(Harness::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
     let screen = settle(&h, h.dispatch("session.message.user.previous"));
-    assert_eq!(Harness::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
 
     // The last user message (alt+end) aligns too: the slack below the last rows makes room.
     h.press("end");
     let screen = settle(&h, h.press("alt+end"));
-    assert_eq!(Harness::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
 
     // Walking back past the loaded history loads older pages.
     for _ in 0..80 {
         h.dispatch("session.message.user.previous");
     }
     let screen = h.wait_for("┃  Question 1\n");
-    assert_eq!(Harness::row(&screen, "Question 1"), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 1), "{screen}");
 }
 
 #[test]
@@ -397,11 +354,11 @@ fn the_scrollbar_toggles_and_the_wheel_moves_three_rows() {
     let h = open(turns(30), Info::default());
     let screen = h.app.text();
     let anchor = "Answer 30 one.";
-    let at = Harness::row(&screen, anchor).unwrap();
+    let at = Nav::row(&screen, anchor).unwrap();
     h.app.scroll(10, 8, false);
     h.app.advance(Duration::from_millis(1));
     let screen = h.app.text();
-    assert_eq!(Harness::row(&screen, anchor), Some(at + 3), "{screen}");
+    assert_eq!(Nav::row(&screen, anchor), Some(at + 3), "{screen}");
 
     // The bar's thumb in the column before the route's two-cell padding.
     let thumb = |screen: &str| {
@@ -417,7 +374,7 @@ fn a_tab_reopens_where_the_reader_left_it() {
     let h = open(turns(30), Info::default());
     let transcript = |screen: &str| -> Vec<String> { screen.lines().skip(TOP).take(17).map(str::to_owned).collect() };
     let switch = |id: &str| {
-        h.tui.navigate(Route::Session { id: SessionID(id.into()) });
+        h.tui.navigate(support::session_route(id));
         h.app.advance(Duration::from_millis(1));
     };
     for _ in 0..3 {
@@ -460,7 +417,7 @@ fn a_tab_reopens_where_the_reader_left_it() {
 }
 
 /// Lets frames and follow-up timers run, then reads the screen.
-fn settle(h: &Harness, _: String) -> String {
+fn settle(h: &Nav, _: String) -> String {
     for _ in 0..4 {
         h.app.advance(Duration::from_millis(5));
     }
@@ -468,7 +425,7 @@ fn settle(h: &Harness, _: String) -> String {
 }
 
 fn position(screen: &str, text: &str) -> (usize, usize) {
-    let y = Harness::row(screen, text).unwrap();
+    let y = Nav::row(screen, text).unwrap();
     let line = screen.lines().nth(y).unwrap();
     let x = line[..line.find(text).unwrap()].chars().count();
     (x, y)

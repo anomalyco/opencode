@@ -34,7 +34,7 @@ use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::support::wait::WAIT;
+use crate::support::WAIT;
 
 /// Serves the E.16 routes and records every request (method and path with query).
 struct Server {

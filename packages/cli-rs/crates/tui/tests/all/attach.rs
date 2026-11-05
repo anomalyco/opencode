@@ -6,112 +6,44 @@
 //!   image preview dialog.
 //! - The stash pushes, pops, and lists, and `prompt-stash.jsonl` is shared with the TypeScript TUI (P-FILE).
 
+use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness};
+
 use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Prompt, PromptPaste, Resolved};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
+use opencode_local::cli_config::{Info, Prompt, PromptPaste};
 use opencode_tui::features::links::testing;
 use opencode_tui::features::startup::Args;
-use opencode_tui::{Deps, Route, Tui};
 use opentui::native::ClipboardOutcome;
-use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 /// A 1×1 PNG.
 const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
-
-struct Fixture {
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
-        let location = json!({ "directory": "/project" });
-        let (status, body) = match (request.method, path.as_str()) {
-            ("GET", "/api/session") => (200, json!({ "data": [session()], "cursor": {} })),
-            ("GET", "/api/session/ses_a") => (200, json!({ "data": session() })),
-            ("GET", "/api/session/ses_a/message") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-                    "request": { "settings": {}, "headers": {}, "body": {} },
-                }] }),
-            ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "m", "modelID": "m", "providerID": "p", "name": "Model M",
-                    "capabilities": { "tools": true, "input": ["text", "image"], "output": ["text"] },
-                    "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-                    "enabled": true, "limit": { "context": 1000, "output": 100 },
-                }] }),
-            ),
-            (
-                "GET",
-                "/api/provider"
-                | "/api/integration"
-                | "/api/form"
-                | "/api/permission/request"
-                | "/api/command"
-                | "/api/skill"
-                | "/api/reference",
-            ) => (200, json!({ "location": location, "data": [] })),
-            ("GET", path) if path.ends_with("/form") || path.ends_with("/permission") => (200, json!({ "data": [] })),
-            ("GET", "/api/config") => (200, json!([])),
-            ("POST", path) if path.ends_with("/prompt") => (
-                200,
-                json!({ "data": {
-                    "id": body["id"], "sessionID": "ses_a", "time": { "created": 1 }, "type": "user",
-                    "payload": { "text": body["text"] }, "delivery": "steer",
-                } }),
-            ),
-            ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => (204, Value::Null),
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
-}
-
-fn session() -> Value {
-    json!({
-        "id": "ses_a", "title": "Fix the parser", "projectID": "project", "cost": 0,
-        "agent": "build", "model": { "providerID": "p", "id": "m" },
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
+/// The baseline routes, with a model that takes images.
+fn fake() -> Fake {
+    Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/model") => {
+            let model = support::merge(
+                support::model("p", "m", "Model M"),
+                json!({ "capabilities": { "tools": true, "input": ["text", "image"], "output": ["text"] } }),
+            );
+            (200, support::list(DIRECTORY, json!([model])))
+        }
+        _ => support::base(seen, DIRECTORY),
     })
 }
 
 struct Setup {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
     home: tempfile::TempDir,
 }
+
+deref_harness!(Setup);
 
 impl Setup {
     fn new() -> Self {
@@ -119,52 +51,28 @@ impl Setup {
     }
 
     fn with(home: tempfile::TempDir, info: Info, local: bool) -> Self {
-        let seen = Seen::default();
-        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
-        let app = TestApp::new(90, 30);
-        let tui = opencode_tui::app::mount_with(
-            &app,
-            Deps {
-                client,
-                directory: "/project".into(),
-                config: Resolved::new(info, |_| None),
-                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
-                route: Route::Session { id: SessionID("ses_a".into()) },
-                continue_: false,
-                events: false,
-            },
-            Args { local, ..Args::default() },
-        );
-        let setup = Self { app, tui, seen, home };
+        let fake = fake();
+        let seen = fake.log();
+        let deps = opencode_tui::Deps {
+            config: support::config(info),
+            roots: support::roots(support::paths(home.path()), "latest"),
+            ..support::deps(Arc::new(fake))
+        };
+        let harness = support::mount_on(TestApp::new(90, 30), deps, Args { local, ..Args::default() });
+        let setup = Self { harness, seen, home };
         setup.wait_for("Model M");
         setup
     }
 
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
-    fn wait_gone(&self, text: &str) {
-        let gone = self.app.wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
-        assert!(gone, "{text:?} stayed:\n{}", self.app.text());
-    }
-
-    fn text(&self) -> String {
-        self.tui.textarea.borrow().clone().unwrap().text()
-    }
-
     fn wait_text(&self, text: &str) {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.text() == text);
+        let found = self.app.wait_until(WAIT, || self.text() == text);
         assert!(found, "prompt is {:?}, not {text:?}", self.text());
     }
 
     fn submit(&self) -> Value {
         let before = self.prompts().len();
         self.app.press("return");
-        let sent = self.app.wait_until(Duration::from_secs(5), || self.prompts().len() > before);
+        let sent = self.app.wait_until(WAIT, || self.prompts().len() > before);
         assert!(sent, "no prompt sent: {:?}", self.seen.lock().unwrap());
         self.prompts().pop().unwrap()
     }
@@ -174,27 +82,9 @@ impl Setup {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(method, path, _)| method == "POST" && path.ends_with("/prompt"))
-            .map(|(_, _, body)| body.clone())
+            .filter(|seen| seen.method == "POST" && seen.path.ends_with("/prompt"))
+            .map(|seen| seen.body.clone())
             .collect()
-    }
-
-    /// The cell where `needle` starts on screen.
-    fn find(&self, needle: &str) -> (u16, u16) {
-        let screen = self.app.text();
-        screen
-            .lines()
-            .enumerate()
-            .find_map(|(y, line)| {
-                let x = line.find(needle)?;
-                Some((line[..x].chars().count() as u16, y as u16))
-            })
-            .unwrap_or_else(|| panic!("{needle:?} not on screen:\n{screen}"))
-    }
-
-    fn dispatch(&self, command: &str) {
-        self.tui.keymap.dispatch(command, None);
-        self.app.advance(Duration::from_millis(1));
     }
 
     fn stash_file(&self) -> String {
@@ -202,23 +92,9 @@ impl Setup {
     }
 
     fn wait_stash_file(&self, check: impl Fn(&str) -> bool) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || check(&self.stash_file()));
+        let found = self.app.wait_until(WAIT, || check(&self.stash_file()));
         assert!(found, "prompt-stash.jsonl is {:?}", self.stash_file());
         self.stash_file()
-    }
-}
-
-fn paths(home: &Path) -> Paths {
-    Paths {
-        home: home.to_owned(),
-        data: home.join("data"),
-        cache: home.join("cache"),
-        config: home.join("config"),
-        state: home.join("state"),
-        tmp: home.join("tmp"),
-        bin: home.join("bin"),
-        log: home.join("log"),
-        repos: home.join("repos"),
     }
 }
 
@@ -280,7 +156,7 @@ fn copying_a_selection_over_a_paste_copies_its_text() {
     let (x, y) = setup.find("see [Pasted");
     // From "see" (not on the label, whose press would expand it) to the label's last cell.
     setup.app.drag((x, y), (x + 20, y));
-    let copied = setup.app.wait_until(Duration::from_secs(5), || !capture.0.copied.borrow().is_empty());
+    let copied = setup.app.wait_until(WAIT, || !capture.0.copied.borrow().is_empty());
     assert!(copied, "nothing copied:\n{}", setup.app.text());
     assert_eq!(capture.0.copied.borrow().last().unwrap(), "see a\nb\nc");
 }
@@ -449,7 +325,7 @@ fn stash_pushes_pops_and_lists_with_delete_confirm() {
 
 #[test]
 fn stash_file_is_shared_with_typescript() {
-    let Some(root) = ts_root() else { return };
+    let Some(root) = support::ts_root() else { return };
     let setup = Setup::new();
     setup.app.type_text("from rust");
     setup.dispatch("prompt.stash");
@@ -479,7 +355,7 @@ fn stash_file_is_shared_with_typescript() {
     std::fs::create_dir_all(home.path().join("state")).unwrap();
     std::fs::copy(state.join("prompt-stash.jsonl"), home.path().join("state/prompt-stash.jsonl")).unwrap();
     let again = Setup::with(home, Info::default(), false);
-    let loaded = again.app.wait_until(Duration::from_secs(5), || !again.tui.prompt.stash.is_empty());
+    let loaded = again.app.wait_until(WAIT, || !again.tui.prompt.stash.is_empty());
     assert!(loaded);
     again.dispatch("prompt.stash.pop");
     again.wait_text("from typescript");
@@ -551,22 +427,9 @@ fn a_stash_made_while_the_stash_loads_is_kept() {
             .map(|entry| entry["prompt"]["text"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>()
     };
-    let merged = setup.app.wait_until(Duration::from_secs(5), || texts() == ["old", "early"]);
+    let merged = setup.app.wait_until(WAIT, || texts() == ["old", "early"]);
     assert!(merged, "the stash is {:?}", texts());
     setup.wait_stash_file(|file| file.lines().count() == 2 && file.contains("\"early\""));
-}
-
-/// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
-fn ts_root() -> Option<std::path::PathBuf> {
-    let root = std::env::var_os("OPENCODE_TS_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let present =
-        root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
-    if !present {
-        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
-    }
-    present.then_some(root)
 }
 
 /// Runs `parity/oracle/E.4-stash.ts`: the real `PromptStashProvider` on `state`.
