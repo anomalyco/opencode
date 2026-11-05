@@ -110,7 +110,7 @@ export async function runCli(side: Side, value: CliCase) {
   return {
     exit,
     ...(proc.signalCode ? { signal: proc.signalCode } : {}),
-    stdout: mask(normalize(stdout, context)),
+    stdout: mask(normalize(stdout.replaceAll(spinnerFrame, ""), context)),
     stderr: mask(
       normalize(
         value.stderrLines === undefined ? stderr : stderr.split("\n").slice(0, value.stderrLines).join("\n"),
@@ -121,6 +121,10 @@ export async function runCli(side: Side, value: CliCase) {
     ...(files ? { files } : {}),
   }
 }
+
+// A Clack spinner frame and the erase that follows it. Both clients draw one every 80 ms until the work ends,
+// so how many show depends on the machine's load; a terminal shows none of them once erased.
+const spinnerFrame = /(?:\x1b\[[0-9;]*m)?[◒◐◓◑](?:\x1b\[[0-9;]*m)?  [^\n\x1b]*\x1b\[999D(?:\x1b\[J)+/g
 
 // Plan 7.1 P-REQ: mutating requests in order, reads as a sorted set.
 export function requestLog(requests: Logged[], context: Context) {
