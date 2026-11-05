@@ -274,6 +274,40 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
     assert!(screen.contains("┃ Plan the fix."), "{screen}");
 }
 
+/// A settings change reaches the rows at once, as TS's reactive config does: thinking opens and the
+/// tokens-per-second footer goes, then `session.toggle.thinking` writes the config back.
+#[test]
+fn config_changes_reach_the_transcript_without_a_restart() {
+    let messages = vec![assistant(
+        "msg_2",
+        1500,
+        json!([{ "type": "reasoning", "text": "Plan the fix.", "time": { "created": 1500, "completed": 3000 } }]),
+        Some(4000),
+    )];
+    let h = open(80, 20, "ses_r", messages, Info::default());
+    let screen = h.wait_for("+ Thought");
+    assert!(!screen.contains("Plan the fix."), "{screen}");
+    assert!(screen.contains("tok/s"), "{screen}");
+    opencode_tui::dialogs::settings::update(&h.tui, |draft| {
+        opencode_tui::dialogs::settings::set_path(draft, &["session", "thinking"], json!("show"));
+        opencode_tui::dialogs::settings::set_path(draft, &["session", "tps"], json!(false));
+    });
+    let screen = h.wait_for("Plan the fix.");
+    assert!(!screen.contains("tok/s"), "{screen}");
+
+    h.tui.keymap.dispatch("session.toggle.thinking", None);
+    assert!(
+        h.app
+            .wait_until(Duration::from_secs(5), || !h.app.text().contains("Plan the fix.")),
+        "{}",
+        h.app.text()
+    );
+    assert_eq!(
+        h.tui.settings.info().session.and_then(|session| session.thinking),
+        Some(Visibility::Hide)
+    );
+}
+
 #[test]
 fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     let messages = vec![

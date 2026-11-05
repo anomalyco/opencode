@@ -18,7 +18,7 @@ pub fn install(tui: &Rc<Tui>) {
         let weak = weak.clone();
         move || {
             let weak = weak.clone();
-            Condition::when(move || weak.upgrade().is_some_and(|tui| !tui.config.tabs.enabled))
+            Condition::when(move || weak.upgrade().is_some_and(|tui| !tui.config().tabs.enabled))
         }
     };
     let commands: Vec<TuiCommand> = (1..=9)
