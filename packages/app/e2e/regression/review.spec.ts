@@ -1959,8 +1959,8 @@ test("a large file whose full diff fails to load says so, and loads on Try again
   await expect(failure).toHaveCount(0)
 })
 
-// A failed search used to read "No matching files", as if the workspace had no such file.
-test("a failed file search offers a retry instead of no matching files", async ({ page }) => {
+// A failed search used to read "No results found", as if the workspace had no such file.
+test("a failed file search offers a retry instead of no results", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewSearchFailure"
   await openSession(page, {
     name: "ReviewSearchFailure",
@@ -1981,7 +1981,7 @@ test("a failed file search offers a retry instead of no matching files", async (
   await openFileLauncher(panel)
   await filter.fill("nested")
   await expect(failure.getByText("Couldn't search files", { exact: true })).toBeVisible()
-  await expect(panel.getByText("No matching files", { exact: true })).toHaveCount(0)
+  await expect(panel.getByText("No results found", { exact: true })).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath("file-search-failed.png"), animations: "disabled" })
   search.failing = false
   await failure.getByRole("button", { name: "Try again", exact: true }).click()
