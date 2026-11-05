@@ -253,14 +253,14 @@ pub enum ProviderSettingsTimeout {
 
 impl<'de> Deserialize<'de> for ProviderSettingsTimeout {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -286,11 +286,11 @@ pub enum ProviderCompaction {
 
 impl<'de> Deserialize<'de> for ProviderCompaction {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("summary") => crate::de::variant(value).map(Self::Summary),
-            Some("native") => crate::de::variant(value).map(Self::Native),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("summary") => raw.variant().map(Self::Summary),
+            Some("native") => raw.variant().map(Self::Native),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -361,14 +361,14 @@ pub enum ProviderCacheWarming {
 
 impl<'de> Deserialize<'de> for ProviderCacheWarming {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -746,13 +746,13 @@ pub enum PluginSource {
 
 impl<'de> Deserialize<'de> for PluginSource {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("builtin") => crate::de::variant(value).map(Self::Builtin),
-            Some("package") => crate::de::variant(value).map(Self::Package),
-            Some("local") => crate::de::variant(value).map(Self::Local),
-            Some("sdk") => crate::de::variant(value).map(Self::Sdk),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("builtin") => raw.variant().map(Self::Builtin),
+            Some("package") => raw.variant().map(Self::Package),
+            Some("local") => raw.variant().map(Self::Local),
+            Some("sdk") => raw.variant().map(Self::Sdk),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -807,11 +807,11 @@ pub enum PluginState {
 
 impl<'de> Deserialize<'de> for PluginState {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("active") => crate::de::variant(value).map(Self::Active),
-            Some("failed") => crate::de::variant(value).map(Self::Failed),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("active") => raw.variant().map(Self::Active),
+            Some("failed") => raw.variant().map(Self::Failed),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -1102,11 +1102,11 @@ pub enum SessionForkBoundary {
 
 impl<'de> Deserialize<'de> for SessionForkBoundary {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("before") => crate::de::variant(value).map(Self::Before),
-            Some("through") => crate::de::variant(value).map(Self::Through),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("before") => raw.variant().map(Self::Before),
+            Some("through") => raw.variant().map(Self::Through),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -1508,11 +1508,11 @@ pub enum PromptFileSource {
 
 impl<'de> Deserialize<'de> for PromptFileSource {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("inline") => crate::de::variant(value).map(Self::Inline),
-            Some("uri") => crate::de::variant(value).map(Self::Uri),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("inline") => raw.variant().map(Self::Inline),
+            Some("uri") => raw.variant().map(Self::Uri),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2049,14 +2049,14 @@ pub enum SessionMessageShellExit {
 
 impl<'de> Deserialize<'de> for SessionMessageShellExit {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -2156,11 +2156,11 @@ pub enum ToolContent {
 
 impl<'de> Deserialize<'de> for ToolContent {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("text") => crate::de::variant(value).map(Self::Text),
-            Some("file") => crate::de::variant(value).map(Self::File),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("text") => raw.variant().map(Self::Text),
+            Some("file") => raw.variant().map(Self::File),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2226,13 +2226,13 @@ pub enum SessionMessageAssistantToolState {
 
 impl<'de> Deserialize<'de> for SessionMessageAssistantToolState {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("streaming") => crate::de::variant(value).map(Self::Streaming),
-            Some("running") => crate::de::variant(value).map(Self::Running),
-            Some("completed") => crate::de::variant(value).map(Self::Completed),
-            Some("error") => crate::de::variant(value).map(Self::Error),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("streaming") => raw.variant().map(Self::Streaming),
+            Some("running") => raw.variant().map(Self::Running),
+            Some("completed") => raw.variant().map(Self::Completed),
+            Some("error") => raw.variant().map(Self::Error),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2285,12 +2285,12 @@ pub enum SessionMessageAssistantContentItem {
 
 impl<'de> Deserialize<'de> for SessionMessageAssistantContentItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("text") => crate::de::variant(value).map(Self::Text),
-            Some("reasoning") => crate::de::variant(value).map(Self::Reasoning),
-            Some("tool") => crate::de::variant(value).map(Self::Tool),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("text") => raw.variant().map(Self::Text),
+            Some("reasoning") => raw.variant().map(Self::Reasoning),
+            Some("tool") => raw.variant().map(Self::Tool),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2506,12 +2506,12 @@ pub enum SessionMessageCompaction {
 
 impl<'de> Deserialize<'de> for SessionMessageCompaction {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("running") => crate::de::variant(value).map(Self::Running),
-            Some("completed") => crate::de::variant(value).map(Self::Completed),
-            Some("failed") => crate::de::variant(value).map(Self::Failed),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("running") => raw.variant().map(Self::Running),
+            Some("completed") => raw.variant().map(Self::Completed),
+            Some("failed") => raw.variant().map(Self::Failed),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2561,20 +2561,20 @@ pub enum SessionMessageInfo {
 
 impl<'de> Deserialize<'de> for SessionMessageInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("agent-switched") => crate::de::variant(value).map(Self::AgentSwitched),
-            Some("model-switched") => crate::de::variant(value).map(Self::ModelSwitched),
-            Some("location-switched") => crate::de::variant(value).map(Self::LocationSwitched),
-            Some("user") => crate::de::variant(value).map(Self::User),
-            Some("synthetic") => crate::de::variant(value).map(Self::Synthetic),
-            Some("system") => crate::de::variant(value).map(Self::System),
-            Some("skill") => crate::de::variant(value).map(Self::Skill),
-            Some("shell") => crate::de::variant(value).map(Self::Shell),
-            Some("assistant") => crate::de::variant(value).map(Self::Assistant),
-            Some("compaction") => crate::de::variant(value).map(Self::Compaction),
-            Some("idle") => crate::de::variant(value).map(Self::Idle),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("agent-switched") => raw.variant().map(Self::AgentSwitched),
+            Some("model-switched") => raw.variant().map(Self::ModelSwitched),
+            Some("location-switched") => raw.variant().map(Self::LocationSwitched),
+            Some("user") => raw.variant().map(Self::User),
+            Some("synthetic") => raw.variant().map(Self::Synthetic),
+            Some("system") => raw.variant().map(Self::System),
+            Some("skill") => raw.variant().map(Self::Skill),
+            Some("shell") => raw.variant().map(Self::Shell),
+            Some("assistant") => raw.variant().map(Self::Assistant),
+            Some("compaction") => raw.variant().map(Self::Compaction),
+            Some("idle") => raw.variant().map(Self::Idle),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2654,13 +2654,13 @@ pub enum SessionInboxInfo {
 
 impl<'de> Deserialize<'de> for SessionInboxInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("user") => crate::de::variant(value).map(Self::User),
-            Some("synthetic") => crate::de::variant(value).map(Self::Synthetic),
-            Some("compaction") => crate::de::variant(value).map(Self::Compaction),
-            Some("move") => crate::de::variant(value).map(Self::Move),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("user") => raw.variant().map(Self::User),
+            Some("synthetic") => raw.variant().map(Self::Synthetic),
+            Some("compaction") => raw.variant().map(Self::Compaction),
+            Some("move") => raw.variant().map(Self::Move),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -2835,17 +2835,17 @@ pub enum FormWhenValue {
 
 impl<'de> Deserialize<'de> for FormWhenValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -3056,15 +3056,15 @@ pub enum FormField {
 
 impl<'de> Deserialize<'de> for FormField {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("string") => crate::de::variant(value).map(Self::String),
-            Some("number") => crate::de::variant(value).map(Self::Number),
-            Some("integer") => crate::de::variant(value).map(Self::Integer),
-            Some("boolean") => crate::de::variant(value).map(Self::Boolean),
-            Some("multiselect") => crate::de::variant(value).map(Self::Multiselect),
-            Some("external") => crate::de::variant(value).map(Self::External),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("string") => raw.variant().map(Self::String),
+            Some("number") => raw.variant().map(Self::Number),
+            Some("integer") => raw.variant().map(Self::Integer),
+            Some("boolean") => raw.variant().map(Self::Boolean),
+            Some("multiselect") => raw.variant().map(Self::Multiselect),
+            Some("external") => raw.variant().map(Self::External),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -3140,20 +3140,20 @@ pub enum FormValue {
 
 impl<'de> Deserialize<'de> for FormValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Array(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -3186,12 +3186,12 @@ pub enum FormState {
 
 impl<'de> Deserialize<'de> for FormState {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("pending") => crate::de::variant(value).map(Self::Pending),
-            Some("answered") => crate::de::variant(value).map(Self::Answered),
-            Some("cancelled") => crate::de::variant(value).map(Self::Cancelled),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("pending") => raw.variant().map(Self::Pending),
+            Some("answered") => raw.variant().map(Self::Answered),
+            Some("cancelled") => raw.variant().map(Self::Cancelled),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -3369,12 +3369,12 @@ pub enum SessionStatsTools {
 
 impl<'de> Deserialize<'de> for SessionStatsTools {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("mode").and_then(serde_json::Value::as_str) {
-            Some("none") => crate::de::variant(value).map(Self::None),
-            Some("summary") => crate::de::variant(value).map(Self::Summary),
-            Some("detail") => crate::de::variant(value).map(Self::Detail),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("mode").as_str() {
+            Some("none") => raw.variant().map(Self::None),
+            Some("summary") => raw.variant().map(Self::Summary),
+            Some("detail") => raw.variant().map(Self::Detail),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -4025,13 +4025,13 @@ pub enum SessionInboxItem {
 
 impl<'de> Deserialize<'de> for SessionInboxItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("user") => crate::de::variant(value).map(Self::User),
-            Some("synthetic") => crate::de::variant(value).map(Self::Synthetic),
-            Some("compaction") => crate::de::variant(value).map(Self::Compaction),
-            Some("move") => crate::de::variant(value).map(Self::Move),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("user") => raw.variant().map(Self::User),
+            Some("synthetic") => raw.variant().map(Self::Synthetic),
+            Some("compaction") => raw.variant().map(Self::Compaction),
+            Some("move") => raw.variant().map(Self::Move),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -4947,12 +4947,12 @@ pub enum SessionMessageAssistantContentEncoded {
 
 impl<'de> Deserialize<'de> for SessionMessageAssistantContentEncoded {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("text") => crate::de::variant(value).map(Self::Text),
-            Some("reasoning") => crate::de::variant(value).map(Self::Reasoning),
-            Some("tool") => crate::de::variant(value).map(Self::Tool),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("text") => raw.variant().map(Self::Text),
+            Some("reasoning") => raw.variant().map(Self::Reasoning),
+            Some("tool") => raw.variant().map(Self::Tool),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -5049,58 +5049,56 @@ pub enum SessionEventDurable {
 
 impl<'de> Deserialize<'de> for SessionEventDurable {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("session.created") => crate::de::variant(value).map(Self::SessionCreated),
-            Some("session.agent.selected") => crate::de::variant(value).map(Self::SessionAgentSelected),
-            Some("session.model.selected") => crate::de::variant(value).map(Self::SessionModelSelected),
-            Some("session.moved") => crate::de::variant(value).map(Self::SessionMoved),
-            Some("session.renamed") => crate::de::variant(value).map(Self::SessionRenamed),
-            Some("session.metadata.updated") => crate::de::variant(value).map(Self::SessionMetadataUpdated),
-            Some("session.permissions") => crate::de::variant(value).map(Self::SessionPermissions),
-            Some("session.viewed") => crate::de::variant(value).map(Self::SessionViewed),
-            Some("session.archived") => crate::de::variant(value).map(Self::SessionArchived),
-            Some("session.unarchived") => crate::de::variant(value).map(Self::SessionUnarchived),
-            Some("session.deleted") => crate::de::variant(value).map(Self::SessionDeleted),
-            Some("session.forked") => crate::de::variant(value).map(Self::SessionForked),
-            Some("session.inbox.delivered") => crate::de::variant(value).map(Self::SessionInboxDelivered),
-            Some("session.inbox.enqueued") => crate::de::variant(value).map(Self::SessionInboxEnqueued),
-            Some("session.inbox.cancelled") => crate::de::variant(value).map(Self::SessionInboxCancelled),
-            Some("session.inbox.delivery.changed") => crate::de::variant(value).map(Self::SessionInboxDeliveryChanged),
-            Some("session.execution.started") => crate::de::variant(value).map(Self::SessionExecutionStarted),
-            Some("session.execution.succeeded") => crate::de::variant(value).map(Self::SessionExecutionSucceeded),
-            Some("session.execution.failed") => crate::de::variant(value).map(Self::SessionExecutionFailed),
-            Some("session.execution.interrupted") => crate::de::variant(value).map(Self::SessionExecutionInterrupted),
-            Some("session.instructions.updated") => crate::de::variant(value).map(Self::SessionInstructionsUpdated),
-            Some("session.synthetic") => crate::de::variant(value).map(Self::SessionSynthetic),
-            Some("session.skill.activated") => crate::de::variant(value).map(Self::SessionSkillActivated),
-            Some("session.shell.started") => crate::de::variant(value).map(Self::SessionShellStarted),
-            Some("session.shell.ended") => crate::de::variant(value).map(Self::SessionShellEnded),
-            Some("session.step.started") => crate::de::variant(value).map(Self::SessionStepStarted),
-            Some("session.step.streamed") => crate::de::variant(value).map(Self::SessionStepStreamed),
-            Some("session.step.ended") => crate::de::variant(value).map(Self::SessionStepEnded),
-            Some("session.step.failed") => crate::de::variant(value).map(Self::SessionStepFailed),
-            Some("session.text.started") => crate::de::variant(value).map(Self::SessionTextStarted),
-            Some("session.text.ended") => crate::de::variant(value).map(Self::SessionTextEnded),
-            Some("session.reasoning.started") => crate::de::variant(value).map(Self::SessionReasoningStarted),
-            Some("session.reasoning.ended") => crate::de::variant(value).map(Self::SessionReasoningEnded),
-            Some("session.tool.input.started") => crate::de::variant(value).map(Self::SessionToolInputStarted),
-            Some("session.tool.input.ended") => crate::de::variant(value).map(Self::SessionToolInputEnded),
-            Some("session.tool.called") => crate::de::variant(value).map(Self::SessionToolCalled),
-            Some("session.tool.success") => crate::de::variant(value).map(Self::SessionToolSuccess),
-            Some("session.tool.failed") => crate::de::variant(value).map(Self::SessionToolFailed),
-            Some("session.retry.scheduled") => crate::de::variant(value).map(Self::SessionRetryScheduled),
-            Some("session.compaction.started") => crate::de::variant(value).map(Self::SessionCompactionStarted),
-            Some("session.compaction.ended") => crate::de::variant(value).map(Self::SessionCompactionEnded),
-            Some("session.compaction.failed") => crate::de::variant(value).map(Self::SessionCompactionFailed),
-            Some("session.revert.staged") => crate::de::variant(value).map(Self::SessionRevertStaged),
-            Some("session.revert.cleared") => crate::de::variant(value).map(Self::SessionRevertCleared),
-            Some("session.revert.committed") => crate::de::variant(value).map(Self::SessionRevertCommitted),
-            Some("session.usage.recorded") => crate::de::variant(value).map(Self::SessionUsageRecorded),
-            Some("session.message.content.updated") => {
-                crate::de::variant(value).map(Self::SessionMessageContentUpdated)
-            }
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("session.created") => raw.variant().map(Self::SessionCreated),
+            Some("session.agent.selected") => raw.variant().map(Self::SessionAgentSelected),
+            Some("session.model.selected") => raw.variant().map(Self::SessionModelSelected),
+            Some("session.moved") => raw.variant().map(Self::SessionMoved),
+            Some("session.renamed") => raw.variant().map(Self::SessionRenamed),
+            Some("session.metadata.updated") => raw.variant().map(Self::SessionMetadataUpdated),
+            Some("session.permissions") => raw.variant().map(Self::SessionPermissions),
+            Some("session.viewed") => raw.variant().map(Self::SessionViewed),
+            Some("session.archived") => raw.variant().map(Self::SessionArchived),
+            Some("session.unarchived") => raw.variant().map(Self::SessionUnarchived),
+            Some("session.deleted") => raw.variant().map(Self::SessionDeleted),
+            Some("session.forked") => raw.variant().map(Self::SessionForked),
+            Some("session.inbox.delivered") => raw.variant().map(Self::SessionInboxDelivered),
+            Some("session.inbox.enqueued") => raw.variant().map(Self::SessionInboxEnqueued),
+            Some("session.inbox.cancelled") => raw.variant().map(Self::SessionInboxCancelled),
+            Some("session.inbox.delivery.changed") => raw.variant().map(Self::SessionInboxDeliveryChanged),
+            Some("session.execution.started") => raw.variant().map(Self::SessionExecutionStarted),
+            Some("session.execution.succeeded") => raw.variant().map(Self::SessionExecutionSucceeded),
+            Some("session.execution.failed") => raw.variant().map(Self::SessionExecutionFailed),
+            Some("session.execution.interrupted") => raw.variant().map(Self::SessionExecutionInterrupted),
+            Some("session.instructions.updated") => raw.variant().map(Self::SessionInstructionsUpdated),
+            Some("session.synthetic") => raw.variant().map(Self::SessionSynthetic),
+            Some("session.skill.activated") => raw.variant().map(Self::SessionSkillActivated),
+            Some("session.shell.started") => raw.variant().map(Self::SessionShellStarted),
+            Some("session.shell.ended") => raw.variant().map(Self::SessionShellEnded),
+            Some("session.step.started") => raw.variant().map(Self::SessionStepStarted),
+            Some("session.step.streamed") => raw.variant().map(Self::SessionStepStreamed),
+            Some("session.step.ended") => raw.variant().map(Self::SessionStepEnded),
+            Some("session.step.failed") => raw.variant().map(Self::SessionStepFailed),
+            Some("session.text.started") => raw.variant().map(Self::SessionTextStarted),
+            Some("session.text.ended") => raw.variant().map(Self::SessionTextEnded),
+            Some("session.reasoning.started") => raw.variant().map(Self::SessionReasoningStarted),
+            Some("session.reasoning.ended") => raw.variant().map(Self::SessionReasoningEnded),
+            Some("session.tool.input.started") => raw.variant().map(Self::SessionToolInputStarted),
+            Some("session.tool.input.ended") => raw.variant().map(Self::SessionToolInputEnded),
+            Some("session.tool.called") => raw.variant().map(Self::SessionToolCalled),
+            Some("session.tool.success") => raw.variant().map(Self::SessionToolSuccess),
+            Some("session.tool.failed") => raw.variant().map(Self::SessionToolFailed),
+            Some("session.retry.scheduled") => raw.variant().map(Self::SessionRetryScheduled),
+            Some("session.compaction.started") => raw.variant().map(Self::SessionCompactionStarted),
+            Some("session.compaction.ended") => raw.variant().map(Self::SessionCompactionEnded),
+            Some("session.compaction.failed") => raw.variant().map(Self::SessionCompactionFailed),
+            Some("session.revert.staged") => raw.variant().map(Self::SessionRevertStaged),
+            Some("session.revert.cleared") => raw.variant().map(Self::SessionRevertCleared),
+            Some("session.revert.committed") => raw.variant().map(Self::SessionRevertCommitted),
+            Some("session.usage.recorded") => raw.variant().map(Self::SessionUsageRecorded),
+            Some("session.message.content.updated") => raw.variant().map(Self::SessionMessageContentUpdated),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -5182,8 +5180,8 @@ pub enum SessionLogItem {
 
 impl<'de> Deserialize<'de> for SessionLogItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
             Some("session.created")
             | Some("session.agent.selected")
             | Some("session.model.selected")
@@ -5230,9 +5228,9 @@ impl<'de> Deserialize<'de> for SessionLogItem {
             | Some("session.revert.cleared")
             | Some("session.revert.committed")
             | Some("session.usage.recorded")
-            | Some("session.message.content.updated") => crate::de::variant(value).map(Self::Durable),
-            Some("log.synced") => crate::de::variant(value).map(Self::LogSynced),
-            _ => Ok(Self::Unknown(value)),
+            | Some("session.message.content.updated") => raw.variant().map(Self::Durable),
+            Some("log.synced") => raw.variant().map(Self::LogSynced),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -5860,12 +5858,12 @@ pub enum GenerateDecisionPart {
 
 impl<'de> Deserialize<'de> for GenerateDecisionPart {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("text") => crate::de::variant(value).map(Self::Text),
-            Some("json") => crate::de::variant(value).map(Self::Json),
-            Some("file") => crate::de::variant(value).map(Self::File),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("text") => raw.variant().map(Self::Text),
+            Some("json") => raw.variant().map(Self::Json),
+            Some("file") => raw.variant().map(Self::File),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -5901,14 +5899,14 @@ pub enum GenerateChoiceValue {
 
 impl<'de> Deserialize<'de> for GenerateChoiceValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -5955,12 +5953,12 @@ pub enum GenerateDecisionQuestion {
 
 impl<'de> Deserialize<'de> for GenerateDecisionQuestion {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("predicate") => crate::de::variant(value).map(Self::Predicate),
-            Some("choice") => crate::de::variant(value).map(Self::Choice),
-            Some("score") => crate::de::variant(value).map(Self::Score),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("predicate") => raw.variant().map(Self::Predicate),
+            Some("choice") => raw.variant().map(Self::Choice),
+            Some("score") => raw.variant().map(Self::Score),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6052,13 +6050,13 @@ pub enum GenerateDecisionAnswer {
 
 impl<'de> Deserialize<'de> for GenerateDecisionAnswer {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("predicate") => crate::de::variant(value).map(Self::Predicate),
-            Some("choice") => crate::de::variant(value).map(Self::Choice),
-            Some("score") => crate::de::variant(value).map(Self::Score),
-            Some("error") => crate::de::variant(value).map(Self::Error),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("predicate") => raw.variant().map(Self::Predicate),
+            Some("choice") => raw.variant().map(Self::Choice),
+            Some("score") => raw.variant().map(Self::Score),
+            Some("error") => raw.variant().map(Self::Error),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6171,11 +6169,11 @@ pub enum VoiceTransportInput {
 
 impl<'de> Deserialize<'de> for VoiceTransportInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("webrtc") => crate::de::variant(value).map(Self::Webrtc),
-            Some("websocket") => crate::de::variant(value).map(Self::Websocket),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("webrtc") => raw.variant().map(Self::Webrtc),
+            Some("websocket") => raw.variant().map(Self::Websocket),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6226,11 +6224,11 @@ pub enum VoiceTransport {
 
 impl<'de> Deserialize<'de> for VoiceTransport {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("webrtc") => crate::de::variant(value).map(Self::Webrtc),
-            Some("websocket") => crate::de::variant(value).map(Self::Websocket),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("webrtc") => raw.variant().map(Self::Webrtc),
+            Some("websocket") => raw.variant().map(Self::Websocket),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6493,14 +6491,14 @@ pub enum IntegrationMethod {
 
 impl<'de> Deserialize<'de> for IntegrationMethod {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("oauth") => crate::de::variant(value).map(Self::Oauth),
-            Some("command") => crate::de::variant(value).map(Self::Command),
-            Some("key") => crate::de::variant(value).map(Self::Key),
-            Some("external") => crate::de::variant(value).map(Self::External),
-            Some("env") => crate::de::variant(value).map(Self::Env),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("oauth") => raw.variant().map(Self::Oauth),
+            Some("command") => raw.variant().map(Self::Command),
+            Some("key") => raw.variant().map(Self::Key),
+            Some("external") => raw.variant().map(Self::External),
+            Some("env") => raw.variant().map(Self::Env),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6635,11 +6633,11 @@ pub enum ConnectionInfo {
 
 impl<'de> Deserialize<'de> for ConnectionInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("credential") => crate::de::variant(value).map(Self::Credential),
-            Some("env") => crate::de::variant(value).map(Self::Env),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("credential") => raw.variant().map(Self::Credential),
+            Some("env") => raw.variant().map(Self::Env),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6860,13 +6858,13 @@ pub enum IntegrationAttemptStatus {
 
 impl<'de> Deserialize<'de> for IntegrationAttemptStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("pending") => crate::de::variant(value).map(Self::Pending),
-            Some("complete") => crate::de::variant(value).map(Self::Complete),
-            Some("failed") => crate::de::variant(value).map(Self::Failed),
-            Some("expired") => crate::de::variant(value).map(Self::Expired),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("pending") => raw.variant().map(Self::Pending),
+            Some("complete") => raw.variant().map(Self::Complete),
+            Some("failed") => raw.variant().map(Self::Failed),
+            Some("expired") => raw.variant().map(Self::Expired),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -6984,13 +6982,13 @@ pub enum IntegrationCommandAttemptStatus {
 
 impl<'de> Deserialize<'de> for IntegrationCommandAttemptStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("pending") => crate::de::variant(value).map(Self::Pending),
-            Some("complete") => crate::de::variant(value).map(Self::Complete),
-            Some("failed") => crate::de::variant(value).map(Self::Failed),
-            Some("expired") => crate::de::variant(value).map(Self::Expired),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("pending") => raw.variant().map(Self::Pending),
+            Some("complete") => raw.variant().map(Self::Complete),
+            Some("failed") => raw.variant().map(Self::Failed),
+            Some("expired") => raw.variant().map(Self::Expired),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -7076,14 +7074,14 @@ pub enum McpServerStatus {
 
 impl<'de> Deserialize<'de> for McpServerStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("connected") => crate::de::variant(value).map(Self::Connected),
-            Some("pending") => crate::de::variant(value).map(Self::Pending),
-            Some("disabled") => crate::de::variant(value).map(Self::Disabled),
-            Some("failed") => crate::de::variant(value).map(Self::Failed),
-            Some("needs_auth") => crate::de::variant(value).map(Self::NeedsAuth),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("connected") => raw.variant().map(Self::Connected),
+            Some("pending") => raw.variant().map(Self::Pending),
+            Some("disabled") => raw.variant().map(Self::Disabled),
+            Some("failed") => raw.variant().map(Self::Failed),
+            Some("needs_auth") => raw.variant().map(Self::NeedsAuth),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -7258,14 +7256,14 @@ pub enum ExperimentalMcpAddInputConfigRemoteOauth {
 
 impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfigRemoteOauth {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -7298,11 +7296,11 @@ pub enum ExperimentalMcpAddInputConfig {
 
 impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfig {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("local") => crate::de::variant(value).map(Self::Local),
-            Some("remote") => crate::de::variant(value).map(Self::Remote),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("local") => raw.variant().map(Self::Local),
+            Some("remote") => raw.variant().map(Self::Remote),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -7409,12 +7407,12 @@ pub enum CredentialValue {
 
 impl<'de> Deserialize<'de> for CredentialValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("oauth") => crate::de::variant(value).map(Self::Oauth),
-            Some("key") => crate::de::variant(value).map(Self::Key),
-            Some("external") => crate::de::variant(value).map(Self::External),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("oauth") => raw.variant().map(Self::Oauth),
+            Some("key") => raw.variant().map(Self::Key),
+            Some("external") => raw.variant().map(Self::External),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -8968,12 +8966,12 @@ pub enum SessionStatus {
 
 impl<'de> Deserialize<'de> for SessionStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("idle") => crate::de::variant(value).map(Self::Idle),
-            Some("retry") => crate::de::variant(value).map(Self::Retry),
-            Some("busy") => crate::de::variant(value).map(Self::Busy),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("idle") => raw.variant().map(Self::Idle),
+            Some("retry") => raw.variant().map(Self::Retry),
+            Some("busy") => raw.variant().map(Self::Busy),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -9356,107 +9354,107 @@ pub enum V2Event {
 
 impl<'de> Deserialize<'de> for V2Event {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("location.shutdown") => crate::de::variant(value).map(Self::LocationShutdown),
-            Some("models-dev.refreshed") => crate::de::variant(value).map(Self::ModelsDevRefreshed),
-            Some("credential.updated") => crate::de::variant(value).map(Self::CredentialUpdated),
-            Some("credential.switched") => crate::de::variant(value).map(Self::CredentialSwitched),
-            Some("integration.updated") => crate::de::variant(value).map(Self::IntegrationUpdated),
-            Some("provider.updated") => crate::de::variant(value).map(Self::ProviderUpdated),
-            Some("model.updated") => crate::de::variant(value).map(Self::ModelUpdated),
-            Some("agent.updated") => crate::de::variant(value).map(Self::AgentUpdated),
-            Some("session.created") => crate::de::variant(value).map(Self::SessionCreated),
-            Some("session.agent.selected") => crate::de::variant(value).map(Self::SessionAgentSelected),
-            Some("session.model.selected") => crate::de::variant(value).map(Self::SessionModelSelected),
-            Some("session.moved") => crate::de::variant(value).map(Self::SessionMoved),
-            Some("session.renamed") => crate::de::variant(value).map(Self::SessionRenamed),
-            Some("session.metadata.updated") => crate::de::variant(value).map(Self::SessionMetadataUpdated),
-            Some("session.permissions") => crate::de::variant(value).map(Self::SessionPermissions),
-            Some("session.viewed") => crate::de::variant(value).map(Self::SessionViewed),
-            Some("session.archived") => crate::de::variant(value).map(Self::SessionArchived),
-            Some("session.unarchived") => crate::de::variant(value).map(Self::SessionUnarchived),
-            Some("session.usage.updated") => crate::de::variant(value).map(Self::SessionUsageUpdated),
-            Some("session.deleted") => crate::de::variant(value).map(Self::SessionDeleted),
-            Some("session.forked") => crate::de::variant(value).map(Self::SessionForked),
-            Some("session.inbox.delivered") => crate::de::variant(value).map(Self::SessionInboxDelivered),
-            Some("session.inbox.enqueued") => crate::de::variant(value).map(Self::SessionInboxEnqueued),
-            Some("session.inbox.cancelled") => crate::de::variant(value).map(Self::SessionInboxCancelled),
-            Some("session.inbox.delivery.changed") => crate::de::variant(value).map(Self::SessionInboxDeliveryChanged),
-            Some("session.execution.started") => crate::de::variant(value).map(Self::SessionExecutionStarted),
-            Some("session.execution.succeeded") => crate::de::variant(value).map(Self::SessionExecutionSucceeded),
-            Some("session.execution.failed") => crate::de::variant(value).map(Self::SessionExecutionFailed),
-            Some("session.execution.interrupted") => crate::de::variant(value).map(Self::SessionExecutionInterrupted),
-            Some("session.instructions.updated") => crate::de::variant(value).map(Self::SessionInstructionsUpdated),
-            Some("session.synthetic") => crate::de::variant(value).map(Self::SessionSynthetic),
-            Some("session.skill.activated") => crate::de::variant(value).map(Self::SessionSkillActivated),
-            Some("session.shell.started") => crate::de::variant(value).map(Self::SessionShellStarted),
-            Some("session.shell.ended") => crate::de::variant(value).map(Self::SessionShellEnded),
-            Some("session.step.started") => crate::de::variant(value).map(Self::SessionStepStarted),
-            Some("session.step.streamed") => crate::de::variant(value).map(Self::SessionStepStreamed),
-            Some("session.step.ended") => crate::de::variant(value).map(Self::SessionStepEnded),
-            Some("session.step.failed") => crate::de::variant(value).map(Self::SessionStepFailed),
-            Some("session.text.started") => crate::de::variant(value).map(Self::SessionTextStarted),
-            Some("session.text.delta") => crate::de::variant(value).map(Self::SessionTextDelta),
-            Some("session.text.ended") => crate::de::variant(value).map(Self::SessionTextEnded),
-            Some("session.reasoning.started") => crate::de::variant(value).map(Self::SessionReasoningStarted),
-            Some("session.reasoning.delta") => crate::de::variant(value).map(Self::SessionReasoningDelta),
-            Some("session.reasoning.ended") => crate::de::variant(value).map(Self::SessionReasoningEnded),
-            Some("session.tool.input.started") => crate::de::variant(value).map(Self::SessionToolInputStarted),
-            Some("session.tool.input.delta") => crate::de::variant(value).map(Self::SessionToolInputDelta),
-            Some("session.tool.input.ended") => crate::de::variant(value).map(Self::SessionToolInputEnded),
-            Some("session.tool.called") => crate::de::variant(value).map(Self::SessionToolCalled),
-            Some("session.tool.progress") => crate::de::variant(value).map(Self::SessionToolProgress),
-            Some("session.tool.success") => crate::de::variant(value).map(Self::SessionToolSuccess),
-            Some("session.tool.failed") => crate::de::variant(value).map(Self::SessionToolFailed),
-            Some("session.retry.scheduled") => crate::de::variant(value).map(Self::SessionRetryScheduled),
-            Some("session.compaction.started") => crate::de::variant(value).map(Self::SessionCompactionStarted),
-            Some("session.compaction.delta") => crate::de::variant(value).map(Self::SessionCompactionDelta),
-            Some("session.compaction.ended") => crate::de::variant(value).map(Self::SessionCompactionEnded),
-            Some("session.compaction.failed") => crate::de::variant(value).map(Self::SessionCompactionFailed),
-            Some("session.revert.staged") => crate::de::variant(value).map(Self::SessionRevertStaged),
-            Some("session.revert.cleared") => crate::de::variant(value).map(Self::SessionRevertCleared),
-            Some("session.revert.committed") => crate::de::variant(value).map(Self::SessionRevertCommitted),
-            Some("filesystem.changed") => crate::de::variant(value).map(Self::FilesystemChanged),
-            Some("reference.updated") => crate::de::variant(value).map(Self::ReferenceUpdated),
-            Some("permission.asked") => crate::de::variant(value).map(Self::PermissionAsked),
-            Some("permission.replied") => crate::de::variant(value).map(Self::PermissionReplied),
-            Some("plugin.updated") => crate::de::variant(value).map(Self::PluginUpdated),
-            Some("project.updated") => crate::de::variant(value).map(Self::ProjectUpdated),
-            Some("worktree.updated") => crate::de::variant(value).map(Self::WorktreeUpdated),
-            Some("worktree.resolved") => crate::de::variant(value).map(Self::WorktreeResolved),
-            Some("command.updated") => crate::de::variant(value).map(Self::CommandUpdated),
-            Some("config.updated") => crate::de::variant(value).map(Self::ConfigUpdated),
-            Some("skill.updated") => crate::de::variant(value).map(Self::SkillUpdated),
-            Some("pty.created") => crate::de::variant(value).map(Self::PtyCreated),
-            Some("pty.updated") => crate::de::variant(value).map(Self::PtyUpdated),
-            Some("pty.exited") => crate::de::variant(value).map(Self::PtyExited),
-            Some("pty.deleted") => crate::de::variant(value).map(Self::PtyDeleted),
-            Some("persistent-pty.added") => crate::de::variant(value).map(Self::PersistentPtyAdded),
-            Some("persistent-pty.removed") => crate::de::variant(value).map(Self::PersistentPtyRemoved),
-            Some("persistent-pty.updated") => crate::de::variant(value).map(Self::PersistentPtyUpdated),
-            Some("shell.created") => crate::de::variant(value).map(Self::ShellCreated),
-            Some("shell.exited") => crate::de::variant(value).map(Self::ShellExited),
-            Some("shell.deleted") => crate::de::variant(value).map(Self::ShellDeleted),
-            Some("form.created") => crate::de::variant(value).map(Self::FormCreated),
-            Some("form.replied") => crate::de::variant(value).map(Self::FormReplied),
-            Some("form.cancelled") => crate::de::variant(value).map(Self::FormCancelled),
-            Some("websearch.updated") => crate::de::variant(value).map(Self::WebsearchUpdated),
-            Some("artifact.updated") => crate::de::variant(value).map(Self::ArtifactUpdated),
-            Some("session.status") => crate::de::variant(value).map(Self::SessionStatus),
-            Some("session.idle") => crate::de::variant(value).map(Self::SessionIdle),
-            Some("tui.prompt.append") => crate::de::variant(value).map(Self::TuiPromptAppend),
-            Some("tui.command.execute") => crate::de::variant(value).map(Self::TuiCommandExecute),
-            Some("tui.toast.show") => crate::de::variant(value).map(Self::TuiToastShow),
-            Some("tui.session.select") => crate::de::variant(value).map(Self::TuiSessionSelect),
-            Some("installation.updated") => crate::de::variant(value).map(Self::InstallationUpdated),
-            Some("installation.update-available") => crate::de::variant(value).map(Self::InstallationUpdateAvailable),
-            Some("vcs.branch.updated") => crate::de::variant(value).map(Self::VcsBranchUpdated),
-            Some("mcp.status.changed") => crate::de::variant(value).map(Self::McpStatusChanged),
-            Some("mcp.resources.changed") => crate::de::variant(value).map(Self::McpResourcesChanged),
-            Some("server.connected") => crate::de::variant(value).map(Self::ServerConnected),
-            Some(tag) if tag.starts_with("rpc.") => crate::de::variant(value).map(Self::Rpc),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("location.shutdown") => raw.variant().map(Self::LocationShutdown),
+            Some("models-dev.refreshed") => raw.variant().map(Self::ModelsDevRefreshed),
+            Some("credential.updated") => raw.variant().map(Self::CredentialUpdated),
+            Some("credential.switched") => raw.variant().map(Self::CredentialSwitched),
+            Some("integration.updated") => raw.variant().map(Self::IntegrationUpdated),
+            Some("provider.updated") => raw.variant().map(Self::ProviderUpdated),
+            Some("model.updated") => raw.variant().map(Self::ModelUpdated),
+            Some("agent.updated") => raw.variant().map(Self::AgentUpdated),
+            Some("session.created") => raw.variant().map(Self::SessionCreated),
+            Some("session.agent.selected") => raw.variant().map(Self::SessionAgentSelected),
+            Some("session.model.selected") => raw.variant().map(Self::SessionModelSelected),
+            Some("session.moved") => raw.variant().map(Self::SessionMoved),
+            Some("session.renamed") => raw.variant().map(Self::SessionRenamed),
+            Some("session.metadata.updated") => raw.variant().map(Self::SessionMetadataUpdated),
+            Some("session.permissions") => raw.variant().map(Self::SessionPermissions),
+            Some("session.viewed") => raw.variant().map(Self::SessionViewed),
+            Some("session.archived") => raw.variant().map(Self::SessionArchived),
+            Some("session.unarchived") => raw.variant().map(Self::SessionUnarchived),
+            Some("session.usage.updated") => raw.variant().map(Self::SessionUsageUpdated),
+            Some("session.deleted") => raw.variant().map(Self::SessionDeleted),
+            Some("session.forked") => raw.variant().map(Self::SessionForked),
+            Some("session.inbox.delivered") => raw.variant().map(Self::SessionInboxDelivered),
+            Some("session.inbox.enqueued") => raw.variant().map(Self::SessionInboxEnqueued),
+            Some("session.inbox.cancelled") => raw.variant().map(Self::SessionInboxCancelled),
+            Some("session.inbox.delivery.changed") => raw.variant().map(Self::SessionInboxDeliveryChanged),
+            Some("session.execution.started") => raw.variant().map(Self::SessionExecutionStarted),
+            Some("session.execution.succeeded") => raw.variant().map(Self::SessionExecutionSucceeded),
+            Some("session.execution.failed") => raw.variant().map(Self::SessionExecutionFailed),
+            Some("session.execution.interrupted") => raw.variant().map(Self::SessionExecutionInterrupted),
+            Some("session.instructions.updated") => raw.variant().map(Self::SessionInstructionsUpdated),
+            Some("session.synthetic") => raw.variant().map(Self::SessionSynthetic),
+            Some("session.skill.activated") => raw.variant().map(Self::SessionSkillActivated),
+            Some("session.shell.started") => raw.variant().map(Self::SessionShellStarted),
+            Some("session.shell.ended") => raw.variant().map(Self::SessionShellEnded),
+            Some("session.step.started") => raw.variant().map(Self::SessionStepStarted),
+            Some("session.step.streamed") => raw.variant().map(Self::SessionStepStreamed),
+            Some("session.step.ended") => raw.variant().map(Self::SessionStepEnded),
+            Some("session.step.failed") => raw.variant().map(Self::SessionStepFailed),
+            Some("session.text.started") => raw.variant().map(Self::SessionTextStarted),
+            Some("session.text.delta") => raw.variant().map(Self::SessionTextDelta),
+            Some("session.text.ended") => raw.variant().map(Self::SessionTextEnded),
+            Some("session.reasoning.started") => raw.variant().map(Self::SessionReasoningStarted),
+            Some("session.reasoning.delta") => raw.variant().map(Self::SessionReasoningDelta),
+            Some("session.reasoning.ended") => raw.variant().map(Self::SessionReasoningEnded),
+            Some("session.tool.input.started") => raw.variant().map(Self::SessionToolInputStarted),
+            Some("session.tool.input.delta") => raw.variant().map(Self::SessionToolInputDelta),
+            Some("session.tool.input.ended") => raw.variant().map(Self::SessionToolInputEnded),
+            Some("session.tool.called") => raw.variant().map(Self::SessionToolCalled),
+            Some("session.tool.progress") => raw.variant().map(Self::SessionToolProgress),
+            Some("session.tool.success") => raw.variant().map(Self::SessionToolSuccess),
+            Some("session.tool.failed") => raw.variant().map(Self::SessionToolFailed),
+            Some("session.retry.scheduled") => raw.variant().map(Self::SessionRetryScheduled),
+            Some("session.compaction.started") => raw.variant().map(Self::SessionCompactionStarted),
+            Some("session.compaction.delta") => raw.variant().map(Self::SessionCompactionDelta),
+            Some("session.compaction.ended") => raw.variant().map(Self::SessionCompactionEnded),
+            Some("session.compaction.failed") => raw.variant().map(Self::SessionCompactionFailed),
+            Some("session.revert.staged") => raw.variant().map(Self::SessionRevertStaged),
+            Some("session.revert.cleared") => raw.variant().map(Self::SessionRevertCleared),
+            Some("session.revert.committed") => raw.variant().map(Self::SessionRevertCommitted),
+            Some("filesystem.changed") => raw.variant().map(Self::FilesystemChanged),
+            Some("reference.updated") => raw.variant().map(Self::ReferenceUpdated),
+            Some("permission.asked") => raw.variant().map(Self::PermissionAsked),
+            Some("permission.replied") => raw.variant().map(Self::PermissionReplied),
+            Some("plugin.updated") => raw.variant().map(Self::PluginUpdated),
+            Some("project.updated") => raw.variant().map(Self::ProjectUpdated),
+            Some("worktree.updated") => raw.variant().map(Self::WorktreeUpdated),
+            Some("worktree.resolved") => raw.variant().map(Self::WorktreeResolved),
+            Some("command.updated") => raw.variant().map(Self::CommandUpdated),
+            Some("config.updated") => raw.variant().map(Self::ConfigUpdated),
+            Some("skill.updated") => raw.variant().map(Self::SkillUpdated),
+            Some("pty.created") => raw.variant().map(Self::PtyCreated),
+            Some("pty.updated") => raw.variant().map(Self::PtyUpdated),
+            Some("pty.exited") => raw.variant().map(Self::PtyExited),
+            Some("pty.deleted") => raw.variant().map(Self::PtyDeleted),
+            Some("persistent-pty.added") => raw.variant().map(Self::PersistentPtyAdded),
+            Some("persistent-pty.removed") => raw.variant().map(Self::PersistentPtyRemoved),
+            Some("persistent-pty.updated") => raw.variant().map(Self::PersistentPtyUpdated),
+            Some("shell.created") => raw.variant().map(Self::ShellCreated),
+            Some("shell.exited") => raw.variant().map(Self::ShellExited),
+            Some("shell.deleted") => raw.variant().map(Self::ShellDeleted),
+            Some("form.created") => raw.variant().map(Self::FormCreated),
+            Some("form.replied") => raw.variant().map(Self::FormReplied),
+            Some("form.cancelled") => raw.variant().map(Self::FormCancelled),
+            Some("websearch.updated") => raw.variant().map(Self::WebsearchUpdated),
+            Some("artifact.updated") => raw.variant().map(Self::ArtifactUpdated),
+            Some("session.status") => raw.variant().map(Self::SessionStatus),
+            Some("session.idle") => raw.variant().map(Self::SessionIdle),
+            Some("tui.prompt.append") => raw.variant().map(Self::TuiPromptAppend),
+            Some("tui.command.execute") => raw.variant().map(Self::TuiCommandExecute),
+            Some("tui.toast.show") => raw.variant().map(Self::TuiToastShow),
+            Some("tui.session.select") => raw.variant().map(Self::TuiSessionSelect),
+            Some("installation.updated") => raw.variant().map(Self::InstallationUpdated),
+            Some("installation.update-available") => raw.variant().map(Self::InstallationUpdateAvailable),
+            Some("vcs.branch.updated") => raw.variant().map(Self::VcsBranchUpdated),
+            Some("mcp.status.changed") => raw.variant().map(Self::McpStatusChanged),
+            Some("mcp.resources.changed") => raw.variant().map(Self::McpResourcesChanged),
+            Some("server.connected") => raw.variant().map(Self::ServerConnected),
+            Some(tag) if tag.starts_with("rpc.") => raw.variant().map(Self::Rpc),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -9905,20 +9903,20 @@ pub enum ScheduleWhenInput {
 
 impl<'de> Deserialize<'de> for ScheduleWhenInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object2(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object3(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object4(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -9950,14 +9948,14 @@ pub enum ScheduleConditionInput {
 
 impl<'de> Deserialize<'de> for ScheduleConditionInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object2(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -10064,13 +10062,13 @@ pub enum ScheduleWhen {
 
 impl<'de> Deserialize<'de> for ScheduleWhen {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("in") => crate::de::variant(value).map(Self::In),
-            Some("at") => crate::de::variant(value).map(Self::At),
-            Some("every") => crate::de::variant(value).map(Self::Every),
-            Some("cron") => crate::de::variant(value).map(Self::Cron),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("in") => raw.variant().map(Self::In),
+            Some("at") => raw.variant().map(Self::At),
+            Some("every") => raw.variant().map(Self::Every),
+            Some("cron") => raw.variant().map(Self::Cron),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -10118,11 +10116,11 @@ pub enum ScheduleCondition {
 
 impl<'de> Deserialize<'de> for ScheduleCondition {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("shell") => crate::de::variant(value).map(Self::Shell),
-            Some("code") => crate::de::variant(value).map(Self::Code),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("shell") => raw.variant().map(Self::Shell),
+            Some("code") => raw.variant().map(Self::Code),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -10741,12 +10739,12 @@ pub enum JobInfo {
 
 impl<'de> Deserialize<'de> for JobInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("kind").and_then(serde_json::Value::as_str) {
-            Some("shell") => crate::de::variant(value).map(Self::Shell),
-            Some("subagent") => crate::de::variant(value).map(Self::Subagent),
-            Some("image") => crate::de::variant(value).map(Self::Image),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("kind").as_str() {
+            Some("shell") => raw.variant().map(Self::Shell),
+            Some("subagent") => raw.variant().map(Self::Subagent),
+            Some("image") => raw.variant().map(Self::Image),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -10861,11 +10859,11 @@ pub enum ReferenceSource {
 
 impl<'de> Deserialize<'de> for ReferenceSource {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("local") => crate::de::variant(value).map(Self::Local),
-            Some("git") => crate::de::variant(value).map(Self::Git),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("local") => raw.variant().map(Self::Local),
+            Some("git") => raw.variant().map(Self::Git),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -11295,12 +11293,12 @@ pub enum ExperimentalMigrationV1StatusOutput2 {
 
 impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("status").and_then(serde_json::Value::as_str) {
-            Some("required") | Some("completed") => crate::de::variant(value).map(Self::Variant1),
-            Some("running") => crate::de::variant(value).map(Self::Running),
-            Some("error") => crate::de::variant(value).map(Self::Error),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("status").as_str() {
+            Some("required") | Some("completed") => raw.variant().map(Self::Variant1),
+            Some("running") => raw.variant().map(Self::Running),
+            Some("error") => raw.variant().map(Self::Error),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -11638,14 +11636,14 @@ pub enum ConfigEntryDocumentInfoModel {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoModel {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -11907,14 +11905,14 @@ pub enum ConfigEntryDocumentInfoFormatter {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoFormatter {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -11947,16 +11945,16 @@ pub enum ConfigEntryDocumentInfoLspObjectValue {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoLspObjectValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if value.get("disabled") == Some(&serde_json::json!(true)) {
-            if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if raw.field("disabled").as_bool() == Some(true) {
+            if let Ok(member) = raw.decode() {
                 return Ok(Self::Object(member));
             }
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object2(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -11971,14 +11969,14 @@ pub enum ConfigEntryDocumentInfoLsp {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoLsp {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12068,14 +12066,14 @@ pub enum ConfigEntryDocumentInfoCompactionBuffer {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoCompactionBuffer {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Number(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12136,17 +12134,17 @@ pub enum ConfigEntryDocumentInfoReferencesValue {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoReferencesValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object2(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12166,14 +12164,14 @@ pub enum ConfigEntryDocumentInfoWebsearch {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWebsearch {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12195,14 +12193,14 @@ pub enum ConfigEntryDocumentInfoPluginsItem {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoPluginsItem {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::String(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12232,14 +12230,14 @@ pub enum ConfigEntryDocumentInfoWarming {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWarming {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12311,11 +12309,11 @@ pub enum ConfigModelReasoning {
 
 impl<'de> Deserialize<'de> for ConfigModelReasoning {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("supported").and_then(serde_json::Value::as_bool) {
-            Some(false) => crate::de::variant(value).map(Self::False),
-            Some(true) => crate::de::variant(value).map(Self::True),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("supported").as_bool() {
+            Some(false) => raw.variant().map(Self::False),
+            Some(true) => raw.variant().map(Self::True),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
@@ -12386,14 +12384,14 @@ pub enum ConfigEntryDocumentInfoProvidersValueModelsValueCost {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoProvidersValueModelsValueCost {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Array(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12480,14 +12478,14 @@ pub enum ConfigEntryDocumentInfoExperimentalImageGenerate {
 
 impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalImageGenerate {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
         }
-        if let Ok(member) = serde_json::from_value(value.clone()) {
+        if let Ok(member) = raw.decode() {
             return Ok(Self::Object(member));
         }
-        Ok(Self::Unknown(value))
+        raw.unknown().map(Self::Unknown)
     }
 }
 
@@ -12605,11 +12603,11 @@ pub enum ConfigEntry {
 
 impl<'de> Deserialize<'de> for ConfigEntry {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        match value.get("type").and_then(serde_json::Value::as_str) {
-            Some("document") => crate::de::variant(value).map(Self::Document),
-            Some("directory") => crate::de::variant(value).map(Self::Directory),
-            _ => Ok(Self::Unknown(value)),
+        let raw = crate::de::Raw::deserialize(deserializer)?;
+        match raw.field("type").as_str() {
+            Some("document") => raw.variant().map(Self::Document),
+            Some("directory") => raw.variant().map(Self::Directory),
+            _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
