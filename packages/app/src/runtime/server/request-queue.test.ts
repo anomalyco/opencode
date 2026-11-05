@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRequestQueue } from "./request-queue"
+import type { RequestStallSnapshot } from "./request-queue-machine"
 
 function setup(input?: {
   limit?: number
@@ -9,7 +10,7 @@ function setup(input?: {
   setupHeadersTimeoutMs?: number
 }) {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
-  const logs: Array<{ message: string; data: Record<string, unknown> }> = []
+  const logs: Array<{ message: string; data: RequestStallSnapshot }> = []
   let clock = 0
 
   const queue = createRequestQueue({
@@ -188,7 +189,7 @@ describe("createRequestQueue", () => {
     const queued = input.queue.fetch("http://server/api/b")
     input.queue.dispose()
     const errors = await Promise.all([inflight, queued].map((request) => request.catch((cause: unknown) => cause)))
-    expect(errors.map((error) => (error as DOMException).name)).toEqual(["AbortError", "AbortError"])
+    expect(errors.map((error) => error instanceof DOMException && error.name)).toEqual(["AbortError", "AbortError"])
     expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/a"])
     expect(input.queue.inflight()).toBe(0)
     await expect(input.queue.fetch("http://server/api/c")).rejects.toBeInstanceOf(DOMException)
@@ -202,7 +203,7 @@ describe("createRequestQueue", () => {
     expect(input.queue.queued()).toBe(1)
     const error = await dead.catch((cause: unknown) => cause)
     expect(error).toBeInstanceOf(DOMException)
-    expect((error as DOMException).name).toBe("TimeoutError")
+    expect(error instanceof DOMException && error.name).toBe("TimeoutError")
     expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/dead", "/api/next"])
     input.pending[1]!.resolve()
     await expect(next).resolves.toBeInstanceOf(Response)
@@ -220,7 +221,7 @@ describe("createRequestQueue", () => {
     ]
 
     const errors = await Promise.all(others.map((request) => request.catch((cause: unknown) => cause)))
-    expect(errors.map((error) => (error as DOMException).name)).toEqual([
+    expect(errors.map((error) => error instanceof DOMException && error.name)).toEqual([
       "TimeoutError",
       "TimeoutError",
       "TimeoutError",

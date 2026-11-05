@@ -435,6 +435,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
   const write = async (key: string, document: unknown, attempt: number) => {
     const pin = (id: string) =>
       dispatch({ type: "save.referenced", storeId, key, attempt, ids: new Set([id]), graceMs: grace })
+
     const sources: Sources = new Map()
     const encoded = await encode(document, sources, pin)
 

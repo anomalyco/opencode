@@ -13,7 +13,9 @@ import {
 } from "./drafts-machine"
 
 const graceMs = 30
+
 const blob = new Blob(["image"])
+
 const doc = { storeId: 1, key: "draft" }
 
 function run(events: readonly DraftRetentionEvent[], from = createDraftRetentionState()) {
@@ -60,6 +62,7 @@ describe("transitionDraftRetention", () => {
   test("a load that read the document before a save replaced it does not unpin the new image", () => {
     const start = run([{ type: "store.registered" }, materialize("new")]).state
     const revision = selectDocumentRevision(start, 1, "draft")
+
     const saved = run(
       [
         { type: "save.started", ...doc, ids: new Set(["new"]), graceMs },
@@ -75,6 +78,7 @@ describe("transitionDraftRetention", () => {
       ids: new Set(["old"]),
       graceMs,
     })
+
     expect(late.state).toBe(saved.state)
     expect(status(late.state, "new")).toBe("pinned")
   })
@@ -85,6 +89,7 @@ describe("transitionDraftRetention", () => {
       materialize("new"),
       { type: "save.started", ...doc, ids: new Set(["new"]), graceMs },
     ]).state
+
     const revision = selectDocumentRevision(saving, 1, "draft")
     const attempt = selectLatestMutation(saving, 1, "draft")
     const saved = run([{ type: "save.committed", ...doc, attempt, ids: new Set(["new"]), graceMs }], saving).state
@@ -107,6 +112,7 @@ describe("transitionDraftRetention", () => {
       attempt: removal,
       graceMs,
     })
+
     expect(late.state).toBe(committed.state)
     expect(status(late.state, "img")).toBe("pinned")
   })
@@ -118,11 +124,13 @@ describe("transitionDraftRetention", () => {
       materialize("b"),
       { type: "save.started", ...doc, ids: new Set(["a"]), graceMs },
     ]).state
+
     const stale = selectLatestMutation(first, 1, "draft")
     const second = run([{ type: "save.started", ...doc, ids: new Set(["b"]), graceMs }], first).state
     expect(isCurrentSave(second, 1, "draft", stale)).toBe(false)
 
     const current = selectLatestMutation(second, 1, "draft")
+
     const done = run(
       [
         { type: "save.committed", ...doc, attempt: current, ids: new Set(["b"]), graceMs },
@@ -130,6 +138,7 @@ describe("transitionDraftRetention", () => {
       ],
       second,
     )
+
     expect(status(done.state, "a")).toBe("grace")
     expect(status(done.state, "b")).toBe("pinned")
   })
@@ -141,6 +150,7 @@ describe("transitionDraftRetention", () => {
       materialize("new"),
       { type: "save.started", ...doc, ids: new Set(["kept"]), graceMs },
     ]).state
+
     const committed = run(
       [
         {
@@ -154,6 +164,7 @@ describe("transitionDraftRetention", () => {
       ],
       first,
     ).state
+
     const attempt = selectLatestMutation(committed, 1, "draft")
     const failed = transitionDraftRetention(committed, { type: "save.aborted", ...doc, attempt, graceMs })
     expect(failed.effects).toEqual([{ type: "timer.arm", id: "new", attempt: expect.any(Number), delayMs: graceMs }])

@@ -97,7 +97,9 @@ export type DraftRetentionTransition = {
 }
 
 const none: readonly DraftRetentionEffect[] = []
+
 const empty: ReadonlySet<string> = new Set()
+
 const noSaves: ReadonlyMap<number, ReadonlySet<string>> = new Map()
 
 export function createDraftRetentionState(): DraftRetentionState {
@@ -127,6 +129,7 @@ export function transitionDraftRetention(
   if (event.type === "grace.expired") return expired(state, event.id, event.attempt)
 
   const name = documentName(event)
+
   const doc = state.documents.get(name) ?? {
     storeId: event.storeId,
     latestMutation: 0,

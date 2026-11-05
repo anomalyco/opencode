@@ -76,10 +76,12 @@ describe("transitionRequestQueue", () => {
 
   test("fast reads take free slots while a slow request waits for the slow share", () => {
     const options = { limit: 3, slowLimit: 1, stallMs: 2_000 }
+
     const result = run(
       [arrive("/api/vcs", 0, 0, true), arrive("/api/worktree", 0, 0, true), arrive("/fast", 0)],
       options,
     )
+
     expect(result.effects).toEqual([
       { type: "request.start", id: 1 },
       { type: "watcher.start", delayMs: 2_000 },

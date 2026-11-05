@@ -11,6 +11,7 @@ import {
   transitionRequestQueue,
   type RequestQueueEffect,
   type RequestQueueEvent,
+  type RequestStallSnapshot,
 } from "./request-queue-machine"
 
 // A socket that dies while the device sleeps can leave fetch waiting for response headers until the
@@ -30,7 +31,7 @@ export function createRequestQueue(input: {
   stallMs?: number
   headersTimeoutMs?: number
   setupHeadersTimeoutMs?: number
-  log?: (message: string, data: Record<string, unknown>) => void
+  log?: (message: string, data: RequestStallSnapshot) => void
   now?: () => number
 }) {
   const config = {

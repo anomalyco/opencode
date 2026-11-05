@@ -94,7 +94,9 @@ export type RequestClassification =
   | { readonly bypass: false; readonly slow: boolean; readonly setup: boolean; readonly priority: RequestPriority }
 
 const none: readonly RequestQueueEffect[] = []
+
 const stop: RequestQueueEffect = { type: "watcher.stop" }
+
 const bypass: RequestClassification = { bypass: true }
 
 export function createRequestQueueState(): RequestQueueState {
