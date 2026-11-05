@@ -54,6 +54,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
       requests.delete(effect.attempt)
       clearTimeout(request?.timer)
       request?.controller.abort()
+
       return
     }
 

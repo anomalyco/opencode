@@ -19,13 +19,17 @@ function replay(events: BranchPickerEvent[], state = INITIAL_BRANCH_PICKER_STATE
 }
 
 const target = (directory: string | undefined): BranchPickerEvent => ({ type: "target.changed", directory })
+
 const open: BranchPickerEvent = { type: "open.change", open: true }
+
 const close: BranchPickerEvent = { type: "open.change", open: false }
+
 const loaded = (attempt: number, items = ["dev", "main"]): BranchPickerEvent => ({
   type: "branches.loaded",
   attempt,
   items,
 })
+
 const focus: BranchPickerEffect = { type: "focus.composer" }
 
 describe("branch picker", () => {
@@ -124,6 +128,7 @@ describe("branch picker", () => {
       directory: "/repo-a",
       items: ["main", "dev"],
     })
+
     expect(synced.effects).toEqual([{ type: "branches.abort", attempt: 2 }])
     expect(selectBranchInitial(synced.state)).toEqual({ items: ["main", "dev"], failed: false })
     expect(selectBranchBusy(synced.state)).toBe(false)
@@ -160,8 +165,13 @@ describe("branch picker", () => {
 
   test("ignores results from superseded attempts", () => {
     const opened = replay([target("/repo-a"), loaded(1), open])
-    for (const event of [loaded(1), { type: "branches.failed", attempt: 1 }, { type: "branches.timed-out", attempt: 1 }]) {
-      expect(transitionBranchPicker(opened.state, event as BranchPickerEvent).state).toBe(opened.state)
+
+    for (const event of [
+      loaded(1),
+      { type: "branches.failed", attempt: 1 },
+      { type: "branches.timed-out", attempt: 1 },
+    ] satisfies BranchPickerEvent[]) {
+      expect(transitionBranchPicker(opened.state, event).state).toBe(opened.state)
     }
 
     const loading = replay([target("/repo-a"), target("/repo-b")])

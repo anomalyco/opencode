@@ -18,10 +18,24 @@ import {
   type WordmarkState,
 } from "./wordmark-machine"
 
-// SAFETY: the machine only stores and hands over these handles and the logo; it never calls or reads them.
-const board = { left: () => 800 } as unknown as PinBoardHandle
-const ball = { radius: () => 5 } as unknown as LodgerBall
-const logo = {} as HTMLDivElement
+// The machine only stores and hands over these handles; it never calls them.
+const board: PinBoardHandle = {
+  collide: () => undefined,
+  left: () => 800,
+  play: () => {},
+  steer: () => {},
+  restore: () => {},
+}
+
+const ball: LodgerBall = {
+  radius: () => 5,
+  at: () => ({ x: 0, y: 0 }),
+  place: () => {},
+  blink: () => {},
+  done: () => {},
+}
+
+const logo = document.createElement("div")
 
 function replay(events: WordmarkEvent[], state: WordmarkState = createWordmarkState(false)) {
   return events.reduce<{ state: WordmarkState; effects: readonly WordmarkEffect[] }>(
@@ -37,18 +51,26 @@ const release = (distance: number, options: { nearHole?: boolean; reducedMotion?
   ball,
   reducedMotion: options.reducedMotion ?? false,
 })
+
 const frame = (options: { inHole?: boolean; over?: boolean; reducedMotion?: boolean }): WordmarkEvent => ({
   type: "carry.frame",
   inHole: options.inHole ?? false,
   over: options.over ?? false,
   reducedMotion: options.reducedMotion ?? false,
 })
+
 const grab: WordmarkEvent = { type: "grab" }
+
 const mounted: WordmarkEvent = { type: "board.mounted", board }
 
 // The lodger pulled out, the pin board mounted, and the lodger perched beside it.
-const IDLE = replay([grab, { type: "drag.slip", reducedMotion: false }, mounted, { type: "settled", phase: "show" }])
-  .state
+const IDLE = replay([
+  grab,
+  { type: "drag.slip", reducedMotion: false },
+  mounted,
+  { type: "settled", phase: "show" },
+]).state
+
 const GAME = replay([grab, frame({ over: true }), release(40)], IDLE).state
 
 describe("wordmark lodger", () => {
@@ -143,9 +165,15 @@ describe("wordmark lodger", () => {
 
     const hop = transitionWordmark(carry, release(2)).state
     expect(hop).toEqual({ status: "hop", board, cue: 0 })
-    expect(replay([{ type: "cue.step", phase: "hop", cue: 1 }, { type: "settled", phase: "hop" }], hop).state).toEqual(
-      IDLE,
-    )
+    expect(
+      replay(
+        [
+          { type: "cue.step", phase: "hop", cue: 1 },
+          { type: "settled", phase: "hop" },
+        ],
+        hop,
+      ).state,
+    ).toEqual(IDLE)
 
     const home = transitionWordmark(carry, release(40)).state
     expect(home).toEqual({ status: "return", board })
@@ -188,6 +216,7 @@ describe("wordmark lodger", () => {
 
   test("ignores events that do not apply to the current phase", () => {
     const hidden = createWordmarkState(false)
+
     for (const event of [
       release(40),
       frame({ inHole: true }),

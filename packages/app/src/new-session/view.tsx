@@ -77,6 +77,7 @@ export function NewSessionView(props: {
     untrack(() => {
       const next = transitionWordmark(wordmark(), event)
       setWordmark(next.state)
+
       if (next.effects.some((effect) => effect.type === "focus.composer")) props.composer.restoreFocus()
     })
 

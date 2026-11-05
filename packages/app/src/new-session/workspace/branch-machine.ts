@@ -93,7 +93,9 @@ export function transitionBranchPicker(state: BranchPickerState, event: BranchPi
   if (event.type === "branches.timed-out") {
     const next = settle(state, event.attempt, undefined)
 
-    return next.state === state ? next : { state: next.state, effects: [{ type: "branches.abort", attempt: event.attempt }] }
+    return next.state === state
+      ? next
+      : { state: next.state, effects: [{ type: "branches.abort", attempt: event.attempt }] }
   }
 
   if (state.status !== "ready") return unchanged(state)
@@ -156,7 +158,8 @@ function retarget(state: LiveState, directory: string | undefined): BranchPicker
 
 // Every open revalidates the loaded list.
 function open(state: Exclude<LiveState, { status: "inactive" }>): BranchPickerTransition {
-  if (state.status === "loading") return state.open ? unchanged(state) : { state: { ...state, open: true }, effects: NONE }
+  if (state.status === "loading")
+    return state.open ? unchanged(state) : { state: { ...state, open: true }, effects: NONE }
 
   if (state.popover !== "closed") return unchanged(state)
 
@@ -169,7 +172,8 @@ function open(state: Exclude<LiveState, { status: "inactive" }>): BranchPickerTr
 }
 
 function close(state: Exclude<LiveState, { status: "inactive" }>): BranchPickerTransition {
-  if (state.status === "loading") return state.open ? { state: { ...state, open: false }, effects: NONE } : unchanged(state)
+  if (state.status === "loading")
+    return state.open ? { state: { ...state, open: false }, effects: NONE } : unchanged(state)
 
   if (state.popover === "closed") return unchanged(state)
 
