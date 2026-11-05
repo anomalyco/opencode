@@ -27,6 +27,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_api::client::Client;
+use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, V2Event};
 use opencode_local::cli_config::Info;
 use opencode_ui::dialog::{DialogKeymap, route_keys};
 use opencode_ui::keymap::{Keybinds, KeymapLayer, TuiCommand};
@@ -408,27 +409,31 @@ impl Prompt {
     }
 
     /// An inbox event of the session (`syncPending`): the queued and steering prompts.
-    pub fn inbox_event(&self, event: &Value) {
-        let data = &event["data"];
-        let id = data["inboxID"].as_str().unwrap_or_default().to_owned();
+    pub fn inbox_event(&self, event: &V2Event) {
         let mut state = self.0.state.borrow_mut();
-        match event["type"].as_str() {
-            Some("session.inbox.enqueued") if data["item"]["type"] == "user" => {
+        match event {
+            V2Event::SessionInboxEnqueued(enqueued) => {
+                let SessionInboxItem::User(item) = &enqueued.data.item else { return };
+                let id = enqueued.data.inbox_id.as_str();
                 if !state.queued.iter().any(|queued| queued.id == id) {
                     state.queued.push(Queued {
-                        id,
-                        delivery: delivery(&data["item"]["delivery"]),
-                        prompt: RunPrompt::from_message(&data["item"]["payload"]),
+                        id: id.to_owned(),
+                        delivery: delivery(&item.delivery),
+                        prompt: RunPrompt::from_message(&serde_json::to_value(&item.payload).unwrap_or_default()),
                     });
                 }
             }
-            Some("session.inbox.delivery.changed") => {
+            V2Event::SessionInboxDeliveryChanged(changed) => {
+                let id = changed.data.inbox_id.as_str();
                 if let Some(queued) = state.queued.iter_mut().find(|queued| queued.id == id) {
-                    queued.delivery = delivery(&data["delivery"]);
+                    queued.delivery = delivery(&changed.data.delivery);
                 }
             }
-            Some("session.inbox.delivered" | "session.inbox.cancelled") => {
-                state.queued.retain(|queued| queued.id != id);
+            V2Event::SessionInboxDelivered(done) => {
+                state.queued.retain(|queued| queued.id != done.data.inbox_id.as_str())
+            }
+            V2Event::SessionInboxCancelled(done) => {
+                state.queued.retain(|queued| queued.id != done.data.inbox_id.as_str())
             }
             _ => {}
         }
@@ -1662,9 +1667,9 @@ fn parse_slash_command(text: &str, commands: Option<&[complete::Command]>) -> Sl
     }
 }
 
-fn delivery(value: &Value) -> Delivery {
-    match value.as_str() {
-        Some("queue") => Delivery::Queue,
+fn delivery(value: &SessionInboxDelivery) -> Delivery {
+    match value {
+        SessionInboxDelivery::Queue => Delivery::Queue,
         _ => Delivery::Steer,
     }
 }
@@ -1686,7 +1691,7 @@ async fn inbox(client: &Client, session: &str) -> Vec<Queued> {
                 .filter(|item| item["type"] == "user")
                 .map(|item| Queued {
                     id: item["id"].as_str().unwrap_or_default().to_owned(),
-                    delivery: delivery(&item["delivery"]),
+                    delivery: delivery(&item["delivery"].as_str().unwrap_or_default().into()),
                     prompt: RunPrompt::from_message(&item["payload"]),
                 })
                 .collect()

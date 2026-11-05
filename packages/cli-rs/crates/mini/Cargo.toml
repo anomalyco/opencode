@@ -22,6 +22,7 @@ futures-util.workspace = true
 indexmap.workspace = true
 log.workspace = true
 rustix = { workspace = true, features = ["stdio"] }
+serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true

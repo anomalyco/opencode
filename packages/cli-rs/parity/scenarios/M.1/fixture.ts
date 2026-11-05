@@ -60,7 +60,7 @@ export const event = (type: string, data: Record<string, unknown>, created = 100
   id: `evt_${type.replace(/\W/g, "")}${String(++counter).padStart(8, "0")}`,
   created,
   type,
-  durable: { aggregateID: "ses_mini", seq: counter },
+  durable: { aggregateID: "ses_mini", seq: counter, version: 1 },
   data: { sessionID: "ses_mini", ...data },
 })
 
@@ -84,10 +84,10 @@ export const plain = [
   user("msg_u1", "first question about a rather long topic", 10),
   {
     ...assistant("msg_a1", [], 11),
-    error: { _tag: "ProviderError", message: "The provider refused the first request" },
+    error: { type: "provider", message: "The provider refused the first request" },
   },
   user("msg_u2", "second question", 20),
-  { ...assistant("msg_a2", [], 21), error: { _tag: "ProviderError", message: "Rate limited" } },
+  { ...assistant("msg_a2", [], 21), error: { type: "provider", message: "Rate limited" } },
 ]
 
 type Script = {

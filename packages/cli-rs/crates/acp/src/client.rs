@@ -1,11 +1,8 @@
 //! Server errors as ACP errors, session IDs, and event subscriptions (`packages/cli/src/acp/client.ts`).
 
-use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
 use opencode_api::client::Client;
 use opencode_api::error::Error;
-use opencode_api::generated::EventSubscribeInput;
-use opencode_api::transport::SseResponse;
 use serde_json::Value;
 
 use crate::error::Failure;
@@ -57,13 +54,7 @@ pub fn decode_session_id(value: &str) -> Result<String, Failure> {
 
 /// One `GET /api/event` stream of raw events. A failure to open the stream is its first item.
 pub fn subscribe(client: &Client) -> BoxStream<'static, Result<Value, Error>> {
-    let client = client.clone();
-    futures_util::stream::once(async move { client.event_subscribe(&EventSubscribeInput::default()).await })
-        .flat_map(|opened| match opened {
-            Ok(response) => SseResponse::<Value>::new(response.response).events(|| {}).boxed(),
-            Err(error) => futures_util::stream::once(async move { Err(error) }).boxed(),
-        })
-        .boxed()
+    opencode_api::events::raw(client)
 }
 
 /// The `type` of an event.

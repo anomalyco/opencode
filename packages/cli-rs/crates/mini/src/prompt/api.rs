@@ -7,8 +7,8 @@ use opencode_api::error::Error;
 use opencode_api::generated::{
     AgentID, AgentListInput, CommandListInput, FileFindInput, FileSystemEntryType, LocationQueryInput,
     ReferenceListInput, SessionCommandInput, SessionCompactInput, SessionID, SessionInboxCancelInput,
-    SessionInboxDelivery, SessionInboxUpdateInput, SessionMessageID, SessionPromptInput, SessionShellInput,
-    SessionSwitchAgentInput, SessionSwitchModelInput,
+    SessionInboxDelivery, SessionInboxUpdateInput, SessionMessageID, SessionMessageInfo, SessionPromptInput,
+    SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
 };
 use serde_json::{Map, Value, json};
 
@@ -110,8 +110,11 @@ pub async fn history(client: &Client, session: &str) -> Vec<RunPrompt> {
         .await
         .unwrap_or_default()
         .iter()
-        .filter(|message| message["type"] == "user")
-        .map(RunPrompt::from_message)
+        .filter_map(|message| match message {
+            SessionMessageInfo::User(user) => serde_json::to_value(user).ok(),
+            _ => None,
+        })
+        .map(|message| RunPrompt::from_message(&message))
         .collect()
 }
 
