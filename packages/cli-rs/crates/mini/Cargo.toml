@@ -19,7 +19,6 @@ opencode-local.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
-indexmap.workspace = true
 log.workspace = true
 rustix = { workspace = true, features = ["stdio"] }
 serde_json.workspace = true
