@@ -1,15 +1,21 @@
 import { describe, expect } from "bun:test"
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync, realpathSync } from "node:fs"
 import { mkdir, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { PersistentPty } from "@opencode/core/persistent-pty"
+import { Config } from "@opencode/core/config"
+import { Environment } from "@opencode/core/environment/index"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
+import { hostEnvironmentLayer } from "./fixture/environment"
+import { location } from "./fixture/location"
 import { daemonShells } from "./fixture/shell-daemon"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
@@ -315,4 +321,63 @@ describe("Shell on the process daemon", () => {
       expect(existsSync(orphan)).toBe(false)
       expect(env.daemon.processes.map((process) => process.id)).toEqual([1])
     }))
+})
+
+// Against the real opencode-pty, when OPENCODE_PTY_BIN names a v8 build.
+const real = unix && process.env.OPENCODE_PTY_BIN ? it.live : it.live.skip
+
+describe("Shell on a real process daemon", () => {
+  real(
+    "starts the daemon on the first command, never on boot or sweep, and runs it with the server's environment",
+    () =>
+      Effect.gen(function* () {
+        const data = (yield* tmpdirScoped()).path
+        const directory = (yield* tmpdirScoped()).path
+        const state = path.join(data, "state")
+        const global = Global.layerWith({ data, state })
+        const started = () => existsSync(path.join(state, "pty")) && readdirSync(path.join(state, "pty")).length > 0
+        process.env.OPENCODE_TEST_REMOVED = "1"
+        yield* Effect.addFinalizer(() => Effect.sync(() => delete process.env.OPENCODE_TEST_REMOVED))
+        yield* Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          yield* Shell.cleanup()
+          expect(started()).toBe(false)
+          const info = yield* shell.create(
+            {
+              shell: "/bin/sh",
+              command: 'printf "%s|%s|%s\\n" "${OPENCODE_TEST_REMOVED:-unset}" "$TERM" "$(pwd)"; printf tail',
+            },
+            (invocation) =>
+              Effect.sync(() => {
+                delete invocation.env.OPENCODE_TEST_REMOVED
+              }),
+          )
+          expect(started()).toBe(true)
+          expect(shell.detachable(info.id)).toBe(true)
+          expect(yield* shell.result(info)).toMatchObject({
+            info: { status: "exited", exit: 0 },
+            capture: {
+              output: `unset|xterm-256color|${realpathSync(directory)}\ntail`,
+              lines: { shown: 2, total: 2 },
+            },
+          })
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([Shell.node, FSUtil.node, Global.node, PersistentPty.node]), [
+              Location.node.replace(
+                Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(location(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+                ),
+              ),
+              Global.node.replace(global),
+              Config.node.replace(Config.testLayer()),
+              Environment.node.replace(hostEnvironmentLayer),
+            ]),
+          ),
+        )
+      }),
+    { timeout: 20_000 },
+  )
 })

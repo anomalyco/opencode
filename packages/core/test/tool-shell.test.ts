@@ -148,6 +148,7 @@ const shellPluginSupervisor = makeLocationNode({
 })
 
 const nodes = LayerNode.group([
+  PersistentPty.node,
   Database.node,
   Bus.node,
   Detaching.node,
@@ -1737,6 +1738,41 @@ describe("ShellTool", () => {
             ])
             expect((yield* jobs.get(shellID))?.status).not.toBe("running")
             expect(yield* jobs.pendingBackground).toEqual([])
+          }),
+        )
+      }),
+    )
+
+    it.live("records a daemon-run foreground command as backgrounded when a planned shutdown starts", () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const jobs = yield* Job.Service
+            const pty = yield* PersistentPty.Service
+            const detaching = yield* Detaching.Service
+            const { shellID, result } = yield* interruptCall(
+              registry,
+              "printf ready; sleep 60",
+              "call-detaching-daemon",
+              Effect.gen(function* () {
+                yield* detaching.handoffPrepared
+                yield* detaching.begin
+              }),
+            )
+            // Only the process daemon lets a command outlive the server.
+            if (!shell.detachable(shellID)) return
+            const info = yield* shell.get(shellID)
+            expect(info.status).toBe("running")
+            expect(result?.metadata).toMatchObject({ shellID, status: "running" })
+            const process = (yield* pty.listPipes()).find((item) => item.outputPath === info.file)
+            expect(process?.lifecycle.status).toBe("running")
+            expect(process?.metadata).toMatchObject({ id: shellID, backgroundedAtShutdown: true })
+            expect(process?.metadata).not.toHaveProperty("timeoutDeadline")
+            expect(process?.metadata).not.toHaveProperty("stopReason")
+            expect((yield* jobs.pendingBackground).map((item) => item.id)).toEqual([shellID])
+            yield* shell.remove(shellID)
           }),
         )
       }),
