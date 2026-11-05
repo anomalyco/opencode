@@ -52,6 +52,24 @@ pub fn number_to_string(value: f64) -> String {
     }
 }
 
+/// `String(value)` for a JSON value.
+pub fn js_string(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Null => "null".to_owned(),
+        Value::Bool(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Number(number) => match (number.as_i64(), number.as_u64(), number.as_f64()) {
+            (Some(value), _, _) => value.to_string(),
+            (_, Some(value), _) => value.to_string(),
+            (_, _, Some(value)) => number_to_string(value),
+            _ => number.to_string(),
+        },
+        Value::Array(items) => items.iter().map(js_string).collect::<Vec<_>>().join(","),
+        Value::Object(_) => "[object Object]".to_owned(),
+    }
+}
+
 /// `Number(text)`, with NaN as `None`: surrounding whitespace is ignored, an empty text is 0, `0x`,
 /// `0o` and `0b` prefixes read unsigned integers, and `Infinity` may carry a sign.
 pub fn parse_number(text: &str) -> Option<f64> {
@@ -151,6 +169,14 @@ mod tests {
         ];
         for (value, text) in cases {
             assert_eq!(number_to_string(value), text, "{value}");
+        }
+    }
+
+    #[test]
+    fn json_numbers_stringify_as_javascript_does() {
+        let cases = [(1.0, "1"), (1.5, "1.5"), (1e21, "1e+21"), (1e-7, "1e-7"), (0.000001, "0.000001"), (-0.0, "0")];
+        for (value, text) in cases {
+            assert_eq!(js_string(&serde_json::json!(value)), text, "{value}");
         }
     }
 

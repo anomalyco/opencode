@@ -11,7 +11,7 @@ workspace = true
 
 [dependencies]
 opentui.workspace = true
-opencode-api.workspace = true
+opencode-api-types.workspace = true
 base64.workspace = true
 chrono.workspace = true
 indexmap.workspace = true

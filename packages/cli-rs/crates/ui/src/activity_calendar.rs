@@ -2,7 +2,7 @@
 //! of activity levels with month labels, and the time zone both send with the stats request.
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeZone};
-use opencode_api::generated::types::SessionStatsActivity;
+use opencode_api_types::SessionStatsActivity;
 
 /// `Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"` as Bun resolves it: `TZ` (an empty
 /// value is UTC), else the zone `/etc/localtime` links to. ICU's names for UTC become `UTC`, and a
