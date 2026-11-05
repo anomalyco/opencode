@@ -21,6 +21,7 @@ import { ComposerDropzone } from "@/composer/dropzone"
 import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
+import { useLayout } from "@/shell/state/layout"
 import { SessionPanelFrame } from "@/session/session-frame"
 import { PluginLinks } from "@/runtime/plugin/render"
 import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/plugin/panels"
@@ -109,6 +110,7 @@ function SessionScreenContent(props: {
   const bottomOpen = createMemo(() => bottomTabs() && session.layout.view().bottom.opened())
 
   const drag = createPaneDrag({
+    identity: session.layout.tabKey,
     shown: (pane) => (pane === "bottom" ? bottomOpen() : region.pane(pane).keys().length > 0),
     drop: (key, target) =>
       batch(() => {
@@ -118,7 +120,11 @@ function SessionScreenContent(props: {
       }),
   })
 
-  const screen = createSessionScreenLayout(session, { wide: region.wide })
+  const screen = createSessionScreenLayout(session, {
+    wide: region.wide,
+    panel: region.pane("side").selected,
+    widths: useLayout().panelWidth,
+  })
 
   const timeline = createSessionTimelineInteraction(session)
 
@@ -126,7 +132,7 @@ function SessionScreenContent(props: {
     sessionID: session.identity.sessionID,
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
-    pauseAutoScroll: timeline.view.unpin,
+    pauseAutoScroll: () => timeline.follow.dispatch({ type: "detach" }),
   })
 
   const messagesReady = timeline.ready
@@ -295,6 +301,7 @@ function SessionScreenContent(props: {
         <PluginLinks session={own()} active={active()}>
           <MessageTimeline
             active={active()}
+            caughtUp={timeline.resource.state === "ready" && timeline.resource.latest === source.identity.sessionID()}
             hideHeader={!isDesktop()}
             registerHeaderGap={registerHeaderGap}
             session={source}
@@ -306,12 +313,9 @@ function SessionScreenContent(props: {
             onResumeScroll={timeline.actions.resume}
             setScrollRef={timeline.view.setScrollRef}
             onScheduleScrollState={timeline.view.scheduleScrollState}
-            onPin={timeline.view.pin}
-            onUnpin={timeline.view.unpin}
+            follow={timeline.follow}
             onUserScroll={timeline.view.markUserScroll}
             onHistoryScroll={timeline.view.onHistoryScroll}
-            onSelectionInteraction={timeline.view.selectionInteraction}
-            pinned={timeline.view.pinned()}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
             onContentResize={timeline.view.contentResized}
@@ -505,7 +509,7 @@ function SessionScreenContent(props: {
                 max={screen.panel.max()}
                 onResize={(width) => {
                   screen.size.touch()
-                  session.layout.view().session.resize(width)
+                  screen.panel.resize(width)
                 }}
                 onDraggingChange={setPanelResizing}
               />
@@ -527,7 +531,6 @@ function SessionScreenContent(props: {
                 ref={sideContent}
                 data-slot="session-side-panel-content"
                 class="absolute inset-y-0 start-0 size-full [contain:layout_style] will-change-[opacity]"
-                style={{ "--session-side-content-width": screen.side.contentWidth() }}
               >
                 <div data-slot="session-side-region" class="absolute inset-0 min-h-0 overflow-visible">
                   <Show when={store.sideMounted}>
@@ -539,6 +542,7 @@ function SessionScreenContent(props: {
                         sidebar={sidebar}
                         present={sideMotion.present()}
                         size={screen.size}
+                        contentWidth={screen.side.contentWidth}
                         drag={drag}
                       />
                     </div>

@@ -11,13 +11,15 @@ import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
+import { needsUser } from "./auto-approve-machine"
 
 export function createSessionRequestModel() {
   const params = useParams()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const data = useData()
+  const autoApprove = useServer().ctx.autoApprove
   const language = useLanguage()
   const settings = useSettings()
   createEffect(() => {
@@ -107,11 +109,13 @@ export function createSessionRequestModel() {
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     const id = params.id
 
-    const project = projectSettingsKey(serverSDK.scope, id ? data.session.get(id)?.projectID : undefined)
+    const enabled = settings.permissions.autoApproves(
+      projectSettingsKey(serverSDK.scope, id ? data.session.get(id)?.projectID : undefined),
+    )
 
-    if (settings.permissions.autoApproves(project)) return
-
-    return sessionPermissionRequest(data.session.list(), data.session.permission.list, id)
+    return sessionPermissionRequest(data.session.list(), data.session.permission.list, id, (item) =>
+      needsUser(autoApprove.state(item.id), enabled),
+    )
   })
 
   const blocked = createMemo(() => {

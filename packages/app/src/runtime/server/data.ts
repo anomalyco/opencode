@@ -47,8 +47,9 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
     ),
   )
 
-  const apply = (sessions: readonly SessionInfo[]) =>
+  const apply = (sessions: readonly SessionInfo[], options?: { activity?: boolean }) =>
     mutation.apply(sessions).map((session) => {
+      if (options?.activity === false) return session
       const updated = activity[session.id]
 
       return updated && updated > session.time.updated ? { ...session, time: { ...session.time, updated } } : session

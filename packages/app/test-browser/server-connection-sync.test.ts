@@ -12,7 +12,7 @@ test("invalidates disconnected data and synchronizes after each handshake", () =
     const connection = createConnectionSync({
       status,
       invalidate: () => calls.push("invalidate"),
-      connected: (info) => calls.push(`connected:${info.reconnect}`),
+      connected: (info) => calls.push(`connected:${info.restart}`),
     })
 
     return { connection, setStatus, dispose }
