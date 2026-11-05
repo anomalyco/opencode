@@ -462,6 +462,32 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("treats tool images moved into a Chat Completions user message as agent-initiated", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* httpRequest(
+        new Request("https://api.githubcopilot.com/chat/completions", {
+          method: "POST",
+          headers: { authorization: "Bearer token" },
+          body: JSON.stringify({
+            messages: [
+              { role: "user", content: "Take a screenshot." },
+              {
+                role: "assistant",
+                content: null,
+                tool_calls: [{ id: "call_1", type: "function", function: { name: "screenshot", arguments: "{}" } }],
+              },
+              { role: "tool", tool_call_id: "call_1", content: "" },
+              { role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } }] },
+            ],
+          }),
+        }),
+      )
+      expect(event.request.headers.get("x-initiator")).toBe("agent")
+      expect(event.request.headers.get("copilot-vision-request")).toBe("true")
+    }),
+  )
+
   it.effect("keeps a declared agent initiator when the body looks user-initiated", () =>
     Effect.gen(function* () {
       yield* addPlugin()

@@ -478,8 +478,10 @@ function requestMetadata(url: string, body: unknown) {
   if (!Array.isArray(body.messages)) return { agent: false, vision: false }
   const last = body.messages.at(-1)
   if (url.includes("completions")) {
+    const previous = body.messages.at(-2)
     return {
-      agent: !isRecord(last) || last.role !== "user",
+      // Chat Completions moves tool-result images into a user message after the tool messages.
+      agent: !isRecord(last) || last.role !== "user" || (isRecord(previous) && previous.role === "tool"),
       vision: body.messages.some(
         (message) =>
           isRecord(message) &&
