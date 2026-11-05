@@ -208,10 +208,24 @@ export function Prompt(props: PromptProps) {
   const args = useArgs()
   const config = useConfig().data
   const cursorStyle = useCursorStyle()
+  const historyScope = createMemo(() => config.prompt?.history_scope ?? "global")
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
   const history = usePromptHistory()
+  const [historyHinted, setHistoryHinted] = createSignal(false)
+  createEffect(
+    on(
+      () => [props.sessionID, historyScope()] as const,
+      () => setHistoryHinted(false),
+    ),
+  )
+  createEffect(() => {
+    const failure = history.error()
+    if (!failure) return
+    toast.show({ title: "Prompt history", message: failure, variant: "warning" })
+    history.clearError()
+  })
   const stash = usePromptStash()
   const keymap = Keymap.use()
   const renderer = useRenderer()
@@ -314,6 +328,8 @@ export function Prompt(props: PromptProps) {
     ],
   }))
   const [cursorVersion, setCursorVersion] = createSignal(0)
+  const noSessionHistory = () =>
+    historyScope() === "session" && input?.plainText === "" && !history.has(props.sessionID, "session")
   const connected = useConnected()
 
   function promptModelWarning() {
@@ -1042,7 +1058,18 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(-1, input.plainText)
+            if (noSessionHistory()) {
+              if (!historyHinted()) {
+                toast.show({
+                  message: "No prompt history in this session. prompt.history_scope is set to session.",
+                  variant: "info",
+                  duration: 4000,
+                })
+                setHistoryHinted(true)
+              }
+              return false
+            }
+            const item = history.move(props.sessionID, -1, input.plainText, historyScope())
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1082,7 +1109,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(props.sessionID, 1, input.plainText, historyScope())
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1309,7 +1336,7 @@ export function Prompt(props: PromptProps) {
       })
       return true
     }
-    history.append(entry)
+    history.append(target, entry, historyScope())
     if (currentMode === "shell") {
       move.startSubmit()
       const send = () => client.api.session.shell({ sessionID: target, command: inputText })
@@ -1528,10 +1555,14 @@ export function Prompt(props: PromptProps) {
       (store.prompt.files?.length ?? 0) > 0 ||
       (store.prompt.agents?.length ?? 0) > 0
     ) {
-      history.append({
-        ...store.prompt,
-        mode: store.mode,
-      })
+      history.append(
+        props.sessionID,
+        {
+          ...store.prompt,
+          mode: store.mode,
+        },
+        historyScope(),
+      )
     }
     resetComposer()
   }

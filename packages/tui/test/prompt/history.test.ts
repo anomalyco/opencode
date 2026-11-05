@@ -5,6 +5,9 @@ import {
   isDuplicateEntry,
   MAX_HISTORY_ENTRIES,
   parsePromptHistory,
+  parsePromptInfo,
+  serializeHistoryEntry,
+  trimHistoryEntries,
   type PromptInfo,
 } from "../../src/prompt/history"
 
@@ -19,8 +22,8 @@ describe("prompt history", () => {
   test("recovers valid JSONL entries around corruption", () => {
     const control = entry("a\u001b[31mb\fc\0d\r\n")
     expect(parsePromptHistory(`${JSON.stringify(control)}\nnot-json\n${JSON.stringify(entry("two"))}\n`)).toEqual([
-      control,
-      entry("two"),
+      { sessionID: undefined, prompt: control },
+      { sessionID: undefined, prompt: entry("two") },
     ])
   })
 
@@ -32,9 +35,9 @@ describe("prompt history", () => {
     const input = Array.from({ length: MAX_HISTORY_ENTRIES + 5 }, (_, index) =>
       JSON.stringify(entry(String(index))),
     ).join("\n")
-    const result = parsePromptHistory(input)
+    const result = trimHistoryEntries(parsePromptHistory(input))
     expect(result).toHaveLength(MAX_HISTORY_ENTRIES)
-    expect(result[0]?.text).toBe("5")
+    expect(result[0]?.prompt.text).toBe("5")
   })
 
   test("dedupes only identical consecutive entries", () => {
@@ -48,6 +51,14 @@ describe("prompt history", () => {
     const a = entry("describe this", [{ name: "a.png", uri: "data:image/png;base64,AAA" }])
     const b = entry("describe this", [{ name: "b.png", uri: "data:image/png;base64,BBB" }])
     expect(isDuplicateEntry(a, b)).toBe(false)
+  })
+
+  test("copies only known prompt fields from persisted JSON", () => {
+    const parsed = parsePromptInfo(
+      JSON.parse('{"text":"hello","pasted":[],"extra":"ignored","__proto__":{"polluted":true}}'),
+    )
+    expect(parsed).toEqual({ text: "hello", pasted: [] })
+    expect(Object.keys(parsed ?? {})).toEqual(["text", "pasted"])
   })
 
   test("preserves duplicate attachment mentions for prompt restoration", () => {
@@ -64,7 +75,14 @@ describe("prompt history", () => {
       },
     ])
 
-    expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
+    expect(parsePromptHistory(JSON.stringify(value))).toEqual([{ sessionID: undefined, prompt: value }])
+  })
+
+  test("preserves the session scope and keeps persisted entries flat", () => {
+    const value = { ...entry("hello"), sessionID: "session-a" }
+    expect(parsePromptHistory(JSON.stringify(value))).toEqual([{ sessionID: "session-a", prompt: entry("hello") }])
+    expect(serializeHistoryEntry({ sessionID: "session-a", prompt: entry("hello") })).toBe(JSON.stringify(value))
+    expect(serializeHistoryEntry({ sessionID: undefined, prompt: entry("hello") })).toBe(JSON.stringify(entry("hello")))
   })
 
   test.each(["wcwidth", "unicode"] as const)("appends a prompt and shifts ranges by the %s offset", (widthMethod) => {

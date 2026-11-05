@@ -1,6 +1,6 @@
 import path from "path"
 import { measureEditText, type WidthMethod } from "@opentui/core"
-import { onMount } from "solid-js"
+import { createSignal, onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import type { PromptInput } from "@opencode/schema"
 import type { Types } from "effect"
@@ -29,6 +29,13 @@ export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "ag
 export type PromptPartRef = {
   type: "file" | "agent" | "skill" | "pasted"
   index: number
+}
+
+export type PromptHistoryScope = "global" | "session"
+
+export type PromptHistoryEntry = {
+  sessionID: string | undefined
+  prompt: PromptInfo
 }
 
 export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
@@ -63,19 +70,64 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
 
 export const MAX_HISTORY_ENTRIES = 50
 
+type CursorKey = string | null
+
+// The home composer has no session ID, but it still needs its own cursor. A null key keeps
+// it distinct from every real session instead of sharing the `undefined` map entry.
+const cursorKey = (sessionID: string | undefined): CursorKey => sessionID ?? null
+
+// Returns the next cursor position, or undefined when the move is not allowed: the composer
+// must hold the current item (or be empty) to start navigating, and the cursor never passes
+// the oldest entry or the newest one (0 is the empty draft).
+function nextIndex(items: PromptInfo[], index: number, direction: 1 | -1, input: string) {
+  const current = items.at(index)
+  if (!current) return undefined
+  if (current.text !== input && input.length) return undefined
+  const next = index + direction
+  if (Math.abs(next) > items.length || next > 0) return undefined
+  return next
+}
+
+// Keep the newest MAX_HISTORY_ENTRIES for each session independently. Session scope must
+// not let a busy session evict another session's recall; global scope still uses the same
+// per-session bound when a session-only file is loaded.
+export function trimHistoryEntries(entries: PromptHistoryEntry[]) {
+  const counts = new Map<CursorKey, number>()
+  const keep = new Array<boolean>(entries.length).fill(false)
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const key = cursorKey(entries[index]!.sessionID)
+    const count = counts.get(key) ?? 0
+    if (count < MAX_HISTORY_ENTRIES) {
+      keep[index] = true
+      counts.set(key, count + 1)
+    }
+  }
+  return entries.filter((_, index) => keep[index])
+}
+
 export function parsePromptHistory(text: string) {
   return text
     .split("\n")
     .filter(Boolean)
     .map((line) => {
       try {
-        return parsePromptInfo(JSON.parse(line))
+        const value: unknown = JSON.parse(line)
+        if (!value || typeof value !== "object") return
+        // Persisted entries are flat (`{ ...prompt, sessionID? }`) so older readers keep
+        // working; only the in-memory entry is split.
+        const { sessionID, ...prompt } = value as Record<string, unknown>
+        const info = parsePromptInfo(prompt)
+        if (!info) return
+        return { sessionID: typeof sessionID === "string" ? sessionID : undefined, prompt: info }
       } catch {
         return undefined
       }
     })
-    .filter((line): line is PromptInfo => line !== undefined)
-    .slice(-MAX_HISTORY_ENTRIES)
+    .filter((line): line is PromptHistoryEntry => line !== undefined)
+}
+
+export function serializeHistoryEntry(entry: PromptHistoryEntry): string {
+  return JSON.stringify({ ...entry.prompt, sessionID: entry.sessionID })
 }
 
 export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
@@ -87,7 +139,15 @@ export function parsePromptInfo(value: unknown): PromptInfo | undefined {
   if (!value || typeof value !== "object") return
   const input = value as Record<string, unknown>
   if (typeof input.text !== "string" || !Array.isArray(input.pasted)) return
-  return input as PromptInfo
+  // Copy only the fields this application understands. In particular, do not spread an
+  // arbitrary JSON object, because an own `__proto__` key in a hand-edited file must not
+  // become part of the prompt object.
+  const info: PromptInfo = { text: input.text, pasted: input.pasted as PastedText[] }
+  if (Array.isArray(input.files)) info.files = input.files as PromptFile[]
+  if (Array.isArray(input.agents)) info.agents = input.agents as NonNullable<PromptInfo["agents"]>
+  if (Array.isArray(input.skills)) info.skills = input.skills as NonNullable<PromptInfo["skills"]>
+  if (input.mode === "normal" || input.mode === "shell") info.mode = input.mode
+  return info
 }
 
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
@@ -95,52 +155,119 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
   init: () => {
     const paths = useTuiPaths()
     const historyPath = path.join(paths.state, "prompt-history.jsonl")
-    onMount(async () => {
-      const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
-      setStore("history", lines)
+    const [error, setError] = createSignal<string>()
 
-      // Rewrite valid retained entries to self-heal corruption and enforce the limit.
-      if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+    const report = (action: "read" | "save", cause: unknown) => {
+      if (action === "read" && (cause as NodeJS.ErrnoException | undefined)?.code === "ENOENT") return
+      setError(`Prompt history could not be ${action === "read" ? "read" : "saved"}`)
+    }
+
+    onMount(async () => {
+      const lines = parsePromptHistory(
+        await readText(historyPath).catch((cause) => {
+          report("read", cause)
+          return ""
+        }),
+      )
+      const retained = trimHistoryEntries(lines)
+      setStore("history", retained)
+
+      // Rewrite valid retained entries to self-heal corruption and enforce the per-session
+      // limit. A loaded file with only invalid lines is left alone.
+      if (retained.length > 0 || retained.length !== lines.length)
+        writeText(historyPath, retained.map(serializeHistoryEntry).join("\n") + "\n").catch((cause) =>
+          report("save", cause),
+        )
     })
 
-    const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
+    const [store, setStore] = createStore({ index: 0, history: [] as PromptHistoryEntry[] })
+    const sessionIndices = new Map<CursorKey, number>()
+    let lastScope: PromptHistoryScope | undefined
+    const sessionKey = (sessionID: string | undefined) => cursorKey(sessionID)
+
+    // Switching scope in a live reload invalidates the cursor that the other scope owns.
+    // Reset the destination cursor rather than letting a stale index skip the newest item.
+    const prepareScope = (scope: PromptHistoryScope) => {
+      if (lastScope === scope) return
+      lastScope = scope
+      if (scope === "global") setStore("index", 0)
+      else sessionIndices.clear()
+    }
 
     return {
-      move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
-        if (!current) return undefined
-        if (current.text !== input && input.length) return
-        const next = store.index + direction
-        if (Math.abs(next) > store.history.length || next > 0) return
-        setStore("index", next)
-        if (next === 0) return emptyPrompt()
-        return store.history.at(next)
+      error,
+      clearError() {
+        setError(undefined)
       },
-      append(item: PromptInfo) {
-        const entry = structuredClone(unwrap(item))
-        if (isDuplicateEntry(store.history.at(-1), entry)) {
-          setStore("index", 0)
-          return
+      has(sessionID: string | undefined, scope: PromptHistoryScope) {
+        if (scope === "global") return store.history.length > 0
+        const key = sessionKey(sessionID)
+        return store.history.some((entry) => cursorKey(entry.sessionID) === key)
+      },
+      move(sessionID: string | undefined, direction: 1 | -1, input: string, scope: PromptHistoryScope) {
+        prepareScope(scope)
+        if (scope === "session") {
+          const key = sessionKey(sessionID)
+          const items = store.history.filter((entry) => cursorKey(entry.sessionID) === key).map((entry) => entry.prompt)
+          let index = sessionIndices.get(key) ?? 0
+          if (items.length > 0 && !items.at(index)) index = 0
+          const next = nextIndex(items, index, direction, input)
+          if (next === undefined) return undefined
+          sessionIndices.set(key, next)
+          return next === 0 ? emptyPrompt() : items.at(next)
         }
+        // The global view is the newest 50 entries across all sessions. Session-scope
+        // retention can make the file longer than that, so slice the view rather than
+        // truncating the persisted history.
+        const items = store.history.slice(-MAX_HISTORY_ENTRIES).map((entry) => entry.prompt)
+        const next = nextIndex(items, store.index, direction, input)
+        if (next === undefined) return undefined
+        setStore("index", next)
+        return next === 0 ? emptyPrompt() : items.at(next)
+      },
+      append(sessionID: string | undefined, item: PromptInfo, scope: PromptHistoryScope) {
+        prepareScope(scope)
+        const key = sessionKey(sessionID)
+        const entry = { sessionID, prompt: structuredClone(unwrap(item)) }
+        // Session scope dedupes against the session's own last prompt, because the recall
+        // pool is the session's history and not the file's; global scope keeps the old
+        // whole-file behavior.
+        const previous =
+          scope === "session"
+            ? store.history.findLast((existing) => cursorKey(existing.sessionID) === key)?.prompt
+            : store.history.at(-1)?.prompt
+        // A submit resets only the submitting composer's cursor. Other sessions keep their
+        // independent positions, and the home composer keeps its own null-keyed position.
+        if (scope === "session") sessionIndices.set(key, 0)
+        else setStore("index", 0)
+        if (isDuplicateEntry(previous, entry.prompt)) return
         let trimmed = false
         setStore(
           produce((draft) => {
             draft.history.push(entry)
-            if (draft.history.length > MAX_HISTORY_ENTRIES) {
+            if (scope === "session") {
+              let count = draft.history.filter((existing) => cursorKey(existing.sessionID) === key).length
+              while (count > MAX_HISTORY_ENTRIES) {
+                const oldest = draft.history.findIndex((existing) => cursorKey(existing.sessionID) === key)
+                if (oldest < 0) break
+                draft.history.splice(oldest, 1)
+                count -= 1
+                trimmed = true
+              }
+            } else if (draft.history.length > MAX_HISTORY_ENTRIES) {
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
               trimmed = true
             }
-            draft.index = 0
           }),
         )
 
         if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(historyPath, store.history.map(serializeHistoryEntry).join("\n") + "\n").catch((cause) =>
+            report("save", cause),
+          )
           return
         }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        appendText(historyPath, serializeHistoryEntry(entry) + "\n").catch((cause) => report("save", cause))
       },
     }
   },

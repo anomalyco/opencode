@@ -147,6 +147,9 @@ export const Info = Schema.Struct({
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show image attachment previews above the prompt input",
       }),
+      history_scope: Schema.optional(Schema.Literals(["global", "session"])).annotate({
+        description: "Recall prompt history from every session or only the current session",
+      }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
   session: Schema.optional(
