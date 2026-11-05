@@ -1273,7 +1273,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                     let app = select.0.cx.app.clone();
                     app.defer(move |_cx| select.move_index(index, false, true));
                 }
-                MouseEventKind::Up(_) => {
+                MouseEventKind::Up(MouseButton::Left) => {
                     let Some(index) = index else { return };
                     let option = {
                         let state = select.0.state.borrow();
