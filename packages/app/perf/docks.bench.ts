@@ -2,13 +2,21 @@
 // composer into its dock, an MCP elicitation grows in above it and closes, and the answered permission morphs back
 // to the composer. Every frame of the four flights steps the docks' springs and writes their styles.
 import { bench, web } from "@hona/strobe"
+import type { OpenCodeEvent } from "@opencode/client/promise"
 import { cached } from "./fixtures/mock"
-import { composer, mockTimelineSession, requestDocks, timeline } from "./fixtures/timeline"
+import { composer, mockTimelineSession, timeline } from "./fixtures/timeline"
+
+// The session `mockTimelineSession` serves.
+const sessionID = "ses_timeline_state_regression"
+
+const location = { directory: "C:/OpenCode/TimelineStateRegression" }
 
 const permission = '[data-component="dock-prompt"][data-kind="permission"]'
 
 // The elicitation dock shares the question dock's frame.
 const elicitation = '[data-component="dock-prompt"][data-kind="question"]'
+
+let round = 0
 
 export default bench({
   targets: {
@@ -39,19 +47,62 @@ export default bench({
       primary: "main.work",
       metrics: ["main.script", "main.style", "main.layout", "frames.dropped.pct", "frames.interval.p95"],
       async run({ page, prepared }) {
-        const round = requestDocks()
-        prepared.source!.send([round.asked])
+        const events = requestDocks()
+        prepared.source!.send([events.asked])
         await page.waitFor(permission)
         await page.idle()
-        prepared.source!.send([round.elicited])
+        prepared.source!.send([events.elicited])
         await page.waitFor(elicitation)
         await page.idle()
-        prepared.source!.send([round.cancelled])
+        prepared.source!.send([events.cancelled])
         await page.idle()
-        prepared.source!.send([round.replied])
+        prepared.source!.send([events.replied])
         await page.waitFor(composer)
         await page.idle()
       },
     },
   },
 })
+
+// One round of request docks, with fresh IDs so the client never takes an event for a repeat.
+function requestDocks() {
+  round++
+  const permission = `per_docks_bench_${round}`
+  const form = `frm_docks_bench_${round}`
+  const envelope = (step: number) => ({
+    id: `evt_docks_bench_${round}_${step}`,
+    created: 1700000003000 + round,
+    location,
+  })
+
+  return {
+    asked: {
+      ...envelope(0),
+      type: "permission.asked",
+      data: { id: permission, sessionID, action: "shell", resources: ["bun test"], metadata: {} },
+    } satisfies Extract<OpenCodeEvent, { type: "permission.asked" }>,
+    elicited: {
+      ...envelope(1),
+      type: "form.created",
+      data: {
+        form: {
+          id: form,
+          sessionID,
+          title: "Input",
+          metadata: { kind: "mcp-elicitation" },
+          fields: [{ key: "answer", type: "string", title: "Continue?" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+    cancelled: {
+      ...envelope(2),
+      type: "form.cancelled",
+      data: { sessionID, id: form },
+    } satisfies Extract<OpenCodeEvent, { type: "form.cancelled" }>,
+    replied: {
+      ...envelope(3),
+      type: "permission.replied",
+      data: { sessionID, requestID: permission, reply: "once" },
+    } satisfies Extract<OpenCodeEvent, { type: "permission.replied" }>,
+  }
+}
