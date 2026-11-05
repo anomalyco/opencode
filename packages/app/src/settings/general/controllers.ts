@@ -1,4 +1,5 @@
-import { createMemo, createResource, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, untrack, type Accessor } from "solid-js"
+import type { ConfigShellOption } from "@opencode/client/promise"
 import type { ColorScheme } from "@opencode/ui/theme/context"
 import { useTheme } from "@opencode/ui/theme/context"
 import {
@@ -22,15 +23,90 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
+import { errorMessage } from "@/shell/layout/helpers"
+import {
+  createOptimisticSettingState,
+  selectSettingMeta,
+  selectSettingValue,
+  transitionOptimisticSetting,
+  type OptimisticSettingEffect,
+  type OptimisticSettingEvent,
+  type SettingWriteFailure,
+} from "./machine"
+
+/**
+ * Drives one optimistically written setting. Writes outlive the owner on purpose: a queued choice still reaches the
+ * source after Settings closes, and a failure still reports.
+ */
+export function createOptimisticSetting<T, M, S>(options: {
+  /** `undefined` while no source can take the setting; another value reads it again. */
+  source: Accessor<S | undefined>
+  initial: T
+  initialMeta: M
+  load: (source: S) => Promise<{ value: T; meta: M }>
+  write: (value: T, source: S) => Promise<unknown> | void
+  onError?: (failure: SettingWriteFailure) => void
+}) {
+  const [state, setState] = createSignal(createOptimisticSettingState<T, M, S>(options.initial, options.initialMeta))
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+
+  const dispatch = (event: OptimisticSettingEvent<T, M, S>) =>
+    untrack(() => {
+      const previous = state()
+      const next = transitionOptimisticSetting(previous, event)
+
+      if (next.state !== previous) setState(next.state)
+      next.effects.forEach(run)
+    })
+
+  const settle = (attempt: number, event: OptimisticSettingEvent<T, M, S>) => {
+    clearTimeout(timers.get(attempt))
+    timers.delete(attempt)
+    dispatch(event)
+  }
+
+  function run(effect: OptimisticSettingEffect<T, S>) {
+    if (effect.type === "notify.error") return options.onError?.(effect.failure)
+
+    const attempt = effect.attempt
+
+    if (effect.type === "load") {
+      void Promise.try(() => options.load(effect.source)).then(
+        (result) => dispatch({ type: "load.succeeded", attempt, value: result.value, meta: result.meta }),
+        () => dispatch({ type: "load.failed", attempt }),
+      )
+
+      return
+    }
+
+    timers.set(
+      attempt,
+      setTimeout(() => settle(attempt, { type: "write.timed-out", attempt }), effect.timeoutMs),
+    )
+    void Promise.try(() => options.write(effect.value, effect.source)).then(
+      () => settle(attempt, { type: "write.succeeded", attempt }),
+      (error: unknown) => settle(attempt, { type: "write.failed", attempt, error }),
+    )
+  }
+
+  createEffect(() => dispatch({ type: "source.synced", source: options.source() }))
+
+  return {
+    value: () => selectSettingValue(state()),
+    meta: () => selectSettingMeta(state()),
+    select: (value: T) => dispatch({ type: "write.requested", value }),
+  }
+}
 
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
-  const serverCtx = useServerCtx(server)
 
-  // Loads again for the controller a server's new credentials start; a server without one keeps the initial value.
-  const [state, actions] = createResource(
-    serverCtx,
-    async (context) => {
+  // Reads again for the controller a server's new credentials start; a server without one keeps the last value.
+  const setting = createOptimisticSetting({
+    source: useServerCtx(server),
+    initial: "",
+    initialMeta: [] as ConfigShellOption[],
+    load: async (context) => {
       const [entries, shells] = await Promise.all([
         context.sdk.api.config.get().catch(() => []),
         context.sdk.api.config.shells().catch(() => []),
@@ -40,34 +116,29 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       const global = boundary === -1 ? entries : entries.slice(0, boundary)
 
       return {
-        shells,
-        shell: global
-          .flatMap((entry) => (entry.type === "document" && entry.info.shell !== undefined ? [entry.info.shell] : []))
-          .at(-1),
+        meta: shells,
+        value:
+          global
+            .flatMap((entry) => (entry.type === "document" && entry.info.shell !== undefined ? [entry.info.shell] : []))
+            .at(-1) ?? "",
       }
     },
-    { initialValue: { shells: [], shell: undefined } },
-  )
+    write: (value, context) => context.sdk.api.experimental.config.update({ shell: value || null }),
+    onError: (failure) =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description:
+          failure.kind === "timeout"
+            ? language.t("home.sessions.load.timeout")
+            : errorMessage(failure.error, language.t("common.requestFailed")),
+      }),
+  })
 
   return {
-    shells: () => state.latest.shells,
-    current: () => state.latest.shell ?? "",
-    select: (value: string) => {
-      const context = serverCtx()
-
-      if (!context || value === (state.latest.shell ?? "")) return
-      const previous = state.latest
-      actions.mutate({ ...previous, shell: value || undefined })
-      void context.sdk.api.experimental.config.update({ shell: value || null })
-        .catch((error) => {
-          actions.mutate(previous)
-          showToast({
-            variant: "error",
-            title: language.t("common.requestFailed"),
-            description: error instanceof Error ? error.message : language.t("common.requestFailed"),
-          })
-        })
-    },
+    shells: setting.meta,
+    current: setting.value,
+    select: setting.select,
   }
 }
 

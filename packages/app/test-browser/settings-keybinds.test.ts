@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
 
-function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<string>) {
+function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<string>, active?: () => boolean) {
   const changes: [string, string][] = []
   const suppression: boolean[] = []
   const notifications: { title: string; description?: string }[] = []
@@ -36,6 +36,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
           },
         },
         notify: (toast) => notifications.push(toast),
+        active,
       },
       {
         locale: () => "en",
@@ -110,6 +111,45 @@ describe("keybind settings controller", () => {
     expect(state.suppression).toEqual([false, true, false, true])
     document.dispatchEvent(modKey("z"))
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
+  })
+
+  test("moving the recording between rows keeps shortcuts suspended, and hiding the page resumes them", () => {
+    const [active, setActive] = createSignal(true)
+    const state = setup({}, undefined, active)
+
+    state.controller.capture.toggle("session.alpha")
+    state.controller.capture.toggle("session.beta")
+    expect(state.controller.capture.active()).toBe("session.beta")
+    expect(state.suppression).toEqual([false])
+
+    setActive(false)
+    expect(state.controller.capture.active()).toBeNull()
+    expect(state.suppression).toEqual([false, true])
+
+    state.dispose()
+    expect(state.suppression).toEqual([false, true])
+  })
+
+  test("focusing or typing in a search field ends the recording and keeps the typed key", () => {
+    const state = setup()
+    const search = document.createElement("input")
+    document.body.append(search)
+
+    state.controller.capture.toggle("session.alpha")
+    search.focus()
+    expect(state.controller.capture.active()).toBeNull()
+    expect(state.suppression).toEqual([false, true])
+
+    state.controller.capture.toggle("session.alpha")
+    const key = new KeyboardEvent("keydown", { key: "t", bubbles: true, cancelable: true })
+    search.dispatchEvent(key)
+    expect(key.defaultPrevented).toBe(false)
+    expect(state.changes).toEqual([])
+    expect(state.controller.capture.active()).toBeNull()
+    expect(state.suppression).toEqual([false, true, false, true])
+
+    search.remove()
+    state.dispose()
   })
 
   test("resets persisted overrides and reports success", () => {

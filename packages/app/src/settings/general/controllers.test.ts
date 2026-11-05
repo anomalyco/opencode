@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "bun:test"
 import { createRoot } from "solid-js"
 import { createShellOptions, createSoundPreviewController } from "./behavior"
+import { createOptimisticSetting } from "./controllers"
 
 describe("settings controllers", () => {
   test("normalizes shell names and preserves an unavailable configured shell", () => {
@@ -20,6 +21,49 @@ describe("settings controllers", () => {
       { id: "/bin/zsh", value: "zsh", name: "zsh", terminalOnly: false },
       { id: "fish", value: "fish", name: "fish", terminalOnly: false },
     ])
+  })
+
+  test("serializes rapid writes and rolls a failure back to the value the source saved", async () => {
+    const writes: { value: string; done: PromiseWithResolvers<void> }[] = []
+    const errors: string[] = []
+
+    const owned = createRoot((dispose) => ({
+      dispose,
+      setting: createOptimisticSetting({
+        source: () => "server",
+        initial: "",
+        initialMeta: undefined,
+        load: async () => ({ value: "/bin/zsh", meta: undefined }),
+        write: (value: string) => {
+          const done = Promise.withResolvers<void>()
+          writes.push({ value, done })
+
+          return done.promise
+        },
+        onError: (failure) => errors.push(failure.kind),
+      }),
+    }))
+
+    await Promise.resolve()
+    expect(owned.setting.value()).toBe("/bin/zsh")
+
+    owned.setting.select("bash")
+    owned.setting.select("fish")
+    expect(owned.setting.value()).toBe("fish")
+    expect(writes.map((write) => write.value)).toEqual(["bash"])
+
+    writes[0]!.done.resolve()
+    await writes[0]!.done.promise
+    await Promise.resolve()
+    expect(writes.map((write) => write.value)).toEqual(["bash", "fish"])
+
+    writes[1]!.done.reject(new Error("boom"))
+    await writes[1]!.done.promise.catch(() => undefined)
+    await Promise.resolve()
+    expect(owned.setting.value()).toBe("bash")
+    expect(errors).toEqual(["failed"])
+
+    owned.dispose()
   })
 
   test("debounces previews and stops owned audio on disposal", async () => {
