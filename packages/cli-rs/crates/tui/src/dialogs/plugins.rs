@@ -7,10 +7,6 @@
 //! come from `GET /api/plugin`. Enter toggles a TUI plugin through `Registry::set_active`, then the route mounts
 //! again so slots follow; on another row it opens the error, if any.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     LocationQueryInput, PluginCheckInput, PluginInfo, PluginListInput, PluginSource, PluginState, PluginUpdateInput,
     V2Event,
@@ -24,6 +20,8 @@ use opencode_ui::motion::Spinner;
 use opencode_ui::select::{ActionRun, FooterHint, Group, Select, SelectAction, SelectOption, SelectProps, select};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
 use super::error_details;
 use crate::app::Tui;
@@ -386,7 +384,7 @@ impl Manager {
         let client = tui.data.client().clone();
         let input = PluginListInput { location: self.location() };
         tui.app.spawn(
-            async move { client.plugin_list(&input, &RequestOptions::default()).await },
+            async move { client.plugin_list(&input).await },
             bind!(self, |manager, _, result| {
                 match result {
                     Ok(output) => {
@@ -463,7 +461,7 @@ impl Manager {
         let client = tui.data.client().clone();
         let input = PluginUpdateInput { location: self.location(), targets: vec![target] };
         tui.app.spawn(
-            async move { client.plugin_update(&input, &RequestOptions::default()).await },
+            async move { client.plugin_update(&input).await },
             bind!(self, |manager, _, result| {
                 manager.pending.borrow_mut().retain(|pending| *pending != key);
                 match result {
@@ -491,7 +489,7 @@ impl Manager {
         let client = tui.data.client().clone();
         let input = PluginCheckInput { location: self.location(), ..PluginCheckInput::default() };
         tui.app.spawn(
-            async move { client.plugin_check(&input, &RequestOptions::default()).await },
+            async move { client.plugin_check(&input).await },
             bind!(self, |manager, _, result| {
                 manager.checking.set(false);
                 match result {

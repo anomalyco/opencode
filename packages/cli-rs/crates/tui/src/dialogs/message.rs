@@ -1,10 +1,6 @@
 //! Message actions dialog (E.10b, row DLG38): `routes/session/dialog-message.tsx`. A click on a user message, or
 //! Enter in the timeline (E.10a), opens it: jump to the message, revert to it, copy its text, or fork before it.
 
-use std::rc::Rc;
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionID, SessionMessageAssistantContentItem, SessionMessageID, SessionMessageInfo, SessionRevertStageInput,
 };
@@ -12,6 +8,8 @@ use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, Dialogs};
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
+use std::rc::Rc;
+use std::time::Duration;
 
 use crate::app::Tui;
 
@@ -58,7 +56,7 @@ fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
     };
     let (weak, session) = (tui.weak(), session.clone());
     tui.app.spawn(
-        async move { client.session_revert_stage(&input, &RequestOptions::default()).await },
+        async move { client.session_revert_stage(&input).await },
         bind!(weak, |tui, _, result| {
             match (result, restored) {
                 (Ok(_), Some(text)) => crate::routes::session::actions::append_prompt(&tui, &session, &text),

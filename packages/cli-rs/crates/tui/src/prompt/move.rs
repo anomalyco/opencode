@@ -5,11 +5,6 @@
 //! new worktree is created at once from a session; on home it is staged, the footer says "(new worktree)",
 //! and the first submit creates it ("Creating worktree…", then "Creating session…") before the session.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput};
 use opencode_store::Location;
 use opencode_ui::bind;
@@ -18,6 +13,9 @@ use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use super::editor::Inner;
 use crate::app::Tui;
@@ -253,7 +251,7 @@ fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
     let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(home.directory) }) };
     let weak = prompt.this.clone();
     tui.app.spawn(
-        async move { client.location_get(&input, &RequestOptions::default()).await.ok().map(|info| info.project.id) },
+        async move { client.location_get(&input).await.ok().map(|info| info.project.id) },
         bind!(weak, |prompt, _, project| {
             let Some(tui) = prompt.tui.upgrade() else {
                 return;
@@ -355,7 +353,7 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
             let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
             let directory = data
                 .client()
-                .worktree_create(&input, &RequestOptions::default())
+                .worktree_create(&input)
                 .await
                 .map_err(|error| worktrees::error_message(&error))?
                 .directory

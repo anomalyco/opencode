@@ -1,15 +1,13 @@
 //! The Shell tab (`routes/session/composer/shell-tab.tsx`): the session's running shell commands; Enter opens the
 //! shell output dialog and Ctrl+D kills one.
 
-use std::rc::Rc;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, SessionMessageShellStatus, ShellRemoveInput};
 use opencode_store::Shell;
 use opencode_ui::bind;
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
+use std::rc::Rc;
 
 use super::{Inner, Label, RowState, Tab, empty, row, window};
 use crate::app::Tui;
@@ -99,7 +97,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
                     id: shell.info.id,
                     location: Some(LocationQueryInput { directory: Some(shell.location.directory) }),
                 };
-                if let Err(error) = client.shell_remove(&input, &RequestOptions::default()).await {
+                if let Err(error) = client.shell_remove(&input).await {
                     log::warn!("failed to kill the shell command: {error}");
                 }
             });

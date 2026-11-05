@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     AgentInfo, AgentInfoMode, ExperimentalUsageLimitsInput, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef,
     ProviderInfo, SessionID, SessionInfo, UsageLimitsInfo,
@@ -297,7 +297,7 @@ impl Local {
         let input = ExperimentalUsageLimitsInput { location: self.location() };
         let weak = self.this.clone();
         self.app.spawn(
-            async move { client.experimental_usage_limits(&input, &RequestOptions::default()).await },
+            async move { client.experimental_usage_limits(&input).await },
             bind!(weak, |local, _, result| {
                 local.usage_loading.borrow_mut().remove(&key);
                 match result {

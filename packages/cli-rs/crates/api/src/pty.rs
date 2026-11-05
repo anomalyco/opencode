@@ -13,7 +13,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use url::Url;
 
-use crate::client::{Client, RequestOptions};
+use crate::client::Client;
 use crate::error::Error;
 use crate::generated::{ExperimentalPersistentPtyConnectTokenInput, PtyID};
 use crate::ws;
@@ -230,13 +230,10 @@ pub struct ConnectInput {
 /// Asks for a connect ticket, then opens the socket. Returns the URL it opened, too.
 pub async fn connect(client: &Client, connector: &dyn Connector, input: &ConnectInput) -> Result<(Url, Socket), Error> {
     let token = client
-        .experimental_persistent_pty_connect_token(
-            &ExperimentalPersistentPtyConnectTokenInput {
-                pty_id: input.pty_id.clone(),
-                x_opencode_ticket: Some("1".to_owned()),
-            },
-            &RequestOptions::default(),
-        )
+        .experimental_persistent_pty_connect_token(&ExperimentalPersistentPtyConnectTokenInput {
+            pty_id: input.pty_id.clone(),
+            x_opencode_ticket: Some("1".to_owned()),
+        })
         .await?;
     let url = client.transport().route(url(client.base_url(), input, &token.ticket)?);
     let socket = connector.open(url.clone()).await.map_err(Error::Transport)?;

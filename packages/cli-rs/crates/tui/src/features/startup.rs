@@ -10,11 +10,9 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use opencode_ui::bind;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionForkInput, SessionID, SessionListInput, SessionListInputOrder};
 use opencode_local::model_pref::Model;
+use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
 
 use crate::app::Tui;
@@ -187,7 +185,7 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
         ..SessionListInput::default()
     };
     tui.app.spawn(
-        async move { client.session_list(&input, &RequestOptions::default()).await },
+        async move { client.session_list(&input).await },
         bind!(tui, |tui, _, result| {
             match result {
                 Ok(response) => {
@@ -213,9 +211,7 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
 fn fork(tui: &Tui, id: SessionID) {
     let client = tui.data.client().clone();
     tui.app.spawn(
-        async move {
-            client.session_fork(&SessionForkInput { session_id: id, before: None }, &RequestOptions::default()).await
-        },
+        async move { client.session_fork(&SessionForkInput { session_id: id, before: None }).await },
         bind!(tui, |tui, _, result| {
             match result {
                 Ok(session) => {

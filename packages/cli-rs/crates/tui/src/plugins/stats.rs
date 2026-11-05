@@ -7,7 +7,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
 use opencode_plugin::{Definition, Slotted};
 use opencode_store::Changes;
@@ -121,7 +120,7 @@ fn load(tui: &Tui, content: &View) {
     let client = tui.data.client().clone();
     let content = content.clone();
     tui.app.spawn(
-        async move { client.experimental_session_stats(&input, &RequestOptions::default()).await },
+        async move { client.experimental_session_stats(&input).await },
         bind!(tui, |tui, _, result| {
             let theme = tui.page();
             content.clear();

@@ -14,7 +14,6 @@ use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexMap;
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     ExperimentalPersistentPtyCreateInput, ExperimentalPersistentPtyListInput, PersistentPtyInfo, SessionID, V2Event,
 };
@@ -216,7 +215,7 @@ pub fn session_mounted(tui: &Tui, session: &SessionID) {
 fn check(tui: &Tui) {
     let client = tui.data.client().clone();
     tui.app.spawn(
-        async move { client.server_info(&RequestOptions::default()).await },
+        async move { client.server_info().await },
         bind!(tui, |tui, _, result| {
             let available = match &result {
                 Ok(info) => {
@@ -254,7 +253,7 @@ pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl Fn
     let input = ExperimentalPersistentPtyListInput { session_id: session.clone() };
     let session = session.0.clone();
     tui.app.spawn(
-        async move { client.experimental_persistent_pty_list(&input, &RequestOptions::default()).await },
+        async move { client.experimental_persistent_pty_list(&input).await },
         bind!(tui, |tui, _, result| {
             let list = match result {
                 Ok(list) => list,
@@ -329,7 +328,7 @@ pub(crate) fn create(tui: &Tui, session: &SessionID, focus: bool, then: impl FnO
     };
     let session = session.clone();
     tui.app.spawn(
-        async move { client.experimental_persistent_pty_create(&input, &RequestOptions::default()).await },
+        async move { client.experimental_persistent_pty_create(&input).await },
         bind!(tui, |tui, _, result| {
             match result {
                 Ok(terminal) => {

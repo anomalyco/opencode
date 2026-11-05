@@ -5,17 +5,15 @@
 //! The directory comes from the worktrees dialog (E.11b). The session route owns one [`LocationMissing`]
 //! beside its prompt and hides the prompt while [`LocationMissing::active`].
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{AbsolutePath, ProjectID, SessionID, SessionMoveInput, WorktreeCreateInput};
 use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use crate::app::Tui;
 use crate::dialogs::worktrees::Selection;
@@ -196,7 +194,7 @@ fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
     let client = tui.data.client().clone();
     let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
     tui.app.spawn(
-        async move { client.worktree_create(&input, &RequestOptions::default()).await },
+        async move { client.worktree_create(&input).await },
         bind!(tui, |tui, _, result| {
             match result.map(|created| created.directory.0) {
                 Ok(directory) if !directory.is_empty() => move_session(&tui, session, directory),
@@ -219,7 +217,7 @@ fn move_session(tui: &Tui, session: SessionID, directory: String) {
     let client = tui.data.client().clone();
     let input = SessionMoveInput { session_id: session, directory: AbsolutePath(directory), delivery: None };
     let weak = tui.weak();
-    tui.app.spawn(async move { client.session_move(&input, &RequestOptions::default()).await }, move |_, result| {
+    tui.app.spawn(async move { client.session_move(&input).await }, move |_, result| {
         if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
             tui.toasts.show(
                 ToastOptions::new(Variant::Error, error.to_string())

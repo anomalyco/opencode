@@ -4,13 +4,6 @@
 //! or left running. Every file lives in a temporary directory, and every process a test starts is
 //! killed when its fixture drops. Without `bun` the tests pass with a note.
 
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::paths::Paths;
 use opencode_service::connect::{self, Connection, Env};
@@ -20,6 +13,11 @@ use opencode_service::stop::{self, Poll, Pty};
 use opencode_service::ts_command::TsCommand;
 use opencode_service::{follow, handoff, standalone};
 use rustix::process::{Pid, Signal, kill_process, test_kill_process};
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 fn fixture_script() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../client/test/fixture/service.ts")
@@ -826,15 +824,14 @@ async fn a_managed_client_follows_a_restarted_service() {
     channel.fixture.wait_for_file(&channel.fixture.registration).await;
     let connection = channel.resolve().await.unwrap();
     let client = follow::client(transport(), &connection, &channel.paths, &channel.env).unwrap();
-    let request = RequestOptions::default();
-    assert_eq!(client.server_info(&request).await.unwrap().pid, i64::from(first));
+    assert_eq!(client.server_info().await.unwrap().pid, i64::from(first));
     // A restart: the service is gone, and its successor registers a new port.
     signal(first, Signal::KILL);
     channel.fixture.exited(first).await;
     let second = channel.fixture.spawn("compatible", &[]);
     until(|| channel.fixture.registration.exists() && channel.fixture.pid() == second, "the successor's registration")
         .await;
-    assert!(client.server_info(&request).await.is_err());
-    assert_eq!(client.server_info(&request).await.unwrap().pid, i64::from(second));
+    assert!(client.server_info().await.is_err());
+    assert_eq!(client.server_info().await.unwrap().pid, i64::from(second));
     assert!(!channel.spawned(), "the client started a service");
 }
