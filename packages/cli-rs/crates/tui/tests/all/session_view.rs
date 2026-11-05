@@ -5,14 +5,17 @@ use crate::support::{self, WAIT};
 
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use opencode_api::generated::V2Event;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
+use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_tui::{Deps, Tui};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
+use tokio::sync::Semaphore;
 
 const DIRECTORY: &str = "/project";
 const WORKTREE: &str = "/project/wt";
@@ -247,7 +250,7 @@ fn the_sidebar_and_footer_skip_other_sessions_and_follow_their_own() {
         h.apply(kind, seq, json!({ "sessionID": format!("ses_other{}", seq % 3) }));
         h.settle();
     };
-    // The limit section reads the usage limits outside the store on any change, so it catches up first.
+    // The limit section reads the usage limits outside the store on any change.
     run(1);
 
     // Runs of sessions outside the family rebuild no section and no footer.
@@ -274,6 +277,48 @@ fn the_sidebar_and_footer_skip_other_sessions_and_follow_their_own() {
     ended(23, "msg_029b", 30_000);
     let screen = h.settle();
     assert!(screen.contains("6% used") && screen.contains("12.0K (6%)"), "{screen}");
+}
+
+/// Holds the usage limits answer until the test releases it.
+struct Gated {
+    memory: Memory,
+    asked: AtomicBool,
+    release: Semaphore,
+}
+
+impl Transport for Gated {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        Box::pin(async move {
+            if request.url.path() == LIMITS {
+                self.asked.store(true, Ordering::SeqCst);
+                self.release.acquire().await.unwrap().forget();
+            }
+            self.memory.send(request).await
+        })
+    }
+}
+
+#[test]
+fn the_sidebar_limit_shows_once_the_limits_load() {
+    // TS reads the limits reactively. Here the store is idle when they load.
+    let gated =
+        Arc::new(Gated { memory: Memory::new(routes()), asked: AtomicBool::new(false), release: Semaphore::new(0) });
+    let deps = Deps {
+        config: support::config(support::decode(r#"{ "animations": false }"#)),
+        route: support::session_route("ses_a"),
+        events: true,
+        ..support::deps(gated.clone())
+    };
+    let support::Harness { app, tui } = support::mount(170, 30, deps);
+    let h = Harness { app, tui, memory: gated.memory.clone() };
+    h.wait_for("Answer 30 three.");
+    h.wait("the limits request", || gated.asked.load(Ordering::SeqCst));
+    h.settle();
+    gated.release.add_permits(1);
+    h.wait_for("Running low on Big Pickle");
+    // The usage limits toast covers the section.
+    h.tui.toasts.dismiss();
+    h.wait_for("$5 remaining");
 }
 
 #[test]
