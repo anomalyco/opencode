@@ -21,6 +21,7 @@ use opencode_api::generated::{
 use opencode_local::storage::Storage;
 use opencode_store::{Changes, SessionStatus, State};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opentui::input::{KeyCode, Modifiers};
 use opentui::keymap::{Condition, Disposer};
 use serde::{Deserialize, Serialize};
 
@@ -241,8 +242,18 @@ pub fn install(tui: &Rc<Tui>) {
             changed(&tui);
         }
     });
-    // Terminal focus reports set the focus. TS also counts `useKeyboard`, but the keymap consumes the keys
-    // before it in practice (`E.12/tab-strip` posts no `session.view` after key presses).
+    // Terminal focus reports set the focus. TS also counts `useKeyboard`: the keymap consumes shortcuts before
+    // it (`E.12/tab-strip` posts no `session.view` after them), but typed text reaches it (`H.5/permission-reply`
+    // posts `session.view` without a focus report).
+    let weak = tui.weak();
+    tui.app.on_key_capture(move |_, key| {
+        let typed = matches!(key.code, KeyCode::Char(_))
+            && key.modifiers.without_locks().bits() & !Modifiers::SHIFT.bits() == 0;
+        if let Some(tui) = weak.upgrade().filter(|tui| typed && tui.tabs.focused.get() != Some(true)) {
+            tui.tabs.focused.set(Some(true));
+            acknowledge(&tui);
+        }
+    });
     let weak = tui.weak();
     tui.app.on_terminal_focus(move |_, focused| {
         if let Some(tui) = weak.upgrade() {
