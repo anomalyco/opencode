@@ -14,7 +14,7 @@ export default {
 
 export const Pending = {
   render: () => {
-    const statuses = ["delivered", "starting", "steering", "stranded", "queued"] as const
+    const statuses = ["delivered", "starting", "steering", "stranded", "queued", "sending"] as const
 
     const [state, setState] = createStore<{
       status: (typeof statuses)[number]

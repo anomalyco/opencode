@@ -167,7 +167,7 @@ export function createSessionTimelineRowRenderer(input: {
       const presentation = input.presentation(message)
 
       return {
-        kind: status === "steering" || status === "stranded" ? "pending" : "sent",
+        kind: status === "steering" || status === "stranded" || status === "sending" ? "pending" : "sent",
         agent: user.agent,
         model: user.model,
         text: !!(presentation?.displayText ?? message.text),

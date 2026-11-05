@@ -29,21 +29,76 @@ const selection = {
   },
 } satisfies ModelSelection
 
-test.each([
-  { name: "a send asks for a selection only once loading finds none", agent: "", toasts: ["missing"], left: "ship it" },
-  { name: "editing a held send cancels it and keeps the edit", edit: "ship i", toasts: [], left: "ship i" },
-  { name: "clearing a held send cancels it", edit: "", toasts: [], left: "" },
-  { name: "stopping a held send cancels it and keeps the prompt", stop: true, toasts: [], left: "ship it" },
+test.each<{
+  name: string
+  mode?: "shell"
+  agent?: string
+  edit?: string
+  stop?: boolean
+  toasts: string[]
+  sent: string[]
+  left: string
+  timeline: string[]
+}>([
+  {
+    name: "a held prompt shows in the session at once and sends once the Location loads, keeping a new draft",
+    edit: "next",
+    toasts: [],
+    sent: ["ship it"],
+    left: "next",
+    timeline: ["hold:ship it", "set:ship it"],
+  },
+  {
+    name: "a held prompt whose Location loads without an agent returns to the composer and asks for one",
+    agent: "",
+    toasts: ["missing"],
+    sent: [],
+    left: "ship it",
+    timeline: ["hold:ship it", "clear"],
+  },
+  {
+    name: "stopping a held prompt cancels it and returns it to the composer",
+    stop: true,
+    toasts: [],
+    sent: [],
+    left: "ship it",
+    timeline: ["hold:ship it", "clear"],
+  },
+  {
+    name: "editing a held shell command cancels it and keeps the edit",
+    mode: "shell",
+    edit: "ship i",
+    toasts: [],
+    sent: [],
+    left: "ship i",
+    timeline: [],
+  },
+  {
+    name: "clearing a held shell command cancels it",
+    mode: "shell",
+    edit: "",
+    toasts: [],
+    sent: [],
+    left: "",
+    timeline: [],
+  },
 ])("$name", async (row) => {
   const state = createMemoryComposerState({ prompt: "ship it" }).capture()
   const sent: string[] = []
   const toasts: string[] = []
+  const timeline: string[] = []
+  const prompted = Promise.withResolvers<void>()
   const [agent, setAgent] = createSignal<string>()
 
   const session: ComposerSession = {
     id: "session-1",
     directory: "/repo",
-    handoff: { set() {}, settle() {}, clear() {} },
+    handoff: {
+      set: (handoff) => void timeline.push(`set:${handoff.message.text}`),
+      hold: (handoff) => void timeline.push(`hold:${handoff.message.text}`),
+      settle() {},
+      clear: () => void timeline.push("clear"),
+    },
     current: () => undefined,
     admitted: () => true,
     api: {
@@ -58,6 +113,7 @@ test.each([
       session: {
         prompt: async (value) => {
           sent.push(value.text)
+          prompted.resolve()
 
           return {
             id: value.id ?? "msg_admitted",
@@ -92,7 +148,7 @@ test.each([
   await createRoot(async (dispose) => {
     const submission = createComposerSubmit({
       adapter,
-      mode: () => "normal",
+      mode: () => row.mode ?? "normal",
       commands: () => [],
       editor: () => undefined,
       queueScroll() {},
@@ -110,13 +166,15 @@ test.each([
 
     expect(composerSubmitView(submission.state()).held).toBe(true)
     expect(toasts).toEqual([])
+    // A prompt shows in the session and leaves the composer at once; a shell command waits in the composer.
+    expect(text(state)).toBe(row.mode ? "ship it" : "")
 
     if (row.edit !== undefined) state.set([{ type: "text", content: row.edit, start: 0, end: row.edit.length }])
 
     if (row.stop) await submission.stop()
 
     // A cancelled hold settles before loading finishes, and loading afterwards sends nothing.
-    if (row.agent === undefined) {
+    if (row.edit !== undefined && row.mode) {
       await held
       expect(composerSubmitView(submission.state()).held).toBe(false)
     }
@@ -124,10 +182,13 @@ test.each([
     setAgent(row.agent ?? "build")
     await held
 
+    if (row.sent.length > 0) await prompted.promise
+
     expect(composerSubmitView(submission.state()).held).toBe(false)
     expect(toasts).toEqual(row.toasts)
-    expect(sent).toEqual([])
+    expect(sent).toEqual(row.sent)
     expect(text(state)).toBe(row.left)
+    expect(timeline).toEqual(row.timeline)
     dispose()
   })
 })

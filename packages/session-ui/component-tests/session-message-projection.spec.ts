@@ -206,13 +206,16 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   const indicator = timeline.locator('[data-slot="user-message-meta"] [data-slot="user-message-pending"]')
   const text = timeline.locator('[data-slot="user-message-text"]')
 
-  for (const status of ["steering", "stranded", "starting", "queued", "delivered"]) {
+  for (const status of ["steering", "stranded", "sending", "starting", "queued", "delivered"]) {
     await timeline.getByLabel("Delivery state").selectOption(status)
-    const pending = status === "steering" || status === "stranded"
+    const pending = status === "steering" || status === "stranded" || status === "sending"
 
     if (pending) await expect(indicator).toBeVisible()
 
     if (!pending) await expect(indicator).toBeHidden()
+
+    // A prompt still sending has no server row, so it offers no action until the server has it.
+    await expect(timeline.locator('[data-slot="user-message-actions"]')).toHaveCount(status === "sending" ? 0 : 1)
 
     const colors = await timeline.evaluate((element, pending) => {
       const probe = document.createElement("span")

@@ -93,6 +93,7 @@ export interface MockServerConfig {
   // `directory` is the requested `location[directory]`, such as an untracked folder the review opened.
   vcsDiff?: unknown[] | ((input: { mode?: string; directory: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
+  beforeAgentsResponse?: () => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
@@ -777,20 +778,23 @@ function mockHandlers(
           }),
         config: () => Effect.succeed(configEntries),
         reference: () => Effect.succeed({ location: location(config), data: [] }),
+        // `beforeAgentsResponse` holds the Location's agent list, as a cold Location does while its plugins activate.
         agent: (ctx) =>
-          Effect.succeed({
-            location: location(config, requestDirectory(config, ctx.request)),
-            data: [
-              {
-                id: "build",
-                name: "Build",
-                mode: "primary",
-                hidden: false,
-                request: { settings: {}, headers: {}, body: {} },
-                permissions: [],
-              },
-            ],
-          }),
+          Effect.promise(async () => config.beforeAgentsResponse?.()).pipe(
+            Effect.as({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: [
+                {
+                  id: "build",
+                  name: "Build",
+                  mode: "primary",
+                  hidden: false,
+                  request: { settings: {}, headers: {}, body: {} },
+                  permissions: [],
+                },
+              ],
+            }),
+          ),
         provider: () =>
           Effect.succeed({ location: location(config), data: currentProviders(resolve(config.provider)) }),
         model: () => Effect.succeed({ location: location(config), data: currentModels(resolve(config.provider)) }),
