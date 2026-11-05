@@ -1163,10 +1163,10 @@ test("an attachment pasted mid-sentence leaves the text and the caret where they
     element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
   })
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("notes.txt")
-  await page.keyboard.type(",")
-  await expect(editor).toHaveText("Hello, world")
   // A rewrite of the editor would replace this node, even when it put the caret back in the same place.
   expect(await editor.evaluate((element, node) => element.firstChild === node, text)).toBe(true)
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("Hello, world")
 })
 
 test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
