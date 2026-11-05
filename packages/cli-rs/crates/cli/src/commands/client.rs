@@ -1,10 +1,10 @@
-//! What the commands that talk to a server share (C.1): the connection, a runtime, raw JSON reads,
+//! What the commands that talk to a server share (C.1): the connection, a runtime,
 //! and `localeCompare` ordering.
 
 use std::future::Future;
 use std::sync::Arc;
 
-use opencode_api::client::{Call, Client};
+use opencode_api::client::Client;
 use opencode_api::generated::types::LocationQueryInput;
 use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::paths::Paths;
@@ -81,14 +81,6 @@ async fn connect_in(
 /// `{ location: { directory: process.cwd() } }`, the location every read command sends.
 pub fn here() -> anyhow::Result<LocationQueryInput> {
     Ok(LocationQueryInput { directory: Some(std::env::current_dir()?.to_string_lossy().into_owned()) })
-}
-
-/// `GET path?location[directory]=<cwd>` as JSON, undecoded. The TypeScript Promise client returns
-/// the wire JSON, and `debug agents` and `debug config` print it as it came, unknown fields included.
-pub async fn get_located(client: &Client, path: &str, declared: &'static [u16]) -> anyhow::Result<Value> {
-    let mut call = Call::new("GET", path.to_owned(), 200, declared);
-    call.query("location", &here()?)?;
-    Ok(client.json(call).await?)
 }
 
 /// `JSON.stringify(value, null, 2)` plus a newline.
