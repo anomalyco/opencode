@@ -65,6 +65,10 @@ story("keeps typed comment text while other lines and comments are used", async 
   await page.getByRole("menuitem", { name: "Edit" }).click()
   await expect(textbox).toHaveValue("first comment")
   await textbox.fill("edited comment")
+  // A click on another line keeps the edit, and the highlight returns to the edited line.
+  await firstLine.click()
+  await expect(textbox).toHaveValue("edited comment")
+  await expect(review.locator('[data-column-number="1"]')).not.toHaveAttribute("data-selected-line")
   await firstLine.hover()
   await review.getByRole("button", { name: "Comment", exact: true, includeHidden: true }).dispatchEvent("click")
   await expect(textbox).toHaveCount(1)

@@ -31,16 +31,35 @@ describe("transitionLineComment", () => {
       { type: "edit.changed", text: "updated" },
     ])
 
-    const events: LineCommentEvent[] = [
-      { type: "draft.opened", range: line(5) },
+    expect(transitionLineComment(editing, { type: "draft.opened", range: line(5) })).toEqual({
+      state: editing,
+      effects: [],
+    })
+
+    // The viewer already highlighted the clicked lines, so the edit hands its own range back to it.
+    const clicks: LineCommentEvent[] = [
       { type: "line.selected", range: line(8) },
       { type: "line.selection-ended", range: line(8) },
       { type: "line.selected", range: null },
       { type: "line.selection-ended", range: null },
     ]
 
-    for (const event of events) expect(transitionLineComment(editing, event)).toEqual({ state: editing, effects: [] })
+    for (const event of clicks) {
+      const step = transitionLineComment(editing, event)
+
+      expect(step).toEqual({ state: editing, effects: [{ type: "sync-selected", range: line(2) }] })
+      expect(viewLineComment(step.state).selected).not.toBe(viewLineComment(editing).selected)
+    }
+
     expect(editing).toEqual({ status: "editing", id: "c1", range: line(2), text: "updated" })
+  })
+
+  test("the viewer echoing a restored range back keeps the same state", () => {
+    const editing: LineCommentMode = { status: "editing", id: "c1", range: line(2), text: "x" }
+    const restored = transitionLineComment(editing, { type: "line.selected", range: line(8) }).state
+
+    expect(transitionLineComment(restored, { type: "line.selected", range: line(2) }).state).toBe(restored)
+    expect(transitionLineComment(restored, { type: "line.selection-ended", range: line(2) }).state).toBe(restored)
   })
 
   test("a repeated selection end for the same lines keeps the typed draft, and a new range moves it", () => {
@@ -65,8 +84,14 @@ describe("transitionLineComment", () => {
       { type: "draft.changed", text: "wip" },
     ])
 
-    expect(transitionLineComment(typed, { type: "line.selected", range: null }).state).toBe(typed)
-    expect(transitionLineComment(typed, { type: "line.selection-ended", range: null }).state).toBe(typed)
+    for (const event of [
+      { type: "line.selected", range: null },
+      { type: "line.selection-ended", range: null },
+    ] as const)
+      expect(transitionLineComment(typed, event)).toEqual({
+        state: typed,
+        effects: [{ type: "sync-selected", range: line(4) }],
+      })
 
     const empty = replay([{ type: "draft.opened", range: line(4) }])
 

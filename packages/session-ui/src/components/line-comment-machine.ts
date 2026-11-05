@@ -59,7 +59,7 @@ export function transitionLineComment(state: LineCommentMode, event: LineComment
     case "line.selected":
       if (!event.range) return clear(state)
 
-      if (state.status === "editing") return stay(state)
+      if (state.status === "editing") return restore(state, event.range)
 
       if ((state.status === "drafting" || state.status === "selecting") && sameSelectedRange(state.range, event.range))
         return stay(state)
@@ -70,6 +70,8 @@ export function transitionLineComment(state: LineCommentMode, event: LineComment
       return enter({ status: "selecting", range: cloneSelectedLineRange(event.range) })
     case "line.selection-ended":
       if (!event.range) return clear(state)
+
+      if (state.status === "editing") return restore(state, event.range)
 
       return openDraft(state, event.range)
     case "draft.opened":
@@ -218,9 +220,19 @@ function openDraft(state: LineCommentMode, range: SelectedLineRange): LineCommen
 }
 
 function clear(state: LineCommentMode): LineCommentTransition {
-  if (state.status === "idle" || holdsText(state)) return stay(state)
+  if (state.status === "idle") return stay(state)
+
+  if (holdsText(state)) return restore(state, null)
 
   return enter(IDLE_LINE_COMMENT_MODE)
+}
+
+// The viewer highlights a clicked range before the machine sees it. When typed text keeps its range, a fresh copy of
+// that range makes the `selectedLines` prop change, so the viewer highlights the held lines again.
+function restore(state: ActiveLineCommentMode, range: SelectedLineRange | null): LineCommentTransition {
+  if (range && sameSelectedRange(state.range, range)) return stay(state)
+
+  return enter({ ...state, range: cloneSelectedLineRange(state.range) })
 }
 
 // Typed draft text and an open edit are never discarded by a selection, click or focus elsewhere in the file.
