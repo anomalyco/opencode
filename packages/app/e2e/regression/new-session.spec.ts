@@ -1000,6 +1000,61 @@ test("keeps the draft on the main checkout when session creation fails, then ret
   await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
 })
 
+// Before, a create whose response stalled left the pending tab on "Starting session" with the prompt locked.
+test("a stalled session create returns to the draft, and the Session it creates later is deleted unused", async ({
+  page,
+}) => {
+  const held = Promise.withResolvers<void>()
+  const creates: string[] = []
+  const prompts: string[] = []
+  await page.clock.install()
+
+  const view = await openDraft(page, {
+    ...pendingDraft,
+    onPrompt: (prompt) => void prompts.push(prompt.sessionID),
+    onSessionCreate: async (body, attempt) => {
+      creates.push(String(body.id))
+
+      if (attempt === 1) await held.promise
+    },
+  })
+
+  await view.editor.fill(text)
+  await submit(page).click()
+  await expect.poll(() => creates.length).toBe(1)
+  const stalled = creates[0]!
+  await expectPath(page, sessionHref(stalled))
+  await expect(page.locator('[data-component="session-preparing"]').getByRole("status")).toContainText(
+    "Starting session",
+  )
+
+  // The create phase's time limit, below the request queue's 60 s wait for response headers.
+  await page.clock.fastForward(30_000)
+
+  await expectPath(page, draftHref(draftID))
+  await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("The server took too long to respond. Send again to retry.", { exact: true }),
+  ).toBeVisible()
+  await expect(view.editor).toHaveText(text)
+  await expect(submit(page)).toBeEnabled()
+  await expect(tabLink(page, stalled)).toHaveCount(0)
+
+  const removed = page.waitForRequest(
+    (request) => request.method() === "DELETE" && new URL(request.url()).pathname === `/api/session/${stalled}`,
+  )
+
+  held.resolve()
+  await removed
+
+  await submit(page).click()
+
+  await expect.poll(() => creates.length).toBe(2)
+  await expect.poll(() => prompts).toEqual([creates[1]])
+  await expectPath(page, sessionHref(creates[1]!))
+  await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
+})
+
 test("a new session's first prompt stays once its missed admission echo resyncs the session", async ({ page }) => {
   const messages: SessionMessageInfo[] = []
   const created: string[] = []

@@ -49,8 +49,12 @@ import {
 } from "./catalog"
 import {
   createLabStageState,
+  INITIAL_LAB_BROWSE_STATE,
   labStageIndex,
+  selectShouldToggleFolder,
+  transitionLabBrowse,
   transitionLabStage,
+  type LabBrowseEvent,
   type LabStageEffect,
   type LabStageEvent,
 } from "./machine"
@@ -124,18 +128,20 @@ export default function ComponentsLab() {
   let palette: CommandPalette | undefined
   let toggle: ((id: string) => void) | undefined
   let focusTree: ((id?: string) => void) | undefined
-  // While browsing the tree by keys, a story that focuses something as it mounts (a dialog, a field) would take the
-  // keys away. A press or Tab anywhere ends browsing; a few returns at most, so a story that traps focus still wins.
-  let browsing = 0
-  // The key behind the latest selection; none for a press.
-  let key: string | undefined
+  let browse = INITIAL_LAB_BROWSE_STATE
+
+  const dispatchBrowse = (event: LabBrowseEvent) => {
+    const next = transitionLabBrowse(browse, event)
+    browse = next.state
+    next.effects.forEach(() => focusTree?.(params.story))
+  }
 
   const entries = () => catalog()?.entries ?? []
   const grid = () => params.view === "grid"
   const selected = createMemo(() => (grid() ? undefined : entries().find((entry) => entry.file === params.story)))
 
   const open = (file: string) => {
-    browsing = stories.contains(document.activeElement) ? 3 : 0
+    dispatchBrowse({ type: "story.opened", fromTree: stories.contains(document.activeElement) })
     setParams({ story: file, view: undefined })
   }
 
@@ -229,7 +235,7 @@ export default function ComponentsLab() {
         onSelect={(_, primary) => {
           if (!primary?.startsWith("folder:")) return primary && open(primary)
 
-          if (key === undefined || key === " ") toggle?.(primary)
+          if (selectShouldToggleFolder(browse)) toggle?.(primary)
         }}
         onActivate={(id) => (id.startsWith("folder:") ? toggle?.(id) : open(id))}
       />
@@ -261,20 +267,23 @@ export default function ComponentsLab() {
     </Show>
   ))
 
-  makeEventListener(window, "pointerdown", () => ((browsing = 0), (key = undefined)), { capture: true })
+  const inTree = (event: Event) => event.target instanceof Node && stories.contains(event.target)
+
+  makeEventListener(window, "pointerdown", (event) => dispatchBrowse({ type: "pointer.down", inTree: inTree(event) }), {
+    capture: true,
+  })
+  // Bubbling, so the tree's own pointerup (which completes a press on a selected row) selects first.
+  makeEventListener(window, "pointerup", () => dispatchBrowse({ type: "pointer.ended" }))
+  makeEventListener(window, "pointercancel", () => dispatchBrowse({ type: "pointer.ended" }))
   makeEventListener(
     window,
     "keydown",
-    (event) => {
-      key = event.key
-
-      if (event.key === "Tab") browsing = 0
-    },
+    (event) => dispatchBrowse({ type: "key.down", key: event.key, inTree: inTree(event) }),
     { capture: true },
   )
-  makeEventListener(stage, "focusin", () => {
-    if (browsing-- > 0) focusTree?.(params.story)
-  })
+  makeEventListener(window, "keyup", () => dispatchBrowse({ type: "key.ended" }))
+  makeEventListener(window, "blur", () => dispatchBrowse({ type: "window.blurred" }))
+  makeEventListener(stage, "focusin", () => dispatchBrowse({ type: "stage.focused" }))
 
   let element!: HTMLDivElement
 

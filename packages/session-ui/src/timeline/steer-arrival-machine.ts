@@ -5,7 +5,8 @@ import type { TimelineRow } from "./timeline-row"
  * Which user messages grow in as they render. `seen` holds the message IDs of the session's rows so far: user messages,
  * shells and assistant messages. A user message counts as a steer only when it lands below a seen row while the session
  * works, so the first page and history loaded above it appear as they are. `arriving` holds steers whose rows have not
- * rendered yet; rendering one, or the session going idle, removes it.
+ * rendered yet; rendering one, or the session going idle, removes it. `growing` holds steers whose rows are growing in;
+ * the grow finishing, or the row unmounting, removes it.
  */
 export type SteerArrivalState =
   | {
@@ -13,6 +14,7 @@ export type SteerArrivalState =
       readonly sessionID: string
       readonly seen: ReadonlySet<string>
       readonly arriving: ReadonlySet<string>
+      readonly growing: ReadonlySet<string>
     }
   | { readonly status: "disposed" }
 
@@ -24,6 +26,7 @@ export type SteerArrivalEvent =
       readonly busy: boolean
     }
   | { readonly type: "rendered"; readonly messageID: string }
+  | { readonly type: "grown"; readonly messageID: string }
   | { readonly type: "disposed" }
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -33,6 +36,7 @@ export const INITIAL_STEER_ARRIVAL_STATE: SteerArrivalState = Object.freeze({
   sessionID: "",
   seen: EMPTY,
   arriving: EMPTY,
+  growing: EMPTY,
 })
 
 export const DISPOSED_STEER_ARRIVAL_STATE: SteerArrivalState = Object.freeze({ status: "disposed" })
@@ -50,7 +54,15 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
     const arriving = new Set(state.arriving)
     arriving.delete(event.messageID)
 
-    return { ...state, arriving }
+    return { ...state, arriving, growing: new Set([...state.growing, event.messageID]) }
+  }
+
+  if (event.type === "grown") {
+    if (!state.growing.has(event.messageID)) return state
+    const growing = new Set(state.growing)
+    growing.delete(event.messageID)
+
+    return { ...state, growing }
   }
 
   const rows = event.rows
@@ -61,6 +73,7 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
       sessionID: event.sessionID,
       seen: new Set(rows.flatMap((row) => rowAnchor(row) ?? [])),
       arriving: EMPTY,
+      growing: EMPTY,
     }
 
   const unseen = rows.some((row) => {
@@ -91,11 +104,20 @@ export function transitionSteerArrival(state: SteerArrivalState, event: SteerArr
     sessionID: state.sessionID,
     seen: unseen ? new Set([...state.seen, ...rows.flatMap((row) => rowAnchor(row) ?? [])]) : state.seen,
     arriving: !event.busy ? EMPTY : steers.length > 0 ? new Set([...state.arriving, ...steers]) : state.arriving,
+    growing: state.growing,
   }
 }
 
 export function shouldGrowUserMessage(state: SteerArrivalState, messageID: string) {
   return state.status === "tracking" && state.arriving.has(messageID)
+}
+
+/**
+ * Whether a run's gaps and meta lines snap rather than spring: while a steer is landing or growing in, the growing row
+ * moves the run, so springing as well would make the bubbles jump.
+ */
+export function shouldSnapUserRun(state: SteerArrivalState) {
+  return state.status === "tracking" && (state.arriving.size > 0 || state.growing.size > 0)
 }
 
 // Each row stands for the message that produced it; message IDs are unique across user, shell and assistant messages.

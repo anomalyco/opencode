@@ -1,4 +1,5 @@
-import { createMemo, createResource, createSignal, Match, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createSignal, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import { Loader } from "@opencode/ui/loader"
 import { Dynamic } from "solid-js/web"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
@@ -20,7 +21,14 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import { usePlugin, usePanel, type MountedSession, type PanelSidebar, type SessionScreen } from "@opencode/plugin/gui"
+import {
+  createKeyed,
+  usePlugin,
+  usePanel,
+  type MountedSession,
+  type PanelSidebar,
+  type SessionScreen,
+} from "@opencode/plugin/gui"
 import { FileTree, OpenInApp } from "@opencode/plugin/gui/file"
 import type Review from "./index"
 import {
@@ -32,9 +40,21 @@ import {
   sortReviewPaths,
   type RenderDiff,
 } from "./kinds"
-import type { ReviewDiffView } from "./machine"
+import {
+  INITIAL_REVIEW_DETAIL_STATE,
+  reviewDetailView,
+  sameReviewDetailTarget,
+  transitionReviewDetail,
+  type ReviewDetailEffect,
+  type ReviewDetailEvent,
+  type ReviewDetailState,
+} from "./detail-machine"
+import { REVIEW_DIFF_TIMEOUT_MS, type ReviewDiffView } from "./machine"
 import type { ReviewModel } from "./model"
-import { ReviewPanelEmpty, ReviewTitle } from "./parts"
+import { ReviewFailure, ReviewPanelEmpty, ReviewTitle } from "./parts"
+
+/** A full patch request: its backoff, then its deadline, and its abort controller once it runs. */
+type DetailRequest = { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
 
 type ReviewPanelState = {
   sidebar: PanelSidebar
@@ -57,7 +77,8 @@ type ReviewPanelProps = {
   folderLabels?: ReadonlyMap<string, string>
   status: ReviewDiffView["status"]
   diffVersion?: number
-  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
+  /** Loads the full patch of a previewed file whose listed patch has no hunks. */
+  detail: ReviewModel["detail"]
   readFile: ReviewModel["readFile"]
   activeFile?: string
   onSelectFile: (path: string) => void
@@ -95,7 +116,7 @@ export default function ReviewPanelContent(props: {
       folderLabels={props.review.folderLabels()}
       status={props.review.diff().status}
       diffVersion={props.review.diffVersion()}
-      loadDiff={props.review.loadDiff}
+      detail={props.review.detail}
       readFile={props.review.readFile}
       activeFile={props.review.activeFile()}
       onSelectFile={props.review.focusFile}
@@ -170,33 +191,118 @@ function ReviewPanel(props: ReviewPanelProps) {
 
   const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
 
-  const detailSource = createMemo(() => {
-    const diff = sourceActiveItem()
-    const load = props.loadDiff
+  // The previewed file's full patch, when its listed patch has no hunks. The request lives as long as the panel.
+  const [detailState, setDetailState] = createSignal<ReviewDetailState>(INITIAL_REVIEW_DETAIL_STATE)
+  const detailRequests = new Map<number, DetailRequest>()
 
-    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return undefined
+  const dispatchDetail = (event: ReviewDetailEvent) => {
+    const next = transitionReviewDetail(untrack(detailState), event)
 
-    return { diff, load, version: props.diffVersion }
+    setDetailState(next.state)
+    next.effects.forEach(runDetailEffect)
+  }
+
+  const runDetailEffect = (effect: ReviewDetailEffect) => {
+    if (effect.type === "abort") {
+      const request = detailRequests.get(effect.attempt)
+
+      detailRequests.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller?.abort()
+
+      return
+    }
+
+    const detail = props.detail
+    const attempt = effect.attempt
+    const request: DetailRequest = {}
+
+    detailRequests.set(attempt, request)
+    // A retry waits out its backoff first; the request's own deadline starts with it.
+    request.timer = setTimeout(() => {
+      const controller = new AbortController()
+
+      request.controller = controller
+      request.timer = setTimeout(() => dispatchDetail({ type: "fetch.timed-out", attempt }), REVIEW_DIFF_TIMEOUT_MS)
+      void detail.load(effect.target, effect.stage, controller.signal).then(
+        (diff) => {
+          if (!detailRequests.delete(attempt)) return
+          clearTimeout(request.timer)
+          dispatchDetail({ type: "fetch.succeeded", attempt, diff })
+        },
+        (cause: unknown) => {
+          if (!detailRequests.delete(attempt)) return
+          clearTimeout(request.timer)
+          dispatchDetail({
+            type: "fetch.failed",
+            attempt,
+            message: cause instanceof Error ? cause.message : String(cause),
+          })
+        },
+      )
+    }, effect.delayMs)
+  }
+
+  const detailTarget = createMemo(
+    () => {
+      const diff = sourceActiveItem()
+
+      if (!diff || !reviewDiffNeedsLoad(diff)) return undefined
+
+      return props.detail.target(diff, props.diffVersion ?? 0)
+    },
+    undefined,
+    {
+      equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewDetailTarget(previous, next)),
+    },
+  )
+
+  // Syncs the previewed file's patch request with the file and the server's connection.
+  createKeyed(
+    () => ({ target: detailTarget(), connected: props.session.server.connected }),
+    (current) =>
+      dispatchDetail({
+        type: "context.changed",
+        context: current.target
+          ? {
+              kind: "needed",
+              target: current.target,
+              connected: current.connected,
+              cached: props.detail.cached(current.target),
+            }
+          : { kind: "none" },
+      }),
+    { equals: (previous, next) => previous.target === next.target && previous.connected === next.connected },
+  )
+  onCleanup(() => dispatchDetail({ type: "disposed" }))
+
+  const detailView = createMemo(() => {
+    const target = detailTarget()
+
+    return target ? reviewDetailView(detailState(), target) : undefined
   })
 
-  const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
-    const value = await load(diff.file, version)
+  const activeItem = () => {
+    const current = detailView()
 
-    if (value?.file !== diff.file) return undefined
+    return (current?.status === "ready" ? current.diff : undefined) ?? sourceActiveItem()
+  }
 
-    return { source: diff, version, value }
-  })
+  // While the full patch loads or failed, the preview keeps the file's header and shows why its diff is missing.
+  const placeholder = () => {
+    const current = detailView()
 
-  const activeItem = createMemo(() => {
-    const source = sourceActiveItem()
+    if (!current || current.status === "ready") return undefined
 
-    if (loadedDiff.state !== "ready") return source
-    const loaded = loadedDiff()
+    if (current.status === "loading") return <Loader />
 
-    if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
-
-    return source
-  })
+    return (
+      <ReviewFailure
+        failure={current.status === "error" ? current.failure : undefined}
+        onRetry={() => dispatchDetail({ type: "retry" })}
+      />
+    )
+  }
 
   return (
     <SessionReviewV2
@@ -248,6 +354,7 @@ function ReviewPanel(props: ReviewPanelProps) {
                 <SessionReviewFilePreviewV2
                   file={file}
                   diff={diff()}
+                  placeholder={placeholder()}
                   diffStyle={props.diffStyle}
                   expandMode={props.state.expandMode()}
                   readFile={props.readFile}

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import {
-  createServerConnectState,
+  CAMERA_PROBE_TIMEOUT_MS,
   formatServerConnectError,
   selectServerConnectView,
   SERVER_CONNECT_TIMEOUT_MS,
+  startServerConnect,
   transitionServerConnect,
   type ServerConnectEffect,
   type ServerConnectErrorContext,
@@ -23,16 +24,28 @@ const original = (input: Partial<ServerOriginal> = {}): ServerOriginal => ({
 
 const edit = (input: Partial<ServerOriginal> = {}): ServerConnectTarget => ({ kind: "edit", original: original(input) })
 
-function replay(target: ServerConnectTarget, events: readonly ServerConnectEvent[]) {
+function replay(
+  target: ServerConnectTarget,
+  events: readonly ServerConnectEvent[],
+  from: ServerConnectState = startServerConnect(target).state,
+) {
   return events.reduce<{ state: ServerConnectState; effects: ServerConnectEffect[] }>(
     (result, event) => {
       const next = transitionServerConnect(result.state, event)
 
       return { state: next.state, effects: [...result.effects, ...next.effects] }
     },
-    { state: createServerConnectState(target), effects: [] },
+    { state: from, effects: [] },
   )
 }
+
+/** The web app's form once its camera check found a camera. */
+const withCamera = (target: ServerConnectTarget) =>
+  transitionServerConnect(startServerConnect(target, "probe").state, {
+    type: "camera.settled",
+    attempt: 1,
+    available: true,
+  }).state
 
 const field = (name: "link" | "url" | "name" | "password", value: string): ServerConnectEvent => ({
   type: "field.changed",
@@ -131,10 +144,11 @@ describe("server connect form", () => {
   })
 
   test("a scanned link submits once", () => {
-    const scanned = replay({ kind: "add" }, [
-      { type: "scan.started" },
-      { type: "scan.completed", link: "http://192.168.1.2:4096/auth/connect/abc" },
-    ])
+    const scanned = replay(
+      { kind: "add" },
+      [{ type: "scan.started" }, { type: "scan.completed", link: "http://192.168.1.2:4096/auth/connect/abc" }],
+      withCamera({ kind: "add" }),
+    )
 
     expect(scanned.state).toMatchObject({ status: "submitting", attempt: 1 })
     expect(scanned.effects).toEqual([
@@ -155,15 +169,82 @@ describe("server connect form", () => {
     ).toBe(scanned.state)
   })
 
-  test("a cancelled scan returns to the form with its values", () => {
-    const result = replay({ kind: "add" }, [
-      field("name", "Remote"),
-      { type: "scan.started" },
-      { type: "scan.cancelled" },
-    ])
+  test("a cancelled scan returns to the form with its values and checks the camera again", () => {
+    const result = replay(
+      { kind: "add" },
+      [field("name", "Remote"), { type: "scan.started" }, { type: "scan.cancelled" }],
+      withCamera({ kind: "add" }),
+    )
 
     expect(result.state).toMatchObject({ status: "editing", draft: { name: "Remote" } })
-    expect(result.effects).toEqual([])
+    expect(result.effects).toEqual([{ type: "camera.probe", attempt: 2, timeoutMs: CAMERA_PROBE_TIMEOUT_MS }])
+  })
+
+  test("a camera check that never answers gives way to the hint", () => {
+    const start = startServerConnect({ kind: "add" }, "probe")
+
+    expect(start.effects).toEqual([{ type: "camera.probe", attempt: 1, timeoutMs: CAMERA_PROBE_TIMEOUT_MS }])
+    expect(selectServerConnectView(start.state, context)).toMatchObject({
+      showScan: true,
+      canScan: false,
+      cameraHint: undefined,
+    })
+
+    const timedOut = transitionServerConnect(start.state, { type: "camera.timed-out", attempt: 1 })
+
+    expect(timedOut.effects).toEqual([{ type: "camera.timer.stop" }])
+    expect(selectServerConnectView(timedOut.state, context)).toMatchObject({
+      showScan: false,
+      canScan: false,
+      cameraHint: "server.connect.camera.unavailable",
+    })
+  })
+
+  test("after a cancelled scan, Scan waits for the new camera check and follows its answer", () => {
+    const cancelled = replay(
+      { kind: "add" },
+      [{ type: "scan.started" }, { type: "scan.cancelled" }],
+      withCamera({ kind: "add" }),
+    )
+
+    expect(selectServerConnectView(cancelled.state, context).canScan).toBe(false)
+    expect(transitionServerConnect(cancelled.state, { type: "scan.started" }).state).toBe(cancelled.state)
+
+    // The answer of the first check is stale.
+    expect(
+      transitionServerConnect(cancelled.state, { type: "camera.settled", attempt: 1, available: true }).state,
+    ).toBe(cancelled.state)
+
+    const denied = transitionServerConnect(cancelled.state, { type: "camera.settled", attempt: 2, available: false })
+
+    expect(selectServerConnectView(denied.state, context)).toMatchObject({
+      canScan: false,
+      cameraHint: "server.connect.camera.unavailable",
+    })
+  })
+
+  test.each([
+    { support: "insecure", showScan: false, cameraHint: "server.connect.camera.native" },
+    { support: "unavailable", showScan: false, cameraHint: "server.connect.camera.unavailable" },
+    { support: "none", showScan: false, cameraHint: undefined },
+  ] as const)("a $support camera shows its hint at once, with no check", (input) => {
+    const start = startServerConnect({ kind: "add" }, input.support)
+
+    expect(start.effects).toEqual([])
+    expect(selectServerConnectView(start.state, context)).toMatchObject({
+      showScan: input.showScan,
+      cameraHint: input.cameraHint,
+    })
+    expect(transitionServerConnect(start.state, { type: "scan.started" }).state).toBe(start.state)
+  })
+
+  test("closing during a camera check stops its timer and ignores its answer", () => {
+    const closed = transitionServerConnect(startServerConnect({ kind: "add" }, "probe").state, { type: "disposed" })
+
+    expect(closed.effects).toEqual([{ type: "camera.timer.stop" }])
+    expect(transitionServerConnect(closed.state, { type: "camera.settled", attempt: 1, available: true }).state).toBe(
+      closed.state,
+    )
   })
 
   test("a result after the dialog unmounts saves nothing", () => {
@@ -341,7 +422,7 @@ describe("server connect form", () => {
   })
 
   test("an edit starts from the server, on a pairing link when it signed out", () => {
-    const view = (target: ServerConnectTarget) => selectServerConnectView(createServerConnectState(target), context)
+    const view = (target: ServerConnectTarget) => selectServerConnectView(startServerConnect(target).state, context)
 
     expect(view(edit({ displayName: "Remote", password: "secret" })).draft).toEqual({
       method: "password",

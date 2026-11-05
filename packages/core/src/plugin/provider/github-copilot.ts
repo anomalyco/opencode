@@ -311,7 +311,7 @@ export const GithubCopilotPlugin = define({
           if (!token) return
           const text = yield* Effect.promise(() => evt.request.clone().text())
           const body = Option.getOrUndefined(decodeBody(text))
-          applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body), true)
+          applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body))
         }),
       { providerID: Provider.ID.githubCopilot },
     )
@@ -477,18 +477,12 @@ export function copilotFetch(token: string | undefined, upstream: Fetch | undefi
     const requestHeaders = new Headers(init?.headers)
     const url = input instanceof URL ? input.href : typeof input === "string" ? input : input.url
     const body = typeof init?.body === "string" ? Option.getOrUndefined(decodeBody(init.body)) : undefined
-    applyHeaders(requestHeaders, token, app, requestMetadata(url, body), false)
+    applyHeaders(requestHeaders, token, app, requestMetadata(url, body))
     return send(input, { ...init, headers: requestHeaders })
   }
 }
 
-function applyHeaders(
-  headers: Headers,
-  token: string | undefined,
-  app: App.Info,
-  metadata: RequestMetadata,
-  anthropic: boolean,
-) {
+function applyHeaders(headers: Headers, token: string | undefined, app: App.Info, metadata: RequestMetadata) {
   if (token) {
     headers.delete("authorization")
     headers.delete("x-api-key")
@@ -502,7 +496,6 @@ function applyHeaders(
   if (metadata.agent) headers.set("x-initiator", "agent")
   else if (!headers.has("x-initiator")) headers.set("x-initiator", "user")
   if (metadata.vision) headers.set("Copilot-Vision-Request", "true")
-  if (anthropic) headers.set("anthropic-beta", "interleaved-thinking-2025-05-14")
 }
 
 // Mirrors the Copilot client's X-Interaction-Type vocabulary: the agent loop is the default,

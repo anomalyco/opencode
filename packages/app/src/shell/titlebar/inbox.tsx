@@ -15,7 +15,7 @@ import {
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { ActivityRing } from "@opencode/ui/activity-ring"
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
@@ -141,34 +141,6 @@ export function SidebarInbox() {
     inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.unread, ...visible.recent])
   })
 
-  function DeleteDialog(props: { entry: InboxEntry }) {
-    const confirm = async () => {
-      await inbox.remove(props.entry)
-      dialog.close()
-    }
-
-    return (
-      <Dialog fit>
-        <DialogHeader hideClose>
-          <DialogTitleGroup
-            title={language.t("session.delete.title")}
-            description={language.t("session.delete.confirm", {
-              name: sessionTitle(props.entry.session.title) ?? language.t("command.session.new"),
-            })}
-          />
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
-            {language.t("common.cancel")}
-          </Button>
-          <Button variant="danger" onClick={confirm}>
-            {language.t("session.delete.button")}
-          </Button>
-        </DialogFooter>
-      </Dialog>
-    )
-  }
-
   // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
   // row on any session change and resetting the list's scroll.
   const rows = (list: () => InboxEntry[]) => (
@@ -191,7 +163,13 @@ export function SidebarInbox() {
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
               onUnarchive={() => void inbox.unarchive(entry())}
-              onDelete={() => dialog.show(() => <DeleteDialog entry={entry()} />)}
+              onDelete={() => {
+                const current = entry()
+
+                void dialog.show(() => (
+                  <DeleteDialog title={current.session.title} onConfirm={() => void inbox.remove(current)} />
+                ))
+              }}
             />
           )}
         </Show>
@@ -274,6 +252,42 @@ export function SidebarInbox() {
         void dialog.show(() => <DialogSessionSearch archived />)
       }}
     />
+  )
+}
+
+// The session leaves the list at once, so the dialog closes before the delete request instead of after it.
+function DeleteDialog(props: { title: string | undefined; onConfirm: () => void }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const layer = useDialogLayer()
+
+  const close = () => dialog.close(layer?.id)
+
+  const confirm = () => {
+    if (dialog.closing) return
+    close()
+    props.onConfirm()
+  }
+
+  return (
+    <Dialog fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup
+          title={language.t("session.delete.title")}
+          description={language.t("session.delete.confirm", {
+            name: sessionTitle(props.title) ?? language.t("command.session.new"),
+          })}
+        />
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="ghost" autofocus disabled={dialog.closing} onClick={close}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button variant="danger" disabled={dialog.closing} onClick={confirm}>
+          {language.t("session.delete.button")}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   )
 }
 

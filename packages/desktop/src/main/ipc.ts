@@ -16,7 +16,7 @@ import { storageHandlers } from "./ipc-handlers/storage"
 import { windowHandlers } from "./ipc-handlers/window"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
-import { showCliInstaller } from "./native/install-cli"
+import { createCliInstaller } from "./native/install-cli"
 import { createMenu, disposeMenu, refreshMenu } from "./native/menu"
 import { onNativeTranslations } from "./native/translations"
 import { DesktopCli } from "./service/desktop-cli"
@@ -50,7 +50,7 @@ export const registerIpcHandlers = Effect.gen(function* () {
 
   const menu = {
     commandWindow: getLastFocusedWindow,
-    installCli: () => runFork(showCliInstaller(desktopCli)),
+    installCli: yield* createCliInstaller(desktopCli),
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,

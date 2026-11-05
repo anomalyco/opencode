@@ -529,11 +529,6 @@ export default function PrivacyPolicy() {
                       </td>
                       <td>1 year</td>
                     </tr>
-                    <tr>
-                      <td>oc_consent</td>
-                      <td>Your answer to our cookie banner, or that we don't need to ask you</td>
-                      <td>180 days for an answer, 1 day otherwise</td>
-                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -541,15 +536,6 @@ export default function PrivacyPolicy() {
               <p>
                 When you create an account, sign in, verify your email or approve a device, we link the records from
                 that browser to your account. Records made while you're signed in carry your account ID directly.
-              </p>
-
-              <p>
-                If you're in the European Economic Area, the United Kingdom or Switzerland, or we can't tell where you
-                are, we ask before setting these Cookies. If you're signed in to OpenCode, we set them without asking.
-                If you haven't accepted, we still record the events above, without these Cookies' IDs, so a visit's
-                events can't be connected to each other or to earlier visits. If you're signed in, those events still
-                carry your account ID. You can change your answer at any time with the Cookies button at the bottom of
-                our marketing pages.
               </p>
 
               <p>

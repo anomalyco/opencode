@@ -50,4 +50,7 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "File Manager",
   "command.open": "Open file",
+  "search.failed": "Couldn't search files",
+  "search.timeout": "The server took too long to answer",
+  "search.offline": "Can't reach this server",
 }

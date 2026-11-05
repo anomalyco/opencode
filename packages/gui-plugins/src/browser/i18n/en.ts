@@ -1,4 +1,5 @@
 export default {
+  "model.timedOut": "The browser took too long to load",
   "command.open": "Open browser",
   "command.reload": "Reload browser page",
   "command.inspect": "Select an element in the browser page",
