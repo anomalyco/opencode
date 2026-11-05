@@ -1,13 +1,16 @@
 export * as OpenCodeTools from "./opencode.js"
 
 import { SystemPart, ToolFailure } from "@opencode/ai/effect"
+import { Flag } from "@opencode/core/flag"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
+import { Workspace } from "@opencode/schema/workspace"
 import { Effect, Schema } from "effect"
 import { toolFailure } from "../runtime.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { FileAccess } from "../../file-access.js"
 import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
@@ -28,6 +31,13 @@ export const MoveInput = Schema.Struct({
 })
 
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
+
+const WorkspaceMoveInput = Schema.Struct({
+  ...MoveInput.fields,
+  workspaceID: Schema.optionalKey(Workspace.ID).annotate({
+    description: "Destination workspace. Omit to stay on the session's current workspace.",
+  }),
+})
 
 export const WorktreeCreateInput = Schema.Struct({
   name: Schema.Trim.check(Schema.isNonEmpty()).annotate({ description: "Worktree name." }),
@@ -97,6 +107,7 @@ export const Plugin = {
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
+    const workspaces = yield* ConfigEntryObserver.observeFlag(Flag.enabled("workspaces"), ctx.event, ctx.tool.reload())
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
         event.system.push(
@@ -139,15 +150,17 @@ export const Plugin = {
           name: "session_move",
           description:
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
-          input: MoveInput,
+          input: workspaces.enabled ? WorkspaceMoveInput : MoveInput,
           output: MoveOutput,
           options: { namespace: "opencode", codemode: true, pinned: true },
-          execute: (input, context) =>
+          execute: (input: typeof WorkspaceMoveInput.Type, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
+              const workspaceID = input.workspaceID ?? (yield* ctx.session.get({ sessionID })).location.workspaceID
               yield* ctx.session.move({
                 sessionID,
                 directory: input.directory,
+                experimental: { workspaceID },
                 delivery: "steer",
               })
               return {
@@ -160,6 +173,56 @@ export const Plugin = {
               ),
             ),
         })
+        if (workspaces.enabled) {
+          draft.add({
+            name: "workspace_providers",
+            description: "List registered workspace provider names.",
+            input: Schema.Struct({}),
+            output: Schema.Array(Schema.String),
+            options: { namespace: "opencode", codemode: true },
+            execute: () => ctx.experimental.workspace.providers().pipe(Effect.map((output) => ({ output }))),
+          })
+          draft.add({
+            name: "workspace_create",
+            description: "Create and provision a workspace with the selected provider.",
+            input: Schema.Struct({ provider: Schema.String }),
+            output: Schema.Struct({ workspaceID: Workspace.ID, provider: Schema.String }),
+            options: { namespace: "opencode", codemode: true, permission: "workspace" },
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                yield* permission.assert({
+                  action: "workspace",
+                  resources: [input.provider],
+                  save: [input.provider],
+                  ...Permission.invocation(context),
+                })
+                const workspaceID = yield* ctx.experimental.workspace.create(input)
+                yield* ctx.experimental.workspace.provision(workspaceID).pipe(
+                  Effect.mapError(
+                    toolFailure(`Unable to provision workspace ${workspaceID}; use workspace_destroy to release it.`),
+                  ),
+                )
+                return { output: { workspaceID: Workspace.ID.make(workspaceID), provider: input.provider } }
+              }).pipe(Effect.mapError(toolFailure(`Unable to create workspace with ${input.provider}`))),
+          })
+          draft.add({
+            name: "workspace_destroy",
+            description: "Destroy a workspace and release its backing resource.",
+            input: Schema.Struct({ workspaceID: Workspace.ID }),
+            output: Workspace.DestroyResult,
+            options: { namespace: "opencode", codemode: true, permission: "workspace" },
+            execute: (input, context) =>
+              Effect.gen(function* () {
+                yield* permission.assert({
+                  action: "workspace",
+                  resources: [input.workspaceID],
+                  save: [input.workspaceID],
+                  ...Permission.invocation(context),
+                })
+                return { output: yield* ctx.experimental.workspace.destroy(input.workspaceID) }
+              }).pipe(Effect.mapError(toolFailure(`Unable to destroy workspace ${input.workspaceID}`))),
+          })
+        }
         draft.add({
           name: "worktree_create",
           description: "Create a named worktree. Returns its directory.",

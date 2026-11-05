@@ -271,6 +271,13 @@ import type {
   ExperimentalArtifactsViewOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalWorkspaceProvidersOutput,
+  ExperimentalWorkspaceCreateInput,
+  ExperimentalWorkspaceCreateOutput,
+  ExperimentalWorkspaceProvisionInput,
+  ExperimentalWorkspaceProvisionOutput,
+  ExperimentalWorkspaceDestroyInput,
+  ExperimentalWorkspaceDestroyOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -634,6 +641,7 @@ export function make(options: ClientOptions) {
               agent: input?.["agent"],
               model: input?.["model"],
               location: input?.["location"],
+              experimental: input?.["experimental"],
               metadata: input?.["metadata"],
               permissions: input?.["permissions"],
             },
@@ -734,7 +742,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/move`,
-            body: { directory: input["directory"], delivery: input["delivery"] },
+            body: { directory: input["directory"], delivery: input["delivery"], experimental: input["experimental"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -1697,6 +1705,53 @@ export function make(options: ClientOptions) {
               },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      workspace: {
+        providers: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalWorkspaceProvidersOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/workspace/providers`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        create: (input: ExperimentalWorkspaceCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalWorkspaceCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/workspace`,
+              body: { id: input["id"], provider: input["provider"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        provision: (input: ExperimentalWorkspaceProvisionInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalWorkspaceProvisionOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/workspace/${encodeURIComponent(input.workspaceID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        destroy: (input: ExperimentalWorkspaceDestroyInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalWorkspaceDestroyOutput }>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/workspace/${encodeURIComponent(input.workspaceID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
               empty: false,
             },
             requestOptions,

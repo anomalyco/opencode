@@ -8,6 +8,7 @@ import type { AbsolutePath } from "@opencode/schema/schema"
 import type { Project } from "@opencode/schema/project"
 import type { RelativePath } from "@opencode/schema/schema"
 import type { Model } from "@opencode/schema/model"
+import type { Workspace } from "@opencode/schema/workspace"
 import type { Permission } from "@opencode/schema/permission"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
@@ -22,7 +23,6 @@ import type { InstructionEntry } from "@opencode/schema/instruction-entry"
 import type { Schema } from "effect"
 import type { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
-import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
@@ -157,6 +157,7 @@ export type SessionCreateInput = {
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined
   readonly location?: Location.PublicRef | undefined
+  readonly experimental?: { readonly workspaceID?: Workspace.ID | undefined } | undefined
   readonly metadata?: Session.Metadata | undefined
   readonly permissions?: Permission.Ruleset | undefined
 }
@@ -204,6 +205,7 @@ export type SessionMoveInput = {
   readonly sessionID: Session.ID
   readonly directory: AbsolutePath
   readonly delivery?: SessionInbox.Delivery | undefined
+  readonly experimental?: { readonly workspaceID?: Workspace.ID | undefined } | undefined
 }
 export type SessionMoveOutput = void
 export type SessionMoveOperation<E = never> = (input: SessionMoveInput) => Effect.Effect<SessionMoveOutput, E>
@@ -2504,6 +2506,35 @@ export type ExperimentalJobListOperation<E = never> = (
   input?: ExperimentalJobListInput,
 ) => Effect.Effect<ExperimentalJobListOutput, E>
 
+export type ExperimentalWorkspaceProvidersOutput = ReadonlyArray<string>
+export type ExperimentalWorkspaceProvidersOperation<E = never> = () => Effect.Effect<
+  ExperimentalWorkspaceProvidersOutput,
+  E
+>
+
+export type ExperimentalWorkspaceCreateInput = { readonly id?: Workspace.ID | undefined; readonly provider: string }
+export type ExperimentalWorkspaceCreateOutput = { readonly id: Workspace.ID; readonly provider: string }
+export type ExperimentalWorkspaceCreateOperation<E = never> = (
+  input: ExperimentalWorkspaceCreateInput,
+) => Effect.Effect<ExperimentalWorkspaceCreateOutput, E>
+
+export type ExperimentalWorkspaceProvisionInput = { readonly workspaceID: Workspace.ID }
+export type ExperimentalWorkspaceProvisionOutput = {
+  readonly id: Workspace.ID
+  readonly provider: string
+  readonly createdAt: number
+  readonly lastUsedAt: number
+}
+export type ExperimentalWorkspaceProvisionOperation<E = never> = (
+  input: ExperimentalWorkspaceProvisionInput,
+) => Effect.Effect<ExperimentalWorkspaceProvisionOutput, E>
+
+export type ExperimentalWorkspaceDestroyInput = { readonly workspaceID: Workspace.ID }
+export type ExperimentalWorkspaceDestroyOutput = Workspace.DestroyResult
+export type ExperimentalWorkspaceDestroyOperation<E = never> = (
+  input: ExperimentalWorkspaceDestroyInput,
+) => Effect.Effect<ExperimentalWorkspaceDestroyOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2534,6 +2565,12 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E> }
+  readonly workspace: {
+    readonly providers: ExperimentalWorkspaceProvidersOperation<E>
+    readonly create: ExperimentalWorkspaceCreateOperation<E>
+    readonly provision: ExperimentalWorkspaceProvisionOperation<E>
+    readonly destroy: ExperimentalWorkspaceDestroyOperation<E>
+  }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

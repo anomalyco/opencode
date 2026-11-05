@@ -5,6 +5,7 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
 import { Money } from "@opencode/schema/money"
+import { Workspace } from "@opencode/schema/workspace"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -374,7 +375,10 @@ describe("SubagentTool", () => {
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           yield* Effect.promise(() =>
-            Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify({ experimental: { subagent_depth: 2 } })),
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_depth: 2, workspaces: true } }),
+            ),
           )
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           const sessions = yield* Session.Service
@@ -384,6 +388,7 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
 
+          const workspaceID = Workspace.ID.create()
           const settled = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
@@ -391,7 +396,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-configured-nested-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "nested", prompt: "should run" },
+              input: { agent: "reviewer", description: "nested", prompt: "should run", workspaceID },
             },
           })
 
@@ -404,7 +409,29 @@ describe("SubagentTool", () => {
             sessionID: outputSessionID(settled.metadata),
             status: "completed",
           })
-          expect((yield* sessions.get(outputSessionID(settled.metadata))).parentID).toBe(parent.id)
+          const child = yield* sessions.get(outputSessionID(settled.metadata))
+          expect(child).toMatchObject({
+            parentID: parent.id,
+            location: { directory: parent.location.directory, workspaceID },
+          })
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-reuse-with-workspace",
+                name: SubagentTool.name,
+                input: {
+                  agent: "reviewer",
+                  description: "nested",
+                  prompt: "continue",
+                  sessionID: child.id,
+                  workspaceID,
+                },
+              },
+            }),
+          ).toMatchObject({ status: "error", error: { message: expect.stringContaining("Cannot set workspaceID") } })
         }),
       ),
     ),

@@ -201,7 +201,6 @@ export interface SessionHooks {
 export type SessionDomain = Pick<
   SessionApi,
   | "list"
-  | "create"
   | "get"
   | "remove"
   | "switchAgent"
@@ -217,5 +216,9 @@ export type SessionDomain = Pick<
   | "context"
 > &
   Pick<ExperimentalSessionApi, "wait" | "instructions"> & {
+    readonly create: (
+      input?: Parameters<SessionApi["create"]>[0] & { readonly location?: { readonly workspace?: string } | null },
+      options?: Parameters<SessionApi["create"]>[1],
+    ) => ReturnType<SessionApi["create"]>
     readonly hook: ModelHooks<SessionHooks>
   }

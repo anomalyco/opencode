@@ -7,6 +7,27 @@ import { Effect, PubSub, Stream } from "effect"
 import path from "path"
 import { Config } from "../../config.js"
 
+/** Refresh flag-dependent tool registrations when a config update changes the flag. */
+export const observeFlag = Effect.fnUntraced(function* (
+  read: Effect.Effect<boolean>,
+  event: EventDomain,
+  reload: Effect.Effect<void>,
+) {
+  const flag = { enabled: yield* read }
+  yield* event.subscribe({ types: ["config.updated"] }).pipe(
+    Stream.runForEach(() =>
+      Effect.gen(function* () {
+        const enabled = yield* read
+        if (enabled === flag.enabled) return
+        flag.enabled = enabled
+        yield* reload
+      }),
+    ),
+    Effect.forkScoped({ startImmediately: true }),
+  )
+  return flag
+})
+
 /**
  * Runs `reload` on every `config.updated`. The returned `entries` always reads the current config, so a reload that
  * runs before the event arrives already sees the change.

@@ -1,11 +1,17 @@
 export * as SubagentTool from "./subagent.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
+import { Flag } from "@opencode/core/flag"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { Location } from "@opencode/schema/location"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { Workspace } from "@opencode/schema/workspace"
 import { Effect, Predicate, Schema } from "effect"
+import path from "path"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
@@ -52,6 +58,15 @@ export const Output = Schema.Struct({
   status: Schema.Literals(["completed", "running"]),
   output: Schema.String,
 })
+const WorkspaceInput = Schema.Struct({
+  ...Input.fields,
+  workspaceID: Schema.optionalKey(Workspace.ID).annotate({
+    description: "Run the subagent on this workspace (from workspace_create) instead of the parent's placement.",
+  }),
+  directory: Schema.optionalKey(AbsolutePath).annotate({
+    description: "Absolute directory on the requested workspace. Defaults to the parent's directory.",
+  }),
+})
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "The output includes a sessionID you can pass back later to continue that specific conversation with the subagent.",
@@ -71,6 +86,7 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
+    const workspaces = yield* ConfigEntryObserver.observeFlag(Flag.enabled("workspaces"), ctx.event, ctx.tool.reload())
 
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
@@ -109,10 +125,21 @@ export const Plugin = {
           name,
           options: { codemode: false },
           description,
-          input: Input,
+          input: workspaces.enabled ? WorkspaceInput : Input,
           output: Output,
-          execute: (input, context) =>
+          execute: (input: typeof WorkspaceInput.Type, context) =>
             Effect.gen(function* () {
+              if (input.workspaceID !== undefined && input.sessionID !== undefined)
+                return yield* new ToolFailure({
+                  message: "Cannot set workspaceID when continuing an existing subagent session.",
+                })
+              if (
+                input.directory !== undefined &&
+                (input.workspaceID === undefined || !path.isAbsolute(input.directory))
+              )
+                return yield* new ToolFailure({
+                  message: "directory requires a workspaceID and must be an absolute path on that workspace.",
+                })
               const parent = yield* sessions
                 .get(context.sessionID)
                 .pipe(
@@ -187,6 +214,13 @@ export const Plugin = {
                 (yield* sessions
                   .create({
                     parentID: context.sessionID,
+                    location:
+                      input.workspaceID === undefined
+                        ? undefined
+                        : Location.Ref.make({
+                            workspaceID: input.workspaceID,
+                            directory: input.directory ?? parent.location.directory,
+                          }),
                     title: input.description,
                     agent: agent.id,
                     model,

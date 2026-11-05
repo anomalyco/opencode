@@ -11,7 +11,6 @@ import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
-import { Project } from "../project.js"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import { NotFoundError } from "./error.js"
 import { SessionEvent } from "./event.js"
@@ -56,7 +55,6 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    const projects = yield* Project.Service
     const locations = yield* LocationServiceMap.Service
     const store = yield* SessionStore.Service
     const execution = yield* SessionExecution.Service
@@ -78,18 +76,19 @@ const layer = Layer.effect(
       const value = input.directory.trim()
       const expanded =
         value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
-      const directory = AbsolutePath.make(path.resolve(session.location.directory, expanded))
-      const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
-      if (!info) return yield* new DestinationNotFoundError({ directory })
-      if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
-      const project = yield* projects.resolve(directory)
-      const destination: SessionInbox.MovePayload = {
-        location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
-        projectID: project.id,
-        subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
+      const paths =
+        input.workspaceID && (expanded.startsWith("/") || session.location.directory.startsWith("/"))
+          ? path.posix
+          : path
+      const directory = AbsolutePath.make(paths.resolve(session.location.directory, expanded))
+      if (input.workspaceID === undefined) {
+        const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
+        if (!info) return yield* new DestinationNotFoundError({ directory })
+        if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
       }
-      yield* locations.contextEffect(destination.location).pipe(
-        Effect.scoped,
+      const location = Location.Ref.make({ directory, workspaceID: input.workspaceID })
+      const destination = yield* Location.Service.pipe(
+        Effect.provide(locations.get(location)),
         Effect.catchCause((cause) => {
           if (Cause.hasInterruptsOnly(cause))
             return Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
@@ -98,7 +97,11 @@ const layer = Layer.effect(
           )
         }),
       )
-      return destination
+      return {
+        location,
+        projectID: destination.project.id,
+        subpath: RelativePath.make(paths.relative(destination.project.directory, directory).replaceAll("\\", "/")),
+      }
     })
 
     const sourceUnavailable = Effect.fn("SessionMove.sourceUnavailable")(function* (session: Session.Info) {
@@ -166,7 +169,6 @@ export const node = makeGlobalNode({
   deps: [
     FSUtil.node,
     Global.node,
-    Project.node,
     LocationServiceMap.node,
     SessionStore.node,
     SessionExecution.node,

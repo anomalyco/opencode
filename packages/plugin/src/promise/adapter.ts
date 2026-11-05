@@ -298,6 +298,10 @@ export function fromPromise(plugin: Plugin) {
               }),
             )
 
+        const createSession = adaptApiMethod<PromiseContext["session"]["create"]>(
+          SessionEndpoints["session.create"],
+          host.session.create,
+        )
         const context2: PromiseContext = {
           app: host.app,
           location: host.location,
@@ -654,7 +658,15 @@ export function fromPromise(plugin: Plugin) {
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
             list: adaptApiMethod(SessionEndpoints["session.list"], host.session.list),
-            create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
+            create: (input) =>
+              createSession(
+                input?.location?.workspace === undefined
+                  ? input
+                  : {
+                      ...input,
+                      experimental: { ...input.experimental, workspaceID: input.location.workspace },
+                    },
+              ),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
             remove: adaptApiMethod(SessionEndpoints["session.remove"], host.session.remove),
             switchAgent: adaptApiMethod(SessionEndpoints["session.switchAgent"], host.session.switchAgent),

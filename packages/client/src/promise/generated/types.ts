@@ -349,6 +349,8 @@ export type JobStatus = "running" | "completed" | "error" | "cancelled"
 
 export type JobTime = { started: number; completed?: number }
 
+export type WorkspaceDestroyResult = { destroyed: boolean }
+
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -2551,6 +2553,7 @@ export type ConfigEntry =
           media_blob?: boolean
           schedules?: boolean
           artifacts?: boolean
+          workspaces?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -3239,6 +3242,14 @@ export type ArtifactNotFoundError = {
 export const isArtifactNotFoundError = (value: unknown): value is ArtifactNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ArtifactNotFoundError"
 
+export type WorkspaceNotFoundError = {
+  readonly _tag: "WorkspaceNotFoundError"
+  readonly workspaceID: string
+  readonly message: string
+}
+export const isWorkspaceNotFoundError = (value: unknown): value is WorkspaceNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "WorkspaceNotFoundError"
+
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
@@ -3330,6 +3341,7 @@ export type SessionCreateInput = {
   readonly agent?: string | null | undefined
   readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null | undefined
   readonly location?: { readonly directory: string } | null | undefined
+  readonly experimental?: { readonly workspaceID?: string | null } | null | undefined
   readonly metadata?: { readonly [x: string]: JsonValue } | null | undefined
   readonly permissions?:
     | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
@@ -3380,6 +3392,7 @@ export type SessionMoveInput = {
   readonly sessionID: string
   readonly directory: string
   readonly delivery?: ("steer" | "queue") | undefined
+  readonly experimental?: { readonly workspaceID?: string | undefined } | undefined
 }
 
 export type SessionMoveOutput = void
@@ -4702,6 +4715,22 @@ export type ExperimentalJobListInput = {
 }
 
 export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
+
+export type ExperimentalWorkspaceProvidersOutput = { data: Array<string> }["data"]
+
+export type ExperimentalWorkspaceCreateInput = { readonly id?: string | undefined; readonly provider: string }
+
+export type ExperimentalWorkspaceCreateOutput = { data: { id: WorkspaceID; provider: string } }["data"]
+
+export type ExperimentalWorkspaceProvisionInput = { readonly workspaceID: string }
+
+export type ExperimentalWorkspaceProvisionOutput = {
+  data: { id: WorkspaceID; provider: string; createdAt: number; lastUsedAt: number }
+}["data"]
+
+export type ExperimentalWorkspaceDestroyInput = { readonly workspaceID: string }
+
+export type ExperimentalWorkspaceDestroyOutput = { data: WorkspaceDestroyResult }["data"]
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
