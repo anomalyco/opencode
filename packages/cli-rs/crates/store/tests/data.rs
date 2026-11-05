@@ -849,3 +849,94 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     );
     assert_eq!(data.revision(), third);
 }
+
+/// A reload with the same IDs in the same order, and the same "more" state, reports only the
+/// messages that differ (TS `reconcile`); anything else replaces the list.
+#[tokio::test]
+async fn message_sync_reconciles_a_reload_with_the_same_ids() {
+    let row = |id: &str, text: &str| json!({ "id": id, "type": "user", "text": text, "time": { "created": 1 } });
+    let more = json!({ "next": "older" });
+    let first = json!({ "data": [row("msg_2", "b"), row("msg_1", "a")], "cursor": more });
+    let cases = [
+        ("same data", first.clone(), false, vec![]),
+        ("one edit", json!({ "data": [row("msg_2", "B"), row("msg_1", "a")], "cursor": more }), false, vec!["msg_2"]),
+        (
+            "new message",
+            json!({ "data": [row("msg_3", "c"), row("msg_2", "b"), row("msg_1", "a")], "cursor": more }),
+            true,
+            vec![],
+        ),
+        ("reordered", json!({ "data": [row("msg_1", "a"), row("msg_2", "b")], "cursor": more }), true, vec![]),
+        ("no more pages", json!({ "data": [row("msg_2", "b"), row("msg_1", "a")], "cursor": {} }), true, vec![]),
+    ];
+    for (name, second, reshaped, edited) in cases {
+        let replies = Log::<Value>::default();
+        replies.push(first.clone());
+        let log = replies.clone();
+        let data = data(
+            handler(move |_req: Req| {
+                let reply = log.get().last().cloned().unwrap();
+                async move { ok(reply) }
+            }),
+            Options::default(),
+        );
+        let session = id(SESSION);
+        data.message_sync(&session).await.unwrap();
+        replies.push(second.clone());
+        data.message_invalidate(&session);
+        let seen = data.revision();
+        data.message_sync(&session).await.unwrap();
+        let changes = data.changes_since(seen).1;
+        assert_eq!(changes.messages(&session), reshaped, "{name}");
+        let mut changed: Vec<_> = changes.message.iter().map(|(_, message)| message.0.as_str()).collect();
+        changed.sort();
+        assert_eq!(changed, edited, "{name}");
+        let rows = second["data"].as_array().unwrap();
+        let expected: Vec<_> = rows.iter().rev().map(|item| item["id"].as_str().unwrap()).collect();
+        assert_eq!(ids(&data, SESSION), expected, "{name}");
+        let text = &rows.iter().find(|item| item["id"] == "msg_2").unwrap()["text"];
+        assert_eq!(&message(&data, SESSION, "msg_2")["text"], text, "{name}");
+        assert_eq!(data.read(|state| state.has_more_messages(&session)), name != "no more pages", "{name}");
+    }
+}
+
+/// Only the published page changes the list; the loading flag alone reports nothing.
+#[tokio::test]
+async fn message_load_more_reports_only_the_published_page() {
+    let release = Slot::<()>::default();
+    let gate = release.clone();
+    let data = data(
+        handler(move |req: Req| {
+            let gate = gate.clone();
+            let older = req.param("cursor").is_some();
+            async move {
+                if !older {
+                    return ok(
+                        json!({ "data": [{ "id": "msg_2", "type": "user", "text": "b", "time": { "created": 2 } }], "cursor": { "next": "older" } }),
+                    );
+                }
+                gate.wait().await;
+                ok(
+                    json!({ "data": [{ "id": "msg_1", "type": "user", "text": "a", "time": { "created": 1 } }], "cursor": {} }),
+                )
+            }
+        }),
+        Options::default(),
+    );
+    let session = id(SESSION);
+    data.message_sync(&session).await.unwrap();
+    let seen = data.revision();
+    let load = {
+        let (data, session) = (data.clone(), session.clone());
+        tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await })
+    };
+    wait(|| data.read(|state| state.messages_loading(&session))).await;
+    assert_eq!(data.revision(), seen, "starting a load changes nothing a view shows");
+    release.resolve(());
+    load.await.unwrap().unwrap();
+    let (revision, changes) = data.changes_since(seen);
+    assert_eq!(revision, seen + 1, "one flush: the page");
+    assert!(changes.messages(&session));
+    assert_eq!(ids(&data, SESSION), ["msg_1", "msg_2"]);
+    assert!(!data.read(|state| state.messages_loading(&session) || state.has_more_messages(&session)));
+}
