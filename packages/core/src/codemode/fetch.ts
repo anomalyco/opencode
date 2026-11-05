@@ -111,15 +111,40 @@ const redirected = (request: Init, status: number, from: string, to: URL): Init 
 
 const read = async (result: { response: Response; url: string; redirects: number }) => {
   const response = result.response
-  const bytes = await response.bytes()
-  const headers = Object.fromEntries(response.headers)
-  const text = () => new TextDecoder().decode(bytes)
-  return {
+  return made({
     url: result.url,
     status: response.status,
     statusText: response.statusText,
-    ok: response.ok,
     redirected: result.redirects > 0,
+    headers: Array.from(response.headers),
+    body: await response.bytes(),
+  })
+}
+
+/** A response as plain data, which a suspended run saves it as. */
+type Saved = {
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly redirected: boolean
+  readonly headers: ReadonlyArray<readonly [string, string]>
+  readonly body: Uint8Array
+}
+
+// The data a response was made from, out of the program's sight: it copies only string keys.
+const saved = Symbol("saved")
+
+// The response the program holds, made from plain data, after a fetch and again when a suspended run resumes.
+const made = (data: Saved) => {
+  const headers = Object.fromEntries(data.headers)
+  const text = () => new TextDecoder().decode(data.body)
+  return {
+    [saved]: data,
+    url: data.url,
+    status: data.status,
+    statusText: data.statusText,
+    ok: data.status >= 200 && data.status <= 299,
+    redirected: data.redirected,
     headers: {
       get: (name: string) => headers[name.toLowerCase()] ?? null,
       has: (name: string) => name.toLowerCase() in headers,
@@ -127,11 +152,18 @@ const read = async (result: { response: Response; url: string; redirects: number
     },
     text: async () => text(),
     json: async () => JSON.parse(text()) as unknown,
-    bytes: async () => bytes,
+    bytes: async () => data.body,
   }
 }
 
-export const extension = Extension.make({ name: "fetch", globals: { fetch: Extension.async(fetch) } })
+export const extension = Extension.make({
+  name: "fetch",
+  globals: { fetch: Extension.async(fetch) },
+  snapshot: {
+    encode: (value) => (value as { readonly [saved]: Saved })[saved],
+    decode: (data) => made(data as Saved),
+  },
+})
 
 /** What to show for a fetch call: its method and URL. */
 export const display = (args: ReadonlyArray<unknown>) => {
