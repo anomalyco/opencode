@@ -996,7 +996,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of the window's slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -1013,6 +1013,8 @@ ctx.add(Slot, {
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
+- `sidebar.section` adds a section to the app's sidebar, under its list of projects, sessions, and tabs. See
+  [Sidebar sections](#sidebar-sections).
 - `order` sorts the items in one slot.
 
 `session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data
@@ -1035,6 +1037,26 @@ ctx.add(Slot, {
 })
 ```
 
+#### Sidebar sections
+
+`sidebar.section` adds a section, such as pinned sessions or a status block, to the sidebar at the start of the window.
+It shows under the sidebar's list and above its footer pills.
+
+```tsx
+ctx.add(Slot, {
+  at: "sidebar.section",
+  render: (input) => <Pinned shown={input.shown} current={ctx.sessions.current()?.key} />,
+})
+```
+
+- The sidebar exists only with the **Side tabs** and **Inbox** interface layouts, in windows 768px and wider. With
+  **Top tabs**, and on narrow screens where tabs open in a drawer, the slot renders nothing.
+- When the user collapses the sidebar, your section stays mounted and `shown` is `false`. It is `true` while the
+  sidebar is open, or while it peeks out on hover. Pause polling and subscriptions while `shown` is `false`.
+- All sections together take at most half the sidebar's height. Taller content scrolls.
+- The slot also shows on Home and on drafts. Read the routed session from `ctx.sessions.current()`.
+- This is not the inner sidebar that side panels share (`ctx.layout.sidebar`).
+
 #### Reference
 
 ```ts
@@ -1047,6 +1069,7 @@ interface SlotMap {
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
+  "sidebar.section": { shown: boolean }
 }
 ```
 

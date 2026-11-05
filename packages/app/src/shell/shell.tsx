@@ -228,7 +228,18 @@ export default function Layout(props: ParentProps) {
           : "max(0px, calc(8px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))",
       }}
     >
-      <Titlebar verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined} />
+      <Titlebar
+        verticalTabs={
+          verticalTabs()
+            ? {
+                mount: state.tabsMount,
+                get shown() {
+                  return preferences.appearance.sidebarOpen() || peek.shown()
+                },
+              }
+            : undefined
+        }
+      />
       <div class="relative flex flex-1 min-h-0 min-w-0 flex-row">
         {/* The empty inset above the panels moves the window, as the titlebar does. */}
         <Show when={dragInset()}>

@@ -52,6 +52,7 @@ import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { ExtensionPlugins } from "../src/runtime/plugin/extension-plugins"
 import { SessionPluginPills } from "../src/session/composer/plugin-pills"
+import { SidebarSections } from "../src/shell/titlebar/sidebar-sections"
 import { ui } from "../src/runtime/plugin/ui"
 
 export {
@@ -817,6 +818,63 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   )
 
   return {
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and the sidebar's production `sidebar.section` slot in a sidebar column 240 by 600 pixels, under
+ * a list that fills the rest, as the vertical tabs sidebar holds it. `show(false)` collapses the sidebar; `disable`
+ * turns plugins off as Extensions › Plugins does.
+ */
+export function mountSidebarSections(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "sidebar"
+  container.style.cssText = "display: flex; flex-direction: column; width: 240px; height: 600px"
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const [shown, setShown] = createSignal(true)
+  const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set())
+
+  function Sidebar() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <div data-testid="list" style={{ flex: "1", "min-height": "0" }} />
+        <SidebarSections shown={shown()} />
+      </Show>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <DialogProvider>
+          <PluginHostProvider
+            definitions={() => input.definitions}
+            disabled={disabled}
+            apis={fakeApis(unused)}
+            whenMounted={mounted}
+          >
+            <Sidebar />
+          </PluginHostProvider>
+        </DialogProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    container,
+    show: (value: boolean) => setShown(value),
+    disable: (ids: readonly string[]) => setDisabled(new Set(ids)),
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {
