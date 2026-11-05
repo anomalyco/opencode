@@ -14,7 +14,9 @@ pub mod parts;
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::cmp::Ordering;
+use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
+use std::sync::atomic::{self, AtomicU64};
 use std::sync::{Arc, Mutex};
 
 use opencode_api::client::RequestOptions;
@@ -23,6 +25,7 @@ use opencode_api::generated::{
     ReferenceSource,
 };
 use opencode_local::jsonl::{self, Frecency};
+use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_store::location::{Catalog, Location};
 use opencode_ui::dialog::FocusId;
@@ -54,15 +57,21 @@ pub enum Mode {
 }
 
 /// State every prompt shares: `frecency.jsonl` and directory recents.
+///
+/// Memory answers on the UI thread. The files are read and written on one worker thread, in order: the
+/// loads first, then each visit and recents change.
 #[derive(Clone, Default)]
 pub struct Shared {
     frecency: Arc<Mutex<Option<Frecency>>>,
     recents: Arc<Mutex<Option<Value>>>,
+    /// The last recents change sent; a written file replaces memory only if no newer change was sent.
+    recents_writes: Arc<AtomicU64>,
+    writer: Rc<OnceCell<Serial>>,
     loaded: Rc<Cell<bool>>,
 }
 
 impl Shared {
-    /// Loads both files on a blocking thread, once.
+    /// Loads both files on the worker, once.
     fn load(&self, tui: &Tui) {
         if self.loaded.replace(true) {
             return;
@@ -73,17 +82,20 @@ impl Shared {
         let (frecency, recents, storage) =
             (self.frecency.clone(), self.recents.clone(), tui.storage());
         // `paths.cwd`: the directory the TUI started in.
-        let cwd = std::path::PathBuf::from(&tui.directory);
-        tui.app.runtime().spawn_blocking(move || {
-            if let Ok(mut slot) = frecency.lock() {
-                slot.get_or_insert_with(|| Frecency::load(&state, &cwd));
-            }
+        let cwd = PathBuf::from(&tui.directory);
+        self.writer().run(move || {
+            load_frecency(&frecency, &state, &cwd);
             let stored =
                 storage.and_then(|storage| storage.load(RECENTS_KEY, &recents_initial()).ok());
             if let Ok(mut slot) = recents.lock() {
                 *slot = stored;
             }
         });
+    }
+
+    fn writer(&self) -> &Serial {
+        self.writer
+            .get_or_init(|| Serial::new("prompt-autocomplete"))
     }
 
     /// `getFrecency(path)`.
@@ -98,18 +110,25 @@ impl Shared {
             .unwrap_or(0.0)
     }
 
-    /// `updateFrecency(path)`, written on a blocking thread. A pick can run before the load does, so
-    /// whichever runs first loads the file.
+    /// `updateFrecency(path)`, written on the worker under the file's lock. A pick can run before the
+    /// load does, so whichever runs first loads the file.
     fn visit(&self, tui: &Tui, path: String) {
         let Some(state) = tui.state_dir() else {
             return;
         };
         let frecency = self.frecency.clone();
-        let cwd = std::path::PathBuf::from(&tui.directory);
-        tui.app.runtime().spawn_blocking(move || {
-            if let Ok(mut slot) = frecency.lock() {
-                slot.get_or_insert_with(|| Frecency::load(&state, &cwd))
-                    .update(&path, jsonl::now_ms());
+        let cwd = PathBuf::from(&tui.directory);
+        self.writer().run(move || {
+            load_frecency(&frecency, &state, &cwd);
+            match jsonl::save_frecency(&state, &cwd, &path, jsonl::now_ms()) {
+                Ok((path, visit)) => {
+                    if let Some(frecency) =
+                        frecency.lock().ok().as_mut().and_then(|slot| slot.as_mut())
+                    {
+                        frecency.record(path, visit);
+                    }
+                }
+                Err(error) => log::warn!("frecency.jsonl: {error}"),
             }
         });
     }
@@ -179,20 +198,35 @@ impl Shared {
         let Some(storage): Option<Storage> = tui.storage() else {
             return;
         };
-        let recents = self.recents.clone();
-        tui.app.runtime().spawn_blocking(move || {
+        let (recents, writes) = (self.recents.clone(), self.recents_writes.clone());
+        let revision = writes.fetch_add(1, atomic::Ordering::SeqCst) + 1;
+        self.writer().run(move || {
             let written = storage.update(RECENTS_KEY, &recents_initial(), |value| {
                 apply(value, &change);
             });
             match written {
                 Ok(value) => {
-                    if let Ok(mut slot) = recents.lock() {
+                    if let Ok(mut slot) = recents.lock()
+                        && writes.load(atomic::Ordering::SeqCst) == revision
+                    {
                         *slot = Some(value);
                     }
                 }
                 Err(error) => log::error!("Failed to persist directory recents: {error}"),
             }
         });
+    }
+}
+
+/// Loads `frecency.jsonl` into `slot` unless it is loaded, without holding `slot` meanwhile: the load
+/// waits on the file's lock, and the UI thread reads `slot` for scores.
+fn load_frecency(slot: &Mutex<Option<Frecency>>, state: &Path, cwd: &Path) {
+    if slot.lock().is_ok_and(|slot| slot.is_some()) {
+        return;
+    }
+    let loaded = Frecency::load(state, cwd);
+    if let Ok(mut slot) = slot.lock() {
+        slot.get_or_insert(loaded);
     }
 }
 

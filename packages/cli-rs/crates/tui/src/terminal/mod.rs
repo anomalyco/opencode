@@ -11,7 +11,7 @@ pub mod pane;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexMap;
 use opencode_api::client::RequestOptions;
@@ -20,6 +20,7 @@ use opencode_api::generated::{
     SessionID, V2Event,
 };
 use opencode_api::pty::{Connector, Tungstenite};
+use opencode_local::serial::Serial;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use serde_json::{Value, json};
@@ -344,17 +345,21 @@ pub fn select(tui: &Tui, session: &str, pty: Option<&str>, focus: bool) {
     if let Some(storage) = tui.storage() {
         let session = session.to_owned();
         let pty = pty.map(str::to_owned);
-        tui.app.runtime().spawn_blocking(move || {
-            let result = storage.update(SELECTION, &json!({ "sessions": {} }), |value| {
-                if !value["sessions"].is_object() {
-                    value["sessions"] = json!({});
+        // One worker thread, so the selections land in the order they were made.
+        static WRITER: OnceLock<Serial> = OnceLock::new();
+        WRITER
+            .get_or_init(|| Serial::new("terminal-selection"))
+            .run(move || {
+                let result = storage.update(SELECTION, &json!({ "sessions": {} }), |value| {
+                    if !value["sessions"].is_object() {
+                        value["sessions"] = json!({});
+                    }
+                    value["sessions"][session] = json!(pty);
+                });
+                if let Err(error) = result {
+                    log::error!("Failed to persist terminal selection: {error}");
                 }
-                value["sessions"][session] = json!(pty);
             });
-            if let Err(error) = result {
-                log::error!("Failed to persist terminal selection: {error}");
-            }
-        });
     }
     crate::frame::refresh(tui);
     update_layer(tui);
