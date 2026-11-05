@@ -337,6 +337,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               })
               .pipe(
                 Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.SpawnConflictError", (error) =>
+                  Effect.fail(new ConflictError({ message: error.message, resource: error.sessionID })),
+                ),
                 Effect.catchTag("Session.PromptConflictError", (error) =>
                   Effect.fail(
                     new ConflictError({

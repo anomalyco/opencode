@@ -1417,6 +1417,103 @@ describe("Session.spawn", () => {
       expect((yield* session.list({ parentID: parent.id })).data.map((item) => item.id)).toEqual([childID])
     }),
   )
+
+  it.effect("creates a child under the caller-chosen id", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+      const childID = Session.ID.create()
+
+      const spawned = yield* session.spawn({ id: childID, parent: { id: parent.id }, title: "child" })
+
+      expect(spawned.id).toBe(childID)
+      expect(yield* session.get(childID)).toMatchObject({ parentID: parent.id, title: "child" })
+      expect((yield* session.list({ parentID: parent.id })).data.map((item) => item.id)).toEqual([childID])
+    }),
+  )
+
+  it.effect("does not re-admit the prompt when a spawn is retried", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+      const childID = Session.ID.create()
+
+      const first = yield* session.spawn({ id: childID, parent: { id: parent.id }, prompt: { text: "do it" } })
+      const retried = yield* session.spawn({ id: childID, parent: { id: parent.id }, prompt: { text: "do it" } })
+
+      expect(retried.id).toBe(first.id)
+      expect((yield* session.list({ parentID: parent.id })).data.map((item) => item.id)).toEqual([childID])
+      expect(yield* session.inbox(childID)).toMatchObject([{ type: "user", payload: { text: "do it" } }])
+    }),
+  )
+
+  it.effect("admits the prompt when the retried child was created without one", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+      const childID = Session.ID.create()
+
+      yield* session.create({ id: childID, parentID: parent.id })
+      const spawned = yield* session.spawn({ id: childID, parent: { id: parent.id }, prompt: { text: "do it" } })
+
+      expect(spawned.id).toBe(childID)
+      expect(yield* session.inbox(childID)).toMatchObject([{ type: "user", payload: { text: "do it" } }])
+    }),
+  )
+
+  it.effect("rejects an id recorded under another parent", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const first = yield* session.create({ location })
+      const second = yield* session.create({ location })
+      const child = yield* session.spawn({ parent: { id: first.id } })
+
+      expect(
+        yield* Effect.flip(
+          session.spawn({ id: child.id, parent: { id: second.id }, prompt: { text: "do it" } }),
+        ),
+      ).toEqual(new Session.SpawnConflictError({ sessionID: child.id, parentID: second.id }))
+      expect(yield* session.inbox(child.id)).toEqual([])
+      expect((yield* session.list({ parentID: second.id })).data).toEqual([])
+    }),
+  )
+
+  it.effect("rejects the parent's own id", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+
+      expect(
+        yield* Effect.flip(session.spawn({ id: parent.id, parent: { id: parent.id }, prompt: { text: "do it" } })),
+      ).toEqual(new Session.SpawnConflictError({ sessionID: parent.id, parentID: parent.id }))
+      expect(yield* session.inbox(parent.id)).toEqual([])
+    }),
+  )
+
+  it.effect("rejects a root session's id", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+      const root = yield* session.create({ location })
+
+      expect(yield* Effect.flip(session.spawn({ id: root.id, parent: { id: parent.id }, prompt: { text: "do it" } }))).toEqual(
+        new Session.SpawnConflictError({ sessionID: root.id, parentID: parent.id }),
+      )
+      expect(yield* session.inbox(root.id)).toEqual([])
+    }),
+  )
+
+  it.effect("rejects a missing parent even when an id is supplied", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const missing = Session.ID.create()
+
+      expect(yield* Effect.flip(session.spawn({ id: Session.ID.create(), parent: { id: missing } }))).toEqual(
+        new Session.NotFoundError({ sessionID: missing }),
+      )
+      expect((yield* session.list({ parentID: missing })).data).toEqual([])
+    }),
+  )
 })
 
 describe("SessionTransfer", () => {

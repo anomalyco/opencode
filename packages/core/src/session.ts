@@ -39,6 +39,7 @@ import {
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
+  SpawnConflictError,
   SyntheticConflictError,
 } from "./session/error.js"
 import { Node } from "@opencode/util/effect/app-node"
@@ -117,6 +118,12 @@ type CreatedFields = {
 }
 
 type SpawnInput = {
+  /**
+   * Child id chosen by the caller. A retry with the same id under the same parent returns the
+   * recorded child without admitting its prompt again. An id recorded under another parent, on a
+   * root Session, or equal to the parent fails with `SpawnConflictError`.
+   */
+  readonly id?: SessionSchema.ID
   readonly parent: { readonly id: SessionSchema.ID; readonly notify?: boolean }
   readonly agent?: Agent.ID
   readonly model?: Model.Ref
@@ -143,6 +150,7 @@ export {
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
+  SpawnConflictError,
   SyntheticConflictError,
 }
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
@@ -169,10 +177,19 @@ export interface Interface {
    *
    * The parent's model is inherited only when the agent is unchanged; otherwise the child keeps
    * no model and `SessionRunnerModel.resolve` picks the chosen agent's model.
+   *
+   * `id` makes the call safe to retry: an id already recorded under the same parent returns that
+   * child with its title, agent, model and metadata unchanged (the first admission wins), and the
+   * prompt is admitted only when the child has no messages and no pending inbox item. Reusing an id
+   * that belongs to another parent, to a root Session, or to the parent itself fails with
+   * `SpawnConflictError` before any prompt is admitted.
    */
   readonly spawn: (
     input: SpawnInput,
-  ) => Effect.Effect<{ readonly id: SessionSchema.ID }, NotFoundError | Effect.Error<ReturnType<Interface["prompt"]>>>
+  ) => Effect.Effect<
+    { readonly id: SessionSchema.ID },
+    NotFoundError | SpawnConflictError | Effect.Error<ReturnType<Interface["prompt"]>>
+  >
   readonly fork: (
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
@@ -412,8 +429,12 @@ const layer = Layer.effect(
       }),
       spawn: Effect.fn("Session.spawn")(function* (input) {
         const parent = yield* result.get(input.parent.id)
+        // A retried spawn must not re-admit its prompt, so learn about the recorded child before
+        // createChild succeeds on its own idempotent path.
+        const recorded = input.id === undefined ? undefined : yield* store.get(input.id)
         const keepsAgent = input.agent === undefined || input.agent === parent.agent
         const child = yield* createChild(parent.id, {
+          id: input.id,
           title: input.title,
           agent: input.agent ?? parent.agent,
           // Only an unchanged agent inherits the parent's model; a different agent resolves its own.
@@ -422,7 +443,26 @@ const layer = Layer.effect(
           // leaves createChild to keep the parent's metadata as-is.
           metadata: SubagentMetadata.withNotify(parent.metadata, input.parent.notify !== false),
         })
-        if (input.prompt !== undefined) yield* result.prompt({ ...input.prompt, sessionID: child.id })
+        // A reused id has to name a child of this parent: otherwise a foreign session, a root
+        // session or the parent itself would receive this prompt. Checked on the returned session,
+        // not only on `recorded`, because losing the concurrent projection race adopts a session
+        // created elsewhere.
+        if (child.parentID !== parent.id)
+          return yield* new SpawnConflictError({ sessionID: child.id, parentID: parent.id })
+        // A retry only admits its prompt when the child has no work yet: a message or a pending
+        // inbox item means the first attempt (or a direct prompt) already started the child.
+        const alreadyStarted =
+          recorded !== undefined &&
+          ((yield* result.inbox(child.id)).length > 0 ||
+            (yield* db
+              .select({ id: SessionMessageTable.id })
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.session_id, child.id))
+              .limit(1)
+              .get()
+              .pipe(Effect.orDie)) !== undefined)
+        if (input.prompt !== undefined && !alreadyStarted)
+          yield* result.prompt({ ...input.prompt, sessionID: child.id })
         return { id: child.id }
       }),
       fork: Effect.fn("Session.fork")(function* (input) {
