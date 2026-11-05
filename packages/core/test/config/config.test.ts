@@ -110,10 +110,16 @@ describe("Config", () => {
         ).pipe(
           Effect.andThen(
             Effect.gen(function* () {
-              // The fixture is real: with global enabled the walk finds both.
+              // The fixture is real: with global enabled the walk finds both. The walk
+              // continues past the fixture toward the filesystem root, so ambient ancestor
+              // ecosystem directories can appear when TMPDIR sits under one; they are not
+              // this test's subject, so scope the assertion to the fixture.
               const config = yield* Config.Service
               const compatibility = yield* config.compatibility!()
-              expect([...compatibility.claude, ...compatibility.agents]).toHaveLength(2)
+              expect([
+                ...compatibility.claude.filter((item) => inFixture(tmp.path, item)),
+                ...compatibility.agents.filter((item) => inFixture(tmp.path, item)),
+              ]).toHaveLength(2)
             }).pipe(Effect.provide(testLayer(project, global))),
           ),
           Effect.andThen(
@@ -122,7 +128,13 @@ describe("Config", () => {
             // project walk enabled.
             Effect.gen(function* () {
               const config = yield* Config.Service
-              expect(yield* config.compatibility!()).toEqual({ claude: [], agents: [] })
+              const compatibility = yield* config.compatibility!()
+              // Scope to the fixture for the same reason as above: ancestor
+              // configuration is ambient and not this test's subject.
+              expect([
+                ...compatibility.claude.filter((item) => inFixture(tmp.path, item)),
+                ...compatibility.agents.filter((item) => inFixture(tmp.path, item)),
+              ]).toEqual([])
               const watcher = yield* Watcher.Test
               expect(
                 (yield* watcher.subscriptions()).filter((watch) => watch.type === "entries" && watch.path === home),
@@ -1508,8 +1520,14 @@ describe("Config", () => {
             Effect.provide(testLayer(project, global)),
           )
 
-          expect(compatibility.claude).toEqual([AbsolutePath.make(path.join(home, ".claude"))])
-          expect(compatibility.agents).toEqual([AbsolutePath.make(path.join(home, ".agents"))])
+          // The upward walk passes ambient ancestor ecosystem directories on its
+          // way to the filesystem root; scope the assertions to the fixture.
+          expect(compatibility.claude.filter((item) => inFixture(tmp.path, item))).toEqual([
+            AbsolutePath.make(path.join(home, ".claude")),
+          ])
+          expect(compatibility.agents.filter((item) => inFixture(tmp.path, item))).toEqual([
+            AbsolutePath.make(path.join(home, ".agents")),
+          ])
         }),
       ),
     ),
