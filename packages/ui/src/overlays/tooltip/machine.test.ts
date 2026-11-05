@@ -193,6 +193,7 @@ describe("tooltip machine", () => {
         [false, true].map((disabled) => syncPropsEvent(forceOpen, disabled)),
       ),
     ]
+
     const reached = new Set(
       [undefined, false, true].flatMap((forceOpen) =>
         [false, true].map((disabled) => createTooltipState(forceOpen, disabled)),
@@ -207,6 +208,7 @@ describe("tooltip machine", () => {
 
         expect(transitionTooltip(state, event)).toBe(transition)
         expect(Object.isFrozen(transition)).toBe(true)
+
         if (transition.state === state) expect(transition.effects).toHaveLength(0)
         reached.add(transition.state)
       }

@@ -90,8 +90,10 @@ function ActiveTooltip(props: TooltipProps) {
 
     for (const effect of transition.effects) {
       if (effect === "schedule-leave") queueMicrotask(settleLeave)
+
       // Kobalte attached its listeners while this event was being dispatched, too late to receive it.
       if (effect === "replay" && source instanceof PointerEvent) handlers?.onPointerEnter?.(source)
+
       if (effect === "replay" && source instanceof FocusEvent) handlers?.onFocus?.(source)
     }
   }
@@ -106,8 +108,10 @@ function ActiveTooltip(props: TooltipProps) {
   const onPointerMove = (event: PointerEvent) => {
     if (!ref) return
     const box = ref.getBoundingClientRect()
+
     const inside =
       event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom
+
     dispatch(inside ? POINTER_INSIDE : POINTER_OUTSIDE)
   }
 
@@ -135,6 +139,7 @@ function ActiveTooltip(props: TooltipProps) {
 
     if (state.status === "disposed") {
       observer?.disconnect()
+
       return
     }
 
