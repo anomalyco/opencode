@@ -8,10 +8,12 @@ import {
   historyMessages,
   messageUpdated,
   partUpdated,
+  session,
   sessionID,
   setupTimeline,
   status,
   textPart,
+  userID,
   userMessage,
   validateTimelineMessages,
 } from "../utils/timeline"
@@ -528,7 +530,54 @@ test.describe("timeline history", () => {
 
     await page.getByRole("button", { name: "Jump to latest" }).click()
     await expect.poll(hash).toBe("")
-    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+    const latest = page.getByText("Latest answer", { exact: true })
+    await expect(latest).toBeInViewport()
+
+    // Browser Back off a page anchor returns to the latest message, as Back off a prompt does.
+    await page.evaluate(() => (location.hash = "#notes"))
+    await expect.poll(hash).toBe("#notes")
+    await timelineScroller(page).hover()
+    await page.mouse.wheel(0, -5_000)
+    await expect(latest).not.toBeInViewport()
+    await page.evaluate(() => history.back())
+    await expect.poll(hash).toBe("")
+    await expect(latest).toBeInViewport()
+  })
+
+  test("a hash for a prompt the revert hides, or one that does not exist, clears without paging history", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(30),
+      userMessage(),
+      assistantMessage([textPart("prt_hash_missing_tail", "Reverted answer")]),
+    ])
+
+    const older: string[] = []
+    const hash = () => page.evaluate(() => location.hash)
+
+    await setupTimeline(page, {
+      sessions: [session({ revert: { messageID: userID } })],
+      message: (_, id) => messages.find((message) => message.id === id),
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - limit)
+
+        return { items: messages.slice(start, end), cursor: start > 0 ? messages[start]!.id : undefined }
+      },
+      onMessages: (request) => {
+        if (request.before && request.phase === "start") older.push(request.before)
+      },
+    })
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    const loaded = [...older]
+
+    // The revert hides this prompt, and older pages hold only older messages, so neither link can ever load.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+    await expect.poll(hash).toBe("")
+    await page.evaluate(() => (location.hash = "#message-msg_9999_missing"))
+    await expect.poll(hash).toBe("")
+    expect(older).toEqual(loaded)
   })
 })
 

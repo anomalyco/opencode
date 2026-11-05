@@ -1,28 +1,22 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { frameLoop } from "@opencode/ui/motion"
 import type { SessionModel } from "../model"
 import { createTimelineCursor } from "./cursor"
-import {
-  CLEAR_CURSOR_EVENT,
-  cursorMessageID,
-  freshCursorMessageID,
-  hasFreshCursorOrSeek,
-  SCROLL_MOVED_EVENT,
-} from "./cursor-machine"
+import { cursorMessageID, freshCursorMessageID, hasFreshCursorOrSeek, SCROLL_MOVED_EVENT } from "./cursor-machine"
 import { createTimelineFollow } from "./follow"
 import {
   canRequestFillProbe,
   canRequestScrollPage,
-  canSeekHistory,
   createTimelineHistoryState,
   DISPOSED_HISTORY_EVENT,
   FILL_REQUESTED_EVENT,
   HISTORY_LOAD_TIMEOUT_MS,
   HISTORY_RETRY_COOLDOWN_MS,
   HISTORY_SCROLL_THRESHOLD,
+  historySeekStatus,
   SCROLL_TOP_EVENT,
   SEEK_REQUESTED_EVENT,
   transitionTimelineHistory,
@@ -31,7 +25,8 @@ import {
 } from "./history-machine"
 import { createTimelineModel } from "./model"
 
-export function createSessionTimelineInteraction(session: SessionModel) {
+/** `visible`: the conversation is on screen, not behind another narrow-screen view. */
+export function createSessionTimelineInteraction(session: SessionModel, visible: Accessor<boolean>) {
   const location = useLocation<{ reveal?: string }>()
   const timeline = createTimelineModel({ session })
 
@@ -159,10 +154,13 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
   const cursor = createTimelineCursor({
     sessionKey: session.identity.sessionKey,
-    sessionID: () => session.identity.params.id,
-    ready: timeline.ready,
+    viewReady: createMemo(() => !!session.identity.params.id && timeline.ready() && !!state.refs.scroller && visible()),
     following: follow.following,
     visibleUserMessages,
+    syncing: () => timeline.resource.loading,
+    revertMessageID: session.data.revertMessageID,
+    oldestMessageID: oldestMessage,
+    historyStatus: createMemo(() => historySeekStatus(historyState())),
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
@@ -173,14 +171,13 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
       if (scroller) scheduleScrollState(scroller)
     },
-    historySeekable: () => canSeekHistory(historyState()),
     seekHistory: () => dispatchHistory(SEEK_REQUESTED_EVENT),
   })
 
   let resumeFrame: (() => void) | undefined
 
   const resume = (behavior?: ScrollBehavior) => {
-    cursor.dispatch(CLEAR_CURSOR_EVENT)
+    cursor.clear()
     const attempt = follow.beginReturn()
     // Scrolls on the next frame, before it paints. A submit resumes from its key handler right after changing the
     // DOM, where reading the scroll range would force a layout that the frame then repeats. Input that stops
@@ -215,7 +212,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       return
     }
 
-    cursor.dispatch({ type: "message.jump", messageID: messages[target].id, behavior: "auto" })
+    cursor.jump(messages[target].id, "auto")
   }
 
   // A gesture inside a nested scrollable region scrolls that region, not the timeline.

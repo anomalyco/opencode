@@ -185,6 +185,17 @@ export function canSeekHistory(state: TimelineHistoryState) {
   return state.status === "idle"
 }
 
+export type HistorySeekStatus = "loading" | "seekable" | "exhausted" | "failed"
+
+/** How paging toward a target that is not loaded yet stands: it can start, is under way, ran out or failed. */
+export function historySeekStatus(state: TimelineHistoryState): HistorySeekStatus {
+  if (state.status === "idle") return "seekable"
+
+  if (state.status === "inactive" || state.status === "loading") return "loading"
+
+  return state.status
+}
+
 function synced(
   state: TimelineHistoryState,
   event: Extract<TimelineHistoryEvent, { type: "sync" }>,

@@ -6,6 +6,7 @@ import {
   createTimelineHistoryState,
   DISPOSED_HISTORY_EVENT,
   FILL_REQUESTED_EVENT,
+  historySeekStatus,
   SCROLL_TOP_EVENT,
   SEEK_REQUESTED_EVENT,
   transitionTimelineHistory,
@@ -290,5 +291,14 @@ describe("history machine", () => {
     expect([idle, loading, failed].map(canRequestScrollPage)).toEqual([true, false, false])
     expect([idle, loading, failed].map(canRequestFillProbe)).toEqual([true, false, false])
     expect([idle, loading, failed].map(canSeekHistory)).toEqual([true, false, false])
+
+    const exhausted = replay([sync({ more: false })]).state
+    expect([createTimelineHistoryState(), idle, loading, failed, exhausted].map(historySeekStatus)).toEqual([
+      "loading",
+      "seekable",
+      "loading",
+      "failed",
+      "exhausted",
+    ])
   })
 })
