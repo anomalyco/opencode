@@ -149,6 +149,12 @@ function ReviewPanel(props: ReviewPanelProps) {
     return live.status === "active" ? live.value : undefined
   }
 
+  const openInButton = () => (
+    <Show when={openIn()}>
+      {(openIn) => <Dynamic component={openIn().Button} screen={props.screen} session={props.session} />}
+    </Show>
+  )
+
   const diffs = () => props.diffs
 
   const searching = createMemo(() => props.state.filter().trim().length > 0)
@@ -313,11 +319,7 @@ function ReviewPanel(props: ReviewPanelProps) {
       sidebarToggle={
         <SessionReviewV2SidebarToggle opened={props.state.sidebar.opened()} onToggle={props.state.sidebar.toggle} />
       }
-      toolbarAction={
-        <Show when={openIn()}>
-          {(openIn) => <Dynamic component={openIn().Button} screen={props.screen} session={props.session} />}
-        </Show>
-      }
+      toolbarAction={openInButton()}
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
@@ -334,6 +336,8 @@ function ReviewPanel(props: ReviewPanelProps) {
           kinds={treeKinds()}
           folderLabels={props.folderLabels}
           activeDiff={activeDiff()}
+          // Without diffs, the preview has no header while the tree is open.
+          actions={diffs().length === 0 ? openInButton() : undefined}
         />
       }
       activeFile={activeDiff()}
@@ -388,6 +392,7 @@ function ReviewPanelSidebar(props: {
   kinds: ReturnType<typeof reviewDiffKinds>
   folderLabels?: ReadonlyMap<string, string>
   activeDiff: string | undefined
+  actions?: JSX.Element
 }) {
   const ctx = usePlugin<typeof Review>()
 
@@ -426,6 +431,7 @@ function ReviewPanelSidebar(props: {
       transition={props.state.sidebar.transition()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs} />}
+      actions={props.actions}
       filter={props.state.filter()}
       onFilterChange={props.state.setFilter}
       onFilterKeyDown={onFilterKeyDown}
