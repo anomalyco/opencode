@@ -195,6 +195,7 @@ export const OpenAIChatMessage = Schema.Union([
       reasoning: Schema.optional(Schema.String),
       reasoning_text: Schema.optional(Schema.String),
       reasoning_details: Schema.optional(Schema.Unknown),
+      reasoning_opaque: Schema.optional(Schema.String),
     }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
@@ -309,6 +310,8 @@ export const OpenAIChatDelta = Schema.StructWithRest(
     reasoning: optionalNull(Schema.String),
     reasoning_text: optionalNull(Schema.String),
     reasoning_details: optionalNull(Schema.Unknown),
+    // GitHub Copilot's opaque reasoning state, which must be replayed for multi-turn reasoning.
+    reasoning_opaque: optionalNull(Schema.String),
     tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -368,6 +371,8 @@ export interface ParserState {
   readonly reasoningTextObserved: boolean
   readonly reasoningDetails: Array<ReasoningDetail>
   readonly reasoningDetailsObserved: boolean
+  /** Latest `reasoning_opaque`; interleaved reasoning sends a new one before each tool call. */
+  readonly reasoningOpaque?: string
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
@@ -496,6 +501,13 @@ const lowerReasoningDetail = (detail: ReasoningDetail) => {
   return detail
 }
 
+// Interleaved reasoning yields one opaque value per segment; like the Copilot VS Code
+// client, replay the latest one with the concatenated reasoning text.
+const reasoningOpaque = (parts: ReadonlyArray<ReasoningPart>, providerMetadataKey: string) =>
+  parts
+    .map((part) => part.providerMetadata?.[providerMetadataKey]?.reasoningOpaque)
+    .findLast((value) => typeof value === "string")
+
 const isKimiDetail = (detail: { readonly type: string }) => detail.type === "summary" || detail.type === "encrypted"
 
 const lowerUserMessage = Effect.fnUntraced(function* (message: UserMessage, options: LoweringOptions) {
@@ -560,7 +572,9 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
     // even when thinking arrived only through structured details.
     if (details?.some(isKimiDetail)) return "reasoning_content"
   })()
-  const reasoningText = reasoning.length === 0 ? (requireReasoning ? "" : undefined) : text
+  const opaque = reasoningOpaque(reasoning, options.providerMetadataKey)
+  const reasoningText =
+    reasoning.length === 0 || (opaque !== undefined && text === "") ? (requireReasoning ? "" : undefined) : text
   const result = {
     role: "assistant" as const,
     content: (() => {
@@ -570,6 +584,7 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
     })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
+    ...(opaque !== undefined ? { reasoning_opaque: opaque } : {}),
   }
   if (field === undefined || reasoningText === undefined) return result
   return { ...result, [field]: reasoningText }
@@ -1075,10 +1090,12 @@ const reasoningMetadata = (
   providerMetadataKey: string,
   field: ParserState["reasoningField"],
   details?: ReadonlyArray<ReasoningDetail>,
+  opaque?: string,
 ) => ({
   [providerMetadataKey]: {
     ...(field ? { reasoningField: field } : {}),
     ...(details ? { reasoningDetails: details } : {}),
+    ...(opaque ? { reasoningOpaque: opaque } : {}),
   },
 })
 
@@ -1143,13 +1160,14 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       : undefined
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
+    const reasoningOpaque = delta?.reasoning_opaque || state.reasoningOpaque
     const deltaMetadata = reasoningMetadata(state.providerMetadataKey, reasoningField)
     const text = detailDelta?.length
       ? (detailText(detailDelta, reasoningTextObserved) ?? reasoning?.text)
       : reasoning?.text
     if (text !== undefined) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
-      reasoningDetailsObserved &&
+      (reasoningDetailsObserved || reasoningOpaque !== undefined) &&
       !lifecycle.reasoning.has("reasoning-0") &&
       (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0)
     )
@@ -1262,6 +1280,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningTextObserved,
         reasoningDetails: state.reasoningDetails,
         reasoningDetailsObserved,
+        reasoningOpaque,
         reasoningEmitted,
         latestToolIndex,
         nextToolIndex,
@@ -1306,9 +1325,10 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
     state.providerMetadataKey,
     state.reasoningField,
     state.reasoningDetailsObserved ? [...state.reasoningDetails] : undefined,
+    state.reasoningOpaque,
   )
   const started =
-    state.reasoningDetailsObserved && !state.reasoningEmitted
+    (state.reasoningDetailsObserved || state.reasoningOpaque !== undefined) && !state.reasoningEmitted
       ? Lifecycle.reasoningStart(
           state.lifecycle,
           events,
