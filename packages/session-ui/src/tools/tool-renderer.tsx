@@ -25,6 +25,7 @@ import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
+import { createDisclosure } from "../components/disclosure"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { ToolErrorCard } from "../components/tool-error-card"
@@ -848,8 +849,9 @@ export function CurrentReadToolGroup(props: {
   onSizeChange?: () => void
 }) {
   const i18n = useI18n()
-  const [state, setState] = createStore({ open: false, truncated: false })
-  const open = () => props.open ?? state.open
+  const [state, setState] = createStore({ truncated: false })
+  const disclosure = createDisclosure({ open: () => props.open, onOpenChange: (open) => props.onOpenChange?.(open) })
+  const open = disclosure.open
   const expandable = () => open() || state.truncated
 
   const pending = createMemo(() =>
@@ -877,9 +879,7 @@ export function CurrentReadToolGroup(props: {
 
   const toggle = () => {
     if (!expandable()) return
-    const next = !open()
-    setState("open", next)
-    props.onOpenChange?.(next)
+    disclosure.toggle()
     props.onSizeChange?.()
   }
 
@@ -1284,35 +1284,19 @@ function ToolFileAccordion(props: {
   forceOpen?: boolean
   defer?: boolean
 }) {
-  const [expanded, setExpanded] = createSignal(props.defaultOpen ?? false)
-  const [visible, setVisible] = createSignal(false)
-  const open = () => props.open ?? expanded()
-
-  const change = (value: boolean) => {
-    if (props.open === undefined) setExpanded(value)
-    props.onOpenChange?.(value)
-  }
-
-  createEffect(() => {
-    if (props.forceOpen && !open()) change(true)
-  })
-
-  createEffect(() => {
-    if (!open()) {
-      setVisible(false)
-
-      return
-    }
-
-    const frame = requestAnimationFrame(() => setVisible(true))
-    onCleanup(() => cancelAnimationFrame(frame))
+  const disclosure = createDisclosure({
+    open: () => props.open,
+    defaultOpen: () => props.defaultOpen ?? false,
+    forceOpen: () => props.forceOpen ?? false,
+    defer: () => props.defer ?? false,
+    onOpenChange: (open) => props.onOpenChange?.(open),
   })
 
   return (
     <FileAccordionGroup>
       <FileAccordionItem
-        open={open()}
-        onOpenChange={change}
+        open={disclosure.open()}
+        onOpenChange={disclosure.setOpen}
         header={
           <div data-slot="apply-patch-trigger-content">
             <div data-slot="apply-patch-file-info">
@@ -1331,7 +1315,7 @@ function ToolFileAccordion(props: {
           </div>
         }
       >
-        <Show when={!props.defer || visible()}>{props.children}</Show>
+        <Show when={!props.defer || disclosure.mounted()}>{props.children}</Show>
       </FileAccordionItem>
     </FileAccordionGroup>
   )
@@ -2516,8 +2500,6 @@ ToolRegistry.register({
         })) ?? patchFileGroups(props.metadata.files),
     )
 
-    const [expanded, setExpanded] = createSignal<string[]>([])
-
     const title = createMemo(() => {
       if (props.tool === "edit") return i18n.t("ui.messagePart.title.edit")
 
@@ -2526,53 +2508,23 @@ ToolRegistry.register({
       return i18n.t("ui.tool.patch")
     })
 
-    const open = createMemo(() => {
-      if (!props.fileOpen) return expanded()
-
-      return files().flatMap((file) => (props.fileOpen?.(file.path) === true ? [file.path] : []))
-    })
-
-    const change = (value: string | string[]) => {
-      const next = Array.isArray(value) ? value : value ? [value] : []
-
-      if (!props.onFileOpenChange) {
-        setExpanded(next)
-
-        return
-      }
-
-      files().forEach((file) => props.onFileOpenChange?.(file.path, next.includes(file.path)))
-    }
-
     return (
       <div data-component="apply-patch-tool">
         <Show when={files().length > 0} fallback={<FileTool {...props} title={title()} count={0} />}>
           <FileAccordionGroup>
             <Index each={files()}>
               {(file) => {
-                const value = () => file().path
-                const active = createMemo(() => open().includes(value()))
-                const [visible, setVisible] = createSignal(false)
-
-                createEffect(() => {
-                  if (!active()) {
-                    setVisible(false)
-
-                    return
-                  }
-
-                  requestAnimationFrame(() => {
-                    if (!active()) return
-                    setVisible(true)
-                  })
+                // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
+                const disclosure = createDisclosure({
+                  open: () => (props.fileOpen ? props.fileOpen(file().path) === true : undefined),
+                  defer: () => props.deferContent !== false,
+                  onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
                 })
 
                 return (
                   <FileAccordionItem
-                    open={active()}
-                    onOpenChange={(expanded) =>
-                      change(expanded ? [...open(), value()] : open().filter((path) => path !== value()))
-                    }
+                    open={disclosure.open()}
+                    onOpenChange={disclosure.setOpen}
                     type={file().type}
                     header={
                       <div data-slot="apply-patch-trigger-content">
@@ -2609,7 +2561,7 @@ ToolRegistry.register({
                       </div>
                     }
                   >
-                    <Show when={props.deferContent === false || visible()}>
+                    <Show when={disclosure.mounted()}>
                       <For each={file().views}>
                         {(view) => (
                           <div data-component="apply-patch-file-diff">
