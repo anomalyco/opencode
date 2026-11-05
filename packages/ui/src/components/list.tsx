@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from 
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
-import { listActive, listScrollTarget } from "../hooks/list-machine"
+import { listActive, listScrollTarget, selectListEmptyState } from "../hooks/list-machine"
 import { Icon, type IconProps } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextField } from "./text-field"
@@ -34,6 +34,8 @@ export interface ListProps<T> extends FilteredListProps<T> {
   children: (item: T) => JSX.Element
   emptyMessage?: string
   loadingMessage?: string
+  /** Shown when an async `items` loader rejects or times out. */
+  errorMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   onMove?: (item: T | undefined) => void
   activeIcon?: IconProps["name"]
@@ -155,11 +157,15 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   }
 
   const emptyMessage = () => {
-    if (list.grouped.loading) return props.loadingMessage ?? i18n.t("ui.list.loading")
+    const empty = selectListEmptyState(list.state())
+
+    if (empty.type === "loading") return props.loadingMessage ?? i18n.t("ui.list.loading")
+
+    if (empty.type === "failed") return props.errorMessage ?? i18n.t("ui.list.failed")
 
     if (props.emptyMessage) return props.emptyMessage
 
-    const query = list.filter()
+    const query = empty.query
 
     if (!query) return i18n.t("ui.list.empty")
 
