@@ -2761,8 +2761,15 @@
         ],
         "security": [],
         "responses": {
-          "204": {
-            "description": "<No Content>"
+          "200": {
+            "description": "SessionWaitResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionWaitResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "InvalidRequestError",
@@ -2794,6 +2801,16 @@
               }
             }
           },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          },
           "503": {
             "description": "ServiceUnavailableError",
             "content": {
@@ -2805,8 +2822,170 @@
             }
           }
         },
-        "description": "Wait for a session agent loop to become idle.",
+        "description": "Wait for a session agent loop to become idle and report its outcome and final text.",
         "summary": "Wait for session"
+      }
+    },
+    "/api/experimental/session/{sessionID}/spawn": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "experimental.session.spawn",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "SessionSpawnResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSpawnResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental: may change without compatibility guarantees. Create a child session under this session and optionally admit its first prompt. Pass an optional `id` to make the call retry-safe; reusing an id owned by another session fails with 409.",
+        "summary": "Spawn subagent session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.ID"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Client-chosen child id. A retry with the same id under the same parent returns the recorded child without admitting its prompt again. An id recorded under another parent, on a root session, or equal to the parent fails with 409."
+                  },
+                  "notify": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "agent": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Agent.ID"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "prompt": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/PromptInput"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/revert/stage": {
@@ -21735,6 +21914,34 @@
         "required": ["id", "name"],
         "additionalProperties": false
       },
+      "PromptInput": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptInput.FileAttachment"
+            }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Prompt.AgentAttachment"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromptInput.SkillAttachment"
+            }
+          }
+        },
+        "required": ["text"],
+        "additionalProperties": false
+      },
       "PromptInput.FileAttachment": {
         "type": "object",
         "properties": {
@@ -24476,6 +24683,23 @@
         "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
+      "SessionSpawnResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/Session.ID"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
       "SessionStats.Activity": {
         "type": "object",
         "properties": {
@@ -24830,6 +25054,27 @@
           }
         },
         "required": ["info", "messages"],
+        "additionalProperties": false
+      },
+      "SessionWaitResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": ["succeeded", "failed", "interrupted"]
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["data"],
         "additionalProperties": false
       },
       "SessionsCursor": {

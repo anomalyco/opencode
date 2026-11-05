@@ -938,4 +938,92 @@ describe("subagent observer lifetime", () => {
       expect(notices[1]?.text).not.toContain("first")
     }),
   )
+
+  it.live("a spawned child runs from its prompt and reports to its parent", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(
+          `${dir.path}/opencode.json`,
+          JSON.stringify({
+            agents: { reviewer: { mode: "subagent" } },
+            permissions: [{ action: "*", resource: "*", effect: "allow" }],
+          }),
+        ),
+      )
+      const sessions = yield* Session.Service
+      const locations = yield* LocationServiceMap.Service
+      const llm = yield* TestLLM.Test
+      const parent = yield* sessions.create({
+        location: { directory: AbsolutePath.make(dir.path) },
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") }),
+      })
+      yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(
+        Effect.provide(locations.get(parent.location)),
+      )
+
+      const spawned = yield* sessions.spawn({
+        parent: { id: parent.id },
+        agent: Agent.ID.make("reviewer"),
+        title: "Review fixture",
+        prompt: { text: "Review the fixture" },
+      })
+      // The default resume wakes the child, so the spawn alone starts the run.
+      yield* llm.wait(1).pipe(Effect.timeout("2 seconds"))
+      yield* sessions.wait(spawned.id)
+      // The report wakes the parent for one more step.
+      yield* llm.wait(2).pipe(Effect.timeout("2 seconds"))
+      yield* sessions.wait(parent.id)
+
+      const notices = yield* reports(parent.id)
+      expect(notices).toHaveLength(1)
+      expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: spawned.id, state: "completed" } })
+      expect(notices[0]?.text).toContain("Review complete")
+    }),
+  )
+
+  it.live("a spawn that asks for silence reports nothing", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(
+          `${dir.path}/opencode.json`,
+          JSON.stringify({
+            agents: { reviewer: { mode: "subagent" } },
+            permissions: [{ action: "*", resource: "*", effect: "allow" }],
+          }),
+        ),
+      )
+      const sessions = yield* Session.Service
+      const locations = yield* LocationServiceMap.Service
+      const llm = yield* TestLLM.Test
+      const parent = yield* sessions.create({
+        location: { directory: AbsolutePath.make(dir.path) },
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") }),
+      })
+      yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(
+        Effect.provide(locations.get(parent.location)),
+      )
+
+      const spawned = yield* sessions.spawn({
+        parent: { id: parent.id, notify: false },
+        agent: Agent.ID.make("reviewer"),
+        prompt: { text: "Review the fixture" },
+      })
+      expect((yield* sessions.get(spawned.id)).metadata).toEqual({ "subagent.notify": false })
+      yield* llm.wait(1).pipe(Effect.timeout("2 seconds"))
+      yield* sessions.wait(spawned.id)
+      expect(yield* reports(parent.id)).toEqual([])
+      const before = (yield* llm.requests()).length
+
+      // A later prompt on the parent is the only input it ever receives.
+      yield* sessions.prompt({ sessionID: parent.id, text: "Review the fixture" })
+      yield* llm.wait(before + 1).pipe(Effect.timeout("2 seconds"))
+      yield* sessions.wait(parent.id)
+      expect(yield* reports(parent.id)).toEqual([])
+      expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
+    }),
+  )
 })

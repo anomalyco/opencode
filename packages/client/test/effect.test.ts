@@ -230,6 +230,14 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     if (request.method === "POST" && url.endsWith("/api/session")) {
       return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session)))
     }
+    if (url.endsWith("/wait")) {
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(request, Response.json({ data: { outcome: "succeeded", text: "Done" } })),
+      )
+    }
+    if (url.endsWith("/spawn")) {
+      return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ data: { id: "ses_child" } })))
+    }
     if (request.method === "POST") {
       return Effect.succeed(
         HttpClientResponse.fromWeb(
@@ -266,7 +274,12 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       resume: false,
     })
     yield* client.session.compact({ sessionID: Session.ID.make("ses_test") })
-    yield* client.experimental.session.wait({ sessionID: Session.ID.make("ses_test") })
+    const waited = yield* client.experimental.session.wait({ sessionID: Session.ID.make("ses_test") })
+    const spawned = yield* client.experimental.session.spawn({
+      sessionID: Session.ID.make("ses_test"),
+      title: "Child",
+      notify: false,
+    })
     const context = yield* client.session.context({ sessionID: Session.ID.make("ses_test") })
     const log = yield* client.experimental.session
       .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
@@ -276,7 +289,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
-    return { page, active, created, admitted, context, log, interrupted, message }
+    return { page, active, created, admitted, waited, spawned, context, log, interrupted, message }
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   const listed = result.page.data[0]
@@ -286,6 +299,8 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(DateTime.toEpochMillis(listed.time.viewed)).toBe(1_717_171_717_001)
   expect(result.active).toEqual({ ses_test: { type: "running" } })
   expect(result.interrupted).toEqual({ interrupted: true })
+  expect(result.waited).toEqual({ outcome: "succeeded", text: "Done" })
+  expect(result.spawned.id).toBe("ses_child")
   expect(Object.getPrototypeOf(result.page.data[0])).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
   expect(result.created.id).toBe("ses_test")

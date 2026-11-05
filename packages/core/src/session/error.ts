@@ -94,6 +94,15 @@ export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()
   inboxID: SessionMessage.ID,
 }) {}
 
+export class SpawnConflictError extends Schema.TaggedError<SpawnConflictError>()("Session.SpawnConflictError", {
+  sessionID: SessionSchema.ID,
+  parentID: SessionSchema.ID,
+}) {
+  override get message() {
+    return `Session ${this.sessionID} already exists and is not a child of ${this.parentID}`
+  }
+}
+
 export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}

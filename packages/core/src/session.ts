@@ -39,6 +39,7 @@ import {
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
+  SpawnConflictError,
   SyntheticConflictError,
 } from "./session/error.js"
 import { Node } from "@opencode/util/effect/app-node"
@@ -67,6 +68,7 @@ import { Job } from "./job.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
+import { SubagentMetadata } from "./session/subagent-metadata.js"
 
 // get project -> project.locations
 //
@@ -78,6 +80,8 @@ import { InstructionEntry } from "./session/instruction-entry.js"
 // - by workspace (home is special)
 
 export { ListAnchor, ListCursor }
+
+export type { WaitResult } from "./session/session.js"
 
 export const ListInput = SessionStore.ListInput
 export type ListInput = SessionStore.ListInput
@@ -93,7 +97,39 @@ type CreateBaseInput = {
   permissions?: Permission.Ruleset
 }
 type CreateInput = CreateBaseInput &
-  ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
+  (
+    | { location: Location.Ref; parentID?: never }
+    | {
+        /** @deprecated Use `Session.spawn`, which also records whether the parent wants a report. */
+        parentID: SessionSchema.ID
+        location?: never
+      }
+  )
+
+/** Fields shared by both creation paths, published as one durable `SessionEvent.Created`. */
+type CreatedFields = {
+  parentID?: SessionSchema.ID
+  location: Location.Ref
+  title?: string
+  agent?: Agent.ID
+  model?: Model.Ref
+  metadata?: SessionSchema.Metadata
+  permissions?: Permission.Ruleset
+}
+
+type SpawnInput = {
+  /**
+   * Child id chosen by the caller. A retry with the same id under the same parent returns the
+   * recorded child without admitting its prompt again. An id recorded under another parent, on a
+   * root Session, or equal to the parent fails with `SpawnConflictError`.
+   */
+  readonly id?: SessionSchema.ID
+  readonly parent: { readonly id: SessionSchema.ID; readonly notify?: boolean }
+  readonly agent?: Agent.ID
+  readonly model?: Model.Ref
+  readonly title?: string
+  readonly prompt?: PromptInput.Prompt
+}
 
 type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: SessionSchema.ID }
 
@@ -114,6 +150,7 @@ export {
   NotFoundError,
   PromptConflictError,
   SkillNotFoundError,
+  SpawnConflictError,
   SyntheticConflictError,
 }
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
@@ -131,6 +168,28 @@ export interface Interface {
     InvalidListCursorError
   >
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  /**
+   * Starts a child Session under `parent.id`, inheriting its location, metadata and permissions.
+   *
+   * `parent.notify` (default true) is written into the child's metadata, so core reports the
+   * child's result to the parent each time it goes idle. A given prompt is admitted with the
+   * default resume, so the child starts running in the background; await it with {@link Interface.wait}.
+   *
+   * The parent's model is inherited only when the agent is unchanged; otherwise the child keeps
+   * no model and `SessionRunnerModel.resolve` picks the chosen agent's model.
+   *
+   * `id` makes the call safe to retry: an id already recorded under the same parent returns that
+   * child with its title, agent, model and metadata unchanged (the first admission wins), and the
+   * prompt is admitted only when the child has no messages and no pending inbox item. Reusing an id
+   * that belongs to another parent, to a root Session, or to the parent itself fails with
+   * `SpawnConflictError` before any prompt is admitted.
+   */
+  readonly spawn: (
+    input: SpawnInput,
+  ) => Effect.Effect<
+    { readonly id: SessionSchema.ID },
+    NotFoundError | SpawnConflictError | Effect.Error<ReturnType<Interface["prompt"]>>
+  >
   readonly fork: (
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
@@ -236,7 +295,8 @@ export interface Interface {
   readonly compact: (
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  /** Waits until the session is idle, then returns its last outcome and newest completed, error-free assistant text. */
+  readonly wait: (id: SessionSchema.ID) => ReturnType<Session.Handle["wait"]>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
@@ -284,57 +344,126 @@ const layer = Layer.effect(
     const isDurableSessionEvent = (item: Bus.LogItem): item is SessionEvent.DurableEvent =>
       Object.hasOwn(SessionEvent.Durable.cases, item.type)
 
+    // Both creation paths publish the same durable fact; a concurrent loss of the projection race
+    // keeps the existing Session identity instead of failing.
+    const publishCreated = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, fields: CreatedFields) {
+      const project = yield* projects.resolve(fields.location.directory)
+      const projected = yield* bus
+        .publish(
+          SessionEvent.Created,
+          {
+            sessionID,
+            slug: Slug.create(),
+            version: app.version,
+            projectID: project.id,
+            parentID: fields.parentID,
+            location: fields.location,
+            subpath: RelativePath.make(
+              path.relative(project.directory, fields.location.directory).replaceAll("\\", "/"),
+            ),
+            title: fields.title,
+            agent: fields.agent,
+            metadata: fields.metadata,
+            permissions: fields.permissions,
+            model: fields.model,
+          },
+          { location: fields.location },
+        )
+        .pipe(
+          Effect.as({ type: "created" } as const),
+          Effect.catchDefect((defect) => {
+            if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
+              return Effect.die(defect)
+            }
+            // Concurrent creation lost the projection race. The existing Session identity wins.
+            return store
+              .get(sessionID)
+              .pipe(
+                Effect.flatMap((session) =>
+                  session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
+                ),
+              )
+          }),
+        )
+      if (projected.type === "existing") return projected.session
+      const created = yield* store.get(sessionID)
+      if (created === undefined) return yield* Effect.die(new NotFoundError({ sessionID }))
+      // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
+      return created
+    })
+
+    const createChild = Effect.fnUntraced(function* (parentID: SessionSchema.ID, input: CreateBaseInput) {
+      const sessionID = input.id ?? SessionSchema.ID.create()
+      // A retried create returns the recorded session even if the parent is gone since.
+      const recorded = yield* store.get(sessionID)
+      if (recorded) return recorded
+      const parent = yield* store.get(parentID)
+      if (parent === undefined) return yield* new NotFoundError({ sessionID: parentID })
+      // Children inherit metadata and permissions the way they inherit location, so host policies
+      // that read them treat the family uniformly.
+      return yield* publishCreated(sessionID, {
+        parentID,
+        location: parent.location,
+        title: input.title,
+        agent: input.agent,
+        model: input.model,
+        metadata: input.metadata ?? parent.metadata,
+        permissions: input.permissions ?? parent.permissions,
+      })
+    })
+
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
+        if (input.parentID !== undefined) return yield* createChild(input.parentID, input)
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
-        const parent = input.parentID ? yield* store.get(input.parentID) : undefined
-        if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
-        const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
-        if (location === undefined)
-          return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
-        const project = yield* projects.resolve(location.directory)
-        const projected = yield* bus
-          .publish(
-            SessionEvent.Created,
-            {
-              sessionID,
-              slug: Slug.create(),
-              version: app.version,
-              projectID: project.id,
-              parentID: input.parentID,
-              location,
-              subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
-              title: input.title,
-              agent: input.agent,
-              // Children inherit metadata and permissions the way they inherit
-              // location, so host policies that read them treat the family uniformly.
-              metadata: input.metadata ?? parent?.metadata,
-              permissions: input.permissions ?? parent?.permissions,
-              model: input.model,
-            },
-            { location },
-          )
-          .pipe(
-            Effect.as({ type: "created" } as const),
-            Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
-                return Effect.die(defect)
-              }
-              // Concurrent creation lost the projection race. The existing Session identity wins.
-              return store
-                .get(sessionID)
-                .pipe(
-                  Effect.flatMap((session) =>
-                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
-                  ),
-                )
-            }),
-          )
-        if (projected.type === "existing") return projected.session
-        // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
-        return yield* result.get(sessionID).pipe(Effect.orDie)
+        return yield* publishCreated(sessionID, {
+          location: LocationServiceMap.canonical(input.location),
+          title: input.title,
+          agent: input.agent,
+          model: input.model,
+          metadata: input.metadata,
+          permissions: input.permissions,
+        })
+      }),
+      spawn: Effect.fn("Session.spawn")(function* (input) {
+        const parent = yield* result.get(input.parent.id)
+        // A retried spawn must not re-admit its prompt, so learn about the recorded child before
+        // createChild succeeds on its own idempotent path.
+        const recorded = input.id === undefined ? undefined : yield* store.get(input.id)
+        const keepsAgent = input.agent === undefined || input.agent === parent.agent
+        const child = yield* createChild(parent.id, {
+          id: input.id,
+          title: input.title,
+          agent: input.agent ?? parent.agent,
+          // Only an unchanged agent inherits the parent's model; a different agent resolves its own.
+          model: input.model ?? (keepsAgent ? parent.model : undefined),
+          // withNotify returns undefined when the inherited preference already matches, which
+          // leaves createChild to keep the parent's metadata as-is.
+          metadata: SubagentMetadata.withNotify(parent.metadata, input.parent.notify !== false),
+        })
+        // A reused id has to name a child of this parent: otherwise a foreign session, a root
+        // session or the parent itself would receive this prompt. Checked on the returned session,
+        // not only on `recorded`, because losing the concurrent projection race adopts a session
+        // created elsewhere.
+        if (child.parentID !== parent.id)
+          return yield* new SpawnConflictError({ sessionID: child.id, parentID: parent.id })
+        // A retry only admits its prompt when the child has no work yet: a message or a pending
+        // inbox item means the first attempt (or a direct prompt) already started the child.
+        const alreadyStarted =
+          recorded !== undefined &&
+          ((yield* result.inbox(child.id)).length > 0 ||
+            (yield* db
+              .select({ id: SessionMessageTable.id })
+              .from(SessionMessageTable)
+              .where(eq(SessionMessageTable.session_id, child.id))
+              .limit(1)
+              .get()
+              .pipe(Effect.orDie)) !== undefined)
+        if (input.prompt !== undefined && !alreadyStarted)
+          yield* result.prompt({ ...input.prompt, sessionID: child.id })
+        return { id: child.id }
       }),
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)

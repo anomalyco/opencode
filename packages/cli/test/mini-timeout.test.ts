@@ -11,9 +11,11 @@ test("mini waits beyond the fetch idle timeout before and after reconnecting", a
     port: 0,
     idleTimeout: 0,
     async fetch(request) {
-      requests.push(new URL(request.url).pathname)
+      const pathname = new URL(request.url).pathname
+      requests.push(pathname)
       // Bun's socket timer sweeps every four seconds, so allow more than two sweeps.
       await Bun.sleep(12_000)
+      if (pathname.endsWith("/wait")) return Response.json({ data: { text: "" } })
       return new Response(null, { status: 204 })
     },
   })

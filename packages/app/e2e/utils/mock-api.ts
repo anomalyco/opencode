@@ -509,7 +509,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionWait", "/api/experimental/session/:sessionID/wait", {
       params: SessionParams,
-      success: NoContent,
+      success: Json,
     }),
   )
   .add(

@@ -456,15 +456,49 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.wait", "/api/experimental/session/:sessionID/wait", {
         params: { sessionID: Session.ID },
-        success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, ServiceUnavailableError],
+        success: Schema.Struct({
+          data: Schema.Struct({
+            outcome: Session.Info.fields.outcome,
+            text: Schema.String,
+          }),
+        }).annotate({ identifier: "SessionWaitResponse" }),
+        error: [SessionNotFoundError, ServiceUnavailableError, UnknownError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.session.wait",
           summary: "Wait for session",
-          description: "Wait for a session agent loop to become idle.",
+          description: "Wait for a session agent loop to become idle and report its outcome and final text.",
         }),
       ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.spawn", "/api/experimental/session/:sessionID/spawn", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          id: Schema.optional(Session.ID).annotate({
+            description:
+              "Client-chosen child id. A retry with the same id under the same parent returns the recorded child without admitting its prompt again. An id recorded under another parent, on a root session, or equal to the parent fails with 409.",
+          }),
+          notify: Schema.Boolean.pipe(Schema.optional),
+          agent: Agent.ID.pipe(Schema.optional),
+          model: Model.Ref.pipe(Schema.optional),
+          title: Schema.String.pipe(Schema.optional),
+          prompt: PromptInput.Prompt.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({
+          data: Schema.Struct({ id: Session.ID }),
+        }).annotate({ identifier: "SessionSpawnResponse" }),
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, UnknownError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.spawn",
+            summary: "Spawn subagent session",
+            description:
+              "Experimental: may change without compatibility guarantees. Create a child session under this session and optionally admit its first prompt. Pass an optional `id` to make the call retry-safe; reusing an id owned by another session fails with 409.",
+          }),
+        ),
     )
     .add(
       HttpApiEndpoint.post("session.revert.stage", "/api/session/:sessionID/revert/stage", {

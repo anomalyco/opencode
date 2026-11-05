@@ -95,6 +95,8 @@ import type {
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
   ExperimentalSessionWaitOutput,
+  ExperimentalSessionSpawnInput,
+  ExperimentalSessionSpawnOutput,
   ExperimentalSessionInstructionsEntryListInput,
   ExperimentalSessionInstructionsEntryListOutput,
   ExperimentalSessionInstructionsEntryPutInput,
@@ -1109,16 +1111,35 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
         wait: (input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionWaitOutput>(
+          request<{ readonly data: ExperimentalSessionWaitOutput }>(
             {
               method: "POST",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/wait`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: true,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 500, 503],
+              empty: false,
             },
             requestOptions,
-          ),
+          ).then((value) => value.data),
+        spawn: (input: ExperimentalSessionSpawnInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionSpawnOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/spawn`,
+              body: {
+                id: input["id"],
+                notify: input["notify"],
+                agent: input["agent"],
+                model: input["model"],
+                title: input["title"],
+                prompt: input["prompt"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409, 500],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
         instructions: {
           entry: {
             list: (input: ExperimentalSessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
@@ -2703,6 +2724,8 @@ export function make(options: ClientOptions) {
       skill: client.experimental.session.skill,
       /** @deprecated Use `client.experimental.session.wait`. Removed in the next minor. */
       wait: client.experimental.session.wait,
+      /** @deprecated Use `client.experimental.session.spawn`. Removed in the next minor. */
+      spawn: client.experimental.session.spawn,
       /** @deprecated Use `client.experimental.session.instructions`. Removed in the next minor. */
       instructions: {
         /** @deprecated Use `client.experimental.session.instructions.entry`. Removed in the next minor. */

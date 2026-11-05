@@ -153,7 +153,7 @@ function sdk(input: {
   globalLocation?: { directory: string; workspaceID?: string }
   permissions?: Record<string, PermissionRequest[]>
   pending?: Record<string, Awaited<ReturnType<OpenCodeClient["session"]["inbox"]["list"]>>>
-  wait?: () => Promise<void>
+  wait?: () => Promise<{ text: string }>
 }) {
   const client = OpenCode.make({ baseUrl: "https://opencode.test" })
   let subscription = 0
@@ -193,7 +193,7 @@ function sdk(input: {
   )
   spyOn(client.session, "active").mockImplementation(() => ok(input.active?.() ?? {}))
   spyOn(client.session.inbox, "list").mockImplementation((request) => ok(input.pending?.[request.sessionID] ?? []))
-  spyOn(client.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? ok(undefined))
+  spyOn(client.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? ok({ text: "" }))
   spyOn(client.session.message, "get").mockImplementation((request) => {
     const message = input.messages?.[request.sessionID]?.find((item) => item.id === request.messageID)
     return message ? (ok(message) as never) : Promise.reject(new Error(`message not found: ${request.messageID}`))
@@ -235,7 +235,7 @@ describe("V2 mini transport", () => {
     const events = feed()
     events.push(connected())
     const inbox: SessionInboxInfo[] = []
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     const admitted = defer()
     const client = sdk({
       streams: [events],
@@ -301,7 +301,7 @@ describe("V2 mini transport", () => {
       expect(ui.commits).toEqual([])
       expect(live).toEqual([])
     } finally {
-      idle.resolve()
+      idle.resolve({ text: "" })
       ui.api.close()
       await queue
       await transport.close()
@@ -314,7 +314,7 @@ describe("V2 mini transport", () => {
     const requested = defer()
     const ack = defer()
     const admitted = defer()
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     const messages: SessionMessages = []
     const client = sdk({ streams: [events], messages: { ses_1: messages }, wait: () => idle.promise })
     const ui = footer()
@@ -431,7 +431,7 @@ describe("V2 mini transport", () => {
       },
     ] satisfies StreamCommit[]
     expect(ui.commits).toEqual(expected)
-    idle.resolve()
+    idle.resolve({ text: "" })
     await turn
 
     expect(ui.commits).toEqual(expected)
@@ -996,7 +996,7 @@ describe("V2 mini transport", () => {
   test("waits authoritatively and reconciles the projected terminal suffix", async () => {
     const events = feed()
     events.push(connected())
-    const settled = defer()
+    const settled = defer<{ text: string }>()
     const messages: SessionMessages = []
     const client = sdk({
       streams: [events],
@@ -1071,7 +1071,7 @@ describe("V2 mini transport", () => {
         time: { created: 3, completed: 4 },
       },
     )
-    settled.resolve()
+    settled.resolve({ text: "" })
     await turn
 
     expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer"])
@@ -1224,7 +1224,7 @@ describe("V2 mini transport", () => {
   test("reports an observed execution failure before prompt promotion", async () => {
     const events = feed()
     events.push(connected())
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     const client = sdk({ streams: [events], messages: { ses_1: [] }, wait: () => idle.promise })
     const ui = footer()
     const transport = await createSessionTransport({
@@ -1256,7 +1256,7 @@ describe("V2 mini transport", () => {
       data: { sessionID: "ses_1", error: { type: "unknown", message: "instructions unavailable" } },
     })
     await Bun.sleep(0)
-    idle.resolve()
+    idle.resolve({ text: "" })
 
     await turn
     expect(ui.commits).toContainEqual(
@@ -1268,7 +1268,7 @@ describe("V2 mini transport", () => {
   test("attributes an execution-only failure to the latest promoted prompt", async () => {
     const events = feed()
     events.push(connected())
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     const messages: SessionMessages = []
     const client = sdk({ streams: [events], messages: { ses_1: messages }, wait: () => idle.promise })
     const ui = footer()
@@ -1330,7 +1330,7 @@ describe("V2 mini transport", () => {
       { id: "msg_prompt", type: "user", text: "hello", time: { created: 2 } },
       { id: "msg_queued", type: "user", text: "follow up", time: { created: 3 } },
     )
-    idle.resolve()
+    idle.resolve({ text: "" })
 
     await turn
     expect(ui.commits).toContainEqual(
@@ -1638,7 +1638,7 @@ describe("V2 mini transport", () => {
       messages: { ses_1: messages },
       wait: () => {
         waits++
-        if (waits > 1) return ok(undefined)
+        if (waits > 1) return ok({ text: "" })
         messages.push({ id: "msg_settled", type: "user", text: "settled", time: { created: 1 } })
         return Promise.reject(
           new ClientError("Transport", { cause: new DOMException("The operation timed out.", "TimeoutError") }),
@@ -1666,7 +1666,7 @@ describe("V2 mini transport", () => {
     const second = feed()
     first.push(connected("evt_connected_1"))
     second.push(connected("evt_connected_2"))
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     let running = true
     const client = sdk({
       streams: [first, second],
@@ -1738,7 +1738,7 @@ describe("V2 mini transport", () => {
     first.close()
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "reconnecting"))
       await Bun.sleep(0)
-    idle.resolve()
+    idle.resolve({ text: "" })
     await turn
     await transport.close()
   })
@@ -1748,7 +1748,7 @@ describe("V2 mini transport", () => {
     const second = feed()
     first.push(connected("evt_connected_1"))
     second.push(connected("evt_connected_2"))
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     let running = true
     let projected = false
     const client = sdk({
@@ -1803,7 +1803,7 @@ describe("V2 mini transport", () => {
     running = false
     first.close()
     while (!ui.commits.some((commit) => commit.image)) await Bun.sleep(0)
-    idle.resolve()
+    idle.resolve({ text: "" })
     await turn
 
     expect(
@@ -2978,7 +2978,7 @@ describe("V2 mini transport", () => {
   test("interrupts the current Session when an active turn is aborted", async () => {
     const events = feed()
     events.push(connected())
-    const idle = defer()
+    const idle = defer<{ text: string }>()
     const client = sdk({ streams: [events], wait: () => idle.promise })
     const ui = footer()
     const transport = await createSessionTransport({
@@ -3018,7 +3018,7 @@ describe("V2 mini transport", () => {
     })
     await Bun.sleep(0)
     controller.abort()
-    idle.resolve()
+    idle.resolve({ text: "" })
     await turn
 
     expect(interrupted).toHaveBeenCalledWith({ sessionID: "ses_1", resume: true })

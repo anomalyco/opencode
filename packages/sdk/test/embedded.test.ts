@@ -646,6 +646,54 @@ it.live(
   15_000,
 )
 
+it.live(
+  "spawns a child session with a prompt and waits for its result",
+  () =>
+    withEmbedded("opencode-embedded-spawn-", (fixture) =>
+      Effect.gen(function* () {
+        const llm = yield* TestLLM.Test.pipe(
+          Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("answer", "answer-text") })),
+        )
+        const opencode = yield* fixture.sdk.OpenCode.create(
+          {
+            config: {
+              directory: fixture.directory,
+              project: false,
+              content: JSON.stringify({
+                model: "custom/fictional-chat",
+                providers: {
+                  custom: {
+                    package: "aisdk:@ai-sdk/openai-compatible",
+                    settings: { baseURL: "https://provider.example/v1" },
+                    models: { "fictional-chat": {} },
+                  },
+                },
+              }),
+            },
+            models: { fetch: false },
+            fs: { filewatcher: false },
+          },
+          {
+            overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))],
+          },
+        )
+        const parent = yield* opencode.sessions.create({ location: location(fixture) })
+        const child = yield* opencode.experimental.session.spawn({
+          sessionID: parent.id,
+          title: "Child",
+          prompt: { text: "Say ready" },
+        })
+
+        expect(child.id).not.toBe(parent.id)
+        expect(yield* opencode.experimental.session.wait({ sessionID: child.id })).toEqual({
+          outcome: "succeeded",
+          text: "answer",
+        })
+      }),
+    ),
+  15_000,
+)
+
 it.live("preserves unknown workspace provider errors", () =>
   withEmbedded("opencode-embedded-workspace-provider-", (fixture) =>
     Effect.gen(function* () {
