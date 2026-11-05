@@ -62,7 +62,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const waiters = new Map<string, PromiseWithResolvers<void>>()
 
     const tree = createFileTreeStore({
-      scope,
       normalizeDir: path.normalizeDir,
       list: (dir) =>
         serverSDK.api.file.list({ path: dir, location: { directory: scope() } }).then((x) =>
