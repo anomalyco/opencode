@@ -137,6 +137,7 @@ export const docsSections: DocsSection[] = [
       {
         items: [
           { title: "Intro", slug: "console" },
+          { title: "Sign in", slug: "console/sign-in" },
           { title: "Models", slug: "console/models" },
           { title: "Providers", slug: "console/providers" },
           { title: "Web search", slug: "console/websearch" },
