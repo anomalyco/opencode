@@ -130,9 +130,13 @@ fn leftovers(state: &Path) -> Vec<String> {
 }
 
 /// `session.json`: the TypeScript TUI saves its whole list while Rust pins. Every state a reader sees is
-/// whole, no temporary file is left, and the next Rust pin keeps every pin TypeScript wrote. (TypeScript
-/// itself saves the list it read at startup, so it can drop the pins Rust wrote meanwhile; see the step
-/// notes.)
+/// whole, no temporary file is left, every Rust pin is written, and a Rust pin after TypeScript's last
+/// save keeps every pin TypeScript wrote.
+///
+/// TypeScript saves without the lock, so neither side can keep everything while both write: a
+/// TypeScript save between a Rust read and rename is lost, and TypeScript saves the list it read at
+/// startup, so it drops Rust's pins (see `steps/rs-test-flakes.md`). A racing Rust write can drop only
+/// TypeScript's newest pins, so TypeScript's pins in the file stay a prefix of its own list.
 #[test]
 fn session_json_under_contention() {
     if !available() {
@@ -152,22 +156,27 @@ fn session_json_under_contention() {
     let mut ts = typescript(&["pins", dir.to_str().unwrap(), "ts", &WRITES.to_string()]);
     ts.go();
     for i in 0..WRITES {
-        pins::set(&dir, &format!("rs-{i}"), true).unwrap();
+        let pin = format!("rs-{i}");
+        let written = pins::set(&dir, &pin, true).unwrap();
+        assert_eq!(written.last(), Some(&pin), "{written:?}");
         thread::sleep(Duration::from_millis(1));
     }
     let typescript_saw = ts.finish();
     stop.store(true, Ordering::SeqCst);
     let reads = reader.join().unwrap();
     assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+    let raced = pins::load(&dir);
+    let kept: Vec<&String> = raced.iter().filter(|pin| pin.starts_with("ts-")).collect();
+    let prefix: Vec<String> = (0..kept.len()).map(|i| format!("ts-{i}")).collect();
+    assert_eq!(kept, prefix.iter().collect::<Vec<_>>(), "{raced:?}");
 
+    // TypeScript saves once more with nothing racing it; the next Rust pin keeps all of it.
+    let mut ts = typescript(&["pins", dir.to_str().unwrap(), "late", "1"]);
+    ts.go();
+    let saved: Vec<String> = serde_json::from_value(ts.finish()["pinned"].clone()).unwrap();
+    assert_eq!(saved, [raced.clone(), vec!["late-0".into()]].concat());
     let written = pins::set(&dir, "rs-last", true).unwrap();
-    for i in 0..WRITES {
-        assert!(
-            written.contains(&format!("ts-{i}")),
-            "ts-{i} was lost: {written:?}"
-        );
-    }
-    assert_eq!(written.last().map(String::as_str), Some("rs-last"));
+    assert_eq!(written, [saved, vec!["rs-last".into()]].concat());
     // TypeScript reads what Rust wrote, byte for byte as it would write it.
     let read_back = read(&dir);
     assert_eq!(read_back["pinned"], json!(written));
@@ -176,8 +185,9 @@ fn session_json_under_contention() {
         json!({ "pinned": written }).to_string()
     );
     eprintln!(
-        "session.json: {reads} reads, all whole; TS ended with {} pins, Rust's next write kept all {WRITES} of TS's",
-        typescript_saw["pinned"].as_array().map_or(0, Vec::len)
+        "session.json: {reads} reads, all whole; TS ended with {} pins, {} of its {WRITES} survived the race",
+        typescript_saw["pinned"].as_array().map_or(0, Vec::len),
+        prefix.len()
     );
 }
 
