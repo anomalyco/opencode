@@ -273,7 +273,7 @@ export function TabNavItem(
           clearSave(attempt)
           dispatchRename({ type: "save.succeeded", attempt, title: effect.title })
         },
-        (error: unknown) => {
+        (error) => {
           clearSave(attempt)
 
           // Only a timeout aborts a save, and the machine already left it.

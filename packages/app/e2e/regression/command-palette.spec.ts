@@ -145,7 +145,9 @@ test("titlebar search shows one server's matches while another server's search f
         })
       : route.fallback(),
   )
-  // A session only the local server's search returns, so no list the app already holds can show it.
+  await openPaletteWorkspace(page, true)
+  // A session only the local server's search returns, so no list the app already holds can show it. Registered after
+  // the local mock so this route answers first.
   await page.route(new RegExp(`^${escape(SERVER)}/api/session\\?.*search=[^&]`), (route) =>
     route.fulfill({
       json: {
@@ -160,7 +162,6 @@ test("titlebar search shows one server's matches while another server's search f
       },
     }),
   )
-  await openPaletteWorkspace(page, true)
   await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("combobox").fill("found")
