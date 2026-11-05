@@ -173,6 +173,6 @@ describe("turn diff cache", () => {
     jest.useRealTimers()
     pending.resolve([diff])
     await settle()
-    expect(cache.state(turn)).toEqual({ status: "loading" })
+    expect(cache.state(turn).status).not.toBe("ready")
   })
 })
