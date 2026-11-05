@@ -96,7 +96,7 @@ import { useConfig, useNewDesigns } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
-import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-tool-output"
+import { collapseShellOutput, collapseToolOutput, patchBodyLines } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
@@ -3153,6 +3153,50 @@ function ShellDisplay(props: {
   )
 }
 
+const FILE_PREVIEW_LINES = 10
+
+export function FilePreview(props: { expanded: boolean; hint?: string; hintColor?: RGBA; children: JSX.Element }) {
+  return (
+    <>
+      <box maxHeight={props.expanded ? undefined : FILE_PREVIEW_LINES} overflow="hidden">
+        {props.children}
+      </box>
+      <Show when={props.hint}>
+        <text fg={props.hintColor}>{props.hint}</text>
+      </Show>
+    </>
+  )
+}
+
+/** Long file contents and diffs start as a preview so they don't take over the transcript. */
+function FileBlock(props: {
+  path: { label: string; value: string }
+  part: SessionMessageAssistantTool
+  lines: number
+  summary: string
+  footer?: JSX.Element
+  children: JSX.Element
+}) {
+  const ctx = use()
+  const theme = useTheme()
+  const [toggled, setToggled] = createSignal<boolean>()
+  const collapsible = () => props.lines > FILE_PREVIEW_LINES
+  const expanded = () => !collapsible() || (toggled() ?? ctx.config.session?.verbosity === "high")
+  const hint = () => {
+    if (!collapsible()) return undefined
+    return expanded() ? "Click to collapse" : `Click to expand · ${props.summary}`
+  }
+
+  return (
+    <BlockTool path={props.path} part={props.part} onClick={collapsible() ? () => setToggled(!expanded()) : undefined}>
+      <FilePreview expanded={expanded()} hint={hint()} hintColor={theme.text.muted}>
+        {props.children}
+      </FilePreview>
+      {props.footer}
+    </BlockTool>
+  )
+}
+
 function Write(props: ToolProps) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -3160,13 +3204,19 @@ function Write(props: ToolProps) {
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
   })
+  const lines = createMemo(() => code().trimEnd().split("\n").length)
 
   return (
     <Switch>
       <Match when={props.part.state.status === "completed"}>
-        <BlockTool
+        <FileBlock
           path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
           part={props.part}
+          lines={lines()}
+          summary={`${lines()} lines`}
+          footer={
+            <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+          }
         >
           <line_number fg={theme.text.muted} minWidth={3} paddingRight={1}>
             <code
@@ -3177,8 +3227,7 @@ function Write(props: ToolProps) {
               content={code()}
             />
           </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
-        </BlockTool>
+        </FileBlock>
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing write…" complete={stringValue(props.input.path)} part={props.part}>
@@ -3470,7 +3519,15 @@ function Edit(props: ToolProps) {
     <Switch>
       <Match when={file()}>
         {(item) => (
-          <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
+          <FileBlock
+            path={{ label: "← Edit", value: pathFormatter.format(path()) }}
+            part={props.part}
+            lines={patchBodyLines(item().patch)}
+            summary={`+${item().additions} -${item().deletions}`}
+            footer={
+              <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+            }
+          >
             <box paddingLeft={1} paddingRight={3}>
               <PatchDiff
                 diff={item().patch}
@@ -3493,8 +3550,7 @@ function Edit(props: ToolProps) {
                 removedLineNumberBg={theme.diff.lineNumber.background.removed}
               />
             </box>
-            <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
-          </BlockTool>
+          </FileBlock>
         )}
       </Match>
       <Match when={true}>
@@ -3546,12 +3602,14 @@ function ApplyPatch(props: ToolProps) {
         <box flexDirection="column" gap={1}>
           <For each={files()}>
             {(file) => (
-              <BlockTool
+              <FileBlock
                 path={{
                   label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
                   value: pathFormatter.format(file.relativePath),
                 }}
                 part={props.part}
+                lines={file.type === "delete" ? 0 : patchBodyLines(file.patch)}
+                summary={`+${file.additions} -${file.deletions}`}
               >
                 <Show
                   when={file.type !== "delete"}
@@ -3584,7 +3642,7 @@ function ApplyPatch(props: ToolProps) {
                     />
                   </box>
                 </Show>
-              </BlockTool>
+              </FileBlock>
             )}
           </For>
         </box>
