@@ -11,7 +11,8 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use opencode_api::client::{Client, RequestOptions};
@@ -89,6 +90,10 @@ pub struct Local {
     preferences: Option<ModelPreferences>,
     pub(crate) storage: Option<Storage>,
     writer: Option<mpsc::Sender<Job>>,
+    /// `model.json` writes sent to the writer, and those it finished. A read made while they differ may miss a change
+    /// already in memory.
+    writes: Cell<u64>,
+    written: Arc<AtomicU64>,
     state: RefCell<State>,
     listeners: Listeners,
     next_listener: Cell<u64>,
@@ -170,6 +175,8 @@ impl Local {
             preferences,
             storage,
             writer,
+            writes: Cell::new(0),
+            written: Arc::default(),
             state: RefCell::new(State::default()),
             listeners: Rc::default(),
             next_listener: Cell::new(0),
@@ -371,12 +378,24 @@ impl Local {
             return;
         };
         let weak = self.this.clone();
+        let started = self.writes.get();
+        let written = self.written.clone();
         self.app.spawn(
-            async move { tokio::task::spawn_blocking(move || preferences.load()).await },
+            async move {
+                // Settled when every write sent before the read had landed before it.
+                let settled = written.load(Ordering::SeqCst) == started;
+                tokio::task::spawn_blocking(move || preferences.load()).await.map(|preference| (preference, settled))
+            },
             move |_, result| {
                 let Some(local) = weak.upgrade() else { return };
+                // A read that may predate a write would undo the change the write carries; read again once it lands.
+                if let Ok((_, settled)) = &result
+                    && (!settled || local.writes.get() != started)
+                {
+                    return local.load_after_writes();
+                }
                 let mut state = local.state.borrow_mut();
-                if let Ok(preference) = result {
+                if let Ok((preference, _)) = result {
                     state.preference = preference;
                 }
                 state.ready = true;
@@ -386,15 +405,29 @@ impl Local {
         );
     }
 
+    /// Reads `model.json` again once the writer has finished every write sent so far.
+    fn load_after_writes(&self) {
+        let (Some(writer), Some(_)) = (&self.writer, &self.preferences) else {
+            return;
+        };
+        let proxy = self.app.proxy();
+        let _ = writer.send(Box::new(move || {
+            let _ = proxy.send(PreferencesChanged);
+        }));
+    }
+
     // `model.json` writes, in order, off the UI thread.
     fn write(&self, job: impl FnOnce(&ModelPreferences) -> Result<(), opencode_local::lock::Error> + Send + 'static) {
         let (Some(writer), Some(preferences)) = (&self.writer, self.preferences.clone()) else {
             return;
         };
+        self.writes.set(self.writes.get() + 1);
+        let written = self.written.clone();
         let _ = writer.send(Box::new(move || {
             if let Err(error) = job(&preferences) {
                 log::warn!("model.json: {error}");
             }
+            written.fetch_add(1, Ordering::SeqCst);
         }));
     }
 

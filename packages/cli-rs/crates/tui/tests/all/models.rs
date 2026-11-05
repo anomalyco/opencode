@@ -34,6 +34,8 @@ use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
+use crate::support::wait::WAIT;
+
 /// Serves the E.16 routes and records every request (method and path with query).
 struct Server {
     routes: Value,
@@ -169,7 +171,7 @@ fn kit(width: u16, height: u16) -> Kit {
     );
     local.load();
     local.load_usage(false);
-    let loaded = app.wait_until(Duration::from_secs(5), || {
+    let loaded = app.wait_until(WAIT, || {
         local.ready()
             && local.catalog_ready()
             && local.integrations().is_some()
@@ -183,7 +185,7 @@ fn kit(width: u16, height: u16) -> Kit {
 
 impl Kit {
     fn settle(&self, text: &str) {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         assert!(found, "{text:?} never showed:\n{}", self.app.text());
         // Let deferred row updates and refreshes land.
         self.app.wait_until(Duration::from_millis(100), || false);
@@ -301,7 +303,7 @@ fn mount() -> Harness {
         },
     );
     let local = tui.local.clone();
-    let loaded = app.wait_until(Duration::from_secs(5), || {
+    let loaded = app.wait_until(WAIT, || {
         local.ready() && local.catalog_ready() && local.integrations().is_some() && !local.agents().is_empty()
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
@@ -314,7 +316,7 @@ fn mount() -> Harness {
 
 impl Harness {
     fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
@@ -327,7 +329,7 @@ impl Harness {
     /// Waits until `model.json` satisfies `check` (writes run on a worker thread).
     fn wait_file(&self, check: impl Fn(&Value) -> bool) -> Value {
         let mut last = Value::Null;
-        let found = self.app.wait_until(Duration::from_secs(5), || {
+        let found = self.app.wait_until(WAIT, || {
             last = self.model_json();
             check(&last)
         });
@@ -390,9 +392,8 @@ fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
     h.wait_for("GPT-5 mini");
     h.app.type_text("hello");
     h.app.press("return");
-    let created = h.app.wait_until(Duration::from_secs(5), || {
-        h.fixture.writes.lock().unwrap().iter().any(|(path, _)| path == "/api/session")
-    });
+    let created =
+        h.app.wait_until(WAIT, || h.fixture.writes.lock().unwrap().iter().any(|(path, _)| path == "/api/session"));
     let writes = h.fixture.writes.lock().unwrap().clone();
     assert!(created, "no session was created: {writes:?}");
     let (_, body) = writes.iter().find(|(path, _)| path == "/api/session").unwrap();
@@ -452,6 +453,38 @@ fn ctrl_t_cycles_the_variant_and_saves_it() {
     h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "low");
 }
 
+// Expected: a `model.json` reload that read the file before a pending write landed does not undo the change the write
+// carries. Actual: the stale reload replaced the preferences, so a `ctrl+t` made while an earlier write's reload was
+// in flight fell back to the default variant (`high`), the `ctrl_t_cycles_the_variant_and_saves_it` flake.
+#[test]
+fn a_reload_that_read_the_file_before_a_pending_write_keeps_the_change() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    // Holding the lock keeps the variant's write from landing.
+    let file = h.state.join("model.json");
+    let lock = opencode_local::lock::acquire(
+        &h.state.join("locks"),
+        &file.to_string_lossy(),
+        &opencode_local::lock::Options::default(),
+    )
+    .unwrap();
+    h.app.press("ctrl+t");
+    assert_eq!(local.variant(), None);
+    // Another writer touches the file: the watcher reloads it, without the variant.
+    let before = h.model_json();
+    std::fs::write(&file, before.to_string()).unwrap();
+    h.app.wait_until(Duration::from_millis(500), || false);
+    assert_eq!(local.variant(), None, "the reload kept the pending change");
+    lock.release().unwrap();
+    h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "default");
+    assert!(h.app.wait_until(WAIT, || local.variant().is_none()));
+    // Once the write landed, a reload applies again.
+    let mut changed = h.model_json();
+    changed["variant"]["anthropic/claude-sonnet"] = json!("low");
+    std::fs::write(&file, changed.to_string()).unwrap();
+    assert!(h.app.wait_until(WAIT, || local.variant().as_deref() == Some("low")));
+}
+
 #[test]
 fn leader_a_switches_the_agent() {
     let h = mount();
@@ -507,9 +540,7 @@ fn model_json_is_shared_with_the_typescript_client() {
     // TS writes under the same lock, and the running Rust TUI picks it up through its watcher.
     run(&oracle, &["recent", h.state.to_str().unwrap(), "openai", "gpt-5-mini"]);
     let local = h.tui.local.clone();
-    let reloaded = h
-        .app
-        .wait_until(Duration::from_secs(5), || local.recent().first() == Some(&Model::new("openai", "gpt-5-mini")));
+    let reloaded = h.app.wait_until(WAIT, || local.recent().first() == Some(&Model::new("openai", "gpt-5-mini")));
     assert!(reloaded, "the watcher never reloaded: {:?}", local.recent());
     assert_eq!(local.favorite().len(), 2);
 }
@@ -538,8 +569,7 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     h.app.press("left");
     h.app.press("left");
     h.app.press("return");
-    let saved =
-        h.app.wait_until(Duration::from_secs(5), || storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true);
+    let saved = h.app.wait_until(WAIT, || storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true);
     assert!(saved, "{}", storage.load("go-upsell", &json!({})).unwrap());
     assert_no_writes(&h.fixture);
 }
