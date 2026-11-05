@@ -215,9 +215,11 @@ test("the MCP popover shows a failed server and reconnects it from its details",
   // A retry that fails again shows its new error in place.
   await expect(details.getByText(again, { exact: true })).toBeVisible()
   await expect(retry).toBeEnabled()
+
   const reconnect = await holdRoute(page, /\/api\/experimental\/mcp\/figma-desktop\/connect(?:\?|$)/, {
     method: "POST",
   })
+
   await retry.click()
   await reconnect.arrived
   await page.keyboard.press("Escape")
