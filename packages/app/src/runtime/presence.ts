@@ -56,9 +56,11 @@ export function createPresence(props: {
   }
 
   const onAnimationStart = (event: AnimationEvent) => {
-    if (event.target !== tracked || current.status !== "present") return
+    const element = tracked
+
+    if (!element || event.target !== element || current.status !== "present") return
     started.name = event.animationName
-    started.current = getComputedStyle(tracked).animationName || "none"
+    started.current = getComputedStyle(element).animationName || "none"
     dispatch(started)
   }
 
