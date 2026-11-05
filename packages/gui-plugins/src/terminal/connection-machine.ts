@@ -71,7 +71,12 @@ export type ConnectionEvent =
 
 export type ConnectionEffect =
   /** Queues a canonical resize on the writer, then the base64 checkpoint, after a terminal reset when `reset`. */
-  | { readonly type: "queue-resize"; readonly size: TerminalSize; readonly checkpoint?: string; readonly reset?: boolean }
+  | {
+      readonly type: "queue-resize"
+      readonly size: TerminalSize
+      readonly checkpoint?: string
+      readonly reset?: boolean
+    }
   /** Queues the end of the replay on the writer, which reports `replay.drained` once the output before it is written. */
   | { readonly type: "queue-replay-end" }
   /** Sends a frame: size alone takes control, size and input types. */
@@ -199,7 +204,10 @@ function drained(state: ConnectionState): ConnectionTransition {
       effects: NONE,
     }
 
-  return { state: { ...base, pane: { sized: true, size: state.desired } }, effects: flush(state.desired, state.role, state) }
+  return {
+    state: { ...base, pane: { sized: true, size: state.desired } },
+    effects: flush(state.desired, state.role, state),
+  }
 }
 
 function input(state: ConnectionState, data: Uint8Array): ConnectionTransition {

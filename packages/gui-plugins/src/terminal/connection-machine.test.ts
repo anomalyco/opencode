@@ -24,12 +24,12 @@ const info = {
   output: { head: 0, tail: 128 },
 }
 
-const message = (body: Record<string, unknown>): ConnectionEvent => ({
+const message = (body: { readonly type: string }): ConnectionEvent => ({
   type: "socket.message",
   text: JSON.stringify(body),
 })
 
-const attached = (fields: Record<string, unknown> = {}) =>
+const attached = (fields: { readonly inputProtocol?: number; readonly role?: "observer" } = {}) =>
   message({
     type: "attached",
     inputProtocol: 1,
@@ -124,7 +124,11 @@ describe("transitionConnection", () => {
 
     const result = run([attached({ role: "observer" }), replayComplete, drained, size(120, 40)], held)
 
-    expect(result.effects).toEqual([{ type: "queue-resize", size: { cols: 40, rows: 10 } }, { type: "queue-replay-end" }, send(120, 40, "ls\r")])
+    expect(result.effects).toEqual([
+      { type: "queue-resize", size: { cols: 40, rows: 10 } },
+      { type: "queue-replay-end" },
+      send(120, 40, "ls\r"),
+    ])
   })
 
   test("a failure drops held input and ignores what follows", () => {
@@ -180,7 +184,12 @@ describe("transitionConnection", () => {
     const measured = transitionConnection(live.state, size(120, 40))
 
     expect(measured.effects).toEqual([send(120, 40)])
-    expect(measured.state).toEqual({ status: "live", attachmentID: ID, role: "observer", pane: { sized: true, size: { cols: 120, rows: 40 } } })
+    expect(measured.state).toEqual({
+      status: "live",
+      attachmentID: ID,
+      role: "observer",
+      pane: { sized: true, size: { cols: 120, rows: 40 } },
+    })
   })
 
   test("a click or input after the replay but before the pane is measured waits for the pane's size", () => {
@@ -201,9 +210,9 @@ describe("transitionConnection", () => {
   })
 
   test("an observer that never asked for control sends nothing when the replay is written", () => {
-    expect(transitionConnection(run([attached({ role: "observer" }), size(120, 40), replayComplete]).state, drained).effects).toEqual(
-      [],
-    )
+    expect(
+      transitionConnection(run([attached({ role: "observer" }), size(120, 40), replayComplete]).state, drained).effects,
+    ).toEqual([])
   })
 
   test("follows control changes", () => {
@@ -221,9 +230,9 @@ describe("transitionConnection", () => {
     expect(transitionConnection(back.state, size(90, 20)).effects).toEqual([send(90, 20)])
 
     // Control that changes during the replay decides what the end of the replay sends.
-    expect(run([attached({ role: "observer" }), size(120, 40), controllerChanged(ID), replayComplete, drained]).effects).toContainEqual(
-      send(120, 40),
-    )
+    expect(
+      run([attached({ role: "observer" }), size(120, 40), controllerChanged(ID), replayComplete, drained]).effects,
+    ).toContainEqual(send(120, 40))
   })
 
   test("queues the snapshot and every resize on the writer", () => {
@@ -277,7 +286,14 @@ describe("transitionConnection", () => {
 
       expect(disposed.state).toEqual({ status: "disposed" })
       expect(disposed.effects).toEqual([{ type: "clear-writer" }])
-      expectIgnored(disposed.state, [{ type: "disposed" }, attached(), drained, input("a"), interacted, { type: "socket.errored" }])
+      expectIgnored(disposed.state, [
+        { type: "disposed" },
+        attached(),
+        drained,
+        input("a"),
+        interacted,
+        { type: "socket.errored" },
+      ])
     })
   })
 })

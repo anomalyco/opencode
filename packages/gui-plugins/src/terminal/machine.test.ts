@@ -249,9 +249,9 @@ describe("terminal machine", () => {
     expect(sessionView(settled.state, "ses_1")).toEqual({ type: "ready", items: [info("pty_1"), info("pty_2")] })
 
     // A terminal already listed, or a list not known yet, changes nothing.
-    expect(transition(created.state, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") }).state).toBe(
-      created.state,
-    )
+    expect(
+      transition(created.state, { type: "terminal.created", sessionID: "ses_1", terminal: info("pty_2") }).state,
+    ).toBe(created.state)
 
     const loading = replay([
       { type: "session.loaded", sessionID: "ses_1" },
