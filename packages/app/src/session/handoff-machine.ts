@@ -9,20 +9,23 @@ export const HANDOFF_SEND_TIMEOUT_MS = 30_000
 /** The bound on the sync that replaces a missed admission echo. */
 export const HANDOFF_SYNC_TIMEOUT_MS = 10_000
 
-// A submitted prompt the timeline shows before the server admits it, with the agent and model it was sent with.
+// A submitted prompt the timeline shows before the server admits it, with the agent and model it was sent with. A
+// prompt held for its Location's agents and models has no selection yet.
 export type SessionMessageHandoff = {
   readonly message: SessionMessageUser
-  readonly selection: { readonly agent: string; readonly model: ModelRef }
+  readonly selection?: { readonly agent: string; readonly model: ModelRef }
 }
 
 /**
  * One session's optimistic prompt, held until the server's admission echo.
+ * - `held`: the composer waits for the Location's agents and models before it sends; no request is in flight, so
+ *   nothing times out. Its send replaces it with `sending`, and a cancelled hold clears it.
  * - `sending`: the selection, a staged revert and the admission are still in flight.
  * - `awaiting-echo`: the send settled as admitted; the echo is due on the event stream, or after it reconnects.
  * - `syncing`: the echo was missed; the session, its inbox and its messages reload before the handoff ends.
  */
 export type HeldSessionHandoff = {
-  readonly phase: "sending" | "awaiting-echo" | "syncing"
+  readonly phase: "held" | "sending" | "awaiting-echo" | "syncing"
   readonly attempt: number
   readonly handoff: SessionMessageHandoff
 }
@@ -39,6 +42,7 @@ export type SessionHandoffState =
 
 export type SessionHandoffEvent =
   | { readonly type: "handoff.set"; readonly sessionID: string; readonly handoff: SessionMessageHandoff }
+  | { readonly type: "handoff.held"; readonly sessionID: string; readonly handoff: SessionMessageHandoff }
   | { readonly type: "prompt.settled"; readonly sessionID: string; readonly messageID: string }
   | { readonly type: "handoff.cleared"; readonly sessionID: string; readonly messageID: string }
   | { readonly type: "session.reverted"; readonly sessionID: string; readonly boundary: string }
@@ -105,6 +109,19 @@ export function transitionSessionHandoff(
     }
   }
 
+  if (event.type === "handoff.held") {
+    const attempt = state.issued + 1
+
+    return {
+      state: {
+        ...state,
+        issued: attempt,
+        entries: { ...state.entries, [event.sessionID]: { phase: "held", attempt, handoff: event.handoff } },
+      },
+      effects: entry ? [{ type: "timer.cancel", sessionID: event.sessionID }] : [],
+    }
+  }
+
   if (!entry) return { state, effects: [] }
 
   const messageID = entry.handoff.message.id
@@ -163,6 +180,14 @@ export function selectSessionHandoff(state: SessionHandoffState, sessionID: stri
   if (state.status !== "active" || !sessionID) return undefined
 
   return state.entries[sessionID]?.handoff
+}
+
+/** Whether a session's optimistic prompt is still held, unsent, for its Location's agents and models. */
+export function selectSessionHandoffHeld(state: SessionHandoffState, sessionID: string, messageID: string) {
+  if (state.status !== "active") return false
+  const entry = state.entries[sessionID]
+
+  return entry?.phase === "held" && entry.handoff.message.id === messageID
 }
 
 function changeConnection(

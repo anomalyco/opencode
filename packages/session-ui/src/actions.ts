@@ -44,9 +44,10 @@ export type SessionUserActions = {
   /**
    * An input the server has not delivered yet. Like the TUI, a pending steer can move to the queue or be deleted;
    * it shows as waiting only while `steering` behind delivered work or `stranded` by an execution that ended.
+   * `sending` is a prompt this client shows before it can send it; it waits without actions until the server has it.
    */
   pending?: {
-    status: (messageID: string) => "starting" | "steering" | "stranded" | "queued" | undefined
+    status: (messageID: string) => "starting" | "steering" | "stranded" | "queued" | "sending" | undefined
     queue: (input: { sessionID: string; messageID: string }) => Promise<void>
     remove: (input: { sessionID: string; messageID: string }) => Promise<void>
   }

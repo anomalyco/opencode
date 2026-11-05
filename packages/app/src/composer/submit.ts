@@ -3,7 +3,7 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import type { PromptComment } from "./comment-note"
 import type { PromptHistoryComment } from "./history/entry"
-import { isCommentItem, type ContextItem, type Prompt } from "./state"
+import { isCommentItem, type ContextItem, type ImageAttachmentPart, type Prompt } from "./state"
 import { appendPrompt, clonePrompt, isAttachment, promptLength, serializePrompt } from "./prompt-parts"
 import type {
   ComposerAdapter,
@@ -93,6 +93,39 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
     if (effect.type === "submit.retry")
       return dispatch({ type: "submit", snapshot: snapshot(input, effect.alternate), done: effect.done })
+
+    if (effect.type === "hold.show") {
+      input.adapter.beforeSubmit?.()
+      effect.session.handoff.hold({
+        message: handoffMessage({
+          id: effect.snapshot.id,
+          prompt: effect.snapshot.draft.prompt,
+          context: effect.snapshot.draft.context,
+          images: effect.snapshot.draft.prompt.filter((part): part is ImageAttachmentPart => part.type === "image"),
+        }),
+      })
+      input.addToHistory(effect.snapshot.draft.prompt, effect.snapshot.mode)
+      input.resetHistory()
+
+      return dispatch({
+        type: "hold.cleared",
+        attempt: effect.attempt,
+        cleared: clearComposer(input, effect.snapshot.draft, "prompt").cleared,
+      })
+    }
+
+    if (effect.type === "hold.cancel") {
+      effect.session.handoff.clear(effect.snapshot.id)
+
+      if (!effect.cleared) return
+      restoreDraft(
+        input,
+        { draft: effect.snapshot.draft, mode: effect.snapshot.mode, comments: effect.snapshot.comments },
+        afterHold(effect.snapshot.draft, effect.cleared),
+      )
+
+      return
+    }
 
     if (effect.type === "command.run") {
       input.adapter.beforeSubmit?.()
@@ -198,17 +231,25 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     clearSubmission(input, effect)
   }
 
-  // A held send goes through once the Location's agents and models load, and ends if the draft changes first.
+  // A held send goes through once the Location's agents and models load. One still in the composer ends if the draft
+  // changes first; a shown one already left it.
   createEffect(() => {
     const current = state()
 
     if (current.type !== "held") return
 
-    if (JSON.stringify(input.adapter.state.current()) !== current.draft)
+    if (!current.shown && JSON.stringify(input.adapter.state.current()) !== current.snapshot.serialized)
       return untrack(() => dispatch({ type: "hold.changed", attempt: current.attempt }))
 
     if (!input.adapter.controls().model.loading)
-      untrack(() => dispatch({ type: "hold.loaded", attempt: current.attempt }))
+      untrack(() =>
+        dispatch({
+          type: "hold.loaded",
+          attempt: current.attempt,
+          selection: currentSelection(input),
+          commands: input.commands(),
+        }),
+      )
   })
 
   onCleanup(() => dispatch({ type: "unmounted" }))
@@ -291,6 +332,7 @@ function snapshot(input: ComposerSubmitInput, alternate: boolean): SubmitSnapsho
     commands: input.commands(),
     clientCommand: mode === "normal" ? input.clientCommand?.(text) : undefined,
     comments: input.comments.capture(),
+    session: input.adapter.kind === "active-session" ? input.adapter.session() : undefined,
   }
 }
 
@@ -329,39 +371,21 @@ async function startSession(
   return started && { ...started, images }
 }
 
-// The composer clears its captured draft once the Session's composer is ready; then the send settles.
+// The composer clears its captured draft once the Session's composer is ready; then the send settles. A shown hold
+// cleared it already, and the composer may hold a new draft since.
 function clearSubmission(
   input: ComposerSubmitInput,
   effect: Extract<ComposerSubmitEffect, { type: "composer.clear" }>,
 ) {
-  const target = effect.draft.target
-  input.adapter.submitted()
+  const held = effect.cleared
+  const clear = held ? undefined : clearComposer(input, effect.draft, effect.kind.type)
 
-  if (effect.kind.type === "prompt") {
-    // Like the TUI, sent context goes with the prompt rather than riding along on the next one.
-    effect.draft.context.forEach((item) => target.context.remove(item.key))
-    input.comments.clear()
+  // A held prompt cleared the composer at Enter, so what it goes back to is read only once the send fails.
+  const restore = () => {
+    const back = clear ?? (held && afterHold(effect.draft, held))
+
+    return !!back && restoreSubmission(input, effect, back)
   }
-
-  if (effect.draft.initial !== target) effect.draft.initial.reset()
-
-  // A preparing session may already have an unsent follow-up in its promoted composer.
-  const following =
-    effect.draft.initial !== target &&
-    effect.draft.preserveDraft &&
-    target.current().some((part) => isAttachment(part) || part.content.length > 0)
-      ? clonePrompt(target.current())
-      : undefined
-
-  if (!following) target.reset()
-  const cleared = target.current()
-  // The ID went with this send; a failure arms it again for this payload when it restores the draft.
-  target.retry.clear()
-  target.mode.set("normal")
-  input.closePopover()
-
-  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
-  const restore = () => restoreSubmission(input, effect, cleared, following)
 
   if (effect.prompt) return void effect.prompt.settled(restore)
 
@@ -377,6 +401,49 @@ function clearSubmission(
       effect.kind.command,
       input.adapter.controls().model.selection.trackSessionCommit,
     ).catch((error) => failSubmission(input, effect.session, "command", error, restore, effect.value.id))
+}
+
+// Returns the cleared composer, which a failed send restores only while it is unchanged, and any follow-up already
+// typed into a promoted new-session composer.
+function clearComposer(input: ComposerSubmitInput, draft: CapturedDraft, kind: SubmissionKind["type"]) {
+  const target = draft.target
+  input.adapter.submitted()
+
+  if (kind === "prompt") {
+    // Like the TUI, sent context goes with the prompt rather than riding along on the next one.
+    draft.context.forEach((item) => target.context.remove(item.key))
+    input.comments.clear()
+  }
+
+  if (draft.initial !== target) draft.initial.reset()
+
+  // A preparing session may already have an unsent follow-up in its promoted composer.
+  const following =
+    draft.initial !== target &&
+    draft.preserveDraft &&
+    target.current().some((part) => isAttachment(part) || part.content.length > 0)
+      ? clonePrompt(target.current())
+      : undefined
+
+  if (!following) target.reset()
+  const cleared = target.current()
+  // The ID went with this send; a failure arms it again for this payload when it restores the draft.
+  target.retry.clear()
+  target.mode.set("normal")
+  input.closePopover()
+
+  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
+
+  return { cleared, following, edited: !!following } satisfies ClearedComposer
+}
+
+// A held prompt left the composer before it was sent, so a draft typed since follows it back rather than keeping it out.
+function afterHold(draft: CapturedDraft, cleared: Prompt): ClearedComposer {
+  const current = draft.target.current()
+  const edited = current !== cleared
+  const typed = edited && current.some((part) => isAttachment(part) || part.content.length > 0)
+
+  return { cleared: current, following: typed ? clonePrompt(current) : undefined, edited }
 }
 
 function clearClientCommand(input: ComposerSubmitInput, prompt: Prompt) {
@@ -397,7 +464,10 @@ function submissionText(prompt: Prompt) {
   return prompt.map((part) => ("content" in part ? part.content : "")).join("")
 }
 
-function handoffMessage(value: ComposerSubmission): SessionMessageUser {
+// A held prompt has no agent or model until its Location's catalog loads.
+function handoffMessage(
+  value: Pick<ComposerSubmission, "id" | "prompt" | "context" | "images"> & { selection?: ComposerSelection },
+): SessionMessageUser {
   const text = submissionText(serializePrompt(value.prompt))
 
   return {
@@ -433,8 +503,7 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
           },
         ]
       }),
-      agent: value.selection.agent,
-      model: selectionModel(value.selection),
+      ...(value.selection && { agent: value.selection.agent, model: selectionModel(value.selection) }),
     },
     time: { created: Date.now() },
   }
@@ -515,6 +584,12 @@ function updateStatus(session: ComposerSession, event: PromptStatusEvent) {
   result.effects.forEach((effect) => session.data.session.setStatus(session.id, effect.status))
 }
 
+/**
+ * The composer a restore goes back to: the prompt it was cleared to, a follow-up typed into it since, and whether it
+ * was edited since, which keeps the comments added meanwhile.
+ */
+type ClearedComposer = { cleared: Prompt; following: Prompt | undefined; edited: boolean }
+
 // Puts a failed submission back, unless the composer changed since it cleared: then the edit is the user's.
 function restoreSubmission(
   input: ComposerSubmitInput,
@@ -524,22 +599,40 @@ function restoreSubmission(
     kind: SubmissionKind
     comments: PromptHistoryComment[]
   },
-  cleared: Prompt,
-  following: Prompt | undefined,
+  back: ClearedComposer,
 ) {
-  const target = submission.draft.target
   const value = submission.value
 
-  if (target.current() !== cleared) return false
+  if (!restoreDraft(input, { ...submission, mode: value.mode }, back)) return false
+
+  // Only a prompt was admitted under its ID. A recovered follow-up changes the payload, so it needs a new one.
+  if (submission.kind.type === "prompt" && !back.following)
+    submission.draft.target.retry.set({ id: value.id, fingerprint: retryFingerprint(value) })
+
+  return true
+}
+
+// Puts a cleared draft back, unless the composer changed since it cleared: then the edit is the user's.
+function restoreDraft(
+  input: ComposerSubmitInput,
+  submission: { draft: CapturedDraft; mode: "normal" | "shell"; comments: PromptHistoryComment[] },
+  back: ClearedComposer,
+) {
+  const target = submission.draft.target
+  const following = back.following
+
+  if (target.current() !== back.cleared) return false
+  const kept = back.edited ? input.comments.capture() : []
   const prompt = following ? appendPrompt(submission.draft.prompt, following) : submission.draft.prompt
   // The prompt is back in the composer; its history entry would only keep attachments referenced.
-  input.removeFromHistory(value.prompt, value.mode, submission.comments)
+  input.removeFromHistory(submission.draft.prompt, submission.mode, submission.comments)
   target.set(prompt, promptLength(prompt))
-  target.mode.set(value.mode)
+  target.mode.set(submission.mode)
   const sent = new Set(submission.draft.context.map((item) => item.key))
 
   // In the order it was sent: an unedited resend must send the same request, which the retry ID's fingerprint names.
-  // Files listed since the send stay after it; comments the draft gained since are replaced, as before.
+  // Files listed since the send stay after it. Comments the draft gained since are replaced, as before, unless they
+  // were added to a draft typed since, which keeps them.
   target.context.replace([
     ...submission.draft.context.map((item): ContextItem => {
       if (item.type === "quote")
@@ -578,24 +671,23 @@ function restoreSubmission(
         description: item.description,
       }
     }),
-    ...target.context.items().filter((item) => !isCommentItem(item) && !sent.has(item.key)),
+    ...target.context.items().filter((item) => (back.edited || !isCommentItem(item)) && !sent.has(item.key)),
   ])
   submission.draft.sources.forEach((item) => target.quoteSource.add(item.key, item.source))
 
-  // Only a prompt was admitted under its ID. A recovered follow-up changes the payload, so it needs a new one.
-  if (submission.kind.type === "prompt" && !following)
-    target.retry.set({ id: value.id, fingerprint: retryFingerprint(value) })
-
   if (target !== input.adapter.state) return true
 
-  input.comments.restore(submission.comments)
+  input.comments.restore([
+    ...submission.comments,
+    ...kept.filter((item) => !submission.comments.some((comment) => comment.id === item.id)),
+  ])
   input.closePopover()
   requestAnimationFrame(() => {
     const editor = input.editor()
 
     if (!editor) return
     editor.focus()
-    setCursorPosition(editor, promptLength(value.prompt))
+    setCursorPosition(editor, promptLength(submission.draft.prompt))
     input.queueScroll()
   })
 
