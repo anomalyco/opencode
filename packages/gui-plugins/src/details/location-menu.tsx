@@ -32,9 +32,10 @@ export default function SessionLocationMenu(props: { session: MountedSession; sc
     return view?.status === "ready" ? view.rows : undefined
   })
 
-  // A failed load is never a clean working tree: the row says so, and picking it loads again in place.
+  // A failed load is never a clean working tree: the row says so, and picking it loads again in place. The menu reads
+  // `closeOnSelect` after this returns, so the retry starts after that read, while the row still keeps the menu open.
   const select = () => {
-    if (status() === "error") return service()?.retry(props.session)
+    if (status() === "error") return queueMicrotask(() => service()?.retry(props.session))
 
     review()?.open(props.session)
   }

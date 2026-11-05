@@ -1966,6 +1966,7 @@ test("a failed file search offers a retry instead of no matching files", async (
     name: "ReviewSearchFailure",
     fileList: () => [fileNode(directory, "README.md")],
     findFiles: (input) => (input.query === "nested" ? [fileNode(directory, "src/nested.ts")] : []),
+    seed: { panes: { ses_reviewsearchfailure: { review: true } } },
   })
   const search = { failing: true }
   await page.route(/\/api\/fs\/find\?/, (route) => {
@@ -1977,7 +1978,7 @@ test("a failed file search offers a retry instead of no matching files", async (
   const filter = panel.getByRole("combobox", { name: "Filter files" })
   const failure = panel.getByRole("alert")
 
-  await browseFiles(page)
+  await openFileLauncher(panel)
   await filter.fill("nested")
   await expect(failure.getByText("Couldn't search files", { exact: true })).toBeVisible()
   await expect(panel.getByText("No matching files", { exact: true })).toHaveCount(0)
