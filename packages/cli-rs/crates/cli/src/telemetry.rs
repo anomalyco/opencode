@@ -523,7 +523,10 @@ impl Otlp {
         let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
             return;
         };
-        let client = reqwest::Client::new();
+        // Its own client: a connection pooled on this runtime only makes progress inside `block_on`.
+        let Ok(client) = opencode_api::transport::client_builder().build() else {
+            return;
+        };
         let mut buffer: Vec<Value> = Vec::new();
         let mut disabled_until: Option<Instant> = None;
         let mut next = Instant::now() + OTLP_INTERVAL;
