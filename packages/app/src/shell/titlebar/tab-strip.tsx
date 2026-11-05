@@ -1,4 +1,14 @@
-import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import {
+  createComputed,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+} from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -26,12 +36,29 @@ import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionTitle } from "@/session/title"
 import { errorMessage } from "@/shell/layout/helpers"
 import { notifySessionTabsRemoved } from "./session-events"
+import {
+  INITIAL_SESSION_TAB_LOADS_STATE,
+  selectSessionTabView,
+  transitionSessionTabLoads,
+  type SessionTabLoadsEffect,
+  type SessionTabLoadsEvent,
+  type SessionTabView,
+} from "./tab-load-machine"
 import { setSidebarUnread } from "@/shell/sidebar-peek"
 import type { SessionInfo } from "@opencode/client/promise"
 
 export const previousSessionCommand = { id: "session.previous", keybind: "alt+arrowup" }
 
 export const nextSessionCommand = { id: "session.next", keybind: "alt+arrowdown" }
+
+// A row the For loop still renders for a tab just removed from the strip.
+const hiddenTabView: SessionTabView = {
+  phase: "loading",
+  visible: false,
+  session: undefined,
+  fallbackTitle: "none",
+  fallbackDirectory: undefined,
+}
 
 function SessionTabSlot(
   props: TabCloseActions & {
@@ -47,7 +74,8 @@ function SessionTabSlot(
     loading: boolean
     fallbackTitle?: string
     fallbackDirectory?: string
-    onRename: (title: string) => Promise<void>
+    onRememberTitle: (sessionID: string, title: string | undefined) => void
+    onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
     onIntent: (hovered: boolean) => void
@@ -92,7 +120,8 @@ function SessionTabSlot(
         loading={props.loading}
         fallbackTitle={props.fallbackTitle}
         fallbackDirectory={props.fallbackDirectory}
-        onRename={props.onRename}
+        onRememberTitle={props.onRememberTitle}
+        onSaveTitle={props.onSaveTitle}
         onDelete={props.onDelete}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
@@ -113,9 +142,10 @@ function SessionTabEntry(
     id: string
     index: number
     active: boolean
+    highlightActive?: boolean
     orientation: "horizontal" | "vertical"
     serverCtx: ServerCtx | undefined
-    onVisibleChange: (visible: boolean) => void
+    view: SessionTabView
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -124,9 +154,8 @@ function SessionTabEntry(
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = createMemo(() => props.serverCtx?.sdk ?? null)
-  const pending = createMemo(() => tabs.pendingSession(props.tab.server, props.tab.sessionId))
-  const cachedSession = createMemo(() => props.serverCtx?.data.session.get(props.tab.sessionId))
   const persisted = createMemo(() => tabs.info[props.id])
+  const session = () => props.view.session
 
   const status = useSessionTabAvatarState(
     () => props.tab.server,
@@ -137,46 +166,17 @@ function SessionTabEntry(
   // A busy session shows its progress indicator instead of the unread dot.
   const unread = createMemo(() => status.unread() && !status.loading())
 
-  const [loadedSession] = createResource(
-    () => {
-      if (pending() || (!props.active && persisted()?.title)) return null
-      const ctx = props.serverCtx
+  const rememberTitle = (sessionID: string, title: string | undefined) => {
+    const current = props.serverCtx?.data.session.get(sessionID)
 
-      return ctx ? { id: props.tab.sessionId, ctx } : null
-    },
-    ({ id, ctx }) =>
-      ctx.data.session
-        .sync(id)
-        .then(() => ctx.data.session.get(id))
-        .catch(() => undefined),
-  )
+    if (current) props.serverCtx?.data.session.remember({ ...current, title })
+  }
 
-  const session = createMemo(() => (pending() ? undefined : (cachedSession() ?? loadedSession())))
-  const missingSession = createMemo(() => !pending() && !!props.serverCtx && !loadedSession.loading && !session())
-  const visible = createMemo(() => !!pending() || !!session() || missingSession() || !!persisted()?.title)
-
-  const rename = async (title: string) => {
-    const value = session()
+  const saveTitle = async (sessionID: string, title: string, signal: AbortSignal) => {
     const ctx = props.serverCtx
 
-    if (!value || !ctx) return
-
-    ctx.data.session.remember({ ...value, title })
-
-    try {
-      await ctx.sdk.api.session.update({ sessionID: value.id, title })
-    } catch (err) {
-      const current = session()
-      const currentCtx = props.serverCtx
-
-      // A newer rename may have replaced this title while the save was in flight.
-      if (current && currentCtx && current.title === title)
-        currentCtx.data.session.remember({ ...current, title: value.title })
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : undefined,
-      })
-    }
+    if (!ctx) throw new Error(language.t("common.requestFailed"))
+    await ctx.sdk.api.session.update({ sessionID, title }, { signal })
   }
 
   function DeleteDialog() {
@@ -222,7 +222,6 @@ function SessionTabEntry(
     )
   }
 
-  createEffect(() => props.onVisibleChange(visible()))
   createEffect(() => props.onUnreadChange(unread()))
 
   createEffect(() => {
@@ -230,10 +229,10 @@ function SessionTabEntry(
     const id = props.tab.sessionId
 
     if (
-      pending() ||
+      props.view.phase === "preparing" ||
+      props.view.phase === "missing" ||
       !ctx ||
       props.active ||
-      ctx.data.session.missing(id) ||
       (!session() && !persisted()?.title) ||
       ctx.sdk.connection.status() !== "connected"
     )
@@ -307,25 +306,29 @@ function SessionTabEntry(
   })
 
   return (
-    <Show when={visible()}>
+    <Show when={props.view.visible}>
       <SessionTabSlot
         tab={props.tab}
         id={props.id}
         index={props.index}
-        active={props.active}
+        active={props.active && props.highlightActive !== false}
         orientation={props.orientation}
         session={session()}
-        preparing={!!pending()}
+        preparing={props.view.phase === "preparing"}
         unread={unread()}
         attention={status.attention()}
         loading={status.loading()}
         fallbackTitle={
-          pending()
-            ? language.t("session.tab.session")
-            : (persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined))
+          {
+            session: language.t("session.tab.session"),
+            persisted: persisted()?.title,
+            unknown: language.t("session.tab.unknown"),
+            none: undefined,
+          }[props.view.fallbackTitle]
         }
-        fallbackDirectory={pending()?.draft.directory ?? persisted()?.directory}
-        onRename={rename}
+        fallbackDirectory={props.view.fallbackDirectory}
+        onRememberTitle={rememberTitle}
+        onSaveTitle={saveTitle}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
@@ -392,6 +395,7 @@ function DraftTabSlot(
 
 export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
+  highlightActive?: boolean
   tabs: Tab[]
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
@@ -402,6 +406,7 @@ export function TitlebarTabStrip(props: {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
+  const appTabs = useTabs()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
   let scrollRef!: HTMLDivElement
@@ -420,9 +425,118 @@ export function TitlebarTabStrip(props: {
   onMount(() => {
     if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
   })
-  const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
-  const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
+  const [tabLoads, setTabLoads] = createSignal(INITIAL_SESSION_TAB_LOADS_STATE)
+  const loadTimers = new Map<number, ReturnType<typeof setTimeout>>()
+
+  const dispatchTabLoads = (event: SessionTabLoadsEvent) =>
+    untrack(() => {
+      const previous = tabLoads()
+      const next = transitionSessionTabLoads(previous, event)
+
+      if (next.state !== previous) setTabLoads(next.state)
+      next.effects.forEach(runTabLoadEffect)
+    })
+
+  function runTabLoadEffect(effect: SessionTabLoadsEffect) {
+    if (effect.type === "load.clear") {
+      clearTimeout(loadTimers.get(effect.attempt))
+      loadTimers.delete(effect.attempt)
+
+      return
+    }
+
+    const ctx = global.serverCtx(effect.server)
+    const connected = () => global.serverCtx(effect.server)?.sdk.connection.status() === "connected"
+
+    loadTimers.set(
+      effect.attempt,
+      setTimeout(
+        () =>
+          dispatchTabLoads({
+            type: "load.timed-out",
+            key: effect.key,
+            attempt: effect.attempt,
+            connected: connected(),
+          }),
+        effect.timeoutMs,
+      ),
+    )
+
+    const settle = () => {
+      const current = global.serverCtx(effect.server)
+
+      dispatchTabLoads({
+        type: "load.settled",
+        key: effect.key,
+        attempt: effect.attempt,
+        cached: !!current?.data.session.get(effect.sessionID),
+        missing: !!current?.data.session.missing(effect.sessionID),
+        connected: connected(),
+      })
+    }
+
+    void (ctx?.data.session.sync(effect.sessionID) ?? Promise.resolve()).then(settle, settle)
+  }
+
+  // Runs before the visible order below reads it, so a session tab counts as visible in the same pass it appears.
+  createComputed(() => {
+    const tabs = props.tabs.flatMap((tab) => {
+      if (tab.type !== "session") return []
+      const ctx = global.serverCtx(tab.server)
+      const key = tabKey(tab)
+
+      return [
+        {
+          key,
+          server: tab.server,
+          sessionID: tab.sessionId,
+          active: props.currentTab === tab,
+          pending: !!appTabs.pendingSession(tab.server, tab.sessionId),
+          cached: !!ctx?.data.session.get(tab.sessionId),
+          missing: !!ctx?.data.session.missing(tab.sessionId),
+          persistedTitle: !!appTabs.info[key]?.title,
+          serverReady: !!ctx,
+          connected: ctx?.sdk.connection.status() === "connected",
+        },
+      ]
+    })
+
+    dispatchTabLoads({ type: "sync", tabs })
+  })
+
+  onCleanup(() => dispatchTabLoads({ type: "disposed" }))
+
+  const views = createMemo(() => {
+    const state = tabLoads()
+
+    return new Map(
+      props.tabs.flatMap((tab) => {
+        if (tab.type !== "session") return []
+        const ctx = global.serverCtx(tab.server)
+        const key = tabKey(tab)
+
+        return [
+          [
+            key,
+            selectSessionTabView(state, key, {
+              active: props.currentTab === tab,
+              pending: appTabs.pendingSession(tab.server, tab.sessionId),
+              session: ctx?.data.session.get(tab.sessionId),
+              missing: !!ctx?.data.session.missing(tab.sessionId),
+              persisted: appTabs.info[key],
+              serverReady: !!ctx,
+            }),
+          ] as const,
+        ]
+      }),
+    )
+  })
+
+  const visibleTabs = createMemo(() =>
+    props.tabs.filter((tab) => tab.type === "draft" || !!views().get(tabKey(tab))?.visible),
+  )
+
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
@@ -621,9 +735,10 @@ export function TitlebarTabStrip(props: {
                       id={id}
                       index={visibleIndex()}
                       active={props.currentTab === tab}
+                      highlightActive={props.highlightActive}
                       orientation={vertical() ? "vertical" : "horizontal"}
                       serverCtx={serverCtx()}
-                      onVisibleChange={(visible) => setVisibility(id, visible)}
+                      view={views().get(id) ?? hiddenTabView}
                       onUnreadChange={(value) => setUnread(id, value)}
                       onNavigate={(element) => {
                         ref = element
@@ -641,7 +756,7 @@ export function TitlebarTabStrip(props: {
                     tab={tab}
                     id={id}
                     index={visibleIndex()}
-                    active={props.currentTab === tab}
+                    active={props.currentTab === tab && props.highlightActive !== false}
                     orientation={vertical() ? "vertical" : "horizontal"}
                     title={language.t("session.tab.session")}
                     onNavigate={(element) => {

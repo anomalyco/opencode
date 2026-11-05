@@ -1,6 +1,17 @@
-import { createMemo, createUniqueId, For, onCleanup, Show, type Accessor } from "solid-js"
+import {
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type Accessor,
+} from "solid-js"
 import { createStore } from "solid-js/store"
-import { createQuery, keepPreviousData } from "@tanstack/solid-query"
+import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
@@ -20,9 +31,19 @@ import { current, useShared } from "./context"
 import SessionFileList, { applyFileListKeyDown } from "./list"
 import { fileTabPath, isFileTab } from "./path"
 import PierreFileTree from "./pierre-tree"
+import {
+  fileSearchView,
+  INITIAL_FILE_SEARCH_STATE,
+  sameFileSearchContext,
+  transitionFileSearch,
+  type FileSearchEffect,
+  type FileSearchEvent,
+  type FileSearchFailure,
+  type FileSearchState,
+} from "./search-machine"
 import { SessionFileView } from "./view"
 
-const emptyFiles: string[] = []
+const emptyFiles: readonly string[] = []
 
 export function SessionFileBrowserTab(props: {
   session: MountedSession
@@ -35,35 +56,117 @@ export function SessionFileBrowserTab(props: {
   state: PanelSidebar
   onSelect: (path: string) => void
   onSelectPermanent: (path: string) => void
-  filterRef?: (element: HTMLInputElement) => void
+  /** The "Open file" focus request this view's filter input should take, if any. */
+  focusRequest: () => number | undefined
   mobile?: boolean
 }) {
   const ctx = usePlugin()
   const shared = useShared()
   const file = props.screen.file
   const resultsID = `session-file-browser-results-${createUniqueId()}`
-  const [store, setStore] = createStore<{ explicitHighlight?: string }>({})
+  const [store, setStore] = createStore<{ explicitHighlight?: string; input?: HTMLInputElement }>({})
   const filter = () => shared.filter.get(props.session.key)
   const setFilter = (value: string) => shared.filter.set(props.session.key, value)
   const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
   const sidebarOpened = () => props.placeholder || props.state.opened()
   const query = createMemo(() => filter().trim())
 
-  const search = createQuery(() => {
-    const value = query()
+  // The filter's search. It asks the server directly: the screen's search reads a failure as no results.
+  const [searchState, setSearchState] = createSignal<FileSearchState>(INITIAL_FILE_SEARCH_STATE)
+  const searches = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
-    return {
-      queryKey: [ctx.id, props.session.server.id, "session-open-file", file.root, value] as const,
-      enabled: props.session.server.connected && value.length > 0,
-      queryFn: ({ signal }) => file.search(value, { limit: 200, signal }),
-      placeholderData: keepPreviousData,
+  const dispatchSearch = (event: FileSearchEvent) => {
+    const next = transitionFileSearch(untrack(searchState), event)
+
+    setSearchState(next.state)
+    next.effects.forEach(runSearchEffect)
+  }
+
+  const runSearchEffect = (effect: FileSearchEffect) => {
+    if (effect.type === "abort") {
+      const request = searches.get(effect.attempt)
+
+      searches.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller.abort()
+
+      return
     }
+
+    const attempt = effect.attempt
+    const server = props.session.server
+
+    const request = {
+      controller: new AbortController(),
+      timer: setTimeout(() => dispatchSearch({ type: "search.timed-out", attempt }), effect.timeoutMs),
+    }
+
+    const settle = () => {
+      clearTimeout(request.timer)
+
+      return searches.delete(attempt)
+    }
+
+    searches.set(attempt, request)
+    // The workspace may change while the search runs; the machine keeps only the answer of its current attempt.
+    void server.client.file
+      .find(
+        { location: { directory: effect.scope.root }, query: effect.query, type: "file", limit: 200 },
+        { signal: AbortSignal.any([ctx.signal, request.controller.signal]) },
+      )
+      .then(
+        (result) => {
+          if (settle())
+            dispatchSearch({
+              type: "search.succeeded",
+              attempt,
+              files: result.data.map((entry) => file.resolve(entry.path)),
+            })
+        },
+        (cause: unknown) => {
+          if (settle())
+            dispatchSearch({
+              type: "search.failed",
+              attempt,
+              message: cause instanceof Error ? cause.message : String(cause),
+            })
+        },
+      )
+  }
+
+  createKeyed(
+    () => ({
+      scope: { serverID: props.session.server.id, root: file.root },
+      connected: props.session.server.connected,
+      query: query(),
+    }),
+    (context) => dispatchSearch({ type: "context.changed", context }),
+    { equals: sameFileSearchContext },
+  )
+  onCleanup(() => dispatchSearch({ type: "disposed" }))
+
+  const searchView = createMemo(() => fileSearchView(searchState()))
+
+  const failureText = (failure: FileSearchFailure) =>
+    failure.type === "timeout" ? ctx.t("search.timeout") : failure.message
+
+  const searchFailure = createMemo(() => {
+    const view = searchView()
+
+    return view.status === "error" ? view.failure : undefined
   })
 
-  const files = createMemo(() => {
-    if (!query() || search.isPending) return emptyFiles
+  const results = createMemo(() => {
+    const view = searchView()
 
-    return [...new Set(search.data ?? emptyFiles)]
+    return view.status === "results" ? view : undefined
+  })
+
+  // Only current results take a pick: the previous query's stay inert while the next one loads.
+  const files = createMemo(() => {
+    const view = results()
+
+    return view && !view.stale ? view.files : emptyFiles
   })
 
   const highlighted = createMemo(() => {
@@ -77,15 +180,30 @@ export function SessionFileBrowserTab(props: {
     return values[0]
   })
 
-  const loading = createMemo(() => query().length > 0 && search.isPending)
-
   const title = createMemo(() => {
     const project = props.session.listedProject ?? { worktree: file.root }
 
     return project.name || getFilename(project.worktree) || project.worktree
   })
 
-  const optionID = (path: string) => `${resultsID}-option-${files().indexOf(path)}`
+  const optionID = (path: string) => `${resultsID}-option-${(results()?.files ?? emptyFiles).indexOf(path)}`
+
+  // Moves keyboard focus to this view's own filter input once "Open file" asks this view for it and the input is
+  // mounted; after the current render, so the input is in the document.
+  createKeyed(
+    () => {
+      const input = store.input
+      const request = props.focusRequest()
+
+      return input && request !== undefined ? { input, request } : undefined
+    },
+    (target) =>
+      queueMicrotask(() => {
+        if (target.input.isConnected) target.input.focus()
+        shared.filter.focused(target.request)
+      }),
+    { equals: (previous, next) => previous.input === next.input && previous.request === next.request },
+  )
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (event.key === "Escape" && query()) {
@@ -127,16 +245,14 @@ export function SessionFileBrowserTab(props: {
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}
-          filterAutofocus={props.placeholder && !props.mobile}
-          filterRef={(element) => props.filterRef?.(element)}
+          filterRef={(element) => setStore("input", element)}
           filterControls={resultsID}
           filterActiveDescendant={highlighted() ? optionID(highlighted()!) : undefined}
           filterExpanded={query().length > 0 && files().length > 0}
           width={props.state.width()}
           onWidthChange={props.mobile ? undefined : props.state.resize}
         >
-          <Show
-            when={query()}
+          <Switch
             fallback={
               <PierreFileTree
                 session={props.session}
@@ -149,42 +265,67 @@ export function SessionFileBrowserTab(props: {
               />
             }
           >
-            <Show
-              when={!loading()}
-              fallback={
-                <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
-                  {ctx.t("common.loading")}
-                  {ctx.t("common.loading.ellipsis")}
-                </div>
-              }
-            >
-              <Show
-                when={files().length > 0}
-                fallback={
-                  <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
-                    {ctx.t("palette.empty")}
+            <Match when={searchView().status === "loading"}>
+              <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
+                {ctx.t("common.loading")}
+                {ctx.t("common.loading.ellipsis")}
+              </div>
+            </Match>
+            <Match when={searchView().status === "offline"}>
+              <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
+                {ctx.t("search.offline")}
+              </div>
+            </Match>
+            <Match when={searchFailure()}>
+              {(failure) => (
+                <div role="alert" class="flex flex-col items-start gap-2 px-2 py-2">
+                  <div class="flex flex-col gap-0.5">
+                    <div class="text-12-medium text-text-strong">{ctx.t("search.failed")}</div>
+                    <div class="text-12-regular text-text-weak break-words">{failureText(failure())}</div>
                   </div>
-                }
-              >
-                <SessionFileList
-                  session={props.session}
-                  screen={props.screen}
-                  id={resultsID}
-                  role="listbox"
-                  optionID={optionID}
-                  files={files()}
-                  kinds={props.kinds}
-                  active={props.active}
-                  highlighted={highlighted()}
-                  onFileClick={(path) => {
-                    setExplicitHighlight(path)
-                    props.onSelect(path)
-                  }}
-                  onFileDoubleClick={props.onSelectPermanent}
-                />
-              </Show>
-            </Show>
-          </Show>
+                  <Button size="small" variant="outline" onClick={() => dispatchSearch({ type: "retry" })}>
+                    {ctx.t("common.retry")}
+                  </Button>
+                </div>
+              )}
+            </Match>
+            <Match when={results()}>
+              {(results) => (
+                <Show
+                  when={results().files.length > 0}
+                  fallback={
+                    <div role="status" class="px-2 py-2 text-12-regular text-text-weak">
+                      {ctx.t("palette.empty")}
+                    </div>
+                  }
+                >
+                  {/* The previous query's results stay in place, dimmed and inert, while the next one loads. */}
+                  <div
+                    classList={{ "pointer-events-none opacity-60": results().stale }}
+                    inert={results().stale || undefined}
+                    aria-busy={results().stale || undefined}
+                  >
+                    <SessionFileList
+                      session={props.session}
+                      screen={props.screen}
+                      id={resultsID}
+                      role="listbox"
+                      optionID={optionID}
+                      files={results().files}
+                      kinds={props.kinds}
+                      active={props.active}
+                      highlighted={highlighted()}
+                      onFileClick={(path) => {
+                        setExplicitHighlight(path)
+                        props.onSelect(path)
+                      }}
+                      onFileDoubleClick={props.onSelectPermanent}
+                    />
+                  </div>
+                </Show>
+              )}
+            </Match>
+          </Switch>
         </SessionReviewV2Sidebar>
       }
     >
@@ -329,13 +470,14 @@ export default function FileBrowser(props: {
       state={panel.sidebar}
       onSelect={(path) => shared.open(props.session, path, { tab: "preview" })}
       onSelectPermanent={(path) => shared.open(props.session, path)}
-      filterRef={(element) => {
-        shared.filter.element = element
-
-        if (!shared.filter.pending) return
-        shared.filter.pending = false
-        queueMicrotask(() => element.focus())
-      }}
+      focusRequest={() =>
+        shared.filter.focusRequest({
+          placement: "side",
+          sessionKey: props.session.key,
+          tabId: id(),
+          visible: panel.visible(),
+        })
+      }
     />
   )
 }

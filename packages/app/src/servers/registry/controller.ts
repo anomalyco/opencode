@@ -3,7 +3,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
-import { type ServerHealth } from "@/runtime/server/health"
+import { selectServerHealthRank, type ServerHealth } from "@/runtime/server/health-machine"
 import { showToast } from "@/shell/notifications/toast"
 import { usePluginServers } from "@/runtime/plugin/servers"
 
@@ -12,17 +12,10 @@ export function sortServerConnections(input: {
   health: Record<string, ServerHealth | undefined>
 }) {
   const order = new Map(input.servers.map((item, index) => [item, index] as const))
-
-  const rank = (value?: ServerHealth) => {
-    if (value?.healthy === true) return 0
-
-    if (value?.healthy === false) return 2
-
-    return 1
-  }
+  const rank = (conn: ServerConnection.Any) => selectServerHealthRank(input.health[ServerConnection.key(conn)])
 
   return input.servers.slice().sort((a, b) => {
-    const health = rank(input.health[ServerConnection.key(a)]) - rank(input.health[ServerConnection.key(b)])
+    const health = rank(a) - rank(b)
 
     if (health !== 0) return health
 

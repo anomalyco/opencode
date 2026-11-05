@@ -1,5 +1,50 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("reveals turn speed with the response footer", async ({ mount, page }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
+
+  const footer = timeline.locator('[data-slot="text-part-copy-wrapper"]').last()
+
+  const meta = footer.locator('[data-slot="text-part-meta"]')
+
+  const speed = meta.locator('[data-slot="text-part-meta-speed"]')
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(meta.locator('[data-slot="text-part-meta-item"]').last()).toHaveText("5m 2s")
+  await expect(speed).toHaveText("·60.0 tok/s")
+  await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+  await expect(footer).toHaveCSS("opacity", "1")
+  await expect(speed).toBeVisible()
+
+  for (const width of [1000, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+    await expect(speed).toBeVisible()
+    expect(
+      await speed.evaluate((element) => {
+        const box = element.getBoundingClientRect()
+
+        const parent = element.parentElement!.getBoundingClientRect()
+
+        return box.left >= parent.left && box.right <= parent.right + 1
+      }),
+    ).toBe(true)
+    await footer.getByRole("button", { name: "Copy response", exact: true }).hover()
+    await expect(speed).toBeVisible()
+  }
+})
+
+story("omits turn speed when a model step has no streaming time", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { measured: false } })
+
+  const meta = timeline.locator('[data-slot="text-part-meta"]')
+
+  await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
+  await meta.hover()
+  await expect(meta).toContainText("5m 2s")
+  await expect(meta.locator('[data-slot="text-part-meta-speed"]')).toHaveCount(0)
+})
+
 story("keeps quote attachment icons fixed while long text truncates", async ({ mount, page }) => {
   const gallery = await mount("current-session-timeline-rows--quote-attachments")
 
@@ -77,6 +122,23 @@ story.describe("message actions menu", () => {
   })
 })
 
+story("keeps pending steer actions usable after a request fails", async ({ mount }) => {
+  const timeline = await mount("current-prompt-message--pending")
+  const queue = timeline.getByRole("button", { name: "Move to queue", exact: true })
+  const remove = timeline.getByRole("button", { name: "Delete", exact: true })
+  const failures = timeline.getByLabel("Failed actions")
+
+  await timeline.getByLabel("Actions fail").check()
+  await timeline.locator('[data-component="user-message"]').hover()
+  await queue.click()
+  await expect(failures).toHaveText("1")
+  await expect(queue).toBeEnabled()
+  await expect(remove).toBeEnabled()
+  await remove.click()
+  await expect(failures).toHaveText("2")
+  await expect(remove).toBeEnabled()
+})
+
 story("drops a pending footer at once on delivery with and without hover", async ({ mount, page }) => {
   const timeline = await mount("current-prompt-message--pending")
   const message = timeline.locator('[data-component="user-message"]')
@@ -144,13 +206,16 @@ story("marks pending metadata without badging delivered, starting, or queued pro
   const indicator = timeline.locator('[data-slot="user-message-meta"] [data-slot="user-message-pending"]')
   const text = timeline.locator('[data-slot="user-message-text"]')
 
-  for (const status of ["steering", "stranded", "starting", "queued", "delivered"]) {
+  for (const status of ["steering", "stranded", "sending", "starting", "queued", "delivered"]) {
     await timeline.getByLabel("Delivery state").selectOption(status)
-    const pending = status === "steering" || status === "stranded"
+    const pending = status === "steering" || status === "stranded" || status === "sending"
 
     if (pending) await expect(indicator).toBeVisible()
 
     if (!pending) await expect(indicator).toBeHidden()
+
+    // A prompt still sending has no server row, so it offers no action until the server has it.
+    await expect(timeline.locator('[data-slot="user-message-actions"]')).toHaveCount(status === "sending" ? 0 : 1)
 
     const colors = await timeline.evaluate((element, pending) => {
       const probe = document.createElement("span")
@@ -320,6 +385,20 @@ story("renders user image, file attachment, file reference, and agent reference"
   expect(attachmentsBox).not.toBeNull()
   expect(bodyBox).not.toBeNull()
   expect(bodyBox!.y - (attachmentsBox!.y + attachmentsBox!.height)).toBe(8)
+})
+
+story("a stored image that fails to load shows a failed tile that retries", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "media" } })
+  const tiles = timeline.locator('[data-slot="user-message-attachment"]')
+
+  await expect(timeline.getByAltText("ready.svg")).toBeVisible()
+  // A failed read used to keep the loading placeholder forever.
+  const failed = tiles.first()
+  await expect(failed.getByRole("img", { name: "Unable to load image." })).toBeVisible()
+  await expect(failed).not.toHaveAttribute("data-placeholder")
+
+  await failed.click()
+  await expect(timeline.getByAltText("flaky.svg")).toBeVisible()
 })
 
 story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {

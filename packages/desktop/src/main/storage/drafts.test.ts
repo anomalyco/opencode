@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test"
 import { sql } from "drizzle-orm"
 import { openDatabase } from "./database"
-import { blobGrace, createDraftStore } from "./drafts"
-
-const collectInterval = 60_000
+import { BLOB_GRACE_MS, COLLECT_INTERVAL_MS } from "./draft-gc-machine"
+import { createDraftStore } from "./drafts"
 
 const start = Date.UTC(2026, 6, 1)
 
@@ -46,7 +45,7 @@ describe("draft store", () => {
     expect(second.getBlob(unused)).toEqual(new Uint8Array([4, 5, 6]))
     second.close()
     // ...and gone once the grace has passed.
-    clock(blobGrace + 1)
+    clock(BLOB_GRACE_MS + 1)
     const third = createDraftStore(database.db, { collectDelay: 0 })
     await new Promise((resolve) => setTimeout(resolve, 5))
     expect(third.getBlob(used)).toEqual(new Uint8Array([1, 2, 3]))
@@ -71,7 +70,7 @@ describe("draft store", () => {
     drafts.flush()
     expect(drafts.getBlob(b)).not.toBeNull()
     // Past the grace period and still unreferenced: collected. Referenced chunks stay.
-    clock(120_000 + blobGrace + 1)
+    clock(120_000 + BLOB_GRACE_MS + 1)
     drafts.putBlob(new TextEncoder().encode("chunk e"))
     drafts.set("other", "{}")
     drafts.flush()
@@ -91,10 +90,10 @@ describe("draft store", () => {
     drafts.set("doc", text(b))
     drafts.flush()
     // Long after, undo republishes A from the renderer cache with no upload. The write touches A.
-    clock(blobGrace - 1)
+    clock(BLOB_GRACE_MS - 1)
     drafts.set("doc", text(a))
     drafts.flush()
-    clock(blobGrace + collectInterval)
+    clock(BLOB_GRACE_MS + COLLECT_INTERVAL_MS)
     drafts.putBlob(new TextEncoder().encode("unrelated"))
     drafts.set("other", "{}")
     drafts.flush()
@@ -134,7 +133,7 @@ describe("draft store", () => {
     drafts.putBlob(new TextEncoder().encode("old"))
     drafts.set("other", JSON.stringify({ n: 1 }))
     drafts.flush()
-    clock(collectInterval + 1)
+    clock(COLLECT_INTERVAL_MS + 1)
     // The renderer uploads first and saves the referencing document up to a second later.
     const image = drafts.putBlob(new Uint8Array([1, 2, 3]))
     drafts.set("other", JSON.stringify({ n: 2 }))
@@ -143,5 +142,59 @@ describe("draft store", () => {
     drafts.set("doc", JSON.stringify({ prompt: [{ type: "image", blob: { id: image } }] }))
     drafts.flush()
     expect(drafts.getBlob(image)).not.toBeNull()
+  })
+
+  const withImage = () => {
+    const database = openDatabase(":memory:")
+    const drafts = createDraftStore(database.db)
+    const image = drafts.putBlob(new Uint8Array([1, 2, 3]))
+    drafts.set("doc", JSON.stringify({ prompt: [{ type: "image", blob: { id: image } }] }))
+    drafts.flush()
+
+    return { drafts, image }
+  }
+
+  test("a draft deleted after a sweep that kept its image referenced has the image collected without an upload", () => {
+    const app = withImage()
+    clock(COLLECT_INTERVAL_MS + 1)
+    app.drafts.set("other", "{}")
+    app.drafts.flush()
+    clock(COLLECT_INTERVAL_MS + 1 + BLOB_GRACE_MS + 1)
+    app.drafts.set("doc", null)
+    app.drafts.flush()
+
+    expect(app.drafts.getBlob(app.image)).toBeNull()
+    app.drafts.close()
+  })
+
+  test("an image a sweep kept inside the grace period is collected once the grace passes", () => {
+    const app = withImage()
+    clock(COLLECT_INTERVAL_MS + 1)
+    app.drafts.set("doc", null)
+    app.drafts.flush()
+    expect(app.drafts.getBlob(app.image)).not.toBeNull()
+    // Only plain-text drafts change afterwards.
+    clock(BLOB_GRACE_MS + 1)
+    app.drafts.set("other", "plain")
+    app.drafts.flush()
+
+    expect(app.drafts.getBlob(app.image)).toBeNull()
+    app.drafts.close()
+  })
+
+  test("a failed sweep is reported once and does not fail the committed draft write", () => {
+    const database = openDatabase(":memory:")
+    const errors: unknown[] = []
+    const drafts = createDraftStore(database.db, { onError: (error) => errors.push(error) })
+    drafts.putBlob(new Uint8Array([1]))
+    database.db.run(sql`CREATE TRIGGER refuse BEFORE DELETE ON blob BEGIN SELECT RAISE(ABORT, 'sweep refused'); END`)
+    clock(BLOB_GRACE_MS + 1)
+    drafts.set("doc", "{}")
+    drafts.flush()
+    drafts.flush()
+
+    expect(errors).toHaveLength(1)
+    expect(database.db.all(sql`SELECT key FROM document`)).toEqual([{ key: "doc" }])
+    drafts.close()
   })
 })

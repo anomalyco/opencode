@@ -72,6 +72,8 @@ const source = {
   "ui.sessionTurn.diffs.showAll": "Show all",
   "ui.sessionTurn.diffs.showLess": "Show less",
   "ui.sessionTurn.diffs.more": "+{{count}} more files",
+  "ui.sessionTurn.diffs.failed": "Diff unavailable",
+  "ui.sessionTurn.diffs.retry": "Retry",
 
   "ui.sessionTurn.retry.retrying": "retrying",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
@@ -151,6 +153,7 @@ const source = {
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
+  "ui.list.failed": "Failed to load results",
   "ui.list.clearFilter": "Clear filter",
   "ui.list.emptyWithFilter.prefix": "No results for",
   "ui.list.emptyWithFilter.suffix": "",
@@ -294,6 +297,7 @@ const source = {
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.duration.hoursMinutes": "{{hours}}h {{minutes}}m",
+  "ui.message.tokensPerSecond": "{{value}} tok/s",
   "ui.message.interrupted": "Interrupted",
   "ui.message.modelVariant": "{{model}} ({{variant}})",
   "ui.message.time.justNow": "Just now",

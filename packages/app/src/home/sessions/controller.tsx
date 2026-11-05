@@ -2,25 +2,55 @@ import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
-import { useQuery, useQueryClient } from "@tanstack/solid-query"
-import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
+import { prefersReducedMotion } from "@opencode/ui/motion"
+import { hashKey, onlineManager, useQueryClient } from "@tanstack/solid-query"
+import {
+  type Accessor,
+  createEffect,
+  createMemo,
+  createSignal,
+  type JSX,
+  onCleanup,
+  startTransition,
+  untrack,
+} from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
 import { HOME_SESSION_LIMIT, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
 import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
+import { useGlobal } from "@/runtime/server/runtime"
 import { sessionHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { pathKey } from "@/workspaces/path-key"
-import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { createSessionExporter } from "@/session/commands/export-session"
+import {
+  createSessionDeleteState,
+  selectSessionDeleteView,
+  SESSION_DELETE_TIMEOUT_MS,
+  transitionSessionDelete,
+  type SessionDeleteEffect,
+  type SessionDeleteEvent,
+} from "@/session/delete-machine"
 import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import { homeSessionsQuery } from "./queries"
+import {
+  HOME_SESSIONS_STALE_MS,
+  INITIAL_HOME_SESSIONS_LOAD_STATE,
+  selectHomeSessionsListView,
+  selectHomeSessionsSearchLoading,
+  transitionHomeSessionsLoad,
+  type HomeSessionsLoadEffect,
+  type HomeSessionsLoadEvent,
+  type HomeSessionsTarget,
+  type HomeSessionsTimer,
+} from "./load-machine"
 import type { HomeController } from "../model"
 import { buildHomeSessionRecords, homeProjectForSession, homeSessionLocation, type HomeSessionRecord } from "./records"
 
@@ -41,6 +71,7 @@ export function createHomeSessionsController(home: HomeController) {
   const language = useLanguage()
   const platform = usePlatform()
   const queryClient = useQueryClient()
+  const global = useGlobal()
 
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -51,14 +82,151 @@ export function createHomeSessionsController(home: HomeController) {
     return project ? directories(project) : [selected]
   })
 
-  const sessionLoad = useQuery(() => {
-    const ctx = home.server.focusedContext()
-    const conn = home.server.focused()
+  const [load, setLoad] = createSignal(INITIAL_HOME_SESSIONS_LOAD_STATE)
+  // Bumped when the shared index cache changes, so lists written by the sidebar, a rename or a delete show here.
+  const [cacheVersion, setCacheVersion] = createSignal(0)
+  const loadTimers: Partial<Record<HomeSessionsTimer, ReturnType<typeof setTimeout>>> = {}
+
+  // Only a change of server or of its connection retargets the list. The cache is keyed by the connection itself.
+  const focus = createMemo(
+    () => {
+      const conn = home.server.focused()
+
+      if (!conn) return
+      const key = ServerConnection.key(conn)
+
+      return { conn, key, connection: homeSessionsConnection(conn, key) }
+    },
+    undefined,
+    { equals: (a, b) => a?.conn === b?.conn && a?.connection === b?.connection },
+  )
+
+  function homeSessionsConnection(
+    conn: ServerConnection.Any,
+    key: ServerConnection.Key,
+  ): HomeSessionsTarget["connection"] {
+    if (home.server.focusedContext()?.sdk.connection.status() === "connected") return "connected"
+    const health = home.server.health(conn)
+
+    if (global.serverSignedOut(key) || health?.type === "unauthorized" || health?.type === "auth") return "auth"
+
+    if (health?.type === "incompatible") return "incompatible"
+
+    if (health?.type === "unreachable" || health?.type === "stopped") return "offline"
+
+    return "connecting"
+  }
+
+  function homeSessionsTarget(current = focus()): HomeSessionsTarget | undefined {
+    if (!current) return
+    const cache = queryClient.getQueryState<SessionInfo[]>(["home-sessions", current.conn])
+    const cached = cache?.data !== undefined
 
     return {
-      ...homeSessionsQuery(conn, ctx),
-      enabled: !!ctx && ctx.sdk.connection.status() === "connected",
+      server: current.key,
+      connection: current.connection,
+      cached,
+      stale: !cached || cache.isInvalidated || Date.now() - cache.dataUpdatedAt >= HOME_SESSIONS_STALE_MS,
     }
+  }
+
+  // Effects run untracked: a dispatch from an effect must not subscribe it to the machine or the server list.
+  const dispatchLoad = (event: HomeSessionsLoadEvent) =>
+    untrack(() => {
+      const previous = load()
+      const next = transitionHomeSessionsLoad(previous, event)
+
+      if (next.state !== previous) setLoad(next.state)
+      next.effects.forEach(runLoadEffect)
+    })
+
+  function runLoadEffect(effect: HomeSessionsLoadEffect) {
+    if (effect.type === "timer.start") {
+      clearTimeout(loadTimers[effect.timer])
+      loadTimers[effect.timer] = setTimeout(() => dispatchLoad(effect.event), effect.delayMs)
+
+      return
+    }
+
+    if (effect.type === "timer.stop") {
+      clearTimeout(loadTimers[effect.timer])
+      loadTimers[effect.timer] = undefined
+
+      return
+    }
+
+    // A probe that finds the server still away leaves the connection unchanged, so report the target again.
+    if (effect.type === "probe.servers") {
+      void global.servers.retry().then(() => dispatchLoad({ type: "context.changed", target: homeSessionsTarget() }))
+
+      return
+    }
+
+    const conn = home.server.list().find((item) => ServerConnection.key(item) === effect.server)
+
+    if (effect.type === "fetch.cancel") {
+      if (conn) void queryClient.cancelQueries({ queryKey: ["home-sessions", conn], exact: true })
+
+      return
+    }
+
+    const attempt = effect.attempt
+    const ctx = conn ? home.server.context(conn) : undefined
+
+    if (!conn || !ctx) {
+      dispatchLoad({ type: "fetch.failed", attempt, message: language.t("common.requestFailed") })
+
+      return
+    }
+
+    // Through the shared query, so a fetch the sidebar already started is joined and the result lands in its cache.
+    void queryClient.fetchQuery({ ...homeSessionsQuery(conn, ctx), staleTime: 0 }).then(
+      () => dispatchLoad({ type: "fetch.succeeded", attempt, reducedMotion: prefersReducedMotion() }),
+      (cause) =>
+        dispatchLoad({
+          type: "fetch.failed",
+          attempt,
+          message: errorMessage(cause, language.t("common.requestFailed")),
+        }),
+    )
+  }
+
+  createEffect(() => {
+    const current = focus()
+    untrack(() => dispatchLoad({ type: "context.changed", target: homeSessionsTarget(current) }))
+  })
+
+  // The query refetched on invalidation and on reconnect while stale; the machine keeps both.
+  onCleanup(
+    queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || event.query.queryKey[0] !== "home-sessions") return
+      setCacheVersion((version) => version + 1)
+
+      if (event.action.type !== "invalidate") return
+      const current = untrack(focus)
+
+      if (current?.connection !== "connected" || event.query.queryHash !== hashKey(["home-sessions", current.conn]))
+        return
+      dispatchLoad({ type: "refresh", server: current.key })
+    }),
+  )
+  onCleanup(
+    onlineManager.subscribe((online) => {
+      const target = untrack(homeSessionsTarget)
+
+      if (!online || target?.connection !== "connected" || !target.stale) return
+      dispatchLoad({ type: "refresh", server: target.server })
+    }),
+  )
+  onCleanup(() => dispatchLoad({ type: "disposed" }))
+
+  const fetchedSessions = createMemo(() => {
+    // The machine settles after the cache write it reports, so a new phase always reads the new list.
+    cacheVersion()
+    load()
+    const conn = home.server.focused()
+
+    return (conn && queryClient.getQueryData<SessionInfo[]>(["home-sessions", conn])) || []
   })
 
   const indexedSessions = createMemo(() => {
@@ -68,9 +236,7 @@ export function createHomeSessionsController(home: HomeController) {
     if (!ctx || !conn) return []
 
     return retainHomeSessions(
-      ctx.data.session.apply(
-        mergeHomeSessionIndex(sessionLoad.isPending ? [] : (sessionLoad.data?.() ?? []), ctx.data.session.list()),
-      ),
+      ctx.data.session.apply(mergeHomeSessionIndex(fetchedSessions(), ctx.data.session.list())),
       HOME_SESSION_LIMIT,
       Date.now(),
     )
@@ -166,7 +332,8 @@ export function createHomeSessionsController(home: HomeController) {
     },
   ])
 
-  const rename = async (server: ServerConnection.Key, session: SessionInfo, title: string) => {
+  // A save the caller cancelled still updates the list if the server took it.
+  const rename = async (server: ServerConnection.Key, session: SessionInfo, title: string, signal?: AbortSignal) => {
     const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
     const ctx = conn ? home.server.context(conn) : undefined
 
@@ -176,7 +343,7 @@ export function createHomeSessionsController(home: HomeController) {
     if (!next || next === sessionLabel(session)) return true
 
     return ctx.sdk.api.session
-      .update({ sessionID: session.id, title: next })
+      .update({ sessionID: session.id, title: next }, { signal })
       .then(() => {
         ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title: next })
         // Rename advances time.updated server-side; re-sync the canonical
@@ -190,6 +357,7 @@ export function createHomeSessionsController(home: HomeController) {
         return true
       })
       .catch((cause) => {
+        if (signal?.aborted) return false
         showToast({
           title: language.t("common.requestFailed"),
           description: errorMessage(cause, language.t("common.requestFailed")),
@@ -199,77 +367,93 @@ export function createHomeSessionsController(home: HomeController) {
       })
   }
 
-  const exportSession = async (server: ServerConnection.Key, session: SessionInfo) => {
+  const exporter = createSessionExporter()
+
+  const serverContext = (server: ServerConnection.Key) => {
     const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
     const ctx = conn ? home.server.context(conn) : undefined
 
-    if (!ctx) return
-
-    try {
-      const data = await fetchSessionExport({ sessionID: session.id, api: ctx.sdk.api })
-      const filename = sessionExportFilename(data.info)
-
-      if (!(await saveSessionExport(filename, data, platform))) return
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("toast.session.export.success.title"),
-        description: language.t("toast.session.export.success.description", { filename }),
-      })
-    } catch (cause) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.export.failed.title"),
-        description: cause instanceof Error ? cause.message : language.t("toast.session.export.failed.description"),
-      })
-    }
-  }
-
-  const remove = async (server: ServerConnection.Key, session: SessionInfo) => {
-    const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
-    const ctx = conn ? home.server.context(conn) : undefined
-
-    if (!conn || !ctx) return false
-    const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
-    const rows = homeRowTops()
-    // session.deleted clears the local hide mutation before the refetch lands,
-    // so the cached index must drop the row now or it briefly reappears.
-    queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
-      current?.filter((item) => item.id !== session.id),
-    )
-    const request = ctx.data.session.remove(session.id)
-    animateHomeRowsUp(rows)
-
-    return request
-      .then(() => {
-        notifySessionTabsRemoved({
-          server: ServerConnection.key(conn),
-          directory: session.location.directory,
-          sessionIDs: ids,
-        })
-
-        return true
-      })
-      .catch((cause) => {
-        showToast({
-          title: language.t("session.delete.failed.title"),
-          description: errorMessage(cause, language.t("session.delete.failed.title")),
-        })
-
-        return false
-      })
-      .finally(() => {
-        void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
-      })
+    return conn && ctx ? { conn, ctx } : undefined
   }
 
   function DeleteDialog(props: { server: ServerConnection.Key; session: SessionInfo }) {
     const name = () => sessionTitle(props.session.title) ?? language.t("command.session.new")
+    const [deleteState, setDeleteState] = createSignal(createSessionDeleteState(props.session.id))
+    let timer: ReturnType<typeof setTimeout> | undefined
 
-    const confirm = async () => {
-      dialog.close()
-      await remove(props.server, props.session)
+    const dispatch = (event: SessionDeleteEvent) => {
+      const next = transitionSessionDelete(untrack(deleteState), event)
+
+      if (next.state !== untrack(deleteState)) setDeleteState(next.state)
+      next.effects.forEach(run)
     }
+
+    // Read when the user confirms, before the delete hides the session and its children from the list.
+    const deleteTarget = () => {
+      const ctx = serverContext(props.server)?.ctx
+
+      return ctx ? { removedIDs: sessionTreeIDs(ctx.data.session.list(), props.session.id) } : undefined
+    }
+
+    function run(effect: SessionDeleteEffect) {
+      if (effect.type === "delete.run") {
+        const target = serverContext(props.server)
+
+        if (!target) return dispatch({ type: "delete.failed", attempt: effect.attempt, cause: undefined })
+        const rows = homeRowTops()
+        // The data layer hides the session at once, keeps it hidden after session.deleted, and shows it again if the
+        // request fails, so the cached index drops it only once the server has.
+        const request = Promise.try(() => target.ctx.data.session.remove(effect.sessionID))
+        animateHomeRowsUp(rows)
+        void request
+          .finally(() => void queryClient.invalidateQueries({ queryKey: ["home-sessions", target.conn], exact: true }))
+          .then(
+            () => dispatch({ type: "delete.succeeded", attempt: effect.attempt, target: effect.target }),
+            (cause: unknown) => dispatch({ type: "delete.failed", attempt: effect.attempt, cause }),
+          )
+
+        return
+      }
+
+      if (effect.type === "dialog.close") return dialog.close()
+
+      if (effect.type === "session.removed") {
+        const conn = serverContext(props.server)?.conn
+
+        if (conn)
+          queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+            current?.filter((item) => !effect.target.removedIDs.includes(item.id)),
+          )
+        notifySessionTabsRemoved({
+          server: props.server,
+          directory: props.session.location.directory,
+          sessionIDs: [...effect.target.removedIDs],
+        })
+
+        return
+      }
+
+      if (effect.type === "toast.delete-failed")
+        return showToast({
+          title: language.t("session.delete.failed.title"),
+          description:
+            effect.cause === undefined
+              ? undefined
+              : errorMessage(effect.cause, language.t("session.delete.failed.title")),
+        })
+
+      clearTimeout(timer)
+      timer = undefined
+
+      if (effect.type === "timer.cancel") return
+      timer = setTimeout(
+        () => dispatch({ type: "delete.timed-out", attempt: effect.attempt }),
+        SESSION_DELETE_TIMEOUT_MS,
+      )
+    }
+
+    onCleanup(() => dispatch({ type: "disposed" }))
+    const busy = () => selectSessionDeleteView(deleteState()).busy
 
     return (
       <Dialog fit>
@@ -280,10 +464,14 @@ export function createHomeSessionsController(home: HomeController) {
           />
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+          <Button variant="ghost" autofocus disabled={busy()} onClick={() => dispatch({ type: "cancel.requested" })}>
             {language.t("common.cancel")}
           </Button>
-          <Button variant="danger" onClick={confirm}>
+          <Button
+            variant="danger"
+            disabled={busy()}
+            onClick={() => dispatch({ type: "confirm.requested", target: deleteTarget() })}
+          >
             {language.t("session.delete.button")}
           </Button>
         </DialogFooter>
@@ -298,7 +486,9 @@ export function createHomeSessionsController(home: HomeController) {
     data: {
       records,
       groups,
-      loading: () => sessionLoad.isPending,
+      listView: createMemo(() => selectHomeSessionsListView(load(), groups().length > 0)),
+      loading: () => selectHomeSessionsSearchLoading(load()),
+      retry: () => dispatchLoad({ type: "retry" }),
       searchRecords: allRecords,
     },
     platform: {
@@ -312,11 +502,11 @@ export function createHomeSessionsController(home: HomeController) {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
-      lookup: async (sessionID: string) => {
+      lookup: async (sessionID: string, signal?: AbortSignal) => {
         const ctx = home.server.focusedContext()
 
         if (!ctx) return
-        const result = await ctx.sdk.api.session.get({ sessionID })
+        const result = await ctx.sdk.api.session.get({ sessionID }, { signal })
 
         if (result.time.archived) return
 
@@ -370,7 +560,10 @@ export function createHomeSessionsController(home: HomeController) {
         })
       },
       rename,
-      export: exportSession,
+      export: (server: ServerConnection.Key, session: SessionInfo) =>
+        exporter.export({ server, sessionID: session.id }),
+      exporting: (server: ServerConnection.Key, session: SessionInfo) =>
+        exporter.exporting({ server, sessionID: session.id }),
       showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
         dialog.show(() => <DeleteDialog server={server} session={session} />),
     },
@@ -405,6 +598,7 @@ function animateHomeRowsUp(tops: Map<string | undefined, number>) {
   document.querySelectorAll<HTMLElement>(HOME_ROW_SELECTOR).forEach((row) => {
     const before = tops.get(row.dataset.sessionId)
     const delta = before === undefined ? 0 : before - row.getBoundingClientRect().top
+
     if (delta === 0) return
     row.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
       duration: 180,
@@ -426,8 +620,10 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
+
   const day = (record: HomeSessionRecord) =>
     localDay(new Date(record.session.time.updated ?? record.session.time.created))
+
   const todaySessions = records.filter((record) => day(record) === today)
   const yesterdaySessions = records.filter((record) => day(record) === yesterday)
   const olderSessions = records.filter((record) => day(record) !== today && day(record) !== yesterday)

@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { captureConsoleWarnings } from "../utils/command-palette"
@@ -92,6 +93,35 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
   await expect(view.editor).toBeFocused()
 })
 
+test("Local shows and targets the main checkout when the draft opened in a worktree", async ({ page }) => {
+  const root = "C:/OpenCode/LocalFromWorktree"
+
+  const worktree = `${root}/.worktrees/quiet-river`
+
+  const created: unknown[] = []
+
+  const view = await openDraft(page, {
+    name: "LocalFromWorktree",
+    project: { sandboxes: [worktree] },
+    worktrees: () => [{ directory: root }, { directory: worktree, strategy: "git" }],
+    vcs: (directory) =>
+      directory === worktree
+        ? { current: "worktree-branch", default: "dev" }
+        : { current: "checkout-branch", default: "dev" },
+    onSessionCreate: (body) => void created.push(body.location),
+    seed: { tabs: [{ draft: "draft_localfromworktree", directory: worktree }] },
+  })
+
+  const screen = page.locator('[data-component="new-session"]')
+
+  await expect(newSessionWorktree(page)).toHaveText("Local")
+  await expect(screen.getByText("checkout-branch", { exact: true })).toBeVisible()
+  await expect(screen.getByText("worktree-branch", { exact: true })).toHaveCount(0)
+  await view.editor.fill("Run in the main checkout")
+  await submit(page).click()
+  await expect.poll(() => created).toEqual([{ directory: root }])
+})
+
 for (const binding of ["custom", "none"]) {
   test(`the picker tooltips reflect ${binding} shortcuts`, async ({ page }) => {
     const view = await openDraft(page, {
@@ -180,19 +210,32 @@ test("picker scrollbars overlay full-width rows and support dragging", async ({ 
   const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
 
   await menu.hover()
+  await expect(thumb).toHaveCSS("opacity", "0")
+  await page.mouse.wheel(0, 100)
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await expect(thumb).toHaveCSS("opacity", "1")
-  await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
+  await expect(thumb).toHaveCSS("opacity", "0")
+
+  await page.mouse.wheel(0, 100)
+  await expect(thumb).toHaveCSS("opacity", "1")
+  await thumb.hover()
+  await expect(menu).not.toHaveAttribute("data-scrolling")
+  await expect(thumb).toHaveCSS("opacity", "1")
 
   const track = (await menu.boundingBox())!
 
   const handle = (await thumb.boundingBox())!
 
-  await thumb.hover()
   await page.mouse.down()
   await page.mouse.move(handle.x + handle.width / 2, track.y + track.height - 4)
   await page.mouse.up()
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop > 0)).toBe(true)
   await expect(page.getByRole("option", { name: /^worktree-23 / })).toBeInViewport()
+  await thumb.hover()
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, track.y + 4)
+  await page.mouse.up()
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBe(0)
 })
 
 for (const row of [
@@ -208,12 +251,12 @@ for (const row of [
   },
 ]) {
   test(`the location path keeps its start and final two segments on ${row.name}`, async ({ page }) => {
-    const warnings = captureConsoleWarnings(page)
     await page.setViewportSize({ width: 600, height: 700 })
     await openDraft(page, { name: "A project with a long name", directory: row.directory })
     const path = page.locator('[data-slot="new-session-location-path"]')
     await expect(path).toHaveText(row.pattern)
     await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    const warnings = captureConsoleWarnings(page)
     await path.hover()
     await expect(page.getByRole("tooltip")).toHaveText(row.directory)
     expect(warnings.filter((warning) => warning.includes("computations created outside"))).toEqual([])
@@ -402,7 +445,6 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
 })
 
 test("the branch shortcut chooses a base branch and stays inactive on Local", async ({ page }) => {
-  const warnings = captureConsoleWarnings(page)
   const view = await openWorktreeDraft(page, {
     name: "BranchShortcut",
     vcs: () => ({ current: "dev", default: "dev" }),
@@ -417,6 +459,7 @@ test("the branch shortcut chooses a base branch and stays inactive on Local", as
 
   const search = page.getByRole("combobox", { name: "Search branches", exact: true })
 
+  const warnings = captureConsoleWarnings(page)
   await base.hover()
   await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
   await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
@@ -690,6 +733,46 @@ test("a pending worktree session shows immediately, keeps its draft, and hands o
   await expect(label).toHaveText("Generated session title")
 })
 
+test("a variant picked on a worktree draft stays with the session it starts, even while another tab is open", async ({
+  page,
+}) => {
+  const mock = await openWorktreeDraft(page, {
+    ...pendingDraft,
+    provider: provider({ id: "pending-model", name: "Pending Model", variants: { balanced: {}, high: {} } }),
+  })
+
+  const composer = page.locator('[data-component="composer"]')
+  const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+
+  // The Default variant control shows only while the pointer is over the composer.
+  await composer.hover()
+  await variant.click()
+  await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
+  await expect(variant).toHaveText("high")
+  const pending = await submitPending(page, mock)
+
+  // The session starts while another tab shows, so nothing shows the worktree when its selection is handed over.
+  await tabLink(page, otherID).click()
+  await expectPath(page, sessionHref(otherID))
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+  await expect.poll(() => mock.prompts.map((prompt) => prompt.sessionID)).toEqual([pending.sessionID])
+  expect(mock.creates).toEqual([
+    expect.objectContaining({
+      id: pending.sessionID,
+      location: { directory: workspace },
+      model: expect.objectContaining({ id: "pending-model", variant: "high" }),
+    }),
+  ])
+
+  await tabLink(page, pending.sessionID).click()
+  await expect(page).toHaveURL(pending.url)
+  await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
+  await expect(variant).toHaveText("high")
+  await page.reload()
+  await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Pending Model")
+  await expect(variant).toHaveText("high")
+})
+
 test("a pending worktree session keeps Session as its mobile title until the generated title arrives", async ({
   page,
 }) => {
@@ -782,6 +865,45 @@ test("the title and message stay stable through worktree creation", async ({ pag
   await expect.poll(() => mock.calls).toEqual(["worktree", "session", "prompt"])
 })
 
+test("the created session's composer keeps focus and a caret placed mid-draft", async ({ page }) => {
+  const mock = await openWorktreeDraft(page, pendingDraft)
+  const pending = await submitPending(page, mock)
+  await draftFollowUp(page)
+  // The start of the second line: not where focusing the editor alone would put the caret.
+  await editor(page).press("ControlOrMeta+End")
+  await editor(page).press("Home")
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect(page.locator("[data-session-title]").getByRole("heading", { level: 1 })).toHaveText(
+    "Created workspace session",
+  )
+  await expect(pending.shimmer).toHaveCount(0)
+  await expect(editor(page)).toHaveText(followUp)
+  await expect(editor(page)).toBeFocused()
+  // Types into whatever holds focus, without focusing the editor again.
+  await page.keyboard.type("Also: ")
+  await expect(editor(page)).toHaveText(followUp.replace("\n", "\nAlso: "))
+})
+
+test("a user who leaves the pending composer keeps focus there once the session is created", async ({ page }) => {
+  const mock = await openWorktreeDraft(page, pendingDraft)
+  const pending = await submitPending(page, mock)
+  await draftFollowUp(page)
+  await pending.shimmer.click()
+  await expect(editor(page)).not.toBeFocused()
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect(page.locator("[data-session-title]").getByRole("heading", { level: 1 })).toHaveText(
+    "Created workspace session",
+  )
+  await expect(pending.shimmer).toHaveCount(0)
+  await expect(editor(page)).toHaveText(followUp)
+  await expect(submit(page)).toBeEnabled()
+  await expect(editor(page)).not.toBeFocused()
+  await expect.poll(() => mock.calls).toEqual(["worktree", "session", "prompt"])
+  await expect(editor(page)).not.toBeFocused()
+})
+
 for (const row of [
   { failure: "worktree", followUp: true, calls: ["worktree"] },
   { failure: "session", followUp: true, calls: ["worktree", "session"] },
@@ -851,6 +973,132 @@ test("retains the draft and reuses the created workspace after session creation 
   expect(mock.calls).toEqual(["worktree", "session", "session", "prompt"])
   await expectPath(page, sessionHref(String(mock.creates[1]!.id)))
   await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
+})
+
+test("keeps the draft on the main checkout when session creation fails, then retries from it", async ({ page }) => {
+  const creates: string[] = []
+
+  const view = await openDraft(page, {
+    ...pendingDraft,
+    onSessionCreate: (body, attempt) => {
+      creates.push(String(body.id))
+
+      return failFirstCreate(body, attempt)
+    },
+  })
+
+  await view.editor.fill(text)
+  await submit(page).click()
+
+  await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
+  await expectPath(page, draftHref(draftID))
+  await expect(view.editor).toHaveText(text)
+  await expect(submit(page)).toBeEnabled()
+  expect(creates).toHaveLength(1)
+  await expect(tabLink(page, creates[0]!)).toHaveCount(0)
+  await expect(page.locator('[data-component="user-message"]')).toHaveCount(0)
+
+  await submit(page).click()
+
+  await expect.poll(() => creates.length).toBe(2)
+  await expectPath(page, sessionHref(creates[1]!))
+  await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
+})
+
+// Before, a create whose response stalled left the pending tab on "Starting session" with the prompt locked.
+test("a stalled session create returns to the draft, and the Session it creates later is deleted unused", async ({
+  page,
+}) => {
+  const held = Promise.withResolvers<void>()
+  const creates: string[] = []
+  const prompts: string[] = []
+  await page.clock.install()
+
+  const view = await openDraft(page, {
+    ...pendingDraft,
+    onPrompt: (prompt) => void prompts.push(prompt.sessionID),
+    onSessionCreate: async (body, attempt) => {
+      creates.push(String(body.id))
+
+      if (attempt === 1) await held.promise
+    },
+  })
+
+  await view.editor.fill(text)
+  await submit(page).click()
+  await expect.poll(() => creates.length).toBe(1)
+  const stalled = creates[0]!
+  await expectPath(page, sessionHref(stalled))
+  await expect(page.locator('[data-component="session-preparing"]').getByRole("status")).toContainText(
+    "Starting session",
+  )
+
+  // The create phase's time limit, below the request queue's 60 s wait for response headers.
+  await page.clock.fastForward(30_000)
+
+  await expectPath(page, draftHref(draftID))
+  await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("The server took too long to respond. Send again to retry.", { exact: true }),
+  ).toBeVisible()
+  await expect(view.editor).toHaveText(text)
+  await expect(submit(page)).toBeEnabled()
+  await expect(tabLink(page, stalled)).toHaveCount(0)
+
+  const removed = page.waitForRequest(
+    (request) => request.method() === "DELETE" && new URL(request.url()).pathname === `/api/session/${stalled}`,
+  )
+
+  held.resolve()
+  await removed
+
+  await submit(page).click()
+
+  await expect.poll(() => creates.length).toBe(2)
+  await expect.poll(() => prompts).toEqual([creates[1]])
+  await expectPath(page, sessionHref(creates[1]!))
+  await expect(page.locator('[data-component="user-message"] [data-slot="user-message-text"]')).toHaveText(text)
+})
+
+test("a new session's first prompt stays once its missed admission echo resyncs the session", async ({ page }) => {
+  const messages: SessionMessageInfo[] = []
+  const created: string[] = []
+
+  // The mock admits the prompt without its session.inbox.enqueued echo.
+  const view = await openDraft(page, {
+    ...pendingDraft,
+    pageMessages: () => ({ items: messages }),
+    onSessionCreate: (body) => void created.push(String(body.id)),
+    seed: { settings: { general: { timelineDetail: timelinePresets[0].value } } },
+  })
+
+  await view.editor.fill(text)
+  await submit(page).click()
+  await expect.poll(() => created).toHaveLength(1)
+  const sessionID = created[0]!
+  await expectPath(page, sessionHref(sessionID))
+  const prompt = page.locator('[data-component="user-message"] [data-slot="user-message-text"]')
+  await expect(prompt).toHaveText([text])
+
+  // Another client switches the agent. Only its own notice shows: the admitted prompt no longer projects one.
+  messages.push({
+    id: "msg_first_agent_plan",
+    type: "agent-switched",
+    agent: "plan",
+    previous: "build",
+    time: { created: T0 },
+  })
+  await view.push([
+    {
+      id: "evt_first_agent_plan",
+      type: "session.agent.selected",
+      created: T0,
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: { sessionID, agent: "plan" },
+    },
+  ])
+  await expect(page.locator('[data-slot="session-timeline-notice"]')).toHaveText([/^Agent changed\s*Build → Plan$/])
+  await expect(prompt).toHaveText([text])
 })
 
 test("restores the draft after closing and revisiting a pending session that fails", async ({ page }) => {
@@ -1078,6 +1326,17 @@ test("the location dialog separates added projects from server projects and tags
   await search.fill("no-worktree-matches")
   await expect(options).toHaveCount(0)
   await expect(dialog.getByRole("separator")).toHaveCount(0)
+  // Open project from the worktree step returns to that step with its search, not to the projects.
+  const open = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+o" : "Control+o"
+  await search.fill("open")
+  await page.keyboard.press(open)
+  await expect(back).toHaveText("Servers")
+  await expect(search).toHaveValue("")
+  await page.keyboard.press("Escape")
+  await expect(back).toHaveText("Run session in")
+  await expect(search).toHaveValue("open")
+  await expect(options.locator(".command-palette-title")).toHaveText(["opencode", "New worktree", "opencode-beta"])
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await search.fill("")
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press("Backspace")
@@ -1089,7 +1348,7 @@ test("the location dialog separates added projects from server projects and tags
   await expect(rows.nth(0)).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press("ArrowUp")
   await expect(options.nth(3)).toHaveAttribute("aria-selected", "true")
-  await page.keyboard.press((await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+o" : "Control+o")
+  await page.keyboard.press(open)
   await expect(back).toHaveText("Servers")
   // The server the app runs beside shows its hostname and "This computer" instead of its address.
   await expect(options).toHaveText(["hailmaryThis computer", "apollo"])

@@ -290,6 +290,20 @@ test.describe("location", () => {
       await header.screenshot({ path: test.info().outputPath(`location-${state.width}.png`) })
     }
 
+    // Find takes room from the title, so the usage details give way, and come back once Find closes.
+    const search = header.locator('[data-component="timeline-search-bar"] input')
+    await row.evaluate((element) => (element.style.inlineSize = "680px"))
+    await expect(usage).toBeVisible()
+    await page.keyboard.press("ControlOrMeta+f")
+    await expect(search).toBeFocused()
+    await expect(usageMenu).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-open.png") })
+    await search.press("Escape")
+    await expect(search).toHaveCount(0)
+    await expect(project).toBeVisible()
+    await expect(usage).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-closed.png") })
+
     await row.evaluate((element) => element.style.removeProperty("inline-size"))
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
@@ -494,6 +508,40 @@ test.describe("location", () => {
       )
     })
   }
+
+  test("an app launch that never answers releases the Open in controls", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.clock.install()
+
+    const mock = await mockWorkspace(page, {
+      ...workspace,
+      seed: {
+        storage: { ...reviewTabs(worktree, "ses_location"), "opencode.global.dat:plugin.file.app": { app: "vscode" } },
+      },
+    })
+
+    // An editor that does not detach keeps its launch running until the user closes it.
+    await page.goto(
+      `/e2e/utils/windows-menu.html?${new URLSearchParams({
+        server: mock.server,
+        path: sessionHref("ses_location", "sidecar"),
+        os: "macos",
+        openApps: "1",
+        holdOpen: "1",
+      })}`,
+    )
+    await expectSessionTitle(page, "Location session")
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
+    await open.click()
+    await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")
+    await expect(open).toBeDisabled()
+
+    await page.clock.fastForward(10_000)
+    await expect(open).toBeEnabled()
+    await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+  })
 
   test.describe("touch", () => {
     test.use({ hasTouch: true })
@@ -713,6 +761,46 @@ test.describe("revert", () => {
     await page.getByRole("button", { name: "Undo", exact: true }).click()
     await cleared
     await expect(prompt).toHaveText("Unsent draft")
+  })
+
+  test("a second /undo before the staged event rewinds one prompt further, and /redo retires the toast", async ({
+    page,
+  }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+    const { session, editor } = await openSession(page, { ...workspace, onRevertStage: (input) => staged.push(input) })
+    const prompt = page.getByRole("textbox", { name: "Prompt" })
+    const undoToast = page.getByRole("button", { name: "Undo", exact: true })
+
+    const slash = async (command: string) => {
+      await editor.press("ControlOrMeta+a")
+      await editor.press("Backspace")
+      await editor.pressSequentially(`/${command}`)
+      await expect(
+        page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]'),
+      ).toContainText(`/${command}`)
+      await editor.press("Enter")
+    }
+
+    // The mock server never sends session.revert.staged, so each step must build on the last request's result.
+    await slash("undo")
+    await expect(prompt).toHaveText("Second prompt")
+    await expect(undoToast).toBeVisible()
+    await slash("undo")
+    await expect(prompt).toHaveText("First prompt")
+    expect(staged).toEqual([
+      { sessionID: session.id, messageID: "msg_second" },
+      { sessionID: session.id, messageID: "msg_first" },
+    ])
+
+    const cleared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === `/api/session/${session.id}/revert`,
+    )
+
+    await slash("redo")
+    expect((await cleared).ok()).toBe(true)
+    await expect(undoToast).toHaveCount(0)
   })
 
   test("Undo after switching tabs restages the earlier revert in the Session it came from", async ({ page }) => {

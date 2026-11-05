@@ -3,38 +3,79 @@ import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
+import { Loader } from "@opencode/ui/loader"
+import { createMcpSignIn, type McpSignInFailure } from "@opencode/ui/mcp-sign-in"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Switch } from "@opencode/ui/switch"
+import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { TruncatedText } from "@opencode/ui/truncated-text"
-import { useMutation } from "@tanstack/solid-query"
 import {
   children,
   createMemo,
-  createResource,
   createSignal,
   createUniqueId,
   For,
   Index,
-  on,
   onCleanup,
+  onMount,
   Show,
+  untrack,
+  type Accessor,
   type Component,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, useDrawer, usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import { createKeyed, useDrawer, usePlugin, type MountedSession, type ServerRef } from "@opencode/plugin/gui"
 import { globalConfigDirectory, serviceConfigFile } from "./config-file"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { createFlyoutMotion } from "./flyout-motion"
+import {
+  configActionView,
+  initialConfigActionState,
+  transitionConfigAction,
+  type ConfigActionEffect,
+  type ConfigActionEvent,
+  type ConfigActionState,
+} from "./config-action-machine"
+import {
+  flyoutActive,
+  flyoutAnchor,
+  flyoutPane,
+  initialFlyoutState,
+  sameAnchor,
+  transitionFlyout,
+  type FlyoutAnchor,
+  type FlyoutEvent,
+  type FlyoutState,
+  type Service,
+} from "./flyout-machine"
+import {
+  initialMcpState,
+  mcpDialogView,
+  mcpRowView,
+  transitionMcp,
+  type McpEffect,
+  type McpEvent,
+  type McpServerStatus,
+  type McpState,
+} from "./mcp-machine"
+import {
+  initialServiceLoadState,
+  serviceLoadView,
+  transitionServiceLoad,
+  type ServiceLoadEffect,
+  type ServiceLoadEvent,
+  type ServiceLoadState,
+  type ServiceLoadView,
+} from "./service-load-machine"
 
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
   { type: "plugins", icon: "cube", label: "plugins" },
   { type: "skills", icon: "graduation-cap", label: "skills" },
-] as const
-
-type Service = (typeof services)[number]["type"]
+] as const satisfies readonly { type: Service; icon: string; label: string }[]
 
 type ServiceProps = {
   session: MountedSession
@@ -46,21 +87,18 @@ type ServiceProps = {
 
 /** One service's list: its load state, what its row summarises, and the list itself. */
 type ServiceSource = {
-  readonly loading: boolean
-  readonly ready: boolean
-  readonly error: boolean
+  readonly view: ServiceLoadView<unknown>
   readonly count: number
   readonly failed: boolean
+  /** Loads the list again when it opens; joins a load that runs. */
+  refresh: () => void
   retry: () => void
   Body: Component
   /** The actions under the list, outside its scroll box so they stay in view. */
   Footer: Component
 }
 
-// How long a pointer may rest inside the safe triangle before the row under it takes over.
-const AIM_TIMEOUT = 100
-
-export function SessionServerPanel(props: ServiceProps & { mobile?: boolean }) {
+export function SessionServerPanel(props: ServiceProps & { mobile?: boolean; mcp: McpControllers }) {
   const ctx = usePlugin()
   const name = () => (ctx.servers.list().length < 2 ? ctx.t("server") : props.session.server.name)
 
@@ -75,14 +113,18 @@ export function SessionServerPanel(props: ServiceProps & { mobile?: boolean }) {
       }
     >
       {(directory) => (
-        <ServiceMenu
-          session={props.session}
-          directory={directory}
-          shown={props.shown}
-          mobile={props.mobile}
-          name={name()}
-          onClose={props.onClose}
-        />
+        // Another server starts its lists and flyout afresh.
+        <Show when={props.session.server.id} keyed>
+          <ServiceMenu
+            session={props.session}
+            directory={directory}
+            shown={props.shown}
+            mobile={props.mobile}
+            name={name()}
+            mcp={props.mcp}
+            onClose={props.onClose}
+          />
+        </Show>
       )}
     </Show>
   )
@@ -98,47 +140,39 @@ function ServerHeading(props: { name: string }) {
   )
 }
 
-function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
+function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp: McpControllers }) {
   const ctx = usePlugin()
   const drawer = useDrawer()
   const id = createUniqueId()
   const motion = createFlyoutMotion()
 
-  // A new scope whenever visibility changes closes the flyout.
-  const scope = createMemo(
-    on(
-      () => props.shown,
-      () => ({}),
-    ),
-  )
+  const [flyoutState, setFlyoutState] = createSignal<FlyoutState>(initialFlyoutState)
 
-  // A signal, not a store field: a store would wrap the scope object and never match it.
-  const [open, setOpen] = createSignal<{ readonly scope: object; readonly service: Service }>()
-
-  const [menu, setMenu] = createStore<{
-    // The pane on show, kept through the flyout's exit so it fades out with its list.
-    pane: Service | undefined
-    // Where the trigger row sits in the flyout's containing block, and the room around it in the viewport.
-    anchor: { row: number; above: number; below: number }
+  // Each list's measured height, and whether it scrolls.
+  const [sizes, setSizes] = createStore<{
     heights: Partial<Record<Service, number>>
     overflow: Partial<Record<Service, boolean>>
-  }>({ pane: undefined, anchor: { row: 0, above: 0, below: 0 }, heights: {}, overflow: {} })
+  }>({ heights: {}, overflow: {} })
 
   const sources: Record<Service, ServiceSource> = {
-    mcp: useMcp(props, () => close()),
-    plugins: useCatalog(props, "plugins"),
-    skills: useCatalog(props, "skills"),
+    mcp: useMcp(props, props.mcp, () => dispatch({ type: "close", focusRow: false })),
+    plugins: usePlugins(props),
+    skills: useSkills(props),
   }
 
-  const active = () => {
-    const current = open()
+  // Memos, so a pointer aiming across rows, which replaces the state on each new target, rewrites nothing on screen.
+  const active = createMemo(() => flyoutActive(flyoutState()))
+  const pane = createMemo(() => flyoutPane(flyoutState()))
+  const anchor = createMemo(() => flyoutAnchor(flyoutState()), undefined, { equals: sameAnchor })
 
-    return current?.scope === scope() ? current.service : undefined
+  const height = () => {
+    const current = pane()
+
+    return (current ? (sizes.heights[current] ?? 0) : 0) + 4
   }
 
-  const height = () => (menu.pane ? (menu.heights[menu.pane] ?? 0) : 0) + 4
   // Beside its row, kept inside the viewport.
-  const offset = () => Math.max(-menu.anchor.above, Math.min(menu.anchor.row - 2, menu.anchor.below - height()))
+  const offset = () => Math.max(-anchor().above, Math.min(anchor().row - 2, anchor().below - height()))
 
   const rows: Partial<Record<Service, HTMLButtonElement>> = {}
   const panes: Partial<Record<Service, HTMLElement>> = {}
@@ -148,76 +182,75 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   // The flyout's containing block in the viewport, measured when a list opens and on scroll or resize, so pointer
   // moves never read layout.
   const bounds = { left: 0, right: 0, top: 0 }
-  // Each list refreshes the first time it shows after the flyout opens.
-  const refreshed = new Set<Service>()
   // The two latest pointer positions at least 2px apart, which give the pointer's heading.
   const trail = { x: 0, y: 0, px: 0, py: 0 }
-  let pending: ReturnType<typeof setTimeout> | undefined
-  onCleanup(() => clearTimeout(pending))
+  let aimTimer: ReturnType<typeof setTimeout> | undefined
 
-  // Places the flyout beside a row: where the row sits in the containing block, and the room around it.
-  const measure = (service: Service) => {
+  // Places the flyout beside a row: where the row sits in the containing block, and the room around it. Undefined
+  // while the flyout or the row is not laid out.
+  const measure = (service: Service): FlyoutAnchor | undefined => {
     const row = rows[service]
     const box = flyout?.offsetParent
 
-    if (!row || !box) return false
+    if (!row || !box || !surface) return
     const base = box.getBoundingClientRect()
 
     bounds.left = base.left
     bounds.right = base.right
     bounds.top = base.top
-    setMenu("anchor", {
+
+    return {
       row: row.getBoundingClientRect().top - base.top,
       above: base.top - 16,
       below: window.innerHeight - 16 - base.top,
-    })
-
-    return true
-  }
-
-  const activate = (service: Service, focus = false) => {
-    clearTimeout(pending)
-
-    if (!flyout || !surface) return
-    const opening = active() === undefined
-
-    if (!refreshed.has(service)) {
-      refreshed.add(service)
-
-      if (!sources[service].loading) sources[service].retry()
-    }
-
-    // The first open lands beside its row at its list's height; later switches glide and resize.
-    if (opening) {
-      flyout.style.transition = "none"
-      surface.style.transition = "none"
-    }
-
-    if (!measure(service)) return
-    setOpen({ scope: scope(), service })
-    setMenu("pane", service)
-
-    if (opening) {
-      void flyout.offsetHeight
-      flyout.style.removeProperty("transition")
-      surface.style.removeProperty("transition")
-    }
-
-    if (focus) {
-      const pane = panes[service]
-
-      if (pane) (focusables(pane)[0] ?? pane).focus()
     }
   }
 
-  const close = (focus = false) => {
-    clearTimeout(pending)
-    const service = active()
+  const dispatch = (event: FlyoutEvent) => {
+    const previous = untrack(flyoutState)
+    const next = transitionFlyout(previous, event)
 
     // Focus returns to the row before the list goes inert, so it never falls to the document.
-    if (focus && service) rows[service]?.focus()
-    refreshed.clear()
-    setOpen(undefined)
+    next.effects.forEach((effect) => {
+      if (effect.type === "focus-row") rows[effect.service]?.focus()
+    })
+
+    if (next.state !== previous)
+      commit(
+        next.state,
+        next.effects.some((effect) => effect.type === "snap-open"),
+      )
+
+    next.effects.forEach((effect) => {
+      if (effect.type === "schedule-aim") {
+        clearTimeout(aimTimer)
+        aimTimer = setTimeout(
+          () => dispatch({ type: "aim.due", attempt: effect.attempt, anchor: measure(effect.target) }),
+          effect.delayMs,
+        )
+      }
+
+      if (effect.type === "cancel-aim") clearTimeout(aimTimer)
+
+      if (effect.type === "refresh") sources[effect.service].refresh()
+
+      if (effect.type === "focus-pane") {
+        const element = panes[effect.service]
+
+        if (element) (focusables(element)[0] ?? element).focus()
+      }
+    })
+  }
+
+  // The first open lands beside its row at its list's height; later switches glide and resize.
+  const commit = (state: FlyoutState, snap: boolean) => {
+    if (!snap || !flyout || !surface) return void setFlyoutState(state)
+    flyout.style.transition = "none"
+    surface.style.transition = "none"
+    setFlyoutState(state)
+    void flyout.offsetHeight
+    flyout.style.removeProperty("transition")
+    surface.style.removeProperty("transition")
   }
 
   // Moving between rows switches at once, except while the pointer heads for the open flyout across other rows.
@@ -231,24 +264,28 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
       trail.y = event.clientY
     }
 
+    const current = active()
+
     // A closed flyout opens when the pointer enters a row, so a pointer resting where Escape closed it stays put.
-    if (!active()) return
+    if (!current) return
     const target = event.target
 
     const service =
       target instanceof Node ? services.find((item) => rows[item.type]?.contains(target))?.type : undefined
 
-    if (!service || service === active()) return clearTimeout(pending)
+    const heading = !!service && service !== current && aiming(event)
 
-    if (!aiming(event)) return activate(service)
-    clearTimeout(pending)
-    pending = setTimeout(() => activate(service), AIM_TIMEOUT)
+    dispatch({
+      type: "row.moved",
+      service,
+      aiming: heading,
+      anchor: service && service !== current && !heading ? measure(service) : undefined,
+    })
   }
 
   // Whether the pointer's last step points into the open flyout: inside the triangle from its previous position to
   // the flyout's near edge.
   const aiming = (event: PointerEvent) => {
-    if (!active()) return false
     // The flyout sits against the containing block's inline start, where it is heading rather than where it is.
     const edge = ctx.locale.direction() === "rtl" ? bounds.right : bounds.left
     const top = bounds.top + offset()
@@ -273,37 +310,47 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     if (row !== -1) {
       if (event.key === into) {
         event.preventDefault()
-        activate(services[row].type, true)
+        const service = services[row].type
+        dispatch({ type: "row.activated", service, focus: true, shown: props.shown, anchor: measure(service) })
       }
 
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
       event.preventDefault()
       const next = services[(row + (event.key === "ArrowDown" ? 1 : services.length - 1)) % services.length].type
       rows[next]?.focus()
-
-      if (active()) activate(next)
+      // An open flyout follows the focused row.
+      dispatch({ type: "row.moved", service: next, aiming: false, anchor: active() ? measure(next) : undefined })
 
       return
     }
 
-    const pane = menu.pane ? panes[menu.pane] : undefined
+    const current = pane()
+    const element = current ? panes[current] : undefined
 
-    if (!pane?.contains(target)) return
+    if (!element?.contains(target)) return
 
     if (event.key === back) {
       event.preventDefault()
-      close(true)
+      dispatch({ type: "close", focusRow: true })
 
       return
     }
 
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
     event.preventDefault()
-    const items = focusables(pane)
+    const items = focusables(element)
     const index = items.findIndex((item) => item === target || item.contains(target))
     const step = event.key === "ArrowDown" ? 1 : -1
     items[index === -1 ? 0 : (index + step + items.length) % items.length]?.focus()
   }
+
+  // Hiding the details closes the flyout, so a pending aim cannot reopen it and each list refreshes on the next open.
+  createKeyed(
+    () => props.shown,
+    () => undefined,
+    { otherwise: () => dispatch({ type: "hidden" }) },
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   // While a list is open: Escape closes only the flyout, before the details popover's own Escape handling sees it,
   // and scrolling or resizing measures the flyout's place again.
@@ -313,7 +360,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
       const remeasure = () => {
         const service = active()
 
-        if (service) measure(service)
+        if (service) dispatch({ type: "remeasured", anchor: measure(service) })
       }
 
       const escape = (event: KeyboardEvent) => {
@@ -322,7 +369,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
         if (event.key !== "Escape" || !focused || !flyout?.offsetParent?.contains(focused)) return
         event.preventDefault()
         event.stopPropagation()
-        close(!!flyout?.contains(focused))
+        dispatch({ type: "close", focusRow: !!flyout?.contains(focused) })
       }
 
       document.addEventListener("keydown", escape, true)
@@ -340,12 +387,12 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   const observer = new ResizeObserver((entries) =>
     entries.forEach((entry) => {
       const service = services.find((item) => panes[item.type]?.contains(entry.target))?.type
-      const pane = service ? panes[service] : undefined
+      const element = service ? panes[service] : undefined
       const scroller = service ? scrollers[service] : undefined
 
-      if (!service || !pane || !scroller) return
-      setMenu("heights", service, pane.offsetHeight)
-      setMenu("overflow", service, scroller.scrollHeight > scroller.clientHeight + 1)
+      if (!service || !element || !scroller) return
+      setSizes("heights", service, element.offsetHeight)
+      setSizes("overflow", service, scroller.scrollHeight > scroller.clientHeight + 1)
     }),
   )
 
@@ -362,7 +409,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
               // In a narrow-screen drawer the service list replaces the drawer's view.
 
               const content = children(() => (
-                <div class="session-summary-card session-service-drawer" aria-busy={source.loading}>
+                <div class="session-summary-card session-service-drawer" aria-busy={source.view.busy}>
                   <ServiceBody source={source}>
                     <source.Body />
                   </ServiceBody>
@@ -375,7 +422,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                   type="button"
                   class="session-summary-row"
                   onClick={(event) => {
-                    if (!source.loading) source.retry()
+                    source.refresh()
                     drawer.open({ title: ctx.t(service.label), content: content(), trigger: event.currentTarget })
                   }}
                 >
@@ -395,7 +442,11 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     <>
       <section class="session-summary-card" data-section="server" onKeyDown={keydown}>
         <ServerHeading name={props.name} />
-        <div class="session-summary-rows" onPointerMove={hover} onPointerLeave={() => clearTimeout(pending)}>
+        <div
+          class="session-summary-rows"
+          onPointerMove={hover}
+          onPointerLeave={() => dispatch({ type: "aim.cancelled" })}
+        >
           <For each={services}>
             {(service) => {
               const source = sources[service.type]
@@ -409,13 +460,27 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                   aria-expanded={active() === service.type}
                   aria-controls={`${id}-${service.type}`}
                   onPointerEnter={(event) => {
-                    if (event.pointerType !== "touch" && active() === undefined) activate(service.type)
+                    if (event.pointerType === "touch" || active() !== undefined) return
+                    dispatch({
+                      type: "row.entered",
+                      service: service.type,
+                      shown: props.shown,
+                      anchor: measure(service.type),
+                    })
                   }}
-                  onClick={(event) => activate(service.type, event.detail === 0)}
+                  onClick={(event) =>
+                    dispatch({
+                      type: "row.activated",
+                      service: service.type,
+                      focus: event.detail === 0,
+                      shown: props.shown,
+                      anchor: measure(service.type),
+                    })
+                  }
                 >
                   <Icon name={service.icon} class="shrink-0 text-v2-icon-icon-muted" />
                   <span class="session-summary-label">{ctx.t(service.label)}</span>
-                  <Show when={source.ready && !source.error}>
+                  <Show when={source.view.status === "ready"}>
                     <Show when={source.failed}>
                       <span class="session-service-dot" data-status="failed" aria-hidden="true" />
                     </Show>
@@ -443,7 +508,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
         inert={active() === undefined || undefined}
         style={{ transform: `translateY(${offset()}px)` }}
         onKeyDown={keydown}
-        onPointerEnter={() => clearTimeout(pending)}
+        onPointerEnter={() => dispatch({ type: "aim.cancelled" })}
       >
         <div class="session-service-flyout-body">
           <div ref={surface} class="session-service-flyout-surface" style={{ "--flyout-height": `${height()}px` }}>
@@ -462,23 +527,23 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                     role="group"
                     tabIndex={-1}
                     aria-label={ctx.t(service.label)}
-                    aria-busy={source.loading}
+                    aria-busy={source.view.busy}
                     data-service={service.type}
-                    data-active={menu.pane === service.type || undefined}
-                    data-overflow={menu.overflow[service.type] || undefined}
-                    inert={menu.pane !== service.type || undefined}
+                    data-active={pane() === service.type || undefined}
+                    data-overflow={sizes.overflow[service.type] || undefined}
+                    inert={pane() !== service.type || undefined}
                   >
-                    <div
-                      ref={(element) => (scrollers[service.type] = element)}
-                      class="session-service-scroll"
-                      data-scrollable
+                    <MenuScroll
+                      class="min-h-0"
+                      viewportClass="session-service-scroll"
+                      viewportRef={(element) => (scrollers[service.type] = element)}
                     >
                       <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
                         <ServiceBody source={source}>
                           <source.Body />
                         </ServiceBody>
                       </div>
-                    </div>
+                    </MenuScroll>
                     <ServiceFooter source={source} />
                   </div>
                 )
@@ -491,42 +556,33 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   )
 }
 
-function useMcp(props: ServiceProps, close: () => void): ServiceSource {
+function useMcp(props: ServiceProps, controllers: McpControllers, close: () => void): ServiceSource {
   const ctx = usePlugin()
   const data = () => props.session.server.data
+  const mcp = useMcpController(controllers, props.session.server, props.directory)
 
-  const toggle = useMcpToggle(props.session, () => props.directory)
+  const list = () => data().location.mcp.server.list({ directory: props.directory })
 
-  const [load, { refetch }] = createResource(
-    () => props.shown && data(),
-    async (current) => {
+  // The list lives in the server's data store; the machine tracks only whether it loaded.
+  const load = useServiceLoad(props, {
+    cached: () => (list() === undefined ? undefined : true),
+    retain: false,
+    task: async () => {
+      const current = data()
       const directory = props.directory
 
       current.location.mcp.server.invalidate({ directory })
       await current.location.mcp.server.sync({ directory })
+
+      return true
     },
-  )
+  })
 
-  const servers = createMemo(() =>
-    (data().location.mcp.server.list({ directory: props.directory }) ?? []).toSorted((a, b) =>
-      a.name.localeCompare(b.name),
-    ),
-  )
-
-  const showError = (name: string) =>
-    ctx.dialogs.open((dialog) => (
-      <McpErrorDialog session={props.session} directory={props.directory} name={name} onClose={dialog.close} />
-    ))
+  const servers = createMemo(() => (list() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
   return {
-    get loading() {
-      return load.loading
-    },
-    get ready() {
-      return data().location.mcp.server.list({ directory: props.directory }) !== undefined
-    },
-    get error() {
-      return !!load.error
+    get view() {
+      return load.view()
     },
     get count() {
       return servers().length
@@ -534,13 +590,16 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
     get failed() {
       return servers().some((server) => server.status.status === "failed")
     },
-    retry: () => void refetch(),
+    refresh: load.refresh,
+    retry: load.retry,
     Body: () => (
       <Show when={servers().length} fallback={<ServiceEmpty title={ctx.t("mcp.empty")} />}>
         <Index each={servers()}>
           {(server) => {
             const enabled = () => server().status.status !== "disabled"
-            const pending = () => toggle.isPending || server().status.status === "pending"
+            const view = createMemo(() => mcpRowView(mcp.state(), server().name, server().status.status))
+            const pending = () => view().pending
+            const busy = () => view().busy
 
             const failure = () => {
               const status = server().status
@@ -549,7 +608,6 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
             }
 
             const signIn = () => server().status.status === "needs_auth" && !!server().integrationID
-            const busy = () => toggle.isPending && toggle.variables?.name === server().name
 
             // The dot shows the status; the words stay for assistive technology.
             const label = () => {
@@ -564,13 +622,22 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
               return ctx.t(status === "connected" ? "mcp.connected" : "mcp.disabled")
             }
 
-            const change = (value: boolean) => {
-              if (pending()) return
-              toggle.mutate({ name: server().name, enabled: value })
+            const change = (value: boolean) =>
+              mcp.dispatch({
+                type: "toggle.requested",
+                name: server().name,
+                enabled: value,
+                status: server().status.status,
+              })
+
+            const showError = () => {
+              const error = failure()
+
+              if (error) mcp.dispatch({ type: "error.opened", name: server().name, error })
             }
 
             const follow = () => {
-              if (failure()) return showError(server().name)
+              if (failure()) return showError()
               change(server().status.status === "needs_auth" || !enabled())
             }
 
@@ -586,7 +653,7 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
                     status={server().status.status}
                     error={failure()}
                     label={ctx.t("mcp.error.actionLabel", { name: server().name })}
-                    onClick={() => showError(server().name)}
+                    onClick={showError}
                   />
                   <TruncatedText text={server().name} class="session-summary-label" />
                 </span>
@@ -648,85 +715,101 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
   }
 }
 
-function useCatalog(props: ServiceProps, service: "plugins" | "skills"): ServiceSource {
-  const ctx = usePlugin()
-  const data = () => props.session.server.data
+type CatalogItem = {
+  readonly name: string
+  readonly status: string | undefined
+  readonly error: string | undefined
+  readonly path: string | undefined
+}
 
-  const [items, { refetch }] = createResource(
-    () => props.shown && data(),
-    async (current) => {
-      const directory = props.directory
+function usePlugins(props: ServiceProps): ServiceSource {
+  const load = useServiceLoad(props, {
+    cached: () => undefined,
+    // Only the machine holds the list, so a new data store keeps it on show while it loads again.
+    retain: true,
+    task: async (signal) => {
+      const result = await props.session.server.client.plugin.list(
+        { location: { directory: props.directory } },
+        { signal },
+      )
 
-      if (service === "plugins") {
-        const result = await props.session.server.client.plugin.list({ location: { directory } })
-
-        return result.data
-          .filter((plugin) => plugin.source.type !== "builtin")
-          .map((plugin) => ({
+      return result.data
+        .filter((plugin) => plugin.source.type !== "builtin")
+        .map(
+          (plugin): CatalogItem => ({
             name: pluginLabel(plugin),
             status: plugin.state.status,
             error: plugin.state.status === "failed" ? plugin.state.error : undefined,
             path: undefined,
-          }))
-      }
+          }),
+        )
+    },
+  })
+
+  return useCatalog(props, "plugins", load, () => load.view().value ?? [])
+}
+
+function useSkills(props: ServiceProps): ServiceSource {
+  const data = () => props.session.server.data
+  const list = () => data().location.skill.list({ directory: props.directory })
+
+  // The list lives in the server's data store; the machine tracks only whether it loaded.
+  const load = useServiceLoad(props, {
+    cached: () => (list() === undefined ? undefined : true),
+    retain: false,
+    task: async () => {
+      const current = data()
+      const directory = props.directory
 
       current.location.skill.invalidate({ directory })
       await current.location.skill.sync({ directory })
 
-      return undefined
+      return true
     },
-  )
-
-  const loaded = () => items.state === "ready" || items.state === "refreshing"
-
-  const list = createMemo(() => {
-    const entries =
-      service === "plugins"
-        ? loaded()
-          ? (items.latest ?? [])
-          : []
-        : (data().location.skill.list({ directory: props.directory }) ?? []).map((skill) => ({
-            name: skill.name,
-            status: undefined,
-            error: undefined,
-            path: skill.path,
-          }))
-
-    return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  createKeyed(data, (current) =>
-    onCleanup(
-      current.on(service === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
-        if (event.location?.directory !== props.directory) return
-        void refetch()
-      }),
+  return useCatalog(props, "skills", load, () =>
+    (list() ?? []).map(
+      (skill): CatalogItem => ({ name: skill.name, status: undefined, error: undefined, path: skill.path }),
     ),
+  )
+}
+
+function useCatalog(
+  props: ServiceProps,
+  service: "plugins" | "skills",
+  load: ServiceLoad<unknown>,
+  items: () => readonly CatalogItem[],
+): ServiceSource {
+  const ctx = usePlugin()
+  const list = createMemo(() => items().toSorted((a, b) => a.name.localeCompare(b.name)))
+
+  createKeyed(
+    () => props.session.server.data,
+    (current) =>
+      onCleanup(
+        current.on(service === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
+          if (event.location?.directory === props.directory) load.invalidate()
+        }),
+      ),
   )
 
   return {
-    get loading() {
-      return items.loading
+    get view() {
+      return load.view()
     },
-    get ready() {
-      return service === "plugins" ? loaded() : data().location.skill.list({ directory: props.directory }) !== undefined
-    },
-    get error() {
-      return !!items.error
-    },
+    refresh: load.refresh,
+    retry: load.retry,
     get count() {
       return list().length
     },
     get failed() {
       return list().some((item) => item.status === "failed")
     },
-    retry: () => void refetch(),
     Body: () => (
       <Show
         when={list().length}
-        fallback={
-          <ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />
-        }
+        fallback={<ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />}
       >
         <For each={list()}>
           {(item) => (
@@ -820,7 +903,7 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
 
   return (
     <Show
-      when={props.source.ready || !props.source.loading}
+      when={props.source.view.status !== "loading"}
       fallback={
         <div class="session-service-message" role="status">
           {ctx.t("common.loading")}
@@ -828,7 +911,7 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
       }
     >
       <Show
-        when={!props.source.error}
+        when={props.source.view.status === "ready"}
         fallback={
           <div class="session-service-message" role="alert">
             <p>{ctx.t("common.requestFailed")}</p>
@@ -847,7 +930,7 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
 // Shown once the list is, as ServiceBody shows it.
 function ServiceFooter(props: { source: ServiceSource }) {
   return (
-    <Show when={(props.source.ready || !props.source.loading) && !props.source.error}>
+    <Show when={props.source.view.status === "ready"}>
       <props.source.Footer />
     </Show>
   )
@@ -857,67 +940,54 @@ function ServiceConfigLink(props: { owner: ServiceProps; service: Service }) {
   const ctx = usePlugin()
   const system = ctx.system
   const local = () => props.owner.session.server.local
-  const [store, setStore] = createStore({ opening: false, copied: false })
   const label = () => ctx.t(local() ? "configure" : "copyConfigPath")
-  // Clears the copied mark two seconds after the latest copy.
-  let reset: ReturnType<typeof setTimeout> | undefined
 
-  onCleanup(() => clearTimeout(reset))
-
-  const activate = async () => {
-    if (store.opening) return
-    setStore({ opening: true, copied: false })
+  const action = useConfigAction(props.owner, async (signal) => {
     const session = props.owner.session
-    await session.server.client.config
-      .get({ location: { directory: props.owner.directory } })
-      .then(async (entries) => {
-        const path = serviceConfigFile(entries, props.service)
 
-        if (!path) throw new Error(ctx.t("configFileMissing"))
+    const entries = await session.server.client.config.get(
+      { location: { directory: props.owner.directory } },
+      { signal },
+    )
 
-        // A local file opens in a side tab beside the session, inside the workspace or not.
-        if (local()) {
-          if (ctx.links.open({ href: path, session })) return props.owner.onClose?.()
-          await ctx.desktop?.reveal(path)
+    const path = serviceConfigFile(entries, props.service)
 
-          return
-        }
+    if (!path) throw new Error(ctx.t("configFileMissing"))
+    signal.throwIfAborted()
 
-        await system.copy(path)
-        setStore("copied", true)
-        clearTimeout(reset)
-        reset = setTimeout(() => setStore("copied", false), 2000)
-      })
-      .catch((error) =>
-        showToast({
-          variant: "error",
-          title: ctx.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
-        }),
-      )
-      .finally(() => setStore("opening", false))
-  }
+    // A local file opens in a side tab beside the session, inside the workspace or not.
+    if (local()) {
+      if (ctx.links.open({ href: path, session })) return { type: "opened", close: true }
+      await ctx.desktop?.reveal(path)
+
+      return { type: "opened", close: false }
+    }
+
+    await system.copy(path)
+
+    return { type: "copied" }
+  })
 
   return (
     <Tooltip
       inactive={local()}
-      value={ctx.t(store.copied ? "ui.message.copied" : "ui.message.copy")}
+      value={ctx.t(action.view().copied ? "ui.message.copied" : "ui.message.copy")}
       placement="top"
       getAnchorRect={(anchor) => anchor?.querySelector("svg")?.getBoundingClientRect()}
-      forceOpen={store.copied ? true : undefined}
+      forceOpen={action.view().copied ? true : undefined}
       class="w-full"
     >
       <button
         type="button"
         class="session-service-config"
-        disabled={store.opening}
+        disabled={action.view().disabled}
         onMouseDown={(event) => {
           if (!local()) event.preventDefault()
         }}
-        onClick={() => void activate()}
+        onClick={action.activate}
       >
         <Icon
-          name={local() ? "settings-gear" : store.copied ? "check" : "outline-copy"}
+          name={local() ? "settings-gear" : action.view().copied ? "check" : "outline-copy"}
           class="shrink-0 text-v2-icon-icon-muted"
         />
         <span class="session-summary-label">{label()}</span>
@@ -929,38 +999,185 @@ function ServiceConfigLink(props: { owner: ServiceProps; service: Service }) {
 // Starts a draft session in the global configuration's directory that asks OpenCode to set the service up.
 function ServiceSetup(props: { owner: ServiceProps; service: Service }) {
   const ctx = usePlugin()
-  const [store, setStore] = createStore({ opening: false })
 
-  const start = async () => {
-    if (store.opening) return
-    setStore("opening", true)
+  const action = useConfigAction(props.owner, async (signal) => {
     const session = props.owner.session
-    await session.server.client.config
-      .get({ location: { directory: props.owner.directory } })
-      .then((entries) => {
-        ctx.layout.draft({
-          server: session.server.id,
-          directory: globalConfigDirectory(entries, props.owner.directory),
-          prompt: ctx.t(`setup.${props.service}.prompt`),
-        })
-        props.owner.onClose?.()
-      })
-      .catch((error) =>
-        showToast({
-          variant: "error",
-          title: ctx.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
-        }),
-      )
-      .finally(() => setStore("opening", false))
-  }
+
+    const entries = await session.server.client.config.get(
+      { location: { directory: props.owner.directory } },
+      { signal },
+    )
+
+    signal.throwIfAborted()
+    ctx.layout.draft({
+      server: session.server.id,
+      directory: globalConfigDirectory(entries, props.owner.directory),
+      prompt: ctx.t(`setup.${props.service}.prompt`),
+    })
+
+    return { type: "opened", close: true }
+  })
 
   return (
-    <button type="button" class="session-service-config" disabled={store.opening} onClick={() => void start()}>
+    <button type="button" class="session-service-config" disabled={action.view().disabled} onClick={action.activate}>
       <Icon name="plus" class="shrink-0 text-v2-icon-icon-muted" />
       <span class="session-summary-label">{ctx.t(`setup.${props.service}`)}</span>
     </button>
   )
+}
+
+type ServiceLoad<T> = {
+  readonly view: Accessor<ServiceLoadView<T>>
+  refresh: () => void
+  retry: () => void
+  /** The server announced a change to the list. */
+  invalidate: () => void
+}
+
+// Loads a service's list through its machine while the popover or drawer shows it: one load at a time, bounded by a
+// timeout, and ended when the list hides, the server's data store changes, or the list unmounts.
+function useServiceLoad<T>(
+  owner: ServiceProps,
+  input: {
+    /** The list the server's data store already holds, for a list that lives there. */
+    cached: () => T | undefined
+    /** Keeps the loaded list across a new data store, for a list that lives only in the machine. */
+    retain: boolean
+    task: (signal: AbortSignal) => Promise<T>
+  },
+): ServiceLoad<T> {
+  const ctx = usePlugin()
+  const [loadState, setLoadState] = createSignal<ServiceLoadState<T>>(initialServiceLoadState())
+  const runs = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+
+  const dispatch = (event: ServiceLoadEvent<T>) => {
+    const previous = untrack(loadState)
+    const next = transitionServiceLoad(previous, event)
+
+    if (next.state !== previous) setLoadState(() => next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: ServiceLoadEffect) => {
+    if (effect.type === "run") {
+      const attempt = effect.attempt
+      const controller = new AbortController()
+
+      runs.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatch({ type: "load.timed-out", attempt }), effect.timeoutMs),
+      })
+      void Promise.try(() => input.task(AbortSignal.any([ctx.signal, controller.signal]))).then(
+        (value) => dispatch({ type: "load.succeeded", attempt, value }),
+        () => dispatch({ type: "load.failed", attempt }),
+      )
+
+      return
+    }
+
+    const handle = runs.get(effect.attempt)
+    runs.delete(effect.attempt)
+    clearTimeout(handle?.timer)
+    handle?.controller.abort()
+  }
+
+  // Follows whether the list shows, the server's data store, and whether that store already holds the list.
+  createKeyed(
+    () => ({ shown: owner.shown, source: owner.session.server.data, cached: input.cached() }),
+    (current) =>
+      dispatch({
+        type: "context.changed",
+        shown: current.shown,
+        source: current.source,
+        cached: current.cached,
+        retain: input.retain,
+      }),
+    {
+      equals: (previous, next) =>
+        previous.shown === next.shown && previous.source === next.source && previous.cached === next.cached,
+    },
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return {
+    view: createMemo(() => serviceLoadView(loadState())),
+    refresh: () => dispatch({ type: "refresh.requested" }),
+    retry: () => dispatch({ type: "retry.requested" }),
+    invalidate: () => dispatch({ type: "invalidated" }),
+  }
+}
+
+type ConfigActionResult = { readonly type: "opened"; readonly close: boolean } | { readonly type: "copied" }
+
+// Runs a footer action through its machine: one run at a time, bounded by a timeout, and ended with the popover.
+function useConfigAction(owner: ServiceProps, task: (signal: AbortSignal) => Promise<ConfigActionResult>) {
+  const ctx = usePlugin()
+  const [actionState, setActionState] = createSignal<ConfigActionState>(initialConfigActionState)
+  const runs = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  let reset: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: ConfigActionEvent) => {
+    const previous = untrack(actionState)
+    const next = transitionConfigAction(previous, event)
+
+    if (next.state !== previous) setActionState(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: ConfigActionEffect) => {
+    if (effect.type === "run") {
+      const attempt = effect.attempt
+      const controller = new AbortController()
+
+      runs.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatch({ type: "timed-out", attempt }), effect.timeoutMs),
+      })
+      void task(AbortSignal.any([ctx.signal, controller.signal])).then(
+        (result) => dispatch({ ...result, attempt }),
+        (error) => dispatch({ type: "failed", attempt, error: error instanceof Error ? error.message : String(error) }),
+      )
+
+      return
+    }
+
+    if (effect.type === "abort") {
+      const handle = runs.get(effect.attempt)
+      runs.delete(effect.attempt)
+      clearTimeout(handle?.timer)
+      handle?.controller.abort()
+
+      return
+    }
+
+    if (effect.type === "schedule-reset") {
+      const attempt = effect.attempt
+      clearTimeout(reset)
+      reset = setTimeout(() => dispatch({ type: "copied.expired", attempt }), effect.delayMs)
+
+      return
+    }
+
+    if (effect.type === "cancel-reset") return clearTimeout(reset)
+
+    if (effect.type === "close-owner") return owner.onClose?.()
+
+    showToast({
+      variant: "error",
+      title: ctx.t("common.requestFailed"),
+      description: effect.type === "toast-failed" ? effect.error : ctx.t("timedOut"),
+    })
+  }
+
+  // Hiding the popover or drawer drops the copied mark, so its tooltip does not stay open over nothing.
+  createKeyed(
+    () => owner.shown,
+    () => undefined,
+    { otherwise: () => dispatch({ type: "hidden" }) },
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return { view: () => configActionView(actionState()), activate: () => dispatch({ type: "activate" }) }
 }
 
 function ServiceEmpty(props: { title: string }) {
@@ -1008,88 +1225,269 @@ function insideTriangle(point: Point, a: Point, b: Point, c: Point) {
   return sides.every((value) => value >= 0) || sides.every((value) => value <= 0)
 }
 
-// Connects, disconnects, or starts sign-in for one of the session server's MCPs, like the app's MCP toggle.
-function useMcpToggle(session: MountedSession, directory: () => string) {
-  const ctx = usePlugin()
-  const system = ctx.system
-  const data = () => session.server.data
-
-  return useMutation(() => ({
-    mutationFn: async (input: { name: string; enabled: boolean }) => {
-      const client = session.server.client
-      const source = data()
-      const ref = { directory: directory() }
-      const server = (await client.mcp.list({ location: ref })).data.find((item) => item.name === input.name)
-
-      if (!server) return
-
-      if (!input.enabled) {
-        await client.experimental.mcp.disconnect({ server: input.name, location: ref })
-      }
-
-      if (input.enabled && server.status.status !== "needs_auth") {
-        await client.experimental.mcp.connect({ server: input.name, location: ref })
-      }
-
-      source.location.mcp.server.invalidate(ref)
-      await source.location.mcp.server.sync(ref)
-      const current = source.location.mcp.server.list(ref)?.find((item) => item.name === input.name)
-
-      if (input.enabled && current?.status.status === "needs_auth" && current.integrationID) {
-        const integration = await client.integration.get({ integrationID: current.integrationID, location: ref })
-        const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.form?.length)
-
-        if (!method || method.type !== "oauth") throw new Error(ctx.t("mcp.interactiveAuth", { name: input.name }))
-
-        const attempt = await client.integration.oauth.connect({
-          integrationID: current.integrationID,
-          methodID: method.id,
-          location: ref,
-        })
-
-        system.openExternal(attempt.data.url)
-      }
-
-      source.location.mcp.resource.invalidate(ref)
-      await source.location.mcp.resource.sync(ref)
-      // A successful HTTP response can still leave the MCP connection in a failed state.
-      const status = current?.status
-
-      if (status?.status === "failed") throw new Error(`${input.name}: ${status.error}`)
-    },
-    onError: (error) =>
-      showToast({
-        variant: "error",
-        title: ctx.t("common.requestFailed"),
-        description: error instanceof Error ? error.message : String(error),
-      }),
-  }))
+type McpController = {
+  readonly state: () => McpState
+  dispatch: (event: McpEvent) => void
+  /** Reports that an error dialog closed, by the user or by the controller. */
+  dismiss: (attempt: number) => void
 }
 
-// The MCPs dialog's error view, for a server the popover lists. It reads the server's own data, so it outlives the
-// popover that opened it.
-function McpErrorDialog(props: { session: MountedSession; directory: string; name: string; onClose: () => void }) {
+/**
+ * The plugin instance's MCP controllers, by server and directory, so a popover or drawer that mounts again finds the
+ * toggles and the error dialog the previous one left running.
+ */
+export type McpControllers = Map<string, McpController>
+
+// The controller for the server and directory, shared with every other mount and the error dialog, for as long as
+// this mount lives.
+function useMcpController(controllers: McpControllers, server: ServerRef, directory: string) {
+  const key = JSON.stringify([server.id, directory])
+  const current = controllers.get(key)
+
+  const mcp =
+    current && untrack(current.state).status !== "disposed"
+      ? current
+      : createMcpController(server, directory, () => {
+          if (controllers.get(key) === mcp) controllers.delete(key)
+        })
+
+  controllers.set(key, mcp)
+  mcp.dispatch({ type: "mounted" })
+  onCleanup(() => mcp.dispatch({ type: "unmounted" }))
+
+  return mcp
+}
+
+// Connects, disconnects, or starts sign-in for one server's MCPs in one directory, like the app's MCP toggle, and shows
+// their errors. It ends once no popover lists it, no toggle runs and no error dialog shows, or with the plugin.
+function createMcpController(server: ServerRef, directory: string, release: () => void): McpController {
   const ctx = usePlugin()
-  const toggle = useMcpToggle(props.session, () => props.directory)
-  const [copied, setCopied] = createSignal(false)
+  const [mcpState, setMcpState] = createSignal<McpState>(initialMcpState)
+  const runs = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  const dialogs = new Map<number, { close: () => void }>()
+  const dispose = () => dispatch({ type: "disposed" })
 
-  const failure = () => {
-    const server = props.session.server.data.location.mcp.server
-      .list({ directory: props.directory })
-      ?.find((item) => item.name === props.name)
+  const dispatch = (event: McpEvent) => {
+    const previous = untrack(mcpState)
+    const next = transitionMcp(previous, event)
 
-    return server?.status.status === "failed" ? { name: server.name, error: server.status.error } : undefined
+    if (next.state !== previous) setMcpState(next.state)
+
+    if (next.state.status === "disposed" && previous.status !== "disposed") {
+      ctx.signal.removeEventListener("abort", dispose)
+      release()
+    }
+
+    next.effects.forEach(run)
   }
 
-  // A successful retry, disabling, or a removed server leaves nothing to show.
+  const mcp: McpController = {
+    state: mcpState,
+    dispatch,
+    dismiss: (attempt) => {
+      dialogs.delete(attempt)
+      dispatch({ type: "error.dismissed", attempt })
+    },
+  }
+
+  const run = (effect: McpEffect) => {
+    if (effect.type === "run-toggle") {
+      const name = effect.name
+      const attempt = effect.attempt
+      const controller = new AbortController()
+
+      runs.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatch({ type: "toggle.timed-out", name, attempt }), effect.timeoutMs),
+      })
+      void toggle(effect, controller.signal).then(dispatch, (error) =>
+        dispatch({
+          type: "toggle.failed",
+          name,
+          attempt,
+          error: error instanceof Error ? error.message : String(error),
+          server: false,
+        }),
+      )
+
+      return
+    }
+
+    if (effect.type === "abort-toggle") {
+      const handle = runs.get(effect.attempt)
+      runs.delete(effect.attempt)
+      clearTimeout(handle?.timer)
+      handle?.controller.abort()
+
+      return
+    }
+
+    if (effect.type === "open-external") return ctx.system.openExternal(effect.url)
+
+    if (effect.type === "open-sign-in") {
+      const signIn = effect.signIn
+      const ref = { directory }
+
+      ctx.dialogs.open((dialog) => (
+        <McpSignInDialog
+          server={server}
+          name={effect.name}
+          integrationID={signIn.integrationID}
+          attemptID={signIn.attemptID}
+          url={signIn.url}
+          lifetime={signIn.lifetime}
+          directory={directory}
+          onSync={async () => {
+            const latest = server.data
+            latest.location.mcp.server.invalidate(ref)
+            latest.location.mcp.resource.invalidate(ref)
+            await Promise.all([latest.location.mcp.server.sync(ref), latest.location.mcp.resource.sync(ref)])
+          }}
+          onClose={() => dialog.close()}
+        />
+      ))
+
+      return
+    }
+
+    if (effect.type === "open-dialog") {
+      dialogs.set(
+        effect.attempt,
+        ctx.dialogs.open(() => (
+          <McpErrorDialog mcp={mcp} attempt={effect.attempt} name={effect.name} server={server} directory={directory} />
+        )),
+      )
+
+      return
+    }
+
+    if (effect.type === "close-dialog") {
+      const handle = dialogs.get(effect.attempt)
+      dialogs.delete(effect.attempt)
+      handle?.close()
+
+      return
+    }
+
+    showToast({
+      variant: "error",
+      title: ctx.t("common.requestFailed"),
+      description: effect.type === "toast-failed" ? effect.message : ctx.t("mcp.timedOut", { name: effect.name }),
+    })
+  }
+
+  const toggle = async (effect: Extract<McpEffect, { type: "run-toggle" }>, signal: AbortSignal): Promise<McpEvent> => {
+    const client = server.client
+    const source = server.data
+    const ref = { directory }
+    const name = effect.name
+    const attempt = effect.attempt
+    const found = (await client.mcp.list({ location: ref }, { signal })).data.find((item) => item.name === name)
+
+    if (!found) return { type: "toggle.succeeded", name, attempt }
+
+    if (!effect.enabled) await client.experimental.mcp.disconnect({ server: name, location: ref }, { signal })
+
+    if (effect.enabled && found.status.status !== "needs_auth")
+      await client.experimental.mcp.connect({ server: name, location: ref }, { signal })
+
+    source.location.mcp.server.invalidate(ref)
+    await source.location.mcp.server.sync(ref)
+    const current = source.location.mcp.server.list(ref)?.find((item) => item.name === name)
+    const integrationID = current?.integrationID
+
+    if (effect.enabled && current?.status.status === "needs_auth" && integrationID) {
+      const integration = await client.integration.get({ integrationID, location: ref }, { signal })
+      const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.form?.length)
+
+      if (!method || method.type !== "oauth") throw new Error(ctx.t("mcp.interactiveAuth", { name }))
+
+      const started = await client.integration.oauth.connect(
+        { integrationID, methodID: method.id, location: ref },
+        { signal },
+      )
+
+      dispatch({
+        type: "toggle.authorizing",
+        name,
+        attempt,
+        url: started.data.url,
+        signIn: started.data.paste
+          ? {
+              integrationID,
+              attemptID: started.data.attemptID,
+              url: started.data.url,
+              lifetime: started.data.time.expires - started.data.time.created,
+            }
+          : undefined,
+      })
+    }
+
+    source.location.mcp.resource.invalidate(ref)
+    await source.location.mcp.resource.sync(ref)
+    // A successful HTTP response can still leave the MCP connection in a failed state.
+    const status = current?.status
+
+    if (status?.status === "failed") return { type: "toggle.failed", name, attempt, error: status.error, server: true }
+
+    return { type: "toggle.succeeded", name, attempt }
+  }
+
+  // The plugin's end ends the toggles and dialogs that outlived the popover.
+  ctx.signal.addEventListener("abort", dispose, { once: true })
+
+  return mcp
+}
+
+// The MCPs dialog's error view, for a server the popover lists. Its controller outlives the popover that opened it.
+function McpErrorDialog(props: {
+  mcp: McpController
+  attempt: number
+  name: string
+  server: ServerRef
+  directory: string
+}) {
+  const ctx = usePlugin()
+  const list = () => props.server.data.location.mcp.server.list({ directory: props.directory })
+  const status = () => list()?.find((item) => item.name === props.name)?.status
+  const view = createMemo(() => mcpDialogView(props.mcp.state(), props.attempt, status()?.status))
+
+  // Follows the server's status, which changes here and anywhere else: a reconnect or a removal closes the dialog, and
+  // a new failure replaces its error.
   createKeyed(
-    () => !!failure(),
-    () => undefined,
-    { otherwise: props.onClose },
+    () => ({ loaded: list() !== undefined, status: status() }),
+    (synced) =>
+      props.mcp.dispatch({
+        type: "server.synced",
+        attempt: props.attempt,
+        loaded: synced.loaded,
+        status: synced.status,
+      }),
+    {
+      equals: (previous, next) =>
+        previous.loaded === next.loaded &&
+        previous.status?.status === next.status?.status &&
+        statusError(previous.status) === statusError(next.status),
+    },
   )
+  onCleanup(() => props.mcp.dismiss(props.attempt))
+
+  const toggle = (enabled: boolean) =>
+    props.mcp.dispatch({ type: "toggle.requested", name: props.name, enabled, status: status()?.status })
+
+  const copy = (name: string, error: string) =>
+    void ctx.system.copy(ctx.t("mcp.error.details", { name, error })).then(
+      () => props.mcp.dispatch({ type: "error.copied", attempt: props.attempt, error }),
+      (cause) =>
+        showToast({
+          variant: "error",
+          title: ctx.t("mcp.error.copyFailed"),
+          description: cause instanceof Error ? cause.message : String(cause),
+        }),
+    )
 
   return (
-    <Show when={failure()}>
+    <Show when={view()}>
       {(current) => (
         <Dialog class="session-mcp-error">
           <DialogHeader>
@@ -1107,34 +1505,15 @@ function McpErrorDialog(props: { session: MountedSession; directory: string; nam
               <Button
                 class="error-details-copy"
                 variant="ghost-muted"
-                icon={copied() ? "check" : "copy"}
-                onClick={() =>
-                  void ctx.system
-                    .copy(ctx.t("mcp.error.details", { name: current().name, error: current().error }))
-                    .then(() => setCopied(true))
-                    .catch((error) =>
-                      showToast({
-                        variant: "error",
-                        title: ctx.t("mcp.error.copyFailed"),
-                        description: error instanceof Error ? error.message : String(error),
-                      }),
-                    )
-                }
+                icon={current().copied ? "check" : "copy"}
+                onClick={() => copy(current().name, current().error)}
               >
-                {ctx.t(copied() ? "common.copied" : "mcp.error.copy")}
+                {ctx.t(current().copied ? "common.copied" : "mcp.error.copy")}
               </Button>
-              <Button
-                variant="ghost"
-                disabled={toggle.isPending}
-                onClick={() => toggle.mutate({ name: props.name, enabled: false })}
-              >
+              <Button variant="ghost" disabled={current().busy} onClick={() => toggle(false)}>
                 {ctx.t("mcp.error.disable")}
               </Button>
-              <Button
-                variant="neutral"
-                disabled={toggle.isPending}
-                onClick={() => toggle.mutate({ name: props.name, enabled: true })}
-              >
+              <Button variant="neutral" disabled={current().busy} onClick={() => toggle(true)}>
                 {ctx.t("common.retry")}
               </Button>
             </ErrorDetails>
@@ -1142,5 +1521,150 @@ function McpErrorDialog(props: { session: MountedSession; directory: string; nam
         </Dialog>
       )}
     </Show>
+  )
+}
+
+function statusError(status: McpServerStatus | undefined) {
+  return status?.status === "failed" || status?.status === "needs_auth" ? status.error : undefined
+}
+
+// Waits for an MCP sign-in that also accepts the redirect URL pasted from the browser, for when the browser cannot
+// reach the machine running the server (SSH, a remote desktop connection, a container). Like the app's MCPs dialog.
+function McpSignInDialog(props: {
+  server: ServerRef
+  name: string
+  integrationID: string
+  attemptID: string
+  url: string
+  /** The attempt's lifetime in milliseconds, from the server's `time`; the two clocks may disagree. */
+  lifetime: number
+  directory: string
+  /** Reloads the MCP server and resource lists once the sign-in succeeded. */
+  onSync: () => Promise<void>
+  onClose: () => void
+}) {
+  const ctx = usePlugin()
+  const errorID = createUniqueId()
+
+  const attempt = () => ({
+    integrationID: props.integrationID,
+    attemptID: props.attemptID,
+    location: { directory: props.directory },
+  })
+
+  // Reads the server's client on every call, so a restarted server's new client answers.
+  const signIn = createMcpSignIn({
+    url: props.url,
+    lifetime: props.lifetime,
+    status: (signal) =>
+      props.server.client.integration.oauth.status(attempt(), { signal }).then((response) => response.data),
+    complete: (code, signal) => props.server.client.integration.oauth.complete({ ...attempt(), code }, { signal }),
+    cancel: () => props.server.client.integration.oauth.cancel(attempt()),
+    sync: props.onSync,
+    openExternal: (url) => ctx.system.openExternal(url),
+    close: props.onClose,
+    message: (error) => error.message,
+  })
+
+  const view = signIn.view
+  const dispatch = signIn.dispatch
+  let input: HTMLInputElement | undefined
+
+  const failure = (value: McpSignInFailure) => {
+    if (value.type === "auth-expired") return ctx.t("mcp.signIn.failed", { error: ctx.t("mcp.signIn.expired") })
+
+    if (value.type === "auth-failed") return ctx.t("mcp.signIn.failed", { error: value.message })
+
+    if (value.type === "sync-failed") return ctx.t("mcp.signIn.syncFailed", { name: props.name, error: value.message })
+
+    return ctx.t("mcp.timedOut", { name: props.name })
+  }
+
+  const entryError = () => {
+    const error = view().entryError
+
+    if (!error) return
+
+    return error.type === "rejected" ? error.message : ctx.t("mcp.signIn.paste.required")
+  }
+
+  onMount(() => input?.focus({ preventScroll: true }))
+
+  return (
+    <Dialog>
+      <DialogHeader>
+        <DialogTitleGroup title={ctx.t("mcp.signIn.open", { name: props.name })} />
+      </DialogHeader>
+      <DialogBody>
+        <div class="flex flex-col gap-5 px-3 pb-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+          <div>{ctx.t("mcp.signIn.description", { name: props.name })}</div>
+          <Show
+            when={view().failure}
+            fallback={
+              <div class="flex items-center gap-2">
+                <Loader class="size-4 shrink-0 text-v2-icon-icon-muted" />
+                <span>{ctx.t("mcp.signIn.waiting")}</span>
+              </div>
+            }
+          >
+            {(current) => (
+              <div role="alert" class="text-v2-state-fg-danger">
+                {failure(current())}
+              </div>
+            )}
+          </Show>
+          <Show when={view().showOpenBrowser || view().canRetry}>
+            <div class="flex flex-wrap items-center gap-2">
+              <Show when={view().showOpenBrowser}>
+                <Button variant="neutral" icon="arrow-up-right" onClick={() => dispatch({ type: "browser.open" })}>
+                  {ctx.t("mcp.signIn.openBrowser")}
+                </Button>
+              </Show>
+              <Show when={view().canRetry}>
+                <Button variant="neutral" onClick={() => dispatch({ type: "retry.requested" })}>
+                  {ctx.t("common.retry")}
+                </Button>
+              </Show>
+            </div>
+          </Show>
+          <Show when={view().showForm}>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                dispatch({ type: "paste.submitted" })
+              }}
+              class="flex flex-col items-start gap-5 self-stretch"
+            >
+              <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
+                {ctx.t("mcp.signIn.paste.label")}
+                <TextInput
+                  ref={input}
+                  class="!w-full"
+                  name="redirect"
+                  placeholder={ctx.t("mcp.signIn.paste.placeholder")}
+                  value={view().value}
+                  readOnly={view().locked}
+                  invalid={entryError() !== undefined}
+                  aria-describedby={entryError() ? errorID : undefined}
+                  autocomplete="off"
+                  spellcheck={false}
+                  onInput={(event) => dispatch({ type: "paste.changed", value: event.currentTarget.value })}
+                />
+              </label>
+              <Show when={entryError()}>
+                {(error) => (
+                  <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
+                    {error()}
+                  </div>
+                )}
+              </Show>
+              <Button type="submit" variant="contrast" disabled={view().locked} aria-busy={view().submitting}>
+                {ctx.t("common.continue")}
+              </Button>
+            </form>
+          </Show>
+        </div>
+      </DialogBody>
+    </Dialog>
   )
 }

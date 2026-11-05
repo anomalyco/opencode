@@ -5,12 +5,14 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { SessionTurn } from "@opencode/util/session-turn"
 import { Option, Predicate, Schema } from "effect"
 import {
   For,
   Match,
   Show,
   Switch,
+  createComputed,
   createEffect,
   createMemo,
   onCleanup,
@@ -58,6 +60,13 @@ import {
   type PartRef,
   type ReasoningMode,
 } from "./projection"
+import { IDLE_TURN_PHASE, sameRef, viewTurnPhase } from "./turn-phase-machine"
+import {
+  DISPOSED_STEER_ARRIVAL_EVENT,
+  INITIAL_STEER_ARRIVAL_STATE,
+  shouldGrowUserMessage,
+  transitionSteerArrival,
+} from "./steer-arrival-machine"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
@@ -109,6 +118,16 @@ export function createSessionTimelineRowRenderer(input: {
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
 
+  const turns = createMemo(() => {
+    const messages = [...input.projection.messageByID().values()]
+
+    return {
+      messages,
+      legacy: SessionTurn.legacy(messages),
+      indexes: new Map(messages.map((message, index) => [message.id, index])),
+    }
+  })
+
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
     const rows = input.projection.rows()
@@ -148,7 +167,7 @@ export function createSessionTimelineRowRenderer(input: {
       const presentation = input.presentation(message)
 
       return {
-        kind: status === "steering" || status === "stranded" ? "pending" : "sent",
+        kind: status === "steering" || status === "stranded" || status === "sending" ? "pending" : "sent",
         agent: user.agent,
         model: user.model,
         text: !!(presentation?.displayText ?? message.text),
@@ -157,58 +176,72 @@ export function createSessionTimelineRowRenderer(input: {
     })
   })
 
-  // A steer sent while the timeline is open grows in. Messages already there when a session loads, and rows the
-  // virtualizer remounts, appear as they are.
-  const seen = { sessionID: "", ids: new Set<string>() }
+  // A steer sent while the timeline is open grows in. Messages already there when a session loads, history loaded
+  // above them, and rows the virtualizer remounts appear as they are. Every row change syncs here, so the driver reuses
+  // its events and skips a sync whose inputs did not change.
+  let arrivals = INITIAL_STEER_ARRIVAL_STATE
+  const arrivalRendered = { type: "rendered" as const, messageID: "" }
 
-  const arrivals = createMemo(() => {
+  const noRows: readonly TimelineRow.TimelineRow[] = []
+  const arrivalSync = { type: "sync" as const, sessionID: "", rows: noRows, busy: false }
+
+  const syncArrivals = () => {
     const sessionID = input.sessionID()
-    const loaded = seen.sessionID === sessionID && seen.ids.size > 0
-    const arrived = new Set<string>()
+    const rows = input.projection.rows()
+    // The input's pending status lands after its row, so a message sent while the session works counts as a steer.
+    const busy = input.status().type !== "idle"
 
-    if (seen.sessionID !== sessionID) seen.ids.clear()
-    seen.sessionID = sessionID
-    input.projection.rows().forEach((row) => {
-      if (!Predicate.isTagged(row, "UserMessage") || seen.ids.has(row.userMessageID)) return
-      seen.ids.add(row.userMessageID)
+    if (sessionID === arrivalSync.sessionID && rows === arrivalSync.rows && busy === arrivalSync.busy) return
+    arrivalSync.sessionID = sessionID
+    arrivalSync.rows = rows
+    arrivalSync.busy = busy
+    arrivals = transitionSteerArrival(arrivals, arrivalSync)
+  }
 
-      if (loaded) arrived.add(row.userMessageID)
-    })
-
-    return arrived
+  createComputed(syncArrivals)
+  onCleanup(() => {
+    arrivals = transitionSteerArrival(arrivals, DISPOSED_STEER_ARRIVAL_EVENT)
   })
 
-  // The input's pending status lands after its row, so a message sent while the session works counts as a steer.
-  const arriving = (messageID: string) => untrack(() => arrivals().delete(messageID) && input.status().type !== "idle")
+  // A row can render before the sync for the rows that hold it, so it syncs first.
+  const arriving = (messageID: string) =>
+    untrack(() => {
+      syncArrivals()
+
+      if (!shouldGrowUserMessage(arrivals, messageID)) return false
+      arrivalRendered.messageID = messageID
+      arrivals = transitionSteerArrival(arrivals, arrivalRendered)
+
+      return true
+    })
 
   const run = (messageID: string) =>
     createMemo(() => runs().get(messageID), undefined, {
       equals: (a, b) => a?.above === b?.above && a?.below === b?.below,
     })
 
-  const workingTurn = (messageID: string) =>
-    input.status().type !== "idle" && input.projection.activeMessageID() === messageID
+  const phase = (messageID: string) => viewTurnPhase(input.projection.turnPhaseByID().get(messageID) ?? IDLE_TURN_PHASE)
 
   const duration = (messageID: string) => {
     const user = input.projection.messageByID().get(messageID)
 
     if (user?.type !== "user") return null
 
-    const completed = (input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages).reduce<
-      number | undefined
-    >((latest, message) => {
-      if (message.time.completed === undefined) return latest
+    const message = input.projection
+      .assistantMessagesByParent()
+      .get(messageID)
+      ?.findLast((message) => message.time.completed !== undefined)
 
-      return latest === undefined ? message.time.completed : Math.max(latest, message.time.completed)
-    }, undefined)
+    if (message?.time.completed === undefined || message.time.completed < user.time.created) return undefined
 
-    if (completed === undefined || completed < user.time.created) return undefined
-
-    return completed - user.time.created
+    return SessionTurn.duration(turns().messages, message, {
+      index: turns().indexes.get(message.id),
+      legacy: turns().legacy,
+    })
   }
 
   const copyContentID = (messageID: string) => {
-    if (workingTurn(messageID)) return null
+    if (phase(messageID).hideCopy) return null
 
     const message = input.projection
       .assistantMessagesByParent()
@@ -251,7 +284,7 @@ export function createSessionTimelineRowRenderer(input: {
 
         if (group.type !== "context") return []
         const contents = indexGroupContents(group.refs)
-        const lastAssistant = input.projection.assistantMessagesByParent().get(row().userMessageID)?.at(-1)
+        const streaming = phase(row().userMessageID).streamingReasoningRef
 
         return group.refs.flatMap<ContextGroupPart>((ref) => {
           const content = contents.get(ref.messageID)?.get(ref.partID)
@@ -267,15 +300,7 @@ export function createSessionTimelineRowRenderer(input: {
               {
                 ...content,
                 id: ref.partID,
-                streaming:
-                  workingTurn(row().userMessageID) &&
-                  input.status().type === "busy" &&
-                  lastAssistant?.id === ref.messageID &&
-                  lastAssistant.time.completed === undefined &&
-                  !lastAssistant.error &&
-                  !lastAssistant.retry &&
-                  lastAssistant.content.at(-1) === content &&
-                  content.time?.completed === undefined,
+                streaming: sameRef(streaming, ref),
               },
             ]
           const message = input.projection.messageByID().get(ref.messageID)
@@ -338,7 +363,7 @@ export function createSessionTimelineRowRenderer(input: {
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
             busy={
-              workingTurn(row().userMessageID) &&
+              phase(row().userMessageID).live &&
               input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
             }
             onOpenChange={(open) => input.disclosure.set(key(), open)}
@@ -455,6 +480,23 @@ export function createSessionTimelineRowRenderer(input: {
       return value.steps.length > 0 ? value : undefined
     })
 
+    const turnTokensPerSecond = createMemo(() => {
+      const current = ref()
+
+      if (!current || copyContentID(row().userMessageID) !== current.partID) return undefined
+
+      const messages = input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages
+
+      const last = messages.at(-1)
+
+      if (!last) return undefined
+
+      return SessionTurn.tokensPerSecond(turns().messages, last, {
+        index: turns().indexes.get(last.id),
+        legacy: turns().legacy,
+      })
+    })
+
     const disclosureKey = () => (content()?.type === "reasoning" ? ref()!.partID : row().group.key)
 
     return (
@@ -468,6 +510,7 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 defaultOpen={defaultOpen()}
@@ -844,9 +887,17 @@ export function createSessionTimelineRowRenderer(input: {
 
   function TurnDiff(props: { row: TimelineRow.TurnDiff; onSizeChange?: () => void }) {
     const render = ToolRegistry.render("patch") ?? GenericTool
-    // Until the diff loads, list the paths the turn's steps recorded, without change counts.
+    // Until the diff loads, and if it fails, list the paths the turn's steps recorded, without change counts.
     const turn = () => ({ sessionID: input.sessionID(), from: props.row.from })
-    const diffs = () => data.turnDiff?.get(turn())
+    const state = createMemo(() => data.turnDiff?.state(turn()))
+
+    const diffs = () => {
+      const current = state()
+
+      return current?.status === "ready" ? current.diffs : undefined
+    }
+
+    const failed = () => state()?.status === "failed"
     const paths = () => diffs()?.map((diff) => diff.file) ?? props.row.files
     const showAllKey = () => `turn-diff:${props.row.messageID}`
     const showAll = () => input.disclosure.value(showAllKey()) === true
@@ -854,24 +905,47 @@ export function createSessionTimelineRowRenderer(input: {
     const overflow = () => paths().length > turnDiffFileLimit
     const fileKey = (path: string) => `turn-diff:${props.row.messageID}:file:${path}`
 
+    // Loads once per turn. A failure settles until the row remounts or the reader retries.
     createEffect(() => data.turnDiff?.load(turn()))
 
     return (
       <Show when={data.turnDiff && paths().length > 0}>
         <div data-slot="session-turn-diffs" class="flex flex-col gap-2 pt-4">
           <div class="flex h-6 min-w-0 items-center gap-2">
-            <span class="text-14-medium text-v2-text-text-base tabular-nums">
+            <span class="shrink-0 text-14-medium text-v2-text-text-base tabular-nums">
               {i18n.plural("ui.sessionTurn.diffs.changed", paths().length)}
             </span>
             <DiffChanges changes={[...(diffs() ?? [])]} />
-            <Show when={overflow()}>
-              <button
-                type="button"
-                class="ml-auto text-14-regular text-v2-text-text-accent"
-                onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+            <Show when={failed()}>
+              <span
+                data-slot="session-turn-diffs-error"
+                class="min-w-0 truncate text-13-regular leading-text-compact text-v2-text-text-faint"
               >
-                {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
-              </button>
+                {i18n.t("ui.sessionTurn.diffs.failed")}
+              </span>
+            </Show>
+            <Show when={failed() || overflow()}>
+              <div class="ms-auto flex shrink-0 items-center gap-3">
+                <Show when={failed()}>
+                  <button
+                    type="button"
+                    data-slot="session-turn-diffs-retry"
+                    class="text-14-regular text-v2-text-text-accent"
+                    onClick={() => data.turnDiff?.load(turn())}
+                  >
+                    {i18n.t("ui.sessionTurn.diffs.retry")}
+                  </button>
+                </Show>
+                <Show when={overflow()}>
+                  <button
+                    type="button"
+                    class="text-14-regular text-v2-text-text-accent"
+                    onClick={() => input.disclosure.set(showAllKey(), !showAll())}
+                  >
+                    {showAll() ? i18n.t("ui.sessionTurn.diffs.showLess") : i18n.t("ui.sessionTurn.diffs.showAll")}
+                  </button>
+                </Show>
+              </div>
             </Show>
           </div>
           <Dynamic
@@ -1065,7 +1139,7 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(current().userMessageID)}>
+            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
               {content}
             </div>
           </div>
@@ -1146,20 +1220,13 @@ export function createSessionTimelineRowRenderer(input: {
         return value
       }
 
-      const status = createMemo(() => {
-        const retry = (
-          input.projection.assistantMessagesByParent().get(current().userMessageID) ?? emptyAssistantMessages
-        ).at(-1)?.retry
-
-        if (!retry) return input.status()
-
-        return { type: "retry" as const, attempt: retry.attempt, message: retry.error.message, next: retry.at }
-      })
-
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <SessionRetry status={status()} show={input.projection.activeMessageID() === current().userMessageID} />
+            <SessionRetry
+              status={{ type: "retry", attempt: current().attempt, message: current().message, next: current().next }}
+              show={input.projection.activeMessageID() === current().userMessageID}
+            />
           </div>
         </Frame>
       )
