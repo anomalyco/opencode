@@ -1,16 +1,15 @@
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import type { Route, CompactionOperations } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
 import {
-  HttpOptions,
   ProviderConfigurationError,
   ProviderID,
-  mergeHttpOptions,
   type ModelID,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
@@ -27,7 +26,7 @@ const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 type AzureURL = AtLeastOne<{ readonly resourceName: string; readonly baseURL: string }>
 
 export type Config = AzureURL &
-  RouteDefaultsInput &
+  RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
     readonly queryParams?: Record<string, string>
@@ -140,7 +139,7 @@ export const configure = (input: Config) => {
   const chat = (modelID: string | ModelID) =>
     configuredRoute(chatRoute, input, modelID)
       .with(withOpenAIOptions(modelID, modelDefaults))
-      .model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
+      .model<OpenAIProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } })
 
   const messages = (modelID: string | ModelID) =>
     messagesRoute
@@ -164,10 +163,7 @@ export const configure = (input: Config) => {
       id: modelID,
       provider: id,
       providerOptions,
-      http: mergeHttpOptions(
-        media.http,
-        target.query === undefined ? undefined : new HttpOptions({ query: target.query }),
-      ),
+      http: { ...media.http, query: { ...media.http?.query, ...target.query } },
     })
   }
 

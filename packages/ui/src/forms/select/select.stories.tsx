@@ -16,9 +16,11 @@ const cities: { city: string; region: Region }[] = [
 ]
 
 const docs = `### Overview
-Single-select built on Kobalte with an inline trigger and current menu styling.
+Single-select built on Kobalte with current menu styling. The trigger is inline by default, or an input field that matches the text input.
 
 ### API
+- \`appearance\`: \`inline\` (default) is the borderless trigger; \`small\`, \`base\` and \`large\` are 24px, 28px and 32px input fields.
+- \`surface\`: \`base\` (default), \`layer-1\` or \`invisible\` for input fields; invisible gains a fill on hover.
 - \`placeholder\`: Shown in the trigger when nothing is selected (same idea as text inputs).
 - \`options\`, \`current\`, \`onSelect\`: controlled selection (\`current\` is the selected option object).
 - \`value\` / \`label\`: accessors when options are not plain strings.
@@ -124,6 +126,72 @@ export const Disabled = {
       onSelect={() => {}}
     />
   ),
+}
+
+export const Appearances = {
+  render: () => (
+    <div style={{ display: "grid", gap: "20px", width: "280px" }}>
+      <Select appearance="small" placeholder="Small (24px)" options={fruits} onSelect={() => {}} />
+      <Select appearance="base" placeholder="Base (28px)" options={fruits} current="Banana" onSelect={() => {}} />
+      <Select appearance="large" placeholder="Large (32px)" options={fruits} current="Cherry" onSelect={() => {}} />
+      <Select placeholder="Inline (default)" options={fruits} current="Date" onSelect={() => {}} />
+    </div>
+  ),
+}
+
+export const Surfaces = {
+  render: () => (
+    <div style={{ display: "grid", gap: "20px", width: "280px" }}>
+      <Select appearance="base" placeholder="Base (default)" options={fruits} onSelect={() => {}} />
+      <Select appearance="base" surface="layer-1" placeholder="Layer 1" options={fruits} onSelect={() => {}} />
+      <Select appearance="base" surface="invisible" placeholder="Invisible" options={fruits} onSelect={() => {}} />
+      <Select
+        appearance="base"
+        surface="invisible"
+        placeholder="Invisible, invalid"
+        options={fruits}
+        invalid
+        onSelect={() => {}}
+      />
+      <Select
+        appearance="base"
+        surface="invisible"
+        placeholder="Invisible, disabled"
+        options={fruits}
+        disabled
+        onSelect={() => {}}
+      />
+    </div>
+  ),
+}
+
+export const HighlightPreview = {
+  render: () => {
+    const [current, setCurrent] = createSignal("Apple")
+    const [shown, setShown] = createSignal("Apple")
+
+    return (
+      <div style={{ display: "grid", gap: "12px", width: "280px" }}>
+        <Select
+          appearance="base"
+          options={fruits}
+          current={current()}
+          onHighlight={(value) => {
+            const previous = shown()
+            setShown(value)
+
+            return () => setShown(previous)
+          }}
+          onSelect={(value) => {
+            if (!value) return
+            setCurrent(value)
+            setShown(value)
+          }}
+        />
+        <output data-slot="select-preview">Showing {shown()}</output>
+      </div>
+    )
+  },
 }
 
 export const WithField = {

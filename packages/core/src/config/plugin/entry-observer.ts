@@ -7,23 +7,24 @@ import { Effect, PubSub, Stream } from "effect"
 import path from "path"
 import { Config } from "../../config.js"
 
+/**
+ * Runs `reload` on every `config.updated`. The returned `entries` always reads the current config, so a reload that
+ * runs before the event arrives already sees the change.
+ */
 export const observe = Effect.fnUntraced(function* (
   config: Config.Interface,
   event: EventDomain,
   reload: Effect.Effect<void>,
 ) {
-  const loaded = { entries: yield* config.entries() }
-  const refresh = config.entries().pipe(
-    Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-    Effect.andThen(reload),
-  )
   yield* event.subscribe({ types: ["config.updated"] }).pipe(
-    Stream.runForEach(() => refresh),
+    Stream.runForEach(() => reload),
     Effect.forkScoped({ startImmediately: true }),
   )
-  // Close the race between the first read and establishing the subscription.
-  loaded.entries = yield* config.entries()
-  return loaded
+  return {
+    get entries() {
+      return config.snapshot()
+    },
+  }
 })
 
 /**

@@ -8,7 +8,35 @@ import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
-import { createProfiling, type Recording } from "./profiling"
+import {
+  createDocumentState,
+  documentGeneration,
+  documentIcon,
+  documentTab,
+  isDocumentClosed,
+  transitionDocument,
+  type DocumentEvent,
+} from "./page-machine"
+import {
+  initialPickerState,
+  isPickerActive,
+  pickerAttempt,
+  PICKER_TIMEOUT_MS,
+  transitionPicker,
+  type PickerEffect,
+  type PickerEvent,
+} from "./picker-machine"
+import { createProfiling } from "./profiling"
+import type { SharedTrace } from "./profiling-machine"
+import {
+  createDialogGateState,
+  selectDialog,
+  selectDialogTarget,
+  selectOpenDialog,
+  transitionDialogGate,
+  type DialogGateEvent,
+  type RunStopReason,
+} from "./dialog-machine"
 import type { BrowserNetwork } from "./network"
 import {
   allowedDestination,
@@ -24,8 +52,8 @@ import type { PaneElement } from "./ipc"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
-/** State every page of the pane shares: the element ref allocator and the app-wide trace recording. */
-export type Shared = { ref: () => string; recording?: Recording }
+/** State every page of the pane shares: the element ref allocator and the owner of the app-wide trace. */
+export type Shared = { ref: () => string; trace?: SharedTrace }
 
 // Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
 const retainedOperations: readonly Browser.Method[] = [
@@ -121,6 +149,31 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
 }
 
+/** Ends a running command's wait when it is interrupted. */
+type Interrupted = ReturnType<typeof Promise.withResolvers<never>>
+
+/** What a command that stopped, or never started, tells the agent. */
+function runStopError(reason: RunStopReason) {
+  switch (reason) {
+    case "dialog-open":
+      return new Error(
+        'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
+      )
+    case "dialog-interrupted":
+      return new Error(
+        'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
+      )
+    case "cancelled":
+      return new Error(
+        "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
+      )
+    case "closed":
+      return new Error(
+        "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
+      )
+  }
+}
+
 export type BrowserPage = ReturnType<typeof createBrowserPage>
 
 export function createBrowserPage(
@@ -186,9 +239,9 @@ export function createBrowserPage(
       return
     }
 
-    if (input.key === "Escape" && inspecting) {
+    if (input.key === "Escape" && isPickerActive(pickerState)) {
       event.preventDefault()
-      void toggleInspect(false)
+      void dispatchPicker({ type: "escape.pressed" })
 
       return
     }
@@ -207,7 +260,7 @@ export function createBrowserPage(
     // The same chord as Chromium DevTools' element picker.
     if (input.shift && pageLetter(input) === "c") {
       event.preventDefault()
-      void toggleInspect(!inspecting)
+      void dispatchPicker({ type: "inspect.toggled" })
 
       return
     }
@@ -230,15 +283,15 @@ export function createBrowserPage(
     options.zoomed?.()
   }
 
-  let icon: string | undefined
-  // Bumped by every icon change, so a slow fetch for an earlier icon cannot replace a later one.
-  let iconRequest = 0
+  let documentState = createDocumentState(options.restore)
+  const closed = () => isDocumentClosed(documentState)
   let reported = ""
 
   const detail = () => {
-    if (closed) return
+    if (closed()) return
     // Chromium's factor for the outermost presets can land a rounding error outside them.
     const next: PageDetail = { zoom: Math.min(5, Math.max(0.25, contents.getZoomFactor())) }
+    const icon = documentIcon(documentState)
 
     if (icon) next.icon = icon
     const key = `${next.zoom}:${next.icon ?? ""}`
@@ -248,14 +301,6 @@ export function createBrowserPage(
     options.detail?.(next)
   }
 
-  contents.on("page-favicon-updated", (_event, favicons) => {
-    const request = ++iconRequest
-    void loadIcon(favicons, options.network).then((value) => {
-      if (closed || request !== iconRequest) return
-      icon = value
-      detail()
-    })
-  })
   const cdp = createCdp(contents)
   const documents = new Map<string, string>()
   const sourceURLs = () => [...new Set([contents.getURL(), ...documents.values()])].sort()
@@ -266,19 +311,14 @@ export function createBrowserPage(
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
   // the element until the document changes.
   const picked = new Map<string, Element>()
-  let inspecting = false
-  // Bumped by every picker toggle and hide, so a pick still being described can tell it was cancelled.
-  let picks = 0
-  let flash: ReturnType<typeof setTimeout> | undefined
+  let pickerState = initialPickerState
+  let pickerTimer: ReturnType<typeof setTimeout> | undefined
   const sessions = new Map<string, string>()
   const parents = new Map<string, string>()
   const contexts = new Map<string, { id: number; sessionID?: string }>()
-  const dialogs = new Set<() => void>()
-  let dialog: { type: string; message: string; defaultValue: string } | null = null
-  let dialogURL = ""
-  let dialogRevision = 0
-  // The first restored navigation consumes the generation reserved in the unloaded inventory.
-  let generation = options.restore ? options.restore.generation - 1 : 0
+  let dialogGate = createDialogGateState()
+  // Running commands by run id: the controller that stops their remaining steps, and the wait an interruption ends.
+  const runs = new Map<number, { controller: AbortController; interrupted: Interrupted }>()
   let revision = 0
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, frame.url)
@@ -288,113 +328,100 @@ export function createBrowserPage(
     documents.delete(frameId)
     revision++
   })
-  let closed = false
-  // The committed document's origin; its icon stays while navigations remain on it.
-  let origin = ""
-  // Whether the native surface holds a real document worth showing. Chromium keeps the
-  // previous document painted until the next one renders, so a shown page stays shown
-  // through later navigations; blank and failed documents hide until a real one is ready.
-  let content = false
-  let failure: { url: string; message: string } | undefined
-  // A blank document is never shown, so its load does not count as loading: a new tab shows its new tab page at once.
-  let blank = options.initialize !== false && !options.restore?.url
-  // Chromium names a document after its URL until its <title> parses. A navigation on the same site keeps the shown
-  // title until the new document names itself or stops loading, so a page that reloads or redirects to itself does
-  // not flash its URL in the tab strip.
-  let title = ""
 
-  const state = (): Browser.Tab => {
-    const page = {
+  const state = () =>
+    documentTab(documentState, {
       id: options.id,
-      url: (failure?.url ?? contents.getURL()).slice(0, 16_384),
-      title: title.slice(0, 2_048),
-      loading: contents.isLoading() && !blank,
-    }
-
-    const history = {
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
-      generation,
-    }
+    })
 
-    return failure ? { ...page, loadError: failure.message, ...history } : { ...page, ...history }
+  // Every state report goes through here, so a page that was disposed publishes nothing.
+  const publish = (error?: string) => {
+    if (!closed()) options.publish(error)
   }
 
-  const publish = () => {
-    if (!closed) options.publish()
+  const dispatch = (event: DocumentEvent) => {
+    const next = transitionDocument(documentState, event)
+    documentState = next.state
+    next.effects.forEach((effect) => {
+      switch (effect.type) {
+        case "reset-document":
+          documents.clear()
+          refs.clear()
+          picked.clear()
+          void dispatchPicker({ type: "document.changed" })
+          break
+        case "clear-diagnostics":
+          diagnostics.clear()
+          break
+        case "show":
+          // The renderer's layout requests may lag behind navigation; the page decides
+          // whether there is a document worth exposing over the themed background.
+          embed.show(effect.visible)
+          break
+        case "publish":
+          publish()
+          break
+        case "detail":
+          detail()
+          break
+        case "load-icon":
+          // Never rejects: an icon that does not load is none.
+          void loadIcon(effect.favicons, options.network).then((icon) =>
+            dispatch({ type: "icon.loaded", attempt: effect.attempt, icon }),
+          )
+      }
+    })
   }
 
-  const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
-    if (!event.isMainFrame || event.isSameDocument) return
-    blank = event.url === "about:blank"
-    failure = undefined
-    generation++
-    documents.clear()
-    refs.clear()
-    picked.clear()
-    diagnostics.clear()
+  const dispatchDialog = (event: DialogGateEvent) => {
+    const next = transitionDialogGate(dialogGate, event)
+    dialogGate = next.state
+    next.effects.forEach((effect) => {
+      if (effect.type === "publish") return publish()
+      const run = runs.get(effect.runID)
 
-    if (inspecting) void toggleInspect(false)
-    publish()
+      if (!run) return
+      runs.delete(effect.runID)
+
+      if (effect.abort) run.controller.abort()
+      run.interrupted.reject(runStopError(effect.reason))
+    })
+
+    return next.reply
   }
 
-  const settle = () => {
-    content = contents.getURL() !== "about:blank" && !failure
-    updateVisibility()
-  }
-
-  contents.on("did-start-navigation", reset)
-  contents.on("did-navigate", (_event, url, status, statusText) => {
-    // The server-network proxy answers an unreachable HTTP target with an empty 502. Other
-    // error statuses are real documents from the user's server and stay visible.
-    if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
-
-    // Another site's icon arrives with its document; the same site keeps its icon meanwhile, as tabs do. Files and blank
-    // pages have no shared origin, so each keeps none.
-    const next = destinationOrigin(url) ?? url
-
-    if (next !== origin) {
-      icon = undefined
-      iconRequest++
-      title = contents.getTitle()
-    }
-
-    origin = next
-
-    // A blank or failed document paints at commit; a real one waits for dom-ready.
-    if (url === "about:blank" || failure) settle()
-    publish()
-    // After the state that names the new URL. Chromium keeps a zoom per origin, so a new site may have its own.
-    detail()
-  })
-  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
-    // Cancelled navigation and failed subframes do not replace the current page.
-    if (!isMainFrame || code === -3) return
-    failure = { url, message: description.slice(0, 2_048) }
-    settle()
-    publish()
-  })
-  contents.on("dom-ready", settle)
-
-  const retitle = () => {
-    title = contents.getTitle()
-    publish()
-  }
-
-  contents.on("did-stop-loading", () => {
-    settle()
-    retitle()
-  })
-  contents.on("did-navigate-in-page", retitle)
+  contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
+  contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: contents.getTitle() }))
+  contents.on("did-start-navigation", (event) =>
+    dispatch({
+      type: "navigation.started",
+      url: event.url,
+      isMainFrame: event.isMainFrame,
+      isSameDocument: event.isSameDocument,
+    }),
+  )
+  contents.on("did-navigate", (_event, url, status, statusText) =>
+    dispatch({ type: "navigation.committed", url, status, statusText, title: contents.getTitle() }),
+  )
+  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
+    dispatch({ type: "navigation.failed", code, description, url, isMainFrame }),
+  )
+  contents.on("did-navigate-in-page", (_event, url, isMainFrame) =>
+    dispatch({ type: "navigation.in-page", url, title: contents.getTitle(), isMainFrame }),
+  )
+  contents.on("dom-ready", () => dispatch({ type: "document.ready" }))
+  contents.on("page-title-updated", () => dispatch({ type: "title.updated", title: contents.getTitle() }))
+  contents.on("page-favicon-updated", (_event, favicons) => dispatch({ type: "icon.updated", favicons }))
   contents.on("focus", () => {
-    if (!closed) options.focused?.()
+    if (!closed()) options.focused?.()
   })
-  contents.on("page-title-updated", retitle)
   contents.on("render-process-gone", () => {
-    if (!closed) options.fail()
+    if (!closed()) options.fail()
   })
   contents.debugger.on("detach", () => {
-    if (!closed) options.fail()
+    if (!closed()) options.fail()
   })
   contents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   contents.session.setPermissionCheckHandler(() => false)
@@ -412,7 +439,7 @@ export function createBrowserPage(
     if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
     event.preventDefault()
     // The same reason a typed address gets, so a blocked link and a blocked address read alike.
-    options.publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
+    publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
   }
 
   contents.on("will-frame-navigate", guard)
@@ -462,7 +489,7 @@ export function createBrowserPage(
       })
     } catch {
       item.cancel()
-      options.publish("download_failed")
+      publish("download_failed")
     }
   }
 
@@ -497,17 +524,14 @@ export function createBrowserPage(
         },
         sessionId,
       ),
-      ...(inspecting ? [arm(sessionId)] : []),
     ]).catch(() => undefined)
+    void dispatchPicker({ type: "frame.attached", sessionID: sessionId })
   })
   // Each out-of-process frame runs its own picker; the frame under the pointer reports the click.
-  cdp.on("Overlay.inspectNodeRequested", ({ backendNodeId }, sessionID) => {
-    if (!inspecting) return
-    void inspected(backendNodeId, sessionID).catch(() => {
-      void hideHighlight()
-      options.inspect?.({ active: false })
-    })
-  })
+  cdp.on(
+    "Overlay.inspectNodeRequested",
+    ({ backendNodeId }, sessionID) => void dispatchPicker({ type: "node.picked", backendID: backendNodeId, sessionID }),
+  )
   cdp.on("Target.detachedFromTarget", ({ sessionId }) => {
     sessions.forEach((id, frameID) => {
       if (id === sessionId) {
@@ -516,35 +540,24 @@ export function createBrowserPage(
       }
     })
   })
-  cdp.on("Page.javascriptDialogOpening", (event) => {
-    dialogURL = event.url
-    dialogRevision++
-    dialog = {
-      type: event.type,
+  cdp.on("Page.javascriptDialogOpening", (event) =>
+    dispatchDialog({
+      type: "dialog.opened",
+      url: event.url,
+      dialogType: event.type,
       message: event.message.slice(0, Browser.MAX_TEXT),
-      defaultValue: event.defaultPrompt ?? "",
-    }
-    dialogs.forEach((reject) => reject())
-    publish()
-  })
-  cdp.on("Page.javascriptDialogClosed", () => {
-    dialogRevision++
-    dialog = null
-    publish()
-  })
+      defaultPrompt: event.defaultPrompt ?? "",
+    }),
+  )
+  cdp.on("Page.javascriptDialogClosed", () => dispatchDialog({ type: "dialog.closed" }))
   // Hidden tabs keep a desktop-sized viewport until the renderer lays the embed out.
   view.setBounds({ x: 0, y: 0, width: 1000, height: 700 })
   const embed = options.embeds.create(view, win)
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
-    if (visible || closed) return
-    picks++
-    void (inspecting ? toggleInspect(false) : hideHighlight())
+    if (!visible) void dispatchPicker({ type: "embed.hidden" })
   })
-  // The renderer's layout requests may lag behind navigation; the page decides
-  // whether there is a document worth exposing over the themed background.
-  const updateVisibility = () => embed.show(content)
 
   const load = (url: string) => {
     let committed = false
@@ -571,7 +584,7 @@ export function createBrowserPage(
           load(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
-            options.publish(error.message)
+            publish(error.message)
           }),
         ]),
     diagnostics.enable(),
@@ -593,21 +606,21 @@ export function createBrowserPage(
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
     async inspect(enabled: boolean) {
-      if (closed) return
+      if (closed()) return
       await ready
-      await toggleInspect(enabled)
+      await dispatchPicker({ type: "inspect.set", enabled })
     },
     async highlight(ref?: Browser.Ref) {
-      if (closed) return
-      await highlightPicked(ref).catch(() => undefined)
+      if (closed()) return
+      await dispatchPicker({ type: "highlight.requested", target: ref ? picked.get(ref.replace(/^@/, "")) : undefined })
     },
     zoom(direction: "in" | "out" | "reset") {
-      if (!closed) zoom(direction)
+      if (!closed()) zoom(direction)
     },
     async site() {
       const url = contents.getURL()
 
-      if (closed || !destinationOrigin(url)) return { cookies: 0 }
+      if (closed() || !destinationOrigin(url)) return { cookies: 0 }
 
       return { cookies: (await contents.session.cookies.get({ url })).length }
     },
@@ -619,7 +632,7 @@ export function createBrowserPage(
       const url = contents.getURL()
       const origin = destinationOrigin(url)
 
-      if (closed || !origin) return
+      if (closed() || !origin) return
       const cookies = await contents.session.cookies.get({ url })
       await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
       await contents.session.clearStorageData({
@@ -627,89 +640,44 @@ export function createBrowserPage(
         storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
       })
 
-      if (closed) return
+      if (closed()) return
       contents.reload()
       // A slow page still cleared; the count then reads what it set so far.
-      await waitFor(() => closed || !contents.isLoading(), new AbortController().signal, 30_000).catch(() => undefined)
+      await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
+        () => undefined,
+      )
     },
     /** Reports the page's icon and zoom when either changed since the last report. */
     detail,
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
-      abortError(signal)
+      // Registers the run before any further await, and listens for its abort in the same turn, so a dialog or a
+      // cancellation that arrives while it still inspects its target interrupts it.
+      const reply = dispatchDialog({ type: "run.started", actionType: command.action.type, aborted: signal.aborted })
 
-      if (closed)
-        throw new Error(
-          "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
-        )
-
-      if (inspecting && pointerOperations.includes(command.action.type)) await toggleInspect(false)
-
-      if (dialog && command.action.type !== "dialog")
-        throw new Error(
-          'A JavaScript dialog is open. Inspect it with browser.dialog({tabID,action:"get"}), then explicitly accept or dismiss it before continuing.',
-        )
-
-      if (command.inspect) return { value: await inspect(command.action), files: [] }
-
-      if (command.target && JSON.stringify(await inspect(command.action)) !== JSON.stringify(command.target))
-        throw new Error(
-          "Browser target changed while permission was pending. Take a fresh snapshot or listing and request the action again; it was not executed.",
-        )
-
-      if (
-        command.generation !== undefined &&
-        command.generation !== generation &&
-        !retainedOperations.includes(command.action.type)
-      )
-        throw new Error(
-          "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
-        )
-      const modal = Promise.withResolvers<never>()
-      const cancelled = Promise.withResolvers<never>()
-      // The action underneath the race keeps running after a dialog wins it; it checks this
-      // signal before each further step, so a validation alert on one field stops the rest.
-      // A navigation is left alone: its beforeunload dialog is answered through browser.dialog
-      // and the pending load then proceeds or not.
-      const run = new AbortController()
-
-      const cancel = () => {
-        run.abort()
-        cancelled.reject(
-          new Error(
-            "Browser operation was cancelled. Inspect the tab before deciding to repeat an action; cancellation does not undo changes already made.",
-          ),
-        )
-      }
-
+      if (reply?.status !== "accepted") throw runStopError(reply?.reason ?? "closed")
+      const runID = reply.runID
+      // The action underneath the race keeps running after an interruption wins it; it checks this
+      // signal before each further step.
+      const run = { controller: new AbortController(), interrupted: Promise.withResolvers<never>() }
+      runs.set(runID, run)
+      const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
-      const reject = () => {
-        if (command.action.type !== "navigate") run.abort()
-        modal.reject(
-          new Error(
-            'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
-          ),
-        )
-      }
-
-      if (command.action.type !== "dialog") dialogs.add(reject)
-
       try {
-        return await Promise.race([
-          execute(command.action, command.files, run.signal, command.target),
-          modal.promise,
-          cancelled.promise,
-        ])
+        return await Promise.race([perform(command, run.controller.signal), run.interrupted.promise])
       } finally {
         signal.removeEventListener("abort", cancel)
-        dialogs.delete(reject)
+        runs.delete(runID)
+        dispatchDialog({ type: "run.finished", runID })
       }
     },
     async dispose() {
-      if (closed) return
-      closed = true
-      clearTimeout(flash)
+      if (closed()) return
+      dispatch({ type: "disposed" })
+      dispatchDialog({ type: "disposed" })
+      void dispatchPicker({ type: "disposed" })
+      clearTimeout(pickerTimer)
       detachNetwork?.()
       contents.session.off("will-download", download)
       await profiling.dispose()
@@ -721,6 +689,30 @@ export function createBrowserPage(
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },
+  }
+
+  async function perform(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
+    if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
+      await dispatchPicker({ type: "pointer.command" })
+
+    if (command.inspect) return { value: await inspect(command.action), files: [] }
+
+    if (command.target && JSON.stringify(await inspect(command.action)) !== JSON.stringify(command.target))
+      throw new Error(
+        "Browser target changed while permission was pending. Take a fresh snapshot or listing and request the action again; it was not executed.",
+      )
+
+    if (
+      command.generation !== undefined &&
+      command.generation !== documentGeneration(documentState) &&
+      !retainedOperations.includes(command.action.type)
+    )
+      throw new Error(
+        "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
+      )
+    abortError(signal)
+
+    return execute(command.action, command.files, signal, command.target)
   }
 
   async function execute(
@@ -1025,7 +1017,9 @@ export function createBrowserPage(
 
       case "dialog": {
         if (action.action !== "get") {
-          if (!dialog)
+          const open = selectOpenDialog(dialogGate)
+
+          if (!open)
             throw new Error(
               'This tab has no JavaScript dialog to handle. browser.dialog({tabID,action:"get"}) returns null when none is open; continue without accepting or dismissing one.',
             )
@@ -1033,10 +1027,10 @@ export function createBrowserPage(
             accept: action.action === "accept",
             promptText: action.promptText,
           })
-          dialog = null
+          dispatchDialog({ type: "dialog.handled", revision: open.revision })
         }
 
-        return result({ tab: state(), dialog })
+        return result({ tab: state(), dialog: selectDialog(dialogGate) })
       }
 
       case "files.upload":
@@ -1134,10 +1128,7 @@ export function createBrowserPage(
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
     // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
     if (action.type === "dialog")
-      return {
-        resources: [dialog ? dialogURL : contents.getURL()],
-        key: `${generation}:${dialogRevision}:${Boolean(dialog)}`,
-      }
+      return selectDialogTarget(dialogGate, documentGeneration(documentState), contents.getURL())
 
     const fileIDs =
       action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
@@ -1194,7 +1185,7 @@ export function createBrowserPage(
                 : [contents.getURL()],
         ),
       ].sort(),
-      key: JSON.stringify([generation, revision, selected]),
+      key: JSON.stringify([documentGeneration(documentState), revision, selected]),
     }
   }
 
@@ -1564,90 +1555,123 @@ export function createBrowserPage(
     return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
   }
 
-  async function toggleInspect(enabled: boolean) {
-    picks++
-
-    if (enabled !== inspecting) {
-      inspecting = enabled
-      clearTimeout(flash)
-      await Promise.all(
-        [undefined, ...sessions.values()].map((sessionID) =>
-          (enabled ? arm(sessionID) : cdp.send("Overlay.setInspectMode", inspectOff, sessionID)).catch(() => undefined),
-        ),
-      )
-
-      if (!enabled) await hideHighlight()
-    }
-
-    // A later toggle may have finished first; report where the picker ended up.
-    options.inspect?.({ active: inspecting })
+  /** Moves the picker and runs its effects; resolves once they ran, so input waits for the picker to disarm. */
+  async function dispatchPicker(event: PickerEvent): Promise<void> {
+    const next = transitionPicker(pickerState, event)
+    pickerState = next.state
+    await Promise.all(next.effects.map(runPicker))
   }
 
-  async function arm(sessionID?: string) {
+  async function runPicker(effect: PickerEffect): Promise<void> {
+    switch (effect.type) {
+      case "arm": {
+        const attempt = effect.attempt
+        // Each out-of-process frame arms its own picker; the main target decides whether the picker started.
+        const frames = Array.from(sessions.values(), (id) => arm(attempt, id).catch(() => undefined))
+
+        return Promise.all([arm(attempt), ...frames]).then(
+          () => dispatchPicker({ type: "arm.succeeded", attempt }),
+          () => dispatchPicker({ type: "arm.failed", attempt }),
+        )
+      }
+
+      case "arm-frame":
+        return arm(effect.attempt, effect.sessionID).catch(() => undefined)
+      case "disarm":
+        return disarm()
+      case "describe": {
+        const attempt = effect.attempt
+
+        return describePick(effect.backendID, effect.sessionID).then(
+          (pick) => dispatchPicker({ type: "describe.succeeded", attempt, target: pick.target, element: pick.element }),
+          () => dispatchPicker({ type: "describe.failed", attempt }),
+        )
+      }
+
+      case "pick": {
+        const ref = options.shared.ref()
+        picked.set(ref, effect.target)
+
+        // The pick focused the page; the comment editor opens in the app window. Focus only moves
+        // within a focused window, so synthetic input never raises a background window.
+        if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
+        options.inspect?.({ active: false, element: { ref: Browser.Ref.make(ref), ...effect.element } })
+
+        return
+      }
+
+      case "flash": {
+        const attempt = effect.attempt
+        const target = effect.target
+
+        return cdp
+          .send("DOM.scrollIntoViewIfNeeded", { backendNodeId: target.backendID }, target.sessionID)
+          .then(() =>
+            cdp.send(
+              "Overlay.highlightNode",
+              { backendNodeId: target.backendID, highlightConfig: pickedHighlight },
+              target.sessionID,
+            ),
+          )
+          .then(
+            () => dispatchPicker({ type: "flash.shown", attempt }),
+            () => dispatchPicker({ type: "flash.failed", attempt }),
+          )
+      }
+
+      case "hide-highlight":
+        return hideHighlight()
+      case "report":
+        options.inspect?.({ active: effect.active })
+
+        return
+      case "timer": {
+        const attempt = effect.attempt
+        const phase = effect.phase
+        clearTimeout(pickerTimer)
+        pickerTimer = setTimeout(
+          () => void dispatchPicker({ type: "timeout", phase, attempt }),
+          PICKER_TIMEOUT_MS[phase],
+        )
+      }
+    }
+  }
+
+  async function arm(attempt: number, sessionID?: string) {
     // The main target enables DOM at startup; frame targets only need it for the picker.
     if (sessionID) await cdp.send("DOM.enable", {}, sessionID)
     await cdp.send("Overlay.enable", {}, sessionID)
 
     // The picker may have been turned off while the domains were enabling.
-    if (!inspecting) return
+    if (pickerAttempt(pickerState) !== attempt) return
     await cdp.send("Overlay.setInspectMode", { mode: "searchForNode", highlightConfig: inspectHighlight }, sessionID)
   }
 
-  async function inspected(backendID: number, sessionID?: string) {
-    inspecting = false
-    const pick = ++picks
-    const navigation = generation
+  async function disarm() {
     await Promise.all(
       [undefined, ...sessions.values()].map((id) =>
         cdp.send("Overlay.setInspectMode", inspectOff, id).catch(() => undefined),
       ),
     )
+  }
+
+  async function describePick(backendID: number, sessionID?: string) {
+    await disarm()
     // Keep the box model on the picked element, without the tooltip, while the renderer freezes the page.
     await cdp.send("Overlay.highlightNode", { backendNodeId: backendID, highlightConfig: pickedHighlight }, sessionID)
-    const element = { backendID, frameID: await frameOf(backendID, sessionID), sessionID }
-    const [details, box, accessible] = await Promise.all([describe(element), rect(element), accessibility(element)])
+    const target = { backendID, frameID: await frameOf(backendID, sessionID), sessionID }
+    const [details, box, accessible] = await Promise.all([describe(target), rect(target), accessibility(target)])
     await painted(sessionID)
-
-    // Escape, a toggle, hiding, or navigation while the element was described cancels the pick.
-    if (closed) return
-
-    if (pick !== picks || navigation !== generation) {
-      if (!inspecting) await hideHighlight()
-      options.inspect?.({ active: inspecting })
-
-      return
-    }
-
-    const ref = options.shared.ref()
-    picked.set(ref, element)
     const zoom = contents.getZoomFactor()
 
-    // The pick focused the page; the comment editor opens in the app window. Focus only moves
-    // within a focused window, so synthetic input never raises a background window.
-    if (!win.isDestroyed() && win.isFocused()) win.webContents.focus()
-    options.inspect?.({
-      active: false,
+    return {
+      target,
       element: {
-        ref: Browser.Ref.make(ref),
         ...details,
         ...accessible,
         rect: { x: box.x * zoom, y: box.y * zoom, width: box.width * zoom, height: box.height * zoom },
       },
-    })
-  }
-
-  async function highlightPicked(ref?: Browser.Ref) {
-    clearTimeout(flash)
-    const element = ref ? picked.get(ref.replace(/^@/, "")) : undefined
-
-    if (!element) return hideHighlight()
-    await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
-    await cdp.send(
-      "Overlay.highlightNode",
-      { backendNodeId: element.backendID, highlightConfig: pickedHighlight },
-      element.sessionID,
-    )
-    flash = setTimeout(() => void hideHighlight(), 1_500)
+    }
   }
 
   async function hideHighlight() {

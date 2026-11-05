@@ -346,7 +346,7 @@ const FINGERPRINT_APPLIANCE = createHash("sha256")
   .digest("hex")
 
 const connect = (name: string, config: ConfigMCP.Remote) =>
-  McpClient.connect(name, config, import.meta.dir).pipe(Effect.provide(hostEnvironmentLayer))
+  McpClient.connect({ server: name, config, directory: import.meta.dir }).pipe(Effect.provide(hostEnvironmentLayer))
 
 // The connection lives only as long as use; closing the scope tears the transport down.
 const withConnection = <A, E>(

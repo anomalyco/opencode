@@ -1,15 +1,29 @@
 // @refresh reload
 
-import { createEffect, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createSimpleContext } from "../context/helper"
 import oc2ThemeJson from "./themes/oc-2.json"
 import { resolveThemeVariant, themeToCss } from "./resolve"
 import { resolveThemeVariantV2, themeV2ToCss } from "./v2/resolve"
 import type { DesktopTheme } from "./types"
+import {
+  createThemeState,
+  DEFAULT_THEME_ID,
+  parseColorScheme,
+  selectColorScheme,
+  selectMode,
+  selectThemeId,
+  selectThemesLoading,
+  transitionTheme,
+  type ColorScheme,
+  type ThemeEffect,
+  type ThemeEvent,
+  type ThemeMachineState,
+  type ThemeTransition,
+} from "./machine"
 
-export type ColorScheme = "light" | "dark" | "system"
+export type { ColorScheme } from "./machine"
 
 const STORAGE_KEYS = {
   THEME_ID: "opencode-theme-id",
@@ -49,56 +63,53 @@ function knownThemes() {
   return known
 }
 
-const names: Record<string, string> = {
-  "oc-2": "OpenCode",
-  amoled: "AMOLED",
-  aura: "Aura",
-  ayu: "Ayu",
-  carbonfox: "Carbonfox",
-  catppuccin: "Catppuccin",
-  "catppuccin-frappe": "Catppuccin Frappe",
-  "catppuccin-macchiato": "Catppuccin Macchiato",
-  cobalt2: "Cobalt2",
-  cursor: "Cursor",
-  dracula: "Dracula",
-  everforest: "Everforest",
-  flexoki: "Flexoki",
-  github: "GitHub",
-  gruvbox: "Gruvbox",
-  kanagawa: "Kanagawa",
-  "lucent-orng": "Lucent Orng",
-  material: "Material",
-  matrix: "Matrix",
-  mercury: "Mercury",
-  monokai: "Monokai",
-  nightowl: "Night Owl",
-  nord: "Nord",
-  "one-dark": "One Dark",
-  onedarkpro: "One Dark Pro",
-  orng: "Orng",
-  "osaka-jade": "Osaka Jade",
-  palenight: "Palenight",
-  rosepine: "Rose Pine",
-  shadesofpurple: "Shades of Purple",
-  solarized: "Solarized",
-  synthwave84: "Synthwave '84",
-  tokyonight: "Tokyonight",
-  vercel: "Vercel",
-  vesper: "Vesper",
-  zenburn: "Zenburn",
-}
+const names = new Map(
+  Object.entries({
+    "oc-2": "OpenCode",
+    amoled: "AMOLED",
+    aura: "Aura",
+    ayu: "Ayu",
+    carbonfox: "Carbonfox",
+    catppuccin: "Catppuccin",
+    "catppuccin-frappe": "Catppuccin Frappe",
+    "catppuccin-macchiato": "Catppuccin Macchiato",
+    cobalt2: "Cobalt2",
+    cursor: "Cursor",
+    dracula: "Dracula",
+    everforest: "Everforest",
+    flexoki: "Flexoki",
+    github: "GitHub",
+    gruvbox: "Gruvbox",
+    kanagawa: "Kanagawa",
+    "lucent-orng": "Lucent Orng",
+    material: "Material",
+    matrix: "Matrix",
+    mercury: "Mercury",
+    monokai: "Monokai",
+    nightowl: "Night Owl",
+    nord: "Nord",
+    "one-dark": "One Dark",
+    onedarkpro: "One Dark Pro",
+    orng: "Orng",
+    "osaka-jade": "Osaka Jade",
+    palenight: "Palenight",
+    rosepine: "Rose Pine",
+    shadesofpurple: "Shades of Purple",
+    solarized: "Solarized",
+    synthwave84: "Synthwave '84",
+    tokyonight: "Tokyonight",
+    vercel: "Vercel",
+    vesper: "Vesper",
+    zenburn: "Zenburn",
+  }),
+)
 
+// SAFETY: oc-2.json follows desktop-theme.schema.json; JSON modules only widen its colors to `string`, and
+// v2/resolve.test.ts resolves the same file as a DesktopTheme.
 const oc2Theme = oc2ThemeJson as DesktopTheme
 
-function resolveStoredTheme(id: string | null | undefined, registered?: Record<string, DesktopTheme>) {
-  if (id === "oc-2" || (id && (knownThemes().has(id) || registered?.[id]))) return id
-
-  return "oc-2"
-}
-
+// Storage access throws where localStorage is missing or blocked; every caller treats that as no stored value.
 function read(key: string) {
-  if (typeof localStorage !== "object") return null
-
   try {
     return localStorage.getItem(key)
   } catch {
@@ -107,16 +118,12 @@ function read(key: string) {
 }
 
 function write(key: string, value: string) {
-  if (typeof localStorage !== "object") return
-
   try {
     localStorage.setItem(key, value)
   } catch {}
 }
 
 function drop(key: string) {
-  if (typeof localStorage !== "object") return
-
   try {
     localStorage.removeItem(key)
   } catch {}
@@ -128,9 +135,9 @@ function clear() {
 }
 
 function ensureThemeStyleElement(): HTMLStyleElement {
-  const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
+  const existing = document.getElementById(THEME_STYLE_ID)
 
-  if (existing) return existing
+  if (existing instanceof HTMLStyleElement) return existing
   const element = document.createElement("style")
   element.id = THEME_STYLE_ID
   document.head.appendChild(element)
@@ -139,9 +146,7 @@ function ensureThemeStyleElement(): HTMLStyleElement {
 }
 
 function getSystemMode(): "light" | "dark" {
-  if (typeof window !== "object") return "light"
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
 function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "dark") {
@@ -150,10 +155,6 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   const tokens = resolveThemeVariant(variant, isDark)
   const css = themeToCss(tokens)
   const v2 = themeV2ToCss(resolveThemeVariantV2(variant, isDark))
-
-  if (themeId !== "oc-2") {
-    write(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, `${css}\n  ${v2}`)
-  }
 
   const fullCss = `:root {
   color-scheme: ${mode};
@@ -174,9 +175,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   if (meta) meta.setAttribute("content", isDark ? "#080808" : "#fafafa")
 }
 
-function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
-  if (themeId === "oc-2") return
-
+function cacheThemeVariants(theme: DesktopTheme) {
   for (const mode of ["light", "dark"] as const) {
     const isDark = mode === "dark"
     const variant = isDark ? theme.dark : theme.light
@@ -191,248 +190,172 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: {
     defaultTheme?: string
-    onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark", scheme: ColorScheme) => void
+    /** The window shows the theme: its colors, or until a registered theme arrives, those cached from the last run. */
+    onThemeApplied?: (mode: "light" | "dark", scheme: ColorScheme) => void
   }) => {
-    const rawTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme
-    const themeId = resolveStoredTheme(rawTheme)
-
-    if (rawTheme && rawTheme !== themeId) {
-      write(STORAGE_KEYS.THEME_ID, themeId)
-      clear()
-    }
-
-    const colorScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
-    const mode = colorScheme === "system" ? getSystemMode() : colorScheme
-
-    const [store, setStore] = createStore({
-      themes: {
-        "oc-2": oc2Theme,
-      } as Record<string, DesktopTheme>,
-      themeId,
-      colorScheme,
-      mode,
-      previewThemeId: null as string | null,
-      previewScheme: null as ColorScheme | null,
+    // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
+    const initial = createThemeState({
+      themeId: read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || DEFAULT_THEME_ID,
+      scheme: parseColorScheme(read(STORAGE_KEYS.COLOR_SCHEME)),
+      systemMode: getSystemMode(),
+      defaultTheme: oc2Theme,
+      bundled: knownThemes(),
     })
 
-    const loads = new Map<string, Promise<DesktopTheme | undefined>>()
+    const [state, setState] = createSignal(initial.state)
+    // Import timeouts by attempt.
+    const timers = new Map<number, ReturnType<typeof setTimeout>>()
+    // `loadThemes` calls waiting for every bundled import to settle.
+    const waiters = new Set<() => void>()
+    // Transitions an effect or `onThemeApplied` raises wait behind the one running.
+    const queue: ((current: ThemeMachineState) => ThemeTransition)[] = []
 
-    const load = (id: string) => {
-      const next = id
+    const enqueue = (next: (current: ThemeMachineState) => ThemeTransition) => {
+      queue.push(next)
 
-      if (!next) return Promise.resolve(undefined)
-      const hit = store.themes[next]
+      if (queue.length > 1) return
 
-      if (hit) return Promise.resolve(hit)
-      const pending = loads.get(next)
-
-      if (pending) return pending
-      const file = getFiles()[`./themes/${next}.json`]
-
-      if (!file) return Promise.resolve(undefined)
-
-      const task = file()
-        .then((mod) => {
-          const theme = mod.default
-          setStore("themes", next, theme)
-
-          return theme
-        })
-        .finally(() => {
-          loads.delete(next)
-        })
-
-      loads.set(next, task)
-
-      return task
-    }
-
-    const applyTheme = (theme: DesktopTheme, themeId: string, mode: "light" | "dark", scheme: ColorScheme) => {
-      applyThemeCss(theme, themeId, mode)
-      props.onThemeApplied?.(theme, mode, scheme)
-    }
-
-    const ids = () => {
-      const extra = Object.keys(store.themes)
-        .filter((id) => !knownThemes().has(id))
-        .sort()
-
-      const all = themeIDs()
-
-      if (extra.length === 0) return all
-
-      return [...all, ...extra]
-    }
-
-    const loadThemes = () => Promise.all(themeIDs().map(load)).then(() => store.themes)
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) {
-        const next = resolveStoredTheme(e.newValue, store.themes)
-
-        if (next !== e.newValue) {
-          write(STORAGE_KEYS.THEME_ID, next)
-          clear()
+      untrack(() => {
+        while (queue[0]) {
+          const head = queue[0]
+          void Promise.try(() => step(head(state()))).catch((cause: unknown) => console.error(cause))
+          queue.shift()
         }
+      })
+    }
 
-        setStore("themeId", next)
+    const dispatch = (event: ThemeEvent) => enqueue((current) => transitionTheme(current, event, knownThemes()))
 
-        if (next === "oc-2") {
-          clear()
+    // The CSS and storage change before the state, so effects that read computed styles see the new theme.
+    const step = (next: ThemeTransition) => {
+      next.effects.forEach(
+        (effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => console.error(cause)),
+      )
 
-          return
-        }
+      if (next.state !== state()) setState(next.state)
 
-        void load(next).then((theme) => {
-          if (!theme || store.themeId !== next) return
-          cacheThemeVariants(theme, next)
-        })
+      if (!selectThemesLoading(next.state)) {
+        waiters.forEach((resolve) => resolve())
+        waiters.clear()
       }
 
-      if (e.key === STORAGE_KEYS.COLOR_SCHEME && e.newValue) {
-        setStore("colorScheme", e.newValue as ColorScheme)
-        setStore("mode", e.newValue === "system" ? getSystemMode() : (e.newValue as "light" | "dark"))
-      }
+      const shown = next.effects.findLast(
+        (effect): effect is Extract<ThemeEffect, { type: "apply-theme" | "notify-applied" }> =>
+          effect.type === "apply-theme" || effect.type === "notify-applied",
+      )
+
+      if (shown) props.onThemeApplied?.(shown.mode, shown.scheme)
     }
+
+    const run = (effect: ThemeEffect) => {
+      if (effect.type === "persist-theme") return write(STORAGE_KEYS.THEME_ID, effect.id)
+
+      if (effect.type === "persist-scheme") return write(STORAGE_KEYS.COLOR_SCHEME, effect.scheme)
+
+      if (effect.type === "cache-theme") return cacheThemeVariants(effect.theme)
+
+      if (effect.type === "clear-cache") return clear()
+
+      if (effect.type === "apply-theme") return applyThemeCss(effect.theme, effect.id, effect.mode)
+
+      if (effect.type === "warn-missing-theme") return console.warn(`Theme "${effect.id}" not found`)
+
+      if (effect.type === "notify-applied") return
+
+      if (effect.type === "cancel-load-timer") {
+        clearTimeout(timers.get(effect.attempt))
+        timers.delete(effect.attempt)
+
+        return
+      }
+
+      if (effect.type === "cancel-all-loads") {
+        timers.forEach(clearTimeout)
+        timers.clear()
+
+        return
+      }
+
+      const file = getFiles()[`./themes/${effect.id}.json`]
+
+      if (!file) return dispatch({ type: "theme.load.failed", id: effect.id, attempt: effect.attempt })
+
+      timers.set(
+        effect.attempt,
+        setTimeout(() => {
+          timers.delete(effect.attempt)
+          dispatch({ type: "theme.load.timed-out", id: effect.id, attempt: effect.attempt })
+        }, effect.timeoutMs),
+      )
+      void Promise.try(file).then(
+        (mod) => dispatch({ type: "theme.loaded", id: effect.id, attempt: effect.attempt, theme: mod.default }),
+        () => dispatch({ type: "theme.load.failed", id: effect.id, attempt: effect.attempt }),
+      )
+    }
+
+    enqueue(() => initial)
 
     onMount(() => {
-      makeEventListener(window, "storage", onStorage)
+      makeEventListener(window, "storage", (e: StorageEvent) => {
+        if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) dispatch({ type: "storage.theme.changed", id: e.newValue })
+
+        if (e.key === STORAGE_KEYS.COLOR_SCHEME && e.newValue)
+          dispatch({ type: "storage.scheme.changed", scheme: parseColorScheme(e.newValue) })
+      })
 
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
 
-      const onMedia = () => {
-        if (store.colorScheme !== "system") return
-        setStore("mode", getSystemMode())
-      }
-
-      makeEventListener(mediaQuery, "change", onMedia)
-
-      const rawTheme = read(STORAGE_KEYS.THEME_ID) ?? props.defaultTheme
-      const savedTheme = resolveStoredTheme(rawTheme, store.themes)
-      const savedScheme = (read(STORAGE_KEYS.COLOR_SCHEME) as ColorScheme | null) ?? "system"
-
-      if (rawTheme && rawTheme !== savedTheme) {
-        write(STORAGE_KEYS.THEME_ID, savedTheme)
-        clear()
-      }
-
-      if (savedTheme !== store.themeId) setStore("themeId", savedTheme)
-
-      if (savedScheme !== store.colorScheme) setStore("colorScheme", savedScheme)
-      setStore("mode", savedScheme === "system" ? getSystemMode() : savedScheme)
-      void load(savedTheme).then((theme) => {
-        if (!theme || store.themeId !== savedTheme) return
-        cacheThemeVariants(theme, savedTheme)
-      })
+      makeEventListener(mediaQuery, "change", () =>
+        dispatch({ type: "system.mode.changed", mode: mediaQuery.matches ? "dark" : "light" }),
+      )
     })
 
-    createEffect(() => {
-      const theme = store.themes[store.themeId]
+    onCleanup(() => dispatch({ type: "disposed" }))
 
-      if (!theme) return
-      applyTheme(theme, store.themeId, store.mode, store.colorScheme)
-    })
-
-    const setTheme = (id: string) => {
-      const next = id
-
-      if (!next) {
-        console.warn(`Theme "${id}" not found`)
-
-        return
-      }
-
-      if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) {
-        console.warn(`Theme "${id}" not found`)
-
-        return
-      }
-
-      setStore("themeId", next)
-
-      if (next === "oc-2") {
-        write(STORAGE_KEYS.THEME_ID, next)
-        clear()
-
-        return
-      }
-
-      void load(next).then((theme) => {
-        if (!theme || store.themeId !== next) return
-        cacheThemeVariants(theme, next)
-        write(STORAGE_KEYS.THEME_ID, next)
-      })
-    }
-
-    const setColorScheme = (scheme: ColorScheme) => {
-      setStore("colorScheme", scheme)
-      write(STORAGE_KEYS.COLOR_SCHEME, scheme)
-      setStore("mode", scheme === "system" ? getSystemMode() : scheme)
-    }
+    const name = (id: string) => state().themes[id]?.name ?? names.get(id) ?? id
 
     return {
-      themeId: () => store.themeId,
-      colorScheme: () => store.colorScheme,
-      mode: () => store.mode,
-      ids,
-      name: (id: string) => store.themes[id]?.name ?? names[id] ?? id,
-      loadThemes,
-      themes: () => store.themes,
-      setTheme,
-      setColorScheme,
-      registerTheme: (theme: DesktopTheme) => setStore("themes", theme.id, theme),
-      previewTheme: (id: string) => {
-        const next = id
+      /** The theme the window shows: a previewed one, the selected one, or the default while that one is not coming. */
+      themeId: createMemo(() => selectThemeId(state(), knownThemes())),
+      colorScheme: createMemo(() => selectColorScheme(state())),
+      /** The mode the window shows, a previewed scheme included. */
+      mode: createMemo(() => selectMode(state())),
+      // Bundled and registered themes in one list, alphabetical by name.
+      ids: () =>
+        [...themeIDs(), ...Object.keys(state().themes).filter((id) => !knownThemes().has(id))].toSorted((a, b) =>
+          name(a).localeCompare(name(b), undefined, { sensitivity: "base" }),
+        ),
+      name,
+      /** Loads every bundled theme; resolves once each import has loaded, failed or timed out. */
+      loadThemes: () => {
+        dispatch({ type: "themes.preload" })
 
-        if (!next) return
+        if (!selectThemesLoading(untrack(state))) return Promise.resolve(untrack(state).themes)
 
-        if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) return
-        setStore("previewThemeId", next)
-        void load(next).then((theme) => {
-          if (!theme || store.previewThemeId !== next) return
-
-          const mode = store.previewScheme
-            ? store.previewScheme === "system"
-              ? getSystemMode()
-              : store.previewScheme
-            : store.mode
-
-          applyTheme(theme, next, mode, store.previewScheme ?? store.colorScheme)
-        })
+        return new Promise<Readonly<Record<string, DesktopTheme>>>((resolve) =>
+          waiters.add(() => resolve(untrack(state).themes)),
+        )
       },
-      previewColorScheme: (scheme: ColorScheme) => {
-        setStore("previewScheme", scheme)
-        const mode = scheme === "system" ? getSystemMode() : scheme
-        const id = store.previewThemeId ?? store.themeId
-        void load(id).then((theme) => {
-          if (!theme) return
+      themes: () => state().themes,
+      setTheme: (id: string) => dispatch({ type: "theme.selected", id }),
+      setColorScheme: (scheme: ColorScheme) => dispatch({ type: "scheme.selected", scheme }),
+      /** Lists a theme beside the bundled ones until the returned function withdraws it. */
+      registerTheme: (theme: DesktopTheme) => {
+        dispatch({ type: "theme.registered", theme })
 
-          if ((store.previewThemeId ?? store.themeId) !== id) return
-
-          if (store.previewScheme !== scheme) return
-          applyTheme(theme, id, mode, scheme)
-        })
+        return () => dispatch({ type: "theme.unregistered", theme })
       },
-      commitPreview: () => {
-        if (store.previewThemeId) {
-          setTheme(store.previewThemeId)
-        }
-
-        if (store.previewScheme) {
-          setColorScheme(store.previewScheme)
-        }
-
-        setStore("previewThemeId", null)
-        setStore("previewScheme", null)
-      },
-      cancelPreview: () => {
-        setStore("previewThemeId", null)
-        setStore("previewScheme", null)
-        void load(store.themeId).then((theme) => {
-          if (!theme) return
-          applyTheme(theme, store.themeId, store.mode, store.colorScheme)
-        })
-      },
+      /**
+       * Every theme source has registered what it will: a selected theme that is still missing is not coming, so the
+       * window shows the default theme and keeps the choice for when it returns.
+       */
+      settle: () => dispatch({ type: "settled" }),
+      /** Shows a theme without saving it, until `commitPreview` or `cancelPreview`. */
+      previewTheme: (id: string) => dispatch({ type: "preview.theme", id }),
+      /** Shows a color scheme without saving it, until `commitPreview` or `cancelPreview`. */
+      previewColorScheme: (scheme: ColorScheme) => dispatch({ type: "preview.scheme", scheme }),
+      commitPreview: () => dispatch({ type: "preview.committed" }),
+      cancelPreview: () => dispatch({ type: "preview.cancelled" }),
     }
   },
 })

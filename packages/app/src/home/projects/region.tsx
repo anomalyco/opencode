@@ -33,6 +33,7 @@ export function HomeProjects(props: {
       onSelectProject={props.projects.project.select}
       onOpenProjectNewSession={props.projects.project.openNewSession}
       canImportSession={props.projects.project.canImportSession}
+      importingSession={props.projects.project.importingSession()}
       onImportSession={props.projects.project.importSession}
       onEditProject={props.projects.project.edit}
       onRevealProject={props.projects.project.reveal}

@@ -1,0 +1,157 @@
+/* Settings › Open source variant: the "fork it" block (and the proof's "Fork on GitHub" button)
+   render in every variant and show only in "fork", from the section's data-oss-variant, which the
+   pre-paint script sets from saved Settings. */
+[data-page="home"][data-site] [data-section="openSource"]:not([data-oss-variant="fork"]) {
+  [data-component="oss-fork"],
+  [data-slot="fork-button"] {
+    display: none;
+  }
+}
+
+/* Under the section body, across the content columns: the terminal takes two cards and the points
+   the rest. Stacked sections (phones) put the points under the terminal. */
+[data-page="home"][data-site] [data-component="oss-fork"] {
+  --terminal-bg: hsl(0, 0%, 8%);
+  --terminal-text: hsl(0, 0%, 86%);
+  --terminal-dim: hsl(0, 0%, 56%);
+
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, calc(var(--card) * 2 + var(--gutter))) minmax(0, 1fr);
+  column-gap: var(--gutter);
+  row-gap: 1.5rem;
+  align-items: start;
+  margin-top: 4rem;
+
+  [data-slot="heading"] {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: var(--fs-large);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-strong);
+    text-box: trim-both cap alphabetic;
+  }
+
+  [data-slot="terminal"] {
+    min-width: 0;
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    outline: 1px solid light-dark(transparent, var(--border));
+    outline-offset: -1px;
+  }
+
+  [data-slot="bar"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 2.25rem;
+    padding-block: 0;
+    padding-inline: 1rem 0.5rem;
+    border-bottom: 1px solid hsl(0, 0%, 16%);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--terminal-dim);
+  }
+
+  [data-slot="copy"] {
+    height: 1.75rem;
+    padding: 0 0.625rem;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--terminal-dim);
+    font: inherit;
+    cursor: pointer;
+    transition:
+      color 150ms ease,
+      background-color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: hsl(0, 0%, 14%);
+        color: var(--terminal-text);
+      }
+    }
+
+    &:active {
+      background: hsl(0, 0%, 14%);
+      color: var(--terminal-text);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: -2px;
+    }
+  }
+
+  pre {
+    margin: 0;
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.7;
+  }
+
+  code {
+    font: inherit;
+  }
+
+  /* One line each; the reveal (reveal.css, "type") clips the mark as it types. */
+  [data-slot="brand"] {
+    display: block;
+    white-space: pre;
+  }
+
+  [data-slot="mark"] {
+    display: inline-block;
+  }
+
+  [data-kind="output"] {
+    color: var(--terminal-dim);
+  }
+
+  [data-kind="comment"] {
+    color: hsl(0, 0%, 44%);
+  }
+
+  [data-kind="command"] + [data-kind="command"],
+  [data-kind="output"] + [data-kind="command"],
+  [data-kind="comment"] + [data-kind="command"] {
+    margin-top: 0.25rem;
+  }
+
+  [data-slot="prompt"] {
+    color: var(--terminal-dim);
+  }
+
+  [data-slot="points"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    h4 {
+      margin: 0 0 0.375rem;
+      font-size: var(--fs-ui);
+      font-weight: 500;
+      color: var(--text-strong);
+    }
+
+    p {
+      margin: 0;
+      font-size: var(--fs-body);
+      line-height: 1.45;
+      color: var(--text-weak);
+      text-wrap: pretty;
+    }
+  }
+
+  @media (max-width: 60rem) {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 2.5rem;
+  }
+}

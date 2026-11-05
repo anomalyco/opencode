@@ -1,0 +1,634 @@
+[data-component="press-gallery"] {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+
+  [data-slot="group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  [data-slot="group-head"] {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    h3 {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="count"] {
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+  }
+
+  [data-slot="group-download"] {
+    margin-inline-start: auto;
+  }
+
+  /* Every layout's thumbnails: a button with the image, dark behind it, and a play mark on videos. */
+  [data-slot="thumb"],
+  [data-slot="preview"] {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    /* A surface grey until the image loads, not a black box. */
+    background: var(--bg-weak);
+    box-shadow: inset 0 0 0 1px var(--border);
+    cursor: zoom-in;
+    overflow: hidden;
+
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 150ms ease;
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--link);
+      outline-offset: 2px;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover img {
+        opacity: 0.85;
+      }
+    }
+
+    &:active img {
+      opacity: 0.85;
+    }
+  }
+
+  [data-slot="play"] {
+    position: absolute;
+    inset-inline-start: 0.5rem;
+    bottom: 0.5rem;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    background: rgb(0 0 0 / 0.7);
+    color: #fff;
+  }
+
+  /* "products" (default): the four products side by side in the page's columns (2 × 2 at medium
+     widths, stacked on phones), each with one image and one Download all button. */
+  &[data-style="products"] {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+
+    [data-slot="group"] {
+      gap: 0.75rem;
+      min-width: 0;
+      container-type: inline-size;
+    }
+
+    [data-slot="zip-size"] {
+      display: none;
+      margin-top: -0.25rem;
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+    }
+
+    /* Below 13rem the button can't hold "Download all", the size and the icon: the size moves
+       under it. */
+    @container (max-width: 13rem) {
+      [data-slot="product-download"] [data-slot="size"] {
+        display: none;
+      }
+
+      [data-slot="zip-size"] {
+        display: block;
+      }
+    }
+
+    /* One line: the name, then the count, which truncates with "…" when the column is narrow. */
+    [data-slot="group-head"] {
+      align-items: baseline;
+      gap: 0.5rem;
+      min-width: 0;
+      white-space: nowrap;
+
+      h3 {
+        flex: none;
+      }
+    }
+
+    [data-slot="count"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    [data-slot="thumb"] {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+    }
+
+    /* Never wider than its column; the label truncates before it overflows. */
+    [data-slot="product-download"] {
+      align-self: start;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* The content column is too narrow for four below 75rem (the Contents rail takes a column). */
+    @media (max-width: 75rem) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (max-width: 40rem) {
+      grid-template-columns: minmax(0, 1fr);
+
+      [data-slot="count"] {
+        display: inline;
+      }
+    }
+  }
+
+  /* "strip": a sideways carousel of small 16:9 thumbnails with captions and actions. The
+     track snaps to each thumbnail; a fade masks whichever edge has more to scroll. */
+  [data-slot="strip-carousel"] {
+    position: relative;
+    --strip-fade: 3rem;
+  }
+
+  [data-slot="strip-track"] {
+    display: flex;
+    gap: 1rem;
+    margin: 0;
+    padding: 0 0 0.5rem;
+    list-style: none;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    /* Proximity, not mandatory: mandatory snapping can jump the strip when the window resizes. */
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--strip-fade),
+      #000 calc(100% - var(--strip-fade)),
+      transparent
+    );
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    li {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 15rem;
+      scroll-snap-align: start;
+    }
+
+    [data-slot="thumb"] {
+      aspect-ratio: 16 / 9;
+    }
+  }
+
+  [data-slot="strip-carousel"][data-at-start] [data-slot="strip-track"] {
+    mask-image: linear-gradient(to var(--x-end, right), #000 calc(100% - var(--strip-fade)), transparent);
+  }
+
+  [data-slot="strip-carousel"][data-at-end] [data-slot="strip-track"] {
+    mask-image: linear-gradient(to var(--x-end, right), transparent, #000 var(--strip-fade));
+  }
+
+  [data-slot="strip-carousel"][data-at-start][data-at-end] [data-slot="strip-track"] {
+    mask-image: none;
+  }
+
+  /* Square arrow buttons over the thumbnails' edges; hidden at an end. */
+  [data-slot="strip-arrow"] {
+    position: absolute;
+    top: calc(15rem * 9 / 16 / 2 - 1rem);
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-strong);
+    cursor: pointer;
+    transition:
+      opacity 150ms ease,
+      background-color 150ms ease;
+
+    &[data-direction="previous"] {
+      inset-inline-start: 0;
+    }
+
+    &[data-direction="next"] {
+      inset-inline-end: 0;
+    }
+
+    &:disabled {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--bg-weak);
+      }
+    }
+
+    &:active {
+      background: var(--bg-weak);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+
+  /* "thumbnails": uniform 16:9 thumbnails, three to a row (two on phones), each with its
+     caption and actions under it. */
+  [data-slot="thumbnails"] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    [data-slot="thumb"] {
+      aspect-ratio: 16 / 9;
+    }
+  }
+
+  [data-slot="tile-meta"] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  [data-slot="caption-text"] {
+    min-width: 0;
+    font-size: var(--fs-small);
+    line-height: 1.4;
+    color: var(--text);
+  }
+
+  [data-slot="tile-actions"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Small text actions in grey that turn strong on hover or focus; 24px tall for touch. */
+  [data-slot="tile-action"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 1.5rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--font-sans);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+
+    &:focus-visible {
+      color: var(--text-strong);
+      outline: 1px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+
+  /* (a) "grid": large tiles, two to a row; portrait items take half a cell's width. */
+  &[data-style="grid"] [data-slot="tiles"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    [data-slot="thumb"] {
+      aspect-ratio: 16 / 9;
+    }
+
+    [data-orientation="portrait"] [data-slot="thumb"] img {
+      object-fit: contain;
+    }
+  }
+
+  /* (b) "filmstrip": a big preview over a strip of every item. */
+  [data-slot="filmstrip"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  [data-slot="preview"] {
+    aspect-ratio: 16 / 9;
+
+    img {
+      object-fit: contain;
+    }
+  }
+
+  [data-slot="caption"] {
+    position: absolute;
+    inset-inline-end: 0.5rem;
+    bottom: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: rgb(0 0 0 / 0.7);
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: #fff;
+  }
+
+  [data-slot="strip"] {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0 0 0.5rem;
+    list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+
+    li {
+      flex: none;
+      height: 4.5rem;
+      aspect-ratio: 16 / 9;
+      scroll-snap-align: start;
+
+      &[data-orientation="portrait"] {
+        aspect-ratio: 4 / 5;
+      }
+    }
+
+    [data-slot="thumb"] {
+      height: 100%;
+      cursor: pointer;
+    }
+
+    [data-slot="thumb"][aria-current] {
+      outline: 1px solid var(--text-strong);
+      outline-offset: 2px;
+    }
+
+    [data-slot="play"] {
+      inset-inline-start: 0.25rem;
+      bottom: 0.25rem;
+      width: 1.125rem;
+      height: 1.125rem;
+    }
+  }
+
+  /* (c) "wall": a collage in three columns, each item at its own shape. */
+  &[data-style="wall"] [data-slot="tiles"] {
+    columns: 3;
+    column-gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      break-inside: avoid;
+      margin-bottom: 0.75rem;
+    }
+
+    [data-slot="thumb"] img {
+      height: auto;
+    }
+  }
+
+  /* (d) "fan": a stacked deck; opening it fans the cards into a grid (media-gallery.tsx animates it). */
+  [data-slot="fan"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  [data-slot="deck"] {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    width: fit-content;
+    padding-block: 1rem;
+    padding-inline: 1rem 1.5rem;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    text-align: start;
+
+    &:focus-visible {
+      outline: 1px solid var(--link);
+    }
+  }
+
+  [data-slot="cards"] {
+    position: relative;
+    display: block;
+    width: 13rem;
+    aspect-ratio: 16 / 9;
+
+    img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: var(--bg-weak);
+      box-shadow: var(--fan-shadow);
+      /* Each card below the top one sits a little lower and turned. */
+      transform: translate(calc(var(--card) * 6px), calc(var(--card) * 5px)) rotate(calc(var(--card) * 2.5deg));
+      transition: transform 320ms var(--ease-out);
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [data-slot="deck"]:hover [data-slot="cards"] img {
+      transform: translate(calc(var(--card) * 10px), calc(var(--card) * 7px)) rotate(calc(var(--card) * 4deg));
+    }
+  }
+
+  [data-slot="deck"]:active [data-slot="cards"] img {
+    transform: translate(calc(var(--card) * 10px), calc(var(--card) * 7px)) rotate(calc(var(--card) * 4deg));
+  }
+
+  [data-slot="fan"][data-open] [data-slot="cards"] img {
+    transform: none;
+  }
+
+  [data-slot="deck-label"] {
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    color: var(--text-strong);
+  }
+
+  [data-slot="fanned"] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      transition: box-shadow 320ms var(--ease-out);
+    }
+
+    [data-slot="thumb"] {
+      aspect-ratio: 16 / 9;
+      box-shadow: var(--fan-shadow);
+    }
+
+    li[data-lift] [data-slot="thumb"] {
+      box-shadow: var(--fan-shadow-lifted);
+    }
+
+    [data-orientation="portrait"] [data-slot="thumb"] img {
+      object-fit: contain;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    &[data-style="grid"] [data-slot="tiles"],
+    [data-slot="fanned"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    &[data-style="wall"] [data-slot="tiles"] {
+      columns: 2;
+    }
+
+    [data-slot="thumbnails"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    [data-slot="strip-track"] li {
+      width: 70%;
+    }
+
+    [data-slot="strip-arrow"] {
+      display: none;
+    }
+
+    [data-slot="tile-meta"] {
+      flex-direction: column;
+    }
+
+    [data-slot="count"] {
+      display: none;
+    }
+  }
+}
+
+/* The lightbox: the item as large as the window allows, with a bar of actions under it. */
+[data-component="press-gallery"] [data-component="press-lightbox"] {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  background: rgb(0 0 0 / 0.94);
+  backdrop-filter: blur(8px);
+  color-scheme: dark;
+
+  [data-slot="stage"] {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+
+    :is(img, video) {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      background: #0a0a0a;
+      pointer-events: auto;
+    }
+  }
+
+  [data-slot="bar"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+  }
+
+  [data-slot="title"] {
+    display: flex;
+    gap: 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    color: #fff;
+  }
+
+  [data-slot="counter"] {
+    color: hsl(0, 0%, 64%);
+  }
+
+  [data-slot="actions"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  [data-slot="sr-only"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 40rem) {
+    padding: 1rem;
+  }
+}

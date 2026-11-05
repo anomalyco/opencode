@@ -97,10 +97,10 @@ export function refusalReset(error: { readonly response?: { readonly body: strin
   return Number.isNaN(at) ? undefined : at
 }
 
-/** When a refused request may retry, from its `retry-after` counted from `base`; nothing past a week, as a bad header. */
+/** When a refused request may retry, from its `retry-after` counted from `base`; nothing past 45 days, as a bad header. */
 export function retryReset(error: { readonly retryAfterMs?: number } | undefined, base: number) {
   const delay = error?.retryAfterMs
-  if (delay === undefined || !Number.isFinite(delay) || delay < 0 || delay > 7 * 86_400_000) return undefined
+  if (delay === undefined || !Number.isFinite(delay) || delay < 0 || delay > 45 * 86_400_000) return undefined
   const at = base + delay
   return Number.isNaN(new Date(at).getTime()) ? undefined : at
 }
@@ -112,7 +112,7 @@ export function goLimitName(error: { readonly response?: { readonly body: string
 
 /** The OpenCode Console Go page for the workspace a Go usage limit names, where it can turn on Extra Usage. */
 export function goLimitLink(error: { readonly response?: { readonly body: string } } | undefined) {
-  const workspace = /"workspace"\s*:\s*"(wrk_\w+)"/.exec(error?.response?.body ?? "")?.[1]
+  const workspace = /"workspace"\s*:\s*"((?:org|wrk)_[\w-]+)"/.exec(error?.response?.body ?? "")?.[1]
   return workspace ? `https://opencode.ai/console/${workspace}/go` : "https://opencode.ai/console"
 }
 

@@ -1,0 +1,368 @@
+/* "Contents": the docs' table of contents, the one definition for every page that has one (docs,
+   Brand, Press, legal, and the phone Contents menu below). OpenTUI Mono at the mono size: the label in
+   --text-faint, the items in --text-weak. The items touch, with their spacing inside them as
+   padding (--rail-pad), so a pointer moving down the list is always over one and hover never drops
+   out between items. Each item has a gutter on the left (--rail-gutter) that holds its pipe: the
+   current item gets a 2px pipe in --text-strong and its label in --text-strong; a hovered item gets
+   a 2px pipe in --border-strong (a quiet edge) and its label one step darker (--text). Idle items
+   have no pipe. The pipe is the label's line box (20px in the rail, the left nav's row height;
+   taller than the nav's "[ ]" ink, by David's call), a fixed-height pseudo-element on the first line,
+   so a label that wraps (the phone menu) keeps it on its first line. It sits at the rail's left edge
+   at every level. The heading lines up with the labels. States change instantly, like the legal
+   tabs. */
+/* The 2px pipe and a 12px gap before the label; on the site root so the docs search lines up too. */
+[data-site] {
+  --rail-gutter: 14px;
+}
+
+[data-site] :is([data-component="on-this-page"], [data-component="contents-menu"]) {
+  --rail-pad: 0.375rem;
+
+  li[data-level="3"] a {
+    padding-inline-start: calc(2 * var(--rail-gutter));
+  }
+
+  a {
+    position: relative;
+    padding-block: var(--rail-pad);
+    padding-inline-start: var(--rail-gutter);
+    color: var(--text-weak);
+    transition: none;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: var(--rail-pad);
+      inset-inline-start: 0;
+      width: 2px;
+      height: 1lh;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not([aria-current="location"]) {
+        color: var(--text);
+
+        &::before {
+          background: var(--border-strong);
+        }
+      }
+    }
+
+    &:active:not([aria-current="location"]) {
+      color: var(--text);
+
+      &::before {
+        background: var(--border-strong);
+      }
+    }
+
+    &[aria-current="location"] {
+      color: var(--text-strong);
+
+      &::before {
+        background: var(--text-strong);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+      outline-offset: 2px;
+    }
+  }
+}
+
+/* 20px lines, like the left nav's rows, so the pipe is 20px; the padding keeps the 30px item pitch. */
+[data-site] [data-component="on-this-page"] {
+  --rail-pad: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--mono-size);
+  line-height: 20px;
+
+  /* The first item's top padding finishes the heading's gap (0.75rem from heading to first label). */
+  [data-slot="heading"] {
+    display: block;
+    margin-bottom: calc(0.75rem - var(--rail-pad));
+    padding-inline-start: var(--rail-gutter);
+    color: var(--text-faint);
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* One line each: long titles end in a single "…" character (text-overflow uses U+2026). */
+  a {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Section rhythm for the document pages (Brand, Press, legal): one gap between sections (72px on each
+   side of the divider; legal, with no divider, keeps the same total) and one gap under a section
+   title. Titles are trimmed to their cap height and baseline, so the gaps measure ink to ink. */
+[data-site] {
+  --section-gap: 72px;
+  --heading-gap: 24px;
+}
+
+[data-site] :is(h2, h3)[data-component="section-heading"][id] {
+  text-box: trim-both cap alphabetic;
+}
+
+/* Legal has no dividers, so its sections keep the same total space (72 + 1 + 72px) without one. */
+[data-site] [data-component="legal-document"] h2[id] {
+  margin-bottom: var(--heading-gap);
+  text-box: trim-both cap alphabetic;
+
+  &:not(:first-child) {
+    margin-top: calc(2 * var(--section-gap) + 1px);
+  }
+}
+
+[data-site] [data-component="legal-hub"] [data-slot="group"] {
+  gap: var(--heading-gap);
+
+  /* The hub's own gap (3.5rem, legal.css) plus this makes the same 145px between groups. */
+  & + [data-slot="group"] {
+    margin-top: calc(2 * var(--section-gap) + 1px - 3.5rem);
+  }
+}
+
+/* "Contents" on phones: a disclosure above the first section, in place of the hidden aside. It sticks
+   under the top bar, or under the lowest sticky bar the page has above it (--contents-top: the legal
+   pages' --anchor-top, less its 1rem, is the bottom of their breadcrumb band and Document / History
+   tabs), in the page colour, so the sections scroll behind it. Only its top rule shows at rest (the
+   next section's own divider closes it); while it is stuck the top rule gives way to a hairline at
+   its bottom edge (the bar above has its own).
+   Open, the list drops over the page instead of pushing it down, and scrolls when it is longer than
+   the window. Sticky positioning only, so nothing moves when it pins. */
+[data-site] {
+  --contents-height: 2.75rem;
+  --contents-top: calc(var(--anchor-top, calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + 1rem)) - 1rem);
+}
+
+/* The docs' V1 notice pins under the top bar too (one line, 2rem, or two lines on narrow phones). */
+[data-site]:has([data-component="docs-version-notice"]) {
+  --contents-top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px) + var(--notice-height, 3rem));
+}
+
+[data-site] [data-component="contents-menu"] {
+  display: none;
+  margin-block: 1.5rem 2.5rem;
+
+  /* Before a section, the section's own space above its divider is enough. */
+  &:has(+ [data-component="block"]) {
+    margin-bottom: 0;
+  }
+  font-size: var(--fs-ui);
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--contents-height);
+    /* A rule above and a hairline below, at rest and pinned. */
+    border-top: 1px solid var(--border);
+    box-shadow: 0 1px 0 var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--text-strong);
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    [data-slot="chevron"] {
+      transition: scale 200ms var(--ease-out);
+    }
+  }
+
+  &[open] summary [data-slot="chevron"] {
+    scale: 1 -1;
+  }
+
+  summary [data-slot="label"] {
+    padding-inline-start: var(--rail-gutter);
+  }
+
+  ul {
+    position: absolute;
+    top: 100%;
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - var(--contents-top) - var(--contents-height) - 1rem);
+    padding-bottom: 0.75rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+
+  a {
+    --rail-pad: 0.5rem;
+    display: block;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 60rem) {
+    position: sticky;
+    top: var(--contents-top);
+    z-index: 8;
+    display: block;
+    background: var(--bg);
+    container-type: scroll-state;
+
+    /* Stuck, the bar above already has its own bottom edge, so the top rule gives way to one at the
+       bottom. */
+    @container scroll-state(stuck: top) {
+      summary {
+        border-top-color: transparent;
+        box-shadow: 0 1px 0 var(--border);
+      }
+    }
+
+    /* The label and the items start at the page content's edge, at body size; the items are 44px+
+       rows (17px Inter at 1.4 plus 11px above and below). The current item's pipe sits in the page's
+       left margin, 12px before the text; the open list spans the margins for that. */
+    summary {
+      font-size: var(--body-size);
+    }
+
+    summary [data-slot="label"] {
+      padding-inline-start: 0;
+    }
+
+    ul {
+      inset-inline-start: calc(-1 * var(--edge));
+      inset-inline-end: calc(-1 * var(--edge));
+      padding-inline: var(--edge);
+    }
+
+    a {
+      --rail-pad: 11px;
+      padding-inline-start: 0;
+      font-size: var(--body-size);
+
+      &::before {
+        inset-inline-start: -12px;
+      }
+    }
+
+    li[data-level="3"] a {
+      padding-inline-start: 1rem;
+    }
+  }
+
+  @media print {
+    display: none;
+  }
+}
+
+/* Phones: no divider right under the Contents bar at rest; the bar's own edge is enough, and the
+   section keeps its space above. (Desktop hides the bar, so its sections keep their dividers.) */
+@media (max-width: 60rem) {
+  [data-site] [data-component="contents-menu"]:not([hidden]) + [data-component="block"] {
+    padding-top: 0;
+    border-top: 0;
+  }
+}
+
+/* Phones: a jump from the list (or an address) lands below the pinned Contents bar. */
+@media (max-width: 60rem) {
+  [data-site][data-page]:has([data-component="contents-menu"]) :is(h2, h3, h4, section, details)[id] {
+    scroll-margin-top: calc(var(--contents-top) + var(--contents-height) + 1rem);
+  }
+}
+
+/* Sections with a SectionHeading never put the title in a left-hand column: the title (and any small
+   line under it, in a wrapper) sits above the content, which takes the full width. */
+[data-site] [data-component="block"]:has([data-component="section-heading"]) {
+  --block-space: var(--section-gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--heading-gap);
+
+  > [data-slot="body"] {
+    max-width: none;
+  }
+}
+
+/* Headings stop clear of the window's top when a contents link or an address jumps to them. */
+[data-site] :is(h2, h3)[id] {
+  scroll-margin-top: 2rem;
+}
+
+/* The title is a button that copies the section's address: it looks like the title, never underlined,
+   and turns --text-strong on hover; keyboard focus gets the site's focus ring. */
+[data-site] [data-slot="heading-link"] {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 150ms ease;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--text-strong);
+    }
+  }
+
+  &:active {
+    color: var(--text-strong);
+  }
+}
+
+/* "Link copied", for a moment after the title. */
+[data-site] [data-slot="heading-copied"] {
+  margin-inline-start: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  -webkit-text-stroke: 0;
+  color: var(--text-weak);
+
+  /* Empty, it stays in the accessibility tree so the live region announces the next copy. */
+  &:empty {
+    margin: 0;
+  }
+}
+
+/* Press and Brand section titles: plain weight 400, no faux medium (matches the legal group headings). */
+[data-site]:is([data-page="press"], [data-page="brand"])
+  :is([data-component="section-heading"], [data-component="block"] [data-slot="label"]) {
+  -webkit-text-stroke: 0;
+}
+
+/* A status dot after an item's title (the docs component kitchen sink): green when chosen, amber in
+   progress, orange not yet reviewed. */
+[data-site]
+  :is([data-component="on-this-page"], [data-component="contents-menu"], [data-component="docs-nav"])
+  [data-slot="status"] {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: 0.5rem;
+  border-radius: 50%;
+  vertical-align: 0.15em;
+  background: var(--status-ok);
+
+  &[data-status="progress"] {
+    background: var(--status-degraded);
+  }
+
+  &[data-status="review"] {
+    background: light-dark(hsl(25, 90%, 45%), hsl(30, 90%, 60%));
+  }
+}

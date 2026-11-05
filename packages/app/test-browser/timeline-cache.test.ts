@@ -61,7 +61,7 @@ function setup() {
     const turnDiffSources = new Map<string, TurnDiffSource>()
 
     const turnDiffSource = (label: string) => {
-      const source = turnDiffSources.get(label) ?? { get: () => undefined, load: () => {} }
+      const source = turnDiffSources.get(label) ?? { state: () => ({ status: "loading" }) as const, load: () => {} }
       turnDiffSources.set(label, source)
 
       return source
@@ -313,6 +313,21 @@ test("disposes a detached view once its transcript is evicted, but never the sel
 
     input.setState("id", "ses_a")
     expect(input.cache()).not.toBe(first)
+  } finally {
+    input.dispose()
+  }
+})
+
+test("a view whose transcript was evicted while selected goes once another session is selected", () => {
+  const input = setup()
+
+  try {
+    input.cache()
+    input.setState("messages", "ses_a", [])
+    expect(input.disposed).toEqual([])
+    input.setState("id", "ses_b")
+    input.cache()
+    expect(input.disposed).toEqual(["ses_a"])
   } finally {
     input.dispose()
   }

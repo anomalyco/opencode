@@ -180,6 +180,11 @@ export function Header() {
             </a>
           </li>
           <li>
+            <a href="/console/enterprise" target="_self">
+              {i18n.t("nav.enterprise")}
+            </a>
+          </li>
+          <li>
             <a href="/console" target="_self">
               {i18n.t("nav.console")}
             </a>
@@ -279,6 +284,11 @@ export function Header() {
                 <li>
                   <a href="/console/go" target="_self">
                     {i18n.t("nav.subscription")}
+                  </a>
+                </li>
+                <li>
+                  <a href="/console/enterprise" target="_self">
+                    {i18n.t("nav.enterprise")}
                   </a>
                 </li>
                 <li>

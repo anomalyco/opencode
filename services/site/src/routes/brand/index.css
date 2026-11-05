@@ -1,0 +1,1854 @@
+[data-page="brand"] {
+  /* Verdict colors for the don'ts. Both pass 4.5:1 on the page and on --bg-weak, light and dark. */
+  --brand-dont: light-dark(hsl(4, 72%, 45%), hsl(4, 90%, 68%));
+  --brand-do: light-dark(hsl(145, 60%, 28%), hsl(145, 50%, 58%));
+  /* The "clay and slate" color fields of the Transparent backgrounds. Solid tiles take them in order,
+     so the sections rhyme. */
+  --brand-light-1: #f3c4a6;
+  --brand-light-2: #c6d2e0;
+  --brand-light-3: #ead7c3;
+  --brand-light-4: #d9e2ea;
+  --brand-light-base: #f7f3ee;
+  --brand-dark-1: #9a3f1e;
+  --brand-dark-2: #334e6e;
+  --brand-dark-3: #5b3a29;
+  --brand-dark-base: #11151a;
+  /* Film grain over the blurred fields: greyscale noise, overlaid. */
+  --brand-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.2' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1.8 0 0 0 -0.4 1.8 0 0 0 -0.4 1.8 0 0 0 -0.4 0 0 0 0 0.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  [data-slot="hero-actions"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* Both labels share one cell, so the copy button keeps the width of the longer one. */
+  [data-slot="copy-labels"] {
+    display: inline-grid;
+
+    > span {
+      grid-area: 1 / 1;
+      visibility: hidden;
+    }
+
+    > [data-active] {
+      visibility: visible;
+    }
+  }
+
+  [data-slot="sr-only"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Landscape preview tiles, 2:1 like every other preview on the page. Each tile keeps its own color scheme so light logos stay on light and dark on dark. */
+  [data-component="brand-tiles"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+
+    [data-slot="preview"] {
+      aspect-ratio: 2;
+      display: grid;
+      place-items: center;
+
+      &[data-tone="light"] {
+        color-scheme: light;
+        background: var(--bg-weak);
+      }
+
+      &[data-tone="dark"] {
+        color-scheme: dark;
+        background: #0a0a0a;
+        box-shadow: inset 0 0 0 1px var(--border);
+      }
+
+      img {
+        display: block;
+        max-width: 100%;
+      }
+
+      /* Whole-pixel steps: the logo at 48 × 60px (4:5, 12px stroke), the wordmark at 156 × 28px
+         (39 × 7 strokes of 4px). The square files pad the logo to 60 × 60px. */
+      &[data-kind="logo"] img {
+        width: 48px;
+        height: 60px;
+      }
+
+      &[data-kind="logo"][data-square] img {
+        width: 60px;
+      }
+
+      &[data-kind="wordmark"] img {
+        width: 156px;
+        height: 28px;
+      }
+    }
+
+    /* The caption above the thumbnail and the buttons under it: the meta row dissolves into the
+       tile's column, and the caption moves first. */
+    [data-slot="meta"] {
+      display: contents;
+    }
+
+    li > [data-slot="meta"] > [data-slot="name"] {
+      order: -1;
+    }
+
+    /* The buttons at the inline end under the tile (the right, or the left in right-to-left text). */
+    li > [data-slot="meta"] > :is([data-slot="actions"], [data-slot="badge-actions"]) {
+      align-self: end;
+      margin-inline-start: 0;
+    }
+
+    /* The file name beside the PNG and SVG buttons: sans, at the row title's size ("Logo"),
+       in grey under the dark title. */
+    [data-slot="name"] {
+      font-family: var(--font-sans);
+      font-size: var(--fs-small);
+      color: var(--text-weak);
+    }
+
+    [data-slot="actions"] {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-inline-start: auto;
+    }
+
+    [data-component="site-button"] {
+      padding: 0 0.75rem;
+    }
+
+    [data-slot="note"] {
+      margin-inline-start: 0.375rem;
+      color: var(--text-weak);
+    }
+
+    /* The app icons at 96px; the avatars cropped to a circle, the way profiles show them. */
+    /* The light avatar on the dark tile and the dark one on the light tile, as a profile picture on
+       a UI of the other scheme. */
+    [data-kind="avatar"] img {
+      width: 96px;
+      height: 96px;
+    }
+
+    [data-kind="avatar"] img {
+      border-radius: 50%;
+    }
+
+    [data-kind="badge"] img {
+      width: 200px;
+      height: 44px;
+    }
+  }
+
+  /* Settings › Brand asset actions. Every style keeps the actions on the right of the asset's name. */
+  [data-slot="actions"] {
+    /* Only the chosen style shows; every style is in the markup (see Actions in index.tsx). */
+    /* Every asset's buttons sit at the inline end of their row (the right, or the left in right-to-left
+       text), in their order; a row that wraps keeps each line at that end too. */
+    > [data-variant] {
+      display: none;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    &[data-style="menu copy"] > [data-variant="menu copy"],
+    &[data-style="menu"] > [data-variant="menu"],
+    &[data-style="split"] > [data-variant="split"],
+    &[data-style="icons"] > [data-variant="icons"],
+    &[data-style="text links"] > [data-variant="text links"],
+    &[data-style="svg copy"] > [data-variant="svg copy"],
+    &[data-style="hover reveal"] > [data-variant="hover reveal"] {
+      display: flex;
+    }
+
+    /* One "Download" button and a grey menu, as the site's other menus: a tint and a mid-grey bar on
+       hover and keyboard focus. */
+    [data-slot="asset-menu"] {
+      position: relative;
+
+      > [data-component="site-button"] {
+        gap: 0.375rem;
+      }
+    }
+
+    /* As wide as its button and lined up with its left edge; a long label ends in "…". Rows as in
+       the logo menu (site.css), but OpenTUI Mono at 14px rather than its 12px (David found 12px too small);
+       0.5rem × 0.875rem padding, 14px icons, the popover
+       background and shadow, and the grey menu states (a tint and a mid-grey bar on hover and
+       keyboard focus). */
+    [data-slot="menu"] {
+      position: absolute;
+      top: calc(100% + 0.25rem);
+      inset-inline-start: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      width: max-content;
+      min-width: 100%;
+      background: var(--popover-bg);
+      box-shadow: var(--popover-shadow);
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      color: var(--text-strong);
+      animation: settings-in 140ms var(--ease-out);
+
+      > * {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.625rem;
+        min-width: 0;
+        padding: 0.5rem 0.875rem;
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-align: start;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+
+        svg {
+          flex-shrink: 0;
+          width: 14px;
+          height: 14px;
+        }
+
+        &::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          inset-inline-start: -1px;
+          width: 2px;
+          background: var(--menu-hint);
+          opacity: 0;
+        }
+
+        &:focus-visible {
+          outline: none;
+          background: var(--menu-hover);
+
+          &::before {
+            opacity: 1;
+          }
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            outline: none;
+            background: var(--menu-hover);
+
+            &::before {
+              opacity: 1;
+            }
+          }
+        }
+
+        &:active {
+          background: var(--menu-press);
+        }
+      }
+    }
+
+    /* A part of the menu: a small grey title (or, untitled, just a hairline) above its items. */
+    [data-slot="menu"] > [data-slot="menu-group"] {
+      padding: 0.625rem 0.875rem 0.25rem;
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+      cursor: default;
+
+      &:not(:first-child) {
+        border-top: 1px solid var(--border);
+      }
+
+      &:empty {
+        padding: 0;
+      }
+
+      &::before {
+        display: none;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: none;
+        }
+      }
+
+      &:active {
+        background: none;
+      }
+    }
+
+    > [data-variant="menu copy"] {
+      gap: 0.25rem;
+    }
+
+    /* PNG, SVG and the copy square: tight, and kept to the right when they wrap under the caption. */
+    [data-slot="meta"] > & {
+      margin-inline-start: auto;
+    }
+
+    > [data-variant="svg copy"] {
+      gap: 0.25rem;
+
+      > [data-component="site-button"] {
+        padding: 0 0.625rem;
+      }
+    }
+
+    /* Menu + copy: a square copy icon next to Download, as tall as it. */
+    [data-slot="copy-square"] {
+      justify-content: center;
+      width: 2.25rem;
+      padding: 0;
+    }
+
+    [data-slot="item-label"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Split: the main part downloads the PNG; the chevron opens the other formats. */
+    > [data-variant="split"] {
+      gap: 1px;
+    }
+
+    [data-slot="chevron-button"] {
+      padding: 0 0.5rem;
+    }
+
+    /* Like the product cards' split button, the chevron fills blue while its menu is open. */
+    [data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
+      &
+      > [data-variant="split"]
+      [data-slot="chevron-button"][aria-expanded="true"] {
+      background: var(--link);
+      color: #fff;
+    }
+
+    /* Icons: square buttons, named by their tooltips and labels. */
+    > [data-variant="icons"] [data-component="site-button"] {
+      justify-content: center;
+      width: 2.25rem;
+      padding: 0;
+    }
+
+    /* Text links: no button chrome, underlined on hover. */
+    [data-slot="links"] {
+      font-size: var(--fs-small);
+      color: var(--text-weak);
+
+      :is(a, button) {
+        padding: 0;
+        background: none;
+        font: inherit;
+        color: var(--text);
+        text-decoration: underline;
+        text-decoration-color: transparent;
+        text-underline-offset: 0.2em;
+        cursor: pointer;
+        transition:
+          color 150ms ease,
+          text-decoration-color 150ms ease;
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+            text-decoration-color: currentColor;
+          }
+        }
+
+        &:active {
+          color: var(--text-strong);
+          text-decoration-color: currentColor;
+        }
+
+        &:focus-visible {
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    /* Hover reveal: the buttons wait for the card to be hovered or focused; touch always shows them. */
+    &[data-style="hover reveal"] {
+      opacity: 0;
+      transition: opacity 150ms ease;
+
+      @media (hover: none), (pointer: coarse) {
+        opacity: 1;
+      }
+    }
+  }
+
+  li:focus-within [data-slot="actions"][data-style="hover reveal"] {
+    opacity: 1;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    li:hover [data-slot="actions"][data-style="hover reveal"] {
+      opacity: 1;
+    }
+  }
+
+  [data-slot="download-icon"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="palette"] {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    h3 {
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-weak);
+    }
+
+    ul {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--gutter);
+    }
+
+    /* The swatch, the name and role, then HEX, RGB and OKLCH to copy. Rows start at the top, so
+       every column's swatch, name and values line up. */
+    li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      min-width: 0;
+    }
+
+    [data-slot="swatch"] {
+      display: block;
+      height: 6rem;
+      margin-bottom: 0.75rem;
+    }
+
+    [data-slot="title-row"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    [data-slot="name"] {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      white-space: nowrap;
+    }
+
+    /* Always two lines tall, so the value rows line up across the three swatches. */
+    [data-slot="use"] {
+      min-height: calc(2lh);
+      font-size: var(--fs-small);
+      line-height: 1.4;
+      color: var(--text-weak);
+    }
+
+    [data-slot="formats"] {
+      display: flex;
+      flex-direction: column;
+      margin-top: 0.75rem;
+    }
+
+    /* A whole row copies its value, with a grey tint across it on hover as in the legal lists. The
+       hairline and tint run the swatch's full width; the label is inset as far as the copy icon. */
+    [data-slot="format"] {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0 0.75rem;
+      padding: 0.375rem 0.5rem;
+      background: none;
+      box-shadow: inset 0 1px 0 var(--border);
+      text-align: start;
+      cursor: pointer;
+      transition: background-color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background-color: var(--bg-weak);
+        }
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+        background-color: var(--bg-weak);
+      }
+
+      &:active {
+        background-color: var(--bg-weaker);
+      }
+    }
+
+    [data-slot="format-name"] {
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+    }
+
+    /* The value never breaks; if it can't fit beside its label it drops under it. */
+    [data-slot="value"] {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      margin-inline-start: auto;
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      color: var(--text);
+      white-space: nowrap;
+
+      svg {
+        flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+      }
+    }
+
+    /* Where a column would be narrower than about 240px: one colour per row. In the three columns the
+       big swatch stays on top, as a swatch beside the values would leave them too little room. */
+    @container (max-width: 46rem) {
+      ul {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.5rem;
+      }
+
+      /* Two columns that every part shares: the name over a tall swatch on the left, the role over
+         the values on the right, so the role and the value rows start at one edge. The swatch is as
+         tall as the three value rows. */
+      li {
+        grid-template-columns: 5.5rem minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        gap: 0.5rem 1rem;
+      }
+
+      [data-slot="title-row"] {
+        display: contents;
+      }
+
+      [data-slot="name"] {
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      [data-slot="use"] {
+        grid-column: 2;
+        grid-row: 1;
+        min-height: 0;
+      }
+
+      /* The labels line up with the role above them again, as in this layout it isn't inset. */
+      [data-slot="format"] {
+        padding-inline-start: 0;
+      }
+
+      [data-slot="swatch"] {
+        grid-column: 1;
+        grid-row: 2;
+        align-self: stretch;
+        height: auto;
+        margin: 0;
+      }
+
+      [data-slot="formats"] {
+        grid-column: 2;
+        grid-row: 2;
+        margin: 0;
+      }
+    }
+
+    /* Phones: the name on its own line, the role under it across the full width, then the swatch
+       beside its values. */
+    @container (max-width: 30rem) {
+      li {
+        grid-template-columns: 4rem minmax(0, 1fr);
+        grid-template-rows: auto auto auto;
+        row-gap: 0.25rem;
+      }
+
+      [data-slot="name"] {
+        grid-column: 1 / -1;
+      }
+
+      [data-slot="use"] {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        margin-bottom: 0.5rem;
+      }
+
+      [data-slot="swatch"],
+      [data-slot="formats"] {
+        grid-row: 3;
+      }
+    }
+  }
+
+  [data-component="usage"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      min-width: 0;
+    }
+
+    :is(strong, h3, h4) {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    span {
+      color: var(--text-weak);
+      line-height: 1.4;
+    }
+
+    [data-slot="figure"] {
+      aspect-ratio: 16 / 10;
+      display: grid;
+      place-items: center;
+      margin-bottom: 0.875rem;
+      background: var(--bg-weak);
+    }
+
+    /* Every sub-section title has the same 48px above it: after a figure (its 0.875rem margin and the
+       item's 0.375rem gap, plus 28px), or at the top of a row (the list's 2rem row gap, plus 16px). */
+    li > h3[id]:not(:first-child) {
+      margin-top: 28px;
+    }
+
+    /* "Minimum sizes" spans the row above its two figures. */
+    [data-slot="group-heading"] {
+      grid-column: 1 / -1;
+      margin-top: 16px;
+      margin-bottom: -1rem;
+    }
+
+    /* Settings › Stroke diagram "off" (the default) hides the "One stroke" figure; the clear-space
+       text still says what a stroke is. */
+    [data-slot="stroke"][data-hidden] {
+      display: none;
+    }
+
+    :is([data-slot="clear-space"], [data-slot="stroke"]) {
+      grid-column: 1 / -1;
+
+      [data-slot="figure"] {
+        aspect-ratio: auto;
+        padding: 2.5rem 1rem;
+      }
+    }
+
+    /* The logo's clear space above the wordmark's, each centred: their drawings are symmetric about
+       the logo and the wordmark, so those sit on the figure's centre line (snapLogos keeps them on
+       whole pixels). */
+    [data-slot="clear-space"] [data-slot="figure"] {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 2.5rem;
+    }
+
+    /* Each minimum-size specimen stands alone at its real size: the artwork, its width marked under
+       it, then the size. The artwork sits on the bottom of a 24px row, so both specimens' marks and
+       labels line up. */
+    [data-slot="minimum"] {
+      display: grid;
+      grid-template-rows: 24px auto auto;
+      justify-items: center;
+      row-gap: 0.5rem;
+
+      svg {
+        display: block;
+      }
+
+      > :first-child {
+        align-self: end;
+      }
+    }
+
+    /* The measurement, as the other blue measurement labels on the page. */
+    [data-slot="value"] {
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      color: var(--link);
+    }
+
+    [data-slot="dimension"] {
+      stroke: var(--link);
+      fill: none;
+    }
+  }
+
+  /* Settings › Stroke diagram: what one stroke is. Only the chosen style shows. */
+  [data-component="stroke-diagram"] {
+    > svg {
+      display: none;
+      max-width: 100%;
+      height: auto;
+    }
+
+    &[data-style="highlight"] > [data-variant="highlight"],
+    &[data-style="ruler"] > [data-variant="ruler"],
+    &[data-style="zoom"] > [data-variant="zoom"],
+    &[data-style="tiles"] > [data-variant="tiles"],
+    &[data-style="animated"] > [data-variant="animated"] {
+      display: block;
+    }
+
+    [data-slot="unit"] {
+      fill: color-mix(in srgb, var(--link) 12%, transparent);
+      stroke: var(--link);
+
+      &[data-source] {
+        fill: light-dark(
+          color-mix(in srgb, var(--link) 70%, transparent),
+          color-mix(in srgb, var(--link) 45%, transparent)
+        );
+      }
+    }
+
+    [data-slot="band"] {
+      fill: color-mix(in srgb, var(--link) 30%, transparent);
+    }
+
+    [data-slot="dimension"],
+    [data-slot="crop"] {
+      fill: none;
+      stroke: var(--link);
+    }
+
+    [data-slot="extension"] {
+      fill: none;
+      stroke: color-mix(in srgb, var(--link) 45%, transparent);
+    }
+
+    [data-slot="grid"] {
+      fill: none;
+      stroke: var(--border);
+    }
+
+    [data-slot="tile"] {
+      fill: none;
+      stroke: var(--border-strong);
+    }
+
+    [data-slot="space"] {
+      fill: none;
+      stroke: var(--border-strong);
+      stroke-dasharray: 4 4;
+    }
+
+    text {
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      fill: var(--link);
+    }
+
+    [data-slot="note"] {
+      fill: var(--text-weak);
+    }
+
+    /* Animated: the stroke lifts out of the logo, steps one stroke left into the clear space and
+       settles, then the clear space and its measurement appear. Steps, not tweens. Reduced motion
+       shows the end state. */
+    [data-variant="animated"] {
+      [data-slot="lift"] {
+        transform-box: view-box;
+      }
+
+      :is([data-slot="space"], [data-late]) {
+        opacity: 0;
+      }
+    }
+
+    &[data-play] [data-variant="animated"] {
+      [data-slot="lift"] {
+        animation: stroke-step 1.8s steps(1, end) 0.3s both;
+      }
+
+      :is([data-slot="space"], [data-late]) {
+        animation: stroke-late 1.8s steps(1, end) 0.3s both;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      [data-variant="animated"] {
+        [data-slot="lift"] {
+          animation: none !important;
+          translate: -24px 0;
+        }
+
+        :is([data-slot="space"], [data-late]) {
+          animation: none !important;
+          opacity: 1;
+        }
+      }
+    }
+  }
+
+  /* One blue layer: the stroke squares, leader and label in the measurement blue; the hatching,
+     guides and crop marks in lighter tints of it. */
+  [data-component="clear-space"] {
+    display: block;
+    max-width: 100%;
+    height: auto;
+
+    [data-slot="hatch"] {
+      stroke: color-mix(in srgb, var(--link) 28%, transparent);
+      stroke-width: 1;
+    }
+
+    [data-slot="outline"] {
+      fill: none;
+      stroke: color-mix(in srgb, var(--link) 40%, transparent);
+    }
+
+    [data-slot="crop"] {
+      fill: none;
+      stroke: color-mix(in srgb, var(--link) 55%, transparent);
+    }
+
+    [data-slot="unit"] {
+      fill: color-mix(in srgb, var(--link) 22%, transparent);
+      stroke: var(--link);
+
+      &[data-source] {
+        fill: light-dark(
+          color-mix(in srgb, var(--link) 70%, transparent),
+          color-mix(in srgb, var(--link) 40%, transparent)
+        );
+      }
+    }
+
+    [data-slot="leader"] {
+      fill: none;
+      stroke: var(--link);
+    }
+
+    [data-slot="leader-dot"] {
+      fill: var(--link);
+    }
+
+    text {
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      fill: var(--link);
+    }
+  }
+
+  [data-component="brand-variant"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    & + & {
+      margin-top: 3rem;
+    }
+
+    h3 {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+    }
+
+    > p {
+      color: var(--text-weak);
+      line-height: 1.4;
+      margin-bottom: 0.75rem;
+    }
+
+    [data-slot="row"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+
+      & + & {
+        margin-top: 1.5rem;
+      }
+    }
+
+    h4 {
+      font-size: var(--fs-small);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    [data-slot="preview"] {
+      &[data-variant="standard"][data-tone="light"] {
+        background: #f4f4f4;
+      }
+
+      /* Photo-like multicolor backgrounds: wide, heavily blurred color fields (the last listed field
+         lies at the bottom) with film grain on top. */
+      /* The picker's "Blur + grain": each field is a circle whose radius is a share of the tile's diagonal
+         (x 1.35 spread), written as an ellipse in a 2:1 tile. Only the grain blends; one mode per layer,
+         or the list repeats and overlays the color fields too. */
+      &[data-variant="transparent"][data-tone="light"] {
+        background:
+          var(--brand-grain), radial-gradient(67.9% 135.8% at 30% 100%, var(--brand-light-4), transparent),
+          radial-gradient(87.5% 175% at 62% 92%, var(--brand-light-3), transparent),
+          radial-gradient(83% 166% at 82% 18%, var(--brand-light-2), transparent),
+          radial-gradient(78.5% 157% at 18% 28%, var(--brand-light-1), transparent), var(--brand-light-base);
+        background-blend-mode: overlay, normal, normal, normal, normal;
+      }
+
+      &[data-variant="transparent"][data-tone="dark"] {
+        background:
+          var(--brand-grain), radial-gradient(90.5% 181% at 50% 105%, var(--brand-dark-3), transparent),
+          radial-gradient(83% 166% at 85% 30%, var(--brand-dark-2), transparent),
+          radial-gradient(75.5% 151% at 15% 25%, var(--brand-dark-1), transparent), var(--brand-dark-base);
+        background-blend-mode: overlay, normal, normal, normal;
+      }
+
+      &[data-variant="solid"] {
+        box-shadow: none;
+      }
+
+      &[data-variant="solid"][data-tone="light"][data-stop="0"] {
+        background: var(--brand-light-1);
+      }
+
+      &[data-variant="solid"][data-tone="light"][data-stop="1"] {
+        background: var(--brand-light-2);
+      }
+
+      &[data-variant="solid"][data-tone="dark"][data-stop="0"] {
+        background: var(--brand-dark-1);
+      }
+
+      &[data-variant="solid"][data-tone="dark"][data-stop="1"] {
+        background: var(--brand-dark-2);
+      }
+    }
+  }
+
+  /* Every card's buttons (assets, avatars, badges) share one size with /press: asset-buttons.css. */
+
+  /* Links in this page's own running text, the same as the site's inline links. */
+  :is([data-slot="text"], [data-slot="prose"], [data-slot="note"]) a {
+    color: var(--inline-link-color, var(--text-strong));
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.15em;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--link);
+      }
+    }
+
+    &:focus-visible,
+    &:active {
+      color: var(--link);
+    }
+  }
+
+  :is([data-slot="prose"], [data-slot="note"]) {
+    line-height: 1.5;
+    color: var(--text-weak);
+  }
+
+  /* Paragraphs that belong together keep the body's paragraph gap, not the section's. */
+  [data-slot="paragraphs"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Every section's intro: the site's body size and colour, not the larger lead. */
+  [data-slot="text"] {
+    font-size: var(--body-size);
+    line-height: 1.5;
+    color: var(--text);
+    text-wrap: pretty;
+  }
+
+  /* Inline names and commands: OpenTUI Mono on a grey chip. */
+  code {
+    padding: 0.0625rem 0.3125rem;
+    background: var(--bg-weaker);
+    font-family: var(--font-mono);
+    font-size: calc(0.875em + 1px);
+    color: var(--text-strong);
+    box-decoration-break: clone;
+  }
+
+  [data-component="brand-sub"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    h3 {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    > p {
+      margin-bottom: 0.75rem;
+      line-height: 1.4;
+      color: var(--text-weak);
+    }
+
+    [data-slot="figure"] {
+      display: grid;
+      place-items: center;
+      padding: 2.5rem 1rem;
+      background: var(--bg-weak);
+    }
+  }
+
+  /* Partner lockups: OpenCode × a partner in light and dark tiles. */
+  [data-slot="lockups"] [data-slot="preview"] svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Badges: a row per style, as the logo and wordmark sections, with a Light and a Dark card side by
+     side (one column where two would be too narrow). Settings › Badge font shows the Inter, OpenTUI Mono
+     or uppercase OpenTUI Mono files. */
+  /* Straight after the description: its 12px margin and the 8px gap put the tabs about as far below
+     it as the cards sit below the tabs. */
+  [data-component="badges"] {
+    container-type: inline-size;
+
+    > [data-variant] {
+      display: none;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    &[data-style="sans"] > [data-variant="sans"],
+    &[data-style="mono"] > [data-variant="mono"],
+    &[data-style="mono caps"] > [data-variant="mono caps"] {
+      display: flex;
+    }
+
+    /* Settings › Badge layout: only the chosen layout shows. */
+    [data-slot="tabs-layout"],
+    [data-slot="rows-layout"] {
+      display: none;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    &[data-layout="tabs"] [data-slot="tabs-layout"],
+    &[data-layout="rows"] [data-slot="rows-layout"] {
+      display: flex;
+    }
+
+    [data-slot="tabs-layout"] {
+      gap: clamp(0.75rem, 1.5vw, 1.25rem);
+    }
+
+    /* The style tabs: plain text at the group title's size, the chosen style in ink and the others
+       muted (darker on hover); they wrap on narrow screens. */
+    [data-slot="style-tabs"] {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 1.25rem;
+
+      button {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0;
+        background: none;
+        font-family: var(--font-mono);
+        font-size: var(--mono-size);
+        color: var(--text-weak);
+        cursor: pointer;
+        transition: color 150ms ease;
+
+        &[aria-selected="true"] {
+          color: var(--text-strong);
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--text-strong);
+          }
+        }
+
+        &:active {
+          color: var(--text-strong);
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--link);
+          outline-offset: 2px;
+        }
+      }
+    }
+
+    [data-slot="tab-indicator"] {
+      display: none;
+    }
+
+    /* Settings › Badge tab style › underline: a 2px ink line under the chosen tab that slides to the
+       next one. */
+    &[data-tab-style="underline"] [data-slot="tab-indicator"] {
+      position: absolute;
+      top: 0;
+      inset-inline-start: 0;
+      display: block;
+      width: 0;
+      height: 2px;
+      background: var(--text-strong);
+      transition:
+        transform 200ms var(--ease-out),
+        width 200ms var(--ease-out);
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+
+    /* Settings › Badge tab style › square: a 6px ink square before the chosen tab's label, about the
+       x-height. Every tab keeps the square's space, so the labels never move. */
+    &[data-tab-style="square"] [data-slot="style-tabs"] button {
+      &::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        margin-inline-end: 0.5rem;
+        background: transparent;
+        transition: background-color 150ms ease;
+      }
+
+      &[aria-selected="true"]::before {
+        background: var(--text-strong);
+      }
+    }
+
+    [data-slot="row"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    h4 {
+      font-size: var(--fs-small);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    [data-slot="badge-grid"] {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.5rem var(--gutter);
+
+      li {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-width: 0;
+      }
+    }
+
+    @container (min-width: 30rem) {
+      [data-slot="badge-grid"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    [data-slot="preview"] {
+      position: relative;
+      display: grid;
+      place-items: center;
+      aspect-ratio: 2;
+
+      &[data-tone="light"] {
+        color-scheme: light;
+        background: #f4f4f4;
+        --size-muted: #6b6b6b;
+        --size-strong: #1f1f1f;
+      }
+
+      &[data-tone="dark"] {
+        color-scheme: dark;
+        background: #0a0a0a;
+        box-shadow: inset 0 0 0 1px var(--border);
+        --size-muted: #8f8f8f;
+        --size-strong: #eeeeee;
+      }
+
+      img {
+        display: block;
+        width: auto;
+        max-width: calc(100% - 1rem);
+      }
+
+      /* Cells: the tiles step away from the badge's grey cells (#eeeeee, #1f1f1f) so the cell edges
+         and the gap between them read. */
+      /* White, so a faint inset edge shows where the tile ends. */
+      &[data-badge="c"][data-tone="light"] {
+        background: #ffffff;
+        box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1);
+      }
+
+      /* Sizes on #4f4f4f: #d0d0d0 is 5.3:1, white 8.2:1. */
+      &[data-badge="c"][data-tone="dark"] {
+        background: #4f4f4f;
+        --size-muted: #d0d0d0;
+        --size-strong: #ffffff;
+      }
+    }
+
+    /* The size switcher: plain mono text in the tile's top-left corner, shown while the tile is
+       hovered or holds focus, and always on touch screens. Muted sizes pass 4.5:1 on their tile. */
+    [data-slot="sizes"] {
+      position: absolute;
+      top: 0.25rem;
+      inset-inline-start: 0.25rem;
+      display: flex;
+      opacity: 0;
+      transition: opacity 150ms ease;
+
+      button {
+        padding: 0.25rem 0.375rem;
+        background: none;
+        font-family: var(--font-mono);
+        font-size: var(--fs-meta);
+        line-height: 1;
+        color: var(--size-muted);
+        cursor: pointer;
+
+        &[aria-pressed="true"] {
+          color: var(--size-strong);
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover {
+            color: var(--size-strong);
+          }
+        }
+
+        &:active {
+          color: var(--size-strong);
+        }
+
+        &:focus-visible {
+          outline: 1px solid var(--size-strong);
+          outline-offset: -1px;
+        }
+      }
+    }
+
+    [data-slot="preview"]:focus-within [data-slot="sizes"] {
+      opacity: 1;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      [data-slot="preview"]:hover [data-slot="sizes"] {
+        opacity: 1;
+      }
+    }
+
+    [data-slot="preview"]:active [data-slot="sizes"] {
+      opacity: 1;
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      [data-slot="sizes"] {
+        opacity: 1;
+
+        /* An invisible band above and below makes each size a 44px tall target. */
+        button {
+          position: relative;
+
+          &::after {
+            content: "";
+            position: absolute;
+            inset: -12px 0;
+          }
+        }
+      }
+    }
+
+    [data-slot="meta"] {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    [data-slot="name"] {
+      font-family: var(--font-sans);
+      font-size: var(--fs-small);
+      color: var(--text-weak);
+    }
+
+    [data-slot="badge-actions"] {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.25rem;
+      margin-inline-start: auto;
+
+      > [data-component="site-button"] {
+        gap: 0.375rem;
+      }
+    }
+  }
+
+  [data-component="partner-lockup"] {
+    display: block;
+    max-width: 100%;
+    height: auto;
+
+    /* The ×: two 1.5px lines in the logo's inner shade (#d2d2d2 on the light tile, #4b4b4b on the
+       dark). */
+    [data-slot="times"] {
+      fill: none;
+      stroke: var(--logo-inner);
+      stroke-width: 1.5;
+    }
+  }
+
+  [data-slot="defs"] {
+    position: absolute;
+  }
+
+  [data-component="brand-dont-grid"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem var(--gutter);
+
+    [data-slot="preview"] {
+      position: relative;
+      aspect-ratio: 2;
+      display: grid;
+      place-items: center;
+      background: var(--bg-weak);
+
+      > svg[data-slot="mark"] {
+        width: 48px;
+        height: 60px;
+      }
+
+      > svg[data-slot="wordmark"] {
+        width: 156px;
+        height: 28px;
+      }
+
+      &[data-example="low-contrast"] {
+        background: #b0b0b0;
+      }
+
+      &[data-example="color"] {
+        background: var(--brand-dark-2);
+      }
+
+      /* 140% wide. */
+      &[data-example="stretch"] svg {
+        transform: scaleX(1.4);
+      }
+
+      &[data-example="shadow"] svg {
+        filter: drop-shadow(4px 6px 3px light-dark(rgb(0 0 0 / 0.5), rgb(255 255 255 / 0.35)));
+      }
+
+      &[data-example="glow"] svg {
+        filter: drop-shadow(0 0 1px #22d3ee) drop-shadow(0 0 8px #22d3ee);
+      }
+    }
+
+    [data-slot="lockup"] {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+
+      svg {
+        display: block;
+        width: 32px;
+        height: 40px;
+      }
+
+      span {
+        font-family: var(--font-sans);
+        font-size: 1.75rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--logo-code);
+      }
+    }
+  }
+
+  /* Shared by the don'ts and the whole-pixel Do and Don't figures. */
+  :is([data-component="brand-dont-grid"], [data-component="brand-pixels"]) {
+    figure {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-width: 0;
+      margin: 0;
+    }
+
+    /* The verdict, then the caption on the same line; a long caption wraps under itself, not under the verdict. */
+    /* One sentence that starts with "Do" or "Do not": it wraps under its first word, not beside it. */
+    figcaption {
+      color: var(--text-weak);
+      line-height: 1.4;
+    }
+
+    /* "Do" and "Do not" read as the start of the rule: same face and size, only the colour differs. */
+    [data-slot="verdict"] {
+      font: inherit;
+    }
+
+    [data-verdict="dont"] [data-slot="verdict"] {
+      color: var(--brand-dont);
+    }
+
+    [data-verdict="do"] [data-slot="verdict"] {
+      color: var(--brand-do);
+    }
+  }
+
+  [data-component="brand-pixels"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem var(--gutter);
+    margin-bottom: 0.875rem;
+
+    [data-slot="preview"] {
+      display: grid;
+      place-items: center;
+      padding: 1.5rem 0;
+      background: var(--bg-weak);
+    }
+
+    /* The grid at the largest whole-pixel cell that fits its figure: 16px cells need 340px, 12px
+       cells 268px, 8px cells 196px. */
+    [data-slot="preview"] {
+      container-type: inline-size;
+    }
+
+    :is([data-cell="12"], [data-cell="8"]) {
+      display: none;
+    }
+
+    @container (max-width: 339px) {
+      [data-cell="16"] {
+        display: none;
+      }
+
+      [data-cell="12"] {
+        display: block;
+      }
+    }
+
+    @container (max-width: 267px) {
+      [data-cell="12"] {
+        display: none;
+      }
+
+      [data-cell="8"] {
+        display: block;
+      }
+    }
+  }
+
+  [data-component="pixel-grid"] {
+    display: block;
+
+    [data-slot="grid"] {
+      fill: none;
+      stroke: var(--border);
+    }
+
+    [data-slot="dimension"] {
+      fill: none;
+      stroke: var(--link);
+    }
+
+    text {
+      font-family: var(--font-mono);
+      font-size: var(--fs-micro);
+      fill: var(--link);
+    }
+  }
+
+  [data-component="usage"] [data-slot="pixels"] {
+    grid-column: 1 / -1;
+
+    /* The logo and wordmark size tables each take half the width, filling the row. */
+    [data-slot="sizes"] {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      gap: 0.75rem var(--gutter, 2rem);
+      /* With the list's 0.375rem gap, 20px after the text, as between other sub-sections' text and
+         their figures. */
+      margin-top: 0.875rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      font-variant-numeric: tabular-nums;
+    }
+
+    th {
+      font-weight: 400;
+      text-align: start;
+      color: var(--text-strong);
+    }
+
+    td {
+      color: var(--text-weak);
+    }
+
+    :is(th, td) {
+      padding-block: 0.25rem;
+      padding-inline: 0 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+  }
+
+  @media (max-width: 40rem) {
+    [data-component="brand-dont-grid"],
+    [data-component="brand-pixels"],
+    [data-component="brand-tiles"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-component="usage"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* The logo and wordmark size tables need about 396px in two equal columns (the wider one is 190px),
+     and the two-across rule outranks the phone rule above, so under 448px they stack (at 320px they
+     overlapped by 10px and "Stroke" was cut off; at 410px the second ran 17px past the row). */
+  @media (max-width: 28rem) {
+    [data-component="usage"] [data-slot="pixels"] [data-slot="sizes"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+/* Scrolling (set by the page for 150ms after each scroll): hover states wait, so rows and tiles don't
+   light up one by one as they pass under a resting pointer. Pointers that hover only: on touch it
+   would swallow a tap made just after a scroll stops. */
+@media (hover: hover) and (pointer: fine) {
+  html[data-scrolling] [data-page="brand"] [data-component="content"] {
+    pointer-events: none;
+  }
+}
+
+/* Settings › Brand colours › blue + clay: the Default and Simple fields in on-brand blues (the
+   Simple tiles still take the first two light and dark fields, in order). The slate and clay
+   defaults above stay for "clay + slate". */
+[data-page="brand"] [data-palette="blue"] {
+  --brand-light-1: #b9caff;
+  --brand-light-2: #d5e0ff;
+  --brand-light-3: #c7d3f4;
+  --brand-light-4: #e4ebff;
+  --brand-light-base: #f3f6ff;
+  --brand-dark-1: #2c4bd6;
+  --brand-dark-2: #142a6b;
+  --brand-dark-3: #1d3aa6;
+  --brand-dark-base: #070b1a;
+}
+
+/* Settings › Variant background: what sits behind the Default (transparent) tiles (default "mesh").
+   "flat" keeps the faint blurred fields above; the others build on the same palette fields, CSS only. The logo stays
+   centred on whole pixels above them. */
+[data-page="brand"] [data-variant-background] [data-slot="preview"][data-variant="transparent"] {
+  position: relative;
+  isolation: isolate;
+
+  > img {
+    position: relative;
+  }
+}
+
+/* Two close tints of the blue: a soft diagonal with a lighter glow in one corner. */
+[data-page="brand"] [data-variant-background="gradient"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background:
+      radial-gradient(90% 120% at 15% 10%, var(--brand-light-4), transparent 70%),
+      linear-gradient(150deg, var(--brand-light-2), var(--brand-light-1));
+    background-blend-mode: normal;
+  }
+
+  &[data-tone="dark"] {
+    background:
+      radial-gradient(90% 120% at 85% 10%, var(--brand-dark-3), transparent 70%),
+      linear-gradient(150deg, var(--brand-dark-1), var(--brand-dark-2));
+    background-blend-mode: normal;
+  }
+}
+
+/* A plain fill under strong film grain, like a photo of a coloured wall. */
+[data-page="brand"] [data-variant-background="grain"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background:
+      var(--brand-grain) 0 0 / 120px,
+      var(--brand-light-1);
+    background-blend-mode: overlay, normal;
+  }
+
+  &[data-tone="dark"] {
+    background:
+      var(--brand-grain) 0 0 / 120px,
+      var(--brand-dark-1);
+    background-blend-mode: soft-light, normal;
+  }
+}
+
+/* Soft out-of-focus shapes: a bright highlight, a deeper shadow and two mid tones, then grain. */
+[data-page="brand"] [data-variant-background="photo-like"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background:
+      var(--brand-grain), radial-gradient(30% 55% at 78% 30%, rgb(255 255 255 / 0.9), transparent),
+      radial-gradient(45% 80% at 22% 85%, color-mix(in oklab, var(--brand-dark-1) 45%, transparent), transparent),
+      radial-gradient(55% 100% at 18% 15%, var(--brand-light-1), transparent),
+      radial-gradient(60% 110% at 90% 95%, var(--brand-light-3), transparent), var(--brand-light-2);
+    background-blend-mode: overlay, normal, normal, normal, normal, normal;
+  }
+
+  &[data-tone="dark"] {
+    background:
+      var(--brand-grain),
+      radial-gradient(28% 50% at 75% 28%, color-mix(in oklab, var(--brand-dark-1), white 35%), transparent),
+      radial-gradient(50% 90% at 20% 20%, var(--brand-dark-1), transparent),
+      radial-gradient(55% 100% at 85% 100%, var(--brand-dark-3), transparent),
+      radial-gradient(40% 70% at 10% 95%, var(--brand-dark-base), transparent), var(--brand-dark-2);
+    background-blend-mode: overlay, normal, normal, normal, normal, normal;
+  }
+}
+
+/* A gradient with a 2px pixel checker that fades across it, in the site's pixel style. The 4px
+   tile keeps every square on whole pixels at 1× and 2×. */
+[data-page="brand"] [data-variant-background="dither"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background-blend-mode: normal;
+    background: linear-gradient(90deg, var(--brand-light-1), var(--brand-light-4));
+    --dither: color-mix(in oklab, var(--brand-dark-1) 22%, transparent);
+  }
+
+  &[data-tone="dark"] {
+    background-blend-mode: normal;
+    background: linear-gradient(90deg, var(--brand-dark-1), var(--brand-dark-2));
+    --dither: rgb(255 255 255 / 0.12);
+  }
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-conic-gradient(var(--dither) 0 25%, transparent 0 50%) 0 0 / 4px 4px;
+    mask-image: linear-gradient(90deg, transparent 15%, #000);
+  }
+}
+
+/* Faint 24px module lines over a fill, as on the font page: a 24px SVG tile with a 1px line on its
+   top and left edge, so both directions land on whole pixels. */
+[data-page="brand"] [data-variant-background="grid"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h24v1H1v23H0z' fill='%232c4bd6' fill-opacity='.16'/%3E%3C/svg%3E")
+        0 0 / 24px 24px,
+      var(--brand-light-2);
+    background-blend-mode: normal;
+  }
+
+  &[data-tone="dark"] {
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h24v1H1v23H0z' fill='%23fff' fill-opacity='.1'/%3E%3C/svg%3E")
+        0 0 / 24px 24px,
+      var(--brand-dark-2);
+    background-blend-mode: normal;
+  }
+}
+
+/* Mesh (default): soft colour from each corner and a lighter centre, like a mesh gradient. No
+   texture, so the logo's see-through shade reads as a clean tint of whatever is behind it. */
+[data-page="brand"] [data-variant-background="mesh"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background:
+      radial-gradient(60% 90% at 50% 50%, var(--brand-light-base), transparent),
+      radial-gradient(70% 120% at 0% 0%, var(--brand-light-1), transparent),
+      radial-gradient(70% 120% at 100% 0%, var(--brand-light-4), transparent),
+      radial-gradient(70% 120% at 100% 100%, var(--brand-light-3), transparent),
+      radial-gradient(
+        70% 120% at 0% 100%,
+        color-mix(in oklab, var(--brand-light-1), var(--brand-dark-1) 20%),
+        transparent
+      ),
+      var(--brand-light-2);
+    background-blend-mode: normal;
+  }
+
+  &[data-tone="dark"] {
+    background:
+      radial-gradient(60% 90% at 50% 50%, color-mix(in oklab, var(--brand-dark-1), var(--brand-dark-2)), transparent),
+      radial-gradient(70% 120% at 0% 0%, var(--brand-dark-1), transparent),
+      radial-gradient(70% 120% at 100% 0%, var(--brand-dark-3), transparent),
+      radial-gradient(70% 120% at 100% 100%, var(--brand-dark-base), transparent),
+      radial-gradient(70% 120% at 0% 100%, var(--brand-dark-2), transparent), var(--brand-dark-2);
+    background-blend-mode: normal;
+  }
+}
+
+/* Aurora: soft diagonal bands of the palette blues. */
+[data-page="brand"] [data-variant-background="aurora"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background: linear-gradient(
+      115deg,
+      var(--brand-light-2) 0%,
+      var(--brand-light-1) 28%,
+      var(--brand-light-base) 48%,
+      var(--brand-light-3) 68%,
+      var(--brand-light-1) 100%
+    );
+    background-blend-mode: normal;
+  }
+
+  &[data-tone="dark"] {
+    background: linear-gradient(
+      115deg,
+      var(--brand-dark-2) 0%,
+      var(--brand-dark-1) 30%,
+      var(--brand-dark-base) 50%,
+      var(--brand-dark-3) 72%,
+      var(--brand-dark-2) 100%
+    );
+    background-blend-mode: normal;
+  }
+}
+
+/* Spotlight: one soft light from the top left, darker towards the far edges. */
+[data-page="brand"] [data-variant-background="spotlight"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background: radial-gradient(
+      90% 160% at 15% 0%,
+      var(--brand-light-base),
+      var(--brand-light-1) 55%,
+      color-mix(in oklab, var(--brand-light-1), var(--brand-dark-1) 25%) 100%
+    );
+    background-blend-mode: normal;
+  }
+
+  &[data-tone="dark"] {
+    background: radial-gradient(
+      90% 160% at 15% 0%,
+      color-mix(in oklab, var(--brand-dark-1), white 15%),
+      var(--brand-dark-1) 40%,
+      var(--brand-dark-base) 100%
+    );
+    background-blend-mode: normal;
+  }
+}
+
+/* Halftone: 1.5px dots on a 6px grid that fade in across a soft gradient. */
+[data-page="brand"] [data-variant-background="halftone"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background: linear-gradient(90deg, var(--brand-light-4), var(--brand-light-1));
+    background-blend-mode: normal;
+    --dot: color-mix(in oklab, var(--brand-dark-1) 45%, transparent);
+  }
+
+  &[data-tone="dark"] {
+    background: linear-gradient(90deg, var(--brand-dark-2), var(--brand-dark-1));
+    background-blend-mode: normal;
+    --dot: color-mix(in oklab, var(--brand-light-1) 35%, transparent);
+  }
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, var(--dot) 0.75px, transparent 1.25px) 0 0 / 6px 6px;
+    mask-image: linear-gradient(90deg, transparent 10%, #000 90%);
+  }
+}
+
+/* Isometric: faint 2:1 pixel-art isometric lines from a 32 × 16px SVG tile, stepped on whole pixels. */
+[data-page="brand"] [data-variant-background="isometric"] [data-slot="preview"][data-variant="transparent"] {
+  &[data-tone="light"] {
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='16' shape-rendering='crispEdges'%3E%3Cpath d='M0 8L16 0L32 8L16 16Z' fill='none' stroke='%232c4bd6' stroke-opacity='.18'/%3E%3C/svg%3E")
+        0 0 / 32px 16px,
+      linear-gradient(160deg, var(--brand-light-4), var(--brand-light-2));
+    background-blend-mode: normal;
+  }
+
+  &[data-tone="dark"] {
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='16' shape-rendering='crispEdges'%3E%3Cpath d='M0 8L16 0L32 8L16 16Z' fill='none' stroke='%23fff' stroke-opacity='.1'/%3E%3C/svg%3E")
+        0 0 / 32px 16px,
+      linear-gradient(160deg, var(--brand-dark-1), var(--brand-dark-2));
+    background-blend-mode: normal;
+  }
+}
+
+@keyframes stroke-step {
+  0% {
+    translate: 0 0;
+  }
+  25% {
+    translate: 0 -8px;
+  }
+  50% {
+    translate: -24px -8px;
+  }
+  75%,
+  100% {
+    translate: -24px 0;
+  }
+}
+
+@keyframes stroke-late {
+  0%,
+  74% {
+    opacity: 0;
+  }
+  75%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* The hero's subtitle spans the content column, like the sections under it. */
+[data-site][data-page="brand"] [data-component="hero"] p {
+  max-width: none;
+}

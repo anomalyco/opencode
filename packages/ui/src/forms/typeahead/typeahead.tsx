@@ -1,12 +1,25 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createEffect, createMemo, For, type JSX, on, onCleanup, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createSignal, For, type JSX, on, onCleanup, Show, untrack } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { abort } from "@opencode/util/abort"
 import { useI18n } from "../../context/i18n"
 import { Loader } from "../../feedback/loader/loader"
 import { MenuScroll } from "../../components/menu-scroll"
 import { createTypeahead } from "./controller"
+import {
+  createTypeaheadState,
+  selectTypeaheadAnimateHeight,
+  selectTypeaheadAnswered,
+  selectTypeaheadFailed,
+  selectTypeaheadInput,
+  selectTypeaheadItems,
+  selectTypeaheadPending,
+  selectTypeaheadStale,
+  transitionTypeahead,
+  TYPEAHEAD_REQUEST_TIMEOUT_MS,
+  type TypeaheadEffect,
+  type TypeaheadEvent,
+} from "./machine"
 
 export { createTypeahead } from "./controller"
 
@@ -29,77 +42,72 @@ export function Typeahead<T>(props: {
   children: (item: T) => JSX.Element
 }) {
   const i18n = useI18n()
-
-  const [store, setStore] = createStore<{
-    query: string
-    searched: boolean
-    answered?: string
-    failed?: boolean
-    loading?: boolean
-  }>({ query: "", searched: false, answered: props.initial ? "" : undefined })
-
-  const cache = new Map<string, T[]>()
+  const created = createTypeaheadState(props.initial)
+  const [machine, setMachine] = createSignal(created.state)
+  let timer: ReturnType<typeof setTimeout> | undefined
   let request: AbortController | undefined
   let input: HTMLInputElement | undefined
-  onCleanup(() => abort(request))
 
-  const query = () => store.query.trim()
-  // The parent owns the opening list, so a refresh reaches an open panel without remounting the input.
-  const opening = () => (query() ? undefined : props.initial)
-  const failed = () => (opening() ? opening()?.failed : store.failed)
-  const pending = () => store.loading || store.answered !== query()
+  const dispatch = (event: TypeaheadEvent<T>) => {
+    const prev = untrack(machine)
+    const next = transitionTypeahead(prev, event)
 
-  const search = (query: string) => {
+    if (next.state !== prev) setMachine(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: TypeaheadEffect) => {
+    clearTimeout(timer)
+    timer = undefined
     abort(request)
+    request = undefined
 
-    if (cache.has(query)) return setStore({ answered: query, failed: false, loading: false })
+    if (effect.type === "cancel") return
+    const attempt = effect.attempt
+
+    if (effect.type === "debounce") {
+      timer = setTimeout(() => dispatch({ type: "debounce.elapsed", attempt }), effect.delayMs)
+
+      return
+    }
+
     const current = (request = new AbortController())
-    setStore("loading", true)
-    props.source(query, current.signal).then(
+    // A source that ignores the signal or stalls must still end in a state the user can retry from.
+    timer = setTimeout(() => dispatch({ type: "request.timed-out", attempt }), TYPEAHEAD_REQUEST_TIMEOUT_MS)
+    props.source(effect.query, current.signal).then(
       (items) => {
-        if (current.signal.aborted) return
-        cache.set(query, items)
-        setStore({ answered: query, failed: false, loading: false })
+        if (!current.signal.aborted) dispatch({ type: "request.succeeded", attempt, items })
       },
-      () => !current.signal.aborted && setStore({ answered: query, failed: true, loading: false }),
+      () => {
+        if (!current.signal.aborted) dispatch({ type: "request.failed", attempt })
+      },
     )
   }
 
-  // A cached or empty query answers at once; a typed one waits, and the request it supersedes is aborted.
+  created.effects.forEach(run)
+
   createEffect(
     on(
-      query,
-      (next) => {
-        if (!next || cache.has(next)) return search(next)
-        abort(request)
-        const timer = setTimeout(() => search(next), props.delay)
-        onCleanup(() => clearTimeout(timer))
-      },
-      { defer: !!props.initial },
+      () => props.initial,
+      (initial) => dispatch({ type: "initial.synced", initial }),
+      { defer: true },
     ),
   )
 
-  // Narrow visible rows while pending; broadening waits for a cached or server answer, avoiding speculative rows flashing.
-  const results = createMemo<{ items: T[]; stale: boolean }>((previous) => {
-    const next = query()
-    const preloaded = opening()
+  onCleanup(() => dispatch({ type: "disposed" }))
 
-    if (preloaded) return { items: preloaded.failed ? [] : preloaded.items, stale: false }
+  const changeInput = (value: string) =>
+    dispatch({ type: "input.changed", input: value, delayMs: props.delay, match: props.match })
 
-    if (store.answered === next && store.failed) return { items: [], stale: false }
-    const cached = cache.get(next) ?? previous?.items.filter((item) => props.match(item, next)) ?? []
-
-    if (cache.has(next) || cached.length > 0) return { items: cached, stale: false }
-
-    return { items: previous?.items ?? [], stale: !!previous?.items.length }
-  })
-
-  const animateHeight = () => store.searched && results().items.length > 0
+  const items = () => selectTypeaheadItems(machine())
+  const stale = () => selectTypeaheadStale(machine())
+  const pending = () => selectTypeaheadPending(machine())
+  const animateHeight = () => selectTypeaheadAnimateHeight(machine())
 
   const typeahead = createTypeahead<T>({
-    items: () => results().items,
+    items,
     key: (item) => props.key(item),
-    stale: () => results().stale,
+    stale,
     onSelect: (item) => props.onSelect(item),
   })
 
@@ -131,21 +139,21 @@ export function Typeahead<T>(props: {
           aria-activedescendant={typeahead.activeID()}
           aria-label={props.placeholder}
           placeholder={props.placeholder}
-          value={store.query}
+          value={selectTypeaheadInput(machine())}
           autocomplete="off"
           spellcheck={false}
           class="h-8 min-w-0 flex-1 outline-none placeholder:text-v2-text-text-faint"
-          onInput={(event) => setStore({ query: event.currentTarget.value, searched: true })}
+          onInput={(event) => changeInput(event.currentTarget.value)}
           onKeyDown={typeahead.onKeyDown}
         />
-        <Show when={store.query}>
+        <Show when={selectTypeaheadInput(machine())}>
           <button
             type="button"
             aria-label={i18n.t("ui.list.clearFilter")}
             class="flex size-5 shrink-0 items-center justify-center rounded-sm text-v2-icon-icon-faint outline-none hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base"
             onPointerDown={(event) => event.preventDefault()}
             onClick={() => {
-              setStore("query", "")
+              changeInput("")
               input?.focus()
             }}
           >
@@ -171,9 +179,9 @@ export function Typeahead<T>(props: {
             role="listbox"
             class="max-h-56"
             viewportClass="p-1"
-            classList={{ hidden: results().items.length === 0 }}
+            classList={{ hidden: items().length === 0 }}
           >
-            <For each={results().items}>
+            <For each={items()}>
               {(item) => (
                 <div
                   id={typeahead.optionID(item)}
@@ -181,7 +189,7 @@ export function Typeahead<T>(props: {
                   aria-selected={typeahead.activeItem() === item}
                   aria-current={props.selected === props.key(item) ? "true" : undefined}
                   class="flex h-7 min-w-0 cursor-default select-none items-center gap-2 rounded-sm px-2 transition-opacity duration-150 aria-selected:bg-v2-overlay-simple-overlay-hover"
-                  classList={{ "opacity-50": results().stale }}
+                  classList={{ "opacity-50": stale() }}
                   onMouseMove={(event) => {
                     // A static cursor must not steal the active row while the keyboard scrolls the list.
                     if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(props.key(item))
@@ -198,17 +206,17 @@ export function Typeahead<T>(props: {
             </For>
           </MenuScroll>
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
-          <Show when={results().items.length === 0}>
+          <Show when={items().length === 0}>
             <div
               class="mx-1 flex h-9 items-center px-2 py-1 text-v2-text-text-faint"
-              classList={{ invisible: store.answered === undefined }}
+              classList={{ invisible: !selectTypeaheadAnswered(machine()) }}
             >
-              <Show when={failed()} fallback={props.emptyLabel}>
+              <Show when={selectTypeaheadFailed(machine())} fallback={props.emptyLabel}>
                 <button
                   type="button"
                   class="-mx-2 flex h-7 flex-1 items-center rounded-sm px-2 text-start text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => search(query())}
+                  onClick={() => dispatch({ type: "retry.requested" })}
                 >
                   {props.retryLabel}
                 </button>
