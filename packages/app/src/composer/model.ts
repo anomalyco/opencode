@@ -369,7 +369,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     commands,
     context,
     // The server narrows by the first word; the title match then needs the whole query.
-    requestSessionSearch: (word, signal) => sessions.search(word, signal),
+    requestSessionSearch: (word, signal) => sessions.search(word, signal).then(() => undefined),
     searchSessions: (query) => {
       const project = sdk().current?.project.id
 

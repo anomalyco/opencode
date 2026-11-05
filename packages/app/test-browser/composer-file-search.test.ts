@@ -89,7 +89,7 @@ test("closing @ aborts its session search, and reopening on the same word waits 
 
 function setup(
   results: Record<string, string[]>,
-  options?: { requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<unknown> },
+  options?: { requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void> },
 ) {
   jest.useFakeTimers()
 

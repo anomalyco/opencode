@@ -4,11 +4,13 @@ export const UPLOAD_STALL_TIMEOUT_MS = 60_000
 /** The failure a stalled upload rejects with; it carries no message, so the toast shows the generic one. */
 export const UPLOAD_TIMED_OUT = Object.freeze({ reason: "timed-out" as const })
 
+/** The draft an upload writes into, compared by identity; closing that draft cancels its uploads. */
+export type UploadScope = object
+
 export type UploadEntry = {
   readonly id: string
   readonly attempt: number
-  /** The draft the upload writes into; closing that draft cancels it. */
-  readonly scope: object
+  readonly scope: UploadScope
   readonly filename: string
   readonly mime: string
   readonly size: number
@@ -28,23 +30,23 @@ export type UploadMachineEvent =
   | {
       readonly type: "upload.started"
       readonly id: string
-      readonly scope: object
+      readonly scope: UploadScope
       readonly filename: string
       readonly mime: string
       readonly size: number
     }
   | { readonly type: "upload.progress"; readonly attempt: number; readonly loaded: number }
-  | { readonly type: "upload.succeeded"; readonly attempt: number; readonly value: unknown }
+  | { readonly type: "upload.succeeded"; readonly attempt: number; readonly path: string }
   | { readonly type: "upload.failed"; readonly attempt: number; readonly error: unknown }
   | { readonly type: "upload.timed-out"; readonly attempt: number }
   | { readonly type: "upload.cancelled"; readonly id: string }
-  | { readonly type: "scope.cancelled"; readonly scope: object }
+  | { readonly type: "scope.cancelled"; readonly scope: UploadScope }
 
 export type UploadMachineEffect =
   | { readonly type: "upload.run"; readonly attempt: number; readonly timeoutMs: number }
   | { readonly type: "timer.reset"; readonly attempt: number; readonly timeoutMs: number }
   | { readonly type: "upload.abort"; readonly attempt: number }
-  | { readonly type: "upload.resolve"; readonly attempt: number; readonly value: unknown }
+  | { readonly type: "upload.resolve"; readonly attempt: number; readonly path: string | undefined }
   | { readonly type: "upload.reject"; readonly attempt: number; readonly error: unknown }
 
 export type UploadMachineTransition = {
@@ -118,8 +120,9 @@ export function transitionUploads(state: UploadMachineState, event: UploadMachin
         effects: [{ type: "timer.reset", attempt: entry.attempt, timeoutMs: UPLOAD_STALL_TIMEOUT_MS }],
       }
     }
+
     case "upload.succeeded":
-      return finish(state, rest(), [{ type: "upload.resolve", attempt: entry.attempt, value: event.value }])
+      return finish(state, rest(), [{ type: "upload.resolve", attempt: entry.attempt, path: event.path }])
     case "upload.failed":
       return finish(state, rest(), [{ type: "upload.reject", attempt: entry.attempt, error: event.error }])
     case "upload.timed-out":
@@ -144,7 +147,7 @@ export function uploadPercent(item: Pick<UploadEntry, "loaded" | "size">) {
 function cancel(attempt: number): UploadMachineEffect[] {
   return [
     { type: "upload.abort", attempt },
-    { type: "upload.resolve", attempt, value: undefined },
+    { type: "upload.resolve", attempt, path: undefined },
   ]
 }
 

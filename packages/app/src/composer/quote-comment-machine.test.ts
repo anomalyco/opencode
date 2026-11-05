@@ -31,7 +31,10 @@ afterEach(() => {
 
 describe("transitionQuoteComment", () => {
   test("closes the editor when its quote leaves the draft, so restoring the quote does not reopen it", () => {
-    const result = replay([{ type: "opened", key }, { type: "retained", keys: ["file:a.ts"] }])
+    const result = replay([
+      { type: "opened", key },
+      { type: "retained", keys: ["file:a.ts"] },
+    ])
 
     expect(result.state).toEqual({ status: "closed", issued: 0 })
     expect(selectQuoteCommentKey(result.state)).toBeUndefined()
@@ -104,11 +107,7 @@ describe("transitionQuoteComment", () => {
   })
 
   test("disposing clears a running send timer and ignores later events", () => {
-    const disposed = replay([
-      { type: "opened", key },
-      { type: "send.requested", draft: "note" },
-      { type: "disposed" },
-    ])
+    const disposed = replay([{ type: "opened", key }, { type: "send.requested", draft: "note" }, { type: "disposed" }])
 
     expect(disposed.state).toEqual({ status: "disposed" })
     expect(disposed.effects.at(-1)).toEqual({ type: "timer.clear" })

@@ -108,7 +108,9 @@ export function transitionMentionSearch(state: MentionSearchState, event: Mentio
 
     return {
       state: { ...state, files: { ...files, status: "loading" } },
-      effects: [{ type: "file.search", attempt: event.attempt, query: state.query, timeoutMs: MENTION_SEARCH_TIMEOUT_MS }],
+      effects: [
+        { type: "file.search", attempt: event.attempt, query: state.query, timeoutMs: MENTION_SEARCH_TIMEOUT_MS },
+      ],
     }
   }
 

@@ -92,7 +92,7 @@ export function createComposerEditor(input: {
   /** Reads reactively, so newly found sessions refresh the list without waiting on file search. */
   searchSessions?: (query: string) => ComposerSuggestion[]
   /** Loads sessions matching `word` into what `searchSessions` reads; settles once they are in. */
-  requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<unknown>
+  requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void>
   openAttachment?: (attachment: ComposerAttachment, origin?: HTMLElement) => void
   /** An object URL for the image file at this path, which a path attachment references without its bytes. */
   readImage?: (path: string) => Promise<string | undefined>
@@ -243,9 +243,7 @@ export function createComposerEditor(input: {
   createEffect(() => {
     if (state.popover.type !== "context") return untrack(() => dispatchMentionSearch(MENTION_CONTEXT_CLOSED))
     const query = state.popover.query
-    untrack(() =>
-      dispatchMentionSearch({ type: "context.changed", query, hasSessions: !!input.requestSessionSearch }),
-    )
+    untrack(() => dispatchMentionSearch({ type: "context.changed", query, hasSessions: !!input.requestSessionSearch }))
   })
   onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
@@ -263,7 +261,12 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [...fixed, ...sessions, ...recent, ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id))]
+      return [
+        ...fixed,
+        ...sessions,
+        ...recent,
+        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
+      ]
     },
     key: (item) => item.id,
     filterKeys: ["label"],

@@ -75,7 +75,13 @@ describe("transitionMentionSearch", () => {
     expect(isMentionFileStale(typed.state, "rez")).toBe(true)
 
     for (const type of ["file.failed", "file.timed-out"] as const) {
-      const settled = replay([{ type: "file.debounce.fired", attempt: 2 }, { type, attempt: 2 }], typed.state)
+      const settled = replay(
+        [
+          { type: "file.debounce.fired", attempt: 2 },
+          { type, attempt: 2 },
+        ],
+        typed.state,
+      )
 
       expect(selectMentionFiles(settled.state)).toEqual([])
       expect(isMentionFileStale(settled.state, "rez")).toBe(false)

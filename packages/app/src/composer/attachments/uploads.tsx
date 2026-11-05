@@ -10,6 +10,7 @@ import {
   transitionUploads,
   uploadPercent,
   type UploadEntry,
+  type UploadScope,
   type UploadMachineEffect,
   type UploadMachineEvent,
 } from "./upload-machine"
@@ -23,11 +24,12 @@ export type Upload = {
   cancel: () => void
 }
 
-type UploadWork = (report: (loaded: number) => void, signal: AbortSignal) => Promise<unknown>
+type UploadWork = (report: (loaded: number) => void, signal: AbortSignal) => Promise<string>
 
 // Uploads outlive the composer that started them, so one process-wide machine feeds every chip
 // and the single progress toast.
 const [machineState, setMachineState] = createSignal(INITIAL_UPLOAD_MACHINE_STATE)
+
 // Rows keep their identity while progress streams, so a cancel button under the pointer is not replaced.
 const [view, setView] = createStore<{ items: Upload[] }>({ items: [] })
 
@@ -35,14 +37,14 @@ const runs = new Map<
   number,
   {
     work: UploadWork
-    result: PromiseWithResolvers<unknown>
+    result: PromiseWithResolvers<string | undefined>
     controller: AbortController
     timer?: ReturnType<typeof setTimeout>
   }
 >()
 
 // Handed from `track` to the `upload.run` effect its start causes in the same dispatch.
-let starting: { work: UploadWork; result: PromiseWithResolvers<unknown> } | undefined
+let starting: { work: UploadWork; result: PromiseWithResolvers<string | undefined> } | undefined
 
 function dispatch(event: UploadMachineEvent) {
   const previous = untrack(machineState)
@@ -78,7 +80,7 @@ function run(effect: UploadMachineEffect) {
     void Promise.try(() =>
       current.work((loaded) => dispatch({ type: "upload.progress", attempt, loaded }), current.controller.signal),
     ).then(
-      (value) => dispatch({ type: "upload.succeeded", attempt, value }),
+      (path) => dispatch({ type: "upload.succeeded", attempt, path }),
       (error) => dispatch({ type: "upload.failed", attempt, error }),
     )
 
@@ -99,7 +101,7 @@ function run(effect: UploadMachineEffect) {
   if (effect.type === "upload.abort") return abort(current.controller)
   runs.delete(attempt)
 
-  if (effect.type === "upload.resolve") return current.result.resolve(effect.value)
+  if (effect.type === "upload.resolve") return current.result.resolve(effect.path)
   current.result.reject(effect.error)
 }
 
@@ -110,17 +112,14 @@ function stall(attempt: number, timeoutMs: number) {
 export const uploads = {
   items: () => view.items,
   /** Uploads in flight for one draft; they survive the composer view remounting. */
-  forScope(scope: object) {
+  forScope(scope: UploadScope) {
     const ids = selectUploadEntries(machineState()).flatMap((entry) => (entry.scope === scope ? [entry.id] : []))
 
     return view.items.filter((item) => ids.includes(item.id))
   },
-  /** Runs `work` while the upload is listed. Resolves to undefined when the user or its draft cancels it. */
-  track<T>(
-    input: Pick<UploadEntry, "id" | "scope" | "filename" | "mime" | "size">,
-    work: (report: (loaded: number) => void, signal: AbortSignal) => Promise<T>,
-  ): Promise<T | undefined> {
-    const result = Promise.withResolvers<unknown>()
+  /** Runs `work` while the upload is listed and resolves to its path, or to undefined when it is cancelled. */
+  track(input: Pick<UploadEntry, "id" | "scope" | "filename" | "mime" | "size">, work: UploadWork) {
+    const result = Promise.withResolvers<string | undefined>()
     starting = { work, result }
     dispatch({ type: "upload.started", ...input })
 
@@ -130,11 +129,10 @@ export const uploads = {
       result.resolve(undefined)
     }
 
-    // SAFETY: the run resolves with what `work` resolved to, or undefined when cancelled.
-    return result.promise as Promise<T | undefined>
+    return result.promise
   },
   cancel: (id: string) => dispatch({ type: "upload.cancelled", id }),
-  cancelScope: (scope: object) => dispatch({ type: "scope.cancelled", scope }),
+  cancelScope: (scope: UploadScope) => dispatch({ type: "scope.cancelled", scope }),
 }
 
 // Sonner builds toast content outside the app's Solid tree: no context and no owner. This host

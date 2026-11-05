@@ -8,12 +8,14 @@ import {
   type UploadMachineEvent,
   type UploadMachineState,
   type UploadMachineTransition,
+  type UploadScope,
 } from "./upload-machine"
 
 const scopeA = {}
+
 const scopeB = {}
 
-function start(id: string, scope: object): UploadMachineEvent {
+function start(id: string, scope: UploadScope): UploadMachineEvent {
   return { type: "upload.started", id, scope, filename: `${id}.bin`, mime: "application/octet-stream", size: 1024 }
 }
 
@@ -53,7 +55,7 @@ describe("transitionUploads", () => {
     expect(result.state).toMatchObject({ status: "uploading", entries: [{ id: "u2", scope: scopeB }] })
     expect(result.effects).toEqual([
       { type: "upload.abort", attempt: 1 },
-      { type: "upload.resolve", attempt: 1, value: undefined },
+      { type: "upload.resolve", attempt: 1, path: undefined },
     ])
   })
 
@@ -84,6 +86,7 @@ describe("uploads", () => {
 
   test("an upload with no progress fails after the stall timeout instead of blocking sends", async () => {
     jest.useFakeTimers()
+
     const pending = uploads.track(
       { id: "hung", scope: scopeB, filename: "big.zip", mime: "application/zip", size: 1024 },
       () => new Promise<string>(() => {}),

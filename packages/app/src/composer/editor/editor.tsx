@@ -911,12 +911,7 @@ function ComposerAttachments(props: {
           class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
         />
         <Show when={editing()} keyed>
-          {(current) => {
-            const view = createMemo(() =>
-              selectQuoteCommentView(props.quoteComment.state(), current.key, current.comment ?? ""),
-            )
-
-            return (
+          {(current) => (
             <Show when={anchors[current.key]}>
               {(anchor) => (
                 <QuoteCommentEditor
@@ -924,7 +919,7 @@ function ComposerAttachments(props: {
                   source={props.quoteComment.anchor()}
                   text={current.text}
                   comment={current.comment ?? ""}
-                  view={view()}
+                  view={selectQuoteCommentView(props.quoteComment.state(), current.key, current.comment ?? "")}
                   mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
                   onInput={props.quoteComment.setDraft}
                   send={
@@ -947,8 +942,7 @@ function ComposerAttachments(props: {
                 />
               )}
             </Show>
-            )
-          }}
+          )}
         </Show>
       </div>
     </Show>
