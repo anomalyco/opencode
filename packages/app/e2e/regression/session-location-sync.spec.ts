@@ -131,8 +131,8 @@ test("replaces the composer when the location is not found and recovers by movin
   await rechecked
   expect(requests).toBe(2)
   await expect(worktree).toBeVisible()
-  await expect(status).toBeVisible()
-  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
+  // The open menu hides the page from role locators.
+  await expect(page.getByText("Session location unavailable", { exact: true })).toBeVisible()
 
   await worktree.click()
   await expect.poll(() => moves).toEqual([{ directory: destination }])
