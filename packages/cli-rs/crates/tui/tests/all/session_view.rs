@@ -7,8 +7,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_api::generated::V2Event;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_tui::{Deps, Tui};
+use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
@@ -138,6 +140,10 @@ struct Harness {
 }
 
 fn mount(id: &str, config: Value) -> Harness {
+    mount_at(100, id, config)
+}
+
+fn mount_at(width: u16, id: &str, config: Value) -> Harness {
     let memory = Memory::new(routes());
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
@@ -145,7 +151,7 @@ fn mount(id: &str, config: Value) -> Harness {
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
-    let support::Harness { app, tui } = support::mount(100, 30, deps);
+    let support::Harness { app, tui } = support::mount(width, 30, deps);
     let h = Harness { app, tui, memory };
     let local = h.tui.local.clone();
     h.wait("the catalog", || local.catalog_ready() && !local.agents().is_empty());
@@ -163,6 +169,22 @@ impl Harness {
 
     fn wait_for(&self, text: &str) {
         self.wait(text, || self.app.text().contains(text));
+    }
+
+    fn apply(&self, kind: &str, seq: u64, data: Value) {
+        let session = data["sessionID"].clone();
+        let event: V2Event = serde_json::from_value(json!({
+            "id": format!("evt_{seq}"), "created": 10_000_000 + seq, "type": kind,
+            "durable": { "aggregateID": session, "seq": seq, "version": 1 },
+            "data": data,
+        }))
+        .unwrap();
+        self.tui.data.apply(&[event]);
+    }
+
+    /// The number the next widget gets, which counts the widgets created so far.
+    fn next_widget(&self) -> u32 {
+        View::new(&self.app).id()
     }
 
     fn settle(&self) -> String {
@@ -213,6 +235,45 @@ fn a_send_returns_to_the_newest_rows_unless_submit_scroll_is_keep() {
     let screen = h.settle();
     assert!(screen.contains("Jump to latest"), "{screen}");
     assert!(!screen.contains("Answer 30 three."), "{screen}");
+}
+
+#[test]
+fn the_sidebar_and_footer_skip_other_sessions_and_follow_their_own() {
+    let h = mount_at(170, "ses_a", json!({ "animations": false }));
+    h.wait_for("Long talk");
+    h.wait_for("Answer 30 three.");
+    let run = |seq: u64| {
+        let kind = if seq % 2 == 1 { "session.execution.started" } else { "session.execution.succeeded" };
+        h.apply(kind, seq, json!({ "sessionID": format!("ses_other{}", seq % 3) }));
+        h.settle();
+    };
+    // The limit section reads the usage limits outside the store on any change, so it catches up first.
+    run(1);
+
+    // Runs of sessions outside the family rebuild no section and no footer.
+    let before = h.next_widget();
+    (2..=20).for_each(run);
+    assert_eq!(h.next_widget(), before + 1, "{}", h.app.text());
+
+    // The session's own step ends show, from an earlier reply until the last one has tokens.
+    let ended = |seq: u64, message: &str, input: u64| {
+        let tokens = json!({ "input": input, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+        h.apply(
+            "session.step.ended",
+            seq,
+            json!({ "sessionID": "ses_a", "assistantMessageID": message, "finish": "stop", "cost": 0, "tokens": tokens }),
+        );
+    };
+    // The usage limits toast covers the section's first lines; its share and the prompt footer show.
+    ended(21, "msg_029b", 2_000);
+    h.wait_for("1% used");
+    h.wait_for("2.0K (1%)");
+    ended(22, "msg_030b", 12_000);
+    h.wait_for("6% used");
+    h.wait_for("12.0K (6%)");
+    ended(23, "msg_029b", 30_000);
+    let screen = h.settle();
+    assert!(screen.contains("6% used") && screen.contains("12.0K (6%)"), "{screen}");
 }
 
 #[test]

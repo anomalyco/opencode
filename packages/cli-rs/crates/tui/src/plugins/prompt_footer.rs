@@ -10,13 +10,13 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::generated::SessionID;
 use opencode_plugin::{Definition, Placement, SlotInput, Slotted, slot};
-use opencode_store::{Changes, SessionStatus};
+use opencode_store::{Changes, SessionStatus, State};
 use opencode_ui::bind;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
 use super::goal::{self, Goal, Goals, Tracker};
-use super::sidebar_context::{money, session_usage};
+use super::sidebar_context::{SessionUsage, Usage, money};
 use crate::app::Tui;
 
 pub fn plugin() -> Definition<Tui> {
@@ -40,6 +40,19 @@ struct Inner {
     show_details: bool,
     goal: Option<Rc<Tracker>>,
     shown: RefCell<Option<Model>>,
+    /// What the footer reads from the store, read again only on the changes that touch it.
+    stored: RefCell<Option<Stored>>,
+    usage: SessionUsage,
+}
+
+#[derive(Clone, Default)]
+struct Stored {
+    subagents: usize,
+    shells: usize,
+    usage: Option<Usage>,
+    cost: f64,
+    /// The usage and the cost as the footer prints them.
+    status: Rc<[String]>,
 }
 
 /// What the footer shows; it renders again only when this changes.
@@ -48,7 +61,7 @@ struct Model {
     width: u16,
     live: Option<Live>,
     goal: Option<Goal>,
-    status: Vec<String>,
+    status: Rc<[String]>,
     usage: bool,
     shortcuts: bool,
     agents: String,
@@ -70,8 +83,9 @@ impl Footer {
             input.prompt.clone().unwrap_or(opencode_plugin::slot::PromptFooter { shell: false, show_details: true });
         let session = input.session_id.clone().map(SessionID);
         let inner = Rc::new_cyclic(|this: &Weak<Inner>| {
-            let goal =
-                session.clone().map(|session| goals.track(tui, session, bind!(this, |inner, tui| inner.refresh(tui))));
+            let goal = session.clone().map(|session| {
+                goals.track(tui, session, bind!(this, |inner, tui| inner.refresh(tui, &Changes::default())))
+            });
             Inner {
                 root: View::new(&tui.app).row().gap(2).min_width(0),
                 session,
@@ -79,9 +93,11 @@ impl Footer {
                 show_details: prompt.show_details,
                 goal,
                 shown: RefCell::new(None),
+                stored: RefCell::new(None),
+                usage: SessionUsage::default(),
             }
         });
-        inner.refresh(tui);
+        inner.refresh(tui, &Changes::everything());
         Self(inner)
     }
 }
@@ -91,45 +107,34 @@ impl Slotted<Tui> for Footer {
         self.0.root.clone()
     }
 
+    // The width, the shortcuts and the goal live outside the store, so any change reads them again.
     fn sync(&self, tui: &Tui, changes: &Changes) {
         if !changes.is_empty() {
-            self.0.refresh(tui);
+            self.0.refresh(tui, changes);
         }
     }
 }
 
 impl Inner {
-    fn model(&self, tui: &Tui) -> Model {
+    fn model(&self, tui: &Tui, changes: &Changes) -> Model {
         let width = tui.app.size().0;
-        let (subagents, shells, status) = match &self.session {
-            None => (0, 0, Vec::new()),
-            Some(session) => tui.data.read(|state| {
-                let subagents = state
-                    .family(session)
-                    .iter()
-                    .filter(|id| *id != session && state.status(id) == SessionStatus::Running)
-                    .count();
-                let shells = state.session_shells(session).len();
-                let status = match state.session(session) {
-                    None => Vec::new(),
-                    Some(_) => {
-                        let cost = state.cost(session);
-                        [
-                            session_usage(state, session).map(|usage| format_usage(usage.tokens, usage.percent)),
-                            (cost > 0.0).then(|| money(cost)),
-                        ]
-                        .into_iter()
-                        .flatten()
-                        .collect()
-                    }
-                };
-                (subagents, shells, status)
-            }),
-        };
+        if let Some(session) = &self.session {
+            // A shell of the session may run in any location.
+            tui.data.read(|state| {
+                let stale = self.stored.borrow().is_none()
+                    || !changes.locations.is_empty()
+                    || crate::routes::session::sidebar::touches(state, changes, session);
+                if stale {
+                    let stored = self.read(state, changes, session);
+                    *self.stored.borrow_mut() = Some(stored);
+                }
+            });
+        }
+        let stored = self.stored.borrow().clone().unwrap_or_default();
         let plural = |count: usize, what: &str| {
             (count > 0).then(|| format!("{count} {what}{}", if count == 1 { "" } else { "s" }))
         };
-        let (subagents, shells) = (plural(subagents, "subagent"), plural(shells, "shell"));
+        let (subagents, shells) = (plural(stored.subagents, "subagent"), plural(stored.shells, "shell"));
         // The keymap reads the store, so it is asked after the read above.
         let keymap = &tui.keymap;
         let live = (subagents.is_some() || shells.is_some()).then(|| Live {
@@ -138,16 +143,20 @@ impl Inner {
             shells,
         });
         let commands = keymap.shortcut("command.palette.show");
-        let (usage, shortcuts) = if status.is_empty() {
+        let (usage, shortcuts) = if stored.status.is_empty() {
             (false, width >= 44)
         } else {
-            layout(i64::from(width) - 8, &status, commands.as_ref().map(|key| format!("{key} commands")).as_slice())
+            layout(
+                i64::from(width) - 8,
+                &stored.status,
+                commands.as_ref().map(|key| format!("{key} commands")).as_slice(),
+            )
         };
         Model {
             width,
             live,
             goal: self.goal.as_ref().and_then(|goal| goal.goal()),
-            status,
+            status: stored.status,
             usage,
             shortcuts,
             agents: keymap.shortcut("agent.cycle").unwrap_or_default(),
@@ -156,8 +165,27 @@ impl Inner {
         }
     }
 
-    fn refresh(&self, tui: &Tui) {
-        let model = self.model(tui);
+    fn read(&self, state: &State, changes: &Changes, session: &SessionID) -> Stored {
+        let subagents = state
+            .family(session)
+            .iter()
+            .filter(|id| *id != session && state.status(id) == SessionStatus::Running)
+            .count();
+        let shells = state.session_shells(session).len();
+        let usage = self.usage.read(state, changes, session);
+        let cost = state.cost(session);
+        let status = match self.stored.borrow().as_ref() {
+            Some(stored) if stored.usage == usage && stored.cost == cost => stored.status.clone(),
+            _ => [usage.map(|usage| format_usage(usage.tokens, usage.percent)), (cost > 0.0).then(|| money(cost))]
+                .into_iter()
+                .flatten()
+                .collect(),
+        };
+        Stored { subagents, shells, usage, cost, status }
+    }
+
+    fn refresh(&self, tui: &Tui, changes: &Changes) {
+        let model = self.model(tui, changes);
         if self.shown.borrow().as_ref() == Some(&model) {
             return;
         }

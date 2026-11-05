@@ -19,18 +19,22 @@ pub fn plugin() -> Definition<Tui> {
         let fold = Fold::load(cx.host(), cx.storage_key("view"));
         cx.slot(Placement::append(slot::SIDEBAR_CONTENT), move |tui, input| {
             let session = SessionID(input.session_id.clone().unwrap_or_default());
-            let fold = fold.clone();
-            Box::new(Section::new(tui, move |tui| view(tui, &session, &fold)))
+            let (model, render) = (fold.clone(), fold.clone());
+            Box::new(Section::new(
+                tui,
+                Some(session.clone()),
+                move |tui, _| {
+                    sync_catalogs(tui, &session, &[Catalog::McpServer]);
+                    let list = servers(tui, &session);
+                    (!list.is_empty()).then(|| (list, model.open()))
+                },
+                move |tui, (list, _)| view(tui, list, &render),
+            ))
         });
     })
 }
 
-fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
-    sync_catalogs(tui, session, &[Catalog::McpServer]);
-    let list = servers(tui, session);
-    if list.is_empty() {
-        return None;
-    }
+fn view(tui: &Tui, list: &[McpServer], fold: &Rc<Fold>) -> View {
     let theme = tui.page();
     let app = &tui.app;
     let on = list.iter().filter(|item| item.status.tag() == "connected").count();
@@ -62,10 +66,10 @@ fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
     let root = View::new(app).child(&header);
     if !foldable || fold.open() {
         for item in list {
-            root.add(&row(tui, &theme, item));
+            root.add(&row(tui, &theme, item.clone()));
         }
     }
-    Some(root)
+    root
 }
 
 /// The MCP servers of the session's location.
