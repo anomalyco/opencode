@@ -42,16 +42,22 @@ export type Summary = typeof Summary.Type
 
 export type Options = {
   readonly budget?: number
+  /**
+   * The catalog the session last saw. Tools it listed stay listed while they exist, so a namespace coming or going
+   * does not reshuffle the others and a change renders as a small delta.
+   */
+  readonly previous?: Summary
 }
 
 const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 
-// Keep every namespace visible, then select full listings one per namespace per round,
-// considering shorter listings first until the inline budget is exhausted.
+// Keep every namespace visible and every tool the previous catalog listed, then select full listings one per
+// namespace per round, considering shorter listings first until the inline budget is exhausted.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? INLINE_BUDGET
+  const listed = new Set(options.previous?.namespaces.flatMap((namespace) => namespace.entries.map((entry) => entry.path)))
   const flattened = flatten(inventory.tools)
   const namespaces = [...Map.groupBy(flattened.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
     .sort(([left], [right]) => {
@@ -81,12 +87,22 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
           .map((entry) => listings.find((listing) => listing.path === entry.path))
           .filter((listing) => listing !== undefined),
       )
+      const selected = new Set([...pinned, ...listings.filter((listing) => listed.has(listing.path))])
       return {
         name,
         ...(description === undefined ? {} : { description }),
+        header: cost(
+          namespaceLine({
+            name,
+            ...(description === undefined ? {} : { description }),
+            count: listings.length,
+            entries: [],
+          }),
+        ),
         listings,
-        selectionOrder: ranked.filter((candidate) => !pinned.has(candidate.listing)),
-        selectedListings: pinned,
+        pinned,
+        selectionOrder: ranked.filter((candidate) => !selected.has(candidate.listing)),
+        selectedListings: selected,
         selectionIndex: 0,
       }
     })
@@ -95,22 +111,28 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
   // TODO: Bound namespace discovery once large namespace inventories and descriptions can no longer stay inline.
   let remaining =
     budget -
-    namespaces.reduce(
-      (total, namespace) =>
-        total +
-        cost(
-          namespaceLine({
-            name: namespace.name,
-            ...(namespace.description === undefined ? {} : { description: namespace.description }),
-            count: namespace.listings.length,
-            entries: [],
-          }),
-        ),
-      0,
-    ) -
+    namespaces.reduce((total, namespace) => total + namespace.header, 0) -
     namespaces
       .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
       .reduce((total, listing) => total + cost(listing.line), 0)
+  // A namespace that arrived since the previous catalog is always shown, but its header does not cost the kept
+  // listings their place; only pinned tools added since can, and they drop the costliest first.
+  const known = new Set(options.previous?.namespaces.map((namespace) => namespace.name))
+  const arrived = namespaces
+    .filter((namespace) => !known.has(namespace.name))
+    .reduce((total, namespace) => total + namespace.header, 0)
+  const evictable = namespaces
+    .flatMap((namespace) =>
+      [...namespace.selectedListings]
+        .filter((listing) => !namespace.pinned.has(listing))
+        .map((listing) => ({ namespace, listing, cost: cost(listing.line) })),
+    )
+    .toSorted((left, right) => right.cost - left.cost)
+  for (const item of evictable) {
+    if (remaining + arrived >= 0) break
+    item.namespace.selectedListings.delete(item.listing)
+    remaining += item.cost
+  }
   while (active.size > 0) {
     for (const namespace of active) {
       const candidate = namespace.selectionOrder[namespace.selectionIndex]

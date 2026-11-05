@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { searchSignature } from "@opencode/codemode"
 
 const entry = (path: string, description: string, signature?: string, pinned = false): CodeModeCatalog.Tool => ({
   type: "tool",
@@ -190,20 +191,24 @@ describe("CodeModeInstructions.update", () => {
   test("renders additions, changes, and removals as a compact semantic delta", () => {
     const changed = { ...echo, signature: "tools.notes.echo({\n  text: string,\n}): Promise<string>" }
     const added = entry("notes.list", "List notes")
+    const kept = entry("orders.cancel", "Cancel an order")
     const unchanged = Array.from({ length: 5 }, (_, index) => entry(`stable.tool${index}`, `Stable ${index}`))
-    const text = update([echo, lookup, ...unchanged], [changed, added, ...unchanged])
+    const text = update([echo, lookup, kept, ...unchanged], [changed, added, kept, ...unchanged])
     expect(text).toContain("The Code Mode tool catalog has changed.")
     expect(text).toContain(`New tools are available in addition to those previously listed:\n  - ${added.signature}`)
     expect(text).toContain(
       `Changed tool listings supersede the previously listed ones:\n  - ${changed.signature} // Echo text`,
     )
     expect(text).toContain("The following tools are no longer available and must not be called: tools.orders.lookup.")
+    // Every change is listed in a complete catalog, so its counts need no separate notice.
+    expect(text).not.toContain("namespace inventories changed")
     expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
   })
 
   test("names removed tools with exact callable expressions including bracket notation", () => {
     const dashed = entry("context7.resolve-library-id", "Resolve a library ID")
-    const text = update([echo, dashed], [echo])
+    const docs = entry("context7.query-docs", "Query documentation")
+    const text = update([echo, dashed, docs], [echo, docs])
     expect(text).toContain(
       'The following tools are no longer available and must not be called: tools.context7["resolve-library-id"].',
     )
@@ -222,18 +227,24 @@ describe("CodeModeInstructions.update", () => {
     expect(text).not.toContain("Old description")
   })
 
-  test("restates the full catalog when the rendering mode crosses full and compact", () => {
+  test("adds search guidance without restating the catalog when it becomes partial", () => {
     const wide = Array.from({ length: 40 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
     const text = update([echo], [echo, ...wide], 30)
-    expect(text).toContain(
-      "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.",
-    )
-    expect(text).toContain("The catalog is partial.")
-    expect(text).toContain("## Code Mode tools (call only inside `execute`)")
+    expect(text).toContain("The catalog is now partial.")
+    expect(text).toContain(`- ${searchSignature}`)
+    expect(text).toContain("New tool namespaces are available:\n- bulk (40 tools, 1 shown)")
+    expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
+  })
+
+  test("says the catalog is complete again once every tool fits", () => {
+    const wide = Array.from({ length: 40 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
+    const text = update([echo, ...wide], [echo], 30)
+    expect(text).toContain("The catalog is now complete")
+    expect(text).toContain("The following tool namespaces are no longer available and must not be used: `bulk`.")
   })
 
   test("falls back to full replacement when the delta is larger than the catalog", () => {
-    const previous = Array.from({ length: 200 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
+    const previous = Array.from({ length: 200 }, (_, index) => entry(`notes.tool${index}`, `Tool ${index}`))
     const text = update([...previous, echo], [echo])
     expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
     expect(text).toContain("## Code Mode tools (call only inside `execute`)")
@@ -248,5 +259,85 @@ describe("CodeModeInstructions.update", () => {
     expect(text).toContain("search them again before relying on previous results")
     expect(text).not.toContain("tools.alpha.tool10(input:")
     expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
+  })
+})
+
+describe("a catalog built on the one the session last saw", () => {
+  const tools = (namespace: string, count: number) =>
+    Array.from({ length: count }, (_, index) => entry(`${namespace}.tool${index}`, `${namespace} ${index}`))
+  const opencode = tools("opencode", 13)
+  const slack = tools("slack", 27)
+  // Shorter signatures than the others, so a fresh catalog would spend the budget on them first.
+  const browser = Array.from({ length: 45 }, (_, index) =>
+    entry(`browser.t${index}`, `browser ${index}`, `tools.browser.t${index}()`),
+  )
+  const listed = (summary: CodeModeCatalog.Summary) =>
+    summary.namespaces.flatMap((namespace) => namespace.entries.map((entry) => entry.path))
+  const next = (previous: CodeModeCatalog.Summary, inventory: CodeModeCatalog.Inventory["tools"]) =>
+    CodeModeCatalog.summarize({ tools: inventory }, { budget: 300, previous })
+
+  test("keeps every tool it listed when a namespace arrives and renders only the newcomer", () => {
+    const before = CodeModeCatalog.summarize({ tools: [...opencode, ...slack] }, { budget: 300 })
+    const after = next(before, [...opencode, ...slack, ...browser])
+    expect(listed(after)).toEqual(expect.arrayContaining(listed(before)))
+    const text = CodeModeInstructions.update(before, after)
+    expect(text).toStartWith("The Code Mode tool catalog has changed.\n\nNew tool namespaces are available:\n- browser")
+    expect(text).not.toContain("This catalog supersedes")
+    expect(text).not.toContain("tools.opencode.")
+    expect(text).not.toContain("tools.slack.")
+  })
+
+  test("removes a departed namespace without reshuffling the rest", () => {
+    const before = CodeModeCatalog.summarize({ tools: [...opencode, ...slack] }, { budget: 300 })
+    const joined = next(before, [...opencode, ...slack, ...browser])
+    const left = next(joined, [...opencode, ...slack])
+    expect(listed(left)).toEqual(expect.arrayContaining(listed(before)))
+    const text = CodeModeInstructions.update(joined, left)
+    expect(text).toContain("The following tool namespaces are no longer available and must not be used: `browser`.")
+    expect(text).not.toContain("This catalog supersedes")
+    expect(text).not.toContain("are no longer listed")
+  })
+
+  test("drops listed tools that are gone and spends the freed budget on others", () => {
+    const before = CodeModeCatalog.summarize({ tools: [...opencode, ...slack] }, { budget: 300 })
+    const gone = listed(before).find((path) => path.startsWith("slack."))!
+    const after = next(
+      before,
+      [...opencode, ...slack].filter((tool) => tool.name !== gone),
+    )
+    expect(listed(after)).not.toContain(gone)
+    expect(listed(after)).toEqual(expect.arrayContaining(listed(before).filter((path) => path !== gone)))
+    const text = CodeModeInstructions.update(before, after)
+    expect(text).toContain(`The following tools are no longer listed: tools.${gone}.`)
+    expect(text).not.toContain("This catalog supersedes")
+  })
+
+  test("refreshes a kept tool whose signature changed", () => {
+    const before = CodeModeCatalog.summarize({ tools: [...opencode, ...slack] }, { budget: 300 })
+    const kept = listed(before)[0]!
+    const changed = [...opencode, ...slack].map((tool) =>
+      tool.name === kept ? { ...tool, signature: `tools.${kept}({\n  id: string,\n}): Promise<string>` } : tool,
+    )
+    const after = next(before, changed)
+    expect(listed(after)).toEqual(listed(before))
+    expect(CodeModeInstructions.update(before, after)).toContain(
+      `Changed tool listings supersede the previously listed ones:\n  - tools.${kept}({\n  id: string,\n}): Promise<string>`,
+    )
+  })
+
+  test("gives up the costliest kept tools when newly pinned tools need the budget", () => {
+    const before = CodeModeCatalog.summarize({ tools: [...opencode, ...slack] }, { budget: 300 })
+    const pinned = tools("pinned", 6).map((tool) => ({ ...tool, pinned: true }))
+    const after = next(before, [...opencode, ...slack, ...pinned])
+    expect(listed(after)).toEqual(expect.arrayContaining(pinned.map((tool) => tool.name)))
+    expect(listed(after).length).toBeLessThan(listed(before).length + pinned.length)
+  })
+
+  test("ignores a stored catalog it cannot decode", () => {
+    const inventory = { tools: [...opencode, ...slack] }
+    const [fresh] = CodeModeInstructions.make(inventory)
+    const [corrupt] = CodeModeInstructions.make(inventory, { namespaces: "not a catalog" })
+    expect(corrupt!.read).toBeDefined()
+    expect(fresh!.initial).toBeDefined()
   })
 })
