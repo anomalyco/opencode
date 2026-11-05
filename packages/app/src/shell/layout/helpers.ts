@@ -17,7 +17,8 @@ export function toggleHomeProjectSelection(
   server: ServerConnection.Key,
   directory: string,
 ): HomeProjectSelection {
-  if (current?.server === server && current.directory === directory) return { server }
+  if (current?.server === server && current.directory && pathKey(current.directory) === pathKey(directory))
+    return { server }
 
   return { server, directory }
 }

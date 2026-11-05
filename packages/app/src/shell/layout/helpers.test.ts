@@ -66,6 +66,13 @@ describe("layout workspace helpers", () => {
         "/home/luke/repos/amazon",
       ),
     ).toEqual({ server: serverKey("https://debian.example") })
+    expect(
+      toggleHomeProjectSelection(
+        { server: serverKey("https://debian.example"), directory: "C:\\OpenCode\\app\\" },
+        serverKey("https://debian.example"),
+        "C:/OpenCode/app",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example") })
   })
 
   test("extracts api error message and fallback", () => {
