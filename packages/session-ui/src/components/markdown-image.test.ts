@@ -77,6 +77,7 @@ describe("createMarkdownImages", () => {
   test("retries a failed read and shows the image without another update", async () => {
     jest.useFakeTimers()
     const reads: string[] = []
+
     const images = createMarkdownImages(async (path) => {
       reads.push(path)
 
@@ -84,6 +85,7 @@ describe("createMarkdownImages", () => {
 
       return new Blob(["png"], { type: "image/png" })
     })
+
     const root = document.createElement("div")
     root.innerHTML = '<img data-local-image="./out/chart.png" alt="chart">'
     document.body.replaceChildren(root)

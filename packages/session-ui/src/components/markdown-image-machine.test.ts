@@ -15,7 +15,12 @@ const synced = (...paths: string[]): MarkdownImagesEvent => ({ type: "paths.sync
 
 const step = (state: MarkdownImagesState, event: MarkdownImagesEvent) => transitionMarkdownImages(state, event)
 
-const read = (path: string, attempt: number): MarkdownImagesEffect => ({ type: "read", path, attempt, timeoutMs: IMAGE_READ_TIMEOUT_MS })
+const read = (path: string, attempt: number): MarkdownImagesEffect => ({
+  type: "read",
+  path,
+  attempt,
+  timeoutMs: IMAGE_READ_TIMEOUT_MS,
+})
 
 test("retries a failed read after a backoff and loads, while streaming updates change nothing", () => {
   const loading = step(INITIAL_MARKDOWN_IMAGES_STATE, synced("chart.png"))
@@ -41,6 +46,7 @@ test("retries a failed read after a backoff and loads, while streaming updates c
     url: "blob:1",
     revoke: true,
   })
+
   expect(loaded.effects).toEqual([{ type: "cancel", attempt: 3 }])
   expect(selectMarkdownImageUrl(loaded.state, "chart.png")).toBe("blob:1")
 })
@@ -48,9 +54,16 @@ test("retries a failed read after a backoff and loads, while streaming updates c
 test("times out a hung read and gives up after the last retry", () => {
   const timeOut = (state: MarkdownImagesState, attempt: number) =>
     step(state, { type: "read.timed-out", path: "chart.png", attempt })
+
   const retry = (state: MarkdownImagesState, attempt: number) =>
     step(state, { type: "retry.due", path: "chart.png", attempt }).state
-  const wait = (attempt: number, delayMs: number): MarkdownImagesEffect => ({ type: "wait", path: "chart.png", attempt, delayMs })
+
+  const wait = (attempt: number, delayMs: number): MarkdownImagesEffect => ({
+    type: "wait",
+    path: "chart.png",
+    attempt,
+    delayMs,
+  })
 
   const first = timeOut(step(INITIAL_MARKDOWN_IMAGES_STATE, synced("chart.png")).state, 1)
   expect(first.effects).toEqual([{ type: "cancel", attempt: 1 }, wait(2, 1000)])
@@ -74,14 +87,15 @@ test("settles an empty read as failed without a retry", () => {
 
 test("ignores late results and revokes their blob URLs", () => {
   const loading = step(INITIAL_MARKDOWN_IMAGES_STATE, synced("chart.png")).state
+
   const late = (state: MarkdownImagesState, revoke: boolean) =>
     step(state, { type: "read.succeeded", path: "chart.png", attempt: 1, url: "blob:stale", revoke })
 
   const timedOut = step(loading, { type: "read.timed-out", path: "chart.png", attempt: 1 }).state
   const removed = step(loading, synced()).state
   const disposed = step(loading, { type: "disposed" }).state
-
-  ;[timedOut, removed, disposed].forEach((state) => {
+  const moved = [timedOut, removed, disposed]
+  moved.forEach((state) => {
     const result = late(state, true)
     expect(result.state).toBe(state)
     expect(result.effects).toEqual([{ type: "revoke-url", url: "blob:stale" }])
@@ -95,11 +109,13 @@ test("ignores late results and revokes their blob URLs", () => {
 
 test("cancels and revokes removed entries and everything on dispose", () => {
   const started = step(INITIAL_MARKDOWN_IMAGES_STATE, synced("a.png", "b.png", "c.png", "d.png")).state
+
   const events: MarkdownImagesEvent[] = [
     { type: "read.failed", path: "b.png", attempt: 2 },
     { type: "read.succeeded", path: "c.png", attempt: 3, url: "blob:c", revoke: true },
     { type: "read.succeeded", path: "d.png", attempt: 4, url: "data:d", revoke: false },
   ]
+
   const settled = events.reduce((state, event) => step(state, event).state, started)
 
   const removed = step(settled, synced("a.png"))

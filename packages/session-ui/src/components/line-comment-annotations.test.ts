@@ -9,9 +9,13 @@ beforeAll(() => GlobalRegistrator.register())
 
 afterAll(() => GlobalRegistrator.unregister())
 
+/** What a Pierre instance reports as hovered, and how often the button asked. */
+type Viewer = { hovered: HoverCommentLine | undefined; reads: number }
+
 function setup() {
   const opened: SelectedLineRange[] = []
-  const viewer = { hovered: undefined as HoverCommentLine | undefined, reads: 0 }
+  const viewer: Viewer = { hovered: undefined, reads: 0 }
+
   const getHoveredLine = () => {
     viewer.reads++
 
@@ -56,11 +60,13 @@ test("reuses one button across Pierre rerenders and detaches it on cleanup", () 
 
   // A reset viewer is a new Pierre instance with its own `getHoveredLine`.
   const next = { reads: 0 }
+
   const replaced = gutter.render(() => {
     next.reads++
 
     return undefined
   })!
+
   expect(replaced).not.toBe(button)
   const reads = gutter.viewer.reads
   document.dispatchEvent(new Event("pointermove"))

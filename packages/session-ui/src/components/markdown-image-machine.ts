@@ -130,6 +130,7 @@ function sync(
   if (removed.length === 0 && added.length === 0) return { state, effects: NO_MARKDOWN_IMAGE_EFFECTS }
   const entries = new Map(state.entries)
   removed.forEach(([path]) => entries.delete(path))
+
   const reads = added.map((path, index) => {
     const attempt = state.attempts + index + 1
     entries.set(path, { status: "loading", attempt, failures: 0 })

@@ -17,13 +17,14 @@ export type HoverCommentState =
   | { readonly status: "tracking"; readonly line: HoverCommentLine | undefined }
   | { readonly status: "disposed" }
 
-export type HoverCommentEvent =
-  | {
-      readonly type: "hover.synced"
-      readonly lineNumber: number | undefined
-      readonly side: HoverCommentSide | undefined
-    }
-  | { readonly type: "disposed" }
+/** The line Pierre reports as hovered. Mutable so the driver can reuse one object for every pointer move. */
+export type HoverCommentSync = {
+  type: "hover.synced"
+  lineNumber: number | undefined
+  side: HoverCommentSide | undefined
+}
+
+export type HoverCommentEvent = Readonly<HoverCommentSync> | { readonly type: "disposed" }
 
 export const INITIAL_HOVER_COMMENT_STATE: HoverCommentState = Object.freeze({ status: "tracking", line: undefined })
 

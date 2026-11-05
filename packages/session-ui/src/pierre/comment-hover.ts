@@ -5,7 +5,7 @@ import {
   transitionHoverComment,
   type HoverCommentEvent,
   type HoverCommentLine,
-  type HoverCommentSide,
+  type HoverCommentSync,
 } from "./comment-hover-machine"
 
 export type { HoverCommentLine }
@@ -59,11 +59,7 @@ export function createHoverComment(props: {
 
   let state = INITIAL_HOVER_COMMENT_STATE
   // Reused for every pointer move and scroll so tracking allocates nothing.
-  const syncEvent: { type: "hover.synced"; lineNumber: number | undefined; side: HoverCommentSide | undefined } = {
-    type: "hover.synced",
-    lineNumber: undefined,
-    side: undefined,
-  }
+  const syncEvent: HoverCommentSync = { type: "hover.synced", lineNumber: undefined, side: undefined }
 
   const dispatch = (event: HoverCommentEvent) => {
     const next = transitionHoverComment(state, event)

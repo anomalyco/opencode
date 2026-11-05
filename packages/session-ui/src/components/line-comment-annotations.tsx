@@ -542,6 +542,7 @@ export function createLineCommentGutterRenderer(props: {
   return (getHoveredLine: () => HoverCommentLine | undefined) => {
     if (active?.getHoveredLine === getHoveredLine && active.comment.canReuse()) return active.comment.button
     active?.comment.dispose()
+
     const comment = createHoverComment({
       label: props.label,
       getHoveredLine,
@@ -563,6 +564,7 @@ export function createLineCommentGutterRenderer(props: {
         props.onOpenDraft(range)
       },
     })
+
     active = comment && { comment, getHoveredLine }
 
     return comment?.button
