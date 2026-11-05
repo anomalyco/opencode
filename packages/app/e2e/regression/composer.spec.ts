@@ -981,7 +981,11 @@ test.describe("touch keyboard", () => {
 
     await slash.tap()
     await expect(suggestions).toBeVisible()
-    await view.editor.pressSequentially(" now")
+    // Focusing the editor programmatically leaves the caret wherever the browser puts it, so move it to the end first.
+    await expect(suggestions.getByRole("textbox", { name: "Commands", exact: true })).toBeFocused()
+    await view.editor.focus()
+    await page.keyboard.press("End")
+    await page.keyboard.type(" now")
     await expect(suggestions).toBeHidden()
     await expect(view.editor).toHaveText("keep me now")
 
