@@ -241,7 +241,7 @@ function relativizeProjectPath(path: string, directory?: string) {
 
   if (!path.startsWith(prefix)) return path
 
-  return path.slice(directory.length)
+  return path.slice(prefix.length)
 }
 
 function displayDirectory(path: string | undefined) {
