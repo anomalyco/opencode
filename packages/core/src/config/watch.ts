@@ -3,7 +3,24 @@ export * as ConfigWatch from "./watch.js"
 import path from "path"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
-import type { ConfigDiscovery } from "./discovery.js"
+import { ConfigDiscovery } from "./discovery.js"
+
+/** Paths whose content or presence feeds the loaded config; other writes under watched roots do not. */
+export function inputs(sources: ConfigDiscovery.Sources) {
+  const roots = [
+    ...(sources.system ? [sources.system.path] : []),
+    ...(sources.global ? [sources.global] : []),
+    ...sources.project.map((root) => root.path),
+  ]
+  return new Set<string>([
+    ...roots,
+    ...roots.flatMap((root) => ConfigDiscovery.names.map((name) => path.join(root, name))),
+    ...sources.direct,
+    ...sources.claude,
+    ...sources.agents,
+    ...(sources.explicit ? [sources.explicit] : []),
+  ])
+}
 
 export function plan(sources: ConfigDiscovery.Sources) {
   const directories = [
