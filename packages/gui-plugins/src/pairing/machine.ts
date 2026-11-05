@@ -1,7 +1,7 @@
 /** How long one read of the remote access setting may take. */
 export const REMOTE_READ_TIMEOUT_MS = 15_000
 
-/** How many times a failed read of the setting is tried again, as a query's default retries did. */
+/** How many times a failed read of either setting is tried again, as a query's default retries did. */
 export const REMOTE_READ_RETRIES = 3
 
 /** The wait before read retry `failures`: 1, 2, then 4 seconds, a query's default backoff. */
@@ -25,6 +25,9 @@ export const TUNNEL_TIMEOUT_MS = 10_000
 
 /** How long one request for a pairing code may take. */
 export const CODE_TIMEOUT_MS = 15_000
+
+/** How long one read or change of the display sleep setting may take. */
+export const SCREEN_TIMEOUT_MS = 15_000
 
 /** Pairing's main side as the page reads it: remote access changes only through it. */
 export type MainStatus =
@@ -60,6 +63,30 @@ export type RemoteState =
   | { readonly status: "failed"; readonly generation: number; readonly previous: boolean | undefined }
   | { readonly status: "disposed" }
 
+/** Whether main keeps the display awake, read and changed through one generation of pairing's main side. */
+export type ScreenState =
+  | { readonly status: "pending" }
+  | { readonly status: "inactive" }
+  | {
+      readonly status: "loading"
+      readonly generation: number
+      readonly attempt: number
+      /** A read runs, or the wait before the next read after a failure. */
+      readonly step: "reading" | "waiting"
+      readonly failures: number
+    }
+  | { readonly status: "ready"; readonly generation: number; readonly enabled: boolean }
+  | {
+      readonly status: "changing"
+      readonly generation: number
+      readonly attempt: number
+      readonly enabled: boolean
+      /** The setting before the change, when it was known. */
+      readonly previous: boolean | undefined
+    }
+  | { readonly status: "failed"; readonly generation: number; readonly previous: boolean | undefined }
+  | { readonly status: "disposed" }
+
 /** The "Pair a device" dialog. Exactly one variant owns its body. */
 export type DialogState =
   | { readonly status: "closed" }
@@ -89,14 +116,16 @@ export type DialogState =
   | { readonly status: "failed"; readonly reason: "remote" | "tunnel" }
 
 /**
- * The pairing page: the remote access setting and the dialog that turns it on. One transition owns both, so the
- * dialog follows every change of the setting in the same event. `issued` is the last attempt handed out.
+ * The pairing page: the remote access setting, the dialog that turns it on, and the display sleep setting. One
+ * transition owns them, so the dialog follows every change of remote access in the same event, and both settings
+ * follow main's generations together. `issued` is the last attempt handed out.
  */
 export type PairingState = {
   readonly issued: number
   /** Whether the local server is listed. Codes come from it, so they never wait for main. */
   readonly server: boolean
   readonly remote: RemoteState
+  readonly screen: ScreenState
   readonly dialog: DialogState
 }
 
@@ -111,6 +140,14 @@ export type PairingEvent =
   | { readonly type: "change.succeeded"; readonly attempt: number }
   /** The change failed or timed out. */
   | { readonly type: "change.failed"; readonly attempt: number }
+  | { readonly type: "screen.read.succeeded"; readonly attempt: number; readonly enabled: boolean }
+  /** The display sleep setting's read failed or timed out. */
+  | { readonly type: "screen.read.failed"; readonly attempt: number }
+  /** The user flipped the "Keep screen active" switch. */
+  | { readonly type: "screen.toggled"; readonly enabled: boolean }
+  | { readonly type: "screen.change.succeeded"; readonly attempt: number }
+  /** The display sleep setting's change failed or timed out. */
+  | { readonly type: "screen.change.failed"; readonly attempt: number }
   /** The user clicked "Pair device". */
   | { readonly type: "dialog.opened" }
   | { readonly type: "dialog.closed" }
@@ -118,7 +155,7 @@ export type PairingEvent =
   /** The server advertises no tunnel yet, or the request failed or timed out. */
   | { readonly type: "tunnel.missing"; readonly attempt: number }
   /** A `wait` effect's delay ended; `for` names the phase it belongs to, as the effect did. */
-  | { readonly type: "wait.ended"; readonly for: "read" | "tunnel"; readonly attempt: number }
+  | { readonly type: "wait.ended"; readonly for: "read" | "screen" | "tunnel"; readonly attempt: number }
   | {
       readonly type: "code.loaded"
       readonly attempt: number
@@ -144,12 +181,25 @@ export type PairingEffect =
       readonly restart: boolean
       readonly timeoutMs: number
     }
+  | { readonly type: "read-screen"; readonly generation: number; readonly attempt: number; readonly timeoutMs: number }
+  | {
+      readonly type: "set-screen"
+      readonly generation: number
+      readonly attempt: number
+      readonly enabled: boolean
+      readonly timeoutMs: number
+    }
   | { readonly type: "poll-tunnel"; readonly attempt: number; readonly timeoutMs: number }
   /**
-   * Waits before the next read of the setting or the next ask for the tunnel; ends with `wait.ended` for the same
-   * phase, so a read retry and a tunnel retry that wait at once never take each other's event.
+   * Waits before the next read of a setting or the next ask for the tunnel; ends with `wait.ended` for the same
+   * phase, so retries that wait at once never take each other's event.
    */
-  | { readonly type: "wait"; readonly for: "read" | "tunnel"; readonly attempt: number; readonly delayMs: number }
+  | {
+      readonly type: "wait"
+      readonly for: "read" | "screen" | "tunnel"
+      readonly attempt: number
+      readonly delayMs: number
+    }
   | { readonly type: "fetch-code"; readonly attempt: number; readonly timeoutMs: number }
   /** Ends an attempt's request and timer. */
   | { readonly type: "abort"; readonly attempt: number }
@@ -161,11 +211,18 @@ export type PairingTransition = { readonly state: PairingState; readonly effects
 const NONE: readonly PairingEffect[] = []
 
 export function createPairingState(): PairingState {
-  return { issued: 0, server: false, remote: { status: "pending" }, dialog: { status: "closed" } }
+  return {
+    issued: 0,
+    server: false,
+    remote: { status: "pending" },
+    screen: { status: "pending" },
+    dialog: { status: "closed" },
+  }
 }
 
 export function transitionPairing(state: PairingState, event: PairingEvent): PairingTransition {
   const remote = state.remote
+  const screen = state.screen
   const dialog = state.dialog
 
   if (remote.status === "disposed") return { state, effects: NONE }
@@ -174,8 +231,8 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
     const close: readonly PairingEffect[] = dialog.status === "closed" ? [] : [{ type: "close-dialog" }]
 
     return {
-      state: { ...state, remote: { status: "disposed" }, dialog: { status: "closed" } },
-      effects: [...abortRemote(remote), ...abortDialog(dialog), ...close],
+      state: { ...state, remote: { status: "disposed" }, screen: { status: "disposed" }, dialog: { status: "closed" } },
+      effects: [...abortRemote(remote), ...abortScreen(screen), ...abortDialog(dialog), ...close],
     }
   }
 
@@ -183,27 +240,57 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
     const main = event.main
 
     if (main.status !== "active") {
-      if (remote.status === main.status) return { state, effects: NONE }
+      if (remote.status === main.status && screen.status === main.status) return { state, effects: NONE }
 
-      return settle({ ...state, remote: { status: main.status } }, abortRemote(remote))
+      return settle({ ...state, remote: { status: main.status }, screen: { status: main.status } }, [
+        ...abortRemote(remote),
+        ...abortScreen(screen),
+      ])
     }
 
-    if ("generation" in remote && remote.generation === main.generation) return { state, effects: NONE }
+    if (
+      "generation" in remote &&
+      remote.generation === main.generation &&
+      "generation" in screen &&
+      screen.generation === main.generation
+    )
+      return { state, effects: NONE }
 
     const attempt = state.issued + 1
+    // Both settings are read again through the new generation, so neither keeps an answer or error from the last one.
+    const screenAttempt = attempt + 1
 
     return settle(
       {
         ...state,
-        issued: attempt,
+        issued: screenAttempt,
         remote: { status: "loading", generation: main.generation, attempt, step: "reading", failures: 0 },
+        screen: {
+          status: "loading",
+          generation: main.generation,
+          attempt: screenAttempt,
+          step: "reading",
+          failures: 0,
+        },
       },
       [
         ...abortRemote(remote),
+        ...abortScreen(screen),
         { type: "read-remote", generation: main.generation, attempt, timeoutMs: REMOTE_READ_TIMEOUT_MS },
+        { type: "read-screen", generation: main.generation, attempt: screenAttempt, timeoutMs: SCREEN_TIMEOUT_MS },
       ],
     )
   }
+
+  if (
+    event.type === "screen.read.succeeded" ||
+    event.type === "screen.read.failed" ||
+    event.type === "screen.toggled" ||
+    event.type === "screen.change.succeeded" ||
+    event.type === "screen.change.failed" ||
+    (event.type === "wait.ended" && event.for === "screen")
+  )
+    return transitionScreen(state, event)
 
   if (event.type === "server.changed") {
     if (state.server === event.available) return { state, effects: NONE }
@@ -308,6 +395,108 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
   }
 
   return transitionCode(state, event)
+}
+
+/**
+ * The display sleep setting. It reads and retries as remote access does, and stays switchable after a failure, so
+ * flipping the switch is the way to try again. Nothing else depends on it.
+ */
+function transitionScreen(
+  state: PairingState,
+  event: Extract<
+    PairingEvent,
+    {
+      type:
+        | "screen.read.succeeded"
+        | "screen.read.failed"
+        | "screen.toggled"
+        | "screen.change.succeeded"
+        | "screen.change.failed"
+        | "wait.ended"
+    }
+  >,
+): PairingTransition {
+  const screen = state.screen
+  const attempt = state.issued + 1
+
+  if (event.type === "screen.read.succeeded" || event.type === "screen.read.failed") {
+    if (screen.status !== "loading" || screen.step !== "reading" || screen.attempt !== event.attempt)
+      return { state, effects: NONE }
+
+    const effects: readonly PairingEffect[] = [{ type: "abort", attempt: event.attempt }]
+
+    if (event.type === "screen.read.succeeded")
+      return {
+        state: { ...state, screen: { status: "ready", generation: screen.generation, enabled: event.enabled } },
+        effects,
+      }
+
+    if (screen.failures >= REMOTE_READ_RETRIES)
+      return {
+        state: { ...state, screen: { status: "failed", generation: screen.generation, previous: undefined } },
+        effects,
+      }
+
+    return {
+      state: { ...state, issued: attempt, screen: { ...screen, attempt, step: "waiting", failures: screen.failures + 1 } },
+      effects: [...effects, { type: "wait", for: "screen", attempt, delayMs: remoteReadDelay(screen.failures) }],
+    }
+  }
+
+  if (event.type === "wait.ended") {
+    if (screen.status !== "loading" || screen.step !== "waiting" || screen.attempt !== event.attempt)
+      return { state, effects: NONE }
+
+    return {
+      state: { ...state, issued: attempt, screen: { ...screen, attempt, step: "reading" } },
+      effects: [
+        { type: "abort", attempt: event.attempt },
+        { type: "read-screen", generation: screen.generation, attempt, timeoutMs: SCREEN_TIMEOUT_MS },
+      ],
+    }
+  }
+
+  if (event.type === "screen.toggled") {
+    if (screen.status !== "ready" && screen.status !== "failed") return { state, effects: NONE }
+
+    if (screen.status === "ready" && screen.enabled === event.enabled) return { state, effects: NONE }
+
+    return {
+      state: {
+        ...state,
+        issued: attempt,
+        screen: {
+          status: "changing",
+          generation: screen.generation,
+          attempt,
+          enabled: event.enabled,
+          previous: screen.status === "ready" ? screen.enabled : screen.previous,
+        },
+      },
+      effects: [
+        {
+          type: "set-screen",
+          generation: screen.generation,
+          attempt,
+          enabled: event.enabled,
+          timeoutMs: SCREEN_TIMEOUT_MS,
+        },
+      ],
+    }
+  }
+
+  if (screen.status !== "changing" || screen.attempt !== event.attempt) return { state, effects: NONE }
+
+  return {
+    state: {
+      ...state,
+      screen:
+        event.type === "screen.change.succeeded"
+          ? { status: "ready", generation: screen.generation, enabled: screen.enabled }
+          : { status: "failed", generation: screen.generation, previous: screen.previous },
+    },
+    effects: [{ type: "abort", attempt: event.attempt }],
+  }
 }
 
 /** The dialog's own requests: the tunnel address, then the code and its replacements. */
@@ -550,6 +739,10 @@ function abortRemote(remote: RemoteState): readonly PairingEffect[] {
   return remote.status === "loading" || remote.status === "changing" ? [{ type: "abort", attempt: remote.attempt }] : []
 }
 
+function abortScreen(screen: ScreenState): readonly PairingEffect[] {
+  return screen.status === "loading" || screen.status === "changing" ? [{ type: "abort", attempt: screen.attempt }] : []
+}
+
 function abortDialog(dialog: DialogState): readonly PairingEffect[] {
   if (dialog.status === "tunnel" || dialog.status === "code") return [{ type: "abort", attempt: dialog.attempt }]
 
@@ -565,6 +758,10 @@ export function pairingEffectFailed(effect: PairingEffect): PairingEvent | undef
 
   if (effect.type === "set-remote") return { type: "change.failed", attempt: effect.attempt }
 
+  if (effect.type === "read-screen") return { type: "screen.read.failed", attempt: effect.attempt }
+
+  if (effect.type === "set-screen") return { type: "screen.change.failed", attempt: effect.attempt }
+
   if (effect.type === "poll-tunnel") return { type: "tunnel.missing", attempt: effect.attempt }
 
   if (effect.type === "wait") return { type: "wait.ended", for: effect.for, attempt: effect.attempt }
@@ -579,6 +776,7 @@ export function pairingEffectFailed(effect: PairingEffect): PairingEvent | undef
 /** What the pairing settings page shows. */
 export function viewPairingPage(state: PairingState) {
   const remote = state.remote
+  const screen = state.screen
   const mainActive = remote.status !== "pending" && remote.status !== "inactive" && remote.status !== "disposed"
 
   return {
@@ -590,6 +788,12 @@ export function viewPairingPage(state: PairingState) {
       (remote.status === "failed" && remote.previous === true),
     remoteDisabled: remote.status !== "ready" && remote.status !== "failed",
     remoteError: remote.status === "failed",
+    screenChecked:
+      ((screen.status === "changing" || screen.status === "ready") && screen.enabled) ||
+      (screen.status === "failed" && screen.previous === true),
+    // A failed read or change keeps the switch enabled, so flipping it tries again.
+    screenDisabled: screen.status !== "ready" && screen.status !== "failed",
+    screenError: screen.status === "failed",
     // Pending main is still starting; anything else that leaves it inactive keeps pairing from turning on.
     unavailable: remote.status === "inactive" || !state.server,
   }

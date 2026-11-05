@@ -18,7 +18,7 @@ export function useWslAddServerProbes(input: {
   /** WSL's main side answers. */
   available: Accessor<boolean>
   view: Accessor<WslAddServerView>
-  adding: Accessor<boolean>
+  /** Main runs a job the dialog waits for, or the dialog waits for its own call. */
   busy: Accessor<boolean>
   selectedDistro: Accessor<string | null>
   addableInstalledDistros: Accessor<WslInstalledDistro[]>
@@ -34,7 +34,6 @@ export function useWslAddServerProbes(input: {
     plan: addServerProbePlan({
       state: input.state(),
       view: input.view(),
-      adding: input.adding(),
       busy: input.busy(),
       selectedDistro: input.selectedDistro(),
       addableInstalledDistros: input.addableInstalledDistros(),

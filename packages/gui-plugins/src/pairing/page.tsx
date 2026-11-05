@@ -1,7 +1,6 @@
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch, untrack, type Accessor } from "solid-js"
 import { renderSVG } from "@opencode/util/qr"
 import { createKeyed, usePlugin, type DialogHandle, type Live, type IpcClient } from "@opencode/plugin/gui"
@@ -53,7 +52,6 @@ export default function PairingPage(props: {
   const ui = ctx.ui
   // The plugin's dialogs close with it, so disabling pairing also stops the dialog's code polling.
   const dialogs = ctx.dialogs
-  const queryClient = useQueryClient()
 
   // Remote access and the display setting need pairing's main side; codes come from the server, so they never wait.
   const main = () => {
@@ -85,6 +83,29 @@ export default function PairingPage(props: {
     return AbortSignal.any([ctx.signal, controller.signal])
   }
 
+  // Reads or changes the display sleep setting through the generation that asked for it. `screenActive` has no input,
+  // so its options are its only argument. The attempt's signal ends either call at its timeout, or when the page or
+  // that generation goes away.
+  const runScreen = (effect: Extract<PairingEffect, { type: "read-screen" | "set-screen" }>) => {
+    const attempt = effect.attempt
+    const fail = () =>
+      dispatch({ type: effect.type === "read-screen" ? "screen.read.failed" : "screen.change.failed", attempt })
+    const live = main()
+
+    if (live?.generation !== effect.generation) return fail()
+
+    const signal = start(attempt, effect.timeoutMs, fail)
+
+    if (effect.type === "read-screen")
+      return void live.value
+        .screenActive({ signal })
+        .then((enabled) => dispatch({ type: "screen.read.succeeded", attempt, enabled }), fail)
+
+    void live.value
+      .setScreenActive(effect.enabled, { signal })
+      .then(() => dispatch({ type: "screen.change.succeeded", attempt }), fail)
+  }
+
   const run = (effect: PairingEffect) => {
     if (effect.type === "abort") {
       const request = requests.get(effect.attempt)
@@ -103,6 +124,8 @@ export default function PairingPage(props: {
     }
 
     if (effect.type === "close-dialog") return opened.dialog?.close()
+
+    if (effect.type === "read-screen" || effect.type === "set-screen") return runScreen(effect)
 
     if (effect.type === "read-remote" || effect.type === "set-remote") {
       const attempt = effect.attempt
@@ -188,30 +211,6 @@ export default function PairingPage(props: {
   )
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  const screenActive = useQuery(() => ({
-    queryKey: [ctx.id, "screen-active", main()?.generation],
-    queryFn: (input) => {
-      const live = main()
-
-      if (!live) throw new Error("Pairing's main side is not active")
-
-      return live.value.screenActive({ signal: input.signal })
-    },
-    enabled: !!main(),
-    gcTime: 0,
-  }))
-
-  const screenActivity = useMutation(() => ({
-    mutationFn: (enabled: boolean) => {
-      const live = main()
-
-      if (!live) throw new Error("Pairing's main side is not active")
-
-      return live.value.setScreenActive(enabled)
-    },
-    onSuccess: (_, enabled) => queryClient.setQueryData([ctx.id, "screen-active", main()?.generation], enabled),
-  }))
-
   return (
     <ui.SettingsLayout title={ctx.t("title")} description={ctx.t("description")}>
       <ui.SettingsSection
@@ -222,7 +221,7 @@ export default function PairingPage(props: {
                 {ctx.t("remote.error")}
               </p>
             </Show>
-            <Show when={pageView().mainActive && (screenActive.error || screenActivity.error)}>
+            <Show when={pageView().screenError}>
               <p class="text-text-danger-base" role="alert">
                 {ctx.t("screenActive.error")}
               </p>
@@ -262,9 +261,9 @@ export default function PairingPage(props: {
             <ui.Switch
               label={ctx.t("screenActive.title")}
               hideLabel
-              checked={screenActive.isSuccess && screenActive.data}
-              disabled={screenActive.isPending || !!screenActive.error || screenActivity.isPending}
-              onChange={(enabled) => screenActivity.mutate(enabled)}
+              checked={pageView().screenChecked}
+              disabled={pageView().screenDisabled}
+              onChange={(enabled) => dispatch({ type: "screen.toggled", enabled })}
             />
           </ui.SettingsRow>
         </Show>
