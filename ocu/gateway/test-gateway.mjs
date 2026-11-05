@@ -89,7 +89,7 @@ test("provider in cooldown is not retried until its cooldown expires", async () 
   });
   const upstreamUrl = await listen(upstream);
   const gateway = createServer({
-    cooldownBaseMs: 10000, cooldownMaxMs: 10000,
+    requestTimeoutMs: 3000, cooldownBaseMs: 10000, cooldownMaxMs: 10000,
     providers: [{
       id: "cooldown-regression-provider",
       baseURL: upstreamUrl + "/v1",
