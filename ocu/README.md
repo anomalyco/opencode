@@ -6,7 +6,9 @@ OCU is an additive routing layer around OpenCode. OpenCode remains the agent/run
 
 - Dependency-free Node.js HTTP gateway.
 - OpenAI-compatible `/v1/models` and `/v1/chat/completions`.
-- Priority-based provider selection and pre-response fallback.
+- Priority-based or adaptive provider selection using observed latency and recent failures.
+- Per-provider request, success, failure and latency metrics via `GET /ocu/status`.
+- Pre-response fallback and in-memory cooldown.
 - In-memory cooldown for rate limits, server errors and connection failures.
 - Optional inbound bearer authentication.
 - Loopback-only default binding.
@@ -34,10 +36,11 @@ To bind beyond loopback, set `OCU_HOST` and `OCU_GATEWAY_KEY`. External binding 
 ## API
 
 - `GET /health`
+- `GET /ocu/status` (provider diagnostics; protect the gateway with a key when exposed)
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 
-Use `ocu/auto` to try eligible providers by ascending priority. A specific alias restricts routing to providers that publish that alias. Fallback is possible only before an upstream success response starts. Once streaming begins, switching providers is unsafe.
+Set `routing.mode` to `priority` or `adaptive`. In adaptive mode, OCU ranks providers using configured priority, observed latency (EWMA) and consecutive failures. Use `ocu/auto` to try eligible providers in the resulting order. A specific alias restricts routing to providers that publish that alias. Fallback is possible only before an upstream success response starts. Once streaming begins, switching providers is unsafe.
 
 ## OpenCode
 
