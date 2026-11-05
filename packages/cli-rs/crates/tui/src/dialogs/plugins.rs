@@ -57,6 +57,7 @@ pub fn show(tui: &Tui) {
         pending: RefCell::new(Vec::new()),
         select: RefCell::new(None),
         open: Cell::new(false),
+        following: RefCell::new(None),
     });
     manager.open(None);
     manager.refetch();
@@ -96,6 +97,8 @@ struct Manager {
     select: RefCell<Option<Select<String>>>,
     /// The list (not the error view) is on screen.
     open: Cell<bool>,
+    /// The `plugin.updated` subscription, until a `plugin.updated` finds the list closed.
+    following: RefCell<Option<opentui::keymap::Disposer>>,
 }
 
 impl Manager {
@@ -401,29 +404,20 @@ impl Manager {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let mut signals = tui.data.signals();
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move {
-                loop {
-                    match signals.recv().await {
-                        Ok(V2Event::PluginUpdated(_)) => return Some(signals),
-                        Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
-                    }
-                }
-            },
-            move |_, signals| {
-                let (Some(manager), Some(_)) = (weak.upgrade(), signals) else {
+        let subscription = crate::features::events::subscribe(
+            &tui,
+            bind!(self, |manager, _, event| {
+                if !matches!(event, V2Event::PluginUpdated(_)) {
                     return;
-                };
+                }
                 if !manager.open.get() {
+                    manager.following.take();
                     return;
                 }
                 manager.refetch();
-                manager.follow();
-            },
+            }),
         );
+        self.following.replace(Some(subscription));
     }
 
     fn toggle(self: &Rc<Self>, entry: Option<&Entry>) {

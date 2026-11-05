@@ -74,21 +74,22 @@ fn options(
     marker: Color,
 ) -> Vec<SelectOption<Model>> {
     let favorite_now = local.favorite();
-    let all: Vec<SelectOption<Model>> = local
-        .models()
-        .into_iter()
-        .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated) && is_free(model))
-        .map(|model| {
-            let value = Model::new(&model.provider_id.0, &model.id);
-            let mut option = SelectOption::new(model.name.clone(), value.clone());
-            if favorite_now.contains(&value) {
-                option.footer = Some("*".to_owned());
-                option.footer_fg = Some(marker);
-            }
-            option.detail = Some(model::detail(&model, false, None));
-            option
-        })
-        .collect();
+    let all: Vec<SelectOption<Model>> = local.models(|models| {
+        models
+            .iter()
+            .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated) && is_free(model))
+            .map(|model| {
+                let value = Model::new(&model.provider_id.0, &model.id);
+                let mut option = SelectOption::new(model.name.clone(), value.clone());
+                if favorite_now.contains(&value) {
+                    option.footer = Some("*".to_owned());
+                    option.footer_fg = Some(marker);
+                }
+                option.detail = Some(model::detail(model, false, None));
+                option
+            })
+            .collect()
+    });
     let favored = |option: &SelectOption<Model>| !favorites.contains(&option.value.key());
     let needle = query.trim();
     if !needle.is_empty() {
