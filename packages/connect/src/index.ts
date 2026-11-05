@@ -9,6 +9,7 @@ const args = process.argv.slice(2)
 const command = args[0]
 const flags = parseFlags(args.slice(1))
 const harness = flag("harness") ?? process.env.OPENCODE_CONNECT_HARNESS
+const NOT_SIGNED_IN = "Not signed in. Run `opencode-connect login` or set OPENCODE_API_KEY."
 
 const commands: Record<string, () => Promise<number>> = {
   check,
@@ -34,10 +35,12 @@ process.exitCode = await run().catch((error: unknown) => {
  * `{"effect":"allow"}` and exit code 0, or `{"effect":"deny","message":...}` and exit code 2.
  *
  * It decides from the stored workspace config without waiting on the network. A config older than a minute is
- * refreshed in the background for the next call; only a sign-in with no config yet waits, for up to 3 seconds.
+ * refreshed in the background for the next call; only a sign-in with no config yet waits, for up to 3 seconds. A
+ * signed-in workspace whose policy is still unknown after that is denied, so a Console outage never lifts policy.
  */
 async function check() {
   const { Effect, Option, Schema } = await import("effect")
+  const { ConsoleAccess } = await import("@opencode/core/console-access")
   const { ConnectStore } = await import("@opencode/client-core/store")
   const { ConsoleCredentials } = await import("@opencode/client-core/credentials")
   const { WorkspaceSnapshot } = await import("@opencode/client-core/snapshot")
@@ -63,11 +66,17 @@ async function check() {
     credential && cached?.owner !== ConsoleCredentials.owner(credential)
       ? await refresh({ wait: 3_000 })
       : cached && WorkspaceSnapshot.stale(cached, Date.now())
-        ? (background(), cached)
+        ? (await background(), cached)
         : cached
   const decision = await Effect.runPromise(
     PolicyEvaluator.check(
-      { organization: snapshot?.organization, policies: WorkspaceSnapshot.policies(snapshot) },
+      credential
+        ? {
+            organization: snapshot?.organization ?? ConsoleAccess.organizationName(credential),
+            policies: WorkspaceSnapshot.policies(snapshot),
+            status: snapshot?.status,
+          }
+        : { policies: [] },
       input.value,
     ),
   )
@@ -87,7 +96,7 @@ async function login() {
       server: flag("server") ?? ConsoleAccess.defaultServer,
       prompt: (device) =>
         Effect.promise(async () => {
-          process.stderr.write(`Open ${device.url}\nand confirm the code ${device.code}\n`)
+          process.stderr.write(`Open ${device.url} and confirm the code ${device.code}\n`)
           if (!process.stdout.isTTY) return
           const { openUrl } = await import("@opencode/util/open")
           await openUrl(device.url).catch(() => undefined)
@@ -95,10 +104,14 @@ async function login() {
     }),
   )
   const result = await withConsole((http) => WorkspaceSync.sync(store, http, { force: true }))
+  const email = credential.metadata?.email
   process.stdout.write(
-    `Signed in to ${ConsoleAccess.organizationName(credential) ?? "OpenCode Console"} as ${credential.metadata?.email}\n`,
+    `Signed in to ${ConsoleAccess.organizationName(credential) ?? "OpenCode Console"}${typeof email === "string" ? ` as ${email}` : ""}\n`,
   )
-  if (result.error) process.stderr.write(`Couldn't load the workspace config yet: ${message(result.error)}\n`)
+  if (result.error)
+    process.stderr.write(
+      `Couldn't fetch the workspace config: ${message(result.error)}. Run \`opencode-connect sync\` to try again.\n`,
+    )
   return 0
 }
 
@@ -107,7 +120,8 @@ async function logout() {
   const { ConsoleCredentials } = await import("@opencode/client-core/credentials")
   const signedOut = await withConsole((http) => ConsoleCredentials.logout(ConnectStore.make(), http))
   process.stdout.write(signedOut ? "Signed out of OpenCode Console\n" : "Not signed in\n")
-  if (process.env.OPENCODE_API_KEY) process.stdout.write("OPENCODE_API_KEY is still set and stays in use\n")
+  if (process.env.OPENCODE_API_KEY)
+    process.stdout.write("OPENCODE_API_KEY is still set, so opencode-connect keeps using that key\n")
   return 0
 }
 
@@ -119,41 +133,37 @@ async function status() {
   const store = ConnectStore.make()
   const credential = ConsoleCredentials.read(store)
   const snapshot = credential ? await refresh() : undefined
-  const telemetry = WorkspaceSnapshot.telemetry(snapshot)
+  const policies = WorkspaceSnapshot.policies(snapshot)
   const info = credential && {
     server: ConsoleAccess.server(credential),
-    credential: credential.type === "key" ? "OPENCODE_API_KEY" : "device sign-in",
-    email: credential.metadata?.email,
+    credential: credential.type === "key" ? ("OPENCODE_API_KEY" as const) : ("device" as const),
+    email: typeof credential.metadata?.email === "string" ? credential.metadata.email : undefined,
     workspace: snapshot?.organization ?? ConsoleAccess.organizationName(credential),
-    synced: snapshot?.config ? new Date(snapshot.fetched).toISOString() : undefined,
-    policies: WorkspaceSnapshot.policies(snapshot).length,
+    synced: policies && snapshot ? new Date(snapshot.fetched).toISOString() : undefined,
+    policies: policies?.length,
     models: WorkspaceSnapshot.models(snapshot),
     routing: WorkspaceSnapshot.routing(snapshot),
     needs: snapshot?.status,
-    telemetry: telemetry !== undefined,
   }
   if (flags.json === true) {
     process.stdout.write(`${JSON.stringify({ signedIn: Boolean(info), ...info })}\n`)
     return 0
   }
   if (!info) {
-    process.stdout.write("Not signed in. Run `opencode-connect login` to connect OpenCode Console.\n")
+    process.stdout.write(`${NOT_SIGNED_IN}\n`)
     return 0
   }
   const lines = [
-    ["Signed in", `${info.email ?? "API key"} (${info.credential})`],
+    ["Signed in", info.credential === "OPENCODE_API_KEY" ? "with OPENCODE_API_KEY" : (info.email ?? "yes")],
     ["Workspace", info.workspace ?? "none"],
     ["Console", info.server],
-    ["Config", info.synced ? `${info.policies} policies, synced ${info.synced}` : "not synced"],
     [
-      "Models",
-      info.routing === "gateway"
-        ? `${info.models} through the workspace gateway`
-        : "none from the workspace; harnesses keep their own provider",
+      "Policies",
+      info.synced
+        ? `${count(info.policies ?? 0, "policy", "policies")}, synced at ${new Date(info.synced).toLocaleTimeString()}`
+        : "not loaded yet, so tool calls are blocked",
     ],
-    ...(telemetry
-      ? [["Usage", `token counts and model names are shared with ${info.workspace ?? "the workspace"}`]]
-      : []),
+    ["Models", info.models ? `${info.models} available from the workspace` : "none from the workspace"],
   ]
   process.stdout.write(lines.map(([label, value]) => `${label.padEnd(10)} ${value}\n`).join(""))
   if (info.needs) process.stdout.write(`\n${info.needs.message}${info.needs.url ? `: ${info.needs.url}` : ""}\n`)
@@ -170,17 +180,19 @@ async function sync() {
   )
   if (flags.quiet === true) return result.error ? 1 : 0
   if (!result.snapshot && !result.error) {
-    process.stderr.write("Not signed in. Run `opencode-connect login` first.\n")
+    process.stderr.write(`${NOT_SIGNED_IN}\n`)
     return 1
   }
   if (result.error) {
-    process.stderr.write(
-      `Couldn't sync: ${message(result.error)}${result.snapshot ? "\nThe last synced config stays in force." : ""}\n`,
-    )
+    const kept = WorkspaceSnapshot.policies(result.snapshot) ? "\nPolicies from the last sync still apply." : ""
+    process.stderr.write(`Couldn't sync: ${message(result.error)}${kept}\n`)
     return 1
   }
-  const policies = WorkspaceSnapshot.policies(result.snapshot).length
-  process.stdout.write(`Synced ${result.snapshot?.organization ?? "workspace"} config: ${policies} policies\n`)
+  const organization = result.snapshot?.organization
+  const policies = WorkspaceSnapshot.policies(result.snapshot)?.length ?? 0
+  process.stdout.write(
+    `Synced ${organization ? `${organization}'s` : "the workspace"} config (${count(policies, "policy", "policies")})\n`,
+  )
   return 0
 }
 
@@ -190,7 +202,7 @@ async function token() {
   const { ConsoleCredentials } = await import("@opencode/client-core/credentials")
   const credential = await withConsole((http) => ConsoleCredentials.fresh(ConnectStore.make(), http))
   if (!credential) {
-    process.stderr.write("Not signed in. Run `opencode-connect login` or set OPENCODE_API_KEY.\n")
+    process.stderr.write(`${NOT_SIGNED_IN}\n`)
     return 1
   }
   process.stdout.write(`${credential.type === "key" ? credential.key : credential.access}\n`)
@@ -224,13 +236,23 @@ async function withConsole<A, E>(body: (http: HttpClient.HttpClient) => Effect.E
   )
 }
 
-// Detached, so a harness never waits on the Console; the next check reads what it stored.
-function background() {
+// Detached, so a harness never waits on the Console; the next check reads what it stored. At most one starts every
+// 30 seconds, so a Console outage doesn't start a process on every tool call.
+async function background() {
+  const { ConnectStore } = await import("@opencode/client-core/store")
+  const claim = ConnectStore.syncClaimFile(ConnectStore.make())
+  const claimed = ConnectStore.modified(claim)
+  if (claimed !== undefined && Date.now() - claimed < 30_000) return
+  ConnectStore.write(claim, "")
   const self = compiled() ? [process.execPath] : [process.execPath, process.argv[1]]
   spawn(self[0], [...self.slice(1), "sync", "--quiet", ...(harness ? ["--harness", harness] : [])], {
     detached: true,
     stdio: "ignore",
   }).unref()
+}
+
+function count(value: number, one: string, many: string) {
+  return `${value} ${value === 1 ? one : many}`
 }
 
 function compiled() {
@@ -268,7 +290,8 @@ function parseFlags(input: string[]) {
 }
 
 function usage() {
-  return `opencode-connect ${version}: use an OpenCode Console workspace from other coding agents
+  return `opencode-connect ${version}
+Sign coding agents in to an OpenCode Console workspace and check their tool calls against its policies.
 
 Usage: opencode-connect <command> [options]
 
@@ -276,15 +299,17 @@ Commands:
   login [--server <url>]  Sign in to OpenCode Console and pick a workspace
   logout                  Sign out and remove the stored workspace config
   status [--json]         Show the sign-in, workspace and config
-  token                   Print an access token for a harness's auth helper
+  token                   Print an access token for auth helpers such as Claude Code's apiKeyHelper
   sync                    Fetch the workspace config now
-  check                   Decide a tool call against workspace policy
-                          (reads {"action","resources","directory"?,"shell"?} JSON on stdin)
+  check                   Check a tool call against the workspace's policies. Reads
+                          {"action": "...", "resources": [...]} on stdin, with optional
+                          "directory" and "shell"; exits 0 to allow, 2 to deny
 
 Options:
-  --harness <name/version>  Name the harness in requests to the Console
-                            (also OPENCODE_CONNECT_HARNESS)
+  --harness <name/version>  Identify the calling agent to the Console, e.g. claude-cli/2.1.304
+                            (or set OPENCODE_CONNECT_HARNESS)
 
 Set OPENCODE_API_KEY to use a personal or service account key instead of signing in.
+Set OPENCODE_CONNECT_SERVER with it to use a Console other than https://opencode.ai/console.
 `
 }

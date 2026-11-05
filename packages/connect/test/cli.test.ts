@@ -44,7 +44,6 @@ async function connect(home: string, args: string[], input: { stdin?: string; en
 const storeOf = (home: string) => ({
   data: path.join(home, "data", "opencode-connect"),
   cache: path.join(home, "cache", "opencode-connect"),
-  state: path.join(home, "state", "opencode-connect"),
 })
 
 async function until(condition: () => boolean, timeout = 10_000) {
@@ -120,7 +119,13 @@ describe("opencode-connect", () => {
 
     // The stale snapshot decides this call; the background sync then replaces it for the next one.
     expect(check.code).toBe(2)
-    await until(() => WorkspaceSnapshot.policies(WorkspaceSnapshot.read(store)).length === 0)
+    await until(() => WorkspaceSnapshot.policies(WorkspaceSnapshot.read(store))?.length === 0)
+    expect(console.state.configs).toBe(1)
+
+    // Another stale check within 30 seconds starts no second sync.
+    WorkspaceSnapshot.write(store, { ...WorkspaceSnapshot.read(store)!, fetched: Date.now() - 120_000 })
+    await connect(home.path, ["check"], { stdin: JSON.stringify({ action: "shell", resources: ["ls"] }) })
+    await Bun.sleep(500)
     expect(console.state.configs).toBe(1)
   })
 
@@ -136,6 +141,21 @@ describe("opencode-connect", () => {
     expect(check.stdout).toBe('{"effect":"deny","message":"Blocked by your organization\'s policy"}\n')
     expect(check.code).toBe(2)
     expect(console.state.requests.at(-1)?.headers.get("authorization")).toBe("Bearer oc_sk_ci")
+  })
+
+  test("blocks tool calls while a signed-in workspace's policy can't be loaded", async () => {
+    await using home = await tmpdir("opencode-connect-cli-")
+    const console = serve({ config: () => new Response("unavailable", { status: 503 }) })
+
+    const check = await connect(home.path, ["check"], {
+      stdin: JSON.stringify({ action: "read", resources: ["notes.md"] }),
+      env: { OPENCODE_API_KEY: "oc_sk_ci", OPENCODE_CONNECT_SERVER: console.url },
+    })
+
+    expect(check.stdout).toBe(
+      '{"effect":"deny","message":"Blocked until your organization\'s policy loads from OpenCode Console"}\n',
+    )
+    expect(check.code).toBe(2)
   })
 
   test("concurrent processes refresh an expiring sign-in once", async () => {
