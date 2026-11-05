@@ -1,12 +1,17 @@
 import { expect, test } from "bun:test"
 import {
   createFollowState,
+  createRouteRevealState,
   defersAdjustments,
   isFollowing,
   needsEndProbe,
+  ROUTE_REVEAL_HISTORY_LIMIT,
+  routeRevealTarget,
   transitionFollow,
+  transitionRouteReveal,
   type FollowEvent,
   type FollowState,
+  type RouteRevealEvent,
 } from "./machine"
 
 const replay = (events: FollowEvent[], from = createFollowState()) => events.reduce(transitionFollow, from)
@@ -176,4 +181,45 @@ test.each<{ name: string; state: FollowState; event: FollowEvent }>([
   { name: "settled following", state: createFollowState(), event: { type: "scroll.settled", atReachableEnd: false } },
 ])("a steady $name scroll returns the same state", (input) => {
   expect(transitionFollow(input.state, input.event)).toBe(input.state)
+})
+
+const reveal = (events: RouteRevealEvent[]) => events.reduce(transitionRouteReveal, createRouteRevealState())
+
+const synced = (entryKey: string, target: string | undefined) => ({ type: "route.synced", entryKey, target }) as const
+
+const attempted = (entryKey: string) => ({ type: "reveal.attempted", entryKey }) as const
+
+test.each<{ name: string; events: RouteRevealEvent[]; pending?: { entryKey: string; target: string } }>([
+  {
+    // A tool call that is not in the list was looked for again on every reattach.
+    name: "a missing tool call is attempted once per history entry",
+    events: [synced("k1", "sh_missing"), attempted("k1"), synced("k1", "sh_missing")],
+  },
+  {
+    // Only the last entry was remembered, so going Back revealed the first entry's tool again.
+    name: "going Back to an entry already revealed does not reveal it again",
+    events: [synced("k1", "sh_1"), attempted("k1"), synced("k2", "sh_2"), attempted("k2"), synced("k1", "sh_1")],
+  },
+  {
+    name: "navigating away before the attempt drops the reveal without consuming it",
+    events: [synced("k1", "sh_1"), synced("k2", undefined), synced("k1", "sh_1")],
+    pending: { entryKey: "k1", target: "sh_1" },
+  },
+  {
+    name: "an attempt for another entry leaves the pending reveal",
+    events: [synced("k2", "sh_2"), attempted("k1")],
+    pending: { entryKey: "k2", target: "sh_2" },
+  },
+])("$name", (input) => {
+  const target = routeRevealTarget(reveal(input.events))
+
+  expect(target && { entryKey: target.entryKey, target: target.target }).toEqual(input.pending)
+})
+
+test("a route reveal remembers only the latest entries it attempted", () => {
+  const keys = Array.from({ length: ROUTE_REVEAL_HISTORY_LIMIT + 1 }, (_, index) => `k${index}`)
+  const state = reveal(keys.flatMap((key) => [synced(key, "sh"), attempted(key)]))
+
+  expect(routeRevealTarget(transitionRouteReveal(state, synced("k0", "sh")))).toBeDefined()
+  expect(routeRevealTarget(transitionRouteReveal(state, synced("k1", "sh")))).toBeUndefined()
 })

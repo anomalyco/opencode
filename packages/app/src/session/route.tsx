@@ -6,7 +6,6 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { DataProvider } from "@opencode/session-ui/context"
 import { SessionUserMessage } from "@opencode/session-ui/message"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
@@ -27,9 +26,9 @@ import { ErrorPage } from "@/shell/errors/error"
 import { useSessionModel } from "./model"
 import { SessionPanelFrame } from "./session-frame"
 import { SessionIdentityHeader } from "./session-identity-header"
-import { ServerUnavailablePanel } from "./server-unavailable-panel"
+import { ServerSignedOutPanel, ServerUnavailablePanel } from "./server-unavailable-panel"
 import { SessionErrorFallback, SessionNotFoundPanel } from "./route-error"
-import { sessionRouteView } from "./resolution-machine"
+import { sessionDocumentTitle, sessionModelDirectory, sessionRouteView, viewedSessionID } from "./resolution-machine"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
@@ -40,19 +39,100 @@ export function TargetSessionRouteContent() {
   const data = useData()
   const server = useServer()
   const tabs = useTabs()
-  const directory = createMemo(() => data.session.get(params.id)?.location.directory)
+
+  const resolution = createSessionResolution(
+    () => params.id,
+    () => data.session,
+    {
+      children: true,
+      connected: () => server.ctx.sdk.connection.status() === "connected",
+      pending: (sessionID) => tabs.pendingSession(server.key, sessionID),
+    },
+  )
+
+  const view = createMemo(() => sessionRouteView(resolution(), server.health))
+  const viewed = createMemo(() => viewedSessionID(view()))
+  const title = createMemo(() => sessionDocumentTitle(view()))
+  const modelDirectory = createMemo(() => sessionModelDirectory(resolution()))
+
+  // Kept once the session leaves `ready`: the session providers can still read it while the route
+  // swaps them out, where a narrowed <Match> value would throw a stale read.
+  const directory = createMemo((previous: string) => {
+    const current = view()
+
+    return current.type === "ready" ? current.session.location.directory : previous
+  }, "")
+
+  // Health updates rebuild the view; the preparing screen and its composer stay mounted through them.
+  const preparing = createMemo(
+    () => {
+      const current = view()
+
+      return current.type === "preparing" ? current : undefined
+    },
+    undefined,
+    { equals: (a, b) => a?.sessionID === b?.sessionID && a?.pending === b?.pending },
+  )
+
+  const failure = createMemo(() => {
+    const current = view()
+
+    return current.type === "error" ? current : undefined
+  })
+
+  const closeTab = () => tabs.removeSessionTab({ server: server.key, sessionId: params.id })
 
   return (
     <>
-      <MarkSessionViewed sessionID={() => params.id} />
-      <SessionDocumentTitle sessionID={() => params.id} />
-      <ModelsProvider directory={directory()}>
+      <MarkSessionViewed sessionID={viewed} />
+      <SessionDocumentTitle title={title} />
+      <ModelsProvider directory={modelDirectory()}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
           <ComposerFocusProvider sessionID={params.id}>
-            <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
-              {(pending) => <PreparingSession sessionID={params.id} pending={pending()} />}
-            </Show>
+            <Switch>
+              <Match when={view().type === "incompatible"}>
+                <SessionStatePanel>
+                  <ServerUnavailablePanel reason="incompatible" onClose={closeTab} />
+                </SessionStatePanel>
+              </Match>
+              <Match when={preparing()} keyed>
+                {(value) => <PreparingSession sessionID={value.sessionID} pending={value.pending} />}
+              </Match>
+              {/* Not keyed: the session providers stay mounted while tabs switch between resolved sessions. */}
+              <Match when={view().type === "ready"}>
+                <LocationProvider directory={directory()}>
+                  <SessionUIProvider directory={directory()} server={server.key}>
+                    <TargetSessionPage />
+                  </SessionUIProvider>
+                </LocationProvider>
+              </Match>
+              <Match when={view().type === "not-found"}>
+                <SessionStatePanel>
+                  <SessionNotFoundPanel sessionID={params.id} serverKey={server.key} />
+                </SessionStatePanel>
+              </Match>
+              <Match when={failure()} keyed>
+                {(value) => (
+                  <SessionStatePanel>
+                    <ErrorPage error={value.error} />
+                  </SessionStatePanel>
+                )}
+              </Match>
+              <Match when={view().type === "signed-out"}>
+                <SessionStatePanel>
+                  <ServerSignedOutPanel conn={server.conn} />
+                </SessionStatePanel>
+              </Match>
+              <Match when={view().type === "unreachable"}>
+                <SessionStatePanel>
+                  <ServerUnavailablePanel reason="unreachable" onClose={closeTab} />
+                </SessionStatePanel>
+              </Match>
+              <Match when={view().type === "resolving"}>
+                <PendingSessionState sessionID={params.id} />
+              </Match>
+            </Switch>
           </ComposerFocusProvider>
         </SessionRouteErrorBoundary>
       </ModelsProvider>
@@ -131,75 +211,6 @@ function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; serv
   )
 }
 
-function ResolvedTargetSessionRoute() {
-  const params = useParams<{ id: string }>()
-  const server = useServer()
-  const tabs = useTabs()
-  const data = useData()
-
-  const resolution = createSessionResolution(
-    () => params.id,
-    () => data.session,
-    { children: true, connected: () => server.ctx.sdk.connection.status() === "connected" },
-  )
-
-  const view = createMemo(() => sessionRouteView(resolution(), server.health))
-
-  // Kept once the session leaves `ready`: the session providers can still read it while the route
-  // swaps them out, where a narrowed <Match> value would throw a stale read.
-  const directory = createMemo((previous: string) => {
-    const current = view()
-
-    return current.type === "ready" ? current.session.location.directory : previous
-  }, "")
-
-  const failure = createMemo(() => {
-    const current = view()
-
-    return current.type === "error" ? current : undefined
-  })
-
-  const closeTab = () => tabs.removeSessionTab({ server: server.key, sessionId: params.id })
-
-  return (
-    <Switch>
-      <Match when={view().type === "incompatible"}>
-        <SessionStatePanel>
-          <ServerUnavailablePanel reason="incompatible" onClose={closeTab} />
-        </SessionStatePanel>
-      </Match>
-      {/* Not keyed: the session providers stay mounted while tabs switch between resolved sessions. */}
-      <Match when={view().type === "ready"}>
-        <LocationProvider directory={directory()}>
-          <SessionUIProvider directory={directory()} server={server.key}>
-            <TargetSessionPage />
-          </SessionUIProvider>
-        </LocationProvider>
-      </Match>
-      <Match when={view().type === "not-found"}>
-        <SessionStatePanel>
-          <SessionNotFoundPanel sessionID={params.id} serverKey={server.key} />
-        </SessionStatePanel>
-      </Match>
-      <Match when={failure()} keyed>
-        {(value) => (
-          <SessionStatePanel>
-            <ErrorPage error={value.error} />
-          </SessionStatePanel>
-        )}
-      </Match>
-      <Match when={view().type === "unreachable"}>
-        <SessionStatePanel>
-          <ServerUnavailablePanel reason="unreachable" onClose={closeTab} />
-        </SessionStatePanel>
-      </Match>
-      <Match when={view().type === "resolving"}>
-        <PendingSessionState sessionID={params.id} />
-      </Match>
-    </Switch>
-  )
-}
-
 function PendingSessionState(props: { sessionID: string }) {
   return (
     <SessionStatePanel>
@@ -257,18 +268,10 @@ function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
 }
 
 // Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
-function SessionDocumentTitle(props: { sessionID: () => string }) {
-  const data = useData()
-
-  const title = createMemo(() => {
-    const value = data.session.get(props.sessionID())?.title
-
-    return isFallbackTitle(value) ? undefined : value
-  })
-
+function SessionDocumentTitle(props: { title: () => string | undefined }) {
   // Keyed: <Title> reads its text inside a meta effect, which would hit a stale Show accessor once the session is deleted.
   return (
-    <Show when={title()} keyed>
+    <Show when={props.title()} keyed>
       {(value) => <Title>{`${value} · OpenCode`}</Title>}
     </Show>
   )

@@ -4,7 +4,7 @@ import type { ModelSelection } from "@/providers/models/selection"
 import { STORY_MODEL } from "@opencode/session-ui/storybook"
 import { Composer } from "./composer"
 import type { ComposerModel } from "./model"
-import { createComposerEditor, createComposerEditorState } from "./editor/interaction"
+import { createComposerEditor } from "./editor/interaction"
 import type { ComposerPersistedState, ComposerSuggestion } from "./types"
 import { promptLength } from "./prompt-parts"
 
@@ -106,6 +106,7 @@ function TouchComposer(props: { state: State }) {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt,
     cursor: promptLength(prompt),
+    mode: props.state === "shell" ? "shell" : "normal",
     model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: "high" },
     context: { items: [] },
   })
@@ -126,7 +127,6 @@ function TouchComposer(props: { state: State }) {
 
   const editor = createComposerEditor({
     store: [draft, setDraft],
-    state: createComposerEditorState(props.state === "shell" ? "shell" : "normal"),
     commands: () => commands,
     context: () => context,
     searchContextFiles: () => context,

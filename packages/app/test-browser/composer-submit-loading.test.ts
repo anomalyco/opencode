@@ -99,7 +99,6 @@ test.each([
       addToHistory() {},
       removeFromHistory() {},
       resetHistory() {},
-      setMode() {},
       closePopover() {},
       notify: { missingSelection: () => void toasts.push("missing"), unqueueable() {}, failed() {} },
       comments: { capture: () => [], clear() {}, restore() {} },

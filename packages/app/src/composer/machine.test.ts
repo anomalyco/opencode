@@ -11,6 +11,7 @@ import {
   type QuoteSnapshot,
   type SubmitSnapshot,
 } from "./machine"
+import { retryFingerprint } from "./retry"
 import { createMemoryComposerState, type ImageAttachmentPart, type Prompt } from "./state"
 
 const target = createMemoryComposerState().capture()
@@ -159,6 +160,32 @@ describe("composer submit machine", () => {
       false,
       true,
     ])
+  })
+
+  test("reuses a failed prompt's ID only for the same prompt, never for a shell or server command", () => {
+    const sent = (input: Partial<SubmitSnapshot>, prompt?: Prompt) =>
+      transitionComposerSubmit(createComposerSubmitState(), {
+        type: "submit",
+        snapshot: snapshot(input, prompt),
+        done,
+      }).effects.find((effect) => effect.type === "session.start")?.value.id
+
+    const fingerprint = (value: SubmitSnapshot) =>
+      retryFingerprint({ ...value, selection, prompt: value.draft.prompt, context: value.draft.context })
+
+    const retry = { id: SessionMessage.ID.create(), fingerprint: fingerprint(snapshot()) }
+
+    expect(sent({ retry })).toBe(retry.id)
+    // The ID used to follow the selection alone, so a changed delivery or prompt reused it and the server dropped them.
+    expect(sent({ retry, delivery: "queue" })).not.toBe(retry.id)
+    expect(sent({ retry, text: "ship it now" })).not.toBe(retry.id)
+    expect(sent({ retry, selection: { ...selection, variant: "high" } })).not.toBe(retry.id)
+
+    const review = snapshot({ text: "/review", commands: [{ name: "review" }] })
+    const shell = snapshot({ mode: "shell" })
+
+    expect(sent({ ...review, retry: { id: retry.id, fingerprint: fingerprint(review) } })).toBe(review.id)
+    expect(sent({ ...shell, retry: { id: retry.id, fingerprint: fingerprint(shell) } })).toBe(shell.id)
   })
 
   test.each(Object.entries(states))("ignores another submit or quote while %s", (_name, state) => {

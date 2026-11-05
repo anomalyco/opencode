@@ -9,7 +9,8 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { composerLanePlacement, useComposerLaneAlignment } from "./composer-lane"
-import { createShellPanel, createShellTail, type ShellEnd } from "./shell-panel"
+import { createShellPanel, createShellTail } from "./shell-panel"
+import type { ShellEnd } from "./shell-panel-machine"
 import "./activity-chips.css"
 
 export type SessionActivityItem = {
@@ -64,23 +65,45 @@ export function SessionActivityChips(props: {
   const language = useLanguage()
   const settings = useSettings()
 
-  const [open, setOpen] = createSignal(false)
-  const panel = createShellPanel({ shells: () => props.shells, stop: props.onStop, ended: props.shell.ended })
+  const rows = new Map<string, HTMLElement>()
+  let content: HTMLElement | undefined
+  let back: HTMLElement | undefined
 
-  // A shell that ended while its panel is open still counts until the menu closes.
-  const held = () => {
-    const shell = panel.state.shell
+  const panel = createShellPanel({
+    enabled: () => settings.general.backgroundActivity() !== "off",
+    subagents: () => props.subagents,
+    shells: () => props.shells,
+    stop: props.onStop,
+    ended: props.shell.ended,
+    focus: {
+      // Opening a shell moves focus to its back arrow.
+      back: () => back?.focus(),
+      // Back on the list, focus returns to that shell's row, or to the first row once the shell has left the list.
+      row: (key) => {
+        const row = rows.get(key)
 
-    return open() && shell && !props.shells.some((item) => item.key === shell.key) ? 1 : 0
-  }
+        if (row?.isConnected) return row.focus()
+        content?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+      },
+      empty: () => {
+        const active = document.activeElement
 
-  const counts = () => ({ subagents: props.subagents.length, shells: props.shells.length + held() })
+        if (!active || active === document.body || !active.isConnected) props.onEmpty()
+      },
+      // Stop gives way to how the shell ended; keep focus in the panel when it held Stop.
+      ended: () => {
+        const active = document.activeElement
 
-  const active = () =>
-    settings.general.backgroundActivity() !== "off" && (counts().subagents > 0 || counts().shells > 0)
+        if (!active || active === document.body || !active.isConnected || active.matches('[role="menu"]')) back?.focus()
+      },
+    },
+  })
+
+  const view = panel.view
+  const counts = () => view().counts
+  const active = () => view().active
 
   const alignment = useComposerLaneAlignment()
-
 
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
@@ -98,84 +121,16 @@ export function SessionActivityChips(props: {
     },
   })
 
-  // One clock for every row, ticking only while the panel is open.
+  // One clock for every row, ticking only while the panel is open and something still runs.
   const [now, setNow] = createSignal(Date.now())
+  const clockRunning = createMemo(() => view().clockRunning)
   createEffect(() => {
-    if (!open() || !active()) return
+    if (!clockRunning()) return
 
     setNow(Date.now())
     const timer = setInterval(() => setNow(Date.now()), 1000)
     onCleanup(() => clearInterval(timer))
   })
-
-  const rows = new Map<string, HTMLElement>()
-  let content: HTMLElement | undefined
-  let back: HTMLElement | undefined
-
-  // Focus moves a frame late: the menu refocuses itself when the selected row unmounts. One pending move at a time.
-  let frame = 0
-
-  const later = (move: () => void) => {
-    cancelAnimationFrame(frame)
-    frame = requestAnimationFrame(move)
-  }
-
-  onCleanup(() => cancelAnimationFrame(frame))
-
-  // Opening a shell moves focus to its back arrow.
-  createEffect(
-    on(
-      () => panel.state.shell?.key,
-      (key) => key && later(() => open() && back?.focus()),
-      { defer: true },
-    ),
-  )
-
-  // Going back returns focus to that shell's row, or to the first row once the shell has ended and left the list. With
-  // nothing left to list, going back closes the menu.
-  const goBack = () => {
-    const key = panel.state.shell?.key
-
-    if (props.subagents.length + props.shells.length === 0) return changeOpen(false)
-    panel.back()
-    later(() => {
-      if (!open()) return
-      const row = key ? rows.get(key) : undefined
-
-      if (row?.isConnected) return row.focus()
-      content?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
-    })
-  }
-
-  // Stop gives way to how the shell ended; keep focus in the panel when it held Stop.
-  createEffect(
-    on(
-      () => panel.state.end,
-      (end) => {
-        if (!end || !back) return
-        const active = document.activeElement
-
-        if (!active || active === document.body || !active.isConnected || active.matches('[role="menu"]')) back.focus()
-      },
-    ),
-  )
-
-  // The menu always opens on the list, and closing forgets the shell so nothing follows it while the menu is shut.
-  const changeOpen = (value: boolean) => {
-    const was = open()
-    setOpen(value)
-
-    if (value || !was) return
-    panel.back()
-    cancelAnimationFrame(frame)
-
-    if (props.subagents.length + props.shells.length > 0) return
-    later(() => {
-      const active = document.activeElement
-
-      if (!active || active === document.body || !active.isConnected) props.onEmpty()
-    })
-  }
 
   // The run time and the stop button share the row's end; hovering a stoppable row swaps one for the other.
   const end = (item: SessionActivityItem) => (
@@ -219,17 +174,10 @@ export function SessionActivityChips(props: {
 
   // Each session mounts its own composer, so a capsule that is already there on a switch stays at rest; only work
   // that starts while the session is open fades in.
-  const [enter, setEnter] = createSignal(!active())
-  createEffect(() => {
-    if (active()) return
-    setEnter(true)
-    changeOpen(false)
-  })
-
   return (
     <Show when={active()}>
       <div data-component="session-activity-chips" class="flex min-w-0 shrink items-center">
-        <Menu gutter={8} placement={composerLanePlacement(alignment())} open={open()} onOpenChange={changeOpen}>
+        <Menu gutter={8} placement={composerLanePlacement(alignment())} open={view().open} onOpenChange={panel.toggle}>
           <Menu.Trigger
             as="button"
             type="button"
@@ -237,7 +185,7 @@ export function SessionActivityChips(props: {
             aria-label={label()}
             data-composer-pill
             class="tabular-nums duration-150 ease-out motion-reduce:animate-none"
-            classList={{ "animate-in fade-in": enter() }}
+            classList={{ "animate-in fade-in": view().enter }}
           >
             <SessionProgressIndicatorV2 class="shrink-0" />
             <span data-slot="session-activity-summary" class="flex min-w-0 items-center gap-2 overflow-hidden">
@@ -251,12 +199,12 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
-              data-view={panel.state.shell ? "shell" : "list"}
+              data-view={view().shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
             >
               <Show
-                when={panel.state.shell}
+                when={view().shell}
                 fallback={
                   <MenuScroll>
                     <For each={props.subagents}>
@@ -301,7 +249,7 @@ export function SessionActivityChips(props: {
                         data-slot="session-activity-back"
                         aria-label={language.t("session.activity.shell.back")}
                         closeOnSelect={false}
-                        onSelect={goBack}
+                        onSelect={panel.back}
                         ref={(el: HTMLElement) => (back = el)}
                       >
                         <Icon name="arrow-left" size="small" />
@@ -314,19 +262,19 @@ export function SessionActivityChips(props: {
                         dir="auto"
                         class="text-[11px] tabular-nums whitespace-nowrap text-v2-text-text-muted"
                       >
-                        {formatElapsed((panel.state.end?.completed ?? now()) - shell().started, language.t)}
+                        {formatElapsed((view().end?.completed ?? now()) - shell().started, language.t)}
                       </span>
                       <Show
-                        when={panel.state.end}
+                        when={view().end}
                         fallback={
                           <Menu.Item
                             data-slot="session-activity-shell-stop"
                             closeOnSelect={false}
-                            aria-disabled={panel.state.stopping || panel.state.ending || undefined}
+                            aria-disabled={view().stopDisabled || undefined}
                             onSelect={panel.stop}
                           >
                             {language.t(
-                              panel.state.stopping ? "session.activity.shell.stopping" : "session.activity.shell.stop",
+                              view().stopping ? "session.activity.shell.stopping" : "session.activity.shell.stop",
                             )}
                           </Menu.Item>
                         }
@@ -347,7 +295,7 @@ export function SessionActivityChips(props: {
                     <ShellTail
                       id={shell().target}
                       directory={props.shell.directory}
-                      running={!panel.state.end}
+                      running={view().tailRunning}
                       load={props.shell.output}
                     />
                   </>
