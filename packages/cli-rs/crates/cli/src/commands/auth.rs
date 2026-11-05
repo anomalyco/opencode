@@ -19,6 +19,8 @@ use opencode_api::generated::{
     IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
     ModelDefaultInput, SessionMessageShellExit,
 };
+use opencode_api::js::{number_to_string, parse_number};
+use opencode_ui::form;
 use serde_json::{Value, json};
 
 use super::Context;
@@ -1066,10 +1068,6 @@ pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> any
     Ok(Some(answer))
 }
 
-mod form {
-    pub use opencode_tui::routes::session::form::{key, validate};
-}
-
 fn supplied_answer(field: &FormField, input: &str) -> anyhow::Result<FormValue> {
     match field {
         FormField::External(_) => {
@@ -1229,41 +1227,37 @@ fn text_answer(field: &FormField, message: String) -> anyhow::Result<Option<Form
         text = text.initial_value(initial);
     }
     let value = text.prompt()?;
-    if value.is_empty() && !is_required(field) {
+    if value.is_empty() && !form::required(field) {
         return Ok(None);
     }
     if matches!(field, FormField::String(_)) {
         return Ok(Some(FormValue::String(value)));
     }
-    Ok(Some(FormValue::Number(js_number(&value).unwrap_or(f64::NAN))))
+    Ok(Some(FormValue::Number(parse_number(&value).unwrap_or(f64::NAN))))
 }
 
 /// `validateText`, the checks of the text prompt (its messages differ from `formValidateValue`'s).
 fn validate_text(field: &FormField, value: &str) -> Option<String> {
     if value.is_empty() {
-        return is_required(field).then(|| "Required".to_owned());
+        return form::required(field).then(|| "Required".to_owned());
     }
     let bounds = match field {
-        FormField::Number(field) => Some((false, &field.minimum, &field.maximum)),
-        FormField::Integer(field) => Some((true, &field.minimum, &field.maximum)),
+        FormField::Number(field) => Some((false, form::number(&field.minimum), form::number(&field.maximum))),
+        FormField::Integer(field) => Some((true, form::number(&field.minimum), form::number(&field.maximum))),
         _ => None,
     };
     if let Some((integer, minimum, maximum)) = bounds {
-        let Some(number) = js_number(value).filter(|number| number.is_finite()) else {
+        let Some(number) = parse_number(value).filter(|number| number.is_finite()) else {
             return Some("Expected a number".to_owned());
         };
         if integer && number.fract() != 0.0 {
             return Some("Expected an integer".to_owned());
         }
-        if let Some(SessionMessageShellExit::Number(minimum)) = minimum
-            && number < *minimum
-        {
-            return Some(format!("Must be at least {}", shell_exit_text(&SessionMessageShellExit::Number(*minimum))));
+        if let Some(minimum) = minimum.filter(|minimum| number < *minimum) {
+            return Some(format!("Must be at least {}", number_to_string(minimum)));
         }
-        if let Some(SessionMessageShellExit::Number(maximum)) = maximum
-            && number > *maximum
-        {
-            return Some(format!("Must be at most {}", shell_exit_text(&SessionMessageShellExit::Number(*maximum))));
+        if let Some(maximum) = maximum.filter(|maximum| number > *maximum) {
+            return Some(format!("Must be at most {}", number_to_string(maximum)));
         }
         return None;
     }
@@ -1285,68 +1279,19 @@ fn validate_text(field: &FormField, value: &str) -> Option<String> {
     use opencode_api::generated::FormStringFieldFormat as Format;
     match &field.format {
         Some(Format::Uri) if url::Url::parse(value).is_err() => Some("Expected a URL".to_owned()),
-        Some(Format::Email) if !email(value) => Some("Expected an email address".to_owned()),
-        Some(Format::Date) if !date(value) => Some("Expected a date".to_owned()),
-        Some(Format::DateTime) if !date_time(value) => Some("Expected a date and time".to_owned()),
+        Some(Format::Email) if !form::email(value) => Some("Expected an email address".to_owned()),
+        Some(Format::Date) if !form::date(value) => Some("Expected a date".to_owned()),
+        Some(Format::DateTime) if !form::date_time(value) => Some("Expected a date and time".to_owned()),
         _ => None,
     }
-}
-
-fn email(text: &str) -> bool {
-    regex::Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").is_ok_and(|email| email.is_match(text))
-}
-
-fn date(text: &str) -> bool {
-    text.len() == 10
-        && text.as_bytes()[4] == b'-'
-        && text.as_bytes()[7] == b'-'
-        && chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
-}
-
-// What `Date.parse` accepts, for the ISO shapes forms use.
-fn date_time(text: &str) -> bool {
-    chrono::DateTime::parse_from_rfc3339(text).is_ok()
-        || ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"]
-            .iter()
-            .any(|format| chrono::NaiveDateTime::parse_from_str(text, format).is_ok())
-        || chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").is_ok()
-}
-
-/// `Number(text)` for decimal input: surrounding whitespace is ignored and an empty text is 0.
-fn js_number(text: &str) -> Option<f64> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Some(0.0);
-    }
-    if text.contains(|c: char| c.is_ascii_alphabetic() && !matches!(c, 'e' | 'E'))
-        && !matches!(text.trim_start_matches(['+', '-']), "Infinity")
-    {
-        return None;
-    }
-    text.parse().ok()
 }
 
 fn shell_exit_text(value: &SessionMessageShellExit) -> String {
     match value {
-        SessionMessageShellExit::Number(value) if value.fract() == 0.0 && value.abs() < 1e21 => {
-            format!("{value:.0}")
-        }
-        SessionMessageShellExit::Number(value) => value.to_string(),
+        SessionMessageShellExit::Number(value) => number_to_string(*value),
         SessionMessageShellExit::String(text) => text.clone(),
         SessionMessageShellExit::Unknown(value) => value.to_string(),
     }
-}
-
-fn is_required(field: &FormField) -> bool {
-    let required = match field {
-        FormField::String(field) => field.required,
-        FormField::Number(field) => field.required,
-        FormField::Integer(field) => field.required,
-        FormField::Boolean(field) => field.required,
-        FormField::Multiselect(field) => field.required,
-        _ => None,
-    };
-    required == Some(true)
 }
 
 fn hidden(field: &FormField) -> bool {
@@ -1380,15 +1325,7 @@ fn default(field: &FormField) -> Option<FormValue> {
 /// `active` in `auth/form.ts`: every `when` condition holds on the answers so far. An array answer matches
 /// when it includes the condition's value as a string.
 fn active(field: &FormField, answer: &FormAnswer) -> bool {
-    let when = match field {
-        FormField::String(field) => &field.when,
-        FormField::Number(field) => &field.when,
-        FormField::Integer(field) => &field.when,
-        FormField::Boolean(field) => &field.when,
-        FormField::Multiselect(field) => &field.when,
-        _ => return true,
-    };
-    when.iter().flatten().all(|condition| {
+    form::conditions(field).iter().all(|condition| {
         let Some(value) = answer.get(&condition.key) else {
             return false;
         };
@@ -1396,7 +1333,7 @@ fn active(field: &FormField, answer: &FormAnswer) -> bool {
             (FormValue::Array(items), want) => {
                 let want = match want {
                     FormWhenValue::String(text) => text.clone(),
-                    FormWhenValue::Number(number) => shell_exit_text(&SessionMessageShellExit::Number(*number)),
+                    FormWhenValue::Number(number) => number_to_string(*number),
                     FormWhenValue::Bool(value) => value.to_string(),
                     FormWhenValue::Unknown(value) => value.to_string(),
                 };

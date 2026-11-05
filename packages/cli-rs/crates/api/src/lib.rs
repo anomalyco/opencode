@@ -7,6 +7,7 @@ pub mod error;
 pub mod events;
 pub mod generated;
 pub mod id;
+pub mod js;
 pub mod memory;
 pub mod pty;
 pub mod query;
