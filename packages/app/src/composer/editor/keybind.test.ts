@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { handleComposerKeyDown, resolveComposerKeyAction } from "./keybind"
+import { INITIAL_COMPOSITION_STATE, isComposing, transitionComposition } from "./composition-machine"
 
 const keybinds = {
   alternate: (event: KeyboardEvent) => event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey,
@@ -8,7 +9,12 @@ const keybinds = {
 }
 
 function keyEvent(input: KeyboardEventInit & Pick<KeyboardEventInit, "key">) {
-  return new KeyboardEvent("keydown", input)
+  const event = new KeyboardEvent("keydown", { cancelable: true, ...input })
+
+  // Happy DOM does not initialize the legacy keyCode field from KeyboardEventInit.
+  if (input.keyCode !== undefined) Object.defineProperty(event, "keyCode", { value: input.keyCode })
+
+  return event
 }
 
 function handle(input: {
@@ -59,8 +65,8 @@ describe("composer keybind resolution", () => {
     ).toBeUndefined()
   })
 
-  test("keeps modified Enter newline bindings available during composition", () => {
-    expect(resolveComposerKeyAction(keyEvent({ key: "Enter", shiftKey: true }), keybinds, true)).toBe("newline")
+  test("leaves modified Enter to the IME during composition", () => {
+    expect(resolveComposerKeyAction(keyEvent({ key: "Enter", shiftKey: true }), keybinds, true)).toBeUndefined()
   })
 
   test("ignores non-Enter bindings during composition", () => {
@@ -78,6 +84,22 @@ describe("composer keybind resolution", () => {
 })
 
 describe("composer keybind integration", () => {
+  test("composition lifecycle suppresses submission until end and still guards Safari's confirming Enter", () => {
+    const started = transitionComposition(INITIAL_COMPOSITION_STATE, { type: "composition.start" })
+    expect(transitionComposition(started, { type: "composition.start" })).toBe(started)
+    expect(
+      handle({ event: keyEvent({ key: "s", metaKey: true }), keybinds, composing: isComposing(started) }).submissions,
+    ).toEqual([])
+    const ended = transitionComposition(started, { type: "composition.end" })
+    expect(transitionComposition(ended, { type: "composition.end" })).toBe(ended)
+    expect(
+      handle({ event: keyEvent({ key: "s", metaKey: true }), keybinds, composing: isComposing(ended) }).submissions,
+    ).toEqual([false])
+    expect(
+      handle({ event: keyEvent({ key: "Enter", keyCode: 229 }), composing: isComposing(ended) }).submissions,
+    ).toEqual([])
+  })
+
   test("custom alternate delivery observes composition and repeat suppression", () => {
     const bindings = { ...keybinds, alternate: (event: KeyboardEvent) => event.key === "q" && event.ctrlKey }
     expect(handle({ event: keyEvent({ key: "q", ctrlKey: true }), keybinds: bindings }).submissions).toEqual([true])
@@ -162,18 +184,24 @@ describe("composer keybind integration", () => {
     })
   })
 
-  test("composing Shift+Enter inserts a newline without selecting a suggestion", () => {
-    expect(
-      handle({
-        event: keyEvent({ key: "Enter", shiftKey: true, isComposing: true }),
-        keybinds,
-        suggestion: true,
-      }),
-    ).toEqual({
-      edits: 0,
-      newlines: 1,
-      selections: 0,
-      submissions: [],
-    })
-  })
+  test.each([{ isComposing: true }, { keyCode: 229 }, { composing: true }])(
+    "leaves modified Enter uncancelled while the IME owns it: %j",
+    (row) => {
+      const event = keyEvent({ key: "Enter", shiftKey: true, ...row })
+      expect(
+        handle({
+          event,
+          keybinds,
+          composing: "composing" in row && row.composing,
+          suggestion: true,
+        }),
+      ).toEqual({
+        edits: 0,
+        newlines: 0,
+        selections: 0,
+        submissions: [],
+      })
+      expect(event.defaultPrevented).toBe(false)
+    },
+  )
 })

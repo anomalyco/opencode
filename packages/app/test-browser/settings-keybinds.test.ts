@@ -97,6 +97,7 @@ describe("keybind settings controller", () => {
       undefined,
       promptKeybindOptions(titles, { submit: "enter" }),
     )
+
     expect(custom.controller.catalog.alternatives("prompt.submit")).not.toContain("Alt")
     custom.controller.capture.toggle("prompt.newline")
     document.dispatchEvent(

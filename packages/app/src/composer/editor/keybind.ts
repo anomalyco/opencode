@@ -5,14 +5,9 @@ export type ComposerKeybinds = {
 }
 
 export function resolveComposerKeyAction(event: KeyboardEvent, keybinds: ComposerKeybinds, composing: boolean) {
-  const bareEnter = event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-  const newline = keybinds.newline(event)
-
-  if (composing && (!newline || event.key !== "Enter" || bareEnter)) return
-
-  if (newline) return "newline" as const
-
   if (composing) return
+
+  if (keybinds.newline(event)) return "newline" as const
 
   if (keybinds.submit(event)) return "submit" as const
 
@@ -44,7 +39,7 @@ export function handleComposerKeyDown(input: {
     input.event.preventDefault()
     input.event.stopPropagation()
 
-    if (!ime && input.event.key === "Enter" && input.selectSuggestion()) return
+    if (input.event.key === "Enter" && input.selectSuggestion()) return
     input.insertNewline()
 
     return
