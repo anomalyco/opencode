@@ -134,7 +134,10 @@ export function transitionFileFind<M>(state: FileFindState<M>, event: FileFindEv
   if (state.status !== "open") return { state, effects: NO_EFFECTS }
 
   if (event.type === "close.requested")
-    return { state: { status: "closed", attempt: state.attempt + 1 }, effects: [CANCEL_FRAMES, CLEAR_MARKS, DEACTIVATE_HOST] }
+    return {
+      state: { status: "closed", attempt: state.attempt + 1 },
+      effects: [CANCEL_FRAMES, CLEAR_MARKS, DEACTIVATE_HOST],
+    }
 
   const query = state.query.trim()
 
@@ -266,7 +269,10 @@ export function transitionFindHostRegistry<H>(
   if (event.type === "host.registered") {
     if (state.hosts.has(host)) return { state, effects: NO_EFFECTS }
 
-    return { state: { ...state, hosts: new Set(state.hosts).add(host), preferred: state.preferred ?? host }, effects: NO_EFFECTS }
+    return {
+      state: { ...state, hosts: new Set(state.hosts).add(host), preferred: state.preferred ?? host },
+      effects: NO_EFFECTS,
+    }
   }
 
   if (event.type === "host.preferred") {
@@ -306,7 +312,11 @@ export function transitionFindHostRegistry<H>(
 }
 
 /** `g` only steps an open bar; `f` reopens the open bar, else opens the one focus is in, then the preferred one. */
-export function selectShortcutHost<H>(state: FindHostRegistryState<H>, key: "f" | "g", contextHost: () => H | undefined) {
+export function selectShortcutHost<H>(
+  state: FindHostRegistryState<H>,
+  key: "f" | "g",
+  contextHost: () => H | undefined,
+) {
   if (key === "g") return state.active
 
   return state.active ?? contextHost() ?? state.preferred ?? state.hosts.values().next().value

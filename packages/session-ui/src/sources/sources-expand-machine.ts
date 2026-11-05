@@ -26,7 +26,12 @@ export type SourcesExpandState =
   | { readonly status: "disposed" }
 
 export type SourcesExpandEvent =
-  | { readonly type: "toggle"; readonly expandable: boolean; readonly reduced: boolean; readonly curve: DurationOptions }
+  | {
+      readonly type: "toggle"
+      readonly expandable: boolean
+      readonly reduced: boolean
+      readonly curve: DurationOptions
+    }
   | { readonly type: "measured"; readonly attempt: number; readonly from: number; readonly to: number }
   // Mutable: the driver reuses one frame event for every frame.
   | { type: "frame"; attempt: number; dt: number }
@@ -54,7 +59,8 @@ export function transitionSourcesExpand(state: SourcesExpandState, event: Source
 
   if (event.type === "toggle") return toggle(state, event)
 
-  if (event.type === "collapse") return state.status === "closed" ? state : { status: "closed", attempt: state.attempt + 1 }
+  if (event.type === "collapse")
+    return state.status === "closed" ? state : { status: "closed", attempt: state.attempt + 1 }
 
   if (state.status !== "opening" && state.status !== "closing") return state
 
@@ -137,7 +143,15 @@ function flight(state: Moving, curve: DurationOptions) {
 }
 
 function height(status: "opening" | "closing", attempt: number, curve: DurationOptions): SourcesExpandState {
-  return { status, attempt, mode: "height", spring: Spring.fromDuration(0, curve), fromRest: true, measured: false, value: 0 }
+  return {
+    status,
+    attempt,
+    mode: "height",
+    spring: Spring.fromDuration(0, curve),
+    fromRest: true,
+    measured: false,
+    value: 0,
+  }
 }
 
 function fade(attempt: number): SourcesExpandState {

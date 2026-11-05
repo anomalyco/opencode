@@ -288,4 +288,3 @@ function remember(key: string, value: MarkdownCacheEntry) {
   if (first === undefined) return
   cache.delete(first)
 }
-

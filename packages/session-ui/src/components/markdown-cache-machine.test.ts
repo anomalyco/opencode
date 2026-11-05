@@ -59,9 +59,9 @@ describe("transitionMarkdownCache", () => {
       { type: "cache.touched", key: "k", src: "v1" },
     ]).state
 
-    expect(transitionMarkdownCache(state, { type: "parse.succeeded", jobId: 1, entry: entry("abandoned") }).effects).toEqual(
-      [{ type: "resolve-consumers", consumerIds: [1], entry: entry("abandoned") }],
-    )
+    expect(
+      transitionMarkdownCache(state, { type: "parse.succeeded", jobId: 1, entry: entry("abandoned") }).effects,
+    ).toEqual([{ type: "resolve-consumers", consumerIds: [1], entry: entry("abandoned") }])
   })
 
   test("an older parse of the same key settles its consumers while the newest one fills the cache", () => {
@@ -117,9 +117,9 @@ describe("transitionMarkdownCache", () => {
     expect(failed.effects).toEqual([
       { type: "reject-consumers", consumerIds: [1, 2], reason: { kind: "error", error } },
     ])
-    expect(transitionMarkdownCache(failed.state, { type: "render.requested", key: "k", raw: "v", src: "v" }).effects).toEqual(
-      [{ type: "start-parse", jobId: 2, raw: "v", src: "v" }],
-    )
+    expect(
+      transitionMarkdownCache(failed.state, { type: "render.requested", key: "k", raw: "v", src: "v" }).effects,
+    ).toEqual([{ type: "start-parse", jobId: 2, raw: "v", src: "v" }])
   })
 
   test("an entry without a hash resolves its consumers but is not cached", () => {

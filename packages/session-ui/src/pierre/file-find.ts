@@ -460,7 +460,8 @@ export function createFileFind(opts: CreateFileFindOptions) {
     return true
   }
 
-  const focus = () => dispatch({ type: "open.requested", preferredRenderer: supportsHighlights() ? "highlights" : "overlay" })
+  const focus = () =>
+    dispatch({ type: "open.requested", preferredRenderer: supportsHighlights() ? "highlights" : "overlay" })
 
   const close = () => dispatch({ type: "close.requested" })
 

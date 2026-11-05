@@ -101,7 +101,9 @@ describe("transitionSourcesExpand", () => {
 
   test("collapse, reduced motion and dispose end any flight", () => {
     const opening = moving(replay([toggle(), { type: "measured", attempt: 1, from: 0, to: 120 }]))
-    const closing = moving(replay([toggle(), { type: "measured", attempt: 1, from: 120, to: 0 }], { status: "open", attempt: 0 }))
+    const closing = moving(
+      replay([toggle(), { type: "measured", attempt: 1, from: 120, to: 0 }], { status: "open", attempt: 0 }),
+    )
 
     expect(transitionSourcesExpand(opening, COLLAPSE_SOURCES_EXPAND_EVENT)).toEqual({ status: "closed", attempt: 2 })
     expect(transitionSourcesExpand(opening, REDUCED_SOURCES_EXPAND_EVENT)).toEqual({ status: "open", attempt: 1 })

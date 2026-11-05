@@ -46,7 +46,9 @@ export type MarkdownCacheEvent =
   | { readonly type: "parse.succeeded"; readonly jobId: number; readonly entry: MarkdownCacheEntry }
   | { readonly type: "parse.failed"; readonly jobId: number; readonly error: unknown }
 
-export type MarkdownCacheRejectReason = { readonly kind: "disposed" } | { readonly kind: "error"; readonly error: unknown }
+export type MarkdownCacheRejectReason =
+  | { readonly kind: "disposed" }
+  | { readonly kind: "error"; readonly error: unknown }
 
 export type MarkdownCacheEffect =
   | { readonly type: "start-parse"; readonly jobId: number; readonly raw: string; readonly src: string }
@@ -195,7 +197,10 @@ function settle(
   )
 
   if (event.type === "parse.failed")
-    return { state: next, effects: [{ type: "reject-consumers", consumerIds, reason: { kind: "error", error: event.error } }] }
+    return {
+      state: next,
+      effects: [{ type: "reject-consumers", consumerIds, reason: { kind: "error", error: event.error } }],
+    }
 
   const resolve: MarkdownCacheEffect = { type: "resolve-consumers", consumerIds, entry: event.entry }
 

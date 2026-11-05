@@ -96,9 +96,7 @@ describe("transitionFileMedia", () => {
       expect(transitionFileMedia(state, { type: "read.timed-out", attempt: 1 }).state).toBe(state)
     }
 
-    expect(transitionFileMedia(disposed.state, { type: "request.changed", target: diagram }).state).toBe(
-      disposed.state,
-    )
+    expect(transitionFileMedia(disposed.state, { type: "request.changed", target: diagram }).state).toBe(disposed.state)
   })
 
   test("media already in the props wins over any read", () => {
