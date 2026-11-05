@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { createComposerAttachments } from "@/composer/attachments/attachments"
+import { createMemoryComposerState } from "@/composer/state"
 import type { ComposerPrompt } from "@/composer/types"
 
 function target() {
@@ -59,5 +60,49 @@ describe("Composer attachment ownership", () => {
         }, rejectTest)
       })
     })
+  })
+
+  test("keeps an upload pending for its draft across a remount, and stops it when the draft closes", async () => {
+    const draft = createRoot((dispose) => ({ state: createMemoryComposerState(), dispose }))
+    const prompt = target()
+    let signal: AbortSignal | undefined
+
+    const mount = () =>
+      createRoot((dispose) => ({
+        dispose,
+        attachments: createComposerAttachments({
+          capture: () => ({ ...prompt.capture, scope: unwrap(draft.state.store[0]()) }),
+          editor: () => document.createElement("div"),
+          focusEditor() {},
+          addPart: () => false,
+          setDraggingType() {},
+          directory: () => "C:/repo",
+          destination: () => ({
+            input: { image: false, pdf: false },
+            local: false,
+            upload: (_file, _report, abort) => {
+              signal = abort
+
+              return new Promise<string>(() => {})
+            },
+          }),
+          isDialogActive: () => false,
+          duplicate() {},
+          onError() {},
+          onUploadError() {},
+        }),
+      }))
+
+    const first = mount()
+    await first.attachments.addAttachments([new File([new Uint8Array([0, 1, 2])], "data.bin")])
+    first.dispose()
+
+    const second = mount()
+    expect(second.attachments.pending().map((upload) => upload.filename)).toEqual(["data.bin"])
+
+    draft.dispose()
+    expect(second.attachments.pending()).toEqual([])
+    expect(signal?.aborted).toBe(true)
+    second.dispose()
   })
 })

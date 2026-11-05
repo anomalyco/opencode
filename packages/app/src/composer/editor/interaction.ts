@@ -1,6 +1,6 @@
 import { Predicate } from "effect"
-import { createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
+import { createStore, reconcile, unwrap } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { abort } from "@opencode/util/abort"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
@@ -25,7 +25,18 @@ import {
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
 import type { ComposerDelivery, ComposerQueue } from "../adapter"
 import { isCommentItem } from "../state"
-import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import { createQuoteCommentController, type QuoteCommentController } from "../quote-comment-machine"
+import {
+  INITIAL_MENTION_SEARCH_STATE,
+  isMentionFileStale,
+  selectMentionFiles,
+  selectMentionSessionsPending,
+  transitionMentionSearch,
+  type MentionSearchEffect,
+  type MentionSearchEvent,
+} from "./mention-search-machine"
+
+const MENTION_CONTEXT_CLOSED: MentionSearchEvent = Object.freeze({ type: "context.closed" })
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -80,19 +91,15 @@ export function createComposerEditor(input: {
   searchContextFiles: (query: string, signal?: AbortSignal) => ComposerSuggestion[] | Promise<ComposerSuggestion[]>
   /** Reads reactively, so newly found sessions refresh the list without waiting on file search. */
   searchSessions?: (query: string) => ComposerSuggestion[]
-  /** Whether the session search for this query has yet to settle; reads reactively. */
-  sessionsPending?: (query: string) => boolean
+  /** Loads sessions matching `word` into what `searchSessions` reads; settles once they are in. */
+  requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<unknown>
   openAttachment?: (attachment: ComposerAttachment, origin?: HTMLElement) => void
   /** An object URL for the image file at this path, which a path attachment references without its bytes. */
   readImage?: (path: string) => Promise<string | undefined>
   openContext?: (key: string) => void
   onContextRemove?: (item: ComposerComment) => void
   onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
-  quoteComment?: {
-    key: Accessor<string | undefined>
-    anchor?: Accessor<ComposerQuoteAnchor | undefined>
-    set: (key?: string) => void
-  }
+  quoteComment?: QuoteCommentController
   onEditor?: (element: HTMLElement) => void
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
@@ -121,8 +128,7 @@ export function createComposerEditor(input: {
 
   onCleanup(cancelFocus)
   const draft = createComposerEditorActions(input.store)
-  const [localQuoteComment, setLocalQuoteComment] = createSignal<string>()
-  const quoteComment = input.quoteComment ?? { key: localQuoteComment, set: setLocalQuoteComment }
+  const quoteComment = input.quoteComment ?? createQuoteCommentController()
   const [state, setState] = input.state ?? createComposerEditorState(draft.state.mode)
   const [savedHistory, setSavedHistory] = createStore<{ entry?: ComposerHistoryEntry; cursor?: number }>({})
   const [cycle, setCycle] = createStore<{ index: number; entry?: ComposerHistoryEntry; cursor?: number }>({ index: -1 })
@@ -148,6 +154,7 @@ export function createComposerEditor(input: {
     ? createComposerAttachments({
         ...input.attachments,
         capture: () => ({
+          scope: unwrap(draft.state),
           current: () => draft.state.prompt,
           cursor: () => draft.state.cursor,
           set: (prompt, cursor) => draft.setPrompt(prompt, cursor),
@@ -175,47 +182,76 @@ export function createComposerEditor(input: {
     )
   }
 
-  const [found, setFound] = createStore<{ query?: string; files: ComposerSuggestion[] }>({ files: [] })
-  let fileQuery: string | undefined
-  let fileAbort = new AbortController()
-  onCleanup(() => abort(fileAbort))
+  // Debounced and abortable: each keystroke or close replaces the pending searches instead of queueing behind them.
+  const [mentionSearch, setMentionSearch] = createSignal(INITIAL_MENTION_SEARCH_STATE)
+  const mentionRuns = new Map<number, { timer: ReturnType<typeof setTimeout>; controller?: AbortController }>()
 
-  // Debounced and abortable: each keystroke or close replaces the pending file search instead of queueing behind it.
-  // The last results stay listed until the next ones arrive, so the menu keeps its rows and height while typing.
-  const findFiles = (query?: string) => {
-    if (query === fileQuery) return
-    abort(fileAbort)
-    const controller = new AbortController()
-    fileQuery = query
-    fileAbort = controller
+  const dispatchMentionSearch = (event: MentionSearchEvent) => {
+    const previous = untrack(mentionSearch)
+    const next = transitionMentionSearch(previous, event)
 
-    if (query === undefined || !query.trim() || /\s/.test(query)) {
-      if (found.files.length) setFound({ query: undefined, files: [] })
+    if (next.state !== previous) setMentionSearch(next.state)
+    next.effects.forEach(runMentionSearch)
+  }
+
+  const runMentionSearch = (effect: MentionSearchEffect) => {
+    const attempt = effect.attempt
+
+    if (effect.type === "file.debounce") {
+      mentionRuns.set(attempt, {
+        timer: setTimeout(() => dispatchMentionSearch({ type: "file.debounce.fired", attempt }), effect.delayMs),
+      })
 
       return
     }
 
-    const timer = setTimeout(
-      () =>
-        void Promise.resolve(input.searchContextFiles(query, controller.signal)).then(
-          (files) => !controller.signal.aborted && setFound({ query, files }),
-          () => undefined,
-        ),
-      150,
-    )
+    clearTimeout(mentionRuns.get(attempt)?.timer)
 
-    controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true })
+    if (effect.type === "file.abort" || effect.type === "session.abort") {
+      const controller = mentionRuns.get(attempt)?.controller
+      mentionRuns.delete(attempt)
+
+      if (controller) abort(controller)
+
+      return
+    }
+
+    const controller = new AbortController()
+
+    if (effect.type === "file.search") {
+      mentionRuns.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatchMentionSearch({ type: "file.timed-out", attempt }), effect.timeoutMs),
+      })
+      void Promise.try(() => input.searchContextFiles(effect.query, controller.signal)).then(
+        (items) => dispatchMentionSearch({ type: "file.resolved", attempt, items }),
+        () => dispatchMentionSearch({ type: "file.failed", attempt }),
+      )
+
+      return
+    }
+
+    mentionRuns.set(attempt, {
+      controller,
+      timer: setTimeout(() => dispatchMentionSearch({ type: "session.timed-out", attempt }), effect.timeoutMs),
+    })
+    // A failed search settles too: the titles already known still match locally.
+    const settled = () => dispatchMentionSearch({ type: "session.settled", attempt })
+    void Promise.try(() => input.requestSessionSearch?.(effect.word, controller.signal)).then(settled, settled)
   }
+
+  createEffect(() => {
+    if (state.popover.type !== "context") return untrack(() => dispatchMentionSearch(MENTION_CONTEXT_CLOSED))
+    const query = state.popover.query
+    untrack(() =>
+      dispatchMentionSearch({ type: "context.changed", query, hasSessions: !!input.requestSessionSearch }),
+    )
+  })
+  onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
-      if (state.popover.type !== "context") {
-        findFiles(undefined)
-
-        return []
-      }
-
-      findFiles(query)
+      if (state.popover.type !== "context") return []
 
       const sessions = input.searchSessions?.(query) ?? []
 
@@ -227,7 +263,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [...fixed, ...sessions, ...recent, ...found.files.filter((item) => !seen.has(item.id))]
+      return [...fixed, ...sessions, ...recent, ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
@@ -274,7 +310,10 @@ export function createComposerEditor(input: {
 
   // Files from the previous query stay listed while the next search runs, but the keyboard can't highlight or pick them.
   const stale = (item: ComposerSuggestion) =>
-    state.popover.type === "context" && item.kind === "file" && !item.recent && found.query !== state.popover.query
+    state.popover.type === "context" &&
+    item.kind === "file" &&
+    !item.recent &&
+    isMentionFileStale(mentionSearch(), state.popover.query)
 
   const selectable = () => suggestions().flatMap((item) => (stale(item) ? [] : [item.id]))
 
@@ -500,7 +539,7 @@ export function createComposerEditor(input: {
   createEffect(() => {
     if (state.popover.type !== "context" || !/\s/.test(state.popover.query)) return
 
-    if (input.sessionsPending?.(state.popover.query)) return
+    if (selectMentionSessionsPending(mentionSearch(), state.popover.query, !!input.requestSessionSearch)) return
 
     if (contextList.grouped.state === "ready" && contextList.flat().length === 0) dispatch({ type: "popover.close" })
   })
@@ -612,9 +651,7 @@ export function createComposerEditor(input: {
       dispatch({ type: "context.active", id })
       input.openContext?.(id)
     },
-    editingQuote: () => quoteComment.key(),
-    quoteAnchor: () => input.quoteComment?.anchor?.(),
-    editQuote: (key?: string) => quoteComment.set(key),
+    quoteComment,
     focusQuotePrompt: () => restoreFocus(),
     commentQuote(id: string, comment: string) {
       const item = draft.state.context.items.find((entry) => entry.key === id)
@@ -630,6 +667,7 @@ export function createComposerEditor(input: {
 
       if (item) input.onContextRemove?.(item)
       draft.removeContext(id)
+      quoteComment.retain(draft.state.context.items.map((entry) => entry.key))
 
       if (state.activeContextID === id) dispatch({ type: "context.active", id })
     },
