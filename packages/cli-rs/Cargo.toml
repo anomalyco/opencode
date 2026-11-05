@@ -42,6 +42,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 indexmap = { version = "2", features = ["serde"] }
 libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
+memchr = "2"
 notify = "8"
 percent-encoding = "2"
 rand = "0.10"
