@@ -10,13 +10,13 @@ import {
 const entry = (src: string) => ({ raw: src, src, hash: `hash-${src}`, html: `<p>${src}</p>` })
 
 function replay(events: MarkdownCacheEvent[], state = INITIAL_MARKDOWN_CACHE_STATE) {
-  return events.reduce(
+  return events.reduce<{ state: MarkdownCacheState; effects: MarkdownCacheEffect[] }>(
     (current, event) => {
       const next = transitionMarkdownCache(current.state, event)
 
       return { state: next.state, effects: [...current.effects, ...next.effects] }
     },
-    { state, effects: [] as MarkdownCacheEffect[] },
+    { state, effects: [] },
   )
 }
 
@@ -145,6 +145,6 @@ describe("transitionMarkdownCache", () => {
 
     expect(transitionMarkdownCache(running, { type: "cache.touched", key: "other", src: "v" }).state).toBe(running)
     expect(transitionMarkdownCache(running, { type: "cache.touched", key: "k", src: "v" }).state).toBe(running)
-    expect(transitionMarkdownCache(running, { type: "parse.failed", jobId: 9, error: undefined }).state).toBe(running)
+    expect(transitionMarkdownCache(running, { type: "parse.failed", jobId: 9, error: new Error("unknown job") }).state).toBe(running)
   })
 })

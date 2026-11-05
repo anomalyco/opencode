@@ -44,11 +44,11 @@ export type MarkdownCacheEvent =
   | { readonly type: "render.requested"; readonly key: string; readonly raw: string; readonly src: string }
   | { readonly type: "consumer.aborted"; readonly consumerId: number }
   | { readonly type: "parse.succeeded"; readonly jobId: number; readonly entry: MarkdownCacheEntry }
-  | { readonly type: "parse.failed"; readonly jobId: number; readonly error: unknown }
+  | { readonly type: "parse.failed"; readonly jobId: number; readonly error: Error }
 
 export type MarkdownCacheRejectReason =
   | { readonly kind: "disposed" }
-  | { readonly kind: "error"; readonly error: unknown }
+  | { readonly kind: "error"; readonly error: Error }
 
 export type MarkdownCacheEffect =
   | { readonly type: "start-parse"; readonly jobId: number; readonly raw: string; readonly src: string }

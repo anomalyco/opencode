@@ -26,7 +26,7 @@ const waiters = new Map<
   number,
   {
     resolve: (entry: MarkdownCacheEntry) => void
-    reject: (error: unknown) => void
+    reject: (error: Error) => void
     signal: AbortSignal | undefined
     cancel: () => void
   }
@@ -273,7 +273,7 @@ function parsed(
 
     return { type: "parse.succeeded", jobId, entry: { raw, src, hash: hash ?? "", html: sanitizeMarkdown(html) } }
   } catch (error) {
-    return { type: "parse.failed", jobId, error }
+    return { type: "parse.failed", jobId, error: error instanceof Error ? error : new Error(String(error)) }
   }
 }
 

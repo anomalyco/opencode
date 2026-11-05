@@ -16,13 +16,13 @@ import {
 const OPEN = { type: "open.requested", preferredRenderer: "highlights" } as const
 
 function replay(events: FileFindEvent<string>[], state: FileFindState<string> = INITIAL_FILE_FIND_STATE) {
-  return events.reduce(
+  return events.reduce<{ state: FileFindState<string>; effects: FileFindEffect<string>[] }>(
     (current, event) => {
       const next = transitionFileFind(current.state, event)
 
       return { state: next.state, effects: [...current.effects, ...next.effects] }
     },
-    { state, effects: [] as FileFindEffect<string>[] },
+    { state, effects: [] },
   )
 }
 
@@ -114,7 +114,7 @@ describe("transitionFileFind", () => {
   })
 
   test("a closed or disposed bar ignores everything but open and dispose", () => {
-    const closed = INITIAL_FILE_FIND_STATE as FileFindState<string>
+    const closed: FileFindState<string> = INITIAL_FILE_FIND_STATE
 
     for (const event of [
       { type: "query.changed", query: "a" },
@@ -134,21 +134,14 @@ describe("transitionFileFind", () => {
 
 describe("transitionFindHostRegistry", () => {
   function replayRegistry(events: FindHostRegistryEvent<string>[], state = createFindHostRegistryState<string>()) {
-    return events.reduce(
-      (current, event) => {
-        const next = transitionFindHostRegistry(current.state, event)
-
-        return { state: next.state, effects: [...current.effects, ...next.effects] }
-      },
-      { state, effects: [] as unknown[] },
-    )
+    return events.reduce((current, event) => transitionFindHostRegistry(current, event).state, state)
   }
 
   const registered = replayRegistry([
     { type: "host.registered", host: "a" },
     { type: "host.registered", host: "b" },
     { type: "host.activated", host: "a" },
-  ]).state
+  ])
 
   test("opening a second bar closes the first, and the first's late close leaves it alone", () => {
     const switched = transitionFindHostRegistry(registered, { type: "host.activated", host: "b" })
