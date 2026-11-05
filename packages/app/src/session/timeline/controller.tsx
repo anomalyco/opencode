@@ -447,6 +447,8 @@ export function createTimelineController(input: { session: TimelineSessionSource
       },
       toggleMenu: (open: boolean) => dispatchTitle({ type: "menu.toggled", open, editable: editable() }),
       edit: () => dispatchTitle({ type: "edit.opened", editable: editable(), title: titleLabel() }),
+      chooseRename: () => dispatchTitle({ type: "rename.chosen" }),
+      menuClosed: () => dispatchTitle({ type: "menu.closed", editable: editable(), title: titleLabel() }),
       change: (value: string) => dispatchTitle({ type: "draft.changed", value }),
       cancel: () => dispatchTitle({ type: "edit.cancelled" }),
       submit: () =>

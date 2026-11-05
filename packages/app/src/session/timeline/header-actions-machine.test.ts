@@ -24,25 +24,37 @@ const submit = { type: "edit.submitted", sessionID: "ses_a", editable: true, cur
 
 const target = { removedIDs: ["ses_a"], nextID: "ses_b" }
 
-test("Rename edits at once and ignores the menu closing after it", () => {
-  const state = titleReplay([
+test("Rename opens the editor once the closing menu hands focus back", () => {
+  const closing = titleReplay([
     { type: "menu.toggled", open: true, editable: true },
-    { type: "edit.opened", editable: true, title: "Old" },
+    { type: "rename.chosen" },
     { type: "menu.toggled", open: false, editable: true },
   ])
 
-  expect(selectSessionHeaderTitleView(state)).toMatchObject({ editing: true, draft: "Old", keepFocusOnMenuClose: true })
+  expect(selectSessionHeaderTitleView(closing)).toMatchObject({
+    editing: false,
+    menuOpen: false,
+    editOnMenuClose: true,
+  })
+
+  const next = transitionSessionHeaderTitle(closing, { type: "menu.closed", editable: true, title: "Old" })
+
+  expect(selectSessionHeaderTitleView(next.state)).toMatchObject({ editing: true, draft: "Old" })
+  expect(next.effects).toEqual([{ type: "focus.schedule", attempt: attempt(next.state) }])
 })
 
-test("closing the menu without Rename never opens the editor on a later close", () => {
+test("a Rename whose menu never handed focus back does not open the editor on a later, unrelated close", () => {
   const state = titleReplay([
     { type: "menu.toggled", open: true, editable: true },
+    { type: "rename.chosen" },
     { type: "menu.toggled", open: false, editable: true },
+    // The menu remounted without reporting its close; the user opens it again and presses Escape.
     { type: "menu.toggled", open: true, editable: true },
     { type: "menu.toggled", open: false, editable: true },
   ])
 
-  expect(selectSessionHeaderTitleView(state)).toMatchObject({ editing: false, menuOpen: false })
+  expect(selectSessionHeaderTitleView(state).editOnMenuClose).toBe(false)
+  expect(transitionSessionHeaderTitle(state, { type: "menu.closed", editable: true, title: "Old" }).state).toBe(state)
 })
 
 test("Enter and the blur after it save once", () => {

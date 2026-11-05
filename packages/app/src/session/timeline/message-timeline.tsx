@@ -602,10 +602,12 @@ function MessageTimelineView(
                         class="session-options-menu w-max"
                         style={{ "min-width": "0" }}
                         onCloseAutoFocus={(event) => {
-                          if (title().keepFocusOnMenuClose) event.preventDefault()
+                          if (!title().editOnMenuClose) return
+                          event.preventDefault()
+                          props.title.menuClosed()
                         }}
                       >
-                        <Menu.Item onSelect={props.title.edit}>{language.t("common.rename")}</Menu.Item>
+                        <Menu.Item onSelect={props.title.chooseRename}>{language.t("common.rename")}</Menu.Item>
                         <Menu.Item onSelect={() => void props.action.export(id)}>
                           {language.t("common.export")}…
                         </Menu.Item>

@@ -5,12 +5,14 @@ export const SESSION_RENAME_TIMEOUT_MS = 15_000
 export const SESSION_DELETE_TIMEOUT_MS = 15_000
 
 /**
- * The session header's title: shown, with its options menu open, edited inline, or saving the edit. Choosing Rename
- * in the menu edits at once, so a later, unrelated menu close cannot open the editor.
+ * The session header's title: shown, with its options menu open, edited inline, or saving the edit. `renaming`: Rename
+ * was chosen and the menu is closing; the editor opens once the menu hands focus back, so the menu cannot take focus
+ * from it. Opening the menu again drops that, so a later, unrelated menu close never opens the editor.
  */
 export type SessionHeaderTitleState =
   | { readonly status: "idle"; readonly sessionKey: string; readonly attempt: number }
   | { readonly status: "menu"; readonly sessionKey: string; readonly attempt: number }
+  | { readonly status: "renaming"; readonly sessionKey: string; readonly attempt: number }
   | { readonly status: "editing"; readonly sessionKey: string; readonly attempt: number; readonly draft: string }
   | {
       readonly status: "saving"
@@ -25,6 +27,9 @@ export type SessionHeaderTitleState =
 export type SessionHeaderTitleEvent =
   | { readonly type: "target.synced"; readonly sessionKey: string; readonly editable: boolean }
   | { readonly type: "menu.toggled"; readonly open: boolean; readonly editable: boolean }
+  | { readonly type: "rename.chosen" }
+  /** The closing menu hands focus back. */
+  | { readonly type: "menu.closed"; readonly editable: boolean; readonly title: string }
   | { readonly type: "edit.opened"; readonly editable: boolean; readonly title: string }
   | { readonly type: "draft.changed"; readonly value: string }
   | { readonly type: "edit.cancelled" }
@@ -133,23 +138,32 @@ export function transitionSessionHeaderTitle(
   }
 
   if (event.type === "menu.toggled") {
-    if (event.open && state.status === "idle" && event.editable)
+    // Opening the menu again drops a Rename whose menu never handed focus back.
+    if (event.open && (state.status === "idle" || state.status === "renaming") && event.editable)
       return { state: rest(state, "menu"), effects: NO_EFFECTS }
 
-    // Choosing Rename closes the menu after the editor opened; that close leaves the editor alone.
     if (!event.open && state.status === "menu") return { state: rest(state, "idle"), effects: NO_EFFECTS }
 
     return { state, effects: NO_EFFECTS }
   }
 
-  if (event.type === "edit.opened") {
-    if (!event.editable || (state.status !== "idle" && state.status !== "menu")) return { state, effects: NO_EFFECTS }
-    const attempt = state.attempt + 1
+  // The menu may report closing before or after the item it closed for.
+  if (event.type === "rename.chosen")
+    return state.status === "menu" || state.status === "idle"
+      ? { state: rest(state, "renaming"), effects: NO_EFFECTS }
+      : { state, effects: NO_EFFECTS }
 
-    return {
-      state: { status: "editing", sessionKey: state.sessionKey, attempt, draft: event.title },
-      effects: [{ type: "focus.schedule", attempt }],
-    }
+  if (event.type === "menu.closed") {
+    if (state.status !== "renaming") return { state, effects: NO_EFFECTS }
+
+    return event.editable ? edit(state, event.title) : { state: rest(state, "idle"), effects: NO_EFFECTS }
+  }
+
+  if (event.type === "edit.opened") {
+    if (!event.editable || (state.status !== "idle" && state.status !== "menu" && state.status !== "renaming"))
+      return { state, effects: NO_EFFECTS }
+
+    return edit(state, event.title)
   }
 
   if (event.type === "draft.changed")
@@ -212,8 +226,8 @@ export function selectSessionHeaderTitleView(state: SessionHeaderTitleState) {
     saving: state.status === "saving",
     draft: editing ? state.draft : "",
     menuOpen: state.status === "menu",
-    // The menu returns focus to its trigger as it closes, which would take it from the editor that Rename opened.
-    keepFocusOnMenuClose: editing,
+    // The closing menu would return focus to its trigger; after Rename, the editor takes it instead.
+    editOnMenuClose: state.status === "renaming",
   }
 }
 
@@ -277,8 +291,17 @@ export function selectSessionDeleteView(state: SessionDeleteState) {
   return { busy: state.status !== "confirming" }
 }
 
-function rest(state: Exclude<SessionHeaderTitleState, { status: "disposed" }>, status: "idle" | "menu") {
+function rest(state: Exclude<SessionHeaderTitleState, { status: "disposed" }>, status: "idle" | "menu" | "renaming") {
   return { status, sessionKey: state.sessionKey, attempt: state.attempt + 1 }
+}
+
+function edit(state: Exclude<SessionHeaderTitleState, { status: "disposed" }>, title: string) {
+  const attempt = state.attempt + 1
+
+  return {
+    state: { status: "editing", sessionKey: state.sessionKey, attempt, draft: title },
+    effects: [{ type: "focus.schedule", attempt }],
+  } satisfies SessionHeaderTitleTransition
 }
 
 function deleted(
