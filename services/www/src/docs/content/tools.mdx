@@ -253,11 +253,6 @@ The `opencode` Code Mode namespace contains session utilities:
 Rename this session to "Timeout cleanup", then move it to the new worktree.
 ```
 
-`session_move` uses the `external_directory` permission when the destination is
-outside the session's project and isn't one of the project's worktrees, with
-the destination as its resource. `session_rename` does not request a built-in
-permission action.
-
 ### Worktrees
 
 The same namespace manages worktrees for the session's project:
