@@ -2,14 +2,12 @@
 //! directory; on home, the next session's directory changes. Either way the directory joins the
 //! project's recents, which the `/cd` argument completion lists first.
 
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
+use std::rc::{Rc, Weak};
 
 use super::parse;
 use crate::app::Tui;
@@ -65,7 +63,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     let Some(session) = prompt.session.clone() else {
         let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
         tui.app.spawn(
-            async move { client.location_get(&input, &RequestOptions::default()).await },
+            async move { client.location_get(&input).await },
             bind!(weak, |prompt, _, result| {
                 let Some(tui) = prompt.tui.upgrade() else {
                     return;
@@ -87,7 +85,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     // TS sends the argument as typed; the server resolves it against the session.
     let request = SessionMoveInput { session_id: session, directory: AbsolutePath(input.to_owned()), delivery: None };
     tui.app.spawn(
-        async move { client.session_move(&request, &RequestOptions::default()).await },
+        async move { client.session_move(&request).await },
         bind!(weak, |prompt, _, result| {
             let Some(tui) = prompt.tui.upgrade() else {
                 return;

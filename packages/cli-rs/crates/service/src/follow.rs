@@ -150,7 +150,6 @@ mod tests {
     use super::*;
     use crate::probe::Endpoint;
     use crate::testing::{Reply, Server};
-    use opencode_api::client::RequestOptions;
     use opencode_api::generated::PtyID;
     use opencode_api::pty;
     use std::ffi::OsString;
@@ -195,8 +194,7 @@ mod tests {
         let connection = connect::resolve(server.clone(), &paths, &env, &options).await.unwrap();
         let client = client(server.clone(), &connection, &paths, &env).unwrap();
         register(&paths, 5000, "new");
-        let request = RequestOptions::default();
-        let info = || client.server_info(&request);
+        let info = || client.server_info();
         // The failed request finds the service again but is not retried.
         assert!(info().await.is_err());
         assert_eq!(info().await.unwrap().version, "2.0.0");
@@ -284,7 +282,7 @@ mod tests {
         let token = |password: &str| Some(Auth::password(password).token());
         assert_eq!(endpoint(), ("http://127.0.0.1:4096/".to_owned(), token("old")));
         register(&paths, 5000, "new");
-        assert!(client.server_info(&RequestOptions::default()).await.is_err());
+        assert!(client.server_info().await.is_err());
         assert_eq!(endpoint(), ("http://127.0.0.1:5000/".to_owned(), token("new")));
         // Another origin keeps its own address and credentials.
         let other = Auth::password("other");
@@ -305,7 +303,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::from_vars(|name| (name == "HOME").then(|| dir.path().into())).unwrap();
         let client = client(server.clone(), &connection, &paths, &Env::default()).unwrap();
-        assert!(client.server_info(&RequestOptions::default()).await.is_err());
+        assert!(client.server_info().await.is_err());
         // Only the request itself: no discovery ran.
         assert_eq!(server.requests().len(), 1);
     }

@@ -3,11 +3,6 @@
 //! the queued prompts dialog, the pending steer dialog, and an empty submit share (`requestPending`,
 //! `mutatePending`, and `undoPending`, `:760-787`).
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput,
     SessionInboxUser, SessionMessageID,
@@ -18,6 +13,9 @@ use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::rc::{Rc, Weak};
 
 use crate::app::Tui;
 use crate::prompt::editor::{Inner as PromptInner, Mode};
@@ -80,17 +78,16 @@ pub fn mutate(
     let key = inbox.to_owned();
     tui.app.spawn(
         async move {
-            let options = RequestOptions::default();
             let delivery = match action {
                 Action::Steer => SessionInboxDelivery::Steer,
                 Action::Queue => SessionInboxDelivery::Queue,
                 Action::Cancel => {
                     let input = SessionInboxCancelInput { session_id: session, inbox_id: id };
-                    return client.session_inbox_cancel(&input, &options).await;
+                    return client.session_inbox_cancel(&input).await;
                 }
             };
             let input = SessionInboxUpdateInput { session_id: session, inbox_id: id, delivery };
-            client.session_inbox_update(&input, &options).await
+            client.session_inbox_update(&input).await
         },
         move |_, result| {
             INFLIGHT.with_borrow_mut(|inflight| inflight.remove(&key));

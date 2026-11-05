@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::generated::{EventSubscribeInput, ExperimentalSessionWaitInput, SessionID, SessionInterruptInput};
 use opencode_api::transport::SseResponse;
 use opentui::app::ProxyError;
@@ -747,7 +747,7 @@ pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<
     let mut call = Call::new("GET", format!("/api/session/{}/message", encode(session)), 200, &[400, 401, 404, 500]);
     call.query("limit", &limit).map_err(|error| error.to_string())?;
     call.query("order", "desc").map_err(|error| error.to_string())?;
-    let list: Value = client.json(call, &RequestOptions::default()).await.map_err(|error| error.to_string())?;
+    let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
     let mut data = list["data"].as_array().cloned().unwrap_or_default();
     data.reverse();
     Ok(data)
@@ -756,10 +756,7 @@ pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<
 /// Whether the session is running (`session.active`).
 pub async fn active(client: &Client, session: &str) -> bool {
     let call = Call::new("GET", "/api/session/active".to_owned(), 200, &[400, 401]);
-    client
-        .json::<Value>(call, &RequestOptions::default())
-        .await
-        .is_ok_and(|active| active["data"].get(session).is_some())
+    client.json::<Value>(call).await.is_ok_and(|active| active["data"].get(session).is_some())
 }
 
 /// Lists the messages and whether the session runs, as a hydration does.
@@ -790,10 +787,7 @@ pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProx
 
 /// One connection. `Ok` means the app is gone.
 async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) -> Result<(), String> {
-    let response = client
-        .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
-        .await
-        .map_err(|error| error.to_string())?;
+    let response = client.event_subscribe(&EventSubscribeInput::default()).await.map_err(|error| error.to_string())?;
     let mut events = Box::pin(SseResponse::<Value>::new(response.response).events(|| {}));
     match events.next().await {
         Some(Ok(first)) if first["type"] == "server.connected" => {}
@@ -840,7 +834,7 @@ pub async fn post(proxy: &AppProxy, incoming: Incoming) -> bool {
 pub async fn default_model(client: &Client, directory: &str) -> Option<(String, String)> {
     let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
     call.query("location", &json!({ "directory": directory })).ok()?;
-    let value: Value = client.json(call, &RequestOptions::default()).await.ok()?;
+    let value: Value = client.json(call).await.ok()?;
     let data = &value["data"];
     Some((data["providerID"].as_str()?.to_owned(), data["id"].as_str()?.to_owned()))
 }
@@ -848,13 +842,13 @@ pub async fn default_model(client: &Client, directory: &str) -> Option<(String, 
 /// `experimental.session.wait`: returns once the session is idle.
 pub async fn wait(client: &Client, session: &str) -> Result<(), String> {
     let input = ExperimentalSessionWaitInput { session_id: SessionID(session.to_owned()) };
-    client.experimental_session_wait(&input, &RequestOptions::default()).await.map_err(|error| error.to_string())
+    client.experimental_session_wait(&input).await.map_err(|error| error.to_string())
 }
 
 /// `session.interrupt`, for mini's two-press gesture (`resume: true`) and run's shutdown.
 pub async fn interrupt(client: &Client, session: &str, resume: Option<bool>) -> Result<(), String> {
     let input = SessionInterruptInput { session_id: SessionID(session.to_owned()), resume };
-    client.session_interrupt(&input, &RequestOptions::default()).await.map(drop).map_err(|error| error.to_string())
+    client.session_interrupt(&input).await.map(drop).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

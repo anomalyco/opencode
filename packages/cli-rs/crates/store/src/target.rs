@@ -5,7 +5,7 @@
 use std::future::Future;
 
 use indexmap::IndexMap;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 /// Sessions per page while looking for the latest session of a directory.
@@ -117,16 +117,13 @@ where
     let session = match selected {
         Some(session) => session,
         None => client
-            .session_create(
-                &SessionCreateInput {
-                    id: input.session.clone().map(Some),
-                    agent: prepared.agent.clone().map(|agent| Some(AgentID(agent))),
-                    model: prepared.model.clone().map(Some),
-                    location: Some(Some(LocationPublicRef { directory: location.directory.clone() })),
-                    ..Default::default()
-                },
-                &RequestOptions::default(),
-            )
+            .session_create(&SessionCreateInput {
+                id: input.session.clone().map(Some),
+                agent: prepared.agent.clone().map(|agent| Some(AgentID(agent))),
+                model: prepared.model.clone().map(Some),
+                location: Some(Some(LocationPublicRef { directory: location.directory.clone() })),
+                ..Default::default()
+            })
             .await
             .map_err(TargetError::Mutation)?,
     };
@@ -165,15 +162,12 @@ async fn fork_if(client: &Client, session: SessionInfo, fork: bool) -> Result<Se
     if !fork {
         return Ok(session);
     }
-    client
-        .session_fork(&SessionForkInput { session_id: session.id, before: None }, &RequestOptions::default())
-        .await
-        .map_err(TargetError::Mutation)
+    client.session_fork(&SessionForkInput { session_id: session.id, before: None }).await.map_err(TargetError::Mutation)
 }
 
 /// A session, or `None` when the server does not know it (`findSession`).
 pub async fn find_session(client: &Client, id: &SessionID) -> Result<Option<SessionInfo>, opencode_api::error::Error> {
-    match client.session_get(&SessionGetInput { session_id: id.clone() }, &RequestOptions::default()).await {
+    match client.session_get(&SessionGetInput { session_id: id.clone() }).await {
         Ok(session) => Ok(Some(session)),
         Err(error)
             if error.declared().is_some_and(|declared| declared.tag.as_deref() == Some("SessionNotFoundError")) =>
@@ -193,18 +187,15 @@ async fn latest_session(
     let mut cursor = None;
     loop {
         let page = client
-            .session_list(
-                &SessionListInput {
-                    directory: Some(location.directory.clone()),
-                    parent_id: Some(None),
-                    archived: Some(false),
-                    limit: Some(SESSION_PAGE_LIMIT),
-                    order: Some(SessionListInputOrder::Desc),
-                    cursor: cursor.take(),
-                    ..Default::default()
-                },
-                &RequestOptions::default(),
-            )
+            .session_list(&SessionListInput {
+                directory: Some(location.directory.clone()),
+                parent_id: Some(None),
+                archived: Some(false),
+                limit: Some(SESSION_PAGE_LIMIT),
+                order: Some(SessionListInputOrder::Desc),
+                cursor: cursor.take(),
+                ..Default::default()
+            })
             .await?;
         let empty = page.data.is_empty();
         if let Some(session) = page.data.into_iter().find(|session| session.location.directory == location.directory) {
@@ -225,12 +216,9 @@ async fn resolve_location(
     directory: Option<String>,
 ) -> Result<LocationPublicInfo, opencode_api::error::Error> {
     client
-        .location_get(
-            &LocationGetInput {
-                location: directory.map(|directory| LocationQueryInput { directory: Some(directory) }),
-            },
-            &RequestOptions::default(),
-        )
+        .location_get(&LocationGetInput {
+            location: directory.map(|directory| LocationQueryInput { directory: Some(directory) }),
+        })
         .await
 }
 
@@ -250,15 +238,12 @@ pub async fn create_worktree_location(
 ) -> Result<WorktreeLocation, TargetError> {
     let base = resolve_location(client, directory).await.map_err(TargetError::Request)?;
     let created = client
-        .worktree_create(
-            &WorktreeCreateInput {
-                project_id: base.project.id.clone(),
-                from: Some(base.project.directory.clone()),
-                name,
-                ..Default::default()
-            },
-            &RequestOptions::default(),
-        )
+        .worktree_create(&WorktreeCreateInput {
+            project_id: base.project.id.clone(),
+            from: Some(base.project.directory.clone()),
+            name,
+            ..Default::default()
+        })
         .await
         .map_err(TargetError::Mutation)?;
     let root = created.directory.0;

@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use futures_util::future::BoxFuture;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     AbsolutePath, LocationPublicRef, SessionCreateInput, SessionForkInput, SessionGetInput, SessionID, SessionInfo,
     SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionsCursor,
@@ -107,15 +107,12 @@ impl Service {
         let (permissions, metadata) = directories::grant(&directories);
         let created = check(
             self.client
-                .session_create(
-                    &SessionCreateInput {
-                        location: Some(Some(LocationPublicRef { directory: AbsolutePath(setup.cwd.clone()) })),
-                        permissions: permissions.map(Some),
-                        metadata: metadata.map(Some),
-                        ..SessionCreateInput::default()
-                    },
-                    &RequestOptions::default(),
-                )
+                .session_create(&SessionCreateInput {
+                    location: Some(Some(LocationPublicRef { directory: AbsolutePath(setup.cwd.clone()) })),
+                    permissions: permissions.map(Some),
+                    metadata: metadata.map(Some),
+                    ..SessionCreateInput::default()
+                })
                 .await,
         )?;
         let (attached, options) = self.sessions.attach(&created, &setup.cwd, &mcp_servers, responded).await?;
@@ -148,16 +145,13 @@ impl Service {
         let directory = cwd.map(|cwd| directories::parse_cwd(&cwd).map(AbsolutePath)).transpose()?;
         let page = check(
             self.client
-                .session_list(
-                    &SessionListInput {
-                        directory,
-                        order: Some(SessionListInputOrder::Desc),
-                        limit: Some(100),
-                        cursor: cursor.filter(|cursor| !cursor.is_empty()).map(SessionsCursor),
-                        ..SessionListInput::default()
-                    },
-                    &RequestOptions::default(),
-                )
+                .session_list(&SessionListInput {
+                    directory,
+                    order: Some(SessionListInputOrder::Desc),
+                    limit: Some(100),
+                    cursor: cursor.filter(|cursor| !cursor.is_empty()).map(SessionsCursor),
+                    ..SessionListInput::default()
+                })
                 .await,
         )?;
         let sessions: Vec<Value> = page
@@ -189,10 +183,7 @@ impl Service {
     pub async fn delete_session(&self, session_id: &str) -> Result<Value, Failure> {
         self.turns.cancel(session_id).await;
         if let Ok(id) = decode_session_id(session_id) {
-            let result = self
-                .client
-                .session_remove(&SessionRemoveInput { session_id: SessionID(id) }, &RequestOptions::default())
-                .await;
+            let result = self.client.session_remove(&SessionRemoveInput { session_id: SessionID(id) }).await;
             match result {
                 Err(error) if is_declared(&error, "SessionNotFoundError") => {}
                 result => check(result)?,
@@ -222,14 +213,8 @@ impl Service {
         let directories = directories::parse(&setup.cwd, &setup.additional_directories)?;
         let mcp_servers = supported_mcp_servers(&setup.mcp_servers)?;
         let session = self.get_session(&setup.session_id, &setup.cwd).await?;
-        let forked = check(
-            self.client
-                .session_fork(
-                    &SessionForkInput { session_id: session.id.clone(), before: None },
-                    &RequestOptions::default(),
-                )
-                .await,
-        )?;
+        let forked =
+            check(self.client.session_fork(&SessionForkInput { session_id: session.id.clone(), before: None }).await)?;
         // Forks inherit the source's grants; replace them with this request's.
         directories::activate(&self.client, &forked, &directories).await?;
         let (attached, options) =
@@ -292,9 +277,7 @@ impl Service {
 
     async fn get_session(&self, session_id: &str, cwd: &str) -> Result<SessionInfo, Failure> {
         let id = decode_session_id(session_id)?;
-        let session = check(
-            self.client.session_get(&SessionGetInput { session_id: SessionID(id) }, &RequestOptions::default()).await,
-        )?;
+        let session = check(self.client.session_get(&SessionGetInput { session_id: SessionID(id) }).await)?;
         if fs_resolve(cwd) != fs_resolve(&session.location.directory.0) {
             return Err(Failure::SessionDirectoryMismatch { session_id: session_id.to_owned(), cwd: cwd.to_owned() });
         }

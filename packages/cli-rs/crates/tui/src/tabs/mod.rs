@@ -702,7 +702,7 @@ fn acknowledge(tui: &Tui) {
     tabs.acknowledged.borrow_mut().insert(session.clone(), idle);
     let client = tui.data.client().clone();
     tui.app.spawn(
-        async move { client.session_view(&SessionViewInput { session_id: id, idle }, &Default::default()).await },
+        async move { client.session_view(&SessionViewInput { session_id: id, idle }).await },
         bind!(tui, |tui, cx, result| {
             let tabs = &tui.tabs;
             if result.is_ok() {

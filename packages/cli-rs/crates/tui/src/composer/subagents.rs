@@ -1,10 +1,6 @@
 //! The Subagents tab (`routes/session/composer/subagents-tab.tsx`): the session's family under its root, running or
 //! not as the filter says, with the current session marked.
 
-use std::rc::Rc;
-use std::sync::LazyLock;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionID, SessionInfo, SessionInterruptInput};
 use opencode_store::SessionStatus;
 use opencode_ui::bind;
@@ -12,6 +8,8 @@ use opencode_ui::keymap::{Bind, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
 use regex::Regex;
+use std::rc::Rc;
+use std::sync::LazyLock;
 
 use super::{Inner, Label, RowState, Tab, clamp_offset, empty, row, window};
 use crate::app::Tui;
@@ -169,7 +167,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             let client = tui.data.client().clone();
             tui.app.runtime().spawn(async move {
                 let input = SessionInterruptInput { session_id: session, resume: None };
-                if let Err(error) = client.session_interrupt(&input, &RequestOptions::default()).await {
+                if let Err(error) = client.session_interrupt(&input).await {
                     log::warn!("failed to interrupt the subagent: {error}");
                 }
             });

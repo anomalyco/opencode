@@ -3,7 +3,7 @@
 
 mod unified;
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{PermissionID, PermissionReply, PermissionReplyInput, SessionID};
 use serde_json::{Value, json};
 
@@ -115,19 +115,16 @@ pub async fn ask(input: &Input) -> Result<String, Failure> {
 pub async fn respond(input: &Input, decision: &str) -> Result<(), Failure> {
     let result = input
         .client
-        .permission_reply(
-            &PermissionReplyInput {
-                session_id: SessionID(input.session_id.clone()),
-                request_id: PermissionID(input.data("id").and_then(Value::as_str).unwrap_or_default().to_owned()),
-                decision: match decision {
-                    "once" => PermissionReply::Once,
-                    "always" => PermissionReply::Always,
-                    _ => PermissionReply::Reject,
-                },
-                message: None,
+        .permission_reply(&PermissionReplyInput {
+            session_id: SessionID(input.session_id.clone()),
+            request_id: PermissionID(input.data("id").and_then(Value::as_str).unwrap_or_default().to_owned()),
+            decision: match decision {
+                "once" => PermissionReply::Once,
+                "always" => PermissionReply::Always,
+                _ => PermissionReply::Reject,
             },
-            &RequestOptions::default(),
-        )
+            message: None,
+        })
         .await;
     match result {
         Err(error) if is_declared(&error, "PermissionNotFoundError") => Ok(()),

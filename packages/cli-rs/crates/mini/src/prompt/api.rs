@@ -2,7 +2,7 @@
 //! session's prompt history (`resolveCurrentSession`), and the turns it sends (`admitPrompt`, `runShellTurn`,
 //! `session.compact`, `session.inbox.update` in `stream-v2.transport.ts` and `runtime.ts`).
 
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::generated::{
     SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxUpdateInput, SessionMessageID,
     SessionShellInput,
@@ -20,7 +20,7 @@ fn error(error: opencode_api::error::Error) -> String {
 async fn list(client: &Client, path: &str, directory: &str) -> Result<Vec<Value>, String> {
     let mut call = Call::new("GET", path.to_owned(), 200, &[400, 401, 404]);
     call.query("location", &json!({ "directory": directory })).map_err(error)?;
-    let value: Value = client.json(call, &RequestOptions::default()).await.map_err(error)?;
+    let value: Value = client.json(call).await.map_err(error)?;
     Ok(value["data"].as_array().cloned().unwrap_or_default())
 }
 
@@ -87,7 +87,7 @@ pub async fn find_files(client: &Client, directory: &str, query: &str) -> Vec<St
         return Vec::new();
     }
     client
-        .json::<Value>(call, &RequestOptions::default())
+        .json::<Value>(call)
         .await
         .map(|value| {
             value["data"]
@@ -138,9 +138,9 @@ pub async fn admit(client: &Client, session: &str, prompt: &RunPrompt, delivery:
         Call::new("POST", format!("/api/session/{}/{path}", encode(session)), status, &[400, 401, 404, 409, 500]);
     call.json(&Value::Object(body)).map_err(error)?;
     if status == 204 {
-        return client.empty(call, &RequestOptions::default()).await.map_err(error);
+        return client.empty(call).await.map_err(error);
     }
-    client.json::<Value>(call, &RequestOptions::default()).await.map(drop).map_err(error)
+    client.json::<Value>(call).await.map(drop).map_err(error)
 }
 
 /// `runShellTurn`: `session.shell`, which answers once the command ran.
@@ -150,14 +150,14 @@ pub async fn shell(client: &Client, session: &str, id: &str, command: &str) -> R
         id: Some(SessionMessageID(id.to_owned())),
         command: command.to_owned(),
     };
-    client.session_shell(&input, &RequestOptions::default()).await.map_err(error)
+    client.session_shell(&input).await.map_err(error)
 }
 
 /// `session.compact`.
 pub async fn compact(client: &Client, session: &str) -> Result<(), String> {
     let mut call = Call::new("POST", format!("/api/session/{}/compact", encode(session)), 200, &[400, 401, 404, 409]);
     call.json(&json!({})).map_err(error)?;
-    client.json::<Value>(call, &RequestOptions::default()).await.map(drop).map_err(error)
+    client.json::<Value>(call).await.map(drop).map_err(error)
 }
 
 /// `onQueuedPromptAction`: `session.inbox.cancel` for `None`, else `session.inbox.update` to move a pending
@@ -169,21 +169,14 @@ pub async fn queued_action(
     delivery: Option<Delivery>,
 ) -> Result<(), String> {
     let (session_id, inbox_id) = (SessionID(session.to_owned()), SessionMessageID(inbox.to_owned()));
-    let options = RequestOptions::default();
     match delivery {
-        None => client
-            .session_inbox_cancel(&SessionInboxCancelInput { session_id, inbox_id }, &options)
-            .await
-            .map_err(error),
+        None => client.session_inbox_cancel(&SessionInboxCancelInput { session_id, inbox_id }).await.map_err(error),
         Some(delivery) => client
-            .session_inbox_update(
-                &SessionInboxUpdateInput {
-                    session_id,
-                    inbox_id,
-                    delivery: SessionInboxDelivery::from(delivery.as_str()),
-                },
-                &options,
-            )
+            .session_inbox_update(&SessionInboxUpdateInput {
+                session_id,
+                inbox_id,
+                delivery: SessionInboxDelivery::from(delivery.as_str()),
+            })
             .await
             .map_err(error),
     }
@@ -198,7 +191,7 @@ pub async fn select(client: &Client, session: &str, agent: Option<&str>, model: 
         let Some(body) = body else { continue };
         let mut call = Call::new("POST", format!("/api/session/{}/{path}", encode(session)), 204, &[400, 401, 404]);
         call.json(&body).map_err(error)?;
-        client.empty(call, &RequestOptions::default()).await.map_err(error)?;
+        client.empty(call).await.map_err(error)?;
     }
     Ok(())
 }

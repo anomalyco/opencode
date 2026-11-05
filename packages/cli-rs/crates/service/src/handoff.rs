@@ -5,14 +5,12 @@
 //! them through `OPENCODE_PTY_HANDOFF`. Every step is best effort: a failure stops the service
 //! without a handoff.
 
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::transport::Transport;
 use opencode_local::registration::Registration;
 use serde_json::{Value, json};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::probe::Endpoint;
 
@@ -34,8 +32,7 @@ pub async fn prepare(transport: Arc<dyn Transport>, file: &Path, info: &Registra
     let Ok(client) = Endpoint::new(&info.url, info.password.clone()).client(transport) else {
         return;
     };
-    let options = RequestOptions::default();
-    let handoff = match tokio::time::timeout(timeout, client.experimental_persistent_pty_handoff(&options)).await {
+    let handoff = match tokio::time::timeout(timeout, client.experimental_persistent_pty_handoff()).await {
         Ok(Ok(output)) => match output.handoff {
             None => Ok(Value::Null),
             Some(handoff) if handoff.expires_at > now_ms() => Ok(json!({
@@ -59,7 +56,7 @@ pub async fn prepare(transport: Arc<dyn Transport>, file: &Path, info: &Registra
             eprintln!(
                 "Background service cannot hand off persistent terminals; shutting them down before replacement: {cause}"
             );
-            let _ = tokio::time::timeout(timeout, client.experimental_persistent_pty_shutdown(&options)).await;
+            let _ = tokio::time::timeout(timeout, client.experimental_persistent_pty_shutdown()).await;
             Value::Null
         }
     };

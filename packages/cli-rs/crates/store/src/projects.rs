@@ -1,7 +1,5 @@
 //! Projects and their saved permissions (F.8), and the adoption of sessions into a project when
 //! its repository is resolved (`worktree.resolved`).
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
@@ -125,11 +123,7 @@ impl Data {
     /// Reads every project once per invalidation; the read replaces the cached set.
     pub fn project_sync(&self) -> Task<()> {
         self.sync_run("project".to_owned(), |data| async move {
-            let projects = data
-                .client()
-                .project_list(&ProjectListInput::default(), &RequestOptions::default())
-                .await
-                .map_err(Error::new)?;
+            let projects = data.client().project_list(&ProjectListInput::default()).await.map_err(Error::new)?;
             data.write(|state| {
                 state.projects = projects.into_iter().map(|project| (project.id.clone(), project)).collect();
                 state.log.projects();
@@ -148,10 +142,7 @@ impl Data {
         self.sync_run(format!("project.permission:{}", id.0), move |data| async move {
             let saved = data
                 .client()
-                .permission_saved_list(
-                    &PermissionSavedListInput { project_id: Some(id.clone()) },
-                    &RequestOptions::default(),
-                )
+                .permission_saved_list(&PermissionSavedListInput { project_id: Some(id.clone()) })
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {

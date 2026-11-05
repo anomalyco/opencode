@@ -1,7 +1,6 @@
 //! Pending forms (F.8), keyed by owner: a session ID, or [`GLOBAL`] for MCP elicitations that
 //! have no session yet.
-
-use opencode_api::client::RequestOptions;
+use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::location::Location;
@@ -100,7 +99,7 @@ impl Data {
                 if owner == GLOBAL {
                     let response = data
                         .client()
-                        .form_list(&FormListInput { location: location.query() }, &RequestOptions::default())
+                        .form_list(&FormListInput { location: location.query() })
                         .await
                         .map_err(Error::new)?;
                     let at = Location::from(&response.location);
@@ -120,7 +119,7 @@ impl Data {
                 }
                 let list = data
                     .client()
-                    .session_form_list(&SessionFormListInput { session_id: owner.clone() }, &RequestOptions::default())
+                    .session_form_list(&SessionFormListInput { session_id: owner.clone() })
                     .await
                     .map_err(|error| evict_missing(&data, error))?;
                 data.write(|state| {
@@ -146,13 +145,13 @@ impl Data {
     /// Answers a form and drops it. A form that is already settled counts as answered. A global
     /// form needs its location, which the request names in a header.
     pub async fn form_reply(&self, input: SessionFormReplyInput, location: Option<&Location>) -> Result<(), Error> {
-        let result = self.client().session_form_reply(&input, &request_options(&input.session_id, location)).await;
+        let result = form_client(self.client(), &input.session_id, location).session_form_reply(&input).await;
         self.settle_form(&input.session_id, &input.form_id, location, result)
     }
 
     /// Cancels a form and drops it; see [`Data::form_reply`].
     pub async fn form_cancel(&self, input: SessionFormCancelInput, location: Option<&Location>) -> Result<(), Error> {
-        let result = self.client().session_form_cancel(&input, &request_options(&input.session_id, location)).await;
+        let result = form_client(self.client(), &input.session_id, location).session_form_cancel(&input).await;
         self.settle_form(&input.session_id, &input.form_id, location, result)
     }
 
@@ -183,12 +182,10 @@ impl Data {
 }
 
 /// Global forms name their location in a header (`formRequestOptions`).
-fn request_options(owner: &str, location: Option<&Location>) -> RequestOptions {
+fn form_client(client: &Client, owner: &str, location: Option<&Location>) -> Client {
     match (owner, location) {
-        (GLOBAL, Some(location)) => {
-            RequestOptions::default().header("x-opencode-directory", encode_component(&location.directory))
-        }
-        _ => RequestOptions::default(),
+        (GLOBAL, Some(location)) => client.with_header("x-opencode-directory", encode_component(&location.directory)),
+        _ => client.clone(),
     }
 }
 
