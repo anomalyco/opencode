@@ -2,7 +2,12 @@ import { describe, expect } from "bun:test"
 import type { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Effect } from "effect"
 import { PolicyEvaluator } from "@opencode/client-core/policy-evaluator"
+import { mkdirSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { it } from "../../core/test/lib/effect"
+import { withEnv } from "../../core/test/fixture/env"
+import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { toolPolicyCases } from "../../core/test/fixture/policy-cases"
 import { compatibilityCases, malformedCases } from "../../core/test/fixture/shell-parse-cases"
 
@@ -194,4 +199,136 @@ describe("PolicyEvaluator.check", () => {
       }),
     )
   })
+
+  describe("parity with OpenCode's file access", () => {
+    it.effect("expands ~ to the home directory", () =>
+      withEnv({ OPENCODE_TEST_HOME: "/home/ada" }, () =>
+        Effect.gen(function* () {
+          const workspace = acme(deny("tool.use", "external_directory:/home/ada/.ssh/*"))
+          expect(
+            yield* PolicyEvaluator.check(workspace, {
+              action: "read",
+              resources: ["~/.ssh/id_rsa"],
+              directory: "/repo",
+            }),
+          ).toEqual(blocked)
+          // ShellParse expands a command's ~ itself, from the OS home directory, as it does in OpenCode.
+          expect(
+            yield* PolicyEvaluator.check(acme(deny("tool.use", `external_directory:${os.homedir()}/.ssh/*`)), {
+              action: "shell",
+              resources: ["cd ~/.ssh && ls"],
+              directory: "/repo",
+            }),
+          ).toEqual(blocked)
+        }),
+      ),
+    )
+
+    it.effect("keeps a file whose name starts with two dots inside the project", () =>
+      Effect.gen(function* () {
+        expect(
+          yield* PolicyEvaluator.check(acme(deny("tool.use", "edit:..env")), {
+            action: "edit",
+            resources: ["/repo/..env"],
+            directory: "/repo",
+          }),
+        ).toEqual(blocked)
+      }),
+    )
+
+    it.effect("checks a directory read outside the project as that directory", () =>
+      Effect.gen(function* () {
+        const outside = (yield* tmpdirScoped("opencode-connect-outside-")).path
+        const read = (...policies: ConfigPolicy.Info[]) =>
+          PolicyEvaluator.check(acme(...policies), { action: "read", resources: [outside], directory: "/repo" })
+        expect(yield* read(deny("tool.use", `external_directory:${outside}/*`))).toEqual(blocked)
+        expect(
+          yield* read(deny("tool.use", "external_directory:*"), allow("tool.use", `external_directory:${outside}/*`)),
+        ).toEqual({ effect: "allow" })
+      }),
+    )
+
+    it.effect("treats the whole repository as inside the project when run from a subdirectory", () =>
+      Effect.gen(function* () {
+        const repo = (yield* tmpdirScoped("opencode-connect-repo-")).path
+        mkdirSync(path.join(repo, ".git"))
+        mkdirSync(path.join(repo, "packages", "web"), { recursive: true })
+        const directory = path.join(repo, "packages", "web")
+        const check = (policy: ConfigPolicy.Info, action: string, resource: string) =>
+          PolicyEvaluator.check(acme(policy), { action, resources: [resource], directory })
+        expect(yield* check(deny("tool.use", "external_directory:*"), "read", "../../README.md")).toEqual({
+          effect: "allow",
+        })
+        expect(yield* check(deny("tool.use", "external_directory:*"), "shell", "cd .. && ls")).toEqual({
+          effect: "allow",
+        })
+        expect(yield* check(deny("tool.use", "read:../../README.md"), "read", path.join(repo, "README.md"))).toEqual(
+          blocked,
+        )
+      }),
+    )
+
+    it.effect("checks where a command runs and where a search looks", () =>
+      Effect.gen(function* () {
+        const outside = (yield* tmpdirScoped("opencode-connect-outside-")).path
+        const workspace = acme(deny("tool.use", `external_directory:${outside}/*`))
+        const check = (action: string, resources: string[], at: string) =>
+          PolicyEvaluator.check(workspace, { action, resources, directory: "/repo", path: at })
+        expect(yield* check("shell", ["ls"], outside)).toEqual(blocked)
+        expect(yield* check("glob", ["*.ts"], outside)).toEqual(blocked)
+        expect(yield* check("grep", ["secret"], outside)).toEqual(blocked)
+        expect(yield* check("glob", ["*.ts"], "/repo/src")).toEqual({ effect: "allow" })
+      }),
+    )
+  })
+
+  it.effect("refuses a raw tool.use check, whose input it can't parse", () =>
+    Effect.gen(function* () {
+      expect(
+        (yield* PolicyEvaluator.check(acme(deny("tool.use", "shell:rm *")), {
+          action: "tool.use",
+          resources: ["shell:echo ok && rm -rf /"],
+        })).effect,
+      ).toBe("deny")
+    }),
+  )
+
+  it.effect("checks a skill against both skill.use and the skill tool", () =>
+    Effect.gen(function* () {
+      const check = (policy: ConfigPolicy.Info) =>
+        PolicyEvaluator.check(acme(policy), { action: "skill", resources: ["deploy"] })
+      expect(yield* check(deny("skill.use", "deploy"))).toEqual(blocked)
+      expect(yield* check(deny("tool.use", "skill:deploy"))).toEqual(blocked)
+      expect(yield* check(deny("skill.use", "release"))).toEqual({ effect: "allow" })
+    }),
+  )
+
+  it.effect("scans with the user's shell, so zsh-only expansion is caught", () =>
+    withEnv({ SHELL: "/bin/zsh" }, () =>
+      Effect.gen(function* () {
+        expect(
+          yield* PolicyEvaluator.check(acme(deny("tool.use", "shell:rm *")), {
+            action: "shell",
+            resources: ["echo ${(e):-\\$(rm -rf ./probe)}"],
+          }),
+        ).toEqual(blocked)
+      }),
+    ),
+  )
+
+  it.effect("runs a command it can't analyze when later allows lift every shell rule", () =>
+    Effect.gen(function* () {
+      const workspace = acme(
+        deny("tool.use", "*"),
+        allow("tool.use", "shell:*"),
+        allow("tool.use", "external_directory:*"),
+      )
+      expect(yield* PolicyEvaluator.check(workspace, { action: "shell", resources: ['echo "unterminated'] })).toEqual({
+        effect: "allow",
+      })
+      expect(yield* PolicyEvaluator.check(workspace, { action: "webfetch", resources: ["https://x.test"] })).toEqual(
+        blocked,
+      )
+    }),
+  )
 })

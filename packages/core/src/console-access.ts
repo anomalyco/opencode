@@ -73,16 +73,10 @@ const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 
-/**
- * The Console's config document. `library`, `telemetry` and `experimental` decode where they're used, so a malformed
- * one can't drop its policies. The Console sends a client it doesn't recognize as current its policies under
- * `experimental.policies`.
- */
+/** The Console's config document. `library` decodes where it's used, so a malformed one can't drop its policies. */
 export const Config = Schema.Struct({
   ...ConfigIntegration.Remote.fields,
   library: Schema.Unknown.pipe(Schema.optional),
-  telemetry: Schema.Unknown.pipe(Schema.optional),
-  experimental: Schema.Unknown.pipe(Schema.optional),
 })
 export type Config = typeof Config.Type
 
@@ -178,11 +172,23 @@ export function revoke(http: HttpClient.HttpClient, credential: Credential.OAuth
     token: credential.refresh,
     token_type_hint: "refresh_token",
     client_id: clientID,
-  }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk), Effect.scoped, Effect.timeout(Duration.seconds(5)))
+  }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk), Effect.timeout(Duration.seconds(5)))
 }
 
 /** The credential's workspace config, or `undefined` when the Console serves none for it. */
 export function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Credential.OAuth) {
+  return fetchDocument(http, value).pipe(
+    Effect.flatMap((document) =>
+      document === undefined ? Effect.succeed(undefined) : Schema.decodeUnknownEffect(Config)(document),
+    ),
+  )
+}
+
+/**
+ * The credential's workspace config as the Console sent it, for clients that read its fields one at a time, or
+ * `undefined` when the Console serves none for it.
+ */
+export function fetchDocument(http: HttpClient.HttpClient, value: Credential.Key | Credential.OAuth) {
   // Scoped so responses whose body is never read (404, errors) are released here instead of by a GC-time abort.
   return HttpClient.withScope(http)
     .execute(
@@ -208,7 +214,7 @@ export function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key |
               })
           }
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return yield* Schema.decodeUnknownEffect(Config)(body)
+          return yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(body)
         }),
       ),
       Effect.scoped,

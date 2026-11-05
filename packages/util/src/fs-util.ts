@@ -249,6 +249,19 @@ export namespace FSUtil {
     }
   }
 
+  /** Expand a leading ~ and normalize Windows shell paths before lexical resolution. */
+  export function resolvePath(directory: string, input: string, home: string) {
+    const normalized = windowsPath(input)
+    return path.resolve(
+      directory,
+      normalized === "~"
+        ? home
+        : normalized.startsWith("~/") || (process.platform === "win32" && normalized.startsWith("~\\"))
+          ? path.join(home, normalized.slice(2))
+          : normalized,
+    )
+  }
+
   export function windowsPath(p: string): string {
     if (process.platform !== "win32") return p
     return p

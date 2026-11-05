@@ -1,13 +1,11 @@
 export * as WorkspaceSync from "./workspace-sync.js"
 
 import { ConsoleAccess } from "@opencode/core/console-access"
-import { Clock, Effect, Result, Schema } from "effect"
+import { Clock, Effect, Result } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { ConsoleCredentials } from "./credentials.js"
 import { WorkspaceSnapshot } from "./snapshot.js"
 import { ConnectStore } from "./store.js"
-
-const encode = Schema.encodeUnknownSync(ConsoleAccess.Config)
 
 /**
  * Names the connector, and the harness it runs for, on every Console request. The Console reads these to tell which
@@ -50,7 +48,7 @@ export const sync = Effect.fn("WorkspaceSync.sync")(function* (
   const outcome = yield* ConsoleCredentials.fresh(store, http).pipe(
     Effect.flatMap((credential) =>
       credential
-        ? ConsoleAccess.fetchConfig(http, credential).pipe(Effect.map((config) => ({ credential, config })))
+        ? ConsoleAccess.fetchDocument(http, credential).pipe(Effect.map((config) => ({ credential, config })))
         : Effect.succeed(undefined),
     ),
     Effect.result,
@@ -62,7 +60,7 @@ export const sync = Effect.fn("WorkspaceSync.sync")(function* (
         owner,
         organization: ConsoleAccess.organizationName(outcome.success.credential),
         fetched: now,
-        config: outcome.success.config && encode(outcome.success.config),
+        config: outcome.success.config,
       }),
     }
   }
