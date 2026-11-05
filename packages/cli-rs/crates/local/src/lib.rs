@@ -3,6 +3,7 @@
 pub mod channel;
 pub mod cli_config;
 pub mod generated;
+pub mod id;
 pub mod jsonc;
 pub mod jsonl;
 pub mod lock;

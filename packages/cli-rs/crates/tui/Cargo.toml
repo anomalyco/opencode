@@ -31,7 +31,7 @@ tokio.workspace = true
 tokio-tungstenite.workspace = true
 unicode-width.workspace = true
 url.workspace = true
-uuid.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true

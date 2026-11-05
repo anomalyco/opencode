@@ -107,7 +107,7 @@ pub fn write_text_atomic(file: &Path, text: &str) -> io::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
-    let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), uuid::Uuid::new_v4()));
+    let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4()));
     fs::write(&temp, text).and_then(|()| fs::rename(&temp, file)).inspect_err(|_| {
         let _ = fs::remove_file(&temp);
     })
