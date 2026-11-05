@@ -1,0 +1,5 @@
+#!/bin/sh
+# The TypeScript CLI from source, as the OPENCODE_TS_BIN whose private server `opencode-rs acp` starts. It
+# runs the way TS `acp` starts its own server (`bun <entrypoint> serve ...`, `src/util/process.ts`). `exec`
+# keeps the server a direct child of the agent, which the lifecycle suite relies on.
+exec bun "$(dirname "$0")/../../../cli/src/index.ts" "$@"
