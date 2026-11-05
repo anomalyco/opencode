@@ -787,7 +787,9 @@ describe("Config", () => {
   )
 
   const countReloads = () => {
-    const counter = { reloads: 0, finished: 0 }
+    const counter = { reloads: 0 }
+    let finished = () => {}
+    const first = new Promise<void>((resolve) => (finished = resolve))
     const tracer = Tracer.make({
       span: (options) => {
         const span = Tracer.nativeTracer.span(options)
@@ -795,20 +797,14 @@ describe("Config", () => {
         counter.reloads++
         const end = span.end.bind(span)
         span.end = (time, exit) => {
-          counter.finished++
           end(time, exit)
+          finished()
         }
         return span
       },
     })
-    // Waits out the readiness reload so later counts only see what the test triggers.
-    const settled = Effect.gen(function* () {
-      while (true) {
-        const seen = counter.reloads
-        yield* Effect.sleep("150 millis")
-        if (seen > 0 && seen === counter.reloads && seen === counter.finished) return
-      }
-    })
+    // The watches' readiness reload; later counts only see what the test triggers.
+    const settled = Effect.promise(() => first).pipe(Effect.timeout("3 seconds"))
     return { counter, tracer, settled }
   }
 
@@ -842,7 +838,8 @@ describe("Config", () => {
               path.join(global, "skills", "demo", "SKILL.md"),
               path.join(global, "opencode.json.bak"),
             ])
-            yield* Effect.sleep("300 millis")
+            // Outlasts the 100 ms reload debounce; proving no reload needs a wait.
+            yield* Effect.sleep("250 millis")
             expect(counter.reloads).toBe(before)
             expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
           }).pipe(
