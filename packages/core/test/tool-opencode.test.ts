@@ -144,7 +144,7 @@ it.effect("groups available models by provider with paging", () =>
   }),
 )
 
-const approvals = { assertions: [] as Permission.AssertInput[], rejectEdit: false }
+const approvals = { assertions: [] as Permission.AssertInput[], rejectEdit: false, rejectExternal: false }
 const worktreeIt = testEffect(
   makePluginTestLayer(
     permissionLayer({
@@ -153,56 +153,64 @@ const worktreeIt = testEffect(
           Effect.andThen(
             approvals.rejectEdit && input.action === "edit"
               ? Effect.fail(new Permission.CorrectedError({ feedback: "Keep this worktree" }))
-              : Effect.void,
+              : approvals.rejectExternal && input.action === "external_directory"
+                ? Effect.fail(new Permission.CorrectedError({ feedback: "Stay in the project" }))
+                : Effect.void,
           ),
         ),
     }),
   ),
 )
 
+// A git project whose worktrees are created under `parent`, with the OpenCode tools registered.
+const setupWorktrees = Effect.fn(function* () {
+  const plugins = yield* Plugin.Service
+  const sessions = yield* Session.Service
+  const location = yield* Location.Service
+  const strategies = yield* WorktreeStrategies.Service
+  const database = yield* Database.Service
+  const parent = yield* tmpdirScoped()
+  yield* Effect.promise(() => initRepo(location.directory))
+  yield* database.db
+    .insert(ProjectTable)
+    .values({
+      id: location.project.id,
+      worktree: location.directory,
+      sandboxes: [],
+      time_created: 1,
+      time_updated: 1,
+    })
+    .onConflictDoUpdate({ target: ProjectTable.id, set: { worktree: location.directory } })
+    .run()
+    .pipe(Effect.orDie)
+  yield* database.db
+    .insert(WorktreeTable)
+    .values({ project_id: location.project.id, directory: location.directory })
+    .onConflictDoNothing()
+    .run()
+    .pipe(Effect.orDie)
+  yield* strategies.transform((editor) => editor.configure({ directory: AbsolutePath.make(parent.path) }))
+  yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+  const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
+  const registry = yield* Tool.Service
+  const program = (code: string) =>
+    executeTool(registry, {
+      sessionID: session.id,
+      ...toolIdentity,
+      call: { type: "tool-call", id: `call-${code}`, name: "execute", input: { code } },
+    })
+  const call = (name: string, input: Record<string, unknown>) =>
+    program(`return await tools.opencode.${name}(${JSON.stringify(input)})`)
+  const run = (name: string, input: Record<string, unknown>) =>
+    call(name, input).pipe(
+      Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
+    )
+  return { location, parent, session, program, call, run }
+})
+
 worktreeIt.live("creates, lists, and removes worktrees for the plugin's project", () =>
   Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const sessions = yield* Session.Service
-    const location = yield* Location.Service
-    const strategies = yield* WorktreeStrategies.Service
-    const database = yield* Database.Service
-    const parent = yield* tmpdirScoped()
-    yield* Effect.promise(() => initRepo(location.directory))
-    yield* database.db
-      .insert(ProjectTable)
-      .values({
-        id: location.project.id,
-        worktree: location.directory,
-        sandboxes: [],
-        time_created: 1,
-        time_updated: 1,
-      })
-      .onConflictDoUpdate({ target: ProjectTable.id, set: { worktree: location.directory } })
-      .run()
-      .pipe(Effect.orDie)
-    yield* database.db
-      .insert(WorktreeTable)
-      .values({ project_id: location.project.id, directory: location.directory })
-      .onConflictDoNothing()
-      .run()
-      .pipe(Effect.orDie)
-    yield* strategies.transform((editor) => editor.configure({ directory: AbsolutePath.make(parent.path) }))
-    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
-    const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
-    const registry = yield* Tool.Service
-    const program = (code: string) =>
-      executeTool(registry, {
-        sessionID: session.id,
-        ...toolIdentity,
-        call: { type: "tool-call", id: `call-${code}`, name: "execute", input: { code } },
-      })
-    const call = (name: string, input: Record<string, unknown>) =>
-      program(`return await tools.opencode.${name}(${JSON.stringify(input)})`)
-    const run = (name: string, input: Record<string, unknown>) =>
-      call(name, input).pipe(
-        Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
-      )
+    const { location, parent, session, program, call, run } = yield* setupWorktrees()
     const directory = path.join(parent.path, "task")
 
     expect(yield* run("worktree_create", { name: " task " })).toEqual({ directory })
@@ -259,5 +267,47 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
     ])
     expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })
+  }),
+)
+
+worktreeIt.live("asks for external directory approval before moving a session outside its project", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const { parent, session, call, run } = yield* setupWorktrees()
+    const worktree = path.join(parent.path, "moved")
+    const outside = yield* tmpdirScoped()
+    expect(yield* run("worktree_create", { name: "moved" })).toEqual({ directory: worktree })
+
+    // The project's own worktrees stay inside its boundary, so moving into one needs no approval.
+    approvals.assertions.length = 0
+    expect(yield* run("session_move", { directory: worktree })).toEqual({
+      sessionID: session.id,
+      directory: worktree,
+    })
+    expect(approvals.assertions).toEqual([])
+
+    // Anywhere else would become the session's internal directory, so it needs external directory
+    // approval for the destination, and a rejection leaves nothing queued to move.
+    const other = yield* sessions.create({ location: Location.Ref.make({ directory: AbsolutePath.make(outside.path) }) })
+    const inbox = yield* sessions.inbox(session.id)
+    approvals.rejectExternal = true
+    expect(yield* call("session_move", { directory: outside.path })).toMatchObject({
+      content: [{ type: "text", text: "Stay in the project" }],
+      metadata: { error: true },
+    })
+    approvals.rejectExternal = false
+    expect(yield* sessions.inbox(session.id)).toEqual(inbox)
+    const resource = `${outside.path.replaceAll("\\", "/")}/*`
+    expect(approvals.assertions).toMatchObject([
+      { action: "external_directory", resources: [resource], sessionID: session.id },
+    ])
+
+    // Another session's relative destination resolves from that session's directory.
+    approvals.assertions.length = 0
+    expect(yield* run("session_move", { sessionID: other.id, directory: "." })).toEqual({
+      sessionID: other.id,
+      directory: outside.path,
+    })
+    expect(approvals.assertions).toMatchObject([{ action: "external_directory", resources: [resource] }])
   }),
 )
