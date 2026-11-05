@@ -34,9 +34,23 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   let iconInput: HTMLInputElement | undefined
   let reader: FileReader | undefined
-  // The latest save sent. Every save and flush waits for it, so saves go out in order even when a flush for a project
-  // the page left is still queued when the page comes back to it.
-  let inflight: Promise<unknown> = Promise.resolve()
+  // The latest save sent per project. A save or flush waits only for its own project's, so saves for one project go out
+  // in order even when a flush for a project the page left is still queued when the page comes back to it.
+  const inflight = new Map<string, Promise<void>>()
+
+  const enqueue = (target: ProjectTarget, send: () => Promise<unknown>) => {
+    const key = `${target.id ?? ""}\n${target.worktree}`
+    const next = (inflight.get(key) ?? Promise.resolve()).then(send, send)
+    inflight.set(
+      key,
+      next.then(
+        () => undefined,
+        () => undefined,
+      ),
+    )
+
+    return next
+  }
 
   const dispatch = (event: ProjectSettingsEvent) => {
     const next = transitionProjectSettings(untrack(settings), event)
@@ -73,10 +87,13 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         })
       }, PROJECT_SAVE_TIMEOUT_MS)
 
-      const send = () => request(effect.target, effect.patch, controller.signal)
+      // A save that timed out while it waited is not sent: the local path ignores the signal.
+      const send = () =>
+        controller.signal.aborted
+          ? Promise.reject(controller.signal.reason)
+          : request(effect.target, effect.patch, controller.signal)
 
-      inflight = inflight
-        .then(send, send)
+      void enqueue(effect.target, send)
         .then(
           () => dispatch({ type: "save.succeeded", saveAttempt: effect.saveAttempt }),
           (cause: unknown) =>
@@ -92,8 +109,9 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     }
 
     if (effect.type === "flush") {
-      const send = () => request(effect.target, effect.patch, AbortSignal.timeout(PROJECT_SAVE_TIMEOUT_MS))
-      inflight = inflight.then(send, send)
+      void enqueue(effect.target, () =>
+        request(effect.target, effect.patch, AbortSignal.timeout(PROJECT_SAVE_TIMEOUT_MS)),
+      ).catch((cause: unknown) => console.error(cause))
 
       return
     }

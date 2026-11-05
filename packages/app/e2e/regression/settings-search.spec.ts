@@ -447,7 +447,17 @@ test("project edits queued behind a save reach their project in order across jum
     await expect(name).toHaveValue(value)
   }
 
+  const sent = (projectID: string) =>
+    hold.requests
+      .filter((request) => new URL(request.url()).pathname === `/api/project/${projectID}`)
+      .map((request) => request.postDataJSON())
+
   await jump("OpenCode 01 name", "OpenCode 01")
+
+  // Another project's save does not wait behind the first project's held one.
+  await name.fill("Bravo")
+  await name.blur()
+  await expect.poll(() => sent("proj_search_1")).toEqual([{ name: "Bravo" }])
 
   // Back on the first project before its queued edit went out, a new save must not overtake it.
   await jump("OpenCode 00 name", "OpenCode 00")
@@ -456,12 +466,8 @@ test("project edits queued behind a save reach their project in order across jum
   hold.release()
 
   await expect
-    .poll(() => hold.requests.map((request) => [new URL(request.url()).pathname, request.postDataJSON()]))
-    .toEqual([
-      ["/api/project/proj_search_0", { name: "Renamed" }],
-      ["/api/project/proj_search_0", { commands: { start: "bun dev" } }],
-      ["/api/project/proj_search_0", { commands: { start: "bun start" } }],
-    ])
+    .poll(() => sent("proj_search_0"))
+    .toEqual([{ name: "Renamed" }, { commands: { start: "bun dev" } }, { commands: { start: "bun start" } }])
 })
 
 test("IME confirmation does not activate a search result", async ({ page }) => {
