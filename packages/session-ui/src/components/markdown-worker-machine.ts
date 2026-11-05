@@ -19,6 +19,9 @@ export const WORKER_RETRY_MAX_DELAY_MS = 60_000
 /** The worker fails when the oldest request in flight makes no progress across one whole window. */
 export const WORKER_HANG_TIMEOUT_MS = 15_000
 
+/** The window until a worker's first reply, which also covers loading its bundle and first grammar over a slow link. */
+export const WORKER_BOOT_TIMEOUT_MS = 60_000
+
 /** A request held for one worker attempt. The same object is posted as the worker message. */
 export type WorkerRequest = Exclude<MarkdownWorkerRequest, { type: "dispose" }>
 
@@ -46,6 +49,8 @@ export type MarkdownWorkerReady = Counters & {
   readonly status: "ready"
   /** The oldest request in flight when the watchdog was armed; undefined while it is disarmed. */
   readonly watched: number | undefined
+  /** Whether this worker has replied yet; until then the watchdog allows for its cold start. */
+  readonly replied: boolean
   /** Every unsettled request by id, in issue order. */
   readonly requests: ReadonlyMap<number, WorkerRequest>
   readonly projectLanes: ReadonlyMap<string, WorkerLane>
@@ -164,7 +169,8 @@ export function transitionMarkdownWorker(
 
   if (event.attempt !== state.attempts) return { state, effects: EMPTY_WORKER_EFFECTS }
 
-  if (event.type === "worker.message") return message(state, event.response)
+  if (event.type === "worker.message")
+    return message(state.replied ? state : { ...state, replied: true }, event.response)
 
   if (event.type === "worker.spawn-failed") return fail(state, { kind: "unavailable", message: event.message })
 
@@ -177,7 +183,7 @@ export function transitionMarkdownWorker(
 
   return {
     state: { ...state, watched: oldest },
-    effects: [{ type: "arm-watchdog", attempt: state.attempts, delay: WORKER_HANG_TIMEOUT_MS }],
+    effects: [{ type: "arm-watchdog", attempt: state.attempts, delay: watchdogDelay(state) }],
   }
 }
 
@@ -203,6 +209,7 @@ function request(state: MarkdownWorkerMachineState, event: Requested): MarkdownW
       failures: state.failures,
       generationFloor: state.generationFloor,
       watched: undefined,
+      replied: false,
       requests: new Map(),
       projectLanes: new Map(),
       projections: new Map(),
@@ -258,7 +265,7 @@ function admit(
   const post: MarkdownWorkerEffect = { type: "post", attempt: state.attempts, message }
 
   const effects = arm
-    ? [...spawn, post, { type: "arm-watchdog" as const, attempt: state.attempts, delay: WORKER_HANG_TIMEOUT_MS }]
+    ? [...spawn, post, { type: "arm-watchdog" as const, attempt: state.attempts, delay: watchdogDelay(state) }]
     : [...spawn, post]
 
   const next = { ...state, issued: message.id, watched: arm ? message.id : state.watched, requests }
@@ -477,6 +484,10 @@ function fail(state: MarkdownWorkerReady, reason: WorkerFailure): MarkdownWorker
     },
     effects: ids.length > 0 ? [close, { type: "reject", ids, reason }, retry] : [close, retry],
   }
+}
+
+function watchdogDelay(state: MarkdownWorkerReady) {
+  return state.replied ? WORKER_HANG_TIMEOUT_MS : WORKER_BOOT_TIMEOUT_MS
 }
 
 function laneField(request: KeyedRequest): LaneField {

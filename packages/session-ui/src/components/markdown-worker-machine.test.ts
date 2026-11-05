@@ -4,6 +4,7 @@ import {
   HIGHLIGHT_STREAM_LIMIT,
   INITIAL_MARKDOWN_WORKER_STATE,
   transitionMarkdownWorker,
+  WORKER_BOOT_TIMEOUT_MS,
   WORKER_HANG_TIMEOUT_MS,
   WORKER_RETRY_DELAY_MS,
   type MarkdownWorkerEffect,
@@ -306,7 +307,9 @@ describe("projections", () => {
       reply({ type: "superseded", id: 1, key: "shared" }),
     ].forEach((event) => {
       const next = transitionMarkdownWorker(run.state, event)
-      expect(next.state).toBe(run.state)
+      // The reply only proves the worker booted.
+      expect(next.state).toEqual({ ...ready(run.state), replied: true })
+      expect(ready(next.state).highlightLanes).toBe(ready(run.state).highlightLanes)
       expect(next.effects).toBe(EMPTY_WORKER_EFFECTS)
     })
     expect(lane).toEqual({ active: 2, queued: 3 })
@@ -363,10 +366,10 @@ describe("coalescing lanes", () => {
 
 describe("parse", () => {
   test("an aborted parse rejects once and ignores the worker's later reply", () => {
-    const run = replay([parse(), { type: "parse.aborted", id: 1 }])
+    const run = replay([parse(), reply({ type: "parse", id: 1, html: "" }), parse(), { type: "parse.aborted", id: 2 }])
 
-    expect(rejected(run.effects, "disposed")).toEqual([1])
-    ;[reply({ type: "parse", id: 1, html: "<p>" }), reply({ type: "error", id: 1, message: "late" })].forEach(
+    expect(rejected(run.effects, "disposed")).toEqual([2])
+    ;[reply({ type: "parse", id: 2, html: "<p>" }), reply({ type: "error", id: 2, message: "late" })].forEach(
       (event) => {
         const next = transitionMarkdownWorker(run.state, event)
         expect(next.state).toBe(run.state)
@@ -381,9 +384,53 @@ describe("hang watchdog", () => {
     const run = replay([project("p", "a"), highlight("h"), project("p", "ab"), parse()])
 
     expect(run.effects.filter((effect) => effect.type === "arm-watchdog")).toEqual([
-      { type: "arm-watchdog", attempt: 1, delay: WORKER_HANG_TIMEOUT_MS },
+      { type: "arm-watchdog", attempt: 1, delay: WORKER_BOOT_TIMEOUT_MS },
     ])
     expect(ready(run.state).watched).toBe(1)
+  })
+
+  test("a slow cold start gets the boot window, and the hang window starts after the first reply", () => {
+    // Loading the worker bundle and its first grammar over a slow link can take longer than the hang window.
+    const booting = replay([highlight("h"), parse()])
+    expect(booting.effects.find((effect) => effect.type === "arm-watchdog")).toEqual({
+      type: "arm-watchdog",
+      attempt: 1,
+      delay: WORKER_BOOT_TIMEOUT_MS,
+    })
+
+    // The first reply lands after the hang window but inside the boot window, so the worker is not failed.
+    const booted = replay([reply(highlighted(1, "h")), { type: "watchdog.fired", attempt: 1 }], booting.state)
+    expect(booted.state.status).toBe("ready")
+    expect(rejected(booted.effects)).toEqual([])
+    expect(booted.effects.filter((effect) => effect.type === "arm-watchdog")).toEqual([
+      { type: "arm-watchdog", attempt: 1, delay: WORKER_HANG_TIMEOUT_MS },
+    ])
+
+    // Once it has replied, a request that stalls for one hang window fails it.
+    const stalled = transitionMarkdownWorker(booted.state, { type: "watchdog.fired", attempt: 1 })
+    expect(stalled.state.status).toBe("failed")
+  })
+
+  test("a worker that never replies fails when the boot window ends", () => {
+    const run = replay([parse(), { type: "watchdog.fired", attempt: 1 }])
+
+    expect(run.state.status).toBe("failed")
+    expect(rejected(run.effects, "error")).toEqual([1])
+  })
+
+  test("a respawned worker gets the boot window again", () => {
+    const run = replay([
+      parse(),
+      reply({ type: "parse", id: 1, html: "" }),
+      { type: "worker.crashed", attempt: 1, message: "boom" },
+      { type: "retry.ready", attempt: 1 },
+      parse(),
+    ])
+
+    expect(run.effects.flatMap((effect) => (effect.type === "arm-watchdog" ? [effect.delay] : []))).toEqual([
+      WORKER_BOOT_TIMEOUT_MS,
+      WORKER_BOOT_TIMEOUT_MS,
+    ])
   })
 
   test("disarms when nothing is in flight", () => {

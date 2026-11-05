@@ -5,7 +5,7 @@ import {
   MarkdownWorkerUnavailableError,
   type MarkdownWorkerPort,
 } from "./markdown-worker"
-import { WORKER_HANG_TIMEOUT_MS, WORKER_RETRY_DELAY_MS } from "./markdown-worker-machine"
+import { WORKER_BOOT_TIMEOUT_MS, WORKER_HANG_TIMEOUT_MS, WORKER_RETRY_DELAY_MS } from "./markdown-worker-machine"
 import type { MarkdownWorkerRequest, MarkdownWorkerResponse } from "./markdown-worker-protocol"
 
 class FakeWorker implements MarkdownWorkerPort {
@@ -102,11 +102,28 @@ test("a worker that cannot be constructed rejects as unavailable and is retried 
   expect(spawn).toHaveBeenCalledTimes(2)
 })
 
-test("a worker that stops answering fails after the watchdog window instead of hanging", async () => {
+test("a slow cold start is not a hang, and a later stall fails after the hang window", async () => {
+  const { client, workers } = start()
+  const first = client.parseMarkdown("# hi", new AbortController().signal)
+
+  jest.advanceTimersByTime(WORKER_HANG_TIMEOUT_MS * 2)
+  expect(workers[0]!.terminated).toBe(false)
+  workers[0]!.reply({ type: "parse", id: 1, html: "<h1>hi</h1>" })
+  expect(await first).toBe("<h1>hi</h1>")
+
+  const stalled = client.parseMarkdown("text", new AbortController().signal)
+  // The boot window's timer is still pending; it re-arms with the hang window, which then runs out.
+  jest.advanceTimersByTime(WORKER_BOOT_TIMEOUT_MS)
+  jest.advanceTimersByTime(WORKER_HANG_TIMEOUT_MS)
+  await expect(stalled).rejects.toThrow("Markdown worker timed out")
+  expect(workers[0]!.terminated).toBe(true)
+})
+
+test("a worker that never replies fails when the boot window ends", async () => {
   const { client, workers } = start()
   const pending = client.parseMarkdown("# hi", new AbortController().signal)
 
-  jest.advanceTimersByTime(WORKER_HANG_TIMEOUT_MS)
+  jest.advanceTimersByTime(WORKER_BOOT_TIMEOUT_MS)
   await expect(pending).rejects.toThrow("Markdown worker timed out")
   expect(workers[0]!.terminated).toBe(true)
 })
