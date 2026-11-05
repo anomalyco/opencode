@@ -4,8 +4,7 @@ import { definePty } from "../../pty/run"
 import { config, leave } from "./fixture"
 import { assistant, server, user } from "../M.2/fixture"
 
-const png =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 const image = (text: string) => ({
   data: png,
   mime: "image/png",
