@@ -268,8 +268,9 @@ export function fromPromise(plugin: Plugin) {
           method: (input: never) => Effect.Effect<unknown, unknown>,
         ) => {
           const compiled = compileEndpoint(endpoint)
-          return ((input?: unknown) =>
+          return ((input?: unknown, options?: { readonly signal?: AbortSignal }) =>
             Effect.gen(function* () {
+              if (options?.signal?.aborted) return yield* Effect.interrupt
               // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
               const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
                 Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
@@ -278,7 +279,7 @@ export function fromPromise(plugin: Plugin) {
               const result = yield* method(Object.assign({}, ...decoded) as never)
               if (compiled.noContent) return undefined
               return yield* compiled.encode(result)
-            }).pipe(Effect.runPromiseWith(runtime))) as PromiseMethod
+            }).pipe((effect) => Effect.runPromiseWith(runtime)(effect, { signal: options?.signal }))) as PromiseMethod
         }
 
         const transform =
