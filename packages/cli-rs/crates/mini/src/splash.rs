@@ -1,5 +1,5 @@
-//! Entry and exit splash (`splash.ts`): M.4. M.1 writes the one-row entry header that a replay starts with
-//! (`entrySplash`); the exit banner and the startup animation are M.4's.
+//! Entry and exit splash (`splash.ts`): the one-row entry header a transcript starts under (`entrySplash`), and
+//! the exit banner with the logo and the command that resumes the session (`exitSplash`).
 
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -71,9 +71,68 @@ pub fn entry(app: &App, width: u32, version: &str, detail: &str, theme: &SplashT
         .child(&Text::new(app, vec![label.fg(theme.right), metadata.fg(theme.left)]).wrap(WrapMode::None))
 }
 
-/// `exitSplash`: the banner written when mini closes. `None` until M.4, so mini prints a newline instead.
-pub fn exit(_app: &App, _title: Option<&str>, _session_id: &str, _theme: &SplashTheme, _mono: bool) -> Option<View> {
-    None
+/// `SPLASH_TITLE_LIMIT`.
+const TITLE_LIMIT: usize = 50;
+
+/// `title`: whitespace runs as one space, truncated, else `Untitled session`.
+pub fn title(text: Option<&str>, mono: bool) -> String {
+    let value = text.unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(" ");
+    if value.is_empty() {
+        return "Untitled session".to_owned();
+    }
+    if mono {
+        return crate::theme::mono_truncate(&value, TITLE_LIMIT, true);
+    }
+    opencode_ui::select::truncate(&value, TITLE_LIMIT)
+}
+
+/// The `go.right` logo without its blank first row; `_` is a full cell, `^` a half block over the shadow, `~` a
+/// half block in the shadow.
+const MARK: [&str; 3] = ["█▀▀█", "█__█", "▀▀▀▀"];
+
+/// `exitSplash`: the banner written when mini closes: the logo, the session's title, and `Continue opencode mini
+/// -s <id>`. A terminal too narrow for the row writes the command alone, wrapped.
+pub fn exit(app: &App, width: u32, title: &str, session_id: &str, theme: &SplashTheme, mono: bool) -> View {
+    let width = width.max(1);
+    let mark: &[&str] = if mono { &["[O]"] } else { &MARK };
+    let top = 1;
+    let body = mark[0].chars().count() as u32 + 2;
+    let (session, label) = ("Session  ", "Continue ");
+    let command = format!("opencode mini -s {session_id}");
+    let wide = body as usize + (label.to_owned() + &command).width() <= width as usize;
+    let command_height = if wide { 1 } else { (command.width() as u32).div_ceil(width) };
+    let height = top + if wide { (mark.len() as u32).max(2) } else { command_height };
+    let root = View::new(app).width(width).height(height);
+    let place = |widget: &Text, left: u32, row: u32, cells: u32| {
+        widget.absolute().position(Edge::Left, left).position(Edge::Top, row).width(cells.max(1)).height(1);
+        root.add(widget);
+    };
+    if wide {
+        for (index, row) in mark.iter().enumerate() {
+            let spans: Vec<Span> = row
+                .chars()
+                .map(|char| match char {
+                    '_' => " ".fg(theme.left).bg(theme.left_shadow),
+                    '^' => "▀".fg(theme.left).bg(theme.left_shadow),
+                    '~' => "▀".fg(theme.left_shadow),
+                    char => char.to_string().fg(theme.left),
+                })
+                .collect();
+            place(&Text::new(app, spans).wrap(WrapMode::None), 0, top + index as u32, width);
+        }
+        let row = vec![session.fg(theme.left), title.to_owned().fg(theme.right).attributes(Attributes::BOLD)];
+        place(&Text::new(app, row).wrap(WrapMode::None), body, top, width.saturating_sub(body));
+        place(&Text::new(app, label.fg(theme.left)).wrap(WrapMode::None), body, top + 1, width.saturating_sub(body));
+    }
+    let left = if wide { body + label.len() as u32 } else { 0 };
+    let text = Text::new(app, command.fg(theme.right).attributes(Attributes::BOLD)).wrap(WrapMode::Char);
+    text.absolute()
+        .position(Edge::Left, left)
+        .position(Edge::Top, if wide { top + 1 } else { top })
+        .width(width.saturating_sub(left).max(1))
+        .height(command_height);
+    root.add(&text);
+    root
 }
 
 #[cfg(test)]
@@ -89,5 +148,13 @@ mod tests {
         assert_eq!(layout(14), ("▪ oc mini".into(), "".into()));
         assert_eq!(layout(5), ("oc mi".into(), "".into()));
         assert_eq!(entry_layout(80, "local", "/tmp/mini", true), ("[O] oc mini".into(), " vlocal - /tmp/mini".into()));
+    }
+
+    #[test]
+    fn titles_collapse_whitespace_and_truncate() {
+        assert_eq!(title(None, false), "Untitled session");
+        assert_eq!(title(Some("  fix \n the   bug "), false), "fix the bug");
+        assert_eq!(title(Some(&"x".repeat(60)), false).chars().count(), 50);
+        assert!(title(Some(&"x".repeat(60)), true).ends_with("..."));
     }
 }

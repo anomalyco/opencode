@@ -492,6 +492,17 @@ impl Prompt {
         self.0.clear_draft()
     }
 
+    /// Whether the session has prompts, earlier or sent now (`state.shown`).
+    pub fn shown(&self) -> bool {
+        !self.0.state.borrow().history.items.is_empty()
+    }
+
+    /// The first prompt with text, for the exit banner's title (`splashTitle`).
+    pub fn first_text(&self) -> Option<String> {
+        let state = self.0.state.borrow();
+        state.history.items.iter().find(|item| !item.text.trim().is_empty()).map(|item| item.text.clone())
+    }
+
     /// A sent prompt joins the history (`push`).
     pub fn push_history(&self, prompt: &RunPrompt) {
         let mut state = self.0.state.borrow_mut();
