@@ -38,6 +38,7 @@ const list = Effect.fn("cli.auth.list")(function* (input) {
       integration: integration.name,
       source: connection.type === "credential" ? connection.label : connection.name,
       type: connection.type === "credential" ? "stored" : "environment",
+      id: connection.type === "credential" ? connection.id : "-",
     })),
   )
   if (rows.length === 0) {
@@ -46,6 +47,7 @@ const list = Effect.fn("cli.auth.list")(function* (input) {
   }
   const width = Math.max(...rows.map((row) => row.integration.length)) + 2
   process.stdout.write(
-    rows.map((row) => row.integration.padEnd(width) + row.source.padEnd(28) + row.type).join(EOL) + EOL,
+    rows.map((row) => row.integration.padEnd(width) + row.source.padEnd(28) + row.type.padEnd(13) + row.id).join(EOL) +
+      EOL,
   )
 })
