@@ -74,6 +74,7 @@ export default bench({
         for (const key of ["ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight"])
           await page.press(key, { until: "frame" })
         await page.waitFor(title, { text: "5 of 5 questions" })
+
         for (const key of ["ArrowLeft", "ArrowLeft", "ArrowLeft", "ArrowLeft"]) await page.press(key, { until: "frame" })
         await page.waitFor(title, { text: "1 of 5 questions" })
         await page.idle()
