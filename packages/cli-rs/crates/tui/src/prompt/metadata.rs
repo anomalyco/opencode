@@ -318,6 +318,9 @@ pub struct Display {
     pub model: String,
     pub provider: String,
     pub variant: Option<String>,
+    /// What the workspace's limits leave for the model, once it is running low, and whether that is in the error
+    /// color (E.16, `limitLabel`).
+    pub limit: Option<(String, bool)>,
 }
 
 /// The metadata row (`PromptMetadataRow`).
@@ -382,6 +385,14 @@ impl Row {
                             spans.push(" · ".fg(theme.text.muted));
                             spans.push(variant.fg(theme.text.feedback.warning.base).bold());
                         }
+                        if let Some((limit, danger)) = layout.limit {
+                            let color = if danger {
+                                theme.text.feedback.error.base
+                            } else {
+                                theme.text.muted
+                            };
+                            spans.push(format!("  {limit}").fg(color));
+                        }
                     }
                     spans
                 }
@@ -390,7 +401,7 @@ impl Row {
     }
 }
 
-/// `promptMetadataLayout` without the `limit` part (E.16).
+/// `promptMetadataLayout`.
 fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let narrow = terminal_width < 44;
     let agent = if narrow { None } else { display.agent.clone() };
@@ -411,6 +422,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
             model: display.model.clone(),
             provider: provider.clone(),
             variant: display.variant.clone(),
+            limit: display.limit.clone(),
         },
         Display {
             agent: agent.clone(),
@@ -418,6 +430,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
             model: display.model.clone(),
             provider: provider.clone(),
             variant: display.variant.clone(),
+            limit: display.limit.clone(),
         },
         Display {
             agent: agent.clone(),
@@ -425,6 +438,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
             model: display.model.clone(),
             provider: short,
             variant: display.variant.clone(),
+            limit: display.limit.clone(),
         },
         Display {
             agent: agent.clone(),
@@ -432,6 +446,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
             model: display.model.clone(),
             provider: String::new(),
             variant: display.variant.clone(),
+            limit: display.limit.clone(),
         },
     ];
     if let Some(fit) = candidates
@@ -446,13 +461,18 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let suffix = display
         .variant
         .as_ref()
-        .map_or(0, |variant| format!(" · {variant}").width());
+        .map_or(0, |variant| format!(" · {variant}").width())
+        + display
+            .limit
+            .as_ref()
+            .map_or(0, |(limit, _)| format!("  {limit}").width());
     Display {
         agent,
         auto: false,
         model: truncate(&display.model, width.saturating_sub(prefix + suffix).max(9)),
         provider: String::new(),
         variant: display.variant.clone(),
+        limit: display.limit.clone(),
     }
 }
 
@@ -478,7 +498,11 @@ fn flat(layout: &Display) -> String {
         parts.push("·");
         parts.push(variant);
     }
-    parts.join(" ")
+    let mut text = parts.join(" ");
+    if let Some((limit, _)) = &layout.limit {
+        text.push_str(&format!("  {limit}"));
+    }
+    text
 }
 
 /// `Locale.truncateWidth(text, width)` with the trailing space before `…` dropped.
@@ -520,6 +544,7 @@ mod tests {
             model: model.into(),
             provider: provider.into(),
             variant: variant.map(str::to_owned),
+            limit: None,
         }
     }
 
@@ -539,6 +564,24 @@ mod tests {
         let tight = layout(flat(&auto).width() - 1, 100, &auto);
         assert!(!tight.auto);
         assert_eq!(tight.provider, "OpenCode / Anthropic");
+    }
+
+    #[test]
+    fn layout_keeps_the_limit_and_counts_it() {
+        let full = Display {
+            limit: Some(("$5 left".into(), false)),
+            ..display("Claude Sonnet", "OpenCode / Anthropic", Some("high"))
+        };
+        assert_eq!(
+            flat(&full),
+            "Build · Claude Sonnet OpenCode / Anthropic · high  $5 left"
+        );
+        // The provider goes before the limit does, and the model truncates around it.
+        assert_eq!(layout(50, 100, &full).provider, "Anthropic");
+        assert_eq!(layout(40, 100, &full).provider, "");
+        let narrow = layout(30, 100, &full);
+        assert_eq!(narrow.model, "Claude S…");
+        assert_eq!(narrow.limit, full.limit);
     }
 
     #[test]

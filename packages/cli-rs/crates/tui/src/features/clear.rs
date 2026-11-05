@@ -1,5 +1,6 @@
 //! `session.clear` (`/clear`, row T25, `app.tsx:802-827`): closes the session's tab and goes home in the
-//! new-session location, keeping the agent and model the session had.
+//! new-session location, keeping the agent and model the session had. `session.new` (`app.tsx:775-800`) is the same
+//! without closing the tab.
 
 use std::rc::Rc;
 
@@ -15,7 +16,7 @@ pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();
     let command = TuiCommand::new("session.clear", move |_, _| {
         if let Some(tui) = weak.upgrade() {
-            clear(&tui);
+            clear(&tui, true);
         }
     })
     .bind(Bind::Off)
@@ -38,12 +39,14 @@ pub fn install(tui: &Rc<Tui>) {
     }
 }
 
-/// `session.clear`.
-pub fn clear(tui: &Tui) {
+/// `session.clear`, or `session.new` when `close_tab` is false.
+pub fn clear(tui: &Tui, close_tab: bool) {
     let model = tui.local.current();
     let agent = tui.local.agent();
     let location = new_location(tui);
-    crate::tabs::close(tui, None);
+    if close_tab {
+        crate::tabs::close(tui, None);
+    }
     crate::features::location::navigate_home(tui, Some(location));
     if let Some(agent) = agent {
         tui.local.set_agent(&agent.id.0);

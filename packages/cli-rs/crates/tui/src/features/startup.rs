@@ -15,6 +15,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionForkInput, SessionID, SessionListInput, SessionListInputOrder,
 };
+use opencode_local::model_pref::Model;
 use opencode_ui::toast::{ToastOptions, Variant};
 
 use crate::app::Tui;
@@ -171,6 +172,13 @@ pub fn run(tui: &Tui, continue_: bool) {
                 .duration(Duration::from_millis(3000)),
         );
     }
+    crate::dialogs::model::startup(
+        &tui.local,
+        tui.startup.args.agent.clone(),
+        tui.startup
+            .model()
+            .map(|(provider, model)| Model::new(&provider, &model)),
+    );
     if continue_ {
         continue_latest(tui, tui.startup.args.fork);
         return;
