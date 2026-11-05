@@ -157,6 +157,7 @@ test("a created Git repository whose project refresh fails still refreshes the s
   await openSession(page, {
     name: "ReviewInitRefresh",
     project: { vcs: undefined },
+    onVcsInit: () => undefined,
     sessions: [{ id: "ses_init_refresh", title: "Initialize Refresh" }],
     seed: {
       panes: { ses_init_refresh: { review: true } },
