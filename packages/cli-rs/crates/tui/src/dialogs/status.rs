@@ -48,13 +48,15 @@ pub fn show(tui: &Tui) {
             let Some(tui) = weak.upgrade() else {
                 return View::new(&cx.app);
             };
+            // The store changes on other threads: take the revision before drawing, so a change in between redraws.
+            let seen = tui.data.read(|state| state.revision());
             let body = View::new(&cx.app);
             draw(&body, cx, &servers(&tui));
             let status = Rc::new(Status {
                 tui: tui.weak(),
                 cx: Rc::downgrade(cx),
                 body: body.clone(),
-                seen: Cell::new(tui.data.read(|state| state.revision())),
+                seen: Cell::new(seen),
                 open: Cell::new(true),
             });
             let closed = status.clone();
@@ -88,7 +90,10 @@ impl Status {
                 }
             });
         }
-        self.watch(tui.data.subscribe());
+        // A new receiver counts the current revision as seen; one written since `seen` must still redraw.
+        let mut revisions = tui.data.subscribe();
+        revisions.mark_changed();
+        self.watch(revisions);
     }
 
     fn watch(self: &Rc<Self>, mut revisions: tokio::sync::watch::Receiver<u64>) {
