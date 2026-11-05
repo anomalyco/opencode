@@ -127,7 +127,8 @@ export function transitionAttachmentMedia(
 export function viewAttachmentMedia(state: AttachmentMediaState, target: AttachmentMediaTarget): AttachmentMediaView {
   if (target.kind === "none") return IDLE_VIEW
 
-  if (target.kind === "direct") return { status: "ready", src: target.src, placeholder: false, clickable: true, canRetry: false }
+  if (target.kind === "direct")
+    return { status: "ready", src: target.src, placeholder: false, clickable: true, canRetry: false }
 
   if (target.kind === "unreadable") return UNREADABLE_VIEW
 

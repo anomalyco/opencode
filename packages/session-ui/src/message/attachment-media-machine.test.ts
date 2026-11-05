@@ -161,9 +161,9 @@ describe("transitionAttachmentMedia", () => {
     expect(resolveAttachmentMediaTarget(pdf, reader)).toEqual({ kind: "none" })
 
     for (const target of [peeked, resolveAttachmentMediaTarget(pdf, reader)]) {
-      expect(transitionAttachmentMedia(INITIAL_ATTACHMENT_MEDIA_STATE, { type: "target.synced", target }).effects).toEqual(
-        [],
-      )
+      expect(
+        transitionAttachmentMedia(INITIAL_ATTACHMENT_MEDIA_STATE, { type: "target.synced", target }).effects,
+      ).toEqual([])
     }
 
     expect(viewAttachmentMedia(INITIAL_ATTACHMENT_MEDIA_STATE, peeked).src).toBe("blob:cached")

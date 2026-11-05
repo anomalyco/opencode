@@ -211,7 +211,10 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const files = createMemo(() => props.diffs.map((diff) => diff.file!))
 
-  let reviewCurrent = createSessionReviewState(untrack(files), untrack(() => props.open))
+  let reviewCurrent = createSessionReviewState(
+    untrack(files),
+    untrack(() => props.open),
+  )
   const [reviewState, setReviewState] = createSignal(reviewCurrent)
 
   const dispatchReview = (event: SessionReviewEvent) => {
@@ -245,7 +248,9 @@ export const SessionReview = (props: SessionReviewProps) => {
   }
 
   const resizeObserver =
-    typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => dispatchReview(MEASURE_REQUESTED_EVENT))
+    typeof ResizeObserver === "undefined"
+      ? undefined
+      : new ResizeObserver(() => dispatchReview(MEASURE_REQUESTED_EVENT))
 
   const [commentModes, setCommentModes] = createSignal(EMPTY_REVIEW_COMMENT_MODES)
 
@@ -454,9 +459,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                     // binary files have empty diffs that we can't render
                     const diffCanRender = () => diff().additions !== 0 || diff().deletions !== 0
 
-                    const expanded = createMemo(() =>
-                      selectSessionReviewExpanded(reviewState(), file, diffCanRender()),
-                    )
+                    const expanded = createMemo(() => selectSessionReviewExpanded(reviewState(), file, diffCanRender()))
 
                     const comments = createMemo(() => grouped().get(file) ?? [])
                     const commentedLines = createMemo(() => comments().map((c) => c.selection))

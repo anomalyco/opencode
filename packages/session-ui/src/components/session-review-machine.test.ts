@@ -12,7 +12,11 @@ import {
 
 const files = ["a.ts", "b.ts"]
 
-function body(state: SessionReviewState, file: string, input: { changedLines?: number; isMedia?: boolean; pinned?: boolean } = {}) {
+function body(
+  state: SessionReviewState,
+  file: string,
+  input: { changedLines?: number; isMedia?: boolean; pinned?: boolean } = {},
+) {
   return selectSessionReviewFileBody(state, {
     file,
     canRender: true,
@@ -128,9 +132,9 @@ describe("transitionSessionReview", () => {
 
     expect(selectSessionReviewOpen(synced.state)).toEqual(["a.ts"])
     expect(synced.effects).toEqual([{ type: "schedule-measure" }])
-    expect(transitionSessionReview(synced.state, { type: "props.synced", files: [...files], open: ["a.ts"] }).state).toBe(
-      synced.state,
-    )
+    expect(
+      transitionSessionReview(synced.state, { type: "props.synced", files: [...files], open: ["a.ts"] }).state,
+    ).toBe(synced.state)
   })
 
   test("pinned files and media mount ahead of the viewport and the size limit", () => {
@@ -139,7 +143,13 @@ describe("transitionSessionReview", () => {
     expect(body(opened, "a.ts", { pinned: true })).toBe("mounted")
     expect(body(opened, "a.ts", { changedLines: 600, isMedia: true, pinned: true })).toBe("mounted")
     expect(
-      selectSessionReviewFileBody(opened, { file: "a.ts", canRender: false, changedLines: 0, isMedia: false, pinned: true }),
+      selectSessionReviewFileBody(opened, {
+        file: "a.ts",
+        canRender: false,
+        changedLines: 0,
+        isMedia: false,
+        pinned: true,
+      }),
     ).toBe("collapsed")
   })
 
