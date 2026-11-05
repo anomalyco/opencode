@@ -178,9 +178,14 @@ impl Client {
     /// `serde_json::Value`, as the TypeScript Promise client returns it, without the typed decode.
     pub async fn json<T: DeserializeOwned>(&self, call: Call, options: &RequestOptions) -> Result<T, Error> {
         let bytes = json_body(self.execute(call, options).await?).await?;
-        let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
-        // The JSON path of the first failure goes in the message, so a schema mismatch names its field.
-        serde_path_to_error::deserialize(&mut deserializer).map_err(|error| Error::MalformedResponse(error.to_string()))
+        // Reads the value only, as the path-tracking decode below does, so bytes after it are not checked.
+        T::deserialize(&mut serde_json::Deserializer::from_slice(&bytes)).map_err(|error| {
+            // A second decode puts the JSON path of the failure in the message, so a schema mismatch names its
+            // field without slowing the decodes that succeed.
+            let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
+            let path = serde_path_to_error::deserialize::<_, T>(&mut deserializer).err();
+            Error::MalformedResponse(path.map_or_else(|| error.to_string(), |error| error.to_string()))
+        })
     }
 
     pub(crate) async fn data<T: DeserializeOwned>(&self, call: Call, options: &RequestOptions) -> Result<T, Error> {
