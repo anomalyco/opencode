@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect, Exit, Scope } from "effect"
 import type { UpdaterState } from "@opencode/plugin/gui/updater"
-import { make, type Dependencies } from "./machine"
+import {
+  initUpdaterMachine,
+  make,
+  toUpdaterState,
+  transitionUpdater,
+  type Dependencies,
+  type UpdaterMachineEffect,
+  type UpdaterMachineEvent,
+  type UpdaterMachineState,
+  type UpdateTarget,
+} from "./machine"
 
 const scopes: Scope.Closeable[] = []
 
@@ -15,8 +25,13 @@ afterEach(async () => {
 async function setup(input?: {
   currentVersion?: string
   ready?: { version: string }
-  /** The release each platform check finds, in order; the last one repeats. "offline" fails the check. */
+  /**
+   * The release each platform check finds, in order; the last one repeats. "offline" fails the check, "none" finds
+   * nothing and "external:<version>" finds an external download.
+   */
   checks?: readonly string[]
+  /** Holds every check after the launch check until it resolves. */
+  held?: Promise<void>
   stage?: () => Promise<void>
   install?: () => Promise<void>
   external?: boolean
@@ -31,18 +46,15 @@ async function setup(input?: {
   const dependencies: Dependencies = {
     currentVersion: input?.currentVersion ?? "1.0.0",
     platform: {
-      checkForUpdate: Effect.try({
-        try: () => {
-          calls.push("check")
-          const version = checks[Math.min(cursor.check++, checks.length - 1)] ?? "2.0.0"
+      checkForUpdate: Effect.suspend(() => {
+        calls.push("check")
+        const launch = cursor.check === 0
+        const result = found(checks[Math.min(cursor.check++, checks.length - 1)] ?? "2.0.0", !!input?.external)
+        const held = input?.held
 
-          if (version === "offline") throw new Error("offline")
+        if (launch || !held) return result
 
-          return input?.external
-            ? { mode: "external" as const, version, url: `https://files.test/${version}.dmg` }
-            : { mode: "restart" as const, version }
-        },
-        catch: (error) => error,
+        return Effect.promise(() => held).pipe(Effect.andThen(result))
       }),
       stageUpdate: (options) =>
         Effect.tryPromise(async () => {
@@ -97,7 +109,20 @@ async function setup(input?: {
     check: () => Effect.runPromise(updater.check),
     install: () => Effect.runPromise(updater.install),
     installFork: () => Effect.runFork(updater.install),
+    close: () => Effect.runPromise(Scope.close(scope, Exit.void)),
   }
+}
+
+function found(next: string, external: boolean): Effect.Effect<UpdateTarget | undefined, Error> {
+  if (next === "offline") return Effect.fail(new Error("offline"))
+
+  if (next === "none") return Effect.succeed(undefined)
+  const version = next.replace("external:", "")
+
+  if (external || next.startsWith("external:"))
+    return Effect.succeed({ mode: "external", version, url: `https://files.test/${version}.dmg` })
+
+  return Effect.succeed({ mode: "restart", version })
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -317,5 +342,325 @@ describe("updater", () => {
     await tick()
     expect(attempts.count).toBe(2)
     expect(app.state()).toEqual({ status: "installing", version: "2.0.0" })
+  })
+
+  test("an external install shows installing at once, and a check meanwhile runs no second platform check", async () => {
+    const held = Promise.withResolvers<void>()
+    const app = await setup({ external: true, held: held.promise })
+    await app.start()
+
+    const click = app.install()
+    expect(app.state()).toEqual({ status: "installing", version: "2.0.0" })
+    expect(await app.check()).toEqual({ status: "installing", version: "2.0.0" })
+
+    held.resolve()
+    await click
+    expect(app.calls).toEqual(["check", "check", "external:https://files.test/2.0.0.dmg"])
+  })
+
+  test("an install never restarts into a staged update that the final check replaced with a download", async () => {
+    const app = await setup({ checks: ["2.0.0", "external:2.1.0"] })
+    await app.start()
+
+    await app.install()
+    expect(app.calls).toEqual(["check", "download", "check"])
+    expect(app.state()).toEqual({ status: "download-required", version: "2.1.0" })
+    expect(app.getReady()).toBeUndefined()
+  })
+
+  test("an external install never opens a download that the final check withdrew", async () => {
+    const app = await setup({ external: true, checks: ["2.0.0", "none"] })
+    await app.start()
+
+    await expect(app.install()).rejects.toThrow("External installer is unavailable")
+    expect(app.calls).toEqual(["check", "check"])
+    expect(app.state()).toEqual({ status: "up-to-date" })
+  })
+
+  test("closing the updater settles every caller still waiting", async () => {
+    const app = await setup({ checks: ["2.0.0"], held: new Promise<void>(() => {}) })
+    await app.start()
+
+    const checks = Promise.all([app.check(), app.check()])
+    const click = app.install()
+    await app.close()
+
+    expect(await checks).toEqual([
+      { status: "installing", version: "2.0.0" },
+      { status: "installing", version: "2.0.0" },
+    ])
+    await expect(click).rejects.toThrow("Updater stopped")
+  })
+})
+
+const url = (version: string) => `https://files.test/${version}.dmg`
+
+function idle(input?: { canExternalInstall?: boolean; persistedVersion?: string }) {
+  return initUpdaterMachine({
+    currentVersion: "1.0.0",
+    enabled: true,
+    canExternalInstall: input?.canExternalInstall ?? true,
+    persistedVersion: input?.persistedVersion,
+  }).state
+}
+
+// Folds events the way the driver applies them and collects every effect.
+function run(state: UpdaterMachineState, ...events: UpdaterMachineEvent[]) {
+  return events.reduce<{ state: UpdaterMachineState; effects: UpdaterMachineEffect[] }>(
+    (step, event) => {
+      const next = transitionUpdater(step.state, event)
+
+      return { state: next.state, effects: [...step.effects, ...next.effects] }
+    },
+    { state, effects: [] },
+  )
+}
+
+// 2.0.0 staged after check attempt 1 and download attempt 2.
+const ready = () =>
+  run(
+    idle(),
+    { type: "check.requested", waiter: 1 },
+    { type: "check.succeeded", attempt: 1, target: { mode: "restart", version: "2.0.0" } },
+    { type: "stage.succeeded", attempt: 2 },
+  ).state
+
+// 2.0.0 offered as an external download after check attempt 1.
+const offered = (input?: { canExternalInstall?: boolean }) =>
+  run(
+    idle(input),
+    { type: "check.requested", waiter: 1 },
+    { type: "check.succeeded", attempt: 1, target: { mode: "external", version: "2.0.0", url: url("2.0.0") } },
+  ).state
+
+const platformCalls = (effects: readonly UpdaterMachineEffect[]) =>
+  effects.flatMap((effect) => (effect.type.startsWith("platform.") ? [effect.type] : []))
+
+describe("transitionUpdater", () => {
+  test.each([
+    { name: "disabled", input: { enabled: false }, state: { status: "disabled" }, effects: [] },
+    { name: "clean launch", input: {}, state: { status: "idle", cached: undefined }, effects: [] },
+    {
+      name: "launch after installing the persisted release",
+      input: { persistedVersion: "1.0.0" },
+      state: { status: "idle", cached: undefined },
+      effects: [{ type: "persistence.clear" }],
+    },
+    {
+      name: "launch with a persisted release never installed",
+      input: { persistedVersion: "2.0.0" },
+      state: { status: "idle", cached: "2.0.0" },
+      effects: [],
+    },
+  ])("init: $name", (row) => {
+    const init = initUpdaterMachine({
+      currentVersion: "1.0.0",
+      enabled: true,
+      canExternalInstall: false,
+      persistedVersion: undefined,
+      ...row.input,
+    })
+
+    expect(init.state).toMatchObject(row.state)
+    expect(init.effects).toEqual(row.effects)
+  })
+
+  test("a stale release in the updater cache downloads the next one in full", () => {
+    const step = run(
+      idle({ persistedVersion: "2.0.0" }),
+      { type: "check.requested", waiter: 1 },
+      { type: "check.succeeded", attempt: 1, target: { mode: "restart", version: "3.0.0" } },
+    )
+
+    expect(step.effects.at(-1)).toEqual({ type: "platform.stage", attempt: 2, differential: false })
+  })
+
+  test("an external install claims the updater at once; a check meanwhile answers without checking", () => {
+    const install = run(offered(), { type: "install.requested", waiter: 2 })
+    expect(toUpdaterState(install.state)).toEqual({ status: "installing", version: "2.0.0" })
+    expect(install.effects).toEqual([{ type: "platform.check", attempt: 2 }])
+
+    const check = run(install.state, { type: "check.requested", waiter: 3 })
+    expect(check.effects).toEqual([
+      { type: "checks.resolve", waiters: [3], state: { status: "installing", version: "2.0.0" } },
+    ])
+  })
+
+  test("an install adopts the silent check already running instead of starting another", () => {
+    const step = run(offered(), { type: "check.requested", waiter: 2 }, { type: "install.requested", waiter: 3 })
+
+    expect(platformCalls(step.effects)).toEqual(["platform.check"])
+    expect(step.state).toMatchObject({
+      status: "installing",
+      plan: { step: "checking", attempt: 2, checkWaiters: [2] },
+    })
+  })
+
+  test.each([
+    { name: "its own check", events: [{ type: "install.requested", waiter: 3 }] },
+    {
+      name: "an adopted silent check",
+      events: [
+        { type: "check.requested", waiter: 4 },
+        { type: "install.requested", waiter: 3 },
+      ],
+    },
+  ] satisfies { name: string; events: UpdaterMachineEvent[] }[])(
+    "a restart install that finds an external download offers it instead of restarting ($name)",
+    (row) => {
+      const step = run(ready(), ...row.events, {
+        type: "check.succeeded",
+        attempt: 3,
+        target: { mode: "external", version: "2.1.0", url: url("2.1.0") },
+      })
+
+      expect(toUpdaterState(step.state)).toEqual({ status: "download-required", version: "2.1.0" })
+      expect(platformCalls(step.effects)).toEqual(["platform.check"])
+      expect(step.effects).toContainEqual({ type: "persistence.clear" })
+      expect(step.effects).toContainEqual({ type: "installs.resolve", waiters: [3] })
+    },
+  )
+
+  test.each([
+    { name: "withdrawn", target: undefined, state: { status: "up-to-date" } },
+    {
+      name: "replaced by a restart release",
+      target: { mode: "restart", version: "2.1.0" },
+      state: { status: "downloading", version: "2.1.0" },
+    },
+  ] satisfies { name: string; target: UpdateTarget | undefined; state: UpdaterState }[])(
+    "an external install never opens a download the final check $name",
+    (row) => {
+      const step = run(
+        offered(),
+        { type: "install.requested", waiter: 2 },
+        { type: "check.succeeded", attempt: 2, target: row.target },
+      )
+
+      expect(toUpdaterState(step.state)).toEqual(row.state)
+      expect(platformCalls(step.effects)).not.toContain("platform.external")
+      expect(step.effects).toContainEqual({
+        type: "installs.reject",
+        waiters: [2],
+        failure: { kind: "external-unavailable" },
+      })
+    },
+  )
+
+  test("an external install without an installer fails at once", () => {
+    const state = offered({ canExternalInstall: false })
+    const step = transitionUpdater(state, { type: "install.requested", waiter: 2 })
+
+    expect(step.state).toBe(state)
+    expect(step.effects).toEqual([{ type: "installs.reject", waiters: [2], failure: { kind: "external-unavailable" } }])
+  })
+
+  test("an install restarts into the staged release when downloading a newer one fails", () => {
+    const step = run(
+      ready(),
+      { type: "install.requested", waiter: 3 },
+      { type: "check.succeeded", attempt: 3, target: { mode: "restart", version: "3.0.0" } },
+      { type: "stage.failed", attempt: 4, message: "offline" },
+    )
+
+    expect(step.state).toMatchObject({ status: "installing", plan: { version: "2.0.0", step: "restarting" } })
+    expect(platformCalls(step.effects)).toEqual(["platform.check", "platform.stage", "platform.restart"])
+  })
+
+  test("a restart handoff holds installing once the app quits, and returns to ready when it fails", () => {
+    const restarting = run(
+      ready(),
+      { type: "install.requested", waiter: 3 },
+      { type: "check.succeeded", attempt: 3, target: undefined },
+    ).state
+
+    const quit = transitionUpdater(restarting, { type: "restart.succeeded", attempt: 4 })
+    expect(toUpdaterState(quit.state)).toEqual({ status: "installing", version: "2.0.0" })
+    expect(quit.effects).toEqual([{ type: "installs.resolve", waiters: [3] }])
+
+    const error = new Error("install failed")
+    const failed = transitionUpdater(restarting, { type: "restart.failed", attempt: 4, error })
+    expect(toUpdaterState(failed.state)).toEqual({ status: "ready", version: "2.0.0" })
+    expect(failed.effects).toEqual([{ type: "installs.reject", waiters: [3], failure: { kind: "error", error } }])
+  })
+
+  test.each([
+    { name: "checking", state: () => run(idle(), { type: "check.requested", waiter: 1 }).state },
+    {
+      name: "downloading",
+      state: () =>
+        run(
+          idle(),
+          { type: "check.requested", waiter: 1 },
+          { type: "check.succeeded", attempt: 1, target: { mode: "restart", version: "2.0.0" } },
+        ).state,
+    },
+    { name: "a silent refresh", state: () => run(ready(), { type: "check.requested", waiter: 2 }).state },
+    { name: "an external refresh", state: () => run(offered(), { type: "check.requested", waiter: 2 }).state },
+    { name: "an installation", state: () => run(ready(), { type: "install.requested", waiter: 2 }).state },
+  ])("ignores results of a superseded attempt during $name", (row) => {
+    const state = row.state()
+
+    const events: UpdaterMachineEvent[] = [
+      { type: "check.succeeded", attempt: 99, target: undefined },
+      { type: "check.failed", attempt: 99, message: "offline" },
+      { type: "stage.succeeded", attempt: 99 },
+      { type: "stage.failed", attempt: 99, message: "offline" },
+      { type: "restart.succeeded", attempt: 99 },
+      { type: "restart.failed", attempt: 99, error: new Error("failed") },
+      { type: "external.succeeded", attempt: 99 },
+      { type: "external.failed", attempt: 99, error: new Error("failed") },
+    ]
+
+    events.forEach((event) => {
+      const step = transitionUpdater(state, event)
+      expect(step.state).toBe(state)
+      expect(step.effects).toEqual([])
+    })
+  })
+
+  test("a caller that stops waiting leaves the check running for the others", () => {
+    const step = run(
+      idle(),
+      { type: "check.requested", waiter: 1 },
+      { type: "check.requested", waiter: 2 },
+      { type: "waiter.cancelled", waiter: 1 },
+      { type: "check.succeeded", attempt: 1, target: undefined },
+    )
+
+    expect(step.effects).toEqual([
+      { type: "platform.check", attempt: 1 },
+      { type: "persistence.clear" },
+      { type: "checks.resolve", waiters: [2], state: { status: "up-to-date" } },
+    ])
+  })
+
+  test("disposing cancels the running attempt, settles every caller and ignores later events", () => {
+    const installing = run(ready(), { type: "check.requested", waiter: 2 }, { type: "install.requested", waiter: 3 })
+    const disposed = transitionUpdater(installing.state, { type: "disposed" })
+
+    expect(disposed.effects).toEqual([
+      { type: "attempt.cancel", attempt: 3 },
+      { type: "installs.reject", waiters: [3], failure: { kind: "disposed" } },
+      { type: "checks.resolve", waiters: [2], state: { status: "installing", version: "2.0.0" } },
+    ])
+    expect(transitionUpdater(disposed.state, { type: "check.succeeded", attempt: 3, target: undefined }).state).toBe(
+      disposed.state,
+    )
+    expect(transitionUpdater(disposed.state, { type: "install.requested", waiter: 4 }).effects).toEqual([
+      { type: "installs.reject", waiters: [4], failure: { kind: "disposed" } },
+    ])
+  })
+
+  test("disposing leaves a restart handoff to ApplicationLifecycle", () => {
+    const restarting = run(
+      ready(),
+      { type: "install.requested", waiter: 3 },
+      { type: "check.succeeded", attempt: 3, target: undefined },
+    ).state
+
+    expect(transitionUpdater(restarting, { type: "disposed" }).effects).toEqual([
+      { type: "installs.reject", waiters: [3], failure: { kind: "disposed" } },
+    ])
   })
 })
