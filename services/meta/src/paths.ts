@@ -1,4 +1,4 @@
-// Every path this Worker serves. Each one is also an exact route, see cloudflare.config.ts.
+// Every path this Worker serves. Each one is also a `<path>*` route, see cloudflare.config.ts.
 export const PATHS = {
   config: "/config.json",
   tui: "/tui.json",

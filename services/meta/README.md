@@ -1,7 +1,9 @@
 # Meta
 
 Machine-readable files that clients fetch from fixed `opencode.ai` URLs. They are
-not part of the website, so they live in their own Worker, one exact route per path.
+not part of the website, so they live in their own Worker with one `<path>*` route
+per path. The `*` lets requests with a query string through; anything that isn't
+exactly one of the paths gets a 404.
 
 | Path                                      | Source                                                                                  |
 | ----------------------------------------- | --------------------------------------------------------------------------------------- |

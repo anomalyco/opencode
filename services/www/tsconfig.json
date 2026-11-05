@@ -3,5 +3,6 @@
   "compilerOptions": {
     "noUnusedLocals": true,
     "types": ["bun"]
-  }
+  },
+  "exclude": ["site", "textjs", "dist", ".cloudflare", ".astro/content-modules.mjs"]
 }
