@@ -57,7 +57,7 @@ export function server(script: Script = {}): Options {
     { path: "/api/reference", json: listed([]) },
     {
       path: "/api/fs/find",
-      json: (entry) => {
+      json: (entry: Logged) => {
         const query = entry.query.query?.[0] ?? ""
         return listed(files.filter((file) => file.includes(query)).map((path) => ({ path })))
       },
