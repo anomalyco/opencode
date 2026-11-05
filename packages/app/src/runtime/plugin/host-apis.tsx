@@ -1207,6 +1207,8 @@ export function createPluginAttachment(apis: HostApis) {
     attach: () => apis.attach(mounted),
     /** The routed `MountedSession`. */
     current,
+    /** The `ServerRef` `Servers.get` returns for a listed server's id. */
+    server,
     closed,
     /** Opens and selects a side tab by key, as a reopened closed tab comes back. */
     openTab: (key: string, session: SessionRef) => open(key, session, { tab: "select" }),

@@ -996,7 +996,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of the window's slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -1013,6 +1013,8 @@ ctx.add(Slot, {
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
+- `new-session.composer.after` sits below the new session composer, before the session exists. See
+  [Below the new session composer](#below-the-new-session-composer).
 - `order` sorts the items in one slot.
 
 `session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data
@@ -1035,6 +1037,44 @@ ctx.add(Slot, {
 })
 ```
 
+#### Below the new session composer
+
+`new-session.composer.after` shows content under the composer of a new session, such as starter prompts or the
+project's recent sessions. It receives the draft's target and its composer, all as reactive getters:
+
+```tsx
+ctx.add(Slot, {
+  at: "new-session.composer.after",
+  render: (input) => (
+    <ctx.ui.Button
+      icon="review"
+      disabled={!input.directory}
+      onClick={() => {
+        input.composer.insert(ctx.t("prompt.review"))
+        input.composer.focus()
+      }}
+    >
+      {ctx.t("review")}
+    </ctx.ui.Button>
+  ),
+})
+```
+
+- `server` is the server the session starts on, the same `ServerRef` that `ctx.servers.get` returns.
+- `project` is the selected project. It is `undefined` while the draft has none.
+- `directory` is where the session runs: the project root or the selected worktree. It is `undefined` while a new
+  worktree is selected, because the server creates that worktree when the session starts.
+- `composer` reads and fills the draft's prompt: `text()`, `insert(text)`, `setText(text)` and `focus()`. The user
+  sends it.
+- The composer never moves. The area takes no room while nothing renders, and scrolls once it reaches the bottom of the
+  screen. Keep content compact: on a short window or behind a touch keyboard it may have no room.
+
+To open one of the project's sessions from the slot, pass its id to `ctx.tabs.open`:
+
+```ts
+ctx.tabs.open({ server: input.server.id, id: session.id }, { focus: true })
+```
+
 #### Reference
 
 ```ts
@@ -1047,6 +1087,19 @@ interface SlotMap {
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
+  "new-session.composer.after": {
+    server: ServerRef
+    project: Project | undefined
+    directory: string | undefined
+    composer: NewSessionComposer
+  }
+}
+
+interface NewSessionComposer {
+  text(): string
+  insert(text: string): void
+  setText(text: string): void
+  focus(): void
 }
 ```
 

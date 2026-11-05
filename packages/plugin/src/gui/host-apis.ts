@@ -685,6 +685,41 @@ export interface Composer {
   focused(): boolean
 }
 
+/**
+ * The new session screen's composer: the draft's prompt, before a session exists. Nothing here sends the prompt; the
+ * user does. The draft has loaded by the time a slot receives it.
+ */
+export interface NewSessionComposer {
+  /**
+   * The prompt's text, as plain text: a mention reads as its `@` text, and attachments are left out. In shell mode, the
+   * shell command. Reactive.
+   *
+   * @example
+   * const empty = () => input.composer.text().trim() === ""
+   */
+  text(): string
+  /**
+   * Inserts plain text into the prompt as typing would, at the cursor the user last left in it, else at the end, and
+   * moves the cursor after it. Selected text is not replaced. The text is not parsed: `@path` stays text rather than a
+   * mention, and line breaks stay line breaks. Focus stays where it is; call `focus` to move it. Does nothing for empty
+   * text.
+   *
+   * @param text - The text to insert.
+   *
+   * @example
+   * input.composer.insert("Summarize the open pull requests")
+   */
+  insert(text: string): void
+  /**
+   * Replaces the prompt's text, mentions included, and moves the cursor to the end. Attachments stay.
+   *
+   * @param text - The new text. Empty clears the text.
+   */
+  setText(text: string): void
+  /** Moves keyboard focus to the prompt, at its cursor. */
+  focus(): void
+}
+
 /** Work the session moved to the background. */
 export interface BackgroundTask {
   /** The task's id. */

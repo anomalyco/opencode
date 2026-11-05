@@ -8,7 +8,10 @@ import {
   type App,
   type Keybinds,
   type MountedSession,
+  type Project,
   type Router,
+  type ServerRef,
+  type SlotMap,
   type Servers,
   type SessionScreen,
   type Ipc,
@@ -53,6 +56,7 @@ import { LanguageProvider } from "../src/runtime/i18n/language"
 import { ExtensionPlugins } from "../src/runtime/plugin/extension-plugins"
 import { SessionPluginPills } from "../src/session/composer/plugin-pills"
 import { ui } from "../src/runtime/plugin/ui"
+import { NewSessionComposerSlot } from "../src/new-session/composer-after"
 
 export {
   bindPlugin,
@@ -817,6 +821,110 @@ export function mountComposerPills(input: { definitions: readonly Entry[] }) {
   )
 
   return {
+    status: (id: string) => hosts[0]?.status(id),
+    failure: (id: string) => hosts[0]?.failure(id),
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and the `new-session.composer.after` slot under a composer, in a 480px new session panel laid
+ * out as the screen lays it out. The draft starts in `/repo` of the `repo` project on the `local` server; `target`
+ * moves it as the location picker does, and its composer records each call. `define` replaces the plugins, as plugin
+ * GUIs join and leave.
+ */
+export function mountNewSessionComposer(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "new-session"
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const captured: Captured = {}
+  const calls: string[] = []
+  const [definitions, setDefinitions] = createSignal(input.definitions)
+
+  const [target, setTarget] = createStore<{ directory: string | undefined; project: string | undefined }>({
+    directory: "/repo",
+    project: "repo",
+  })
+
+  // SAFETY: the slot passes the server through; the test's plugins read only `id`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const server = { id: "local" } as unknown as ServerRef
+
+  const slot: SlotMap["new-session.composer.after"] = {
+    server,
+    get project() {
+      // SAFETY: the test's plugins read only the project's `name`.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+      return target.project ? ({ name: target.project, worktree: "/repo" } as unknown as Project) : undefined
+    },
+    get directory() {
+      return target.directory
+    },
+    composer: {
+      text: () => "",
+      insert: (text) => void calls.push(`insert ${text}`),
+      setText: (text) => void calls.push(`setText ${text}`),
+      focus: () => void calls.push("focus"),
+    },
+  }
+
+  function Panel() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <div data-component="new-session" style={{ position: "relative", height: "480px", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: "120px", left: "0", right: "0" }}>
+            <div class="flex flex-col gap-3">
+              <div data-testid="composer" style={{ height: "120px" }} />
+              <NewSessionComposerSlot input={slot} />
+            </div>
+          </div>
+        </div>
+      </Show>
+    )
+  }
+
+  function Host() {
+    const apis = createHostApis()
+    captured.apis = apis
+
+    return (
+      <PluginHostProvider
+        definitions={definitions}
+        disabled={() => new Set<string>()}
+        apis={apis.apis}
+        whenMounted={apis.whenMounted}
+      >
+        <Panel />
+      </PluginHostProvider>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <Host />
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    /** Moves the draft, as picking a project or worktree does. */
+    target: (next: { directory: string | undefined; project: string | undefined }) => setTarget(next),
+    define: (next: readonly Entry[]) => setDefinitions(next),
+    /** What plugins called on the draft's composer, in order. */
+    calls,
     status: (id: string) => hosts[0]?.status(id),
     failure: (id: string) => hosts[0]?.failure(id),
     unmount: () => {

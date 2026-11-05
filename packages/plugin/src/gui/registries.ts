@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js"
 import type { IconName } from "./icon-name.js"
 import { Registry } from "./core.js"
-import type { SessionRef, MountedSession, SessionScreen } from "./host-apis.js"
+import type { SessionRef, MountedSession, NewSessionComposer, Project, ServerRef, SessionScreen } from "./host-apis.js"
 
 /** The name of a shared icon; derived from the dependency-free UI artwork catalog, not a component's props. */
 export type { IconName }
@@ -896,6 +896,26 @@ export interface SlotMap {
     readonly screen: SessionScreen
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
+  }
+  /**
+   * Below the composer of the new session screen, where the user writes the first prompt of a session that does not
+   * exist yet: for example recent sessions of the project or starter prompts. Contributions stack in `order`, the
+   * composer's width. The composer never moves: the area takes no room while nothing renders, grows down from under
+   * the composer, and scrolls once it reaches the bottom of the screen, which on a short window or behind a touch
+   * keyboard can leave it no room at all. The fields are reactive getters: read them where you use them.
+   */
+  readonly "new-session.composer.after": {
+    /** The server the session starts on: the same object `ctx.servers.get` returns for its id. */
+    readonly server: ServerRef
+    /** The selected project, with its worktrees; undefined while the draft has none or the server is still listing it. */
+    readonly project: Project | undefined
+    /**
+     * The directory the session runs in: the project's root, or the selected worktree. Undefined while a new worktree
+     * is selected, which the server creates when the session starts.
+     */
+    readonly directory: string | undefined
+    /** The draft's composer, to fill the prompt in for the user to send. */
+    readonly composer: NewSessionComposer
   }
 }
 

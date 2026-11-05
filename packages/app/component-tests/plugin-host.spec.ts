@@ -9,17 +9,24 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SlotMap,
 } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
-import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
+import type { mountCodeBlocks, mountNewSessionComposer, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
 /** What the code block cases drive from the page. */
 type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the new session composer cases drive from the page. */
+type NewSessionHost = ReturnType<typeof mountNewSessionComposer>
+
+/** What a `new-session.composer.after` render receives. */
+type NewSessionInput = SlotMap["new-session.composer.after"]
 
 /** What the theme preview case drives from the page. */
 type ThemesHost = ReturnType<typeof mountThemes>
@@ -2231,3 +2238,133 @@ story("code block content follows plugins that join and leave after the message 
   await expect(root.getByTestId("chart")).toHaveCount(0)
   await expect(root.locator("pre code")).toHaveText("A,B")
 })
+
+story(
+  "plugins fill the space below the new session composer in order, follow the draft's target, and fail alone",
+  async ({ page }) => {
+    const host = await page.evaluateHandle(async (fixture) => {
+      const { mountNewSessionComposer, until, Slot } = await import(fixture)
+
+      const host: NewSessionHost = mountNewSessionComposer({
+        definitions: [
+          {
+            id: "recent",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Slot, {
+                  at: "new-session.composer.after",
+                  order: 1,
+                  render: (input: NewSessionInput) => {
+                    document.body.dataset.renders = `${Number(document.body.dataset.renders ?? 0) + 1}`
+
+                    return () => `${input.server.id} ${input.project?.name ?? "none"} ${input.directory ?? "new"}`
+                  },
+                }),
+            }),
+          },
+          {
+            id: "starter",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Slot, {
+                  at: "new-session.composer.after",
+                  render: (input: NewSessionInput) =>
+                    Object.assign(document.createElement("button"), {
+                      textContent: "Plan",
+                      onclick: () => {
+                        input.composer.insert("Plan the release")
+                        input.composer.focus()
+                      },
+                    }),
+                }),
+            }),
+          },
+          {
+            id: "broken",
+            windowEntry: async () => ({
+              default: (ctx: Context) =>
+                void ctx.add(Slot, {
+                  at: "new-session.composer.after",
+                  render: () => {
+                    throw new Error("slot failed")
+                  },
+                }),
+            }),
+          },
+        ],
+      })
+
+      await until(() => !!host.failure("broken") && host.status("recent") === "active")
+
+      return host
+    }, fixture)
+
+    const area = page.getByTestId("new-session").locator('[data-slot="new-session-composer-after"]')
+    await expect(area).toHaveText("Planlocal repo /repo")
+    expect(await host.evaluate((host) => [host.status("starter"), host.failure("broken")])).toEqual([
+      "active",
+      { phase: "render", error: expect.stringContaining("slot failed") },
+    ])
+
+    // A new worktree has no directory yet; the render stays mounted and reads the next target.
+    await host.evaluate((host) => host.target({ directory: undefined, project: "repo" }))
+    await expect(area).toHaveText("Planlocal repo new")
+    await host.evaluate((host) => host.target({ directory: "/other", project: undefined }))
+    await expect(area).toHaveText("Planlocal none /other")
+    await expect(page.locator("body")).toHaveAttribute("data-renders", "1")
+
+    await area.getByRole("button", { name: "Plan" }).click()
+    expect(await host.evaluate((host) => host.calls)).toEqual(["insert Plan the release", "focus"])
+  },
+)
+
+story(
+  "the space below the new session composer takes no room while empty and scrolls above the panel's bottom",
+  async ({ page }) => {
+    const host = await page.evaluateHandle(async (fixture) => {
+      const { mountNewSessionComposer, until } = await import(fixture)
+      const host: NewSessionHost = mountNewSessionComposer({ definitions: [] })
+      await until(
+        () => !!document.querySelector('[data-testid="new-session"] [data-slot="new-session-composer-after"]'),
+      )
+
+      return host
+    }, fixture)
+
+    const root = page.getByTestId("new-session")
+    const area = root.locator('[data-slot="new-session-composer-after"]')
+    const composer = root.getByTestId("composer")
+    await expect(area).toBeHidden()
+    const before = await composer.boundingBox()
+
+    await host.evaluate(async (host, fixture) => {
+      const { Slot } = await import(fixture)
+
+      host.define([
+        {
+          id: "tall",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Slot, {
+                at: "new-session.composer.after",
+                render: () =>
+                  Object.assign(document.createElement("div"), { textContent: "tall", style: "height: 600px" }),
+              }),
+          }),
+        },
+      ])
+    }, fixture)
+
+    await expect(area).toHaveText("tall")
+    expect(await composer.boundingBox()).toEqual(before)
+    const panel = await root.locator('[data-component="new-session"]').boundingBox()
+    await expect
+      .poll(async () => {
+        const box = await area.boundingBox()
+
+        return box && panel ? panel.y + panel.height - (box.y + box.height) : 0
+      })
+      .toBeGreaterThanOrEqual(56)
+    expect(await area.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  },
+)
