@@ -55,6 +55,7 @@ impl Session {
         let form = form::SessionForms::new(tui, &id);
         let location = crate::routes::location_missing::LocationMissing::new(tui, &id);
         let prompt = crate::prompt::editor::mount(tui, Some(&id));
+        scroll.follow_submits(&prompt);
         let queued = queued::Queued::new(tui, &id, prompt.weak());
         // `<Switch>`: the permission, the form, the missing location, or the prompt.
         let rest = View::new(app)

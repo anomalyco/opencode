@@ -98,6 +98,9 @@ struct Inner {
     /// The keys of the scroll box's children, in order.
     mounted: RefCell<Vec<RowKey>>,
     start: RefCell<Start>,
+    /// Where the mounted window ends, by row index, when it stops before the newest row
+    /// (`visibleRowsEnd`): `session.first` mounts the head only.
+    end: Cell<Option<usize>>,
     /// Set when rows mount above the window, so the reader's rows stay in place.
     pin: RefCell<Option<Pin>>,
     loading: Cell<bool>,
@@ -192,6 +195,7 @@ impl Transcript {
             rows: RefCell::default(),
             mounted: RefCell::default(),
             start: RefCell::new(Start::Tail),
+            end: Cell::new(None),
             pin: RefCell::default(),
             loading: Cell::new(false),
             layer: RefCell::default(),
@@ -272,16 +276,30 @@ impl Transcript {
 
     /// Mounts every loaded row (`ensureAllRows`).
     pub fn mount_all(&self, tui: &Tui) {
-        if *self.0.start.borrow() == Start::Top {
+        if *self.0.start.borrow() == Start::Top && self.0.end.get().is_none() {
             return;
         }
         *self.0.start.borrow_mut() = Start::Top;
+        self.0.end.set(None);
         self.0.render(tui, |_| false);
+    }
+
+    /// Mounts the oldest [`BACKFILL_CHUNK`] rows only, after `session.first` loaded the history; newer
+    /// rows mount as the reader scrolls down.
+    pub fn mount_head(&self, tui: &Tui) {
+        *self.0.start.borrow_mut() = Start::Top;
+        self.0.end.set(Some(BACKFILL_CHUNK));
+        // The render reads the history the load just stored.
+        self.0.render(tui, |_| false);
+        if self.0.specs.borrow().len() <= BACKFILL_CHUNK {
+            self.0.end.set(None);
+        }
     }
 
     /// Mounts the tail again and follows the bottom (`toBottom`).
     pub fn to_tail(&self, tui: &Tui) {
         *self.0.start.borrow_mut() = Start::Tail;
+        self.0.end.set(None);
         self.0.render(tui, |_| false);
         self.0.scroll.sticky(true);
         self.0.scroll.scroll_to_bottom();
@@ -289,7 +307,17 @@ impl Transcript {
 
     /// Whether every loaded row is mounted.
     pub fn all_mounted(&self) -> bool {
-        self.0.window_start(&self.0.specs.borrow()) == 0
+        self.0.window_start(&self.0.specs.borrow()) == 0 && self.at_end()
+    }
+
+    /// Whether the newest row is mounted.
+    pub fn at_end(&self) -> bool {
+        self.0.at_end()
+    }
+
+    /// Mounts newer rows below a head window when the reader nears its end. Returns whether it did.
+    pub fn reveal_newer(&self, tui: &Tui) -> bool {
+        self.0.reveal_newer(tui)
     }
 
     /// Mounted rows with their message and content y, top to bottom (`anchors.messagePositions`
@@ -313,14 +341,14 @@ impl Transcript {
         out
     }
 
-    /// Loads every older page in one publication (`session.first`), then mounts the head.
+    /// Loads every older page in one publication (`session.first`). The window stays until `done`
+    /// mounts the head.
     pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
         let Some(session) = self.session() else {
             return;
         };
         let data = tui.data.clone();
         let weak = self.0.this.clone();
-        *self.0.start.borrow_mut() = Start::Top;
         tui.app.spawn(
             async move {
                 data.message_load_more(
@@ -421,7 +449,7 @@ impl Inner {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
-                if up && inner.reveal_older(&tui) {
+                if up && inner.reveal_older(&tui) || !up && inner.reveal_newer(&tui) {
                     return;
                 }
                 inner.follow(&tui, !up);
@@ -593,6 +621,8 @@ impl Inner {
 
     fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(&str) -> bool) {
         let start = self.window_start(specs);
+        let end = window_end(self.end.get(), start, specs.len());
+        let specs = &specs[..end];
         let keys: Vec<RowKey> = specs[start..].iter().map(Spec::key).collect();
         let wanted: HashSet<&RowKey> = keys.iter().collect();
         let mut rows = self.rows.borrow_mut();
@@ -677,6 +707,30 @@ impl Inner {
         true
     }
 
+    fn at_end(&self) -> bool {
+        self.end
+            .get()
+            .is_none_or(|end| end >= self.specs.borrow().len())
+    }
+
+    /// `revealNewerRows`: near the end of a head window, mount [`BACKFILL_CHUNK`] more rows below it.
+    fn reveal_newer(&self, tui: &Tui) -> bool {
+        let Some(end) = self.end.get() else {
+            return false;
+        };
+        let rows = self.specs.borrow().len();
+        let (_, top) = self.scroll.scroll_position();
+        let viewport = f64::from(self.scroll.rect().height);
+        let content = f64::from(self.scroll.content_view().rect().height);
+        if end >= rows || top + viewport < content - viewport {
+            return false;
+        }
+        let next = grouping::rows_after(&self.weights.borrow(), end, BACKFILL_CHUNK);
+        self.end.set((next < rows).then_some(next));
+        self.render(tui, |_| false);
+        true
+    }
+
     /// `prependHistory`: loads the next older page; the store's flush mounts it.
     fn load_older(&self, tui: &Tui) -> bool {
         let Some(session) = self.session.borrow().clone() else {
@@ -721,7 +775,8 @@ impl Inner {
         let content = self.scroll.content_view().rect().height;
         let bottom = f64::from((content - self.scroll.rect().height).max(0.0));
         // Only a step down reaches the bottom; after a step up the content's size may be a frame old.
-        let next = if down && top >= bottom {
+        // The end of a head window is not the bottom.
+        let next = if down && top >= bottom && self.at_end() {
             Start::Tail
         } else {
             match &*self.start.borrow() {
@@ -754,6 +809,11 @@ fn window_start(start: &Start, specs: &[Spec], weights: &[usize]) -> usize {
             .position(|spec| spec.key() == *key)
             .map_or(tail, |index| index.min(tail)),
     }
+}
+
+/// The row after the last mounted one (`visibleEnd`): never before the window's start.
+fn window_end(end: Option<usize>, start: usize, rows: usize) -> usize {
+    end.map_or(rows, |end| end.min(rows)).max(start)
 }
 
 /// Shortcuts rows show, read before the store is locked.

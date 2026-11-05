@@ -308,6 +308,57 @@ fn first_loads_the_history_and_jump_to_latest_returns() {
 }
 
 #[test]
+fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
+    let scrollbar = Info {
+        session: Some(Session {
+            scrollbar: Some(true),
+            ..Session::default()
+        }),
+        ..Info::default()
+    };
+    let h = open(turns(60), scrollbar);
+    // `session.first` mounts the oldest 60 rows only (`setVisibleRowsEnd`), so the content is shorter
+    // and the scrollbar's thumb longer than with every row mounted.
+    h.press("ctrl+g");
+    let head = h.wait_for("┃  Question 1\n");
+    assert!(head.contains("Jump to latest ↓"), "{head}");
+    // The thumb in half rows: `▀` and `▄` are one, `█` two.
+    let thumb = |screen: &str| {
+        screen
+            .lines()
+            .skip(TOP)
+            .take(15)
+            .map(|line| match line.chars().nth(77) {
+                Some('█') => 2,
+                Some('▀' | '▄') => 1,
+                _ => 0,
+            })
+            .sum::<usize>()
+    };
+    let head_thumb = thumb(&head);
+    // Paging down mounts the newer rows (`revealNewerRows`) until the newest one shows, then the view
+    // follows the bottom again.
+    let mut screen = head;
+    for _ in 0..400 {
+        if screen.contains("Answer 60 three.") && !screen.contains("Jump to latest") {
+            break;
+        }
+        screen = h.press("pagedown");
+    }
+    assert!(screen.contains("Answer 60 three."), "{screen}");
+    assert!(!screen.contains("Jump to latest"), "{screen}");
+    // Message navigation mounts every row (`ensureAllRows`).
+    h.press("ctrl+g");
+    h.wait_for("┃  Question 1\n");
+    let screen = settle(&h, h.dispatch("session.message.next"));
+    assert!(
+        head_thumb > thumb(&screen),
+        "head thumb {head_thumb}, full thumb {}:\n{screen}",
+        thumb(&screen)
+    );
+}
+
+#[test]
 fn message_navigation_aligns_messages_with_the_top() {
     let h = open(turns(30), Info::default());
     // A reply's first anchor is its first mounted part, so a closed exploration group does not count

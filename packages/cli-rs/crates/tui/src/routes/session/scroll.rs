@@ -6,7 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::time::{Duration, Instant};
 
-use opencode_local::cli_config::{Grouping, Info, Verbosity};
+use opencode_local::cli_config::{Grouping, Info, SubmitScroll, Verbosity};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::input::MouseEventKind;
@@ -72,6 +72,23 @@ impl Controls {
         });
         inner.install(tui);
         Self(inner)
+    }
+
+    /// The prompt's `onSubmit` (`index.tsx:1650-1652`): back to the newest rows after a send, unless
+    /// `session.submit_scroll` is `keep`.
+    pub fn follow_submits(&self, prompt: &crate::prompt::editor::Prompt) {
+        let weak = Rc::downgrade(&self.0);
+        prompt.on_submit(move |tui| {
+            let keep = tui
+                .settings
+                .info()
+                .session
+                .and_then(|session| session.submit_scroll)
+                == Some(SubmitScroll::Keep);
+            if let Some(inner) = weak.upgrade().filter(|_| !keep) {
+                inner.to_bottom(tui);
+            }
+        });
     }
 }
 
@@ -355,7 +372,9 @@ impl Inner {
     fn move_by(&self, tui: &Tui, delta: f64) {
         self.clear_navigation();
         let scroll = self.transcript.scroll().clone();
-        if delta < 0.0 && self.transcript.reveal_older(tui) {
+        if delta < 0.0 && self.transcript.reveal_older(tui)
+            || delta > 0.0 && self.transcript.reveal_newer(tui)
+        {
             let weak = self.this.clone();
             after_layout(&tui.app, move || {
                 scroll.scroll_by(0.0, delta);
@@ -370,8 +389,8 @@ impl Inner {
         self.update_away();
     }
 
-    /// `session.first`: loads every older page, mounts every row, and scrolls to the top. The history
-    /// hint shows meanwhile.
+    /// `session.first`: loads every older page, mounts the oldest rows, and scrolls to the top. The
+    /// history hint shows meanwhile.
     fn first(&self, tui: &Tui) {
         if self.first_jump.get() {
             return;
@@ -391,7 +410,7 @@ impl Inner {
                 tui.toasts.error(error);
                 return;
             }
-            inner.transcript.mount_all(tui);
+            inner.transcript.mount_head(tui);
             let scroll = inner.transcript.scroll();
             scroll.sticky(false);
             scroll.scroll_to(0.0, 0.0);
@@ -448,6 +467,7 @@ impl Inner {
         let away = self.navigation.borrow().is_some()
             || self.slack_height.get() > 0.0
             || self.first_jump.get()
+            || !self.transcript.at_end()
             || top < bottom.floor();
         self.away.set(away);
         self.latest.visible(away && !self.first_jump.get());

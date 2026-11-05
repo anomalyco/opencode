@@ -140,6 +140,10 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     );
     if !trimmed.is_empty() {
         prompt.reset();
+        let hook = prompt.on_submit.borrow().clone();
+        if let Some(hook) = hook {
+            hook(tui);
+        }
     }
     // A staged new worktree is created first; then the prompt comes back and submits into it.
     if prompt.session.is_none() {
