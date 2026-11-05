@@ -11,7 +11,7 @@ use crate::dialog::{
 use crate::keymap::{Bind, KeymapLayer, TuiCommand};
 use crate::theme::Surface;
 use opentui::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 /// How a long title is cut (`truncateTitle`).
@@ -350,6 +350,8 @@ struct Inner<T> {
     scroll: ScrollBox,
     footer_slot: View,
     rows: RefCell<Vec<View>>,
+    /// A selection scroll waiting for the list's new height (`scrollAfterLayout`).
+    scroll_after_layout: Cell<bool>,
 }
 
 /// The select's handle (TS `DialogSelectRef`). Cloning is cheap.
@@ -412,6 +414,7 @@ pub fn select<T: Clone + PartialEq + 'static>(
         scroll,
         footer_slot,
         rows: RefCell::new(Vec::new()),
+        scroll_after_layout: Cell::new(false),
     });
     // The dialog owns the select; handlers hold weak references.
     let owner = inner.clone();
@@ -423,6 +426,16 @@ pub fn select<T: Clone + PartialEq + 'static>(
     handle.focus_initial();
     handle.register_layer();
     let weak = Rc::downgrade(&handle.0);
+    handle.0.scroll.content_view().on_resize({
+        let weak = weak.clone();
+        move |_, _| {
+            if let Some(inner) = weak.upgrade()
+                && inner.scroll_after_layout.replace(false)
+            {
+                Select(inner).scroll_to_selection(false);
+            }
+        }
+    });
     handle.0.scroll.on_mouse(move |cx, event| {
         if !matches!(
             event.kind,
@@ -793,7 +806,14 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 self.0.state.borrow_mut().selected = index;
                 self.remember_selection();
                 if moved && (props.preserve_selection || (self.current().is_some() && !filtering)) {
-                    self.scroll_to_selection(false);
+                    // Before layout the scroll box still has the old rows' limits, and a move past them goes to
+                    // the end, so a list whose rows changed scrolls once its content has the new height.
+                    let laid_out = self.0.scroll.content_view().rect().height;
+                    if laid_out == self.list_rows().0 as f32 {
+                        self.scroll_to_selection(false);
+                    } else {
+                        self.0.scroll_after_layout.set(true);
+                    }
                 }
             }
             None => {
