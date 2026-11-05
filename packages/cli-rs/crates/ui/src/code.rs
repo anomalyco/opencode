@@ -202,7 +202,7 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
 }
 
 /// Read-only code in the theme's text color, highlighted as `filetype` (`<code conceal={false} fg={text.base}>`).
-/// It shows all its lines and takes no focus, as in the transcript.
+/// It shows all its lines, wraps at a word as Core's `<code>` does, and takes no focus, as in the transcript.
 pub fn view(
     app: &App,
     theme: &Theme,
@@ -216,6 +216,7 @@ pub fn view(
         .syntax_theme(syntax.clone())
         .filetype(filetype)
         .set_code(content)
+        .wrap(WrapMode::Word)
         .focusable(false)
 }
 
