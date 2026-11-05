@@ -156,8 +156,10 @@ function DetailsPopover(props: DetailsProps) {
           // Keys pressed in the popover, Escape included, stay out of the session view's shortcuts.
           data-prevent-autofocus
           // A pointer open focuses the popover itself, so its first row shows no focus ring beside the pointer.
+          // Kobalte calls this inside its focus scope's effect: a tracked read would run the scope again on every
+          // change of state, moving focus to the trigger and back.
           onOpenAutoFocus={(event: Event) => {
-            if (!detailsPopoverFocusesContent(popoverState())) return
+            if (!detailsPopoverFocusesContent(untrack(popoverState))) return
             event.preventDefault()
             dispatch({ type: "autofocus.intercepted" })
           }}
