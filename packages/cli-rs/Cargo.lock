@@ -1318,6 +1318,7 @@ dependencies = [
  "indexmap",
  "log",
  "opencode-api",
+ "opencode-drive",
  "opencode-latex",
  "opencode-local",
  "opencode-mermaid",
