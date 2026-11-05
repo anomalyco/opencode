@@ -158,7 +158,6 @@ async function handleChat(req, res, config) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
     const headers = { "content-type": "application/json", accept: "application/json" };
-    const key = provider.apiKeyEnv ? process.env[provider.apiKeyEnv] : "";
     if (key) headers.authorization = "Bearer " + key;
 
     try {
