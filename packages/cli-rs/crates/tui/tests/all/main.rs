@@ -11,6 +11,7 @@ mod app;
 mod attach;
 mod complete;
 mod composer;
+mod diffs;
 mod editor;
 mod form;
 mod integrations;

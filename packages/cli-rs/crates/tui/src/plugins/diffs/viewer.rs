@@ -161,8 +161,6 @@ struct RouteData {
 pub struct Shared {
     pub memory: RefCell<Memory>,
     route: RefCell<Option<RouteData>>,
-    /// The viewer last mounted; it lives until the next one replaces it.
-    current: RefCell<Option<Rc<Viewer>>>,
 }
 
 pub fn plugin() -> Definition<Tui> {
@@ -180,6 +178,8 @@ pub fn plugin() -> Definition<Tui> {
                 };
                 let viewer = Viewer::mount(tui, &panel, place, i64::from(input.width));
                 host.add(&viewer.root);
+                // The panel's host keeps the viewer, so its keys, menu, and watch go when the panel closes.
+                Box::new(viewer)
             }),
         );
         let route = shared.clone();
@@ -206,11 +206,6 @@ pub fn plugin() -> Definition<Tui> {
         ));
         let weak = tui.weak();
         setup.on_dispose(move || {
-            if let Some(viewer) = shared.current.take()
-                && let Some(layer) = viewer.layer.borrow_mut().take()
-            {
-                layer.dispose();
-            }
             if let Some(tui) = weak.upgrade() {
                 tui.panels.release(&tui, ID);
             }
@@ -400,11 +395,6 @@ impl Viewer {
             passes: Cell::new(0),
             this: this.clone(),
         });
-        // The previous viewer's keys go with it.
-        let previous = shared.current.replace(Some(viewer.clone()));
-        if let Some(layer) = previous.and_then(|previous| previous.layer.borrow_mut().take()) {
-            layer.dispose();
-        }
         viewer.install(tui);
         viewer.load();
         super::sources::watch(&viewer);
@@ -423,17 +413,15 @@ impl Viewer {
                 (Some(host.id()), Condition::Always)
             }
             Place::Route { .. } => {
-                let weak = self.this.clone();
                 let tui = self.tui.clone();
                 let enabled = Condition::when(move || {
-                    let shown = tui.upgrade().is_some_and(|tui| {
+                    tui.upgrade().is_some_and(|tui| {
                         tui.route()
                             == Route::Plugin {
                                 id: ID.to_owned(),
                                 name: ROUTE.to_owned(),
                             }
-                    });
-                    shown && weak.upgrade().is_some_and(|viewer| viewer.is_current())
+                    })
                 });
                 (None, enabled)
             }
@@ -451,14 +439,6 @@ impl Viewer {
                 viewer.refresh();
             }
         });
-    }
-
-    fn is_current(&self) -> bool {
-        self.shared
-            .current
-            .borrow()
-            .as_ref()
-            .is_some_and(|current| std::ptr::eq(Rc::as_ptr(current), self))
     }
 
     pub(super) fn session(&self) -> Option<&SessionID> {
