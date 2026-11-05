@@ -35,7 +35,7 @@ test("clicking subagent A, then B, lands on B whenever A's sync settles", () => 
     { type: "child.synced", attempt: 1 },
   ])
 
-  const [, , earlyA, thenB] = replay([
+  const [, resolvingB, earlyA, thenB] = replay([
     ...clicks,
     { type: "child.synced", attempt: 1 },
     { type: "child.synced", attempt: 2 },
@@ -47,7 +47,7 @@ test("clicking subagent A, then B, lands on B whenever A's sync settles", () => 
   expect(syncedB?.effects).toEqual([{ type: "child.navigate", origin: parent, targetSessionID: "ses_b" }])
   expect(lateA?.state).toBe(syncedB!.state)
   expect(lateA?.effects).toEqual([])
-  expect(earlyA?.state).toBe(b!.state)
+  expect(earlyA?.state).toBe(resolvingB!.state)
   expect(earlyA?.effects).toEqual([])
   expect(thenB?.effects).toEqual([{ type: "child.navigate", origin: parent, targetSessionID: "ses_b" }])
 })
