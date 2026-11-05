@@ -2556,6 +2556,7 @@ export type ConfigEntry =
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
+          plugin_gui_web?: boolean | Array<string>
           policies?: Array<{
             action:
               | "provider.use"
@@ -4539,6 +4540,10 @@ export type ExperimentalPersistentPtyConnectTokenOutput = { data: PtyTicketConne
 export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
+
+export type ExperimentalPluginWebInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+
+export type ExperimentalPluginWebOutput = { location: LocationPublicRef; data: Array<PluginInfo> }
 
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: string

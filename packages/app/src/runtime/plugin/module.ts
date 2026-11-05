@@ -2,6 +2,9 @@ import {
   evaluatePluginBundle,
   inertModule,
   mainOnlyModule,
+  readPluginBundle,
+  type BundleModule,
+  type PluginBundle,
   type PluginModule,
   type Entry,
 } from "@opencode/plugin/gui/host"
@@ -32,23 +35,42 @@ const modules = {
  * takes the server plugin's id. A bundle that fails to evaluate becomes an entry that fails, so Extensions › Plugins
  * reports it.
  */
-export async function pluginDefinition(id: string, code: string): Promise<Entry> {
+export function pluginDefinition(id: string, code: string): Promise<Entry> {
+  return definition(id, (require) => evaluatePluginBundle(code, { process: "window", require }))
+}
+
+/**
+ * `pluginDefinition` for a web tab, whose CSP forbids the `new Function` that `evaluatePluginBundle` uses: the bundle
+ * runs as a module imported from a `blob:` URL instead.
+ */
+export function webPluginDefinition(id: string, code: string): Promise<Entry> {
+  return definition(id, async (require) => {
+    const run = await importBundle(code)
+    const module: BundleModule = { exports: {} }
+
+    run(require, module, module.exports)
+
+    return readPluginBundle(module)
+  })
+}
+
+async function definition(
+  id: string,
+  evaluate: (require: (name: string) => object) => PluginBundle | Promise<PluginBundle>,
+): Promise<Entry> {
   const loaded = new Map<string, object>(
     await Promise.all(Object.entries(modules).map(async ([name, load]) => [name, await load()] as const)),
   )
 
   const bundle = await Promise.try(() =>
-    evaluatePluginBundle(code, {
-      process: "window",
-      require: (name) => {
-        const module = loaded.get(name)
+    evaluate((name) => {
+      const module = loaded.get(name)
 
-        if (module) return module
+      if (module) return module
 
-        if (mainOnlyModule(name)) return inertModule(name)
+      if (mainOnlyModule(name)) return inertModule(name)
 
-        throw new Error(`Plugin GUI bundle requires a module the app does not share: ${name}`)
-      },
+      throw new Error(`Plugin GUI bundle requires a module the app does not share: ${name}`)
     }),
   ).then(
     (value) => ({ ok: true as const, value }),
@@ -62,3 +84,20 @@ export async function pluginDefinition(id: string, code: string): Promise<Entry>
   // A setup's returned cleanup reaches the host, which runs it when the plugin goes away.
   return { ...bundle.value.definition, id, windowEntry: async () => ({ default: (ctx: never) => setup?.(ctx) }) }
 }
+
+// Imports the CommonJS bundle as the body of a function of `require`, `module` and `exports`, the function
+// `new Function` would build, so the caller runs it with its own `require`.
+function importBundle(code: string) {
+  const source = `export default function (require, module, exports) {\n${code}\n}\n`
+  const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }))
+
+  return import(/* @vite-ignore */ url)
+    .then((imported: { default: BundleFunction }) => imported.default)
+    .finally(() => URL.revokeObjectURL(url))
+}
+
+type BundleFunction = (
+  require: (name: string) => object,
+  module: BundleModule,
+  exports: BundleModule["exports"],
+) => void

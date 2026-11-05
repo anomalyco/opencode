@@ -211,6 +211,24 @@ only it holds, and sends windows the same set. A window cannot supply main-proce
 
 A plugin whose server part fails to load has no GUI.
 
+### In the web app
+
+The web app loads plugin GUIs only when the server's config allows it. Set `experimental.plugin_gui_web` to `true` for
+every plugin with a GUI, or to the ids of the plugins to load:
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+  "experimental": { "plugin_gui_web": ["acme"] },
+}
+```
+
+- A browser tab reads the bundles from the server that served it, with the tab's own sign-in, and follows
+  `plugin.updated` like the desktop app.
+- Only the window `setup` runs. There is no main process, so `main` never runs and every `Ipc` is `inactive`.
+- A plugin that declares `os` does not load on the web, where no OS is known.
+- The plugin's window code runs with the tab's sign-in, so allow only plugins you trust on every device that connects.
+
 ## Reload and updates
 
 Load the plugin from its local directory and rebuild on every change:
