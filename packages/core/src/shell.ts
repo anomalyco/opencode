@@ -27,6 +27,7 @@ import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
+import { Detaching } from "./detaching.js"
 import { Global } from "@opencode/util/global"
 import { PersistentPty } from "./persistent-pty.js"
 import { ShellSelect } from "./shell/select.js"
@@ -223,6 +224,7 @@ const layer = () =>
       const config = yield* Config.Service
       const pty = yield* PersistentPty.Service
       const lifecycle = yield* LocationLifecycle.Service
+      const detaching = yield* Detaching.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const commands = new Map<Shell.ID, Active>()
@@ -236,36 +238,32 @@ const layer = () =>
       const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
       yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
 
+      // A Location that closes while the server keeps running (a reload, an eviction) keeps watching the daemon's
+      // commands it started: their exit, timeout and stop, so the jobs waiting on them still hear how they ended.
+      // Its replacement, if one boots, takes the commands back too and is the one that reports and evicts them.
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          for (const command of commands.values()) {
+          const stopping = detaching.isStopping()
+          for (const command of [...commands.values()]) {
+            if (command.daemon && !stopping) continue
             if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-            // Daemon commands are only detached from: their processes keep running for the next owner.
+            // On shutdown daemon commands are only detached from: their processes keep running for the next owner.
             if (command.daemon?.kill) yield* Fiber.interrupt(command.daemon.kill)
             if (command.daemon?.wait) yield* Fiber.interrupt(command.daemon.wait)
             // Teardown interrupts pending commands; it is not a terminal command failure. It never stops or
             // removes a command itself: a spawned process dies with its handle's scope once `done` settles.
             yield* Deferred.interrupt(command.done)
+            commands.delete(command.info.id)
           }
-          commands.clear()
           exitOrder.length = 0
         }),
       )
 
-      // A reload boots the Location's replacement while calls may still hold this one, and the replacement takes
-      // the daemon's commands back. Once closed, this one leaves their timers, stops and reporting to it, and only
-      // still answers its own waiters.
       let closed = false
       yield* lifecycle.awaitShutdown.pipe(
         Effect.andThen(
-          Effect.gen(function* () {
+          Effect.sync(() => {
             closed = true
-            for (const command of commands.values()) {
-              if (!command.daemon) continue
-              if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-              command.timeoutFiber = undefined
-              if (command.daemon.kill) yield* Fiber.interrupt(command.daemon.kill)
-            }
           }),
         ),
         Effect.forkScoped,
@@ -537,6 +535,18 @@ const layer = () =>
         )
       }
 
+      // The command's metadata as the daemon has it. A closed Location and its replacement can both watch one
+      // command, so a timeout or stop recorded by either is read back from there.
+      const latest = (daemon: Daemon) =>
+        pty.getPipe(daemon.id).pipe(
+          Effect.map((process) => Option.getOrUndefined(decodeStored(process.metadata))),
+          Effect.catchTags({
+            // Forgotten, or no daemon (which takes its processes with it).
+            "PersistentPty.ProcessNotFoundError": () => Effect.succeed(undefined),
+            "PersistentPty.UnavailableError": () => Effect.succeed(daemon.stored),
+          }),
+        )
+
       // Watches a command the daemon runs: its exit, timeout (in ms from now, none if undefined) and graceful
       // stop. Used for new commands and for running ones taken back after a restart.
       const attach = (command: Active, daemon: Daemon, timeout: number | undefined) => {
@@ -553,14 +563,25 @@ const layer = () =>
         // recorded stop. Only removal and teardown interrupt it.
         const stop = (reason: StopReason) =>
           Effect.sync(() => {
-            if (closed || daemon.stored.stopReason !== undefined) return
+            if (daemon.stored.stopReason !== undefined) return
             daemon.stored = { ...daemon.stored, stopReason: reason }
             daemon.kill = runFork(stopping(reason))
           })
         command.stop = stop
 
-        const arm = (duration: number) => {
-          command.timeoutFiber = runFork(Effect.sleep(Duration.millis(duration)).pipe(Effect.andThen(stop("timeout"))))
+        // Times out at `deadline`, unless the daemon's metadata says the timeout was cleared, moved or already hit.
+        const arm = (duration: number, deadline: number | undefined) => {
+          const expire: Effect.Effect<void> = Effect.gen(function* () {
+            const current = yield* latest(daemon)
+            if (!current) return
+            daemon.stored = current
+            if (current.stopReason !== undefined || current.backgroundedAtShutdown) return
+            const moved = current.timeoutDeadline
+            if (moved === undefined) return
+            if (deadline !== undefined && moved > deadline) return arm(moved - deadline, moved)
+            yield* stop("timeout")
+          })
+          command.timeoutFiber = runFork(Effect.sleep(Duration.millis(duration)).pipe(Effect.andThen(expire)))
         }
 
         command.timeout = (duration) =>
@@ -568,25 +589,29 @@ const layer = () =>
             if (daemon.stored.stopReason !== undefined) return
             if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
             command.timeoutFiber = undefined
-            yield* store(daemon, { timeoutDeadline: duration === 0 ? undefined : Date.now() + duration })
-            if (duration !== 0) arm(duration)
+            const deadline = duration === 0 ? undefined : Date.now() + duration
+            yield* store(daemon, { timeoutDeadline: deadline })
+            if (deadline !== undefined) arm(duration, deadline)
           })
 
         daemon.wait = runFork(
           pty.waitPipe(daemon.id).pipe(
-            Effect.map((exit): Ended => {
-              daemon.outputLines = exit.outputLines
-              daemon.outputError = exit.outputError
-              const reason = daemon.stored.stopReason
-              // A stopped command reports its reason, not the signal it was stopped with, as spawned ones do.
-              if (reason) return { status: reason, completed: exit.exitedAt }
-              return {
-                status: "exited",
-                ...(exit.exitCode !== undefined ? { exit: exit.exitCode } : {}),
-                ...(exit.signal !== undefined ? { signal: exit.signal } : {}),
-                completed: exit.exitedAt,
-              }
-            }),
+            Effect.flatMap(
+              Effect.fnUntraced(function* (exit): Effect.fn.Return<Ended> {
+                daemon.outputLines = exit.outputLines
+                daemon.outputError = exit.outputError
+                // Another watcher of the command may have stopped it.
+                const reason = daemon.stored.stopReason ?? (yield* latest(daemon))?.stopReason
+                // A stopped command reports its reason, not the signal it was stopped with, as spawned ones do.
+                if (reason) return { status: reason, completed: exit.exitedAt }
+                return {
+                  status: "exited",
+                  ...(exit.exitCode !== undefined ? { exit: exit.exitCode } : {}),
+                  ...(exit.signal !== undefined ? { signal: exit.signal } : {}),
+                  completed: exit.exitedAt,
+                }
+              }),
+            ),
             // The daemon went away (and its processes with it), or forgot the process: it was killed.
             Effect.catch((error) =>
               Effect.logWarning("lost a shell command's process", { id: command.info.id, error: error.message }).pipe(
@@ -603,7 +628,7 @@ const layer = () =>
           return
         }
         if (timeout === undefined) return
-        if (timeout > 0) return arm(timeout)
+        if (timeout > 0) return arm(timeout, daemon.stored.timeoutDeadline)
         runFork(stop("timeout"))
       }
 
@@ -943,6 +968,7 @@ export const node = makeLocationNode({
     Config.node,
     PersistentPty.node,
     LocationLifecycle.node,
+    Detaching.node,
     cleanupNode,
   ],
 })

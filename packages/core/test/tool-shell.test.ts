@@ -1491,6 +1491,78 @@ describe("ShellTool", () => {
     }),
   )
 
+  fakeDaemonIt.live("keeps a background daemon command's job across a Location reload and reports how it ended", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+          Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        const started = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const shell = yield* Shell.Service
+          const run = (id: string) =>
+            Effect.gen(function* () {
+              const settled = yield* executeTool(registry, call({ command: "work", background: true }, id))
+              return yield* shell.get(ID.make(String(settled.metadata?.shellID)))
+            })
+          return { finishing: yield* run("call-finishing"), cancelled: yield* run("call-cancelled") }
+        }).pipe(Effect.provide(locations.get(location)))
+        const process = (info: { file: string }) => {
+          const found = fake?.processes.find((item) => item.pipe?.output_path === info.file)
+          if (!found) throw new Error("no daemon process for the command")
+          return found.id
+        }
+
+        // A reload closes the Location and boots its replacement, which takes the commands back.
+        yield* locations.invalidate(location)
+        const replacement = yield* Effect.gen(function* () {
+          return yield* Shell.Service
+        }).pipe(Effect.provide(locations.get(location)))
+        expect((yield* replacement.list()).map((info) => info.id).toSorted()).toEqual(
+          [started.finishing.id, started.cancelled.id].toSorted(),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("running")
+
+        // Cancelling the session's job still stops its command.
+        yield* jobs.cancel(started.cancelled.id)
+        while (!fake?.ops.includes("signal")) yield* Effect.promise(() => Bun.sleep(2))
+        expect(fake?.requests).toContainEqual(
+          expect.objectContaining({ op: "signal", id: process(started.cancelled), signal: "SIGTERM" }),
+        )
+
+        fake?.output(process(started.finishing), "done\n")
+        fake?.exit(process(started.finishing), 0)
+        const notices = Array.from(yield* Fiber.join(admitted)).map((event) => event.data.item.payload)
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            text: expect.stringContaining("done"),
+            metadata: expect.objectContaining({ shellID: started.finishing.id, state: "completed", exit: 0 }),
+          }),
+        )
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            metadata: expect.objectContaining({ shellID: started.cancelled.id, state: "cancelled" }),
+          }),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("completed")
+        expect((yield* replacement.get(started.finishing.id)).status).toBe("exited")
+        yield* locations.invalidate(location)
+      }),
+    ),
+  )
+
   it.live("preserves a background command's non-zero exit", () =>
     withTempDir((tmp) => {
       reset()
