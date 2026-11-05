@@ -205,7 +205,9 @@ impl Transcript {
     }
 
     pub fn sync(&self, tui: &Tui, session: &SessionID, changes: &Changes) {
-        self.0.session.replace(Some(session.clone()));
+        if self.0.session.replace(Some(session.clone())).as_ref() != Some(session) {
+            *self.0.groups.expanded.borrow_mut() = tui.tabs.expanded_groups(&session.0);
+        }
         let location = self.0.location(tui);
         let catalogs = location
             .as_ref()
@@ -371,6 +373,10 @@ impl Inner {
             let Some(tui) = inner.tui.upgrade() else {
                 return;
             };
+            if let Some(session) = inner.session.borrow().as_ref() {
+                tui.tabs
+                    .set_expanded_groups(&session.0, inner.groups.expanded.borrow().clone());
+            }
             inner.render(&tui, |_| true);
         }));
         let weak = self.this.clone();
