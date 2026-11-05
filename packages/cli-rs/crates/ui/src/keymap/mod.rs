@@ -224,6 +224,8 @@ pub struct TuiKeymap<T> {
     keymap: Keymap<T>,
     keybinds: Rc<Keybinds<T>>,
     leader: Option<TimedLeader<T>>,
+    /// The timeout `leader` was built with, and the configured one now ([`Self::set_leader_timeout`]).
+    leader_timeouts: (Duration, Cell<Duration>),
     leader_stroke: Option<Stroke>,
     modes: Rc<RefCell<Vec<ModeEntry>>>,
     next_mode: Cell<u64>,
@@ -279,6 +281,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             keymap,
             keybinds: Rc::new(keybinds),
             leader,
+            leader_timeouts: (options.leader_timeout, Cell::new(options.leader_timeout)),
             leader_stroke,
             modes: Rc::new(RefCell::new(Vec::new())),
             next_mode: Cell::new(0),
@@ -318,14 +321,26 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
 
     /// When the pending leader sequence expires; schedule a timer and call [`Self::expire_leader`].
     pub fn leader_deadline(&self) -> Option<Instant> {
-        self.leader.as_ref()?.deadline()
+        let (built, current) = (self.leader_timeouts.0, self.leader_timeouts.1.get());
+        let deadline = self.leader.as_ref()?.deadline()?;
+        Some(deadline - built + current)
     }
 
     /// Clears the leader sequence if `now` is past its deadline. Returns whether it did.
     pub fn expire_leader(&self, now: Instant) -> bool {
-        self.leader
-            .as_ref()
-            .is_some_and(|leader| leader.expire(now))
+        if self.leader_deadline().is_none_or(|deadline| now < deadline) {
+            return false;
+        }
+        // The addon keeps the timeout it was built with, so a shorter configured one clears the sequence here.
+        if !self.leader.as_ref().is_some_and(|leader| leader.expire(now)) {
+            self.keymap.clear_pending_sequence();
+        }
+        true
+    }
+
+    /// `leader.timeout` after a config change; the next leader key takes it.
+    pub fn set_leader_timeout(&self, timeout: Duration) {
+        self.leader_timeouts.1.set(timeout);
     }
 
     /// Whether `event` is the configured leader key.
