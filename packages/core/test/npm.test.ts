@@ -494,7 +494,7 @@ describe("Npm.pin and cache retention", () => {
       const staging = path.join(usage, "in-flight.staging")
       yield* Effect.promise(() => fs.writeFile(staging, "{ broken"))
       // Another host's process cannot be probed from here, and a state directory shared between
-      // machines makes its lease just as real, so cleanup must leave it alone.
+      // machines makes its lease just as real, so cleanup must leave it alone while it is fresh.
       const otherHost = path.join(usage, "other-host-marker")
       yield* Effect.promise(() =>
         fs.writeFile(
@@ -502,12 +502,27 @@ describe("Npm.pin and cache retention", () => {
           JSON.stringify({ generation: "unused", pid: 999_999, hostname: "other-host", createdAt: new Date().toISOString() }),
         ),
       )
+      // But nothing here could ever reap a foreign marker, so it expires by `createdAt`: a host
+      // killed without cleanup (a SIGKILLed container) must not pin its generation forever.
+      const expired = path.join(usage, "expired-other-host-marker")
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          expired,
+          JSON.stringify({
+            generation: "unused",
+            pid: 999_999,
+            hostname: "other-host",
+            createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000).toISOString(),
+          }),
+        ),
+      )
       const exists = (file: string) => Effect.promise(() => fs.stat(file).then(() => true, () => false))
       yield* npm.update(spec)
-      return { staging: yield* exists(staging), otherHost: yield* exists(otherHost) }
+      return { staging: yield* exists(staging), otherHost: yield* exists(otherHost), expired: yield* exists(expired) }
     }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
 
     expect(result.staging).toBeTrue()
     expect(result.otherHost).toBeTrue()
+    expect(result.expired).toBeFalse()
   })
 })

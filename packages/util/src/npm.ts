@@ -341,11 +341,12 @@ const layer = Layer.effect(
     // consumer's next lazy import — or its teardown during a reload — into the ENOENT that fails
     // the whole reload (#62068). Each holder records a lease marker carrying its process identity;
     // liveness is the process itself, so a suspended server keeps its lease and a crashed one stops
-    // pinning as soon as its pid is gone. Another host's marker cannot be probed and reads as live:
-    // cleanup never deletes a lease it cannot check. No heartbeat timer involved.
+    // pinning as soon as its pid is gone. Another host's marker cannot be probed and reads as live
+    // until it ages out by `createdAt`; no heartbeat timer involved.
     const usageDirectory = () => path.join(global.state, "npm-usage")
     const liveGenerations = Effect.fnUntraced(function* () {
       const entries = yield* fs.readDirectory(usageDirectory()).pipe(Effect.orElseSucceed(() => [] as string[]))
+      const now = yield* Clock.currentTimeMillis
       const live = new Set<string>()
       yield* Effect.forEach(
         entries,
@@ -362,7 +363,14 @@ const layer = Layer.effect(
             if (Option.isNone(marker)) return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
             // A marker from another host cannot be probed from here, and a state directory shared
             // between machines or containers makes its lease just as real, so it counts as live.
-            if (marker.value.hostname !== hostname) return live.add(marker.value.generation)
+            // Nothing here could ever reap it either, so it expires by `createdAt` after the same
+            // generous age the generations themselves are kept for: a foreign host killed without
+            // cleanup (a SIGKILLed container) must not pin its generation forever.
+            if (marker.value.hostname !== hostname) {
+              const createdAt = Date.parse(marker.value.createdAt)
+              if (Number.isFinite(createdAt) && now - createdAt <= retention) return live.add(marker.value.generation)
+              return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+            }
             if (!processAlive(marker.value.pid)) return yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
             live.add(marker.value.generation)
           }),
