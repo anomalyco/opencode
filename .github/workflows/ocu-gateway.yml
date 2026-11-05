@@ -1,0 +1,26 @@
+name: OCU gateway tests
+
+on:
+  push:
+    branches: [ocu/phase-1-foundation]
+    paths:
+      - "ocu/**"
+      - ".github/workflows/ocu-gateway.yml"
+  pull_request:
+    paths:
+      - "ocu/**"
+      - ".github/workflows/ocu-gateway.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run gateway tests
+        run: node --test ocu/gateway/test-gateway.mjs
