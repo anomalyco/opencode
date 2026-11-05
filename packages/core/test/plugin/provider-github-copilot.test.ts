@@ -147,7 +147,6 @@ describe("GithubCopilotPlugin", () => {
       const before = folds.count
 
       yield* TestClock.adjust("10 minutes")
-      // Each refresh reads the endpoint before the model list.
       yield* advance(() => models().length === 2)
       yield* drain
       expect(folds.count).toBe(before)
@@ -410,9 +409,11 @@ describe("GithubCopilotPlugin", () => {
       const credentials = yield* Credential.Service
       const providers = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
+      const requests: string[] = []
       const http = HttpClient.make((request) =>
-        Effect.succeed(
-          HttpClientResponse.fromWeb(
+        Effect.sync(() => {
+          requests.push(request.url)
+          return HttpClientResponse.fromWeb(
             request,
             Response.json({
               data: [
@@ -429,8 +430,8 @@ describe("GithubCopilotPlugin", () => {
                 },
               ],
             }),
-          ),
-        ),
+          )
+        }),
       )
       const sent: string[] = []
       const outbound = Object.assign(
@@ -457,6 +458,7 @@ describe("GithubCopilotPlugin", () => {
         Effect.provideService(HttpClient.HttpClient, http),
         Effect.provideService(FetchHttpClient.Fetch, outbound),
       )
+      yield* advance(() => requests.some((url) => url.endsWith("/models")))
       yield* drain
 
       const event = yield* hooks.trigger("session", "title", {

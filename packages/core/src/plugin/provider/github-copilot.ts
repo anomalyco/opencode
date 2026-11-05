@@ -104,15 +104,14 @@ const oauth = (app: App.Info) =>
             Effect.flatMap((token) => {
               if (token.access_token) {
                 const access = token.access_token
-                return request(userURL(domain), {
-                    headers: {
-                      Accept: "application/json",
-                      Authorization: `Bearer ${access}`,
-                      "User-Agent": App.useragent(app),
-                      "X-GitHub-Api-Version": userApiVersion,
-                    },
+                return request(userURL(enterprise ? domain : undefined), {
+                  headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${access}`,
+                    "User-Agent": App.useragent(app),
+                    "X-GitHub-Api-Version": userApiVersion,
                   },
-                ).pipe(
+                }).pipe(
                   Effect.map((user) => Option.getOrUndefined(decodeUser(user))),
                   // Only an explicit entitlement answer blocks login; a failed
                   // or malformed lookup must not turn a GitHub hiccup into a denial.
@@ -189,7 +188,13 @@ export const GithubCopilotPlugin = define({
                 current?.type === "oauth"
                   ? HttpClient.filterStatusOk(http)
                       .execute(
-                        HttpClientRequest.get(userURL(enterpriseDomain(credential.metadata))).pipe(
+                        HttpClientRequest.get(
+                          userURL(
+                            typeof current.metadata?.enterpriseUrl === "string"
+                              ? current.metadata.enterpriseUrl
+                              : undefined,
+                          ),
+                        ).pipe(
                           HttpClientRequest.setHeaders({
                             Accept: "application/json",
                             Authorization: `Bearer ${current.refresh}`,
@@ -394,12 +399,8 @@ function oauthURLs(domain: string) {
   }
 }
 
-function userURL(domain: string) {
-  return `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`
-}
-
-function enterpriseDomain(metadata?: Readonly<Record<string, unknown>>) {
-  return typeof metadata?.enterpriseUrl === "string" ? normalizeDomain(metadata.enterpriseUrl) : "github.com"
+function userURL(enterprise?: string) {
+  return `${enterprise ? `https://api.${normalizeDomain(enterprise)}` : "https://api.github.com"}/copilot_internal/user`
 }
 
 function baseURL(enterprise?: string) {
