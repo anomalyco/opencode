@@ -1,45 +1,62 @@
-import { createEffect, on, onCleanup } from "solid-js"
-import { useLocation } from "@solidjs/router"
+import { createEffect, createSignal, on, onCleanup } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { ComposerEditor } from "@/composer/editor/editor"
-import { setCursorPosition } from "@/composer/editor/dom"
+import { getCursorPosition } from "@/composer/editor/dom"
 import { createComposerEditor } from "@/composer/editor/interaction"
+import { promptLength } from "@/composer/prompt-parts"
 import type { PendingSession } from "@/shell/tabs/tabs"
+import { isTitlebarTabLink, useComposerFocus } from "./composer/focus"
 
-export function PreparingComposer(props: { pending: PendingSession }) {
-  const location = useLocation()
-  let element: HTMLElement | undefined
+export function PreparingComposer(props: { sessionID: string; pending: PendingSession }) {
+  const focus = useComposerFocus(props.sessionID)
+  const [element, setElement] = createSignal<HTMLElement>()
 
   const editor = createComposerEditor({
     store: () => props.pending.composer.store,
     commands: () => [],
     context: () => [],
     searchContextFiles: () => [],
-    onEditor: (value) => {
-      element = value
-    },
+    onEditor: setElement,
     view: {
       draftOnly: true,
       submit: { stopping: () => false, onSubmit() {}, onStop() {} },
     },
   })
 
+  focus.bindPreparing({ target: () => props.sessionID, element })
+
+  createEffect(() => {
+    const el = element()
+
+    if (!el) return
+    makeEventListener(el, "focusin", () => focus.dispatch({ type: "preparing.focused", target: props.sessionID }))
+    makeEventListener(el, "focusout", (event) => {
+      // Removing the editor, or the window losing focus, is not the user leaving it.
+      if (!el.isConnected || !document.hasFocus() || document.activeElement === el) return
+
+      if (event.relatedTarget instanceof Element && isTitlebarTabLink(event.relatedTarget)) return
+      focus.dispatch({ type: "preparing.blurred", target: props.sessionID })
+    })
+    // The editor stores the caret only on input, key up and pointer up. Keep it current through keyboard moves
+    // and line breaks, so the draft moved into the created session carries it.
+    makeEventListener(document, "selectionchange", () => {
+      if (document.activeElement !== el) return
+      const cursor = getCursorPosition(el)
+
+      if (cursor !== undefined && cursor !== props.pending.composer.cursor()) editor.onCursor(cursor)
+    })
+  })
+
   createEffect(
     on(
       () => props.pending,
       (pending) => {
-        const pathname = location.pathname
-        editor.restoreFocus(pending.composer.cursor())
+        const target = props.sessionID
+        const cursor = () => pending.composer.cursor() ?? promptLength(pending.composer.current())
+        focus.dispatch({ type: "preparing.mounted", target, cursor: cursor() })
         onCleanup(() => {
-          if (document.activeElement !== element) return
-          const cursor = pending.composer.cursor()
-          requestAnimationFrame(() => {
-            if (location.pathname !== pathname) return
-            const next = document.querySelector<HTMLDivElement>('[data-component="composer-editor"]')
-
-            if (!next || next === element) return
-            next.focus()
-            setCursorPosition(next, cursor ?? 0)
-          })
+          const el = element()
+          focus.dispatch({ type: "preparing.unmounted", target, cursor: (el && getCursorPosition(el)) ?? cursor() })
         })
       },
     ),

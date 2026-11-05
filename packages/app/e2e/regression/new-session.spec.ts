@@ -790,6 +790,45 @@ test("the title and message stay stable through worktree creation", async ({ pag
   await expect.poll(() => mock.calls).toEqual(["worktree", "session", "prompt"])
 })
 
+test("the created session's composer keeps focus and a caret placed after a line break", async ({ page }) => {
+  const mock = await openWorktreeDraft(page, pendingDraft)
+  const pending = await submitPending(page, mock)
+  await draftFollowUp(page)
+  // The start of the second line, one character past the line break.
+  await editor(page).press("ControlOrMeta+End")
+  await editor(page).press("Home")
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect(page.locator("[data-session-title]").getByRole("heading", { level: 1 })).toHaveText(
+    "Created workspace session",
+  )
+  await expect(pending.shimmer).toHaveCount(0)
+  await expect(editor(page)).toHaveText(followUp)
+  await expect(editor(page)).toBeFocused()
+  // Types into whatever holds focus, without focusing the editor again.
+  await page.keyboard.type("Also: ")
+  await expect(editor(page)).toHaveText(followUp.replace("\n", "\nAlso: "))
+})
+
+test("a user who leaves the pending composer keeps focus there once the session is created", async ({ page }) => {
+  const mock = await openWorktreeDraft(page, pendingDraft)
+  const pending = await submitPending(page, mock)
+  await draftFollowUp(page)
+  await pending.shimmer.click()
+  await expect(editor(page)).not.toBeFocused()
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect(page.locator("[data-session-title]").getByRole("heading", { level: 1 })).toHaveText(
+    "Created workspace session",
+  )
+  await expect(pending.shimmer).toHaveCount(0)
+  await expect(editor(page)).toHaveText(followUp)
+  await expect(submit(page)).toBeEnabled()
+  await expect(editor(page)).not.toBeFocused()
+  await expect.poll(() => mock.calls).toEqual(["worktree", "session", "prompt"])
+  await expect(editor(page)).not.toBeFocused()
+})
+
 for (const row of [
   { failure: "worktree", followUp: true, calls: ["worktree"] },
   { failure: "session", followUp: true, calls: ["worktree", "session"] },
