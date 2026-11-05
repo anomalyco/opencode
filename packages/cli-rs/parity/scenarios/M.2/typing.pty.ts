@@ -9,7 +9,10 @@ export default definePty({
   rows: 20,
   server: server({
     events: (id) => answer(id, "Three lines read."),
-    after: (id) => [user(id, "one\ntwo\nthree", 100), assistant("msg_a4", [{ type: "text", text: "Three lines read." }], 101)],
+    after: (id) => [
+      user(id, "one\ntwo\nthree", 100),
+      assistant("msg_a4", [{ type: "text", text: "Three lines read." }], 101),
+    ],
   }),
   setup: (root) => config(root),
   steps: [
