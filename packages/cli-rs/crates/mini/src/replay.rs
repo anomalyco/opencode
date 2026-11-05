@@ -17,12 +17,12 @@ use opencode_api::client::Client;
 use opencode_api::error::Error;
 use opencode_api::generated::{
     ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder, ModelDefaultInput,
-    SessionID, SessionInboxItem, SessionInterruptInput, SessionMessageAssistant,
-    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool, SessionMessageAssistantToolState,
-    SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
-    SessionMessageInfo, SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted,
-    SessionMessageToolStateError, SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
-    SessionStructuredError, V2Event,
+    PromptFileAttachment, PromptFileSource, SessionID, SessionInboxItem, SessionInterruptInput,
+    SessionMessageAssistant, SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool,
+    SessionMessageAssistantToolState, SessionMessageAssistantToolState as ToolPartState,
+    SessionMessageAssistantToolTime, SessionMessageCompaction, SessionMessageInfo, SessionMessageShellExit,
+    SessionMessageShellOutput, SessionMessageToolStateCompleted, SessionMessageToolStateError,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError, V2Event,
 };
 use opentui::app::ProxyError;
 use opentui::prelude::*;
@@ -195,6 +195,7 @@ impl Output {
 #[derive(Clone, Debug, PartialEq)]
 struct Pending {
     text: String,
+    files: Vec<PromptFileAttachment>,
 }
 
 /// The transcript of one session (the state of `createSessionTransport`).
@@ -427,21 +428,32 @@ impl Transcript {
         self.promoted.contains(message_id)
     }
 
-    pub fn admitted(&mut self, message_id: &str, text: &str) -> Output {
+    pub fn admitted(&mut self, message_id: &str, text: &str, files: &[PromptFileAttachment]) -> Output {
         if self.promoted.contains(message_id) {
-            return self.user(message_id, text, true);
+            return self.user(message_id, text, files, true);
         }
-        self.pending.insert(message_id.to_owned(), Pending { text: text.to_owned() });
+        self.pending.insert(message_id.to_owned(), Pending { text: text.to_owned(), files: files.to_vec() });
         Output::default()
     }
 
-    fn user(&mut self, message_id: &str, text: &str, render: bool) -> Output {
+    /// `renderUser`: the prompt once, then its images once each.
+    fn user(&mut self, message_id: &str, text: &str, files: &[PromptFileAttachment], render: bool) -> Output {
         let visible = !self.message_ids.insert(message_id.to_owned());
-        if !render || visible || text.trim().is_empty() {
+        let images: Vec<Commit> = user_image_commits(message_id, files)
+            .into_iter()
+            .filter(|commit| {
+                self.image_ids.insert(part_key(message_id, commit.part_id.as_deref().unwrap_or_default())) && render
+            })
+            .collect();
+        if !render {
             return Output::default();
         }
-        let commit = Commit::new(EntryKind::User, Source::System, Phase::Start, text).message(message_id);
-        Output::commits(vec![commit])
+        let mut commits = Vec::new();
+        if !visible && !text.trim().is_empty() {
+            commits.push(Commit::new(EntryKind::User, Source::System, Phase::Start, text).message(message_id));
+        }
+        commits.extend(images);
+        Output::commits(commits)
     }
 
     /// `rememberToolMessage`: a message that calls tools shows no text while tools are hidden.
@@ -576,7 +588,7 @@ impl Transcript {
                 let id = user.id.as_str();
                 self.pending.remove(id);
                 self.promoted.insert(id.to_owned());
-                self.user(id, &user.text, render)
+                self.user(id, &user.text, user.files.as_deref().unwrap_or_default(), render)
             }
             SessionMessageInfo::Compaction(compaction) => self.compaction(compaction, render),
             SessionMessageInfo::Assistant(assistant) => self.assistant(assistant, render),
@@ -734,7 +746,8 @@ impl Transcript {
                 let SessionInboxItem::User(item) = &enqueued.data.item else {
                     return Output::default();
                 };
-                let mut output = self.admitted(enqueued.data.inbox_id.as_str(), &item.payload.text);
+                let files = item.payload.files.as_deref().unwrap_or_default();
+                let mut output = self.admitted(enqueued.data.inbox_id.as_str(), &item.payload.text, files);
                 output.footer.push(event.clone());
                 output
             }
@@ -742,7 +755,7 @@ impl Transcript {
                 let id = delivered.data.inbox_id.as_str();
                 self.promoted.insert(id.to_owned());
                 let mut output = match self.pending.remove(id) {
-                    Some(pending) => self.user(id, &pending.text, true),
+                    Some(pending) => self.user(id, &pending.text, &pending.files, true),
                     None => Output::default(),
                 };
                 output.extend(Output::patch(true, "waiting for assistant"));
@@ -1178,6 +1191,42 @@ fn error_message(error: &SessionStructuredError) -> String {
     if error.message.is_empty() { "Session execution failed".to_owned() } else { error.message.clone() }
 }
 
+/// `userImageCommits`: a prompt's images, without repeats of one named inline image (`deduplicateVisibleImages`).
+fn user_image_commits(message: &str, files: &[PromptFileAttachment]) -> Vec<Commit> {
+    let mut seen: Vec<(String, &str)> = Vec::new();
+    files
+        .iter()
+        .filter(|file| {
+            let inline = matches!(file.source, PromptFileSource::Inline(_));
+            let Some(mention) = file.mention.as_ref().filter(|_| file.mime.starts_with("image/") && inline) else {
+                return true;
+            };
+            let metadata =
+                serde_json::to_string(&(&file.mime, &file.name, &file.description, &mention.text)).unwrap_or_default();
+            let key = (metadata, file.data.as_str());
+            if seen.contains(&key) {
+                return false;
+            }
+            seen.push(key);
+            true
+        })
+        .filter(|file| file.mime.starts_with("image/"))
+        .enumerate()
+        .map(|(index, file)| {
+            let caption = file
+                .name
+                .clone()
+                .or_else(|| file.mention.as_ref().map(|mention| mention.text.clone()))
+                .unwrap_or_else(|| format!("[Image {}]", index + 1));
+            let mut commit = Commit::new(EntryKind::User, Source::System, Phase::Final, caption)
+                .message(message)
+                .part_id(format!("image:{index}"));
+            commit.image = Some(format!("data:{};base64,{}", file.mime, file.data.as_str()));
+            commit
+        })
+        .collect()
+}
+
 fn skill_commit(message: &str, name: &str) -> Commit {
     Commit::new(EntryKind::System, Source::System, Phase::Start, format!("→ Skill \"{name}\""))
         .message(message)
@@ -1512,7 +1561,7 @@ mod tests {
     fn an_admitted_prompt_prints_when_delivered() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(&[], false);
-        assert!(transcript.admitted("msg_p", "hi").commits.is_empty());
+        assert!(transcript.admitted("msg_p", "hi", &[]).commits.is_empty());
         let output = transcript.event(&event("session.inbox.delivered", json!({ "inboxID": "msg_p" })));
         assert_eq!(texts(&output), [(EntryKind::User, "hi".into())]);
         assert_eq!(output.patch.unwrap().status.as_deref(), Some("waiting for assistant"));
