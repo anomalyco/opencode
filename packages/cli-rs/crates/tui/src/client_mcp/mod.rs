@@ -116,7 +116,11 @@ pub fn sync(tui: &Tui) {
             tui.data
                 .read(|state| state.default_location().directory.clone())
         });
-    let (url, headers) = endpoint(client.base_url(), client.credentials());
+    // A managed service that restarted has a new port and password; the transport knows them.
+    let (base, auth) = client
+        .transport()
+        .endpoint(client.base_url().clone(), client.credentials());
+    let (url, headers) = endpoint(&base, auth.as_ref());
     let key = tui
         .settings
         .experiment(EXPERIMENT)

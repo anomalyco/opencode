@@ -8,6 +8,7 @@ use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use serde::de::DeserializeOwned;
 
+use crate::client::Auth;
 use crate::error::Error;
 use crate::generated::{SessionReasoningDelta, SessionTextDelta, V2Event};
 
@@ -71,6 +72,12 @@ pub trait Transport: Send + Sync {
     /// service's current address; sockets opened beside the transport use this.
     fn route(&self, url: url::Url) -> url::Url {
         url
+    }
+
+    /// Where a socket to `url` that authenticates with `auth` would go now, and the credentials it would use. A
+    /// transport that follows a restarted service answers with the service's current address and password.
+    fn endpoint(&self, url: url::Url, auth: Option<&Auth>) -> (url::Url, Option<Auth>) {
+        (self.route(url), auth.cloned())
     }
 }
 
