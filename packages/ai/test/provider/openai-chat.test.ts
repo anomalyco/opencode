@@ -1264,6 +1264,23 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("converts the GitHub Copilot billing beside usage to USD", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ content: "Hello" }, "stop"), {
+              ...usageChunk({ prompt_tokens: 5, completion_tokens: 2 }),
+              copilot_usage: { total_nano_aiu: 4_473_525_000, token_details: [] },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
+    }),
+  )
+
   it.effect("drops a malformed billed cost without failing the stream", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

@@ -400,6 +400,25 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("converts the GitHub Copilot billing on the completed event to USD", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.completed",
+              response: { id: "resp_1", usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 } },
+              copilot_usage: { total_nano_aiu: 4_473_525_000 },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
+    }),
+  )
+
   it.effect("ignores bare null frames between events", () =>
     Effect.gen(function* () {
       const model = configure({

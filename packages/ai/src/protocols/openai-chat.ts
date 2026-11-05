@@ -960,7 +960,11 @@ const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, rea
 // `prompt_tokens_details.cached_tokens`, DeepSeek uses
 // `prompt_cache_hit_tokens`, Zai uses top-level `cached_tokens`, and
 // DigitalOcean uses top-level `cache_read_input_tokens` / `cache_created_input_tokens`.
-const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string): Usage | undefined => {
+const mapUsage = (
+  usage: OpenAIChatEvent["usage"],
+  providerMetadataKey: string,
+  frame: OpenAIChatEvent,
+): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const output = usage.completion_tokens ?? undefined
@@ -981,7 +985,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string):
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, frame),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -1116,8 +1120,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     // Moonshot (and a few other OpenAI-compatible providers) attach usage to
     // `choice.usage` instead of the top-level `usage` field.
     const usage =
-      mapUsage(event.usage, state.providerMetadataKey) ??
-      mapUsage(choice?.usage, state.providerMetadataKey) ??
+      mapUsage(event.usage, state.providerMetadataKey, event) ??
+      mapUsage(choice?.usage, state.providerMetadataKey, event) ??
       state.usage
     const rawFinishReason = choice?.finish_reason
     const finishReason = rawFinishReason
