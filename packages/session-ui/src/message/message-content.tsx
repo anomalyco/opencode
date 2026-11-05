@@ -297,8 +297,6 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
-  // Copy the full prompt the model received, with quotes, comments and attachments. A Voice message
-  // copies the spoken words here and offers the full prompt under "Copy full message".
   const copyText = () => (props.voice ? props.text : props.message.text)
 
   const sent = createMemo(() =>
