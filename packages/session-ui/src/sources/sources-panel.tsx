@@ -1,8 +1,19 @@
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Icon } from "@opencode/ui/icon"
-import { frameLoop, prefersReducedMotion, Spring } from "@opencode/ui/motion"
-import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { frameLoop, observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { sourcesExpand, type SiteIconMode } from "./experiment"
+import {
+  COLLAPSE_SOURCES_EXPAND_EVENT,
+  DISPOSED_SOURCES_EXPAND_EVENT,
+  INITIAL_SOURCES_EXPAND_STATE,
+  isSourcesStepMounted,
+  isSourcesStepMoving,
+  isSourcesStepOpen,
+  REDUCED_SOURCES_EXPAND_EVENT,
+  transitionSourcesExpand,
+  type SourcesExpandEvent,
+} from "./sources-expand-machine"
 import { SiteIcon } from "./site-icon"
 import type { SourceResult, SourceStep, TurnSources } from "./sources"
 import "./sources.css"
@@ -33,66 +44,115 @@ function SearchStep(props: {
   onOpen: (url: string) => void
 }) {
   const i18n = useI18n()
-  const [state, setState] = createSignal({ open: false, mounted: false })
+  let current = INITIAL_SOURCES_EXPAND_STATE
+  const [state, setState] = createSignal(current)
+  const open = createMemo(() => isSourcesStepOpen(state()))
+  const mounted = createMemo(() => isSourcesStepMounted(state()))
   const expandable = () => props.step.results.length > 0
   let region: HTMLDivElement | undefined
   let list: HTMLDivElement | undefined
-  let stop: (() => void) | undefined
-  // Height follows one spring; opening again mid-close keeps its velocity.
-  const spring = new Spring(0)
-  onCleanup(() => stop?.())
+  let stopFrame: (() => void) | undefined
+  // One event object serves every frame, so a step allocates nothing beyond the height string.
+  const frame = { type: "frame" as const, attempt: 0, dt: 0 }
 
-  const toggle = () => {
-    const open = !state().open
-    setState({ open, mounted: true })
+  const dispatch = (event: SourcesExpandEvent) => {
+    const previous = current
+    const next = transitionSourcesExpand(previous, event)
 
-    if (!region || !list) return
-    const el = region
-    // Layout is read once per toggle, never per frame: the results' height, now that they render, and where a
-    // resting region starts from. A moving one starts from its spring.
-    const height = open ? list.offsetHeight : 0
+    if (next === previous) return
+    current = next
 
-    if (!stop) spring.snap(el.offsetHeight)
-    stop?.()
-    stop = undefined
+    if (isSourcesStepMoving(previous) && (!isSourcesStepMoving(next) || next.attempt !== previous.attempt)) {
+      stopFrame?.()
+      stopFrame = undefined
 
-    if (prefersReducedMotion()) {
-      spring.snap(height)
-      el.style.height = open ? "" : "0px"
+      if (region) delete region.dataset.moving
 
-      if (open) fadeIn(list)
+      if (list) list.style.opacity = ""
+    }
 
-      if (!open) setState({ open, mounted: false })
+    if (next.status === "disposed") return
+    setState(next)
+
+    if (!isSourcesStepMoving(next)) {
+      if (region) region.style.height = next.status === "open" ? "" : "0px"
 
       return
     }
 
-    const options = sourcesExpand()
-    spring.omega = (2 * Math.PI) / options.duration
-    spring.zeta = 1 - options.bounce
-    spring.set(height)
-    el.dataset.moving = ""
+    if (!region?.isConnected || !list?.isConnected) return dispatch({ type: "detached", attempt: next.attempt })
 
-    stop = frameLoop.add((dt) => {
-      el.style.height = `${spring.step(dt)}px`
+    if (next.mode === "fade") {
+      region.style.height = ""
+      list.style.opacity = "0"
+      stopFrame ??= frameLoop.add(tick)
 
-      if (!spring.resting) return true
-      delete el.dataset.moving
-      el.style.height = open ? "" : "0px"
-      stop = undefined
+      return
+    }
 
-      if (!open) setState({ open, mounted: false })
+    // Layout is read once per flight, never per frame: where a resting region starts, and the results' height now
+    // that they render. A reversed flight starts from its spring.
+    if (!next.measured) {
+      dispatch({
+        type: "measured",
+        attempt: next.attempt,
+        from: region.offsetHeight,
+        to: next.status === "opening" ? list.offsetHeight : 0,
+      })
 
-      return false
-    })
+      if (current !== next) return
+    }
+
+    region.dataset.moving = ""
+    region.style.height = `${next.value}px`
+    stopFrame ??= frameLoop.add(tick)
   }
 
+  const tick = (dt: number) => {
+    const moving = current
+
+    if (!isSourcesStepMoving(moving)) return false
+
+    if (!region?.isConnected || !list?.isConnected) {
+      dispatch({ type: "detached", attempt: moving.attempt })
+
+      return false
+    }
+
+    frame.attempt = moving.attempt
+    frame.dt = dt
+    dispatch(frame)
+
+    if (current !== moving) return false
+
+    if (moving.mode === "fade") list.style.opacity = String(moving.value)
+
+    if (moving.mode === "height") region.style.height = `${moving.value}px`
+
+    return true
+  }
+
+  createEffect(() => {
+    if (!expandable()) dispatch(COLLAPSE_SOURCES_EXPAND_EVENT)
+  })
+
+  onCleanup(
+    observeReducedMotion(() => {
+      if (prefersReducedMotion()) dispatch(REDUCED_SOURCES_EXPAND_EVENT)
+    }),
+  )
+
+  onCleanup(() => dispatch(DISPOSED_SOURCES_EXPAND_EVENT))
+
+  const toggle = () =>
+    dispatch({ type: "toggle", expandable: expandable(), reduced: prefersReducedMotion(), curve: sourcesExpand() })
+
   return (
-    <div data-slot="sources-step" data-open={state().open ? "" : undefined}>
+    <div data-slot="sources-step" data-open={open() ? "" : undefined}>
       <button
         type="button"
         data-slot="sources-step-row"
-        aria-expanded={expandable() ? state().open : undefined}
+        aria-expanded={expandable() ? open() : undefined}
         disabled={!expandable()}
         onClick={toggle}
       >
@@ -114,7 +174,7 @@ function SearchStep(props: {
       </button>
       <div ref={region} data-slot="sources-step-results" style={{ height: "0px" }}>
         <div ref={list} data-slot="sources-step-list">
-          <Show when={state().mounted}>
+          <Show when={mounted()}>
             <For each={props.step.results}>
               {(result) => <ResultRow result={result} icons={props.icons} onOpen={props.onOpen} />}
             </For>
@@ -175,19 +235,4 @@ function FetchStep(props: { step: Extract<SourceStep, { type: "fetch" }>; onOpen
       </a>
     </div>
   )
-}
-
-// Reduced motion trades the height for a short fade.
-function fadeIn(el: HTMLElement) {
-  const spring = Spring.fromDuration(0, { duration: 0.15, bounce: 0 })
-  spring.set(1)
-  el.style.opacity = "0"
-  frameLoop.add((dt) => {
-    el.style.opacity = String(spring.step(dt))
-
-    if (!spring.resting) return true
-    el.style.opacity = ""
-
-    return false
-  })
 }

@@ -158,28 +158,44 @@ export function createMarkdownWorkerClient(spawn: () => MarkdownWorkerPort) {
       dispatch({ type: "worker.crashed", attempt, message: "Markdown worker response failed" })
   }
 
+  // Callers that cancel by id need no AbortController, listener or promise per parse.
+  const startParse = (text: string, settle: Settle<string>) => {
+    const id = state.issued + 1
+    request({ type: "parse.requested", text }, { kind: "parse", resolve: settle.resolve, reject: settle.reject })
+
+    return id
+  }
+
+  const abortParse = (id: number) => dispatch({ type: "parse.aborted", id })
+
   return {
-    parseMarkdown(text: string, signal: AbortSignal) {
-      if (signal.aborted) return Promise.reject(markdownWorkerDisposed)
-      const id = state.issued + 1
-      const abort = () => dispatch({ type: "parse.aborted", id })
+    startParse,
+
+    abortParse,
+
+    parseMarkdown(text: string, signal?: AbortSignal) {
+      if (signal?.aborted) return Promise.reject(markdownWorkerDisposed)
 
       return new Promise<string>((resolve, reject) => {
+        if (!signal) {
+          startParse(text, { resolve, reject })
+
+          return
+        }
+
+        const abort = () => abortParse(id)
         signal.addEventListener("abort", abort, { once: true })
-        request(
-          { type: "parse.requested", text },
-          {
-            kind: "parse",
-            resolve: (html) => {
-              signal.removeEventListener("abort", abort)
-              resolve(html)
-            },
-            reject: (error) => {
-              signal.removeEventListener("abort", abort)
-              reject(error)
-            },
+
+        const id = startParse(text, {
+          resolve: (html) => {
+            signal.removeEventListener("abort", abort)
+            resolve(html)
           },
-        )
+          reject: (error) => {
+            signal.removeEventListener("abort", abort)
+            reject(error)
+          },
+        })
       })
     },
 
@@ -220,6 +236,10 @@ const client = createMarkdownWorkerClient(
 )
 
 export const parseMarkdown = client.parseMarkdown
+
+export const startParseMarkdown = client.startParse
+
+export const abortParseMarkdown = client.abortParse
 
 export const projectMarkdown = client.projectMarkdown
 
