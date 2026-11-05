@@ -274,8 +274,7 @@ function settleDisposed(state: Extract<QueueState, { status: "disposed" }>, even
 
   if (!returning || !("attempt" in event) || event.attempt !== returning.attempt) return unchanged(state)
 
-  if (event.type === "mutation.admitted" || event.type === "mutation.succeeded")
-    return changed({ status: "disposed" })
+  if (event.type === "mutation.admitted" || event.type === "mutation.succeeded") return changed({ status: "disposed" })
 
   if (event.type === "mutation.undone")
     return changed({ status: "disposed" }, [

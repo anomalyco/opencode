@@ -29,9 +29,9 @@ test("an open directory picker refuses a second picker or a worktree move, and i
   expect(selectLocationMissingView(picking.state, missing).disabled).toBe(true)
   expect(transitionLocationMissing(picking.state, { type: "choose.requested" }).state).toBe(picking.state)
   expect(transitionLocationMissing(picking.state, { type: "menu.toggled", open: true }).state).toBe(picking.state)
-  expect(
-    transitionLocationMissing(picking.state, { type: "move.worktree", directory: sibling.directory }).state,
-  ).toBe(picking.state)
+  expect(transitionLocationMissing(picking.state, { type: "move.worktree", directory: sibling.directory }).state).toBe(
+    picking.state,
+  )
 
   const disposed = transitionLocationMissing(picking.state, { type: "disposed" })
 

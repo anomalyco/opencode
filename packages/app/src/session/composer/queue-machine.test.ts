@@ -353,7 +353,12 @@ describe("an operation past its bound", () => {
     expect(undoing.effects).toContainEqual({ type: "mutation.timer.start", attempt })
     expect(viewQueue(undoing.state, { working: true, behavior: "queue" }).undoing).toBe(true)
 
-    const timedOut = transitionQueue(undoing.state, { type: "mutation.timed-out", attempt, hidden: [], stage: "running" })
+    const timedOut = transitionQueue(undoing.state, {
+      type: "mutation.timed-out",
+      attempt,
+      hidden: [],
+      stage: "running",
+    })
 
     expect(timedOut.state.status).toBe("idle")
     expect(viewQueue(timedOut.state, { working: true, behavior: "queue" }).undoing).toBe(false)
@@ -362,9 +367,7 @@ describe("an operation past its bound", () => {
       { type: "toast", key: "common.requestFailed" },
       { type: "mutation.timer.clear" },
     ])
-    expect(transitionQueue(timedOut.state, { type: "mutation.failed", attempt, hidden: [] }).state).toBe(
-      timedOut.state,
-    )
+    expect(transitionQueue(timedOut.state, { type: "mutation.failed", attempt, hidden: [] }).state).toBe(timedOut.state)
   })
 
   test("an undo whose cancel is in flight waits for the server's answer", () => {

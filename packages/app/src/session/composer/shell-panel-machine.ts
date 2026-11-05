@@ -157,10 +157,10 @@ export function transitionShellPanel(state: ShellPanelState, event: ShellPanelEv
     if (count(event.work) === 0) return close(state, event.work)
     const issued = state.issued + 1
 
-    return changed(
-      { status: "list", issued, focusAttempt: issued, enter: state.enter, stopping: state.stopping },
-      [...leave(state), { type: "focus.row", attempt: issued, key: state.item.key }],
-    )
+    return changed({ status: "list", issued, focusAttempt: issued, enter: state.enter, stopping: state.stopping }, [
+      ...leave(state),
+      { type: "focus.row", attempt: issued, key: state.item.key },
+    ])
   }
 
   if (event.type === "ended.settled" || event.type === "ended.timed-out") {
@@ -238,10 +238,10 @@ function settleStop(state: Live, event: Extract<ShellPanelEvent, { type: "stop.s
     return changed({ ...state, stopping }, [cancel])
 
   if (event.type === "stop.settled" && event.stopped)
-    return changed({ ...state, stopping, phase: { status: "ended", end: { status: "killed", completed: event.now } } }, [
-      cancel,
-      FOCUS_ENDED,
-    ])
+    return changed(
+      { ...state, stopping, phase: { status: "ended", end: { status: "killed", completed: event.now } } },
+      [cancel, FOCUS_ENDED],
+    )
 
   // A Stop that failed leaves the shell running, unless it left the list meanwhile and ends on its own.
   if (running(event.work, state.item)) return changed({ ...state, stopping }, [cancel])

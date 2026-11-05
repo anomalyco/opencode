@@ -20,7 +20,10 @@ const watcher: SessionActivityItem = {
   started: 2,
 }
 
-const work = (shells: readonly SessionActivityItem[], subagents: readonly SessionActivityItem[] = []): ShellPanelWork => ({
+const work = (
+  shells: readonly SessionActivityItem[],
+  subagents: readonly SessionActivityItem[] = [],
+): ShellPanelWork => ({
   enabled: true,
   subagents,
   shells,
@@ -61,9 +64,9 @@ test("a row's Stop sends once until it settles, and a stop that never settles gi
 
   expect(timedOut.effects).toEqual([{ type: "timer.cancel", attempt }])
   expect(selectShellPanelView(timedOut.state, both).stoppingKeys).toEqual({})
-  expect(transitionShellPanel(timedOut.state, { type: "stop.requested", item: server, work: both }).effects).toContainEqual(
-    expect.objectContaining({ type: "stop.run", item: server }),
-  )
+  expect(
+    transitionShellPanel(timedOut.state, { type: "stop.requested", item: server, work: both }).effects,
+  ).toContainEqual(expect.objectContaining({ type: "stop.run", item: server }))
 })
 
 test("a subagent row stops only once its child session exists", () => {

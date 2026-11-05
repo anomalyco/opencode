@@ -87,7 +87,10 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
       clearTimeout(timer)
       timer =
         effect.phase === "menu-loading"
-          ? setTimeout(() => dispatch({ type: "worktrees.timed-out", attempt: effect.attempt }), WORKTREES_LOAD_TIMEOUT_MS)
+          ? setTimeout(
+              () => dispatch({ type: "worktrees.timed-out", attempt: effect.attempt }),
+              WORKTREES_LOAD_TIMEOUT_MS,
+            )
           : setTimeout(
               () => dispatch({ type: "move.settle-timed-out", attempt: effect.attempt }),
               LOCATION_MOVE_SETTLE_TIMEOUT_MS,
@@ -136,7 +139,13 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
     await data.session.sync(props.sessionID).catch(() => undefined)
   }
 
-  createEffect(on(() => !!dialog.active, (open) => dispatch({ type: "dialog.changed", open }), { defer: true }))
+  createEffect(
+    on(
+      () => !!dialog.active,
+      (open) => dispatch({ type: "dialog.changed", open }),
+      { defer: true },
+    ),
+  )
   onCleanup(() => dispatch({ type: "disposed" }))
 
   const id = createUniqueId()

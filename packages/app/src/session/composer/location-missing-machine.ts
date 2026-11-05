@@ -84,7 +84,10 @@ export function transitionLocationMissing(
   if (state.status === "disposed") return unchanged(state)
 
   if (event.type === "disposed")
-    return changed({ status: "disposed" }, state.status === "menu-loading" || state.status === "moved" ? [TIMER_CANCEL] : [])
+    return changed(
+      { status: "disposed" },
+      state.status === "menu-loading" || state.status === "moved" ? [TIMER_CANCEL] : [],
+    )
 
   const base = { issued: state.issued, worktrees: state.worktrees }
   const loading = state.status === "menu-loading" ? [TIMER_CANCEL] : []
@@ -212,7 +215,10 @@ function cancelled(base: Base, dialogOpen: boolean): LocationMissingTransition {
   return changed({ ...base, status: "idle", restoreFocus: dialogOpen }, dialogOpen ? [] : [{ type: "focus.choose" }])
 }
 
-function changed(state: LocationMissingState, effects: readonly LocationMissingEffect[] = []): LocationMissingTransition {
+function changed(
+  state: LocationMissingState,
+  effects: readonly LocationMissingEffect[] = [],
+): LocationMissingTransition {
   return { state, effects }
 }
 
