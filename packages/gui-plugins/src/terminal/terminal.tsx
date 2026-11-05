@@ -5,10 +5,20 @@ import { resolveThemeVariantV2 } from "@opencode/ui/theme/v2/resolve"
 import type { HexColor, ResolvedV2Theme } from "@opencode/ui/theme/types"
 import { createPersistentPtyClient } from "@opencode/client/solid"
 import type { FitAddon, Terminal as Term } from "ghostty-web"
-import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import { uuid } from "@opencode/util/uuid"
-import { terminalConnection, type TerminalFailure } from "./connection"
+import { terminalConnection } from "./connection"
+import {
+  createPaneDispatch,
+  initialPaneState,
+  paneFailure,
+  paneRevealed,
+  paneTerm,
+  type PaneEffect,
+  type PaneEvent,
+  type PaneState,
+} from "./pane-machine"
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
 import { consumeTerminalMetaKey, terminalKeyInput } from "./terminal-key-event"
@@ -36,12 +46,27 @@ const DEFAULT_TERMINAL_COLORS = {
   },
 } as const satisfies Record<"light" | "dark", TerminalColors>
 
-const isHexColor = (value: string): value is HexColor => value.startsWith("#")
+type Loaded = Awaited<ReturnType<TerminalProps["ghostty"]>>
 
-const debugTerminal = (...values: unknown[]) => {
-  if (!import.meta.env.DEV) return
-  console.debug("[terminal]", ...values)
+/**
+ * What the pane's effects hold between events; only `run` in `Terminal` changes them. `phaseTimer` bounds loading and
+ * connecting, `connect` aborts the connect attempt and detaches its socket's listeners, and `cleanups` dispose the
+ * emulator and its listeners.
+ */
+type PaneHandles = {
+  phaseTimer?: ReturnType<typeof setTimeout>
+  measureFrame?: number
+  sizeTimer?: ReturnType<typeof setTimeout>
+  focusTimer?: ReturnType<typeof setTimeout>
+  connect?: AbortController
+  socket?: WebSocket
+  fit?: FitAddon
+  cleanups: VoidFunction[]
 }
+
+const MEASURE_REQUESTED: PaneEvent<Loaded, Term> = { type: "measure.requested" }
+
+const isHexColor = (value: string): value is HexColor => value.startsWith("#")
 
 const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
   let current = tokens[key]
@@ -138,30 +163,25 @@ export const Terminal = (props: TerminalProps) => {
   // Intentional mount-time capture: each surface attaches to one terminal.
   const ptyID = props.ptyID
   const attachmentID = uuid()
-  let socket: WebSocket | undefined
-  let term: Term | undefined
-  let fitAddon: FitAddon | undefined
-  let measureFrame: number | undefined
-  let sizeTimer: ReturnType<typeof setTimeout> | undefined
-  let measured = false
-  let revealed = false
-  let disposed = false
-  const cleanups: VoidFunction[] = []
-  // The opened terminal, for the quote toolbar.
-  const [opened, setOpened] = createSignal<Term>()
+  const handles: PaneHandles = { cleanups: [] }
+  const [paneState, setPaneState] = createSignal<PaneState<Term>>(initialPaneState)
   const [written, setWritten] = createSignal(0)
-  const [failure, setFailure] = createSignal<TerminalFailure>()
 
-  const reveal = () => {
-    if (revealed) return
-    revealed = true
-    container.style.opacity = "1"
-  }
+  const dispatch = createPaneDispatch<Loaded, Term>({
+    read: () => untrack(paneState),
+    write: (next) => setPaneState(next),
+    run,
+  })
+
+  const measure = () => dispatch(MEASURE_REQUESTED)
 
   const connection = terminalConnection({
     attachmentID,
     write: (data, done) => {
-      if (disposed || !term) {
+      const current = untrack(paneState)
+      const term = paneTerm(current)
+
+      if (!term) {
         done()
 
         return
@@ -171,23 +191,21 @@ export const Terminal = (props: TerminalProps) => {
         setWritten((value) => value + 1)
         done()
       })
-      reveal()
+
+      if (!paneRevealed(current)) dispatch({ type: "screen.written" })
     },
     resize: (size) => {
-      if (!disposed) term?.resize(size.cols, size.rows)
+      paneTerm(untrack(paneState))?.resize(size.cols, size.rows)
     },
     send: (frame) => {
-      if (socket?.readyState === WebSocket.OPEN) socket.send(frame)
+      if (handles.socket?.readyState === WebSocket.OPEN) handles.socket.send(frame)
     },
-    fail: (next) => {
-      if (disposed) return
-      setFailure(next)
-      reveal()
-      props.onFailure?.()
-
-      if (next === "outdated") socket?.close(1000)
-    },
+    fail: (reason) => dispatch({ type: "connection.failed", failure: reason }),
   })
+
+  const revealed = createMemo(() => paneRevealed(paneState()))
+  const failure = createMemo(() => paneFailure(paneState()))
+  const opened = createMemo(() => paneTerm(paneState()))
 
   const failureText = () => {
     const current = failure()
@@ -197,19 +215,6 @@ export const Terminal = (props: TerminalProps) => {
     if (current === "failed") return plugin.t("connectionFailed")
 
     if (current === "outdated") return plugin.t("serverOutdated")
-  }
-
-  const cleanup = () => {
-    if (!cleanups.length) return
-    const fns = cleanups.splice(0).reverse()
-
-    for (const fn of fns) {
-      try {
-        fn()
-      } catch (err) {
-        debugTerminal("cleanup failed", err)
-      }
-    }
   }
 
   const getTerminalColors = (): TerminalColors => {
@@ -241,51 +246,25 @@ export const Terminal = (props: TerminalProps) => {
 
   const terminalColors = createMemo(getTerminalColors)
 
-  // FitAddon.fit() would resize the emulator, which only ever takes the server's canonical size. The pane's size is
-  // what this attachment asks for when it controls the terminal; changes after the first are debounced.
-  const measure = () => {
-    if (disposed || !fitAddon) return
-
-    if (measureFrame !== undefined) return
-
-    measureFrame = requestAnimationFrame(() => {
-      measureFrame = undefined
-
-      if (disposed) return
-      const next = fitAddon?.proposeDimensions()
-
-      if (!next) return
-
-      if (!measured) {
-        measured = true
-        connection.size(next)
-
-        return
-      }
-
-      if (sizeTimer !== undefined) clearTimeout(sizeTimer)
-      sizeTimer = setTimeout(() => {
-        sizeTimer = undefined
-
-        if (!disposed) connection.size(next)
-      }, 100)
-    })
-  }
-
   // The terminal follows the theme and font; it is created with the current ones, so changes before then wait.
   createKeyed(
     () => ({ colors: terminalColors(), mode: theme.mode() === "dark" ? "dark" : "light" }),
     (current) => {
+      const term = paneTerm(untrack(paneState))
+
       if (!term) return
 
       setOptionIfSupported(term, "theme", current.colors)
       setOptionIfSupported(term, "colorScheme", current.mode)
     },
+    { equals: (previous, next) => previous.colors === next.colors && previous.mode === next.mode },
   )
 
   createKeyed(
     () => appearance.font("mono"),
     (font) => {
+      const term = paneTerm(untrack(paneState))
+
       if (!term) return
 
       setOptionIfSupported(term, "fontFamily", font)
@@ -293,22 +272,16 @@ export const Terminal = (props: TerminalProps) => {
     },
   )
 
-  // A new zoom remeasures; the first value finds no fit addon yet.
+  // A new zoom remeasures; the pane ignores it until the terminal opened.
   createKeyed(
     () => desktop?.zoom(),
     () => measure(),
   )
 
-  const focusTerminal = () => {
-    const t = term
-
-    if (!t) return
-
+  const focusTerminal = (t: Term) => {
     // A tab's rename field keeps focus, before and after a tick; it may take it before the terminal mounts. Other
     // fields, such as the command palette that created the terminal, give focus to it.
     const focus = () => {
-      if (disposed) return
-
       const current = document.activeElement
 
       if (current instanceof HTMLInputElement && current.closest('[role="tablist"]')) return
@@ -319,10 +292,11 @@ export const Terminal = (props: TerminalProps) => {
     }
 
     focus()
-    setTimeout(focus, 0)
+    clearTimeout(handles.focusTimer)
+    handles.focusTimer = setTimeout(focus, 0)
   }
 
-  const handlePointerDown = () => {
+  const handlePointerDown = (t: Term) => {
     const activeElement = document.activeElement
 
     if (activeElement instanceof HTMLElement && activeElement !== container && !container.contains(activeElement)) {
@@ -330,19 +304,15 @@ export const Terminal = (props: TerminalProps) => {
     }
 
     connection.interact()
-    focusTerminal()
+    focusTerminal(t)
   }
 
-  const handleLinkClick = (event: MouseEvent) => {
+  const handleLinkClick = (t: Term, event: MouseEvent) => {
     if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
 
     if (event.altKey) return
 
     if (event.button !== 0) return
-
-    const t = term
-
-    if (!t) return
 
     const text = getHoveredLinkText(t)
 
@@ -353,191 +323,272 @@ export const Terminal = (props: TerminalProps) => {
     system.openExternal(text)
   }
 
-  const connect = async () => {
+  function run(effect: PaneEffect<Loaded>) {
+    if (effect.type === "load-ghostty") {
+      handles.phaseTimer = setTimeout(() => dispatch({ type: "phase.timed-out", phase: "loading" }), effect.timeoutMs)
+      void props.ghostty().then(
+        (loaded) => dispatch({ type: "ghostty.loaded", loaded }),
+        (cause: unknown) => {
+          if (import.meta.env.DEV) console.debug("[terminal] failed to load ghostty-web", cause)
+          dispatch({ type: "ghostty.failed" })
+        },
+      )
+
+      return
+    }
+
+    if (effect.type === "cancel-phase-timer") {
+      clearTimeout(handles.phaseTimer)
+      handles.phaseTimer = undefined
+
+      return
+    }
+
+    if (effect.type === "open-terminal") return open(effect.loaded)
+
+    if (effect.type === "start-connect") {
+      const controller = new AbortController()
+      handles.connect = controller
+      handles.phaseTimer = setTimeout(
+        () => dispatch({ type: "phase.timed-out", phase: "connecting" }),
+        effect.timeoutMs,
+      )
+      void connect(controller.signal).catch((cause: unknown) => {
+        if (controller.signal.aborted) return
+
+        if (import.meta.env.DEV) console.debug("[terminal] failed to connect terminal", cause)
+        connection.error()
+      })
+
+      return
+    }
+
+    if (effect.type === "apply-size") return connection.size(effect.size)
+
+    if (effect.type === "schedule-measure") {
+      if (handles.measureFrame !== undefined) return
+      handles.measureFrame = requestAnimationFrame(() => {
+        handles.measureFrame = undefined
+        dispatch({ type: "measure.sampled", proposed: handles.fit?.proposeDimensions() })
+      })
+
+      return
+    }
+
+    if (effect.type === "schedule-size-timer") {
+      clearTimeout(handles.sizeTimer)
+      handles.sizeTimer = setTimeout(() => {
+        handles.sizeTimer = undefined
+        dispatch({ type: "size.debounced", seq: effect.seq })
+      }, effect.delayMs)
+
+      return
+    }
+
+    if (effect.type === "cancel-size-timer") {
+      clearTimeout(handles.sizeTimer)
+      handles.sizeTimer = undefined
+
+      return
+    }
+
+    if (effect.type === "notify-failure") return props.onFailure?.()
+
+    stop()
+
+    if (effect.type === "stop") return
+    clearTimeout(handles.focusTimer)
+    handles.focusTimer = undefined
+    handles.fit = undefined
+    handles.cleanups
+      .splice(0)
+      .reverse()
+      .forEach((fn) => {
+        try {
+          fn()
+        } catch (err) {
+          if (import.meta.env.DEV) console.debug("[terminal] cleanup failed", err)
+        }
+      })
+  }
+
+  // Ends what is in flight: the phase timer, measurement, the connect attempt and its socket. The emulator stays.
+  function stop() {
+    clearTimeout(handles.phaseTimer)
+    handles.phaseTimer = undefined
+
+    if (handles.measureFrame !== undefined) cancelAnimationFrame(handles.measureFrame)
+    handles.measureFrame = undefined
+    clearTimeout(handles.sizeTimer)
+    handles.sizeTimer = undefined
+    // Aborting detaches the socket's listeners, so closing it reports nothing.
+    handles.connect?.abort()
+    handles.connect = undefined
+    const socket = handles.socket
+    handles.socket = undefined
+
+    if (socket?.readyState === WebSocket.CONNECTING || socket?.readyState === WebSocket.OPEN) socket.close(1000)
+  }
+
+  function open(loaded: Loaded) {
+    const mod = loaded.mod
+
+    const t = new mod.Terminal({
+      cursorBlink: true,
+      cursorStyle: "bar",
+      fontSize: 14,
+      fontFamily: appearance.font("mono"),
+      allowTransparency: false,
+      convertEol: false,
+      theme: terminalColors(),
+      scrollback: 10_000,
+      ghostty: loaded.ghostty,
+    })
+
+    handles.cleanups.push(() => t.dispose())
+    setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
+
+    t.attachCustomKeyEventHandler((event) => {
+      const key = event.key.toLowerCase()
+
+      const input = terminalKeyInput(event)
+
+      if (input) {
+        t.input(input, true)
+
+        return true
+      }
+
+      if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
+        document.execCommand("copy")
+
+        return true
+      }
+
+      // allow for toggle terminal keybinds in parent
+      if (keybinds.matches("terminal.toggle", event)) return true
+
+      return consumeTerminalMetaKey(event, {
+        paste: () => void document.execCommand("paste"),
+        copy: () => t.hasSelection() && (document.execCommand("copy") || t.copySelection()),
+      })
+    })
+
+    const fit = new mod.FitAddon()
+    handles.cleanups.push(() => disposeIfDisposable(fit))
+    t.loadAddon(fit)
+    handles.fit = fit
+
+    const active = document.activeElement
+    t.open(container)
+    useTerminalUiBindings({
+      container,
+      term: t,
+      cleanups: handles.cleanups,
+      handlePointerDown: () => handlePointerDown(t),
+      handleLinkClick: (event) => handleLinkClick(t, event),
+      handleFocus: () => connection.interact(),
+    })
+
+    // onAutoFocus consumes the request, which flips autoFocus, so read it once, now that the terminal opened: the
+    // panel may cancel a request it made while mounting this pane.
+    const autoFocus = props.autoFocus === true
+
+    if (autoFocus) {
+      focusTerminal(t)
+      props.onAutoFocus?.()
+    }
+
+    if (!autoFocus) {
+      const restoreFocus = () => {
+        const current = document.activeElement
+
+        if (current !== container && !container.contains(current)) return
+        t.blur()
+        t.textarea?.blur()
+
+        if (active instanceof HTMLElement && active.isConnected) active.focus()
+      }
+
+      restoreFocus()
+      const timer = setTimeout(restoreFocus, 0)
+      handles.cleanups.push(() => clearTimeout(timer))
+    }
+
+    const onData = t.onData((data) => connection.input(data))
+    handles.cleanups.push(() => disposeIfDisposable(onData))
+
+    const onKey = t.onKey((key) => {
+      if (key.key == "Enter") {
+        props.onSubmit?.()
+      }
+    })
+
+    handles.cleanups.push(() => disposeIfDisposable(onKey))
+
+    // FitAddon.fit() would resize the emulator, which only ever takes the server's canonical size. The pane's size is
+    // what this attachment asks for when it controls the terminal.
+    const observer = new ResizeObserver(measure)
+    observer.observe(container)
+    handles.cleanups.push(() => observer.disconnect())
+    window.addEventListener("resize", measure)
+    handles.cleanups.push(() => window.removeEventListener("resize", measure))
+    void document.fonts.ready.then(measure)
+
+    // The container is laid out once the emulator opened in it, so the first size goes out before the socket opens.
+    dispatch({ type: "terminal.opened", term: t, initialSize: fit.proposeDimensions() })
+  }
+
+  async function connect(signal: AbortSignal) {
     const server = props.server
     const snapshot = await server.client.experimental.persistentPty.snapshot({ ptyID })
 
-    if (disposed) return
+    if (signal.aborted) return
     connection.restore({ size: snapshot.info.size, checkpoint: snapshot.checkpoint })
 
-    const next = await createPersistentPtyClient(server.client, { url: server.url }).connect({
+    const socket = await createPersistentPtyClient(server.client, { url: server.url }).connect({
       ptyID,
       cursor: snapshot.info.output.tail,
       attachmentID,
       takeover: true,
     })
 
-    if (disposed) {
-      next.close(1000)
+    if (signal.aborted) {
+      socket.close(1000)
 
       return
     }
 
-    socket = next
-    next.addEventListener("message", (event) => {
-      if (disposed) return
+    handles.socket = socket
+    socket.addEventListener("open", () => dispatch({ type: "socket.opened" }), { signal })
+    socket.addEventListener(
+      "message",
+      (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          connection.output(new Uint8Array(event.data))
 
-      if (event.data instanceof ArrayBuffer) {
-        connection.output(new Uint8Array(event.data))
+          return
+        }
 
-        return
-      }
-
-      // The PTY client receives binary frames as ArrayBuffers, handled above; the rest are text.
-      connection.message(String(event.data))
-    })
-    next.addEventListener("error", (event) => {
-      if (disposed) return
-      debugTerminal("websocket error", event)
-      connection.error()
-    })
+        // The PTY client receives binary frames as ArrayBuffers, handled above; the rest are text.
+        connection.message(String(event.data))
+      },
+      { signal },
+    )
+    socket.addEventListener(
+      "error",
+      (event) => {
+        if (import.meta.env.DEV) console.debug("[terminal] websocket error", event)
+        connection.error()
+      },
+      { signal },
+    )
     // The removal event closes the tab separately; keep the terminal visible until then.
-    next.addEventListener("close", () => {
-      if (!disposed) connection.close()
-    })
+    socket.addEventListener("close", () => connection.close(), { signal })
   }
 
-  onMount(() => {
-    const run = async () => {
-      const loaded = await props.ghostty()
-
-      if (disposed) return
-
-      const mod = loaded.mod
-      const g = loaded.ghostty
-
-      const t = new mod.Terminal({
-        cursorBlink: true,
-        cursorStyle: "bar",
-        fontSize: 14,
-        fontFamily: appearance.font("mono"),
-        allowTransparency: false,
-        convertEol: false,
-        theme: terminalColors(),
-        scrollback: 10_000,
-        ghostty: g,
-      })
-
-      cleanups.push(() => t.dispose())
-
-      if (disposed) {
-        cleanup()
-
-        return
-      }
-
-      term = t
-      setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
-
-      t.attachCustomKeyEventHandler((event) => {
-        const key = event.key.toLowerCase()
-
-        const input = terminalKeyInput(event)
-
-        if (input) {
-          t.input(input, true)
-
-          return true
-        }
-
-        if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
-          document.execCommand("copy")
-
-          return true
-        }
-
-        // allow for toggle terminal keybinds in parent
-        if (keybinds.matches("terminal.toggle", event)) return true
-
-        return consumeTerminalMetaKey(event, {
-          paste: () => void document.execCommand("paste"),
-          copy: () => t.hasSelection() && (document.execCommand("copy") || t.copySelection()),
-        })
-      })
-
-      const fit = new mod.FitAddon()
-      cleanups.push(() => disposeIfDisposable(fit))
-      t.loadAddon(fit)
-      fitAddon = fit
-
-      const active = document.activeElement
-      t.open(container)
-      useTerminalUiBindings({
-        container,
-        term: t,
-        cleanups,
-        handlePointerDown,
-        handleLinkClick,
-        handleFocus: () => connection.interact(),
-      })
-      setOpened(t)
-
-      // onAutoFocus consumes the request, which flips autoFocus, so read it once.
-      const autoFocus = props.autoFocus === true
-
-      if (autoFocus) {
-        focusTerminal()
-        props.onAutoFocus?.()
-      }
-
-      if (!autoFocus) {
-        const restoreFocus = () => {
-          const current = document.activeElement
-
-          if (current !== container && !container.contains(current)) return
-          t.blur()
-          t.textarea?.blur()
-
-          if (active instanceof HTMLElement && active.isConnected) active.focus()
-        }
-
-        restoreFocus()
-        const timer = setTimeout(restoreFocus, 0)
-        cleanups.push(() => clearTimeout(timer))
-      }
-
-      const onData = t.onData((data) => connection.input(data))
-      cleanups.push(() => disposeIfDisposable(onData))
-
-      const onKey = t.onKey((key) => {
-        if (key.key == "Enter") {
-          props.onSubmit?.()
-        }
-      })
-
-      cleanups.push(() => disposeIfDisposable(onKey))
-
-      const observer = new ResizeObserver(measure)
-      observer.observe(container)
-      cleanups.push(() => observer.disconnect())
-      window.addEventListener("resize", measure)
-      cleanups.push(() => window.removeEventListener("resize", measure))
-
-      if (typeof document !== "undefined" && document.fonts) {
-        void document.fonts.ready.then(measure)
-      }
-
-      measure()
-      await connect()
-    }
-
-    void run().catch((err) => {
-      if (disposed) return
-      debugTerminal("failed to connect terminal", err)
-      connection.error()
-    })
-  })
-
-  onCleanup(() => {
-    disposed = true
-
-    if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
-
-    if (sizeTimer !== undefined) clearTimeout(sizeTimer)
-
-    if (socket && socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close(1000)
-    cleanup()
-  })
+  onMount(() => dispatch({ type: "mounted" }))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return (
     <>
@@ -551,7 +602,7 @@ export const Terminal = (props: TerminalProps) => {
           "background-color": terminalColors().background,
           "caret-color": "transparent",
           "font-family": appearance.font("mono"),
-          opacity: 0,
+          opacity: revealed() ? 1 : 0,
         }}
         classList={{
           "select-text": true,
