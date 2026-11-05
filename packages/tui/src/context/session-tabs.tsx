@@ -476,6 +476,16 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           draft.tabs = moveSessionTab(draft.tabs, session, index)
         })
       },
+      moveCurrent(direction: 1 | -1) {
+        if (!enabled()) return
+        const session = current()
+        const index = state().tabs.findIndex((tab) => tab.sessionID === session)
+        if (!session || index === -1) return
+        if (moveSessionTab(state().tabs, session, index + direction) === state().tabs) return
+        update((draft) => {
+          draft.tabs = moveSessionTab(draft.tabs, session, index + direction)
+        })
+      },
       cycle(direction: 1 | -1) {
         if (!enabled()) return
         const tab = cycleSessionTab(state().tabs, current(), direction)

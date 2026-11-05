@@ -281,6 +281,29 @@ test("opens a background tab without changing the current session", async () => 
   }
 })
 
+test("moves the current tab one slot and stops at either end", async () => {
+  const setup = await renderSessionTabs("second", { persisted: ["first", "second", "third"] })
+  const order = () => setup.tabs.tabs().map((tab) => tab.sessionID)
+
+  try {
+    await wait(() => setup.tabs.current() === "second" && setup.tabs.tabs().length === 3)
+    setup.tabs.moveCurrent(-1)
+    await wait(() => order()[0] === "second", 2_000, "second to reach the start")
+    setup.tabs.moveCurrent(-1)
+    await setup.flush()
+    expect(order()).toEqual(["second", "first", "third"])
+    setup.tabs.moveCurrent(1)
+    await wait(() => order()[1] === "second", 2_000, "second to move back")
+    setup.tabs.moveCurrent(1)
+    await wait(() => order()[2] === "second", 2_000, "second to reach the end")
+    setup.tabs.moveCurrent(1)
+    await setup.flush()
+    expect(order()).toEqual(["first", "third", "second"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("loads location metadata when an open session moves", async () => {
   const destination = `${directory}/moved-worktree`
   const setup = await renderSessionTabs("first")
