@@ -23,6 +23,9 @@ import type { SimScenario, Step } from "./scenario"
 const RUN_DEADLINE = Number(process.env.PARITY_SIM_DEADLINE ?? 240_000)
 const WAIT = 30_000
 const password = "sim-parity"
+// Both sides of a run share the sandbox path, so it never differs between them; masking its random name keeps the
+// committed captures the same from run to run.
+const SANDBOX_MASK = { line: "opencode-parity-[A-Za-z0-9]{6}", reason: "the sandbox name is random" }
 
 const children = new Set<{ kill(signal?: number): void }>()
 const stopAll = () => children.forEach((child) => child.kill(9))
@@ -285,7 +288,7 @@ async function runStep(
     same = JSON.stringify(next) === JSON.stringify(last) ? same + 1 : 1
     last = next
   }
-  io.captures[step.checkpoint] = applyMasks(last, step.masks ?? [])
+  io.captures[step.checkpoint] = applyMasks(last, [...(step.masks ?? []), SANDBOX_MASK])
 }
 
 // The simulation provider of `opencode-drive`'s default config: an OpenAI-compatible provider at the default
