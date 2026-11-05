@@ -136,7 +136,12 @@ export const ROUTE_REVEAL_HISTORY_LIMIT = 32
  */
 export type RouteRevealState =
   | { readonly status: "idle"; readonly consumed: readonly string[] }
-  | { readonly status: "pending"; readonly entryKey: string; readonly target: string; readonly consumed: readonly string[] }
+  | {
+      readonly status: "pending"
+      readonly entryKey: string
+      readonly target: string
+      readonly consumed: readonly string[]
+    }
 
 export type RouteRevealEvent =
   | { readonly type: "route.synced"; readonly entryKey: string; readonly target: string | undefined }

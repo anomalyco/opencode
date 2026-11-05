@@ -531,6 +531,7 @@ export function createTimelineVirtualizer(input: Input) {
 
     // A row that has not mounted yet pins once its first measurement lands.
     if (!row) return
+
     // A tool inside a group of several names them all on the group; pin the group, or else the row.
     const element =
       row.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`) ??

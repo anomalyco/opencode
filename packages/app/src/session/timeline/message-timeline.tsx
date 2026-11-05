@@ -119,9 +119,7 @@ export function MessageTimeline(props: MessageTimelineProps) {
     }
   }
 
-  return (
-    <MessageTimelineView {...props} data={controller.data} action={controller.action} title={controller.title} />
-  )
+  return <MessageTimelineView {...props} data={controller.data} action={controller.action} title={controller.title} />
 }
 
 function MessageTimelineView(
@@ -607,9 +605,7 @@ function MessageTimelineView(
                           if (title().keepFocusOnMenuClose) event.preventDefault()
                         }}
                       >
-                        <Menu.Item onSelect={props.title.edit}>
-                          {language.t("common.rename")}
-                        </Menu.Item>
+                        <Menu.Item onSelect={props.title.edit}>{language.t("common.rename")}</Menu.Item>
                         <Menu.Item onSelect={() => void props.action.export(id)}>
                           {language.t("common.export")}…
                         </Menu.Item>

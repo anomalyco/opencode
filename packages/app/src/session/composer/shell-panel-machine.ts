@@ -124,10 +124,10 @@ export function transitionShellPanel(state: ShellPanelState, event: ShellPanelEv
     const focus: ShellPanelEffect = { type: "focus.back", attempt }
 
     if (running(event.work, event.item))
-      return changed(
-        { status: "shell", attempt, enter: state.enter, item: event.item, phase: { status: "running" } },
-        [...cleanup(state), focus],
-      )
+      return changed({ status: "shell", attempt, enter: state.enter, item: event.item, phase: { status: "running" } }, [
+        ...cleanup(state),
+        focus,
+      ])
 
     return changed({ status: "shell", attempt, enter: state.enter, item: event.item, phase: { status: "ending" } }, [
       ...cleanup(state),
@@ -165,13 +165,14 @@ export function transitionShellPanel(state: ShellPanelState, event: ShellPanelEv
     const attempt = state.attempt + 1
 
     if (event.type === "stop.settled" && event.stopped)
-      return changed({ ...state, attempt, phase: { status: "ended", end: { status: "killed", completed: event.now } } }, [
-        TIMER_CANCEL,
-        FOCUS_ENDED,
-      ])
+      return changed(
+        { ...state, attempt, phase: { status: "ended", end: { status: "killed", completed: event.now } } },
+        [TIMER_CANCEL, FOCUS_ENDED],
+      )
 
     // A Stop that failed leaves the shell running, unless it left the list meanwhile and ends on its own.
-    if (running(event.work, state.item)) return changed({ ...state, attempt, phase: { status: "running" } }, [TIMER_CANCEL])
+    if (running(event.work, state.item))
+      return changed({ ...state, attempt, phase: { status: "running" } }, [TIMER_CANCEL])
 
     return changed({ ...state, attempt, phase: { status: "ending" } }, [TIMER_CANCEL, ...ending(attempt, state.item)])
   }

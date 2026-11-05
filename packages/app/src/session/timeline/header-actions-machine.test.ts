@@ -50,10 +50,16 @@ test("Enter and the blur after it save once", () => {
     { type: "edit.opened", editable: true, title: "Old" },
     { type: "draft.changed", value: " New " },
   ])
+
   const first = transitionSessionHeaderTitle(editing, submit)
   const second = transitionSessionHeaderTitle(first.state, submit)
 
-  expect(first.effects).toContainEqual({ type: "rename.save", attempt: attempt(first.state), sessionID: "ses_a", title: "New" })
+  expect(first.effects).toContainEqual({
+    type: "rename.save",
+    attempt: attempt(first.state),
+    sessionID: "ses_a",
+    title: "New",
+  })
   expect(second.state).toBe(first.state)
   expect(second.effects).toEqual([])
 })
@@ -79,6 +85,7 @@ test("leaving the session mid-save resets the header, and the late save cannot c
     { type: "draft.changed", value: "New" },
     submit,
   ])
+
   const reopened = titleReplay(
     [
       { type: "target.synced", sessionKey: "ses_a", editable: false },
@@ -111,9 +118,9 @@ test("a save that fails or hangs returns to the edit with the draft", () => {
     expect(next.effects).toContainEqual(expect.objectContaining({ type: "toast.rename-failed" }))
   }
 
-  expect(transitionSessionHeaderTitle(saving, { type: "rename.succeeded", attempt: attempt(saving) }).state.status).toBe(
-    "idle",
-  )
+  expect(
+    transitionSessionHeaderTitle(saving, { type: "rename.succeeded", attempt: attempt(saving) }).state.status,
+  ).toBe("idle")
 })
 
 test("Delete claims the request at once, so a double click or Cancel waits for it", () => {
@@ -164,7 +171,10 @@ test("a delete closes the dialog and leaves the session, even when it lands afte
 })
 
 test("confirming a session that is already gone closes the dialog", () => {
-  const next = transitionSessionDelete(createSessionDeleteState("ses_a"), { type: "confirm.requested", target: undefined })
+  const next = transitionSessionDelete(createSessionDeleteState("ses_a"), {
+    type: "confirm.requested",
+    target: undefined,
+  })
 
   expect(next.state.status).toBe("closed")
   expect(next.effects).toEqual([{ type: "dialog.close" }])

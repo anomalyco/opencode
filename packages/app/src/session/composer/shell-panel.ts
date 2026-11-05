@@ -31,9 +31,11 @@ export function createShellPanel(input: {
 }) {
   const work = () => ({ enabled: input.enabled(), subagents: input.subagents().length, shells: input.shells() })
   const initial = untrack(work)
+
   const [panelState, setPanelState] = createSignal(
     createShellPanelState({ active: initial.enabled && initial.subagents + initial.shells.length > 0 }),
   )
+
   let timer: ReturnType<typeof setTimeout> | undefined
   let frame = 0
 
@@ -138,6 +140,7 @@ export function createShellTail(input: {
       () => [input.id(), input.directory()] as const,
       ([id, directory]) => {
         setOutput("")
+
         const follower = createShellFollower({
           id,
           directory,

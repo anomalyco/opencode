@@ -55,7 +55,12 @@ export type SessionHeaderTitleTransition = {
 /** The delete confirmation for one session: asking, or waiting for the server. */
 export type SessionDeleteState =
   | { readonly status: "confirming"; readonly sessionID: string; readonly attempt: number }
-  | { readonly status: "deleting"; readonly sessionID: string; readonly attempt: number; readonly target: SessionDeleteTarget }
+  | {
+      readonly status: "deleting"
+      readonly sessionID: string
+      readonly attempt: number
+      readonly target: SessionDeleteTarget
+    }
   | { readonly status: "closed"; readonly sessionID: string; readonly attempt: number }
   | { readonly status: "disposed"; readonly sessionID: string; readonly attempt: number }
 
@@ -76,7 +81,12 @@ export type SessionDeleteEvent =
   | { readonly type: "disposed" }
 
 export type SessionDeleteEffect =
-  | { readonly type: "delete.run"; readonly attempt: number; readonly sessionID: string; readonly target: SessionDeleteTarget }
+  | {
+      readonly type: "delete.run"
+      readonly attempt: number
+      readonly sessionID: string
+      readonly target: SessionDeleteTarget
+    }
   | { readonly type: "timer.start"; readonly attempt: number }
   | { readonly type: "timer.cancel" }
   | { readonly type: "dialog.close" }
@@ -123,7 +133,8 @@ export function transitionSessionHeaderTitle(
   }
 
   if (event.type === "menu.toggled") {
-    if (event.open && state.status === "idle" && event.editable) return { state: rest(state, "menu"), effects: NO_EFFECTS }
+    if (event.open && state.status === "idle" && event.editable)
+      return { state: rest(state, "menu"), effects: NO_EFFECTS }
 
     // Choosing Rename closes the menu after the editor opened; that close leaves the editor alone.
     if (!event.open && state.status === "menu") return { state: rest(state, "idle"), effects: NO_EFFECTS }
@@ -147,7 +158,9 @@ export function transitionSessionHeaderTitle(
       : { state, effects: NO_EFFECTS }
 
   if (event.type === "edit.cancelled")
-    return state.status === "editing" ? { state: rest(state, "idle"), effects: [FOCUS_CANCEL] } : { state, effects: NO_EFFECTS }
+    return state.status === "editing"
+      ? { state: rest(state, "idle"), effects: [FOCUS_CANCEL] }
+      : { state, effects: NO_EFFECTS }
 
   // Enter, then the blur it causes, submits once: the first leaves `editing`.
   if (event.type === "edit.submitted") {
@@ -159,7 +172,13 @@ export function transitionSessionHeaderTitle(
     const attempt = state.attempt + 1
 
     return {
-      state: { status: "saving", sessionKey: state.sessionKey, attempt, sessionID: event.sessionID, draft: state.draft },
+      state: {
+        status: "saving",
+        sessionKey: state.sessionKey,
+        attempt,
+        sessionID: event.sessionID,
+        draft: state.draft,
+      },
       effects: [
         FOCUS_CANCEL,
         { type: "rename.save", attempt, sessionID: event.sessionID, title },
@@ -247,7 +266,10 @@ export function transitionSessionDelete(state: SessionDeleteState, event: Sessio
   // A failed delete keeps the dialog, so the user can retry or cancel.
   return {
     state: { status: "confirming", sessionID: state.sessionID, attempt: state.attempt + 1 },
-    effects: [TIMER_CANCEL, { type: "toast.delete-failed", cause: event.type === "delete.failed" ? event.cause : undefined }],
+    effects: [
+      TIMER_CANCEL,
+      { type: "toast.delete-failed", cause: event.type === "delete.failed" ? event.cause : undefined },
+    ],
   }
 }
 
@@ -273,7 +295,9 @@ function deleted(
   }
 }
 
-function cleanupTitle(state: Exclude<SessionHeaderTitleState, { status: "disposed" }>): readonly SessionHeaderTitleEffect[] {
+function cleanupTitle(
+  state: Exclude<SessionHeaderTitleState, { status: "disposed" }>,
+): readonly SessionHeaderTitleEffect[] {
   if (state.status === "editing") return [FOCUS_CANCEL]
 
   if (state.status === "saving") return [TIMER_CANCEL]

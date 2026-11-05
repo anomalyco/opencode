@@ -57,10 +57,12 @@ export function createTimelineCache(
         // hidden behind another narrow-screen view is still the one on screen once the conversation returns.
         const selected = createMemo(() => session.identity.sessionKey() === key)
         const hasTranscript = createMemo(() => !!id && transcript(id).length > 0)
+
         let entryState = createTimelineCacheEntryState({
           selected: untrack(selected),
           hasTranscript: untrack(hasTranscript),
         })
+
         createComputed(() => {
           entryState = transitionTimelineCacheEntry(entryState, {
             type: "synced",

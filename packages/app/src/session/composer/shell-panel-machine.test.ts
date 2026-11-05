@@ -43,7 +43,9 @@ test("a Stop from an earlier visit cannot settle the Stop in flight after reopen
     { type: "shell.selected", item: server, work: both },
     { type: "stop.requested", work: both },
   ])
+
   const stale = attempt(first.state)
+
   const second = replay(
     [
       { type: "back.requested", work: both },
@@ -80,6 +82,7 @@ test("a stop that never settles gives the button back, or ends the shell that le
     attempt: attempt(stopping),
     work: work([watcher]),
   })
+
   expect(gone.state).toMatchObject({ status: "shell", phase: { status: "ending" } })
   expect(gone.effects).toEqual([
     { type: "timer.cancel" },
@@ -110,6 +113,7 @@ test("an exit that never arrives settles the panel as stopped and stops the outp
     { type: "shell.selected", item: watcher, work: both },
     { type: "work.synced", work: work([server]) },
   ]).state
+
   expect(selectShellPanelView(ending, work([server]))).toMatchObject({ stopDisabled: true, tailRunning: false })
 
   const next = transitionShellPanel(ending, { type: "ended.timed-out", attempt: attempt(ending), now: 9 })
@@ -136,6 +140,7 @@ test("an ended shell keeps counting until the menu closes, then the capsule fade
     { type: "work.synced", work: work([]) },
     { type: "ended.settled", attempt: 3, info: { status: "exited", exit: 1, completed: 7 }, now: 8 },
   ]).state
+
   expect(selectShellPanelView(ended, work([]))).toMatchObject({ active: true, counts: { shells: 1 } })
 
   const closed = transitionShellPanel(ended, { type: "menu.toggled", open: false, work: work([]) })
@@ -152,7 +157,10 @@ test("going back lists the remaining work, or closes the menu when nothing is le
 
   const listed = transitionShellPanel(shown, { type: "back.requested", work: work([server]) })
   expect(listed.state).toMatchObject({ status: "list", enter: false })
-  expect(listed.effects).toEqual([{ type: "focus.cancel" }, { type: "focus.row", attempt: attempt(listed.state), key: "sh_test" }])
+  expect(listed.effects).toEqual([
+    { type: "focus.cancel" },
+    { type: "focus.row", attempt: attempt(listed.state), key: "sh_test" },
+  ])
 
   const closed = transitionShellPanel(shown, { type: "back.requested", work: work([]) })
   expect(closed.state).toMatchObject({ status: "closed", enter: true })

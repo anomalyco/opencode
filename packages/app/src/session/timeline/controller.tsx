@@ -217,12 +217,12 @@ export function createTimelineController(input: { session: TimelineSessionSource
       onNone: () => (cause instanceof Error ? cause.message : language.t("common.requestFailed")),
     })
 
-  const editable = () =>
-    !!input.session.identity.sessionID() && !input.session.data.parentID() && input.active()
+  const editable = () => !!input.session.identity.sessionID() && !input.session.data.parentID() && input.active()
 
   const [titleState, setTitleState] = createSignal(
     createSessionHeaderTitleState(untrack(input.session.identity.sessionKey)),
   )
+
   let titleInput: HTMLInputElement | undefined
   let titleTimer: ReturnType<typeof setTimeout> | undefined
   let titleFrame = 0
@@ -379,7 +379,10 @@ export function createTimelineController(input: { session: TimelineSessionSource
       timer = undefined
 
       if (effect.type === "timer.cancel") return
-      timer = setTimeout(() => dispatch({ type: "delete.timed-out", attempt: effect.attempt }), SESSION_DELETE_TIMEOUT_MS)
+      timer = setTimeout(
+        () => dispatch({ type: "delete.timed-out", attempt: effect.attempt }),
+        SESSION_DELETE_TIMEOUT_MS,
+      )
     }
 
     onCleanup(() => dispatch({ type: "disposed" }))
