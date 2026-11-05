@@ -166,6 +166,8 @@ export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
   if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  // zsh aborts the whole line on an unmatched glob; pass it through literally as bash does.
+  if (n === "zsh") return ["+o", "nomatch", "-c", command]
   return ["-c", command]
 }
 
