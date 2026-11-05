@@ -23,6 +23,8 @@ export function listen(
       const sockets = new Set<net.Socket>()
       const server = net.createServer((socket) => {
         sockets.add(socket)
+        // A client may close its end (an interrupted wait) just before a reply is written.
+        socket.on("error", () => {})
         socket.once("close", () => sockets.delete(socket))
         const serve = (): Promise<void> =>
           readRequest(socket).then((envelope) => {

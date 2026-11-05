@@ -1,5 +1,5 @@
 import path from "node:path"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
@@ -8,6 +8,7 @@ import { Location } from "@opencode/core/location"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
+import { Detaching } from "@opencode/core/detaching"
 import { Bus } from "@opencode/core/bus"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
@@ -40,7 +41,7 @@ export const daemonShells = Effect.fn(function* () {
     }),
   ).pipe(Layer.provide(hostEnvironmentLayer))
   const shellLayer = (directory: string) =>
-    AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node]), [
+    AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node, Detaching.node]), [
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -52,13 +53,26 @@ export const daemonShells = Effect.fn(function* () {
       Environment.node.replace(environment),
       PersistentPty.node.replace(Layer.succeed(PersistentPty.Service, pty)),
     ])
-  // Runs `body` against the Location's Shell, then closes it as a restart or an eviction would.
   // A Location's Shell that stays open for the rest of the test.
   const openShell = (directory: string) =>
     Effect.gen(function* () {
       const context = yield* Layer.build(shellLayer(directory))
       return Context.get(context, Shell.Service)
     })
+  // A Location's Shell and its services, closed by `close` as a reload or an eviction does while the server runs.
+  const openLocation = (directory: string) =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const context = yield* Layer.buildWithScope(shellLayer(directory), scope)
+      return {
+        shell: Context.get(context, Shell.Service),
+        bus: Context.get(context, Bus.Service),
+        close: Context.get(context, LocationLifecycle.Service).shutdown.pipe(
+          Effect.andThen(Scope.close(scope, Exit.void)),
+        ),
+      }
+    })
+  // Runs `body` against the Location's Shell, then closes it as the server shutting down for a restart does.
   const withShell = <A, E>(
     directory: string,
     body: (shell: Shell.Interface) => Effect.Effect<A, E, LocationLifecycle.Service | Bus.Service>,
@@ -66,7 +80,10 @@ export const daemonShells = Effect.fn(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const shell = yield* Shell.Service
-        return yield* body(shell)
+        const detaching = yield* Detaching.Service
+        const result = yield* body(shell)
+        yield* detaching.begin
+        return result
       }).pipe(Effect.provide(shellLayer(directory))),
     )
   const directory = (yield* tmpdirScoped()).path
@@ -78,9 +95,20 @@ export const daemonShells = Effect.fn(function* () {
     pty,
     withShell,
     openShell,
+    openLocation,
     spawned: () => spawned,
     created: () => daemon.requests.filter((request) => request.op === "create_pipe"),
     signals: (id: number) =>
       daemon.requests.flatMap((request) => (request.op === "signal" && request.id === id ? [request.signal] : [])),
   }
 })
+
+// Polls in real time until `check` holds: the fake daemon answers over a socket, which the test clock does not drive.
+export const until = (check: (() => boolean) | Effect.Effect<boolean>) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 2_000; attempt++) {
+      if (typeof check === "function" ? check() : yield* check) return
+      yield* Effect.promise(() => Bun.sleep(2))
+    }
+    return yield* Effect.die(new Error("condition never held"))
+  })

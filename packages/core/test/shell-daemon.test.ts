@@ -11,20 +11,21 @@ import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
-import { Bus } from "@opencode/core/bus"
-import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
-import { daemonShells } from "./fixture/shell-daemon"
+import { daemonShells, until } from "./fixture/shell-daemon"
 import { tmpdirScoped } from "./fixture/tmpdir"
+import { binaryPath } from "@opencode/pty"
 import { it } from "./lib/effect"
 
 const unix = process.platform !== "win32"
 const test = unix ? it.live : it.live.skip
+// On the test clock, for timers.
+const timed = unix ? it.effect : it.effect.skip
 
 const lines = (count: number) => Array.from({ length: count }, (_, index) => `line ${index + 1}\n`).join("")
 
@@ -154,43 +155,33 @@ describe("Shell on the process daemon", () => {
     }))
 
   // On the test clock: the timeout and the grace period pass without waiting for them.
-  ;(unix ? it.effect : it.effect.skip)(
-    "stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it",
-    () =>
-      Effect.gen(function* () {
-        const env = yield* daemonShells()
-        env.daemon.trap.add(1)
-        // Real time for the fake daemon's socket round trips.
-        const until = (done: () => boolean) =>
-          Effect.promise(async () => {
-            while (!done()) await Bun.sleep(5)
+  timed("stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      env.daemon.trap.add(1)
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const info = yield* shell.create({ shell: "/bin/sh", command: "trap '' TERM; sleep 60", timeout: 10 })
+          yield* TestClock.adjust("10 millis")
+          yield* until(() => env.signals(1).length > 0)
+          expect(env.signals(1)).toEqual(["SIGTERM"])
+          expect((yield* shell.get(info.id)).status).toBe("running")
+          // The grace period starts once the daemon acknowledged SIGTERM, so keep the clock moving until it ends.
+          yield* until(TestClock.adjust("1 second").pipe(Effect.map(() => env.signals(1).length > 1)))
+          expect((yield* shell.wait(info.id)).status).toBe("timeout")
+          expect(env.signals(1)).toEqual(["SIGTERM", "SIGKILL"])
+          expect(env.daemon.processes[0]?.pipe?.metadata).toMatchObject({ stopReason: "timeout" })
+          expect(env.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
+          expect(yield* shell.result(info)).toMatchObject({
+            info: { status: "timeout" },
+            capture: { output: "(no output)" },
           })
-        yield* env.withShell(env.directory, (shell) =>
-          Effect.gen(function* () {
-            const info = yield* shell.create({ shell: "/bin/sh", command: "trap '' TERM; sleep 60", timeout: 10 })
-            yield* TestClock.adjust("10 millis")
-            yield* until(() => env.signals(1).length > 0)
-            expect(env.signals(1)).toEqual(["SIGTERM"])
-            expect((yield* shell.get(info.id)).status).toBe("running")
-            // The grace period starts once the daemon acknowledged SIGTERM.
-            while (env.signals(1).length < 2) {
-              yield* TestClock.adjust("1 second")
-              yield* Effect.promise(() => Bun.sleep(5))
-            }
-            expect((yield* shell.wait(info.id)).status).toBe("timeout")
-            expect(env.signals(1)).toEqual(["SIGTERM", "SIGKILL"])
-            expect(env.daemon.processes[0]?.pipe?.metadata).toMatchObject({ stopReason: "timeout" })
-            expect(env.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
-            expect(yield* shell.result(info)).toMatchObject({
-              info: { status: "timeout" },
-              capture: { output: "(no output)" },
-            })
-            expect((yield* shell.result(info)).info).not.toHaveProperty("signal")
-            expect(env.daemon.ops).not.toContain("terminate")
-            expect(existsSync(info.file)).toBe(true)
-          }),
-        )
-      }),
+          expect((yield* shell.result(info)).info).not.toHaveProperty("signal")
+          expect(env.daemon.ops).not.toContain("terminate")
+          expect(existsSync(info.file)).toBe(true)
+        }),
+      )
+    }),
   )
 
   test("forgets a command in the daemon before deleting its file, on remove and on eviction", () =>
@@ -215,8 +206,8 @@ describe("Shell on the process daemon", () => {
               return info
             }),
           )
-          // Waiters resolve before retention runs.
-          yield* Effect.sleep(20)
+          // Waiters resolve before retention runs, which forgets the process and then deletes its file.
+          yield* until(() => !existsSync(finished[0]!.file))
           expect(yield* shell.get(finished[0]!.id).pipe(Effect.flip)).toBeInstanceOf(Shell.NotFoundError)
           expect(existsSync(finished[0]!.file)).toBe(false)
           expect(env.daemon.processes.map((process) => process.id)).not.toContain(2)
@@ -239,7 +230,7 @@ describe("Shell on the process daemon", () => {
           const expiring = yield* shell.create({ shell: "/bin/sh", command: "expiring", timeout: 100 })
           const stopping = yield* shell.create({ shell: "/bin/sh", command: "stopping" })
           yield* shell.stop(stopping.id, "killed")
-          while (env.signals(4).length === 0) yield* Effect.sleep(5)
+          yield* until(() => env.signals(4).length > 0)
           return { running, exited, expiring, stopping }
         }),
       )
@@ -247,7 +238,9 @@ describe("Shell on the process daemon", () => {
       expect(env.daemon.ops).not.toContain("terminate")
       expect(env.signals(1)).toEqual([])
       expect(env.signals(4)).toEqual(["SIGTERM"])
-      yield* Effect.sleep(150)
+      // The expiring command's deadline passes while no server runs.
+      const expiring = env.daemon.processes.find((process) => process.id === 3)?.pipe
+      if (expiring) expiring.metadata = { ...expiring.metadata, timeoutDeadline: Date.now() - 1 }
 
       const other = (yield* tmpdirScoped()).path
       yield* env.withShell(other, (shell) =>
@@ -281,34 +274,62 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
-  test("a closed Location leaves its daemon commands' timers and reporting to its replacement", () =>
+  // A reload or an eviction closes a Location while the server keeps running.
+  timed("a Location closed while the server runs keeps enforcing its commands' timeouts", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
-      yield* env.withShell(env.directory, (shell) =>
-        Effect.gen(function* () {
-          const lifecycle = yield* LocationLifecycle.Service
-          const bus = yield* Bus.Service
-          const exits: string[] = []
-          yield* bus.listen((event) =>
-            Effect.sync(() => {
-              if (event.type === "shell.exited") exits.push(event.type)
-            }),
-          )
-          const info = yield* shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 50 })
-          yield* lifecycle.shutdown
-          yield* Effect.sleep(100)
-          // The replacement owns the timeout now.
-          expect(env.signals(1)).toEqual([])
-          env.daemon.exit(1, 0)
-          // A call still holding this Location gets its result, but nothing is reported twice.
-          expect(yield* shell.wait(info.id)).toMatchObject({ status: "exited", exit: 0 })
-          yield* Effect.sleep(20)
-          expect(exits).toEqual([])
+      const closing = yield* env.openLocation(env.directory)
+      const info = yield* closing.shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 50 })
+      yield* closing.close
+      expect(env.signals(1)).toEqual([])
+      yield* TestClock.adjust("50 millis")
+      yield* until(() => env.signals(1).length > 0)
+      expect(env.signals(1)).toEqual(["SIGTERM"])
+      expect(yield* closing.shell.wait(info.id)).toMatchObject({ status: "timeout" })
+    }),
+  )
+
+  timed("a closed Location and its replacement share a command's timeout and stop through the daemon", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      const closing = yield* env.openLocation(env.directory)
+      const backgrounded = yield* closing.shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 100 })
+      const stopped = yield* closing.shell.create({ shell: "/bin/sh", command: "sleep 60" })
+      yield* closing.close
+      const exits = { closed: 0, replacement: 0 }
+      yield* closing.bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === "shell.exited") exits.closed++
         }),
       )
-    }))
+      const replacement = yield* env.openLocation(env.directory)
+      yield* replacement.bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === "shell.exited") exits.replacement++
+        }),
+      )
+      expect((yield* replacement.shell.list()).map((item) => item.id)).toEqual([backgrounded.id, stopped.id])
 
-  test("records a command moved to the background at shutdown so the next server never times it out", () =>
+      // The call that started it, still in the closed Location, moves it to the background and clears its timeout.
+      yield* closing.shell.timeout(backgrounded.id, 0)
+      const gets = () => env.daemon.ops.filter((op) => op === "get").length
+      const before = gets()
+      yield* TestClock.adjust("100 millis")
+      // The replacement's timer checked the daemon and left the command alone.
+      yield* until(() => gets() > before)
+      expect(env.signals(1)).toEqual([])
+
+      // Cancelling its job in the closed Location stops it; the replacement reports why it ended.
+      yield* closing.shell.stop(stopped.id, "killed")
+      expect(yield* replacement.shell.wait(stopped.id)).toMatchObject({ status: "killed" })
+      expect(yield* closing.shell.wait(stopped.id)).toMatchObject({ status: "killed" })
+      yield* until(() => exits.replacement === 1)
+      expect(exits.closed).toBe(0)
+      yield* replacement.close
+    }),
+  )
+
+  timed("records a command moved to the background at shutdown so the next server never times it out", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const info = yield* env.withShell(env.directory, (shell) =>
@@ -320,15 +341,17 @@ describe("Shell on the process daemon", () => {
       )
       expect(env.daemon.processes[0]?.pipe?.metadata).toMatchObject({ backgroundedAtShutdown: true })
       expect(env.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
-      yield* Effect.sleep(150)
       yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
-          yield* Effect.sleep(50)
+          yield* TestClock.adjust("1 second")
           expect((yield* shell.get(info.id)).status).toBe("running")
           expect(env.signals(1)).toEqual([])
+          // No timer was armed, so none consulted the daemon.
+          expect(env.daemon.ops).not.toContain("get")
         }),
       )
-    }))
+    }),
+  )
 
   test("the sweep keeps a running command's file and forgets a finished one before deleting its file", () =>
     Effect.gen(function* () {
@@ -365,10 +388,9 @@ describe("Shell on the process daemon", () => {
     }))
 })
 
-// Against the real opencode-pty. Opt-in through OPENCODE_PTY_BIN on purpose: the installed @opencode/pty is still
-// 0.4 (protocol v7) until the release bumps it, so its binaryPath would only exercise the spawner fallback. Once it
-// speaks v8, fall back to binaryPath here like server/test/persistent-pty.test.ts does.
-const real = unix && process.env.OPENCODE_PTY_BIN ? it.live : it.live.skip
+// Against the real opencode-pty, like server/test/persistent-pty.test.ts.
+const binary = unix ? (process.env.OPENCODE_PTY_BIN ?? binaryPath) : undefined
+const real = binary !== undefined && existsSync(binary) ? it.live : it.live.skip
 
 describe("Shell on a real process daemon", () => {
   real(
