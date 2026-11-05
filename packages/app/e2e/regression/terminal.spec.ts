@@ -147,6 +147,47 @@ test("the New terminal shortcut creates the next numbered terminal", async ({ pa
   await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
 })
 
+// Closing the palette returns focus to the composer while the terminal is still being created.
+test("New terminal from the command palette opens the terminal focused", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  await editor.click()
+  await page.keyboard.press("Control+Shift+P")
+  const palette = page.getByRole("dialog")
+  const input = palette.getByRole("combobox")
+  await expect(input).toBeFocused()
+  await input.fill("New terminal")
+  await expect(palette.getByRole("option", { name: /^New terminal/ })).toHaveAttribute("aria-selected", "true")
+  await input.press("Enter")
+
+  await expect(side(page).getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
+})
+
+test("a click into the composer while a new terminal is created keeps the focus there", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  const create = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, {
+    method: "POST",
+  })
+
+  await editor.click()
+  await page.keyboard.press("Control+Alt+T")
+  await create.arrived
+  await editor.click()
+  create.release()
+
+  await expect(side(page).getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await expect.poll(() => persistentPty.sockets.length).toBe(1)
+  await expect(editor).toBeFocused()
+})
+
 test("another client's control ends at a click, which resizes the terminal to the pane", async ({ page }) => {
   const { persistentPty } = await openSession(page, {
     name: "Terminals",

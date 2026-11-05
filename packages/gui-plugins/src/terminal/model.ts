@@ -1,5 +1,5 @@
-import { createRoot, getOwner, runWithOwner, untrack, type Owner } from "solid-js"
-import { createStore, unwrap } from "solid-js/store"
+import { createRoot, createSignal, getOwner, runWithOwner, untrack, type Owner } from "solid-js"
+import { unwrap } from "solid-js/store"
 import { Predicate, Schema } from "effect"
 import {
   ClientError,
@@ -28,6 +28,14 @@ import {
   type Event,
   type State,
 } from "./machine"
+import {
+  focusRequestToken,
+  hasFocusRequest,
+  initialFocusState,
+  isFocusRequested,
+  transitionFocus,
+  type FocusRequestEvent,
+} from "./focus-machine"
 
 // The keys terminals were stored under before they lived on the server. Their PTY ids no longer exist anywhere.
 const LEGACY = { key: "terminals", from: "workspace:terminal" }
@@ -38,7 +46,9 @@ export type TerminalModel = ReturnType<typeof createTerminalModel>
 
 export type TerminalSession = ReturnType<TerminalModel["load"]>
 
-type FocusRequest = { key: string; request: number; id?: string; pending: boolean }
+const PANELS = "#terminal-panel, #review-panel"
+
+const OVERLAYS = '[role="dialog"], [role="menu"]'
 
 const importGhostty = () => import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
 
@@ -66,7 +76,7 @@ export function createTerminalModel(input: {
     initial: { servers: {} },
   })
 
-  const [state, setState] = createStore<{ focus?: FocusRequest }>({})
+  const [focus, setFocus] = createSignal(initialFocusState)
 
   const sessions = new Map<string, SessionRef>()
   const handles = new Map<string, ReturnType<typeof handle>>()
@@ -75,7 +85,6 @@ export function createTerminalModel(input: {
   const cleared = new Set<string>()
   const cleanups: VoidFunction[] = []
   const ghostty: Ghostty = {}
-  const focus = { request: 0 }
 
   const serverState = (id: string) => machine.servers[id] ?? initialState
 
@@ -207,35 +216,45 @@ export function createTerminalModel(input: {
     return created
   }
 
-  const requestFocus = (key: string, id?: string, pending = false) => {
-    focus.request += 1
-    setState("focus", { key, request: focus.request, id, pending })
+  const dispatchFocus = (event: FocusRequestEvent) => {
+    const previous = untrack(focus)
+    const next = transitionFocus(previous, event)
 
-    return focus.request
+    if (next !== previous) setFocus(next)
+
+    return next
   }
 
-  const cancelFocus = (request?: number) => {
-    if (request !== undefined && state.focus?.request !== request) return
-
-    setState("focus", undefined)
-  }
+  // A request from a palette or menu pick starts while the overlay still holds focus.
+  const overlay = () => typeof document !== "undefined" && inOverlay(document.activeElement)
 
   if (typeof document !== "undefined") {
-    const cancelOnOutsideFocus = (event: FocusEvent) => {
-      if (!state.focus) return
+    const moved = (event: FocusEvent) => {
+      if (!hasFocusRequest(untrack(focus)) || !(event.target instanceof Element)) return
+      const panel = event.target.closest(PANELS) !== null
 
-      if (!(event.target instanceof Element)) return
+      dispatchFocus({
+        type: "focus.moved",
+        into: !panel ? "outside" : event.target instanceof HTMLInputElement ? "field" : "panel",
+        leavingOverlay: event.relatedTarget === null || inOverlay(event.relatedTarget),
+      })
+    }
 
-      // The side region focuses its selected tab trigger or root while switching tabs; only focus leaving it, or
-      // entering a field in it such as a tab's rename field, cancels.
-      if (event.target.closest("#terminal-panel, #review-panel") && !(event.target instanceof HTMLInputElement)) return
+    // A press where focus already is moves no focus, and still means the user moved on.
+    const pressed = (event: PointerEvent) => {
+      if (!hasFocusRequest(untrack(focus)) || !(event.target instanceof Element)) return
 
-      cancelFocus()
+      if (event.target.closest(PANELS) || inOverlay(event.target)) return
+      dispatchFocus({ type: "pointer.outside" })
     }
 
     // Capture phase: a tab's rename field stops its focusin from bubbling.
-    document.addEventListener("focusin", cancelOnOutsideFocus, true)
-    cleanups.push(() => document.removeEventListener("focusin", cancelOnOutsideFocus, true))
+    document.addEventListener("focusin", moved, true)
+    document.addEventListener("pointerdown", pressed, true)
+    cleanups.push(() => {
+      document.removeEventListener("focusin", moved, true)
+      document.removeEventListener("pointerdown", pressed, true)
+    })
   }
 
   const handle = (initial: SessionRef) => {
@@ -245,12 +264,6 @@ export function createTerminalModel(input: {
     const view = () => sessionView(serverState(initial.server.id), initial.id)
     const all = () => viewItems(view())
     const get = (id: string) => all().find((info) => info.id === id)
-
-    const focusRequested = (id?: string) => {
-      if (!id || !state.focus || state.focus.pending || state.focus.key !== key) return false
-
-      return !state.focus.id || state.focus.id === id
-    }
 
     return {
       key,
@@ -276,7 +289,7 @@ export function createTerminalModel(input: {
       /** Creates a terminal and selects it; resolves its id, or undefined when the server refuses. */
       async new() {
         const target = session()
-        const request = requestFocus(key, undefined, true)
+        const request = dispatchFocus({ type: "request.pending", session: key, overlay: overlay() }).request
 
         await settled(target, owner)
 
@@ -299,7 +312,7 @@ export function createTerminalModel(input: {
             env: {},
           })
           .catch((error) => {
-            cancelFocus(request)
+            dispatchFocus({ type: "pending.failed", request })
 
             // A server without the persistent terminal routes answers with a status its API never declares for them.
             const outdated =
@@ -325,8 +338,7 @@ export function createTerminalModel(input: {
 
         await dispatch(target.server, { type: "session.refresh", sessionID: target.id })
         selection(target).set({ id: info.id })
-
-        if (state.focus?.request === request) setState("focus", { key, request, id: info.id, pending: false })
+        dispatchFocus({ type: "pending.resolved", request, id: info.id })
 
         return info.id
       },
@@ -372,15 +384,18 @@ export function createTerminalModel(input: {
             )
           })
       },
-      requestFocus(id?: string) {
-        requestFocus(key, id)
+      requestFocus(id: string) {
+        dispatchFocus({ type: "request.target", session: key, id, overlay: overlay() })
       },
-      focusRequested,
+      /** The terminal should take focus once it shows. */
+      focusRequested: (id: string) => isFocusRequested(focus(), key, id),
+      /** The request asking the terminal to take focus, so each focus attempt runs once per request. */
+      focusRequest: (id: string) => focusRequestToken(focus(), key, id),
       consumeFocus(id: string) {
-        if (focusRequested(id)) setState("focus", undefined)
+        dispatchFocus({ type: "consumed", session: key, id })
       },
       cancelFocus() {
-        if (state.focus?.key === key) cancelFocus()
+        dispatchFocus({ type: "cancelled", session: key })
       },
     }
   }
@@ -426,6 +441,7 @@ export function createTerminalModel(input: {
         sessions.delete(session.key)
         handles.delete(session.key)
         selected.delete(session.key)
+        dispatchFocus({ type: "cancelled", session: session.key })
       })
 
       const server = removed[0]?.server
@@ -452,6 +468,10 @@ export function createTerminalModel(input: {
     cleared.add(id)
     input.storage.remove(LEGACY.key, { scope: { server: session.server.id, directory }, from: LEGACY.from })
   }
+}
+
+function inOverlay(node: EventTarget | null) {
+  return node instanceof Element && node.closest(OVERLAYS) !== null
 }
 
 /** Resolves once the server has created the session. */

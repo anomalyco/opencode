@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createMemo, onCleanup } from "solid-js"
+import { For, Match, Show, Switch, createMemo, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { Tabs } from "@opencode/ui/tabs"
@@ -107,16 +107,18 @@ export default function TerminalPanel(props: {
     () => {
       const id = active()
 
-      return opened() && id && terminal().focusRequested(id) ? { id } : undefined
+      return opened() && id ? terminal().focusRequest(id) : undefined
     },
     (request) => {
+      const id = untrack(active)
+
       const focusFrame = requestAnimationFrame(() => {
-        if (!opened() || active() !== request.id || !terminal().focusRequested(request.id)) return
+        if (!id || !opened() || active() !== id || terminal().focusRequest(id) !== request) return
 
-        focusTerminalById(request.id)
-        const input = document.getElementById(`terminal-wrapper-${request.id}`)?.querySelector("textarea")
+        focusTerminalById(id)
+        const input = document.getElementById(`terminal-wrapper-${id}`)?.querySelector("textarea")
 
-        if (input === document.activeElement) terminal().consumeFocus(request.id)
+        if (input === document.activeElement) terminal().consumeFocus(id)
       })
 
       onCleanup(() => cancelAnimationFrame(focusFrame))
