@@ -153,6 +153,26 @@ const decodeReasoningDetail = Schema.decodeUnknownOption(ReasoningDetail)
 const knownReasoningDetails = (details: ReadonlyArray<unknown>) =>
   details.flatMap((detail) => Option.toArray(decodeReasoningDetail(detail)))
 
+// Some OpenAI-compatible gateways stream `delta.reasoning` as an object that
+// carries the display summary and encrypted continuation state instead of a
+// scalar string.
+const OpenAIChatStreamedReasoning = Schema.Struct({
+  content: optionalNull(Schema.String),
+  encrypted_content: optionalNull(Schema.String),
+  summary: optionalNull(Schema.String),
+})
+
+const streamedReasoningDetails = (
+  reasoning: Schema.Schema.Type<typeof OpenAIChatStreamedReasoning> | null | undefined,
+) => {
+  if (!reasoning) return undefined
+  const details: Array<ReasoningDetail> = []
+  if (reasoning.content) details.push({ type: "reasoning.text", text: reasoning.content })
+  if (reasoning.summary) details.push({ type: "reasoning.summary", summary: reasoning.summary })
+  if (reasoning.encrypted_content) details.push({ type: "reasoning.encrypted", data: reasoning.encrypted_content })
+  return details.length > 0 ? details : undefined
+}
+
 const OpenAIChatTextContent = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
@@ -306,7 +326,7 @@ export const OpenAIChatDelta = Schema.StructWithRest(
     content: optionalNull(Schema.String),
     refusal: optionalNull(Schema.String),
     reasoning_content: optionalNull(Schema.String),
-    reasoning: optionalNull(Schema.String),
+    reasoning: optionalNull(Schema.Union([Schema.String, OpenAIChatStreamedReasoning])),
     reasoning_text: optionalNull(Schema.String),
     reasoning_details: optionalNull(Schema.Unknown),
     tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
@@ -1139,9 +1159,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     const reasoningField = state.reasoningField ?? reasoning?.field
     const reasoningTextObserved = state.reasoningTextObserved || reasoning !== undefined
+    const streamedDetails =
+      delta?.reasoning && typeof delta.reasoning === "object"
+        ? streamedReasoningDetails(delta.reasoning)
+        : undefined
     const detailDelta = Array.isArray(delta?.reasoning_details)
-      ? knownReasoningDetails(delta.reasoning_details)
-      : undefined
+      ? [...knownReasoningDetails(delta.reasoning_details), ...(streamedDetails ?? [])]
+      : streamedDetails
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
     const deltaMetadata = reasoningMetadata(state.providerMetadataKey, reasoningField)
