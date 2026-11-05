@@ -26,7 +26,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
+import { Cause, Clock, Duration, Effect, Exit, PlatformError, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
@@ -89,6 +89,8 @@ export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.Ne
 export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
   server: Schema.String,
   message: Schema.String,
+  /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
+  answered: Schema.optional(Schema.Boolean),
 }) {}
 
 /** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
@@ -131,10 +133,21 @@ export interface ElicitationHandler {
   }) => Effect.Effect<void>
 }
 
+/** For a request that can come back asking for input: tool calls, prompts and resource reads. */
+export interface PerRequest {
+  /**
+   * Answers the elicitations this request causes instead of the connection's handler, for a connection
+   * that serves several callers. 2026-07-28 only.
+   */
+  readonly elicitation?: ElicitationHandler["create"]
+}
+
 /** Handle over a connected MCP server that keeps the SDK `Client` out of the rest of core. */
 export interface Connection {
   /** True when the connection negotiated revision 2026-07-28 or later; false is the initialize handshake. */
   readonly modern: boolean
+  /** The protocol revision the connection negotiated, such as "2025-11-25". */
+  readonly protocolVersion: string | undefined
   /** Display title from `serverInfo.title`, when the server provides one. */
   readonly title: string | undefined
   readonly instructions: string | undefined
@@ -143,16 +156,22 @@ export interface Connection {
   readonly resources: () => Effect.Effect<Resource[], Error>
   readonly resourceTemplates: () => Effect.Effect<ResourceTemplateType[], Error>
   /** Resolves to undefined when the server does not advertise resources. */
-  readonly readResource: (input: { readonly uri: string }) => Effect.Effect<ReadResourceResult | undefined, Error>
-  readonly prompt: (input: {
-    readonly name: string
-    readonly args?: Record<string, string>
-  }) => Effect.Effect<GetPromptResult, Error>
-  readonly callTool: (input: {
-    readonly name: string
-    readonly args?: Record<string, unknown>
-    readonly sessionID?: Session.ID
-  }) => Effect.Effect<CallToolResult, Error>
+  readonly readResource: (
+    input: { readonly uri: string } & PerRequest,
+  ) => Effect.Effect<ReadResourceResult | undefined, Error>
+  readonly prompt: (
+    input: {
+      readonly name: string
+      readonly args?: Record<string, string>
+    } & PerRequest,
+  ) => Effect.Effect<GetPromptResult, Error>
+  readonly callTool: (
+    input: {
+      readonly name: string
+      readonly args?: Record<string, unknown>
+      readonly sessionID?: Session.ID
+    } & PerRequest,
+  ) => Effect.Effect<CallToolResult, Error>
   readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
   readonly onToolsChanged: (callback: () => void) => void
@@ -166,20 +185,28 @@ export interface Attached {
   readonly transport: Transport
 }
 
+export interface ConnectOptions {
+  readonly server: string
+  readonly config: typeof ConfigMCP.Server.Type | Attached
+  /** Resolves a relative stdio `cwd` and is the default one, and is the root `roots/list` answers with. */
+  readonly directory: string
+  /** Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth. */
+  readonly authProvider?: OAuthClientProvider
+  readonly elicitation?: ElicitationHandler
+  readonly clientInfo?: Implementation
+  /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
+  readonly roots?: boolean
+}
+
 /**
  * Connects an MCP server; closing the calling scope tears down the transport and any spawned process.
  * A stdio server is spawned through the location's `Environment`, so it runs wherever the location's
  * shell commands run rather than always on the host.
  */
-export const connect = Effect.fnUntraced(function* (
-  server: string,
-  config: typeof ConfigMCP.Server.Type | Attached,
-  directory: string,
-  // Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth.
-  authProvider?: OAuthClientProvider,
-  elicitation?: ElicitationHandler,
-  clientInfo: Implementation = { name: "opencode", version: "unknown" },
-) {
+export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
+  const server = options.server
+  const config = options.config
+  const elicitation = options.elicitation
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
@@ -192,6 +219,13 @@ export const connect = Effect.fnUntraced(function* (
     debounceMs: 0,
     onChanged: () => changed[key](),
   })
+
+  // Requests that bring their own elicitation handler, keyed by the signal each passes to the SDK.
+  const callers = new WeakMap<AbortSignal, ElicitationHandler["create"]>()
+  const claim = (signal: AbortSignal, input: PerRequest) => {
+    if (input.elicitation) callers.set(signal, input.elicitation)
+    return signal
+  }
 
   // The SDK fails pending requests with a bare "Connection closed"; the transport error before it says why.
   let lastError: string | undefined
@@ -220,12 +254,12 @@ export const connect = Effect.fnUntraced(function* (
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
-    const client = new Client(clientInfo, {
+    const client = new Client(options.clientInfo ?? { name: "opencode", version: "unknown" }, {
       capabilities: {
         ...(elicitation ? { elicitation: { form: {}, url: {} } } : {}),
         // Legacy era only: roots are deprecated as of 2026-07-28 and modern servers cannot request them.
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
-        roots: {},
+        ...(options.roots === false ? {} : { roots: {} }),
       },
       versionNegotiation: negotiation(protocol),
       listChanged: {
@@ -240,11 +274,18 @@ export const connect = Effect.fnUntraced(function* (
       lastError = describe(error)
       runFork(Effect.logWarning("mcp transport error", { server, error: lastError }))
     }
-    client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
+    if (options.roots !== false)
+      client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
     if (elicitation) {
-      client.setRequestHandler("elicitation/create", (request, ctx) =>
-        runPromise(elicitation.create({ server, params: request.params, signal: ctx.mcpReq.signal })),
-      )
+      // A 2026-07-28 server asks for input in the result of the request that needs it. Our SDK patch puts
+      // that request's options on the context (`mcpReq.origin`, see patches/@modelcontextprotocol%2Fclient),
+      // so its signal finds the handler it brought. Anything else goes to the connection's handler.
+      client.setRequestHandler("elicitation/create", (request, ctx) => {
+        const origin = (ctx.mcpReq as { readonly origin?: { readonly options?: { readonly signal?: AbortSignal } } })
+          .origin?.options?.signal
+        const create = (origin && callers.get(origin)) ?? elicitation.create
+        return runPromise(create({ server, params: request.params, signal: ctx.mcpReq.signal }))
+      })
       client.setNotificationHandler("notifications/elicitation/complete", (notification) =>
         runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
       )
@@ -289,7 +330,7 @@ export const connect = Effect.fnUntraced(function* (
         server,
         command,
         args,
-        cwd: McpStdio.resolveCwd(directory, config.cwd),
+        cwd: McpStdio.resolveCwd(options.directory, config.cwd),
         environment: {
           ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...config.environment,
@@ -298,7 +339,7 @@ export const connect = Effect.fnUntraced(function* (
       return yield* initialize(transport)
     }
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-    const fetch = yield* McpOAuth.loggedFetch({ server, directory })
+    const fetch = yield* McpOAuth.loggedFetch({ server, directory: options.directory })
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
@@ -307,7 +348,7 @@ export const connect = Effect.fnUntraced(function* (
     const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
-        authProvider,
+        authProvider: options.authProvider,
         fetch,
       })
       return yield* initialize(session.transport)
@@ -373,6 +414,7 @@ export const connect = Effect.fnUntraced(function* (
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
       modern: client.getProtocolEra() === "modern",
+      protocolVersion: client.getNegotiatedProtocolVersion(),
       title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
@@ -453,12 +495,15 @@ export const connect = Effect.fnUntraced(function* (
       readResource: (input) => {
         if (!advertised("resources")) return Effect.succeed(undefined)
         return request("read MCP resource", (signal) =>
-          client.readResource({ uri: input.uri }, { signal, timeout: execution }),
+          client.readResource({ uri: input.uri }, { signal: claim(signal, input), timeout: execution }),
         )
       },
       prompt: (input) =>
         request("get MCP prompt", (signal) =>
-          client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
+          client.getPrompt(
+            { name: input.name, arguments: input.args ?? {} },
+            { signal: claim(signal, input), timeout: execution },
+          ),
         ),
       callTool: (input) => {
         const call = Effect.tryPromise({
@@ -470,7 +515,7 @@ export const connect = Effect.fnUntraced(function* (
                 ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
               },
               {
-                signal,
+                signal: claim(signal, input),
                 timeout: execution,
                 // Only asks for a progress token: progress on the response stream can keep proxies from closing it.
                 // The SDK timeout does not reset on progress; execution is the hard wall.
@@ -524,8 +569,22 @@ export const connect = Effect.fnUntraced(function* (
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
     })
-  return yield* new ConnectError({ server, message: explain(error) })
+  return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
+
+// Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
+// time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.
+function repeats(error: unknown): boolean {
+  if (error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed && error.cause !== undefined)
+    return repeats(error.cause)
+  return (
+    (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) ||
+    // Refused credentials, even without OAuth: any connection with them would be refused the same way.
+    (error instanceof SdkHttpError && (error.status === 401 || error.status === 403)) ||
+    isTransient(error) ||
+    PlatformError.isPlatformError(error)
+  )
+}
 
 // These servers reject any unknown query parameter and have no Code Mode of their own, so adding
 // ?codemode=false only costs a failed request before the retry at the configured URL.

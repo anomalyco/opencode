@@ -12,7 +12,18 @@ import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import type { FileDiffInfo } from "@opencode/client/promise"
@@ -21,8 +32,16 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
-import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
+import { previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
+import {
+  EMPTY_REVIEW_COMMENT_MODES,
+  reviewFileCommentMode,
+  transitionReviewCommentModes,
+  type LineCommentEvent,
+} from "./line-comment-machine"
+import { createReviewFocusDriver } from "./review-focus-driver"
+import { reviewFocusPinnedFile } from "./review-focus-machine"
 import type { LineCommentEditorProps } from "./line-comment"
 import { normalize, text, type ViewDiff } from "./session-diff"
 
@@ -139,14 +158,8 @@ function diffId(file: string): string | undefined {
   return `session-review-diff-${sum}`
 }
 
-type SessionReviewSelection = {
-  file: string
-  range: SelectedLineRange
-}
-
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
-  let focusToken = 0
   let frame: number | undefined
   const i18n = useI18n()
   const fileComponent = useFileComponent()
@@ -157,21 +170,20 @@ export const SessionReview = (props: SessionReviewProps) => {
     open: string[]
     visible: Record<string, boolean | undefined>
     force: Record<string, boolean | undefined>
-    selection: SessionReviewSelection | null
-    commenting: SessionReviewSelection | null
-    opened: SessionReviewFocus | null
   }>({
     open: [],
     visible: {},
     force: {},
-    selection: null,
-    commenting: null,
-    opened: null,
   })
 
-  const selection = () => store.selection
-  const commenting = () => store.commenting
-  const opened = () => store.opened
+  const [commentModes, setCommentModes] = createSignal(EMPTY_REVIEW_COMMENT_MODES)
+
+  const dispatchComment = (file: string, event: LineCommentEvent) => {
+    const step = transitionReviewCommentModes(untrack(commentModes), file, event)
+    setCommentModes(step.modes)
+
+    return step.effects
+  }
 
   const open = () => props.open ?? store.open
 
@@ -238,11 +250,9 @@ export const SessionReview = (props: SessionReviewProps) => {
   }
 
   const pinned = (file: string) =>
-    props.focusedComment?.file === file ||
+    reviewFocusPinnedFile(focus.state()) === file ||
     props.focusedFile === file ||
-    selection()?.file === file ||
-    commenting()?.file === file ||
-    opened()?.file === file
+    reviewFileCommentMode(commentModes(), file).status !== "idle"
 
   const handleScroll: JSX.EventHandler<HTMLDivElement, Event> = (event) => {
     queue()
@@ -291,65 +301,44 @@ export const SessionReview = (props: SessionReviewProps) => {
     return previewSelectedLines(contents, range)
   }
 
-  createEffect(() => {
-    const focus = props.focusedComment
+  const focus = createReviewFocusDriver({
+    focusedComment: () => props.focusedComment,
+    // Before the diffs load, wait for them instead of failing the request.
+    isAvailable: (target) => {
+      if (!hasDiffs()) return true
+      const diff = itemsMap()[target.file]
 
-    if (!focus) return
+      return diff !== undefined && (diff.additions !== 0 || diff.deletions !== 0)
+    },
+    root: () => scroll,
+    findComment: (file, commentId) => {
+      const anchor = anchors.get(file)?.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`)
 
-    untrack(() => {
-      focusToken++
-      const token = focusToken
+      if (!(anchor instanceof HTMLElement)) return
 
-      setStore("opened", focus)
+      if (anchor.style.pointerEvents === "none" || anchor.style.opacity === "0") return
 
-      const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
+      return anchor
+    },
+    findFallback: (file) => anchors.get(file),
+    scrollTo: (target) => {
+      if (!scroll) return
+      const rootRect = scroll.getBoundingClientRect()
+      const targetRect = target.getBoundingClientRect()
+      const next = scroll.scrollTop + targetRect.top - rootRect.top - rootRect.height / 2 + targetRect.height / 2
+      scroll.scrollTop = Math.max(0, next)
+    },
+    onOpenComment: (file, commentId) => {
+      const comment = (props.comments ?? []).find((item) => item.file === file && item.id === commentId)
 
-      if (comment) setStore("selection", { file: comment.file, range: cloneSelectedLineRange(comment.selection) })
-
+      if (comment) dispatchComment(file, { type: "comment.focused", id: comment.id, range: comment.selection })
+    },
+    onExpandFile: (file) => {
       const current = open()
 
-      if (!current.includes(focus.file)) {
-        handleChange([...current, focus.file])
-      }
-
-      const scrollTo = (attempt: number) => {
-        if (token !== focusToken) return
-
-        const root = scroll
-
-        if (!root) return
-
-        const wrapper = anchors.get(focus.file)
-        const anchor = wrapper?.querySelector(`[data-comment-id="${focus.id}"]`)
-
-        const ready =
-          anchor instanceof HTMLElement && anchor.style.pointerEvents !== "none" && anchor.style.opacity !== "0"
-
-        const target = ready ? anchor : wrapper
-
-        if (!target) {
-          if (attempt >= 120) return
-          requestAnimationFrame(() => scrollTo(attempt + 1))
-
-          return
-        }
-
-        const rootRect = root.getBoundingClientRect()
-        const targetRect = target.getBoundingClientRect()
-        const offset = targetRect.top - rootRect.top
-        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
-        root.scrollTop = Math.max(0, next)
-
-        if (ready) return
-
-        if (attempt >= 120) return
-        requestAnimationFrame(() => scrollTo(attempt + 1))
-      }
-
-      requestAnimationFrame(() => scrollTo(0))
-
-      requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
-    })
+      if (!current.includes(file)) handleChange([...current, file])
+    },
+    onAcknowledge: () => props.onFocusedCommentChange?.(null),
   })
 
   return (
@@ -451,43 +440,16 @@ export const SessionReview = (props: SessionReviewProps) => {
                     const isDeleted = () =>
                       diff().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
 
-                    const selectedLines = createMemo(() => {
-                      const current = selection()
-
-                      if (!current || current.file !== file) return null
-
-                      return current.range
-                    })
-
-                    const draftRange = createMemo(() => {
-                      const current = commenting()
-
-                      if (!current || current.file !== file) return null
-
-                      return current.range
-                    })
-
                     const commentsUi = createLineCommentController<SessionReviewComment>({
                       comments,
                       label: i18n.t("ui.lineComment.submit"),
                       draftKey: () => file,
                       mention: props.lineCommentMention,
-                      state: {
-                        opened: () => {
-                          const current = opened()
-
-                          if (!current || current.file !== file) return null
-
-                          return current.id
-                        },
-                        setOpened: (id) => setStore("opened", id ? { file, id } : null),
-                        selected: selectedLines,
-                        setSelected: (range) => setStore("selection", range ? { file, range } : null),
-                        commenting: draftRange,
-                        setCommenting: (range) => setStore("commenting", range ? { file, range } : null),
+                      machine: {
+                        mode: createMemo(() => reviewFileCommentMode(commentModes(), file)),
+                        dispatch: (event) => dispatchComment(file, event),
                       },
                       getSide: selectionSide,
-                      clearSelectionOnSelectionEndNull: false,
                       onSubmit: ({ comment, selection }) => {
                         props.onLineComment?.({
                           file,
@@ -639,6 +601,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                               anchors.set(file, el)
                               nodes.set(file, el)
                               queue()
+                              focus.poke()
                             }}
                           >
                             <Show when={expanded()}>
@@ -683,6 +646,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     disableLineNumbers={props.disableLineNumbers}
                                     onRendered={() => {
                                       props.onDiffRendered?.()
+                                      focus.poke()
                                     }}
                                     enableLineSelection={props.onLineComment != null}
                                     enableGutterUtility={props.onLineComment != null}
@@ -693,7 +657,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     renderGutterUtility={
                                       props.onLineComment ? commentsUi.renderGutterUtility : undefined
                                     }
-                                    selectedLines={selectedLines()}
+                                    selectedLines={commentsUi.selected()}
                                     commentedLines={commentedLines()}
                                     media={{
                                       mode: "auto",

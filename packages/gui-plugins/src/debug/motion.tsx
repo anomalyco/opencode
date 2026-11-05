@@ -1,5 +1,6 @@
 import { createMemo, createSignal, Index, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
+import { Option, Schema } from "effect"
 import { createRemoteControls, type ControlDescriptor, type State, type Value } from "knobs"
 import { KnobsPanel } from "knobs/solid"
 import { Icon } from "@opencode/ui/icon"
@@ -19,13 +20,33 @@ import {
 } from "@opencode/ui/motion-tuning-features"
 import { applyMotion } from "@opencode/ui/motion-tuning-fields"
 import { usePlugin } from "@opencode/plugin/gui"
+import {
+  createMotionState,
+  MOTION_WIDE_AT,
+  selectMotionFeature,
+  selectMotionHeld,
+  selectMotionIdle,
+  selectMotionPushed,
+  selectMotionSelected,
+  selectMotionWide,
+  transitionMotion,
+  type MotionEffect,
+  type MotionEvent,
+  type MotionHandle,
+} from "./motion-machine"
 
 // Where the panel was dragged to, as an offset from its bottom-right home, its width, and the feature it last showed;
 // kept per device.
 const key = "opencode.motion.panel"
 
-// From this width the list and the open feature sit side by side.
-const wideAt = 560
+const SavedPanel = Schema.fromJsonString(
+  Schema.Struct({
+    x: Schema.optional(Schema.Number),
+    y: Schema.optional(Schema.Number),
+    width: Schema.optional(Schema.Number),
+    feature: Schema.optional(Schema.String),
+  }),
+)
 
 // The push between the list and a feature's page: no bounce, transform and opacity only.
 const push = { omega: (2 * Math.PI) / 0.34, zeta: 1 }
@@ -39,14 +60,30 @@ export default function Motion(props: { title: string; onClose: () => void }) {
   const ctx = usePlugin()
   let container!: HTMLDivElement
   const saved = load()
-  const offset = { x: saved.x, y: saved.y }
-  const [width, setWidth] = createSignal(saved.width)
-  const [selected, setSelected] = createSignal(saved.feature)
-  const [pushed, setPushed] = createSignal(false)
+
+  // Where the panel sits, written straight to its style so a drag or resize never re-renders; `start*` and the bounds
+  // are read once when a handle is pressed.
+  const frame = {
+    x: saved.x,
+    y: saved.y,
+    width: saved.width,
+    startX: 0,
+    startY: 0,
+    startWidth: 0,
+    minX: 0,
+    maxX: 0,
+    minY: 0,
+    maxY: 0,
+  }
+
+  const [motion, setMotion] = createSignal(
+    createMotionState({ wide: saved.width >= MOTION_WIDE_AT, selected: saved.feature }),
+  )
+
   const [stack, setStack] = createSignal<HTMLDivElement>()
   // The registry isn't reactive; this ticks on every registration and edit, including the debug bar's.
   const [live, setLive] = createSignal(0)
-  onCleanup(motionTuning.subscribe(() => setLive((value) => value + 1)))
+  const show = outline()
 
   const areas = createMemo(() => {
     live()
@@ -55,15 +92,70 @@ export default function Motion(props: { title: string; onClose: () => void }) {
   })
 
   const features = () => areas().flatMap((area) => area.features)
-  const wide = () => width() >= wideAt
-  const feature = () => features().find((item) => item.key === selected()) ?? (wide() ? features()[0] : undefined)
-  const show = outline()
-  let focusing: ReturnType<typeof setTimeout> | undefined
+  const wide = () => selectMotionWide(motion())
+  const pushed = () => selectMotionPushed(motion())
+  const feature = () => selectMotionFeature(motion(), features())
 
-  onCleanup(() => {
-    clearTimeout(focusing)
-    show(undefined)
-  })
+  const dispatch = (event: MotionEvent) => {
+    const next = transitionMotion(motion(), event)
+
+    if (next.state !== motion()) setMotion(next.state)
+    next.effects.forEach((effect) => void Promise.try(() => run(effect)).catch(console.error))
+  }
+
+  const run = (effect: MotionEffect) => {
+    if (effect.type === "save") return persist()
+
+    if (effect.type === "close") return props.onClose()
+
+    if (effect.type === "focus.page") {
+      // Shown now rather than on the spring's next frame, so focus can land in the page.
+      stack()?.removeAttribute("data-home")
+      container.querySelector<HTMLElement>("[data-motion-page] button")?.focus({ preventScroll: true })
+
+      return
+    }
+
+    if (effect.type === "focus.row") {
+      container
+        .querySelector<HTMLElement>(`[data-motion-feature="${CSS.escape(effect.key)}"]`)
+        ?.focus({ preventScroll: true })
+
+      return
+    }
+
+    if (effect.type === "focus.list") {
+      const active = document.activeElement
+
+      if (active !== document.body && !active?.closest("[data-motion-page]")) return
+      container.querySelector<HTMLElement>("[data-motion-feature]")?.focus({ preventScroll: true })
+
+      return
+    }
+
+    if (effect.type === "settle") return settle()
+
+    if (effect.type === "outline.frame") return show.frame(effect.target)
+
+    if (effect.type === "outline.focus") {
+      document.querySelector(effect.target)?.scrollIntoView({ block: "nearest", inline: "nearest" })
+      show.frame(effect.target)
+      show.expire(() => dispatch({ type: "outline.expired", attempt: effect.attempt }), effect.delay)
+
+      return
+    }
+
+    show.dispose()
+  }
+
+  onCleanup(
+    motionTuning.subscribe(() => {
+      setLive((value) => value + 1)
+      const selected = selectMotionSelected(motion())
+      dispatch({ type: "features.changed", present: features().some((item) => item.key === selected) })
+    }),
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   springStyle(
     stack,
@@ -75,121 +167,82 @@ export default function Motion(props: { title: string; onClose: () => void }) {
     push,
   )
 
-  // A pushed page makes the list inert before the pointer leaves its row, so the hover outline is cleared here.
-  const open = (item: MotionFeature) => {
-    show(undefined)
-    setSelected(item.key)
-    setPushed(true)
-    save({ ...offset, width: width(), feature: item.key })
-
-    if (wide()) return
-    // Shown now rather than on the spring's next frame, so focus can land in the page.
-    stack()?.removeAttribute("data-home")
-    container.querySelector<HTMLElement>("[data-motion-page] button")?.focus({ preventScroll: true })
-  }
-
-  const back = () => {
-    setPushed(false)
-    container
-      .querySelector<HTMLElement>(`[data-motion-feature="${CSS.escape(selected() ?? "")}"]`)
-      ?.focus({ preventScroll: true })
-  }
-
-  const focus = (target: string) => {
-    clearTimeout(focusing)
-    document.querySelector(target)?.scrollIntoView({ block: "nearest", inline: "nearest" })
-    show(undefined)
-    show(target)
-    focusing = setTimeout(() => show(undefined), 1600)
-  }
-
   const escape = (event: KeyboardEvent) => {
     if (event.key !== "Escape" || event.defaultPrevented) return
     event.preventDefault()
     event.stopPropagation()
-
-    if (!wide() && pushed()) return back()
-    props.onClose()
+    dispatch({ type: "escape" })
   }
 
-  const place = () => (container.style.transform = `translate(${offset.x}px, ${offset.y}px)`)
+  const place = () => (container.style.transform = `translate(${frame.x}px, ${frame.y}px)`)
 
   // Moves by at most what keeps the whole panel in the window, reading layout once rather than every frame.
-  const bounds = () => {
+  const bound = () => {
     const rect = container.getBoundingClientRect()
-
-    return {
-      x: [offset.x - rect.left, offset.x + window.innerWidth - rect.right],
-      y: [offset.y - rect.top, offset.y + window.innerHeight - rect.bottom],
-    }
+    frame.minX = frame.x - rect.left
+    frame.maxX = Math.max(frame.minX, frame.x + window.innerWidth - rect.right)
+    frame.minY = frame.y - rect.top
+    frame.maxY = Math.max(frame.minY, frame.y + window.innerHeight - rect.bottom)
   }
 
-  const clamp = (limits: ReturnType<typeof bounds>, x: number, y: number) => {
-    offset.x = Math.min(Math.max(x, limits.x[0]), Math.max(limits.x[0], limits.x[1]))
-    offset.y = Math.min(Math.max(y, limits.y[0]), Math.max(limits.y[0], limits.y[1]))
+  const moveTo = (x: number, y: number) => {
+    frame.x = Math.min(Math.max(x, frame.minX), frame.maxX)
+    frame.y = Math.min(Math.max(y, frame.minY), frame.maxY)
     place()
   }
 
   const settle = () => {
-    clamp(bounds(), offset.x, offset.y)
-    save({ ...offset, width: width(), feature: selected() })
+    bound()
+    moveTo(frame.x, frame.y)
+    persist()
   }
 
-  const grab = (event: PointerEvent) => {
-    if (event.button !== 0 || !(event.currentTarget instanceof HTMLElement)) return
+  const persist = () => save({ x: frame.x, y: frame.y, width: frame.width, feature: selectMotionSelected(motion()) })
 
-    if (event.target instanceof Element && event.target.closest("button")) return
-    const header = event.currentTarget
+  // The header drags the panel and the left edge resizes it, the right edge staying where it is. One pointer at a time.
+  const press = (handle: MotionHandle, event: PointerEvent & { currentTarget: HTMLElement }) => {
+    if (handle === "header" && event.target instanceof Element && event.target.closest("button")) return
+    dispatch({ type: "pointer.down", handle, pointerId: event.pointerId, button: event.button })
+
+    if (!selectMotionHeld(motion(), handle, event.pointerId)) return
     event.preventDefault()
-    const limits = bounds()
-    const start = { x: event.clientX - offset.x, y: event.clientY - offset.y }
-    header.setPointerCapture(event.pointerId)
-
-    const move = (moved: PointerEvent) => clamp(limits, moved.clientX - start.x, moved.clientY - start.y)
-
-    const drop = () => {
-      header.removeEventListener("pointermove", move)
-      header.removeEventListener("pointerup", drop)
-      header.removeEventListener("pointercancel", drop)
-      settle()
-    }
-
-    header.addEventListener("pointermove", move)
-    header.addEventListener("pointerup", drop)
-    header.addEventListener("pointercancel", drop)
+    bound()
+    frame.startX = handle === "header" ? event.clientX - frame.x : event.clientX
+    frame.startY = event.clientY - frame.y
+    frame.startWidth = frame.width
+    event.currentTarget.setPointerCapture(event.pointerId)
   }
 
-  // The left edge resizes; the right edge stays where it is.
-  const resize = (event: PointerEvent) => {
-    if (event.button !== 0 || !(event.currentTarget instanceof HTMLElement)) return
-    const edge = event.currentTarget
-    event.preventDefault()
-    const start = { x: event.clientX, width: width() }
-    edge.setPointerCapture(event.pointerId)
+  // Runs per pointer move: no allocation and no signal write unless the panel crosses the wide breakpoint.
+  const drag = (handle: MotionHandle, event: PointerEvent) => {
+    if (!selectMotionHeld(motion(), handle, event.pointerId)) return
 
-    const move = (moved: PointerEvent) =>
-      setWidth(Math.round(Math.min(Math.max(320, start.width + start.x - moved.clientX), window.innerWidth - 24)))
+    if (handle === "header") return moveTo(event.clientX - frame.startX, event.clientY - frame.startY)
+    frame.width = Math.round(
+      Math.min(Math.max(320, frame.startWidth + frame.startX - event.clientX), window.innerWidth - 24),
+    )
+    container.style.width = `${frame.width}px`
 
-    const drop = () => {
-      edge.removeEventListener("pointermove", move)
-      edge.removeEventListener("pointerup", drop)
-      edge.removeEventListener("pointercancel", drop)
-      settle()
-    }
-
-    edge.addEventListener("pointermove", move)
-    edge.addEventListener("pointerup", drop)
-    edge.addEventListener("pointercancel", drop)
+    if (frame.width >= MOTION_WIDE_AT !== wide()) dispatch({ type: "resized", wide: frame.width >= MOTION_WIDE_AT })
   }
+
+  // Lost capture also covers a capture taken away, so a gesture always ends; the first of the three wins.
+  const release = (event: PointerEvent) => dispatch({ type: "pointer.released", pointerId: event.pointerId })
 
   onMount(() => {
     place()
-    const observer = new ResizeObserver(settle)
+
+    // A gesture settles once it ends rather than on every frame of a resize.
+    const resized = () => {
+      if (selectMotionIdle(motion())) settle()
+    }
+
+    const observer = new ResizeObserver(resized)
     observer.observe(container)
-    window.addEventListener("resize", settle)
+    window.addEventListener("resize", resized)
     onCleanup(() => {
       observer.disconnect()
-      window.removeEventListener("resize", settle)
+      window.removeEventListener("resize", resized)
     })
   })
 
@@ -208,12 +261,9 @@ export default function Motion(props: { title: string; onClose: () => void }) {
                   data-motion-feature={item().key}
                   aria-current={wide() && feature()?.key === item().key ? "page" : undefined}
                   class="grid min-h-12 w-full grid-cols-[minmax(0,1fr)_16px_16px] items-center gap-x-2 border-t border-v2-border-border-muted px-4 py-1.5 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-v2-border-border-focus aria-[current=page]:bg-v2-overlay-simple-overlay-hover"
-                  onPointerEnter={() => {
-                    clearTimeout(focusing)
-                    show(item().target)
-                  }}
-                  onPointerLeave={() => show(undefined)}
-                  onClick={() => open(item())}
+                  onPointerEnter={() => dispatch({ type: "row.entered", target: item().target })}
+                  onPointerLeave={() => dispatch({ type: "row.left" })}
+                  onClick={() => dispatch({ type: "feature.opened", key: item().key })}
                 >
                   <span class="min-w-0">
                     <span class="flex items-baseline gap-2 text-[14px] font-medium leading-5 text-v2-text-text-base">
@@ -252,26 +302,43 @@ export default function Motion(props: { title: string; onClose: () => void }) {
 
   const page = () => (
     <Show when={feature()}>
-      {(item) => <FeaturePage feature={item()} live={live} back={wide() ? undefined : back} onFocus={focus} />}
+      {(item) => (
+        <FeaturePage
+          feature={item()}
+          live={live}
+          back={wide() ? undefined : () => dispatch({ type: "back" })}
+          onFocus={(target) => dispatch({ type: "target.focused", target })}
+        />
+      )}
     </Show>
   )
 
   return (
     <Portal>
       <div
-        ref={container}
+        ref={(element) => {
+          container = element
+          element.style.width = `${frame.width}px`
+        }}
         class="pointer-events-auto fixed bottom-10 right-3 z-50 flex h-[min(600px,calc(100vh-6rem))] flex-col overflow-hidden rounded-[10px] border border-v2-border-border-muted bg-v2-background-bg-base text-v2-text-text-base shadow-[var(--v2-elevation-floating)]"
-        style={{ width: `${width()}px` }}
         onKeyDown={escape}
       >
         <div
           class="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize touch-none"
           aria-hidden="true"
-          onPointerDown={resize}
+          onPointerDown={(event) => press("edge", event)}
+          onPointerMove={(event) => drag("edge", event)}
+          onPointerUp={release}
+          onPointerCancel={release}
+          onLostPointerCapture={release}
         />
         <header
           class="flex h-10 shrink-0 cursor-grab touch-none items-center justify-between gap-2 border-b border-v2-border-border-muted ps-4 pe-1.5"
-          onPointerDown={grab}
+          onPointerDown={(event) => press("header", event)}
+          onPointerMove={(event) => drag("header", event)}
+          onPointerUp={release}
+          onPointerCancel={release}
+          onLostPointerCapture={release}
         >
           <h2 class="text-[13px] font-semibold leading-5">{props.title}</h2>
           <IconButton
@@ -556,52 +623,67 @@ function descriptor(
 }
 
 // Frames the part of the app a feature changes: a pointer-transparent outline that fades in and out. Its rects are read
-// once per change of target, never per frame.
+// once per change of target, never per frame. The machine decides what is framed; this only draws it, and owns the
+// timers that fade frames out and end a Focus.
 function outline() {
   const frames: HTMLElement[] = []
-  let current: string | undefined
+  const leaving = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
+  // At most one: a newer Focus clears the older timer.
+  const focusing = new Set<ReturnType<typeof setTimeout>>()
 
   const clear = () =>
     frames.splice(0).forEach((frame) => {
       frame.style.opacity = "0"
-      setTimeout(() => frame.remove(), 200)
+      leaving.set(
+        frame,
+        setTimeout(() => {
+          leaving.delete(frame)
+          frame.remove()
+        }, 200),
+      )
     })
 
-  return (target: string | undefined) => {
-    if (target === current) return
-    current = target
-    clear()
+  return {
+    frame: (target: string | undefined) => {
+      clear()
 
-    if (!target) return
+      if (!target) return
 
-    document.querySelectorAll(target).forEach((element) => {
-      const rect = element.getBoundingClientRect()
+      document.querySelectorAll(target).forEach((element) => {
+        const rect = element.getBoundingClientRect()
 
-      if (rect.width === 0 || rect.height === 0) return
-      const frame = document.body.appendChild(document.createElement("div"))
+        if (rect.width === 0 || rect.height === 0) return
+        const frame = document.body.appendChild(document.createElement("div"))
 
-      frame.style.cssText = `position:fixed;z-index:60;pointer-events:none;opacity:0;transition:opacity .15s;border-radius:6px;
-        left:${rect.left - 3}px;top:${rect.top - 3}px;width:${rect.width + 6}px;height:${rect.height + 6}px;
-        border:1.5px solid var(--v2-border-border-focus);background:color-mix(in srgb, var(--v2-border-border-focus) 10%, transparent)`
-      requestAnimationFrame(() => (frame.style.opacity = "1"))
-      frames.push(frame)
-    })
+        frame.style.cssText = `position:fixed;z-index:60;pointer-events:none;opacity:0;transition:opacity .15s;border-radius:6px;
+          left:${rect.left - 3}px;top:${rect.top - 3}px;width:${rect.width + 6}px;height:${rect.height + 6}px;
+          border:1.5px solid var(--v2-border-border-focus);background:color-mix(in srgb, var(--v2-border-border-focus) 10%, transparent)`
+        requestAnimationFrame(() => (frame.style.opacity = "1"))
+        frames.push(frame)
+      })
+    },
+    // A newer Focus replaces the timer; an older one that fires anyway is ignored by its attempt.
+    expire: (done: () => void, delay: number) => {
+      focusing.forEach(clearTimeout)
+      focusing.clear()
+      focusing.add(setTimeout(done, delay))
+    },
+    dispose: () => {
+      focusing.forEach(clearTimeout)
+      leaving.forEach((timer, frame) => {
+        clearTimeout(timer)
+        frame.remove()
+      })
+      leaving.clear()
+      frames.splice(0).forEach((frame) => frame.remove())
+    },
   }
 }
 
 function load() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) ?? "{}")
+  const saved = Option.getOrUndefined(Schema.decodeUnknownOption(SavedPanel)(localStorage.getItem(key) ?? "{}"))
 
-    return {
-      x: Number(saved.x) || 0,
-      y: Number(saved.y) || 0,
-      width: Number(saved.width) || 360,
-      feature: saved.feature ? String(saved.feature) : undefined,
-    }
-  } catch {
-    return { x: 0, y: 0, width: 360, feature: undefined }
-  }
+  return { x: saved?.x ?? 0, y: saved?.y ?? 0, width: saved?.width || 360, feature: saved?.feature || undefined }
 }
 
 function save(state: { x: number; y: number; width: number; feature: string | undefined }) {

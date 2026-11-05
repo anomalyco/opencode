@@ -55,7 +55,8 @@ export interface MockServerConfig {
   onCredentialActivate?: (credentialID: string) => void
   // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
   onCredentialUpdate?: (credentialID: string, body: { label?: string }) => void
-  onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  // Runs on POST /api/integration/:id/connect/key; returning `{ error }` rejects the key with a 400 and that message.
+  onConnectKey?: (input: { integrationID: string; body: unknown }) => void | { error: string }
   // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
   // Background shell commands (`GET /api/shell`).
@@ -89,7 +90,8 @@ export interface MockServerConfig {
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
-  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  // `directory` is the requested `location[directory]`, such as an untracked folder the review opened.
+  vcsDiff?: unknown[] | ((input: { mode?: string; directory: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
@@ -108,6 +110,10 @@ export interface MockServerConfig {
   // Without it, permission replies answer 501 MockUnsupported.
   onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
+  // Records form replies. The mock keeps listing a replied form unless `forms` stops returning it.
+  onFormReply?: (input: { sessionID: string; formID: string; body: unknown }) => void
+  // Web search providers (`GET /api/websearch/provider`), none by default.
+  websearchProviders?: Resolvable<unknown[]>
   // MCP servers. A list serves every workspace; a function receives the requested directory.
   mcp?: unknown[] | ((directory: string) => unknown[])
   // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
@@ -118,6 +124,8 @@ export interface MockServerConfig {
   onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
+  // Runs on DELETE .../connect/oauth/:attemptID, which closes an OAuth attempt the dialog left.
+  onIntegrationOAuthCancel?: (attemptID: string) => void
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -142,6 +150,9 @@ export interface MockServerConfig {
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  // POST /api/session/:id/fork creates `<id>_fork` in the same directory. The hook may hold the request, or return an
+  // answer to replace the response.
+  onFork?: (input: { sessionID: string; body: Schema.JsonObject }) => void | MockAnswer | Promise<void | MockAnswer>
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
@@ -730,6 +741,27 @@ function mockHandlers(
           return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
+      .handleRaw("sessionFork", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const body = Option.getOrElse(decodeJsonObject(input), (): Schema.JsonObject => ({}))
+          const answer = yield* Effect.promise(async () => config.onFork?.({ sessionID: ctx.params.sessionID, body }))
+
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+
+          const parent = config.sessions.find((item) => item.id === ctx.params.sessionID)
+          const id = `${ctx.params.sessionID}_fork`
+
+          const forked = currentSession(
+            { ...parent, id, title: `${parent?.title ?? ctx.params.sessionID} (fork)` },
+            config.directory,
+          )
+
+          if (!config.sessions.some((item) => item.id === id)) config.sessions.push(forked)
+
+          return HttpServerResponse.jsonUnsafe({ data: forked })
+        }),
+      )
       .handleAll({
         info: () =>
           Effect.succeed({
@@ -779,9 +811,13 @@ function mockHandlers(
             },
           })),
         integrationConnect: (ctx) =>
-          Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
-            Effect.andThen(noContent),
-          ),
+          Effect.suspend(() => {
+            const rejected = config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })
+
+            if (rejected) return Effect.fail(new MockBadRequest({ message: rejected.error }))
+
+            return noContent
+          }),
         integrationOAuthConnect: (ctx) => {
           const start = config.onIntegrationOAuth
 
@@ -820,6 +856,9 @@ function mockHandlers(
               },
             })
           }),
+        integrationOAuthCancel: (ctx) =>
+          Effect.sync(() => config.onIntegrationOAuthCancel?.(ctx.params.attemptID)).pipe(Effect.andThen(noContent)),
+        integrationConnectExternal: () => noContent,
         credentialActivate: (ctx) =>
           Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialUpdate: (ctx) =>
@@ -863,7 +902,8 @@ function mockHandlers(
           }),
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
-        websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
+        websearchProviders: () =>
+          Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
         worktreeList: () =>
@@ -959,7 +999,7 @@ function mockHandlers(
           Effect.sync(() => ({
             location: location(config),
             data: Predicate.isFunction(config.vcsDiff)
-              ? config.vcsDiff({ mode: ctx.query.mode })
+              ? config.vcsDiff({ mode: ctx.query.mode, directory: requestDirectory(config, ctx.request) })
               : (config.vcsDiff ?? []),
           })),
         fsList: (ctx) =>
@@ -1042,7 +1082,13 @@ function mockHandlers(
         // Like the server, which also answers 204 for a shell that already ended.
         shellRemove: () => noContent,
         persistentPtyList: (ctx) =>
-          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+          persistentPtyEnabled.pipe(
+            Effect.andThen(() =>
+              state.persistentPty.listFails
+                ? Effect.fail(new MockInternal({ message: "Listing terminals failed" }))
+                : Effect.succeed({ data: state.persistentPty.list(ctx.params.sessionID) }),
+            ),
+          ),
         persistentPtyCreate: (ctx) =>
           persistentPtyEnabled.pipe(
             Effect.map(() => {
@@ -1177,7 +1223,10 @@ function mockHandlers(
               (form) => Predicate.isObject(form) && form.sessionID === ctx.params.sessionID,
             ),
           }),
-        sessionFormReply: () => noContent,
+        sessionFormReply: (ctx) =>
+          Effect.sync(() =>
+            config.onFormReply?.({ sessionID: ctx.params.sessionID, formID: ctx.params.formID, body: ctx.payload }),
+          ).pipe(Effect.andThen(noContent)),
         sessionFormCancel: () => noContent,
         sessionBackground: (ctx) =>
           Effect.sync(() => config.onBackground?.({ sessionID: ctx.params.sessionID })).pipe(Effect.andThen(noContent)),
@@ -1573,6 +1622,7 @@ const decodeSession = Schema.decodeUnknownSync(
       Schema.Struct({
         created: lenient(Schema.Number),
         updated: lenient(Schema.Number),
+        busy: lenient(Schema.Number),
         idle: lenient(Schema.Number),
         viewed: lenient(Schema.Number),
         archived: Schema.optionalKey(Schema.Unknown),

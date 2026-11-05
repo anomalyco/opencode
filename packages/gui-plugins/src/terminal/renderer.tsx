@@ -15,6 +15,7 @@ import {
 import type Terminal from "./index"
 import { terminalToggleCommand } from "./index"
 import { createTerminalModel, type TerminalSession } from "./model"
+import { tabHidden, tabTargetable } from "./machine"
 import { terminalTabLabel } from "./title"
 import { TerminalTabLabel } from "./label"
 import quoteStyles from "./quote.css?inline"
@@ -54,9 +55,16 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     layout.open(key(id), session, layout.narrow() ? undefined : { tab: "select" })
   }
 
+  // `new` selects the terminal and asks it to take focus, unless the user moved on while it was created. Then opening
+  // its tab, which asks for focus again, gives that up.
   const create = (session: MountedSession, terminal: TerminalSession) =>
     void terminal.new().then((id) => {
-      if (id && !ctx.signal.aborted) show(session, terminal, id)
+      if (!id || ctx.signal.aborted) return
+      const focused = terminal.focusRequested(id)
+
+      layout.open(key(id), session, layout.narrow() ? undefined : { tab: "select" })
+
+      if (!focused) terminal.cancelFocus()
     })
 
   ctx.add(BuiltinSlot, {
@@ -196,16 +204,18 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
       get title() {
         return label()
       },
-      // Listed only to hold the restored selection until the server lists the session's terminals.
+      // Listed only to hold the restored selection until the panel has something to show for it: the server's list,
+      // or why it failed.
       get hidden() {
-        return !terminal().ready()
+        return tabHidden(terminal().view())
       },
       group: "terminal",
       label: () => (
         <TerminalTabLabel
           label={label()}
           title={info()?.title ?? ""}
-          rename={(title) => void terminal().rename(id, title)}
+          // A tab shown for a list that failed has no terminal to rename yet.
+          rename={info() ? (title) => void terminal().rename(id, title) : undefined}
           close={() => void terminal().close(id)}
         />
       ),
@@ -226,32 +236,32 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
       icon: "terminal",
       cached: true,
     },
-    // One tab per terminal of the session. Until the server lists them, the stored tabs stay listed but hidden so
-    // restore keeps them.
+    // One tab per terminal of the session. Until the server lists them, the stored tabs stay listed (hidden while
+    // loading) so restore keeps them.
     list: (input) => {
-      const terminal = model.load(input.session)
-      const ids = [...new Set([...input.open, ...terminal.all().map((info) => info.id)])]
+      const ids = model.load(input.session).tabs(input.open)
 
-      if (ids.length === 0) return []
+      if (ids.length === 0) {
+        tabs.delete(input.session.key)
+
+        return []
+      }
 
       const cache = tabs.get(input.session.key) ?? new Map<string, PanelTab>()
       tabs.set(input.session.key, cache)
+      cache.forEach((_tab, id) => {
+        if (!ids.includes(id)) cache.delete(id)
+      })
 
-      return ids.flatMap((id) => {
-        if (terminal.ready() && !terminal.get(id)) {
-          cache.delete(id)
-
-          return []
-        }
-
+      return ids.map((id) => {
         const existing = cache.get(id)
 
-        if (existing) return [existing]
+        if (existing) return existing
 
         const created = tab(input.session, id)
         cache.set(id, created)
 
-        return [created]
+        return created
       })
     },
     render: (props) => (
@@ -271,7 +281,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     focus: (input) => {
       const terminal = model.load(input.session)
 
-      if (terminal.ready() && !terminal.get(input.tab.id)) return
+      if (!tabTargetable(terminal.view(), input.tab.id)) return
 
       terminal.select(input.tab.id)
 
@@ -280,7 +290,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     enter: (input) => {
       const terminal = model.load(input.session)
 
-      if (!terminal.ready() || terminal.get(input.tab.id)) terminal.requestFocus(input.tab.id)
+      if (tabTargetable(terminal.view(), input.tab.id)) terminal.requestFocus(input.tab.id)
     },
   })
 }

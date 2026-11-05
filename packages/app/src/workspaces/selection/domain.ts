@@ -123,26 +123,30 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
-export function currentPickerSuggestions<T>(
-  result: { query: string; items: readonly T[] } | undefined,
-  query: string,
-  loading = false,
-) {
-  if (result?.query !== query && !loading) return []
+export type PickerPolicy = ReturnType<typeof pickerMode>
 
-  return result?.items ?? []
+// The folder a typed or chosen path opens, or undefined when the mode does not allow it.
+export function resolvePickerTarget(policy: PickerPolicy, path: string, home: string, base: string) {
+  return policy.navigation(pickerAbsoluteInput(cleanPickerInput(path), home, base))
 }
 
-export function activeTreeNavigation(request: number, current: number) {
-  return request === current
+export function displayInputDirectory(path: string, home: string) {
+  const displayed = displayPickerPath(path, "", home)
+  const separator = displayed.includes("\\") ? "\\" : "/"
+
+  return displayed.endsWith(separator) ? displayed : displayed + separator
 }
 
+// `abort(key)` and `clear()` abort the task's signal and resolve its promise with undefined at once, so a task that
+// never settles cannot keep its slot.
 export function createPriorityTaskQueue<T>(concurrency: number) {
   type Job = {
     key: string
     priority: "user" | "background"
-    promise: Promise<T>
+    promise: Promise<T | undefined>
+    controller: AbortController
     run: () => void
+    settle: (outcome: { value: T | undefined } | { error: unknown }) => void
   }
 
   const jobs = new Map<string, Job>()
@@ -160,7 +164,7 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     }
   }
 
-  const schedule = (key: string, priority: Job["priority"], task: () => Promise<T>) => {
+  const schedule = (key: string, priority: Job["priority"], task: (signal: AbortSignal) => Promise<T>) => {
     const existing = jobs.get(key)
 
     if (existing) {
@@ -169,31 +173,35 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
       return existing.promise
     }
 
-    const deferred = Promise.withResolvers<T>()
+    const deferred = Promise.withResolvers<T | undefined>()
+    const controller = new AbortController()
+    const state = { running: false, settled: false }
 
     const job: Job = {
       key,
       priority,
       promise: deferred.promise,
+      controller,
       run: () => {
-        const complete = () => {
-          active--
-          jobs.delete(key)
-          drain()
-        }
-
+        state.running = true
         Promise.resolve()
-          .then(task)
+          .then(() => (controller.signal.aborted ? undefined : task(controller.signal)))
           .then(
-            (value) => {
-              complete()
-              deferred.resolve(value)
-            },
-            (error) => {
-              complete()
-              deferred.reject(error)
-            },
+            (value) => job.settle({ value }),
+            (error) => job.settle({ error }),
           )
+      },
+      settle: (outcome) => {
+        if (state.settled) return
+        state.settled = true
+        jobs.delete(key)
+        dequeue(job)
+
+        if (state.running) active--
+
+        if ("error" in outcome) deferred.reject(outcome.error)
+        else deferred.resolve(outcome.value)
+        drain()
       },
     }
 
@@ -202,6 +210,21 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     drain()
 
     return job.promise
+  }
+
+  const dequeue = (job: Job) => {
+    const queue = job.priority === "user" ? user : background
+    const index = queue.indexOf(job)
+
+    if (index !== -1) queue.splice(index, 1)
+  }
+
+  const abort = (key: string) => {
+    const job = jobs.get(key)
+
+    if (!job) return
+    job.controller.abort()
+    job.settle({ value: undefined })
   }
 
   const promote = (key: string) => {
@@ -216,7 +239,12 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     user.push(job)
   }
 
-  return { schedule, promote }
+  // Queued jobs go first, so aborting a running one never starts a job that is about to be dropped.
+  const clear = () => {
+    ;[...user, ...background, ...jobs.values()].forEach((job) => abort(job.key))
+  }
+
+  return { schedule, promote, abort, clear }
 }
 
 export function nextSuggestionIndex(current: number, delta: -1 | 1, count: number) {
@@ -401,8 +429,9 @@ export async function listPickerDirectory(
   sdk: ServerSDK,
   location: { directory: string; workspace?: string },
   directory: string,
+  signal?: AbortSignal,
 ) {
-  const result = await sdk.api.file.list({ location, path: directory })
+  const result = await sdk.api.file.list({ location, path: directory }, { signal })
 
   return result.data.map((entry) => {
     const absolute = pickerAbsolutePath(entry.path, result.location.directory)
@@ -418,7 +447,6 @@ export function createDirectorySearch(args: {
   home: () => string
 }) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
-  let current = 0
 
   const scoped = (value: string) => {
     const raw = normalizePickerDrive(value)
@@ -465,14 +493,13 @@ export function createDirectorySearch(args: {
     return fuzzysort.go(query, items, { key: "name", limit }).map((item) => item.obj.absolute)
   }
 
-  return async (filter: string) => {
-    const token = ++current
-    const active = () => token === current
+  return async (filter: string, options?: { signal?: AbortSignal }): Promise<string[]> => {
+    const active = () => !options?.signal?.aborted
     const value = cleanPickerInput(filter)
     const input = scoped(value)
     const location = args.location()
 
-    if (!input || !location) return [] as string[]
+    if (!input || !location) return []
     const raw = normalizePickerDrive(value)
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)

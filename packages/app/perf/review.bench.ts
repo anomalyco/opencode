@@ -12,6 +12,7 @@ export default bench({
 
   targets: {
     web: web({
+      expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
       async prepare({ params, playwright, mock, url }) {
         const page = cached(playwright.page, mock)
@@ -57,6 +58,22 @@ export default bench({
       async reset({ page, params }) {
         await page.press("ControlOrMeta+a")
         await page.press("Backspace", { until: review.tree(scalingRows(params.files)) })
+        await page.idle()
+      },
+    },
+
+    // Closing the side panel and opening it again, each flight until it lands: every frame of the edge panel's motion.
+    "close and reopen review": {
+      primary: "main.work",
+      metrics: ["run.duration", "frames.dropped.pct"],
+      async run({ page }) {
+        await page.click(review.toggle)
+        await page.idle()
+        await page.click(review.toggle, { until: review.file })
+        await page.idle()
+      },
+      async reset({ page }) {
+        await openReview(page)
         await page.idle()
       },
     },
