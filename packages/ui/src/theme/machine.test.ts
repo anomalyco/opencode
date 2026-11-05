@@ -34,9 +34,13 @@ function theme(id: string): DesktopTheme {
 }
 
 const oc2 = theme("oc-2")
+
 const dracula = theme("dracula")
+
 const nord = theme("nord")
+
 const tokyonight = theme("tokyonight")
+
 const midnight = theme("acme:midnight")
 
 function start(input: { themeId?: string; scheme?: ColorScheme; systemMode?: ResolvedMode } = {}) {
@@ -127,6 +131,7 @@ test("registrations, settling and a finished load keep a preview on screen", () 
     { type: "preview.theme", id: "oc-2" },
     { type: "preview.scheme", scheme: "light" },
   )
+
   const background = run(
     previewed.state,
     { type: "theme.registered", theme: midnight },
@@ -148,6 +153,7 @@ test("another tab's theme choice becomes the saved theme behind a preview", () =
     { type: "preview.theme", id: "dracula" },
     { type: "theme.loaded", id: "dracula", attempt: 1, theme: dracula },
   )
+
   const changed = run(
     previewed.state,
     { type: "storage.theme.changed", id: "nord" },
@@ -168,6 +174,7 @@ test("a saved theme that finishes loading after cancel and a new preview stays b
     { type: "preview.cancelled" },
     { type: "preview.theme", id: "oc-2" },
   )
+
   const loaded = run(result.state, { type: "theme.loaded", id: "nord", attempt: 1, theme: nord })
 
   expect(applied(result.effects)).toEqual([{ id: "oc-2", mode: "dark", scheme: "dark" }])
@@ -212,6 +219,7 @@ test("previews never touch storage; committing saves both axes without painting 
     { type: "theme.loaded", id: "dracula", attempt: 2, theme: dracula },
     { type: "preview.scheme", scheme: "light" },
   )
+
   const cancelled = run(previewed.state, { type: "preview.cancelled" })
 
   expect(storage(previewed.effects)).toEqual([{ type: "cache-theme", id: "nord", theme: nord }])
@@ -234,6 +242,7 @@ test("a plugin theme withdrawn and registered again caches both variants again",
     { type: "settled" },
     { type: "theme.selected", id: "acme:midnight" },
   )
+
   const withdrawn = run(selected.state, { type: "theme.unregistered", theme: midnight })
 
   expect(withdrawn.effects).toEqual([
@@ -313,6 +322,7 @@ test("withdrawing a previewed plugin theme ends the preview; a replaced theme ig
     { type: "theme.registered", theme: midnight },
     { type: "preview.theme", id: "acme:midnight" },
   )
+
   const withdrawn = run(previewed.state, { type: "theme.unregistered", theme: midnight })
 
   expect(withdrawn.state.status).toBe("committed")
@@ -347,6 +357,7 @@ test("preloading skips loaded and loading themes and retries failed ones", () =>
     { type: "theme.load.failed", id: "nord", attempt: 1 },
     { type: "preview.theme", id: "dracula" },
   )
+
   const preloaded = run(failed.state, { type: "themes.preload" })
 
   expect(preloaded.effects).toEqual([
@@ -364,6 +375,7 @@ test("preloading skips loaded and loading themes and retries failed ones", () =>
 test("events that change nothing return the same state", () => {
   const state = run(start().state, { type: "theme.registered", theme: midnight }, { type: "settled" }).state
   const previewing = run(state, { type: "preview.scheme", scheme: "light" }).state
+
   const unchanged: [ThemeMachineState, ThemeEvent][] = [
     [state, { type: "theme.selected", id: "oc-2" }],
     [state, { type: "scheme.selected", scheme: "dark" }],

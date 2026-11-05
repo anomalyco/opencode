@@ -150,6 +150,7 @@ export function transitionTheme(
         [{ type: "persist-theme", id: event.id }],
       )
     }
+
     case "scheme.selected": {
       if (state.committed.scheme === event.scheme && preview(state).scheme === undefined)
         return { state, effects: NO_EFFECTS }
@@ -163,6 +164,7 @@ export function transitionTheme(
         [{ type: "persist-scheme", scheme: event.scheme }],
       )
     }
+
     case "preview.theme": {
       if (!event.id || !known(state, event.id, bundled)) return { state, effects: NO_EFFECTS }
 
@@ -174,11 +176,13 @@ export function transitionTheme(
         NO_EFFECTS,
       )
     }
+
     case "preview.scheme": {
       if (preview(state).scheme === event.scheme) return { state, effects: NO_EFFECTS }
 
       return reconcile(withPreview(state, { ...preview(state), scheme: event.scheme }), bundled, NO_EFFECTS)
     }
+
     case "preview.committed": {
       if (state.status !== "previewing") return { state, effects: NO_EFFECTS }
 
@@ -201,11 +205,13 @@ export function transitionTheme(
         ],
       )
     }
+
     case "preview.cancelled": {
       if (state.status !== "previewing") return { state, effects: NO_EFFECTS }
 
       return reconcile(withPreview(state, {}), bundled, NO_EFFECTS)
     }
+
     case "theme.registered": {
       if (state.themes[event.theme.id] === event.theme) return { state, effects: NO_EFFECTS }
 
@@ -219,6 +225,7 @@ export function transitionTheme(
         NO_EFFECTS,
       )
     }
+
     case "theme.unregistered": {
       // A theme registered again under the same id replaced this one; leave it.
       if (event.theme.id === DEFAULT_THEME_ID || state.themes[event.theme.id] !== event.theme)
@@ -226,11 +233,13 @@ export function transitionTheme(
 
       return reconcile({ ...state, themes: omit(state.themes, [event.theme.id]) }, bundled, NO_EFFECTS)
     }
+
     case "settled": {
       if (state.registration === "settled") return { state, effects: NO_EFFECTS }
 
       return reconcile({ ...state, registration: "settled" }, bundled, NO_EFFECTS)
     }
+
     case "themes.preload": {
       const queued = [...bundled].filter(
         (id) => id !== DEFAULT_THEME_ID && !state.themes[id] && state.loads[id] === undefined,
@@ -242,6 +251,7 @@ export function transitionTheme(
 
       return reconcile(requested.state, bundled, requested.effects)
     }
+
     case "theme.loaded": {
       if (state.loads[event.id] !== event.attempt) return { state, effects: NO_EFFECTS }
 
@@ -256,6 +266,7 @@ export function transitionTheme(
         [{ type: "cancel-load-timer", attempt: event.attempt }],
       )
     }
+
     case "theme.load.failed":
     case "theme.load.timed-out": {
       if (state.loads[event.id] !== event.attempt) return { state, effects: NO_EFFECTS }
@@ -266,11 +277,13 @@ export function transitionTheme(
         event.type === "theme.load.failed" ? [{ type: "cancel-load-timer", attempt: event.attempt }] : NO_EFFECTS,
       )
     }
+
     case "system.mode.changed": {
       if (state.systemMode === event.mode) return { state, effects: NO_EFFECTS }
 
       return reconcile({ ...state, systemMode: event.mode }, bundled, NO_EFFECTS)
     }
+
     case "storage.theme.changed": {
       if (!event.id || (state.committed.themeId === event.id && !state.failed[event.id]))
         return { state, effects: NO_EFFECTS }
@@ -285,11 +298,13 @@ export function transitionTheme(
         NO_EFFECTS,
       )
     }
+
     case "storage.scheme.changed": {
       if (state.committed.scheme === event.scheme) return { state, effects: NO_EFFECTS }
 
       return reconcile({ ...state, committed: { ...state.committed, scheme: event.scheme } }, bundled, NO_EFFECTS)
     }
+
     case "disposed": {
       const { preview: _, ...data } = { preview: undefined, ...state }
 
@@ -334,11 +349,13 @@ export function selectThemesLoading(state: ThemeMachineState) {
 
 function reconcile(draft: ActiveState, bundled: ReadonlySet<string>, prefix: readonly ThemeEffect[]): ThemeTransition {
   const valid = validatePreview(draft, bundled)
+
   const requested = request(
     valid,
     [...new Set([valid.committed.themeId, preview(valid).themeId].filter((id) => id !== undefined))],
     bundled,
   )
+
   const cached = reconcileCache(requested.state, bundled)
   const applied = reconcileApplied(cached.state, bundled)
 

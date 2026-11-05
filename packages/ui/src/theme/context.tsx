@@ -201,6 +201,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       defaultTheme: oc2Theme,
       bundled: knownThemes(),
     })
+
     const [state, setState] = createSignal(initial.state)
     // Import timeouts by attempt.
     const timers = new Map<number, ReturnType<typeof setTimeout>>()
@@ -248,11 +249,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const run = (effect: ThemeEffect) => {
       if (effect.type === "persist-theme") return write(STORAGE_KEYS.THEME_ID, effect.id)
+
       if (effect.type === "persist-scheme") return write(STORAGE_KEYS.COLOR_SCHEME, effect.scheme)
+
       if (effect.type === "cache-theme") return cacheThemeVariants(effect.theme)
+
       if (effect.type === "clear-cache") return clear()
+
       if (effect.type === "apply-theme") return applyThemeCss(effect.theme, effect.id, effect.mode)
+
       if (effect.type === "warn-missing-theme") return console.warn(`Theme "${effect.id}" not found`)
+
       if (effect.type === "notify-applied") return
 
       if (effect.type === "cancel-load-timer") {

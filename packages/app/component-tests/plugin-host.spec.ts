@@ -1747,6 +1747,7 @@ story("a theme preview survives a system light/dark flip and a plugin theme arri
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" })
+
   const host: JSHandle<ThemesHost> = await page.evaluateHandle(async (fixture) => {
     const { mountThemes, Theme } = await import(fixture)
     // The frame's own provider saved its scheme; this window follows the system.
@@ -1754,6 +1755,7 @@ story("a theme preview survives a system light/dark flip and a plugin theme arri
     localStorage.removeItem("opencode-theme-id")
     localStorage.removeItem("opencode-theme-css-light")
     localStorage.removeItem("opencode-theme-css-dark")
+
     const variant = {
       palette: {
         neutral: "#101418",
@@ -1783,6 +1785,7 @@ story("a theme preview survives a system light/dark flip and a plugin theme arri
         },
       ],
     })
+
     host.previewScheme("light")
 
     return host
@@ -1807,6 +1810,7 @@ story("a theme preview survives a system light/dark flip and a plugin theme arri
         matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => resolve(), { once: true }),
       ),
     }))
+
     await page.emulateMedia({ colorScheme })
     await changed.evaluate((changed) => changed.done)
   }
