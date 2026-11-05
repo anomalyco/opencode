@@ -199,6 +199,9 @@ const source = {
   "ui.textField.copied": "Copied",
 
   "ui.imagePreview.alt": "Image preview",
+  "ui.imagePreview.previous": "Previous image",
+  "ui.imagePreview.next": "Next image",
+  "ui.imagePreview.counter": "{{current}} of {{total}}",
   "ui.imagePreview.zoomIn": "Zoom in",
   "ui.imagePreview.zoomOut": "Zoom out",
   "ui.imagePreview.zoomToFit": "Zoom to fit",

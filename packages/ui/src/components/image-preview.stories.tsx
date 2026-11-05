@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { onMount } from "solid-js"
+import { createSignal, onMount } from "solid-js"
 import * as mod from "./image-preview"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "../context/dialog"
@@ -65,6 +65,43 @@ export const Basic = {
 }
 
 // A large, offline, screenshot-style bitmap with small text that is only legible once zoomed in.
+export const Gallery = {
+  render: () => {
+    const dialog = useDialog()
+
+    const images = [
+      "https://placehold.co/960x600/png?text=One",
+      "https://placehold.co/960x600/png?text=Two",
+      "https://placehold.co/960x600/png?text=Three",
+    ]
+
+    const GalleryPreview = () => {
+      const [index, setIndex] = createSignal(1)
+      const step = (delta: number) => setIndex((index() + delta + images.length) % images.length)
+
+      return (
+        <mod.ImagePreview
+          src={images[index()]}
+          alt="Gallery preview"
+          position={{ index: index() + 1, total: images.length }}
+          onPrevious={() => step(-1)}
+          onNext={() => step(1)}
+        />
+      )
+    }
+
+    const open = () => dialog.show(() => <GalleryPreview />)
+
+    onMount(open)
+
+    return (
+      <Button variant="neutral" onClick={open}>
+        Open image gallery
+      </Button>
+    )
+  },
+}
+
 export const Screenshot = {
   render: () => {
     const dialog = useDialog()

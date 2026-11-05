@@ -40,6 +40,9 @@ export interface ImagePreviewProps {
    * flies out of its place and back, and returns it once the close lands.
    */
   video?: HTMLVideoElement
+  onPrevious?: () => void
+  onNext?: () => void
+  position?: { index: number; total: number }
 }
 
 const STEP = Math.SQRT2
@@ -400,6 +403,20 @@ export function ImagePreview(props: ImagePreviewProps) {
   const hideOrigin = () => home()?.setAttribute("data-image-preview-origin", "")
   const showOrigin = () => home()?.removeAttribute("data-image-preview-origin")
 
+  // Moving through a gallery changes the origin while the preview stays open. Hand the hidden state to the image being
+  // shown so the first thumbnail is visible again, and closing restores the current one.
+  createEffect(
+    on(
+      () => props.origin,
+      (next, prev) => {
+        if (!prev || prev === next) return
+
+        prev.removeAttribute("data-image-preview-origin")
+        next?.setAttribute("data-image-preview-origin", "")
+      },
+    ),
+  )
+
   onCleanup(() => {
     stop?.()
     settle()
@@ -547,6 +564,22 @@ export function ImagePreview(props: ImagePreviewProps) {
     (event: KeyboardEvent) => {
       const bare = !event.metaKey && !event.ctrlKey && !event.altKey
 
+      if (bare && event.key === "ArrowLeft" && props.onPrevious) {
+        event.preventDefault()
+        event.stopPropagation()
+        props.onPrevious()
+
+        return
+      }
+
+      if (bare && event.key === "ArrowRight" && props.onNext) {
+        event.preventDefault()
+        event.stopPropagation()
+        props.onNext()
+
+        return
+      }
+
       if (bare && event.key === " " && props.video && holder) {
         event.preventDefault()
         event.stopPropagation()
@@ -643,6 +676,30 @@ export function ImagePreview(props: ImagePreviewProps) {
           </Show>
         </div>
         <div data-slot="image-preview-controls">
+          <Show when={props.position}>
+            {(position) => (
+              <>
+                <IconButton
+                  data-slot="image-preview-previous"
+                  icon={<Icon name="chevron-left" />}
+                  variant="ghost"
+                  aria-label={i18n.t("ui.imagePreview.previous")}
+                  onClick={() => props.onPrevious?.()}
+                />
+                <span data-slot="image-preview-counter">
+                  {i18n.t("ui.imagePreview.counter", { current: position().index, total: position().total })}
+                </span>
+                <IconButton
+                  data-slot="image-preview-next"
+                  icon={<Icon name="chevron-right" />}
+                  variant="ghost"
+                  aria-label={i18n.t("ui.imagePreview.next")}
+                  onClick={() => props.onNext?.()}
+                />
+                <div data-slot="image-preview-divider" />
+              </>
+            )}
+          </Show>
           <IconButton
             data-slot="image-preview-zoom-out"
             icon={<Icon name="minus" />}

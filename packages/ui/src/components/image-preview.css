@@ -167,6 +167,15 @@
     font-variant-numeric: tabular-nums;
   }
 
+  [data-slot="image-preview-counter"] {
+    min-width: 48px;
+    padding-inline: 2px;
+    text-align: center;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.65;
+  }
+
   [data-slot="image-preview-divider"] {
     width: 1px;
     height: 16px;
