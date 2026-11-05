@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js"
 import { type McpControls, useMcpController, useMcpPool } from "@/providers/connect/mcp"
-import { isMcpToggling, type McpServerStatus } from "@/providers/connect/mcp-machine"
+import { isMcpToggling } from "@/providers/connect/mcp-machine"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { useServer } from "@/runtime/server/current"
@@ -35,11 +35,13 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
   const mcp = useMcpController(directory)
   const pool = useMcpPool()
 
-  // Toggles a directory's server and resolves whether it succeeded, holding that directory's controller meanwhile.
-  const toggle = (current: string, name: string, enabled: boolean, status: McpServerStatus["status"] | undefined) => {
+  // Sets a directory's server to an explicit state and resolves whether it succeeded, holding that directory's
+  // controller meanwhile. Like an explicit toggle on dev, it runs on a server that is still connecting, so it passes no
+  // status for the machine's pending guard.
+  const toggle = (current: string, name: string, enabled: boolean) => {
     const controller = pool.acquire(current)
 
-    return controller.toggle(name, enabled, status).finally(() => controller.dispatch({ type: "unmounted" }))
+    return controller.toggle(name, enabled, undefined).finally(() => controller.dispatch({ type: "unmounted" }))
   }
 
   const controls: McpControls = {
@@ -57,7 +59,13 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
       tabs.updateDraft(input.draftID, { mcp: { target: target(), states: { ...states(), [name]: enabled } } })
 
       if (preview()) return
-      void toggle(directory(), name, enabled, undefined)
+      void toggle(directory(), name, enabled).catch((error) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      )
     },
   }
 
@@ -79,7 +87,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
 
         if (!status || (enabled ? status === "connected" : status === "disabled")) return []
 
-        return [toggle(directory, name, enabled, status)]
+        return [toggle(directory, name, enabled)]
       }),
     )
 

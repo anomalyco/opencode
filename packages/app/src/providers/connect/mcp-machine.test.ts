@@ -107,6 +107,20 @@ describe("MCP machine", () => {
     expect(isMcpToggling(done.state)).toBe(true)
   })
 
+  test("a row skips a connecting server, but the composer's explicit request still runs", () => {
+    const start = replay([])
+
+    // A row passes the server's status, and a connecting server takes no new toggle.
+    expect(
+      transitionMcp(start.state, { type: "toggle.requested", name: "figma", enabled: true, status: "pending" }).state,
+    ).toBe(start.state)
+    // Starting a session sets the draft's state on a server that may still be connecting, so it passes no status.
+    expect(
+      transitionMcp(start.state, { type: "toggle.requested", name: "figma", enabled: false, status: undefined })
+        .effects,
+    ).toEqual([run("figma", 1, false)])
+  })
+
   test("the error view opens only on a failed server, and waits for the list when it is not loaded", () => {
     const start = replay([])
 

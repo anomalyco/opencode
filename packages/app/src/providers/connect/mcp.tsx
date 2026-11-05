@@ -27,7 +27,10 @@ export type McpControls = {
 export type McpController = {
   readonly state: Accessor<McpState>
   dispatch: (event: McpEvent) => void
-  /** Toggles a server and resolves whether it succeeded; joins a toggle of the same server already running. */
+  /**
+   * Toggles a server and resolves whether it succeeded; joins a toggle of the same server already running. Rejects when
+   * the machine refuses the request, which only a `"pending"` status does; pass no status to set a connecting server.
+   */
   toggle: (name: string, enabled: boolean, status: McpServerStatus["status"] | undefined) => Promise<boolean>
   /** Resolves once every running toggle ended, with whether all succeeded. */
   settle: () => Promise<boolean>
@@ -281,7 +284,8 @@ function createMcpController(
       if (joined) return joined
       dispatch({ type: "toggle.requested", name, enabled, status })
 
-      return running(name) ?? Promise.resolve(false)
+      // The machine refused the request (the server is connecting), so the caller reports it instead of failing quietly.
+      return running(name) ?? Promise.reject(new Error(input.language.t("session.summary.mcp.notReady", { name })))
     },
     settle: () =>
       Promise.all([...runs.values()].map((handle) => handle.done.promise)).then((results) => results.every(Boolean)),
