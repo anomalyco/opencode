@@ -2002,10 +2002,11 @@ test("models: a Console provider picked on Providers opens its collapsed group, 
     ],
   })
 
-  await settings.getByRole("tab", { name: "Models", exact: true }).click()
   const group = settings
     .locator('[data-component="settings-models-console"]')
     .getByRole("button", { name: /^OpenCode Console/ })
+
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
   await group.click()
   await expect(group).toHaveAttribute("aria-expanded", "false")
 
