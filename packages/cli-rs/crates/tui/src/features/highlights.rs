@@ -84,21 +84,19 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
         count: release.items.len(),
         history: tui.state_dir().is_some_and(|state| state.join("prompt-history.jsonl").exists()),
     };
-    let (weak, release) = (tui.weak(), release.clone());
-    tui.app.spawn(
+    let release = release.clone();
+    tui.request(
         async move {
             tokio::task::spawn_blocking(move || claim(&storage, &input))
                 .await
                 .map_err(|error| error.to_string())
                 .and_then(|result| result)
         },
-        bind!(weak, |tui, _, result| {
-            match result {
-                Ok(true) if !tui.dialogs.is_open() => highlights::show(&tui, &release.version, &release.items),
-                Ok(_) => {}
-                Err(error) => tui.toasts.error(error),
+        move |tui, claimed| {
+            if claimed && !tui.dialogs.is_open() {
+                highlights::show(tui, &release.version, &release.items);
             }
-        }),
+        },
     );
 }
 
