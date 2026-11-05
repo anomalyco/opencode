@@ -100,10 +100,7 @@ export const layer = (options?: Options) =>
         return true
       })
 
-      const restartMessage = (
-        background: Job.Background,
-        recovery: Exclude<Job.Recovery, { kind: "subagent" }>,
-      ) => {
+      const restartMessage = (background: Job.Background, recovery: Exclude<Job.Recovery, { kind: "subagent" }>) => {
         const state = background.status === "running" ? "cancelled" : background.status
         if (recovery.kind === "shell") {
           const text =
@@ -165,17 +162,17 @@ export const layer = (options?: Options) =>
         yield* jobs.completeBackground(background.notificationID)
       })
 
-      // Returns true when this child's resume belongs to the deferred child pass.
       const recoverSubagent = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
         suspended: ReadonlySet<SessionSchema.ID>,
-      ): Effect.fn.Return<boolean> {
+      ): Effect.fn.Return<"stale" | "owned" | "reported" | "exhausted" | "resume"> {
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
           yield* jobs.completeBackground(background.notificationID)
-          return false
+          return "stale"
         }
+        if ((yield* jobs.get(background.id))?.status === "running") return "owned"
 
         // A silent child reports nothing, whether its settle ran or restart replays it, so only the
         // durable marker is left to clear.
@@ -196,16 +193,16 @@ export const layer = (options?: Options) =>
         // Finished before the crash: no settle survives to report it, so this replay is the report.
         if (background.status !== "running") {
           yield* notify(background)
-          return false
+          return "reported"
         }
-        if (yield* execution.isActive(recovery.childSessionID)) return false
+        if (yield* execution.isActive(recovery.childSessionID)) return "owned"
         if (!(yield* prepareResume(recovery.childSessionID))) {
           // prepareResume terminalizes on the bus rather than through a busy period, so no settle
           // report follows: this is the only delivery for the exhausted child.
           yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
-          return false
+          return "exhausted"
         }
-        return true
+        return "resume"
       })
 
       const resumeChild = Effect.fnUntraced(function* (
@@ -258,6 +255,9 @@ export const layer = (options?: Options) =>
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
           yield* store.releaseChildClaims(children)
+          const owned = new Set<SessionSchema.ID>()
+          const exhausted = new Set<SessionSchema.ID>()
+          const reported = new Set<string>()
           const resumable: Array<{
             readonly background: Job.Background
             readonly recovery: Extract<Job.Recovery, { kind: "subagent" }>
@@ -266,10 +266,16 @@ export const layer = (options?: Options) =>
             // Admit shell outcomes before a recovered child can start its first model request.
             pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
             Effect.fnUntraced(function* (background) {
-              if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
-              if (recovery.kind !== "subagent") return yield* recoverToolJob(background, recovery)
-              if (yield* recoverSubagent(background, recovery, suspended)) resumable.push({ background, recovery })
+              if (recovery.kind !== "subagent") {
+                if ((yield* jobs.get(background.id))?.status === "running") return
+                return yield* recoverToolJob(background, recovery)
+              }
+              const result = yield* recoverSubagent(background, recovery, suspended)
+              if (result === "owned" || result === "resume") owned.add(recovery.childSessionID)
+              if (result === "exhausted") exhausted.add(recovery.childSessionID)
+              if (result === "reported") reported.add(background.notificationID)
+              if (result === "resume") resumable.push({ background, recovery })
             }),
             { discard: true },
           )
@@ -289,6 +295,22 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(resumable, ({ background, recovery }) => resumeChild(background, recovery), {
             discard: true,
           })
+          // Held direct prompts have no job marker. Wake them only after cancellations are admitted,
+          // parents are counted, and recovered jobs own their reports. A wake preserves the held
+          // answer boundary without retrying an interrupted model execution.
+          yield* Effect.forEach(
+            yield* store.listHeldChildren(),
+            Effect.fnUntraced(function* (held) {
+              if (owned.has(held.sessionID) || (yield* execution.isActive(held.sessionID))) return
+              if (exhausted.has(held.sessionID) || reported.has(held.report.notificationID))
+                return yield* store.releaseReport(held.sessionID)
+              const child = yield* store.get(held.sessionID)
+              if (!child || !SubagentMetadata.notify(child.metadata) || !(yield* store.get(held.parentID)))
+                return yield* store.releaseReport(held.sessionID)
+              yield* execution.wake(held.sessionID)
+            }),
+            { discard: true },
+          )
         }),
       })
     }),

@@ -1,13 +1,16 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Layer, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Job } from "@opencode/core/job"
+import { Instance } from "@opencode/core/instance/service"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -15,6 +18,8 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionSchema } from "@opencode/core/session/schema"
@@ -41,6 +46,10 @@ const it = testEffect(
         SubagentJob.node,
         SessionExecution.node,
         LocationServiceMap.node,
+        Bus.node,
+        Database.node,
+        Instance.node,
+        SessionInbox.node,
       ]),
       [
         Global.node.replace(tempGlobalLayer),
@@ -398,6 +407,68 @@ describe("subagent observer lifetime", () => {
       }),
     )
   }
+
+  it.live("restart recovers a directly prompted child's durable hold after cancelling its shell", () =>
+    Effect.gen(function* () {
+      const store = yield* SessionStore.Service
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      const before = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(before, Exit.void))
+      const oldJobs = yield* Job.make.pipe(Scope.provide(before))
+      const old = yield* Layer.buildWithScope(
+        SessionExecution.layer.pipe(Layer.provide(Layer.succeed(Job.Service, oldJobs))),
+        before,
+      )
+      const oldExecution = Context.get(old, SessionExecution.Service)
+      yield* oldJobs.start({
+        id: "restart-shell",
+        type: "shell",
+        recovery: { kind: "shell", sessionID: f.child.id, shellID: "restart-shell", command: "bun dev" },
+        run: Effect.never,
+      })
+      yield* oldJobs.background("restart-shell")
+      yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("after restart", "after"))
+      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Start the dev server", resume: false })
+      yield* oldExecution.wake(f.child.id)
+      yield* oldExecution.awaitIdle(f.child.id)
+      const held = yield* store.heldReport(f.child.id)
+      expect(held).toBeDefined()
+      expect(yield* reports(f.parent.id)).toEqual([])
+      yield* Scope.close(before, Exit.void)
+      expect(yield* store.heldReport(f.child.id)).toEqual(held)
+
+      const after = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(after, Exit.void))
+      const jobs = yield* Job.make.pipe(Scope.provide(after))
+      const context = yield* Layer.buildWithScope(
+        SessionRestart.layer().pipe(
+          Layer.provideMerge(SessionExecution.layer),
+          Layer.provide(Layer.succeed(Job.Service, jobs)),
+        ),
+        after,
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* restart.resumeSuspendedSessions
+      yield* execution.awaitIdle(f.child.id)
+      yield* execution.awaitIdle(f.parent.id)
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(1)
+      expect(notices[0]).toMatchObject({ id: held?.notificationID, metadata: { childID: f.child.id } })
+      expect(notices[0]?.text).toContain("after restart")
+      expect(notices[0]?.text).not.toContain("first")
+      expect(yield* store.listHeldChildren()).toEqual([])
+      expect(yield* jobs.pendingBackground).toEqual([])
+      expect(yield* llm.requests()).toHaveLength(3)
+      expect((yield* f.sessions.context(f.child.id)).filter((message) => message.type === "synthetic")).toMatchObject([
+        { text: expect.stringContaining("server restarted") },
+      ])
+      yield* restart.resumeSuspendedSessions
+      expect(yield* reports(f.parent.id)).toEqual(notices)
+      expect(yield* llm.requests()).toHaveLength(3)
+    }),
+  )
 
   it.live("a silent background grandchild job releases its parent's held report", () =>
     Effect.gen(function* () {

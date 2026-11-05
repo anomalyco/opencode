@@ -1042,6 +1042,7 @@ describe("SessionRestart background recovery", () => {
   it.effect("resumes a background subagent and notifies its parent exactly once", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
       const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_subagent_recovery_parent")
@@ -1064,6 +1065,8 @@ describe("SessionRestart background recovery", () => {
       yield* jobs.background(child)
       const marker = (yield* jobs.pendingBackground)[0]
       if (!marker) return yield* Effect.die("background record missing")
+      const heldID = SessionMessage.ID.create()
+      yield* store.holdReport(child, { notificationID: heldID, since: undefined })
 
       const resumed = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
@@ -1119,10 +1122,192 @@ describe("SessionRestart background recovery", () => {
         },
       ])
       yield* pendingEmpty(restarted)
+      expect(yield* store.listHeldChildren()).toEqual([])
       yield* restart.resumeSuspendedSessions
       expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
     }),
   )
+
+  for (const state of ["cancellation", "no-answer", "stale", "finished", "silent", "orphan"] as const) {
+    it.effect(`recovers a held child independently of its ${state} marker state`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const parent = Session.ID.make("ses_held_parent")
+        const child = Session.ID.make("ses_held_child")
+        const other = Session.ID.make("ses_held_other")
+        if (state !== "orphan")
+          yield* seedSessions(
+            database,
+            [parent],
+            state === "cancellation" ? { time_suspended: Date.now(), resume_attempts: 2 } : {},
+          )
+        yield* seedSessions(database, [child], {
+          parent_id: parent,
+          time_suspended: Date.now(),
+          metadata: state === "silent" ? { "subagent.notify": false } : {},
+        })
+        yield* answer(bus, child, "Previously reported answer")
+        const old = (yield* store.context(child)).findLast((message) => message.type === "assistant")
+        if (!old) return yield* Effect.die("old answer missing")
+        const held = { notificationID: SessionMessage.ID.create(), since: { at: 0, answer: old.id } }
+        yield* store.holdReport(child, held)
+        if (state === "stale" || state === "finished") {
+          if (state === "stale") yield* seedSessions(database, [other])
+          yield* jobs.start({
+            id: child,
+            type: "subagent",
+            recovery: {
+              kind: "subagent",
+              parentSessionID: state === "stale" ? other : parent,
+              childSessionID: child,
+              agent: "explore",
+              description: "Earlier inspection",
+            },
+            run: state === "stale" ? Effect.never : Effect.succeed("Previously reported answer"),
+          })
+          if (state === "finished") yield* jobs.wait({ id: child })
+          yield* jobs.background(child)
+          yield* answer(bus, child, "Owed answer")
+        }
+        if (state === "cancellation")
+          yield* seedBackground(jobs, child, [{ id: "held-shell", shellID: "held-shell", command: "bun dev" }])
+
+        const failed: Session.ID[] = []
+        yield* bus.project(SessionEvent.Execution.Failed, (event) =>
+          Effect.sync(() => void failed.push(event.data.sessionID)),
+        )
+        const drained: Array<{ sessionID: Session.ID; force: boolean }> = []
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const restarted = yield* Job.make.pipe(Scope.provide(scope))
+        const context = yield* buildExecution(
+          scope,
+          (input) =>
+            Effect.gen(function* () {
+              drained.push({ sessionID: input.sessionID, force: input.force })
+              if (input.sessionID !== child) return
+              expect(yield* store.heldReport(child)).toEqual(held)
+              if (state !== "cancellation") return
+              // Parent budget accounting and admit-only cancellation both precede the held wake.
+              expect(failed).toEqual([parent])
+              expect(yield* SessionInbox.list(database.db, child)).toMatchObject([
+                { payload: { text: expect.stringContaining("server restarted") } },
+              ])
+              expect(yield* SessionInbox.promote(database.db, bus, child, "input")).toBe(1)
+              yield* answer(bus, child, "Owed answer")
+            }),
+          { maxAttempts: 2 },
+          restarted,
+        )
+        const restart = Context.get(context, SessionRestart.Service)
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* restart.resumeSuspendedSessions
+        yield* execution.awaitIdle(child)
+        if (state !== "orphan") yield* execution.awaitIdle(parent)
+        expect(drained.filter((input) => input.sessionID === child)).toEqual(
+          state === "silent" || state === "orphan" ? [] : [{ sessionID: child, force: false }],
+        )
+        expect(yield* store.listHeldChildren()).toEqual([])
+        expect(yield* attempts(database, child)).toBe(0)
+        expect(yield* restarted.pendingBackground).toEqual([])
+        const notices = yield* SessionInbox.list(database.db, parent)
+        expect(notices).toHaveLength(state === "finished" ? 2 : state === "stale" || state === "cancellation" ? 1 : 0)
+        if (state === "stale" || state === "finished" || state === "cancellation") {
+          expect(notices.find((notice) => notice.id === held.notificationID)).toMatchObject({
+            payload: { text: expect.stringContaining("Owed answer") },
+          })
+          expect(notices.find((notice) => notice.id === held.notificationID)?.payload).not.toMatchObject({
+            text: expect.stringContaining("Previously reported answer"),
+          })
+        }
+        if (state === "stale") expect(yield* SessionInbox.list(database.db, other)).toEqual([])
+        const count = drained.length
+        yield* restart.resumeSuspendedSessions
+        expect(drained).toHaveLength(count)
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual(notices)
+      }),
+    )
+  }
+
+  for (const owner of ["job", "execution"] as const) {
+    it.effect(`leaves a held child's report to its live ${owner}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const bus = yield* Bus.Service
+        const parent = Session.ID.make("ses_held_owned_parent")
+        const child = Session.ID.make("ses_held_owned_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        const held = { notificationID: SessionMessage.ID.create(), since: undefined }
+        yield* store.holdReport(child, held)
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const jobs = yield* Job.make.pipe(Scope.provide(scope))
+        const release = yield* Deferred.make<void>()
+        const started = yield* Deferred.make<void>()
+        const drained: Session.ID[] = []
+        const context = yield* buildExecution(
+          scope,
+          ({ sessionID }) =>
+            Effect.gen(function* () {
+              drained.push(sessionID)
+              if (sessionID !== child) return
+              yield* Deferred.succeed(started, undefined)
+              yield* Deferred.await(release)
+              yield* answer(bus, child, "Owned answer")
+            }),
+          undefined,
+          jobs,
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+        const restart = Context.get(context, SessionRestart.Service)
+        const notificationID = owner === "job" ? SessionMessage.ID.create() : held.notificationID
+        if (owner === "job") {
+          yield* jobs.start({
+            id: child,
+            type: "subagent",
+            notificationID,
+            recovery: {
+              kind: "subagent",
+              parentSessionID: parent,
+              childSessionID: child,
+              agent: "explore",
+              description: "Live inspection",
+            },
+            // A registered job owns the report even before it starts an execution.
+            run: Deferred.await(release).pipe(Effect.andThen(execution.resume(child)), Effect.as("Owned answer")),
+          })
+          yield* jobs.background(child)
+        }
+        if (owner === "execution") {
+          yield* execution.wake(child)
+          yield* Deferred.await(started)
+        }
+        yield* restart.resumeSuspendedSessions
+        expect(yield* store.heldReport(child)).toEqual(held)
+        expect(drained).toEqual(owner === "job" ? [] : [child])
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+        yield* Deferred.succeed(release, undefined)
+        if (owner === "job") yield* jobs.wait({ id: child })
+        yield* execution.awaitIdle(child)
+        yield* execution.awaitIdle(parent)
+        expect(drained.filter((id) => id === child)).toHaveLength(1)
+        expect(yield* store.listHeldChildren()).toEqual([])
+        expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
+          { id: notificationID, payload: { text: expect.stringContaining("Owned answer") } },
+        ])
+        // Replay the now-finished job's marker with the same ID as settlement.
+        yield* restart.resumeSuspendedSessions
+        yield* execution.awaitIdle(parent)
+        expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
+        expect(yield* jobs.pendingBackground).toEqual([])
+      }),
+    )
+  }
 
   it.effect("keeps a resumed child's marker when shutdown interrupts it again", () =>
     Effect.gen(function* () {
@@ -1275,6 +1460,7 @@ describe("SessionRestart background recovery", () => {
   it.effect("delivers a subagent result persisted before restart without rerunning the child", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
       const parent = Session.ID.make("ses_subagent_completed_parent")
       const child = Session.ID.make("ses_subagent_completed_child")
@@ -1296,6 +1482,9 @@ describe("SessionRestart background recovery", () => {
       yield* jobs.background(child)
       yield* Deferred.succeed(complete, "Recovered result")
       yield* jobs.wait({ id: child })
+      const marker = (yield* jobs.pendingBackground)[0]
+      if (!marker) return yield* Effect.die("background record missing")
+      yield* store.holdReport(child, { notificationID: marker.notificationID, since: undefined })
 
       const parentWoken = yield* Deferred.make<void>()
       const drained: Session.ID[] = []
@@ -1316,20 +1505,28 @@ describe("SessionRestart background recovery", () => {
 
       expect(drained).toEqual([parent])
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
-        { payload: { text: expect.stringContaining("Recovered result"), metadata: { state: "completed" } } },
+        {
+          id: marker.notificationID,
+          payload: { text: expect.stringContaining("Recovered result"), metadata: { state: "completed" } },
+        },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
+      expect(yield* store.listHeldChildren()).toEqual([])
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
     }),
   )
 
   it.effect("clears a finished silent child's marker without reporting it", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
       const parent = Session.ID.make("ses_subagent_silent_parent")
       const child = Session.ID.make("ses_subagent_silent_child")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent, metadata: { "subagent.notify": false } })
+      yield* store.holdReport(child, { notificationID: SessionMessage.ID.create(), since: undefined })
       const complete = yield* Deferred.make<string>()
       yield* jobs.start({
         id: child,
@@ -1363,6 +1560,7 @@ describe("SessionRestart background recovery", () => {
       expect(drained).toEqual([])
       expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
       expect(yield* restarted.pendingBackground).toEqual([])
+      expect(yield* store.listHeldChildren()).toEqual([])
     }),
   )
 
@@ -1588,11 +1786,13 @@ describe("SessionRestart background recovery", () => {
   it.effect("terminalizes a recovered subagent that exhausts its resume budget", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const store = yield* SessionStore.Service
       const jobs = yield* Job.Service
       const parent = Session.ID.make("ses_subagent_exhausted_parent")
       const child = Session.ID.make("ses_subagent_exhausted_child")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now(), resume_attempts: 2 })
+      yield* store.holdReport(child, { notificationID: SessionMessage.ID.create(), since: undefined })
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -1635,6 +1835,9 @@ describe("SessionRestart background recovery", () => {
         },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
+      expect(yield* store.listHeldChildren()).toEqual([])
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(1)
     }),
   )
 })
