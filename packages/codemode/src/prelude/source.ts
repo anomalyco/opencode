@@ -136,4 +136,68 @@ function setMethod(target, other, name) {
   }
   return result === undefined ? true : result
 }
+function Object$fromEntries(entries) {
+  const result = {}
+  for (const entry of entries) {
+    if (!$IsObject(entry, true)) $Throw("TypeError", "Object.fromEntries expects [key, value] entry objects.")
+    $Define(result, String(entry[0]), entry[1], true)
+  }
+  return result
+}
+
+function Math$sumPrecise(items) {
+  const numbers = []
+  for (const item of items) {
+    if (typeof item !== "number") $Throw("TypeError", "Math.sumPrecise expects an iterable of numbers.")
+    numbers[numbers.length] = item
+  }
+  return $SumPrecise(numbers)
+}
+
+// new AggregateError: the error is made (message and cause) before its errors are read.
+function aggregateError(error, errors) {
+  const list = []
+  for (const item of errors) list[list.length] = item
+  return $Define(error, "errors", list, false)
+}
+
+// A Uint8Array's bytes from an iterable: a new one with prototype into, or set into the Uint8Array into at
+// offset. As in TypedArray.from, a mapper sees the original values, after the source is consumed in full.
+function collectBytes(source, name, mapper, thisArg, into, offset) {
+  if (!$IsIterable(source)) $Throw("TypeError", name + " expects a Uint8Array, an array, or an iterable of numbers, received " + $Describe(source) + ".")
+  const values = []
+  for (const item of source) values[values.length] = item
+  let index = 0
+  if (mapper !== undefined) {
+    while (index < values.length) {
+      values[index] = $Call(mapper, thisArg, values[index], index)
+      index++
+    }
+  }
+  return $Bytes(values, into, offset)
+}
+
+// Headers and URLSearchParams from iterable [name, value] pairs, read in full as strings before any is checked; from a
+// record of names to values when init is not iterable.
+function readPairs(init, label, kind, proto) {
+  if (!$IsIterable(init)) return $Pairs(kind, proto, init, label)
+  const pairs = []
+  let strings
+  for (const pair of init) {
+    if (!$IsIterable(pair)) $Throw("TypeError", label + " expects iterable [name, value] pairs.")
+    strings = []
+    for (const item of pair) strings[strings.length] = String(item)
+    pairs[pairs.length] = strings
+  }
+  return $Pairs(kind, proto, pairs, label)
+}
+
+// Headers and URLSearchParams forEach: the callback sees each pair as listed when it started.
+function pairsForEach(target, pairs, callback, thisArg) {
+  let index = 0
+  while (index < pairs.length) {
+    $Call(callback, thisArg, pairs[index][1], pairs[index][0], target)
+    index++
+  }
+}
 `

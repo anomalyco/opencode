@@ -1,10 +1,6 @@
-import { consumer, STATE } from "../machine/native-kind.js"
 import { constants, type Method, methods } from "../interpreter/native.js"
-import { typeError } from "../interpreter/model.js"
 import { Obj, coerceToNumber } from "../interpreter/objects.js"
 import { withPrimitives } from "../interpreter/callback.js"
-import { Push } from "../interpreter/signals.js"
-import { Drain, drain } from "../machine/natives.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
@@ -81,20 +77,6 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
     unary("fround", Math.fround),
     unary("clz32", Math.clz32),
     binary("imul", Math.imul),
-    ["sumPrecise", 1, (_, args) => new Push(Drain, drain(SumPrecise, args[0], [[]]))],
   ])
   return math
 }
-
-// State: the numbers so far.
-const SumPrecise = consumer({
-  name: "Math.sumPrecise",
-  notIterable: () => {
-    throw typeError("Math.sumPrecise expects a synchronous iterable.")
-  },
-  each: (_task, frame, value) => {
-    if (typeof value !== "number") throw typeError("Math.sumPrecise expects an iterable of numbers.")
-    ;(frame.slots[STATE] as Array<number>).push(value)
-  },
-  done: (_task, frame) => Math.sumPrecise(frame.slots[STATE] as Array<number>),
-})

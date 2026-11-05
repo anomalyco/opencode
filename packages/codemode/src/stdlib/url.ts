@@ -1,7 +1,4 @@
-import { consumer, nativeKind, STATE } from "../machine/native-kind.js"
-import { Push } from "../interpreter/signals.js"
-import { PENDING } from "../machine/frame.js"
-import { Drain, drain } from "../machine/natives.js"
+import { Invoke } from "../interpreter/signals.js"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, PendingThrow, typeError, uriError } from "../interpreter/model.js"
 import {
@@ -128,47 +125,26 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
 export type PairsInto = { readonly kind: "Headers" | "URLSearchParams"; readonly proto: Obj }
 
 /**
- * Reads a synchronous iterable of `[name, value]` pairs as strings, then builds `into` from them; a record of names to
- * values when `init` is not iterable. As in WebIDL, the whole sequence is converted before any pair's length is
- * checked.
+ * Reads a synchronous iterable of `[name, value]` pairs as strings (in the prelude), then builds `into` from them; a
+ * record of names to values when `init` is not iterable. As in WebIDL, the whole sequence is converted before any
+ * pair's length is checked.
  */
-export const readPairs = (init: Value, label: string, into: PairsInto) =>
-  new Push(Drain, drain(Pairs, init, [label, [], into]))
+export const readPairs = <R>(ctx: Interpreter<R>, init: Value, label: string, into: PairsInto) =>
+  new Invoke(ctx.prelude.fn("readPairs"), undefined, [init, label, into.kind, into.proto], undefined)
 
-// State: the label, the pairs so far, and what they build.
-const Pairs = consumer({
-  name: "pairs",
-  notIterable: (_task, frame, init) => fromRecord(frame.slots[STATE + 2] as PairsInto, init),
-  each: (task, frame, value) => task.push(Drain, frame.node, drain(Pair, value, [frame.slots[STATE], []])),
-  resume: (_task, frame, input) => {
-    ;(frame.slots[STATE + 1] as Array<Array<string>>).push(input as Array<string>)
-  },
-  done: (_task, frame) => {
-    const pairs = frame.slots[STATE + 1] as Array<Array<string>>
-    const into = frame.slots[STATE + 2] as PairsInto
-    if (pairs.some((entry) => entry.length !== 2))
-      throw typeError(`${frame.slots[STATE] as string} expects iterable [name, value] pairs.`)
-    if (into.kind === "URLSearchParams") {
-      return new URLSearchParamsObj(into.proto, new URLSearchParams(pairs as Array<[string, string]>))
-    }
-    return new HeadersObj(
-      into.proto,
-      attempt(() => new Headers(pairs as Array<[string, string]>)),
-    )
-  },
-})
-
-// One pair's strings; a failing conversion closes the pair's iterator. State: the label and the strings so far.
-const Pair = consumer({
-  name: "pair",
-  notIterable: (_task, frame) => {
-    throw typeError(`${frame.slots[STATE] as string} expects iterable [name, value] pairs.`)
-  },
-  each: (_task, frame, value) => {
-    ;(frame.slots[STATE + 1] as Array<string>).push(coerceToString(value))
-  },
-  done: (_task, frame) => frame.slots[STATE + 1] as never,
-})
+/** What `readPairs` makes of the pairs it read (an array of arrays of strings), or of a record. */
+export const buildPairs = (into: PairsInto, value: Value, label: string): Value => {
+  if (!(value instanceof Arr)) return fromRecord(into, value)
+  const pairs = value.items.map((pair) => (pair as Arr).items as Array<string>)
+  if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
+  if (into.kind === "URLSearchParams") {
+    return new URLSearchParamsObj(into.proto, new URLSearchParams(pairs as Array<[string, string]>))
+  }
+  return new HeadersObj(
+    into.proto,
+    attempt(() => new Headers(pairs as Array<[string, string]>)),
+  )
+}
 
 const fromRecord = (into: PairsInto, init: Value): Value => {
   if (into.kind === "Headers") {
@@ -202,27 +178,21 @@ export const attempt = <T>(run: () => T): T => {
 }
 
 /** Headers and URLSearchParams `forEach`: the callback sees each `[name, value]` pair as listed when it started. */
-export const pairsForEach = (target: Value, pairs: Array<[string, string]>, callback: Callable, thisArg: Value) =>
-  new Push(PairsForEach, [target, pairs, callback, thisArg, 0])
+export const pairsForEach = <R>(
+  ctx: Interpreter<R>,
+  target: Value,
+  pairs: Array<[string, string]>,
+  callback: Callable,
+  thisArg: Value,
+) => {
+  const list = new Arr(
+    ctx.builtins.Array,
+    pairs.map((pair) => new Arr(ctx.builtins.Array, pair)),
+  )
+  return new Invoke(ctx.prelude.fn("pairsForEach"), undefined, [target, list, callback, thisArg], undefined)
+}
 
-// Slots: the receiver, its pairs, the callback, its `this`, and the next pair.
-const PairsForEach = nativeKind("pairs forEach", (task, frame) => {
-  const slots = frame.slots
-  const pairs = slots[1] as Array<[string, string]>
-  let index = slots[4] as number
-  if (frame.phase === 1) index++
-  frame.phase = 1
-  for (; index < pairs.length; index++) {
-    const [key, value] = pairs[index]!
-    if (task.call(slots[2] as Callable, slots[3] as Value, [value, key, slots[0] as Value], frame.node) === PENDING) {
-      slots[4] = index
-      return PENDING
-    }
-  }
-  return undefined
-})
-
-const constructURLSearchParams = (init: Value, proto: Obj) => {
+const constructURLSearchParams = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
   const wrap = (params: URLSearchParams) => new URLSearchParamsObj(proto, params)
   if (init === undefined) return wrap(new URLSearchParams())
   if (init instanceof URLSearchParamsObj) return wrap(new URLSearchParams(init.params))
@@ -230,7 +200,7 @@ const constructURLSearchParams = (init: Value, proto: Obj) => {
   if (init === null || typeof init === "number" || typeof init === "boolean") {
     return wrap(new URLSearchParams(coerceToString(init)))
   }
-  return readPairs(init, "new URLSearchParams(...)", { kind: "URLSearchParams", proto })
+  return readPairs(ctx, init, "new URLSearchParams(...)", { kind: "URLSearchParams", proto })
 }
 
 export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
@@ -239,7 +209,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
   const searchParams = constructor(builtins, proto, {
     name: "URLSearchParams",
     call: requiresNew("URLSearchParams"),
-    construct: (args, newTarget) => constructURLSearchParams(args[0], prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructURLSearchParams(ctx, args[0], prototypeFrom(newTarget, proto)),
   })
   const self = (thisValue: Value, name: string) =>
     receiver(URLSearchParamsObj, thisValue, `URLSearchParams.prototype.${name}`)
@@ -325,7 +295,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
         requireArgs("forEach", args, 1)
         const target = self(thisValue, "forEach")
         const callback = requireCallback(args[0], "URLSearchParams.forEach")
-        return pairsForEach(target, Array.from(target.params.entries()), callback, args[1])
+        return pairsForEach(ctx, target, Array.from(target.params.entries()), callback, args[1])
       },
     ],
   ])

@@ -1,8 +1,7 @@
-import { consumer, STATE } from "../machine/native-kind.js"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
 import { ToolRuntimeError } from "../tool-runtime.js"
-import { type AstNode, formatLocation, PendingThrow, Throw, sourceLocation, typeError } from "./model.js"
+import { type AstNode, formatLocation, PendingThrow, Throw, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"
@@ -20,9 +19,8 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
-import { Push } from "./signals.js"
+import { Invoke } from "./signals.js"
 import { withPrimitives } from "./callback.js"
-import { Drain, drain } from "../machine/natives.js"
 import { formatValue } from "../stdlib/console.js"
 import { inPrelude } from "./source.js"
 
@@ -159,27 +157,6 @@ export const createAggregateErrorValue = <R>(
   return value
 }
 
-// State: the message, the prototype, the options, and the errors so far.
-const AggregateErrors = consumer({
-  name: "new AggregateError",
-  notIterable: () => {
-    throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
-  },
-  take: (frame, value) => {
-    ;(frame.slots[STATE + 3] as Array<Value>).push(value)
-  },
-  done: (task, frame) => {
-    const slots = frame.slots
-    const created = createAggregateErrorValue(
-      task.ctx,
-      slots[STATE + 3] as Array<Value>,
-      slots[STATE] as string,
-      slots[STATE + 1] as Obj,
-    )
-    return withCause(created, slots[STATE + 2] as Value)
-  },
-})
-
 // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
 const withCause = (created: ErrorObj, options: Value) => {
   if (options instanceof Obj && has(options, "cause")) define(created, "cause", get(options, "cause"), hidden)
@@ -198,8 +175,8 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
         "string",
         message === undefined ? [] : [message],
         ([text]) => {
-          const state = [message === undefined ? "" : coerceToString(text), proto, args[2], []]
-          return new Push(Drain, drain(AggregateErrors, args[0], state))
+          const created = withCause(createErrorValue(proto, message === undefined ? "" : coerceToString(text)), args[2])
+          return new Invoke(ctx.prelude.fn("aggregateError"), undefined, [created, args[0]], undefined)
         },
         true,
       )

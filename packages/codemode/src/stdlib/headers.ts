@@ -15,9 +15,9 @@ import { requireCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { attempt, pairsForEach, readPairs } from "./url.js"
 
-const constructHeaders = (init: Value, proto: Obj) => {
+const constructHeaders = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
   if (init === undefined) return new HeadersObj(proto, new Headers())
-  if (init instanceof Obj) return readPairs(init, "new Headers(...)", { kind: "Headers", proto })
+  if (init instanceof Obj) return readPairs(ctx, init, "new Headers(...)", { kind: "Headers", proto })
   throw typeError("new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.")
 }
 
@@ -27,7 +27,7 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
   const headers = constructor(builtins, proto, {
     name: "Headers",
     call: requiresNew("Headers"),
-    construct: (args, newTarget) => constructHeaders(args[0], prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructHeaders(ctx, args[0], prototypeFrom(newTarget, proto)),
   })
   const self = (thisValue: Value, name: string) => receiver(HeadersObj, thisValue, `Headers.prototype.${name}`)
   const wrap = (items: Array<Value>) => new Arr(builtins.Array, items)
@@ -95,7 +95,7 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
         requireArgs("forEach", args, 1)
         const target = self(thisValue, "forEach")
         const callback = requireCallback(args[0], "Headers.forEach")
-        return pairsForEach(target, Array.from(target.headers.entries()), callback, args[1])
+        return pairsForEach(ctx, target, Array.from(target.headers.entries()), callback, args[1])
       },
     ],
   ])

@@ -1,16 +1,11 @@
-import { consumer, STATE } from "../machine/native-kind.js"
-import { Push } from "../interpreter/signals.js"
-import { Drain, drain } from "../machine/natives.js"
 import { constructor, methods, receiver } from "../interpreter/native.js"
 import { type AstNode, AsyncIteratorSymbol, invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
 import {
-  define,
   entries,
   enumerableKeys,
   getOwn,
   hasOwn,
   hasPrototype,
-  hidden,
   keys,
   own,
   ownKeys,
@@ -23,7 +18,7 @@ import {
   type Value,
 } from "../interpreter/objects.js"
 import { primitivePrototype } from "../interpreter/intrinsics.js"
-import { containsOpaqueReference, describeValue, rejectCircularInsertion } from "../interpreter/references.js"
+import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
 import { invokeMethod } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { ToolReference } from "../tool-runtime.js"
@@ -66,21 +61,6 @@ export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value 
   }
   return target
 }
-
-// State: the object being filled. A rejected entry closes the source iterator.
-const FromEntries = consumer({
-  name: "Object.fromEntries",
-  notIterable: () => {
-    throw typeError("Object.fromEntries expects a synchronous iterable of entries.")
-  },
-  each: (_task, frame, entry) => {
-    if (!(entry instanceof Obj) || containsOpaqueReference(entry)) {
-      throw typeError("Object.fromEntries expects [key, value] entry objects.")
-    }
-    define(frame.slots[STATE] as Obj, coerceToString(getOwn(entry, 0)), getOwn(entry, 1))
-  },
-  done: (_task, frame) => frame.slots[STATE] as Obj,
-})
 
 const classTag = (value: Value): string => {
   if (value === null) return "Null"
@@ -172,7 +152,6 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
     ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(ctx, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
     ["is", 2, (_, args) => Object.is(args[0], args[1])],
     ["assign", 2, (_, args) => objectAssign(ctx, args)],
-    ["fromEntries", 1, (_, args) => new Push(Drain, drain(FromEntries, args[0], [new Obj(ctx.builtins.Object)]))],
     ["freeze", 1, (_, args) => restrict("freeze", args[0])],
     ["seal", 1, (_, args) => restrict("seal", args[0])],
     ["preventExtensions", 1, (_, args) => restrict("preventExtensions", args[0])],

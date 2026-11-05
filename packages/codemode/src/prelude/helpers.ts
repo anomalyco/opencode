@@ -1,7 +1,9 @@
 import { isSupportedCallback, requireCallback } from "../interpreter/callback.js"
 import type { Builtins } from "../interpreter/intrinsics.js"
 import { iterateDirect } from "../machine/iteration.js"
+import { finishBytes } from "../stdlib/bytes.js"
 import { weakKey } from "../stdlib/collections.js"
+import { buildPairs } from "../stdlib/url.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { checkArrayLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, PendingThrow } from "../interpreter/model.js"
@@ -10,13 +12,13 @@ import {
   Arr,
   Bytes,
   coerceToString,
+  data,
   define,
+  hidden,
   getOwn,
   IteratorObj,
   positionIterator,
-  coerceToInteger,
   coerceToNumber,
-  GeneratorObj,
   get,
   HeadersObj,
   MapObj,
@@ -30,7 +32,7 @@ import {
   WeakSetObj,
 } from "../interpreter/objects.js"
 import { builtinCursor } from "../interpreter/operations.js"
-import { describeValue, isOpaque } from "../interpreter/references.js"
+import { containsOpaqueReference, describeValue, isOpaque } from "../interpreter/references.js"
 import { Invoke } from "../interpreter/signals.js"
 
 // The prelude's privileged helpers: leaf built-ins (they never call program code) bound only in the prelude's scope.
@@ -68,7 +70,43 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
       3,
       ([value, kind, method]) => receiver<Obj>(classes[kind as keyof typeof classes], value, String(method)),
     ],
-    $IsObject: [1, ([value]) => value instanceof Obj],
+    /** Whether `value` is an object; with `data`, one holding no opaque reference. */
+    $IsObject: [2, ([value, data]) => value instanceof Obj && !(data === true && containsOpaqueReference(value))],
+    /** Whether `for...of` can iterate `value`. */
+    $IsIterable: [
+      1,
+      ([value]) => {
+        if (builtinCursor(builtins, value) !== undefined) return true
+        if (!(value instanceof Obj)) return false
+        const method = get(value, IteratorSymbol)
+        return method !== undefined && method !== null
+      },
+    ],
+    $Describe: [1, ([value]) => describeValue(value)],
+    /** Defines an own data property, enumerable or hidden, and returns the object. */
+    $Define: [
+      4,
+      ([target, key, value, enumerable]) => {
+        define(target as Obj, key as string, value, enumerable === true ? data : hidden)
+        return target
+      },
+    ],
+    $SumPrecise: [1, ([numbers]) => Math.sumPrecise((numbers as Arr).items as Array<number>)],
+    /** A Uint8Array of the values (see `collectBytes`). */
+    $Bytes: [
+      3,
+      ([values, into, offset]) => {
+        const items = (values as Arr).items
+        checkArrayLength(items.length)
+        return finishBytes(Uint8Array.from(items, coerceToNumber), into as Obj, offset as number)
+      },
+    ],
+    /** Headers or URLSearchParams from the pairs `readPairs` read, or from a record. */
+    $Pairs: [
+      4,
+      ([kind, proto, value, label]) =>
+        buildPairs({ kind: kind as "Headers", proto: proto as Obj }, value, String(label)),
+    ],
     $IsCallable: [1, ([value]) => isSupportedCallback(value)],
     /** An iterator object as `for...of` steps it, reading `next` once (GetIteratorDirect); an array's values. */
     $Direct: [

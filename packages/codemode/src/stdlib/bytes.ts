@@ -1,7 +1,4 @@
-import { consumer, nativeKind, STATE } from "../machine/native-kind.js"
-import { Push } from "../interpreter/signals.js"
-import { PENDING } from "../machine/frame.js"
-import { Drain, drain } from "../machine/natives.js"
+import { Invoke } from "../interpreter/signals.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, rangeError, syntaxError, typeError } from "../interpreter/model.js"
@@ -23,82 +20,37 @@ import { requireCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { callbackMethods, sortArray } from "./array.js"
 
-/** What becomes of the bytes `collectBytes` reads: a new Uint8Array (with its prototype), or bytes set into one. */
-type BytesInto =
-  | { readonly kind: "new"; readonly proto: Obj }
-  | { readonly kind: "set"; readonly target: Bytes; readonly offset: number }
-
 /**
- * The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. As in
- * TypedArray.from, a mapper sees the original values, after the source is consumed in full.
+ * The bytes a Uint8Array, array, or other iterable of numbers describes, read in the prelude: a new Uint8Array with
+ * prototype `into`, or set into the Uint8Array `into` at `offset`. The host array clamps each value.
  */
-const collectBytes = (source: Value, name: string, into: BytesInto, mapper?: Value, thisArg?: Value) => {
+const collectBytes = <R>(
+  ctx: Interpreter<R>,
+  source: Value,
+  name: string,
+  into: Obj,
+  offset: number,
+  mapper?: Value,
+  thisArg?: Value,
+) => {
   const callback = mapper === undefined ? undefined : requireCallback(mapper, name)
-  if (source instanceof Bytes && callback === undefined) return finishBytes(into, new Uint8Array(source.bytes))
-  return new Push(Drain, drain(CollectBytes, source, [name, into, callback, thisArg, [], 0]))
+  if (source instanceof Bytes && callback === undefined) return finishBytes(new Uint8Array(source.bytes), into, offset)
+  return new Invoke(ctx.prelude.fn("collectBytes"), undefined, [source, name, callback, thisArg, into, offset], undefined)
 }
 
-const finishBytes = (into: BytesInto, bytes: Uint8Array): Value => {
-  if (into.kind === "new") return new Bytes(into.proto, bytes)
-  const offset = into.offset
-  if (!Number.isInteger(offset) || offset < 0 || bytes.length + offset > into.target.bytes.length) {
+export const finishBytes = (bytes: Uint8Array, into: Obj, offset: number): Value => {
+  if (!(into instanceof Bytes)) return new Bytes(into, bytes)
+  if (!Number.isInteger(offset) || offset < 0 || bytes.length + offset > into.bytes.length) {
     throw rangeError("Uint8Array.set: the source does not fit at that offset.")
   }
-  into.target.bytes.set(bytes, offset)
+  into.bytes.set(bytes, offset)
   return undefined
 }
 
-// State: the method's name, where the bytes go, the mapper and its `this`, the values, and the next one to map.
-const CollectBytes = consumer({
-  name: "Uint8Array bytes",
-  notIterable: (_task, frame, source) => {
-    throw typeError(
-      `${frame.slots[STATE] as string} expects a Uint8Array, an array, or an iterable of numbers, received ${describeValue(source)}.`,
-    )
-  },
-  take: (frame, value) => {
-    const values = frame.slots[STATE + 4] as Array<Value>
-    values.push(value)
-    checkArrayLength(values.length)
-  },
-  done: (task, frame) => {
-    const slots = frame.slots
-    if (slots[STATE + 2] === undefined) {
-      return finishBytes(
-        slots[STATE + 1] as BytesInto,
-        Uint8Array.from(slots[STATE + 4] as Array<Value>, coerceToNumber),
-      )
-    }
-    return task.push(MapBytes, frame.node, slots.slice(STATE))
-  },
-})
-
-// Slots: as `CollectBytes`'s state, with the mapped values so far.
-const MapBytes = nativeKind("Uint8Array mapper", (task, frame, input) => {
-  const slots = frame.slots
-  const values = slots[4] as Array<Value>
-  const mapped = (slots[6] ??= []) as Array<Value>
-  let index = slots[5] as number
-  if (frame.phase === 1) {
-    mapped.push(input as Value)
-    index++
-  }
-  for (; index < values.length; index++) {
-    const result = task.call(slots[2] as Value, slots[3] as Value, [values[index], index], frame.node)
-    if (result === PENDING) {
-      slots[5] = index
-      frame.phase = 1
-      return PENDING
-    }
-    mapped.push(result)
-  }
-  return finishBytes(slots[1] as BytesInto, Uint8Array.from(mapped, coerceToNumber))
-})
-
-const constructBytes = (args: Array<Value>, proto: Obj) => {
+const constructBytes = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
   const source = args[0]
   if (source !== null && typeof source === "object")
-    return collectBytes(source, "new Uint8Array(...)", { kind: "new", proto })
+    return collectBytes(ctx, source, "new Uint8Array(...)", proto, 0)
   const length = source === undefined ? 0 : coerceToNumber(source)
   if (!Number.isInteger(length) || length < 0) throw rangeError(`Invalid typed array length: ${coerceToString(source)}`)
   checkArrayLength(length)
@@ -113,7 +65,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     name: "Uint8Array",
     length: 3,
     call: requiresNew("Uint8Array"),
-    construct: (args, newTarget) => constructBytes(args, prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructBytes(ctx, args, prototypeFrom(newTarget, proto)),
   })
   const decode = (name: string, args: Array<Value>, from: (text: string) => Uint8Array) => {
     if (typeof args[0] !== "string") throw typeError(`Uint8Array.${name} expects a string.`)
@@ -124,7 +76,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     }
   }
   methods(builtins, uint8Array, [
-    ["from", 1, (_, args) => collectBytes(args[0], "Uint8Array.from", { kind: "new", proto }, args[1], args[2])],
+    ["from", 1, (_, args) => collectBytes(ctx, args[0], "Uint8Array.from", proto, 0, args[1], args[2])],
     ["of", 0, (_, args) => wrap(Uint8Array.from(args, coerceToNumber))],
     ["fromBase64", 1, (_, args) => decode("fromBase64", args, (text) => Uint8Array.fromBase64(text))],
     ["fromHex", 1, (_, args) => decode("fromHex", args, (text) => Uint8Array.fromHex(text))],
@@ -153,7 +105,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         const target = self(thisValue, "set")
-        return collectBytes(args[0], "Uint8Array.set", { kind: "set", target, offset: optNumber(args[1]) ?? 0 })
+        return collectBytes(ctx, args[0], "Uint8Array.set", target, optNumber(args[1]) ?? 0)
       },
     ],
     [
