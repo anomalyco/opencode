@@ -114,7 +114,16 @@ function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSyste
     etag,
     ...(lastModified === undefined ? {} : { "last-modified": lastModified }),
   }
-  if (isNotModified(request, etag, lastModified)) return HttpServerResponse.empty({ status: 304, headers: validators })
+  // File content is served from the API origin, and a repository can contain active documents such as
+  // .html and .svg. Sandboxing gives those an opaque origin and blocks scripts, so a crafted same-origin
+  // link cannot run with the paired browser's session cookie; nosniff keeps other types from being
+  // treated as a document at all.
+  const activeContent = {
+    "content-security-policy": "sandbox",
+    "x-content-type-options": "nosniff",
+  }
+  if (isNotModified(request, etag, lastModified))
+    return HttpServerResponse.empty({ status: 304, headers: { ...validators, ...activeContent } })
 
   const rangeHeader = request.method === "GET" ? request.headers["range"] : undefined
   const range =
@@ -134,6 +143,7 @@ function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSyste
     contentLength: length,
     headers: {
       ...validators,
+      ...activeContent,
       "accept-ranges": "bytes",
       "content-type": file.mime,
       ...(range === undefined ? {} : { "content-range": `bytes ${range.start}-${range.end}/${file.size}` }),

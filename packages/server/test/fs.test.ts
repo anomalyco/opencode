@@ -91,6 +91,7 @@ it.live(
         await fs.mkdir(path.join(current, "nested"), { recursive: true })
         await fs.mkdir(outside, { recursive: true })
         await fs.writeFile(path.join(current, "clip.mp4"), "0123456789")
+        await fs.writeFile(path.join(current, "page.html"), "<script>fetch('/api/credential')</script>")
         await fs.writeFile(path.join(current, "empty.bin"), "")
         await fs.writeFile(path.join(current, "large.mp4"), largeBytes)
         await fs.writeFile(path.join(current, "notes.txt"), "compressible ".repeat(1024))
@@ -128,6 +129,14 @@ it.live(
       expect(etag).toMatch(/^W\/"[0-9a-f]+-[0-9a-f]+"$/)
       expect(lastModified).toBeTruthy()
       expect(yield* Effect.promise(() => full.text())).toBe("0123456789")
+
+      // 1b. Active content stays inert: a repository file must not run script in the API origin.
+      const page = yield* request("page.html")
+      expect(page.status).toBe(200)
+      expect(page.headers.get("content-type")).toBe("text/html")
+      expect(page.headers.get("x-content-type-options")).toBe("nosniff")
+      expect(page.headers.get("content-security-policy")).toBe("sandbox")
+      expect(yield* Effect.promise(() => page.text())).toContain("<script>")
 
       // 2. HEAD probe (and HEAD with Range ignores Range)
       const head = yield* request("clip.mp4", { method: "HEAD", headers: { Range: "bytes=0-3" } })
@@ -214,6 +223,9 @@ it.live(
             expect(notModified.headers.get("etag")).toBe(etag)
             expect(notModified.headers.get("last-modified")).toBe(lastModified)
             expect(notModified.headers.get("cache-control")).toBe("no-cache, no-transform")
+            // Revalidations carry the document hardening too, so a body cached before it shipped stays inert.
+            expect(notModified.headers.get("content-security-policy")).toBe("sandbox")
+            expect(notModified.headers.get("x-content-type-options")).toBe("nosniff")
             expect(yield* Effect.promise(() => notModified.text())).toBe("")
           }),
       )
