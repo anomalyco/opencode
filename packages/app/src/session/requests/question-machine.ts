@@ -48,7 +48,8 @@ export type QuestionDockState =
       readonly tab: number
       readonly drafts: readonly QuestionDraft[]
     }
-  | { readonly status: "disposed"; readonly attempt: number }
+  // `unsent` is the draft of a reply still in flight when the dock went away, kept until the reply settles.
+  | { readonly status: "disposed"; readonly attempt: number; readonly unsent: QuestionCacheSnapshot | undefined }
 
 export type QuestionDockEvent =
   | { readonly type: "tab.select"; readonly tab: number }
@@ -100,6 +101,8 @@ export function createQuestionDockState(count: number, cached?: QuestionCacheSna
 }
 
 export function transitionQuestionDock(state: QuestionDockState, event: QuestionDockEvent): QuestionDockTransition {
+  if (state.status === "disposed") return transitionDisposed(state, event)
+
   if (event.type === "request.succeeded") {
     if (state.status !== "sending" || state.attempt !== event.attempt) return unchanged(state)
 
@@ -131,14 +134,21 @@ export function transitionQuestionDock(state: QuestionDockState, event: Question
     ])
   }
 
-  // Only an unanswered form keeps its draft for when the dock comes back. A reply already sent finishes on its own.
+  // An unanswered form keeps its draft for when the dock comes back. A reply already sent finishes on its own, and
+  // keeps its draft until it settles, in case it fails.
   if (event.type === "disposed") {
-    if (state.status === "disposed") return unchanged(state)
-    const next: QuestionDockState = { status: "disposed", attempt: state.attempt }
+    const snapshot = { tab: state.tab, drafts: state.drafts }
 
-    if (state.status !== "answering") return changed(next)
+    if (state.status === "answering")
+      return changed({ status: "disposed", attempt: state.attempt, unsent: undefined }, [
+        { type: "cache.save", snapshot },
+      ])
 
-    return changed(next, [{ type: "cache.save", snapshot: { tab: state.tab, drafts: state.drafts } }])
+    return changed({
+      status: "disposed",
+      attempt: state.attempt,
+      unsent: state.status === "sending" ? snapshot : undefined,
+    })
   }
 
   if (state.status !== "answering") return unchanged(state)
@@ -207,6 +217,32 @@ function edit(
   if (next === draft) return unchanged(state)
 
   return changed({ ...state, drafts: state.drafts.map((item, index) => (index === state.tab ? next : item)) })
+}
+
+// A reply sent before the dock went away still settles: a failure or timeout reports it and keeps its draft for when
+// the dock comes back; a success, or the form settling, drops the draft.
+function transitionDisposed(
+  state: Extract<QuestionDockState, { status: "disposed" }>,
+  event: QuestionDockEvent,
+): QuestionDockTransition {
+  if (!state.unsent) return unchanged(state)
+
+  const settled: QuestionDockState = { status: "disposed", attempt: state.attempt, unsent: undefined }
+
+  if (event.type === "resolved") return changed(settled, [{ type: "request.abort" }])
+
+  if (event.type !== "request.succeeded" && event.type !== "request.failed" && event.type !== "request.timed-out")
+    return unchanged(state)
+
+  if (event.attempt !== state.attempt) return unchanged(state)
+
+  if (event.type === "request.succeeded") return changed(settled)
+
+  const save = { type: "cache.save", snapshot: state.unsent } as const
+
+  if (event.type === "request.failed") return changed(settled, [{ type: "toast.fail", error: event.error }, save])
+
+  return changed(settled, [{ type: "request.abort" }, { type: "toast.fail" }, save])
 }
 
 export function isQuestionBusy(state: QuestionDockState) {

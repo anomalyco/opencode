@@ -132,8 +132,13 @@ describe("transitionQuestionDock", () => {
     const start = answering([{ type: "option.pick", value: "wide", multiple: false }])
     const sending = transitionQuestionDock(start, { type: "send", action: { type: "dismiss" } }).state
     const replied = transitionQuestionDock(sending, { type: "request.succeeded", attempt: 1 }).state
+    const away = transitionQuestionDock(sending, { type: "disposed" })
 
-    expect(transitionQuestionDock(sending, { type: "disposed" }).effects).toEqual([])
+    expect(away.effects).toEqual([])
+    expect(transitionQuestionDock(away.state, { type: "request.succeeded", attempt: 1 })).toEqual({
+      state: { status: "disposed", attempt: 1, unsent: undefined },
+      effects: [],
+    })
     expect(transitionQuestionDock(replied, { type: "disposed" }).effects).toEqual([])
 
     const settled = transitionQuestionDock(start, { type: "resolved" })
@@ -156,7 +161,7 @@ describe("transitionQuestionDock", () => {
 
     const disposed = transitionQuestionDock(start, { type: "disposed" })
 
-    expect(disposed.state).toEqual({ status: "disposed", attempt: 0 })
+    expect(disposed.state).toEqual({ status: "disposed", attempt: 0, unsent: undefined })
     expect(disposed.effects).toEqual([{ type: "cache.save", snapshot: { tab: 1, drafts: start.drafts } }])
 
     const restored = createQuestionDockState(questions.length, { tab: 1, drafts: start.drafts })
@@ -188,6 +193,41 @@ describe("transitionQuestionDock", () => {
     expect(retry).toMatchObject({ status: "sending", attempt: 2 })
     expect(transitionQuestionDock(retry, { type: "request.failed", attempt: 1 }).state).toBe(retry)
     expect(transitionQuestionDock(retry, { type: "request.timed-out", attempt: 1 }).state).toBe(retry)
+  })
+
+  test("reports a reply that fails or hangs after the dock went away, and keeps its draft", () => {
+    const start = answering([
+      { type: "tab.select", tab: 1 },
+      { type: "option.pick", value: "terminal", multiple: true },
+    ])
+
+    const sending = transitionQuestionDock(start, reply(start)).state
+    const away = transitionQuestionDock(sending, { type: "disposed" }).state
+    const snapshot = { tab: 1, drafts: start.drafts }
+
+    expect(away).toEqual({ status: "disposed", attempt: 1, unsent: snapshot })
+
+    const failed = transitionQuestionDock(away, { type: "request.failed", attempt: 1, error: "offline" })
+
+    expect(failed).toEqual({
+      state: { status: "disposed", attempt: 1, unsent: undefined },
+      effects: [
+        { type: "toast.fail", error: "offline" },
+        { type: "cache.save", snapshot },
+      ],
+    })
+    expect(transitionQuestionDock(failed.state, { type: "request.timed-out", attempt: 1 }).effects).toEqual([])
+    expect(transitionQuestionDock(away, { type: "request.timed-out", attempt: 1 }).effects).toEqual([
+      { type: "request.abort" },
+      { type: "toast.fail" },
+      { type: "cache.save", snapshot },
+    ])
+    expect(transitionQuestionDock(away, { type: "request.failed", attempt: 0 }).state).toBe(away)
+    expect(transitionQuestionDock(away, { type: "resolved" })).toEqual({
+      state: { status: "disposed", attempt: 1, unsent: undefined },
+      effects: [{ type: "request.abort" }],
+    })
+    expect(transitionQuestionDock(away, { type: "disposed" }).state).toBe(away)
   })
 
   test("ignores edits and tab changes that do not apply", () => {

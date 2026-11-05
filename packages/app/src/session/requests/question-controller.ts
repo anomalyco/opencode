@@ -83,11 +83,8 @@ export function createQuestionDock(input: { request: () => FormInfo; onSubmit: (
 
   onCleanup(serverSDK.event.on("form.replied", settled))
   onCleanup(serverSDK.event.on("form.cancelled", settled))
-  onCleanup(() => {
-    dispatch({ type: "disposed" })
-    // A reply already sent keeps going without the dock; only its timeout goes.
-    clearTimeout(timeout)
-  })
+  // A reply already sent keeps going without the dock, with its timeout, so a failure still reports and keeps the draft.
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const tab = createMemo(() => questionTab(dockState()))
   const draft = (index: number) => questionDraft(dockState(), index)
