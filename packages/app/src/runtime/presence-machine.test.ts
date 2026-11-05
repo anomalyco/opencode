@@ -179,7 +179,7 @@ const view = <T>(state: AnimatedPresenceState<T>) => ({
   value: selectAnimatedValue(state),
 })
 
-const start = <T>(value: T | undefined, identity: unknown, now: number) =>
+const start = <T>(value: T | undefined, identity: string | undefined, now: number) =>
   createAnimatedPresenceState({ value, identity, now })
 
 const lingerA = { identity: "ses_A", minimumDuration: 1000 }
