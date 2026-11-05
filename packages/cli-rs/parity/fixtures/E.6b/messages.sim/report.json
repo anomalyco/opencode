@@ -1,0 +1,221 @@
+{
+  "scenario": "E.6b/messages",
+  "sides": [
+    "ts",
+    "rs"
+  ],
+  "compacted": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "failed": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "reverted": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "requests": {
+    "equal": true,
+    "writes": {
+      "a": [
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/compact {\"id\":\"<msg>\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Try again\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Rewrite the lexer\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/interrupt",
+        "POST /api/experimental/session/<ses>/wait",
+        "POST /api/session/<ses>/revert/stage {\"messageID\":\"<msg>\"}"
+      ],
+      "b": [
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/compact {\"id\":\"<msg>\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Try again\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Rewrite the lexer\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}",
+        "POST /api/session/<ses>/interrupt",
+        "POST /api/experimental/session/<ses>/wait",
+        "POST /api/session/<ses>/revert/stage {\"messageID\":\"<msg>\"}"
+      ]
+    },
+    "onlyA": [
+      "GET /api/fs/list",
+      "GET /api/plugin"
+    ],
+    "onlyB": []
+  },
+  "model": [
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 2,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 3,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ],
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 2,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 3,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ]
+  ]
+}

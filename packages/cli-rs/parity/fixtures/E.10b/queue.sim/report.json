@@ -1,0 +1,301 @@
+{
+  "scenario": "E.10b/queue",
+  "sides": [
+    "ts",
+    "rs"
+  ],
+  "steer": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "dock": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "queued": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "second": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "steered": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "dock-click": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "dock-closed": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "pending-steer": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "moved": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "message": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "closed": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "drained": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "requests": {
+    "equal": true,
+    "writes": {
+      "a": [
+        "POST /api/session {\"agent\":\"build\",\"id\":\"<ses>\",\"location\":{\"directory\":\"<root>/work\"},\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Read the parser\"}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Steer this\"}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"queue\",\"files\":[],\"id\":\"<msg>\",\"text\":\"First queued\"}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"queue\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Second queued\"}",
+        "PATCH /api/session/<ses>/inbox/<msg> {\"delivery\":\"steer\"}",
+        "PATCH /api/session/<ses>/inbox/<msg> {\"delivery\":\"queue\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}"
+      ],
+      "b": [
+        "POST /api/session {\"agent\":\"build\",\"id\":\"<ses>\",\"location\":{\"directory\":\"<root>/work\"},\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Read the parser\"}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Steer this\"}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"queue\",\"files\":[],\"id\":\"<msg>\",\"text\":\"First queued\"}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"queue\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Second queued\"}",
+        "PATCH /api/session/<ses>/inbox/<msg> {\"delivery\":\"steer\"}",
+        "PATCH /api/session/<ses>/inbox/<msg> {\"delivery\":\"queue\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}"
+      ]
+    },
+    "onlyA": [
+      "GET /api/fs/list",
+      "GET /api/plugin"
+    ],
+    "onlyB": []
+  },
+  "model": [
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "title",
+        "reply": null
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 2,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 3,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ],
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "title",
+        "reply": null
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 2,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 3,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ]
+  ]
+}

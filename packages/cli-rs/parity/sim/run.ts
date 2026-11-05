@@ -5,7 +5,8 @@
 // Each side runs alone against its own simulated TS server, backend driver, and recording proxy, in a sandbox that
 // never touches the user's config, state, or service. Every process a side starts is killed when the side ends,
 // when the run fails, and when the runner exits.
-import { mkdir, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, rm, stat, writeFile } from "node:fs/promises"
+import { homedir } from "node:os"
 import path from "node:path"
 import { Schema } from "effect"
 import { Frontend, Handshake } from "@opencode/protocol/simulation"
@@ -25,6 +26,10 @@ const WAIT = 30_000
 const password = "sim-parity"
 // Both sides of a run share the sandbox path, so it never differs between them; masking its random name keeps the
 // committed captures the same from run to run.
+// Read only: each side gets a copy.
+const GRAMMAR_CACHE =
+  process.env.PARITY_GRAMMAR_CACHE ??
+  path.join(process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local/share"), "opentui", "tree-sitter")
 const SANDBOX_MASK = { line: "opencode-parity-[A-Za-z0-9]{6}", reason: "the sandbox name is random" }
 
 const children = new Set<{ kill(signal?: number): void }>()
@@ -141,6 +146,16 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
   )
   await rm(box.cwd, { recursive: true, force: true })
   await mkdir(box.cwd, { recursive: true })
+  // Core downloads tree-sitter grammars on first use and caches them; a fresh home has none, so TS would show code
+  // unhighlighted (or highlight it once a download lands). A copy of the user's cache matches how the TS TUI runs
+  // for them, and what Rust links statically (H06-highlight-queries).
+  if (
+    await stat(GRAMMAR_CACHE).then(
+      (info) => info.isDirectory(),
+      () => false,
+    )
+  )
+    await cp(GRAMMAR_CACHE, path.join(box.env.XDG_DATA_HOME, "opentui", "tree-sitter"), { recursive: true })
   for (const [file, contents] of Object.entries(scenario.files ?? {}))
     await Bun.write(path.join(box.cwd, file), contents)
   await Bun.write(

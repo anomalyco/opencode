@@ -1,0 +1,113 @@
+{
+  "scenario": "E.14/stats",
+  "sides": [
+    "ts",
+    "rs"
+  ],
+  "home": {
+    "equal": false,
+    "differences": 87,
+    "colorOnly": 84,
+    "deviation": [
+      "T17-home-prompt",
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "poster": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
+  },
+  "requests": {
+    "equal": true,
+    "writes": {
+      "a": [],
+      "b": []
+    },
+    "onlyA": [
+      "GET /api/fs/list",
+      "GET /api/plugin",
+      "GET /api/experimental/migration/v1"
+    ],
+    "onlyB": []
+  },
+  "model": [
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ],
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ]
+  ]
+}

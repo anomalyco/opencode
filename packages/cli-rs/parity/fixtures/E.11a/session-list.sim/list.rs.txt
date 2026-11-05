@@ -1,0 +1,30 @@
+
+
+
+
+
+
+
+
+
+          Search sessions in work                                                      esc
+
+          Today
+      ┃   Fix the parser
+          Write docs
+
+
+          all projects ctrl+a                                delete ctrl+d   rename ctrl+r
+
+             ┃  Build · Simulated Model Simulation
+
+
+
+
+
+
+
+
+
+
+

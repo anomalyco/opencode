@@ -1,0 +1,51 @@
+{
+  "scenario": "E.11a/session-list",
+  "sides": [
+    "ts",
+    "rs"
+  ],
+  "home": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
+  },
+  "list": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
+  },
+  "marked": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
+  },
+  "deleted": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
+  },
+  "requests": {
+    "equal": true,
+    "writes": {
+      "a": [
+        "DELETE /api/session/<ses>"
+      ],
+      "b": [
+        "DELETE /api/session/<ses>"
+      ]
+    },
+    "onlyA": [
+      "GET /api/fs/list",
+      "GET /api/plugin"
+    ],
+    "onlyB": []
+  },
+  "model": [
+    [],
+    []
+  ]
+}
