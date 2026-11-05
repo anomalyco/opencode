@@ -153,6 +153,69 @@ describe("Session.wait", () => {
     }),
   )
 
+  it.effect("finds a good answer behind more than a page of failed attempts", () =>
+    Effect.gen(function* () {
+      duringIdle = Effect.void
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location })
+      yield* seedAssistant(session.id, { id: "msg_wait_deep_good", seq: 1, text: "good answer" })
+      yield* Effect.forEach(
+        Array.from({ length: 45 }, (_, i) => i),
+        (i) =>
+          i % 2 === 0
+            ? seedAssistant(session.id, { id: `msg_wait_deep_failed_${i}`, seq: i + 2, text: "failed", failed: true })
+            : seedAssistant(session.id, {
+                id: `msg_wait_deep_partial_${i}`,
+                seq: i + 2,
+                text: "partial",
+                completed: false,
+              }),
+        { discard: true },
+      )
+
+      expect((yield* sessions.wait(session.id)).text).toBe("good answer")
+    }),
+  )
+
+  it.effect("finds a good answer exactly one full page back", () =>
+    Effect.gen(function* () {
+      duringIdle = Effect.void
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location })
+      yield* seedAssistant(session.id, { id: "msg_wait_page_good", seq: 1, text: "good answer" })
+      yield* Effect.forEach(
+        Array.from({ length: 20 }, (_, i) => i),
+        (i) => seedAssistant(session.id, { id: `msg_wait_page_failed_${i}`, seq: i + 2, text: "failed", failed: true }),
+        { discard: true },
+      )
+
+      expect((yield* sessions.wait(session.id)).text).toBe("good answer")
+    }),
+  )
+
+  it.effect("returns NO_TEXT when no answer exists across several pages", () =>
+    Effect.gen(function* () {
+      duringIdle = Effect.void
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location })
+      yield* Effect.forEach(
+        Array.from({ length: 41 }, (_, i) => i),
+        (i) =>
+          i % 2 === 0
+            ? seedAssistant(session.id, { id: `msg_wait_none_failed_${i}`, seq: i + 1, text: "failed", failed: true })
+            : seedAssistant(session.id, {
+                id: `msg_wait_none_partial_${i}`,
+                seq: i + 1,
+                text: "partial",
+                completed: false,
+              }),
+        { discard: true },
+      )
+
+      expect((yield* sessions.wait(session.id)).text).toBe(SubagentCompletion.NO_TEXT)
+    }),
+  )
+
   it.effect("fails fast for an unknown session without waiting", () =>
     Effect.gen(function* () {
       awaited.length = 0

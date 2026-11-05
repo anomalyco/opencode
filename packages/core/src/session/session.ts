@@ -15,6 +15,7 @@ import {
   BusyError,
   CompactionConflictError,
   InboxConflictError,
+  MessageDecodeError,
   NotFoundError,
   PromptConflictError,
   SyntheticConflictError,
@@ -36,6 +37,9 @@ type PromptRequest = SessionPrompt.Input & {
   resume?: boolean
 }
 
+/** Assistants read per page when {@link WaitResult.text} walks back through history. */
+const ANSWER_PAGE = 20
+
 /** What a waiting parent gets back once its child goes idle. */
 export type WaitResult = {
   /**
@@ -44,9 +48,9 @@ export type WaitResult = {
    */
   readonly outcome: SessionSchema.Info["outcome"]
   /**
-   * Text of the newest completed, error-free assistant answer, or `SubagentCompletion.NO_TEXT`.
-   * Read regardless of outcome, so a failed or interrupted period can still return an earlier
-   * good answer.
+   * Text of the newest completed, error-free assistant answer anywhere in the history, or
+   * `SubagentCompletion.NO_TEXT`. Read regardless of outcome, so a failed or interrupted period
+   * can still return an earlier good answer.
    */
   readonly text: string
 }
@@ -291,17 +295,44 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* execution.wake(sessionID)
     return admitted
   })
+  /**
+   * Newest completed, error-free assistant, paging back through history so a run of failed or
+   * unfinished attempts cannot hide an earlier good answer.
+   */
+  const lastAnswer = (
+    sessionID: SessionSchema.ID,
+    cursor?: SessionMessage.ID,
+  ): Effect.Effect<SessionMessage.Info | undefined, MessageDecodeError> =>
+    store
+      .messages({
+        sessionID,
+        order: "desc",
+        limit: ANSWER_PAGE,
+        type: "assistant",
+        cursor: cursor === undefined ? undefined : { id: cursor, direction: "next" },
+      })
+      .pipe(
+        Effect.flatMap((page) => {
+          const answer = page.find(
+            (message) =>
+              message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+          )
+          if (answer || page.length < ANSWER_PAGE) return Effect.succeed(answer)
+          // The last row of a descending page is its oldest, and `direction: "next"` continues
+          // strictly older than it.
+          return lastAnswer(sessionID, page.at(-1)!.id)
+        }),
+      )
   const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
     yield* execution.awaitIdle(sessionID)
     // Read again after idle: the terminal event writes `idle_outcome` before the deferred behind
     // `awaitIdle` resolves, so the first get would carry the previous period's outcome.
     const session = yield* get(sessionID)
-    const messages = yield* store.messages({ sessionID, order: "desc", limit: 20, type: "assistant" })
-    const assistant = messages.find(
-      (message) => message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-    )
-    return { outcome: session.outcome, text: SubagentCompletion.text(assistant) } satisfies WaitResult
+    return {
+      outcome: session.outcome,
+      text: SubagentCompletion.text(yield* lastAnswer(sessionID)),
+    } satisfies WaitResult
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
