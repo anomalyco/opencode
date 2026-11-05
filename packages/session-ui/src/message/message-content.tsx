@@ -299,6 +299,7 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
+  const copyText = () => (props.voice ? props.text : props.message.text)
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -452,8 +453,9 @@ export function CurrentUserMessageDisplay(props: {
                   {i18n.t("ui.message.moveToQueue")}
                 </Menu.Item>
               </Show>
-              <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
+              <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
                 <Icon name="outline-copy" size="small" />
+
                 {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
               {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
