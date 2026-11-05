@@ -1239,14 +1239,15 @@ test("the location dialog separates added projects from server projects and tags
   await expect(dialog.getByRole("separator")).toHaveCount(0)
   // Open project from the worktree step returns to that step with its search, not to the projects.
   const open = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+o" : "Control+o"
-  await search.fill("beta")
+  await search.fill("open")
   await page.keyboard.press(open)
   await expect(back).toHaveText("Servers")
   await expect(search).toHaveValue("")
   await page.keyboard.press("Escape")
   await expect(back).toHaveText("Run session in")
-  await expect(search).toHaveValue("beta")
-  await expect(options.locator(".command-palette-title")).toHaveText(["opencode-beta"])
+  await expect(search).toHaveValue("open")
+  await expect(options.locator(".command-palette-title")).toHaveText(["opencode", "New worktree", "opencode-beta"])
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await search.fill("")
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press("Backspace")
