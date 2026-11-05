@@ -215,10 +215,12 @@ export const Plugin = {
       const shared = (path: string) => path.split("/").findIndex((part, offset) => part !== segments[offset])
       // Glob metacharacters become single-character wildcards; the exact name is checked below.
       const pattern = `**/${name.replace(/[*?[\]{}\\!]/g, "?")}`
-      const found = yield* ripgrep.glob({ cwd: location.directory, pattern, limit: 50 }).pipe(
+      const found = yield* ripgrep.glob({ cwd: location.directory, pattern, limit: ELSEWHERE_LIMIT }).pipe(
         Effect.timeout("2 seconds"),
         Effect.orElseSucceed(() => []),
       )
+      // ripgrep returns files in walk order, so a capped list can miss the nearest copy of a common name.
+      if (found.length >= ELSEWHERE_LIMIT) return []
       const candidates = found
         .map((entry) => entry.path)
         .filter((path) => path !== requested.resource && path.split("/").at(-1) === name)
@@ -271,6 +273,8 @@ export const Plugin = {
     })
   }),
 }
+
+const ELSEWHERE_LIMIT = 200
 
 const canonical = (name: string) =>
   name

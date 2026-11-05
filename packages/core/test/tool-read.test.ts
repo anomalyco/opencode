@@ -822,6 +822,10 @@ describe("ReadTool", () => {
       directoryEntryDetails = ["config.ts", "db.ts"].map((name) => ({ name, type: "file" as const }))
       expect(yield* read("conifg.ts")).toBe("File not found: conifg.ts\n\nDid you mean one of these?\nconfig.ts")
       expect(yield* read("ui.ts")).toBe("File not found: ui.ts")
+      // A name common enough to fill the search cap gives no repo-wide suggestions, since the nearest may be missing.
+      indexedFiles = Array.from({ length: 200 }, (_, index) => `pkg${index}/queue.rs`)
+      directoryEntryDetails = []
+      expect(yield* read("lib/queue.rs")).toBe("File not found: lib/queue.rs")
     }),
   )
 
