@@ -13,6 +13,9 @@ OCU is an additive routing layer around OpenCode. OpenCode remains the agent/run
 - Optional inbound bearer authentication.
 - Loopback-only default binding.
 - Example provider and OpenCode v2 configuration.
+- Adaptive routing using observed latency and recent failures.
+- Provider diagnostics at `GET /ocu/status`.
+- Initial Android runtime scripts for Termux (no root/proot required).
 - Tests using Node's built-in test runner.
 
 This is a foundation, not a production-hardened service. Cooldowns are in memory and reset on restart. Persistent usage accounting, a UI, Android packaging and automatic provider discovery are out of scope for this phase.
@@ -41,6 +44,10 @@ To bind beyond loopback, set `OCU_HOST` and `OCU_GATEWAY_KEY`. External binding 
 - `POST /v1/chat/completions`
 
 Set `routing.mode` to `priority` or `adaptive`. In adaptive mode, OCU ranks providers using configured priority, observed latency (EWMA) and consecutive failures. Use `ocu/auto` to try eligible providers in the resulting order. A specific alias restricts routing to providers that publish that alias. Fallback is possible only before an upstream success response starts. Once streaming begins, switching providers is unsafe.
+
+## Android (Termux)
+
+See `ocu/android/README.md`. Run `bash ocu/android/setup-termux.sh` from the repository root, configure `~/.config/ocu/config.json`, then start with `bash ocu/android/run-termux.sh`.
 
 ## OpenCode
 
