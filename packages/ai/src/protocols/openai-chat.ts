@@ -265,6 +265,8 @@ export const OpenAIChatUsage = Schema.StructWithRest(
     prompt_cache_hit_tokens: optionalNull(Schema.Number),
     cache_read_input_tokens: optionalNull(Schema.Number),
     cache_created_input_tokens: optionalNull(Schema.Number),
+    // GitHub Copilot reports reasoning at the top level instead of in `completion_tokens_details`.
+    reasoning_tokens: optionalNull(Schema.Number),
     prompt_tokens_details: optionalNull(
       Schema.StructWithRest(
         Schema.Struct({
@@ -967,7 +969,7 @@ const mapUsage = (
 ): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
-  const output = usage.completion_tokens ?? undefined
+  const completion = usage.completion_tokens ?? undefined
   const cached =
     usage.prompt_tokens_details?.cached_tokens ??
     usage.prompt_cache_hit_tokens ??
@@ -975,7 +977,14 @@ const mapUsage = (
     usage.cache_read_input_tokens ??
     undefined
   const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? usage.cache_created_input_tokens ?? undefined
-  const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? usage.reasoning_tokens ?? undefined
+  // Copilot's Gemini counts reasoning beside `completion_tokens` rather than inside it; the total tells which.
+  const output =
+    completion !== undefined &&
+    reasoning !== undefined &&
+    usage.total_tokens === ProviderShared.sumTokens(input, completion, reasoning)
+      ? completion + reasoning
+      : completion
   const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({
     inputTokens: input,
@@ -1128,6 +1137,14 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       ? {
           normalized: yield* mapFinishReason(event, rawFinishReason),
           raw: choice?.native_finish_reason ?? rawFinishReason,
+          ...(rawFinishReason === "content_filter"
+            ? {
+                category: ProviderShared.contentFilterCategory(
+                  choice?.delta?.copilot_annotations,
+                  choice?.content_filter_results,
+                ),
+              }
+            : {}),
         }
       : state.finishReason
     const delta = choice?.delta
