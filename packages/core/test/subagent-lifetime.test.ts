@@ -15,8 +15,10 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionSchema } from "@opencode/core/session/schema"
+import { SessionStore } from "@opencode/core/session/store"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Tool } from "@opencode/core/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -32,7 +34,14 @@ const it = testEffect(
   Layer.merge(
     llmLayer,
     AppNodeBuilder.build(
-      LayerNode.group([Session.node, Job.node, SubagentJob.node, SessionExecution.node, LocationServiceMap.node]),
+      LayerNode.group([
+        Session.node,
+        SessionStore.node,
+        Job.node,
+        SubagentJob.node,
+        SessionExecution.node,
+        LocationServiceMap.node,
+      ]),
       [
         Global.node.replace(tempGlobalLayer),
         offlineModels,
@@ -343,32 +352,52 @@ describe("subagent observer lifetime", () => {
     )
   }
 
-  it.live("a directly prompted child reports once, only after its background shell exits", () =>
-    Effect.gen(function* () {
-      const jobs = yield* Job.Service
-      const llm = yield* TestLLM.Test
-      const f = yield* family()
-      const exitShell = yield* backgroundShell(f.child.id)
-      yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("final", "final"))
+  for (const launch of ["direct", "job"] as const) {
+    it.live(`a ${launch} child reports once with its owned ID after its background shell exits`, () =>
+      Effect.gen(function* () {
+        const jobs = yield* Job.Service
+        const store = yield* SessionStore.Service
+        const llm = yield* TestLLM.Test
+        const f = yield* family()
+        const savedID = SessionMessage.ID.create()
+        if (launch === "job") yield* store.holdReport(f.child.id, { notificationID: savedID, since: undefined })
+        const exitShell = yield* backgroundShell(f.child.id)
+        yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("final", "final"))
 
-      yield* f.sessions.prompt({ sessionID: f.child.id, text: "Start the dev server" })
-      yield* f.sessions.wait(f.child.id)
-      expect(yield* reports(f.parent.id)).toEqual([])
-      expect((yield* jobs.get("shell-dev"))?.status).toBe("running")
+        if (launch === "job") expect((yield* f.spawn).status).toBe("completed")
+        else yield* f.sessions.prompt({ sessionID: f.child.id, text: "Start the dev server" })
+        yield* llm.wait(1).pipe(Effect.timeout("2 seconds"))
+        yield* f.sessions.wait(f.child.id)
+        expect(yield* reports(f.parent.id)).toEqual([])
+        expect((yield* jobs.get("shell-dev"))?.status).toBe("running")
+        const held = yield* store.heldReport(f.child.id)
+        expect(held).toBeDefined()
+        const notificationID = launch === "job" ? (yield* jobs.get(f.child.id))?.notificationID : held?.notificationID
+        expect(notificationID).toBeDefined()
+        if (launch === "job") {
+          expect(held).toEqual({ notificationID: savedID, since: undefined })
+          expect(notificationID).not.toBe(savedID)
+        }
 
-      yield* exitShell
-      yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
-      yield* f.sessions.wait(f.child.id)
-      yield* f.sessions.wait(f.parent.id)
-      const notices = yield* reports(f.parent.id)
-      expect(notices).toHaveLength(1)
-      expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "completed" } })
-      expect(notices[0]?.text).toContain("final")
-      expect(notices[0]?.text).not.toContain("first")
-      expect(yield* jobs.pendingBackground).toEqual([])
-      expect(yield* llm.requests()).toHaveLength(3)
-    }),
-  )
+        yield* exitShell
+        if (launch === "job") yield* jobs.wait({ id: f.child.id })
+        yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
+        yield* f.sessions.wait(f.child.id)
+        yield* f.sessions.wait(f.parent.id)
+        const notices = yield* reports(f.parent.id)
+        expect(notices).toHaveLength(1)
+        expect(notices[0]).toMatchObject({
+          id: notificationID,
+          metadata: { source: "subagent", childID: f.child.id, state: "completed" },
+        })
+        expect(yield* store.heldReport(f.child.id)).toBeUndefined()
+        expect(notices[0]?.text).toContain("final")
+        expect(notices[0]?.text).not.toContain("first")
+        expect(yield* jobs.pendingBackground).toEqual([])
+        expect(yield* llm.requests()).toHaveLength(3)
+      }),
+    )
+  }
 
   it.live("a silent background grandchild job releases its parent's held report", () =>
     Effect.gen(function* () {

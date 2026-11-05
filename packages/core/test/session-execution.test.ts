@@ -18,8 +18,10 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionBackground } from "@opencode/core/session/background"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { SubagentReport } from "@opencode/core/session/execution/subagent-report"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -145,6 +147,175 @@ describe("SessionExecution lifecycle", () => {
       expect((yield* claims(database))[sessionID]).toBe(false)
     }),
   )
+
+  for (const outcome of ["shutdown", "user", "failure", "conflict"] as const) {
+    it.effect(`durable child report ownership survives or releases after ${outcome}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const inbox = yield* SessionInbox.Service
+        const jobs = yield* Job.Service
+        const parent = Session.ID.make("ses_held_parent")
+        const child = Session.ID.make("ses_held_child")
+        const other = Session.ID.make("ses_held_other")
+        yield* seedSessions(database, [parent, other])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        const hold = { notificationID: SessionMessage.ID.create(), since: { at: 1, answer: undefined } }
+        yield* store.holdReport(child, hold)
+        yield* seedBackground(jobs, child, [{ id: "held-shell", shellID: "held-shell", command: "bun dev" }])
+        if (outcome === "conflict")
+          yield* inbox.admit({
+            id: hold.notificationID,
+            sessionID: other,
+            item: {
+              type: "synthetic",
+              payload: SessionInbox.SyntheticPayload.make({ text: "Already owned" }),
+              delivery: "steer",
+            },
+          })
+
+        const draining = yield* Deferred.make<void>()
+        const finish = yield* Deferred.make<void>()
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(scope, ({ sessionID }) =>
+          sessionID !== child
+            ? Effect.void
+            : Deferred.succeed(draining, undefined).pipe(
+                Effect.andThen(Deferred.await(finish)),
+                Effect.andThen(
+                  Effect.fail(
+                    new AIError({
+                      reason: new TransportError({ message: "Child failed", transport: "http", operation: "request" }),
+                    }),
+                  ),
+                ),
+              ),
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* execution.resume(child).pipe(Effect.exit, Effect.forkScoped)
+        yield* Deferred.await(draining)
+        if (outcome === "shutdown") yield* Scope.close(scope, Exit.void)
+        else if (outcome === "failure") yield* Deferred.succeed(finish, undefined)
+        else expect(yield* execution.interrupt(child)).toBeTrue()
+        yield* execution.awaitIdle(child)
+
+        const retained = outcome === "shutdown" || outcome === "conflict"
+        expect(yield* store.heldReport(child)).toEqual(retained ? hold : undefined)
+        expect((yield* claims(database))[child]).toBe(outcome === "shutdown")
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual(
+          retained
+            ? []
+            : [
+                expect.objectContaining({
+                  id: hold.notificationID,
+                  payload: expect.objectContaining({
+                    metadata: expect.objectContaining({ state: outcome === "failure" ? "error" : "cancelled" }),
+                  }),
+                }),
+              ],
+        )
+      }),
+    )
+  }
+
+  for (const boundary of ["new", "bounded", "unbounded"] as const) {
+    it.effect(`persists ${boundary} report ownership before checking background work`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        const inbox = yield* SessionInbox.make()
+        const jobs = yield* Job.Service
+        const scope = yield* Scope.Scope
+        const parent = Session.ID.make("ses_pending_parent")
+        const child = Session.ID.make("ses_pending_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        const hold = {
+          notificationID: SessionMessage.ID.create(),
+          since: boundary === "unbounded" ? undefined : { at: 0, answer: undefined },
+        }
+        if (boundary !== "new") yield* store.holdReport(child, hold)
+        // The old answer is excluded by the new period's anchor, but remains owed by a saved hold.
+        yield* answer(bus, child, "Earlier answer")
+        yield* seedBackground(jobs, child, [{ id: "held-shell", shellID: "held-shell", command: "bun dev" }])
+        const seen: SessionStore.HeldReport[] = []
+        const deps: SubagentReport.Deps = {
+          store,
+          inbox,
+          jobs,
+          scope,
+          wake: () => Effect.void,
+          pending: (sessionID: Session.ID) =>
+            Effect.gen(function* () {
+              const held = yield* store.heldReport(sessionID)
+              expect(held).toBeDefined()
+              if (held) seen.push(held)
+              return yield* SessionBackground.unsettled(jobs, store, database.db, sessionID)
+            }),
+        }
+        const reports = SubagentReport.make(deps)
+        yield* reports.started(child)
+        yield* reports.report(child, { type: "succeeded" }, yield* reports.snapshot(child))
+        const saved = yield* store.heldReport(child)
+        expect(saved).toBeDefined()
+        expect(seen).toHaveLength(1)
+        expect(saved).toEqual(seen[0])
+        if (boundary !== "new") expect(saved).toEqual(hold)
+        else expect(saved?.since).toMatchObject({ at: expect.any(Number), answer: expect.any(String) })
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+
+        // A fresh reporter has no process-local knowledge of the owed answer or admission ID.
+        const restarted = SubagentReport.make(deps)
+        yield* restarted.started(child)
+        yield* restarted.report(child, { type: "succeeded" }, yield* restarted.snapshot(child))
+        expect(yield* store.heldReport(child)).toEqual(saved)
+        yield* jobs.cancel("held-shell")
+        const shell = (yield* jobs.wait({ id: "held-shell" })).info
+        if (shell?.notificationID) yield* jobs.completeBackground(shell.notificationID)
+        yield* restarted.started(child)
+        yield* restarted.report(child, { type: "succeeded" }, yield* restarted.snapshot(child))
+        expect(yield* store.heldReport(child)).toBeUndefined()
+        const notices = yield* SessionInbox.list(database.db, parent)
+        expect(notices).toEqual(
+          boundary === "new"
+            ? []
+            : [
+                expect.objectContaining({
+                  id: saved?.notificationID,
+                  payload: expect.objectContaining({ text: expect.stringContaining("Earlier answer") }),
+                }),
+              ],
+        )
+      }),
+    )
+  }
+
+  for (const reason of ["no answer", "silent", "missing parent"] as const) {
+    it.effect(`releases a durable hold when there is ${reason}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const parent = Session.ID.make("ses_no_report_parent")
+        const child = Session.ID.make("ses_no_report_child")
+        if (reason !== "missing parent") yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], {
+          parent_id: parent,
+          ...(reason === "silent" ? { metadata: { "subagent.notify": false } } : {}),
+        })
+        yield* store.holdReport(child, { notificationID: SessionMessage.ID.create(), since: undefined })
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(scope, () => Effect.void)
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* execution.resume(child)
+        yield* execution.awaitIdle(child)
+        expect(yield* store.heldReport(child)).toBeUndefined()
+        expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      }),
+    )
+  }
 
   it.effect("reports an idle interrupt as a no-op", () =>
     Effect.gen(function* () {

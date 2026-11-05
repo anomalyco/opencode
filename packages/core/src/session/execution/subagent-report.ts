@@ -67,7 +67,8 @@ export type Deps = {
 /**
  * Reports a settled subagent busy period to its parent, once per busy period, through a local
  * inbox adapter. Observers and restart recovery keep their own delivery: every path admits the
- * same notification ID, so first admission wins and the parent sees one message.
+ * same notification ID, so first admission wins and the parent sees one message. Holds are durable
+ * on the Session and released only after admission or an explicit no-report decision.
  */
 export const make = (deps: Deps) => {
   // The job generation running when a busy period began, and where that period began. Its watcher
@@ -75,10 +76,6 @@ export const make = (deps: Deps) => {
   // cancellation there owns the period's report: completion or failure is settling an earlier
   // period. Dropped at settlement.
   const periods = new Map<SessionSchema.ID, { readonly job: Bound | undefined; readonly start: Start }>()
-  // Children whose last succeeded period held its report for background work, with the start of the
-  // earliest period still owed. Process-local: after a restart, recovery and background notices wake
-  // the child instead.
-  const held = new Map<SessionSchema.ID, Start | undefined>()
 
   /**
    * The newest answer that completed at or after the busy period began. `since` comes from the
@@ -166,58 +163,64 @@ export const make = (deps: Deps) => {
   const report = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, outcome: Outcome, snap: Snapshot) {
     // Shutdown keeps the claim, and restart owns the report that resumes it.
     if (outcome.type === "interrupted" && outcome.reason === "shutdown") return
-    // Every settlement decides afresh; a period that holds again re-adds the child below, keeping
-    // the start it first owed.
-    const owed = held.has(sessionID)
-    const since = owed ? held.get(sessionID) : snap.start
-    held.delete(sessionID)
     const child = yield* deps.store.get(sessionID)
     if (!child?.parentID) return
     const parentID = child.parentID
+    const held = yield* deps.store.heldReport(child.id)
+    const drop = held === undefined ? Effect.void : deps.store.releaseReport(child.id)
     if (!SubagentMetadata.notify(child.metadata)) {
+      yield* drop
       // A silent descendant sends no notice, so wake the nearest held ancestor to report its final
       // state; silent sessions between them never hold. The wake runs no model step without input.
       const seen = new Set([child.id])
       let ancestor = yield* deps.store.get(parentID)
-      while (ancestor && !held.has(ancestor.id) && !seen.has(ancestor.id)) {
+      while (ancestor && !seen.has(ancestor.id)) {
+        if (ancestor.parentID && (yield* deps.store.heldReport(ancestor.id)) !== undefined)
+          return yield* deps.wake(ancestor.id)
         seen.add(ancestor.id)
         ancestor = ancestor.parentID ? yield* deps.store.get(ancestor.parentID) : undefined
       }
-      if (ancestor && held.has(ancestor.id)) yield* deps.wake(ancestor.id)
       return
     }
-    if (!(yield* deps.store.get(parentID))) return
+    if (!(yield* deps.store.get(parentID))) return yield* drop
     // A foreground caller receives this result inline through its own blocking registration.
-    if (snap.blocked) return
+    if (snap.blocked) return yield* drop
     const live = snap.job?.status === "running" ? snap.job : undefined
     // A running job without a notification is a foreground spawn whose block has not registered,
     // or one whose block already returned. Either way that job owns the result.
-    if (live && !live.notificationID) return
+    if (live && !live.notificationID) return yield* drop
     // A generation that began this period and was cancelled during it already reported through its
     // observer or its cancelled caller. One that completed or failed during the period was settling
     // an earlier period, so this period still reports its own answer with a fresh message ID.
-    if (!live && snap.owned) return
+    if (!live && snap.owned) return yield* drop
     // The child's own background work will wake it again, and that later settlement reports the
-    // final state. Failures and user interrupts report now. Mark held before asking, so a silent
-    // descendant settling meanwhile still wakes this child; a spurious wake sends nothing.
+    // final state. Failures and user interrupts report now. Persist the hold before asking, so a
+    // silent descendant settling meanwhile sees it and wakes this child. Keep the first ID and
+    // boundary, including an unbounded start, across every period until admission succeeds.
+    const owed =
+      outcome.type === "succeeded"
+        ? yield* deps.store.holdReport(child.id, {
+            notificationID: live?.notificationID ?? SessionMessage.ID.create(),
+            since: snap.start,
+          })
+        : held
     if (outcome.type === "succeeded") {
-      // Keep the start this child first owed, so a later hold still reports that answer or a newer
-      // one rather than losing it to a period that produced nothing.
-      if (!held.has(child.id)) held.set(child.id, since)
+      if (owed === undefined) return
       if (yield* deps.pending(child.id)) return
-      held.delete(child.id)
     }
 
+    const since = owed === undefined ? snap.start : owed.since
+    const release = owed === undefined ? Effect.void : deps.store.releaseReport(child.id)
     const recovery = subagentRecovery(live?.notificationID ? snap.recovery : undefined, child, parentID)
     const status = outcome.type === "succeeded" ? "completed" : outcome.type === "interrupted" ? "cancelled" : "error"
     const assistant = status === "completed" ? yield* lastAssistant(child.id, since) : undefined
     // A period that succeeded without finishing an answer of its own was not a turn: a move, a
     // compaction, a recovered notice or a no-input wake settles that way, and a spawn that never ran
     // reports through the tool's inline error instead.
-    if (status === "completed" && assistant === undefined) return
+    if (status === "completed" && assistant === undefined) return yield* release
     const output = status === "completed" ? SubagentCompletion.text(assistant) : undefined
     const error = outcome.type === "failed" ? outcome.error.message : undefined
-    const notificationID = live?.notificationID
+    const notificationID = live?.notificationID ?? owed?.notificationID
 
     yield* SubagentCompletion.deliver(
       // Mirrors Session.synthetic without Session.Service: admit one steer synthetic, then wake
@@ -255,7 +258,7 @@ export const make = (deps: Deps) => {
         ...(notificationID === undefined ? {} : { notificationID }),
         recovery,
       },
-    )
+    ).pipe(Effect.andThen(release), Effect.uninterruptible)
   })
 
   return { started, snapshot, report }
