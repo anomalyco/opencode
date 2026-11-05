@@ -64,13 +64,8 @@ export function server(script: Script = {}): Options {
     },
     { method: "POST", path: "/api/session/ses_mini/command", status: 204 },
     { method: "POST", path: "/api/session/ses_mini/shell", status: 204 },
-    {
-      method: "PATCH",
-      path: "/api/session/ses_mini/inbox/:id",
-      json: (entry) => ({
-        data: inboxItem({ ...entry, body: { ...(entry.body as object), id: entry.path.split("/").pop(), text: "" } }),
-      }),
-    },
+    { method: "PATCH", path: "/api/session/ses_mini/inbox/:id", status: 204 },
+    { method: "DELETE", path: "/api/session/ses_mini/inbox/:id", status: 204 },
     ...(script.wait === undefined
       ? []
       : [{ method: "POST", path: "/api/experimental/session/ses_mini/wait", status: 204, delay: script.wait }]),

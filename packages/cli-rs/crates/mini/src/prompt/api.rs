@@ -3,6 +3,10 @@
 //! `session.compact`, `session.inbox.update` in `stream-v2.transport.ts` and `runtime.ts`).
 
 use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::generated::{
+    SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxUpdateInput,
+    SessionMessageID,
+};
 use serde_json::{Map, Value, json};
 
 use super::complete::{Agent, Catalog, Command, Reference};
@@ -194,26 +198,42 @@ pub async fn compact(client: &Client, session: &str) -> Result<(), String> {
         .map_err(error)
 }
 
-/// `session.inbox.update`: moves a pending prompt between queue and steer.
-pub async fn deliver(
+/// `onQueuedPromptAction`: `session.inbox.cancel` for `None`, else `session.inbox.update` to move a pending
+/// prompt between queue and steer.
+pub async fn queued_action(
     client: &Client,
     session: &str,
     inbox: &str,
-    delivery: Delivery,
+    delivery: Option<Delivery>,
 ) -> Result<(), String> {
-    let mut call = Call::new(
-        "PATCH",
-        format!("/api/session/{}/inbox/{}", encode(session), encode(inbox)),
-        200,
-        &[400, 401, 404, 409],
+    let (session_id, inbox_id) = (
+        SessionID(session.to_owned()),
+        SessionMessageID(inbox.to_owned()),
     );
-    call.json(&json!({ "delivery": delivery.as_str() }))
-        .map_err(error)?;
-    client
-        .json::<Value>(call, &RequestOptions::default())
-        .await
-        .map(drop)
-        .map_err(error)
+    let options = RequestOptions::default();
+    match delivery {
+        None => client
+            .session_inbox_cancel(
+                &SessionInboxCancelInput {
+                    session_id,
+                    inbox_id,
+                },
+                &options,
+            )
+            .await
+            .map_err(error),
+        Some(delivery) => client
+            .session_inbox_update(
+                &SessionInboxUpdateInput {
+                    session_id,
+                    inbox_id,
+                    delivery: SessionInboxDelivery::from(delivery.as_str()),
+                },
+                &options,
+            )
+            .await
+            .map_err(error),
+    }
 }
 
 /// `switchAgent` and `switchModel` before an ordinary prompt; a command keeps the session's selection.
