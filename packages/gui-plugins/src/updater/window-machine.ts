@@ -45,7 +45,8 @@ export function transitionWindowUpdater(state: WindowUpdaterState, event: Window
     if (state.status === "installing") return unchanged(state)
 
     // Not loaded yet, or not active (failed, or not on this platform): nothing can check or install.
-    if (!event.available) return state.status === "idle" ? unchanged(state, [{ type: "toast-failed" }]) : unchanged(state)
+    if (!event.available)
+      return state.status === "idle" ? unchanged(state, [{ type: "toast-failed" }]) : unchanged(state)
 
     if (state.status === "checking" && event.action === "check") return unchanged(state)
     // An install asked for during a check takes over; the check's answer no longer settles anything.
@@ -61,7 +62,10 @@ export function transitionWindowUpdater(state: WindowUpdaterState, event: Window
 
   if (event.type === "action.settled") return unchanged({ status: "idle", issued: state.attempt })
 
-  return { state: { status: "idle", issued: state.attempt }, effects: [{ type: "toast-failed", message: event.message }] }
+  return {
+    state: { status: "idle", issued: state.attempt },
+    effects: [{ type: "toast-failed", message: event.message }],
+  }
 }
 
 function unchanged(state: WindowUpdaterState, effects: readonly WindowUpdaterEffect[] = []): WindowUpdaterTransition {

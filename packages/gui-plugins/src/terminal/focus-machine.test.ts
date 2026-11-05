@@ -101,9 +101,18 @@ describe("terminal focus machine", () => {
     const state = replay([pending()])
 
     expect(transitionFocus(state, pending())).toBe(state)
-    expect(transitionFocus(state, pending(true))).toEqual({ status: "pending", request: 1, session: "ses_1", overlay: true })
+    expect(transitionFocus(state, pending(true))).toEqual({
+      status: "pending",
+      request: 1,
+      session: "ses_1",
+      overlay: true,
+    })
     expect(
-      isFocusRequested(replay([pending(), { type: "pending.resolved", request: 1, id: "pty_1" }], state), "ses_1", "pty_1"),
+      isFocusRequested(
+        replay([pending(), { type: "pending.resolved", request: 1, id: "pty_1" }], state),
+        "ses_1",
+        "pty_1",
+      ),
     ).toBe(true)
 
     // Once the user moved on, a new request starts again.

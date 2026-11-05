@@ -88,7 +88,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           dispatchModel({ type: "load.succeeded", attempt, model: created })
         },
         (cause: unknown) =>
-          dispatchModel({ type: "load.failed", attempt, error: cause instanceof Error ? cause.message : String(cause) }),
+          dispatchModel({
+            type: "load.failed",
+            attempt,
+            error: cause instanceof Error ? cause.message : String(cause),
+          }),
       )
   }
 

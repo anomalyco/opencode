@@ -2,7 +2,13 @@ import { showToast } from "@opencode/ui/toast"
 import { createSignal, lazy, onCleanup, Suspense, untrack } from "solid-js"
 import { MenuItem, Server, Style, type ServerEntry, type ServerState, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
-import { initialWslAdd, transitionWslAdd, WSL_DIALOG_LOAD_TIMEOUT_MS, type WslAddEffect, type WslAddEvent } from "./add-machine"
+import {
+  initialWslAdd,
+  transitionWslAdd,
+  WSL_DIALOG_LOAD_TIMEOUT_MS,
+  type WslAddEffect,
+  type WslAddEvent,
+} from "./add-machine"
 import { Wsl, type WslServerItem } from "./contract"
 import { wslRowView } from "./row-view"
 import type definition from "./index"
@@ -60,15 +66,16 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const runAdd = (effect: WslAddEffect<DialogModule>) => {
     if (effect.type === "toast-failed")
-      return void showToast({ variant: "error", title: ctx.t("common.requestFailed"), description: effect.error || undefined })
+      return void showToast({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: effect.error || undefined,
+      })
 
     if (effect.type === "load") {
       const attempt = effect.attempt
       const deadline = Promise.withResolvers<never>()
-      const timer = setTimeout(
-        () => deadline.reject(new Error()),
-        WSL_DIALOG_LOAD_TIMEOUT_MS,
-      )
+      const timer = setTimeout(() => deadline.reject(new Error()), WSL_DIALOG_LOAD_TIMEOUT_MS)
 
       // A chunk that fails or never loads, such as after an update replaced the app's files, answers the click.
       return void Promise.race([loadDialog(), deadline.promise])

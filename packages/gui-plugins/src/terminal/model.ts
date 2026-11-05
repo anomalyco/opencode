@@ -227,7 +227,12 @@ export function createTerminalModel(input: {
           // A terminal that already exited is closed.
           failed: (error) =>
             isPtyNotFoundError(error)
-              ? { type: "close.succeeded", sessionID: command.sessionID, ptyID: command.ptyID, attempt: command.attempt }
+              ? {
+                  type: "close.succeeded",
+                  sessionID: command.sessionID,
+                  ptyID: command.ptyID,
+                  attempt: command.attempt,
+                }
               : {
                   type: "close.failed",
                   sessionID: command.sessionID,
@@ -312,9 +317,7 @@ export function createTerminalModel(input: {
     // The next default title counts the terminals the server already has.
     const known =
       command.known ??
-      (await server.client.experimental.persistentPty
-        .list({ sessionID: target.id }, { signal })
-        .catch(() => []))
+      (await server.client.experimental.persistentPty.list({ sessionID: target.id }, { signal }).catch(() => []))
     const used = new Set(known.flatMap((info) => titleNumber(info.title) ?? []))
     const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
 
@@ -383,7 +386,8 @@ export function createTerminalModel(input: {
 
     if (waiting) dispatchFocus({ type: "pending.failed", request: waiting.request })
 
-    if (command.outcome.kind === "unsupported") input.toast.show({ variant: "error", title: input.t("create.unsupported") })
+    if (command.outcome.kind === "unsupported")
+      input.toast.show({ variant: "error", title: input.t("create.unsupported") })
 
     if (command.outcome.kind === "failed")
       input.toast.show({ variant: "error", title: input.t("create.failed"), description: command.outcome.error })
@@ -410,22 +414,18 @@ export function createTerminalModel(input: {
     const stops = runWithOwner(owner, () => [
       // The event stream opens with server.connected, so this runs for the first connection and every reconnect.
       data.on("server.connected", () => dispatch(server, { type: "server.connected" })),
-      data.on(
-        "persistent-pty.added",
-        (event) => dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      data.on("persistent-pty.added", (event) =>
+        dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
       ),
-      data.on(
-        "persistent-pty.removed",
-        (event) => dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      data.on("persistent-pty.removed", (event) =>
+        dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
       ),
-      data.on(
-        "persistent-pty.updated",
-        (event) =>
-          dispatch(server, {
-            type: "terminal.updated",
-            sessionID: event.data.sessionID,
-            terminal: event.data.terminal,
-          }),
+      data.on("persistent-pty.updated", (event) =>
+        dispatch(server, {
+          type: "terminal.updated",
+          sessionID: event.data.sessionID,
+          terminal: event.data.terminal,
+        }),
       ),
     ])!
 

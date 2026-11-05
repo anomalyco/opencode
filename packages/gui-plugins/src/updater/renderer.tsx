@@ -40,7 +40,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   }
 
   const runWindow = (effect: WindowUpdaterEffect) => {
-    if (effect.type === "toast-failed") return void showToast({ title: ctx.t("common.requestFailed"), description: effect.message })
+    if (effect.type === "toast-failed")
+      return void showToast({ title: ctx.t("common.requestFailed"), description: effect.message })
     const attempt = effect.attempt
     const chunk = Promise.withResolvers<never>()
     const timer = setTimeout(() => chunk.reject(new Error()), ACTION_CHUNK_TIMEOUT_MS)

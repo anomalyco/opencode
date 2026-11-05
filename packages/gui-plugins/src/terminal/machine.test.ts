@@ -320,7 +320,12 @@ describe("terminal machine", () => {
   // to the first one's unconfirmed title.
   test("only the newest rename settles a terminal's title", () => {
     const alpha = transition(listed(), { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "alpha" })
-    const beta = transition(alpha.state, { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "beta" })
+    const beta = transition(alpha.state, {
+      type: "rename.requested",
+      sessionID: "ses_1",
+      ptyID: "pty_1",
+      title: "beta",
+    })
 
     expect(beta.commands).toEqual([
       { type: "abort", attempts: [3] },
@@ -395,7 +400,12 @@ describe("terminal machine", () => {
       { type: "toast-close-failed", error: "boom" },
     ])
 
-    const closed = transition(closing.state, { type: "close.succeeded", sessionID: "ses_1", ptyID: "pty_1", attempt: 4 })
+    const closed = transition(closing.state, {
+      type: "close.succeeded",
+      sessionID: "ses_1",
+      ptyID: "pty_1",
+      attempt: 4,
+    })
 
     expect(viewItems(sessionView(closed.state, "ses_1"))).toEqual([])
     expect(closed.commands).toEqual([{ type: "load-list", sessionID: "ses_1", attempt: 5 }])

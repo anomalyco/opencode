@@ -38,7 +38,10 @@ describe("browser model machine", () => {
     expect(selectBrowserTabHidden(failed.state, known)).toBe(false)
     expect(failed.effects).toEqual([{ type: "load-model", attempt: 1 }])
 
-    const retried = replay([{ type: "retry.requested" }, { type: "load.succeeded", attempt: 2, model: { name: "m" } }], failed.state)
+    const retried = replay(
+      [{ type: "retry.requested" }, { type: "load.succeeded", attempt: 2, model: { name: "m" } }],
+      failed.state,
+    )
 
     expect(retried.effects).toEqual([{ type: "load-model", attempt: 2 }])
     expect(selectBrowserModel(retried.state)).toEqual({ name: "m" })

@@ -91,7 +91,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const runAdd = (effect: SshAddEffect<DialogModule>) => {
     if (effect.type === "toast-failed")
-      return void showToast({ variant: "error", title: ctx.t("common.requestFailed"), description: effect.error || undefined })
+      return void showToast({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: effect.error || undefined,
+      })
 
     if (effect.type === "load") {
       const attempt = effect.attempt

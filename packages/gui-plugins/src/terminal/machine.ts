@@ -128,7 +128,12 @@ export type Event =
       readonly error: string
     }
   /** The user sets a terminal's title; `null` clears it. */
-  | { readonly type: "rename.requested"; readonly sessionID: string; readonly ptyID: string; readonly title: string | null }
+  | {
+      readonly type: "rename.requested"
+      readonly sessionID: string
+      readonly ptyID: string
+      readonly title: string | null
+    }
   | {
       readonly type: "rename.succeeded"
       readonly sessionID: string
@@ -247,7 +252,9 @@ export function sessionView(state: State, sessionID: string): View {
 
 /** A new terminal is being created for the session; another request joins it. */
 export function sessionCreating(state: State, sessionID: string) {
-  return (state.status === "checking" || state.status === "supported") && active(state, sessionID).creating !== undefined
+  return (
+    (state.status === "checking" || state.status === "supported") && active(state, sessionID).creating !== undefined
+  )
 }
 
 /**
@@ -293,7 +300,9 @@ function unknown(state: State, event: Event): Transition {
   if (event.type === "session.loaded") return check(1, { [event.sessionID]: { status: "waiting" } }, 1, {})
 
   if (event.type === "create.requested")
-    return unchanged(state, [{ type: "settle-create", sessionID: event.sessionID, outcome: { ok: false, kind: "cancelled" } }])
+    return unchanged(state, [
+      { type: "settle-create", sessionID: event.sessionID, outcome: { ok: false, kind: "cancelled" } },
+    ])
 
   return unchanged(state)
 }
@@ -340,7 +349,8 @@ function checking(state: Extract<State, { status: "checking" }>, event: Event): 
   if (event.type === "session.loaded" && !state.sessions[event.sessionID])
     return changed({ ...state, sessions: { ...state.sessions, [event.sessionID]: { status: "waiting" } } })
 
-  if (event.type === "terminal.updated") return changed(withItems(state, event.sessionID, (items) => replace(items, event.terminal)))
+  if (event.type === "terminal.updated")
+    return changed(withItems(state, event.sessionID, (items) => replace(items, event.terminal)))
 
   return unchanged(state)
 }
@@ -520,7 +530,11 @@ function mutate(state: Active, event: Event): Transition | undefined {
     if (!item || current.closing[event.ptyID] !== undefined) return unchanged(state)
 
     // The title already shown, or clearing a terminal never renamed, sends nothing.
-    if (pending ? pending.title === event.title : event.title === item.title || (event.title === null && item.userTitle === null))
+    if (
+      pending
+        ? pending.title === event.title
+        : event.title === item.title || (event.title === null && item.userTitle === null)
+    )
       return unchanged(state)
     const attempt = state.issued + 1
 
@@ -561,10 +575,15 @@ function lost(
       ? ({ ok: false, kind: "unsupported" } as const)
       : ({ ok: false, kind: "failed", error: next.error } as const)
 
-  return changed(next.status === "unsupported" ? { status: "unsupported", ...base } : { status: "failed", ...base, error: next.error }, [
-    ...abort(attempts(state, [...new Set([...Object.keys(state.sessions), ...Object.keys(state.mutations)])])),
-    ...settleCreates(state, Object.keys(state.mutations), outcome),
-  ])
+  return changed(
+    next.status === "unsupported"
+      ? { status: "unsupported", ...base }
+      : { status: "failed", ...base, error: next.error },
+    [
+      ...abort(attempts(state, [...new Set([...Object.keys(state.sessions), ...Object.keys(state.mutations)])])),
+      ...settleCreates(state, Object.keys(state.mutations), outcome),
+    ],
+  )
 }
 
 function removed(state: Active, ids: readonly string[]): Transition {
@@ -576,7 +595,8 @@ function removed(state: Active, ids: readonly string[]): Transition {
     ...settleCreates(state, ids, { ok: false, kind: "cancelled" } as const),
   ]
 
-  if (state.status === "checking") return changed({ ...state, sessions: omit(state.sessions, ids), mutations }, commands)
+  if (state.status === "checking")
+    return changed({ ...state, sessions: omit(state.sessions, ids), mutations }, commands)
 
   return changed({ ...state, sessions: omit(state.sessions, ids), mutations }, commands)
 }
@@ -675,7 +695,8 @@ function known(state: Active, sessionID: string) {
 }
 
 function withMutations<T extends Active>(state: T, sessionID: string, next: Mutations): T {
-  const idle = next.creating === undefined && Object.keys(next.closing).length === 0 && Object.keys(next.renames).length === 0
+  const idle =
+    next.creating === undefined && Object.keys(next.closing).length === 0 && Object.keys(next.renames).length === 0
 
   return { ...state, mutations: idle ? omit(state.mutations, [sessionID]) : { ...state.mutations, [sessionID]: next } }
 }
