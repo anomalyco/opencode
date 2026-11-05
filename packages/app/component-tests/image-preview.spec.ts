@@ -74,7 +74,7 @@ story("a pan whose release never reaches the preview stops following the pointer
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
 
-  const pointer = await body.evaluateHandle((element) => {
+  const pointer = await body.evaluateHandle((element: HTMLElement) => {
     const seen = { id: -1 }
     element.addEventListener("pointerdown", (event) => (seen.id = event.pointerId), { once: true })
 
