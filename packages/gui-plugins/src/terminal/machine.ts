@@ -562,7 +562,7 @@ function lost(
       : ({ ok: false, kind: "failed", error: next.error } as const)
 
   return changed(next.status === "unsupported" ? { status: "unsupported", ...base } : { status: "failed", ...base, error: next.error }, [
-    ...abort(attempts(state, Object.keys(state.sessions).concat(Object.keys(state.mutations)))),
+    ...abort(attempts(state, [...new Set([...Object.keys(state.sessions), ...Object.keys(state.mutations)])])),
     ...settleCreates(state, Object.keys(state.mutations), outcome),
   ])
 }

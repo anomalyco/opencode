@@ -91,7 +91,10 @@ export function createTerminalModel(input: {
   const servers = new Map<string, { ref: ServerRef; dispatch: (event: Event) => void }>()
   const requests = new Map<string, Map<number, AbortController>>()
   // The new-terminal requests a session's create answers, and the focus request it resolves.
-  const creates = new Map<string, { request: number; done: PromiseWithResolvers<string | undefined> }>()
+  const creates = new Map<
+    string,
+    { request: number; done: { promise: Promise<string | undefined>; resolve: (id: string | undefined) => void } }
+  >()
 
   const dispatch = (server: ServerRef, event: Event) => {
     if (lifetime.signal.aborted) return
