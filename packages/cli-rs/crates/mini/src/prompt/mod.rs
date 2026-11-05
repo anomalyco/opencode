@@ -196,6 +196,8 @@ struct Inner {
     /// Programmatic edits sync the draft themselves.
     quiet: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
+    /// The footer view around the prompt (`input.view()`): `prompt` while the composer shows.
+    view: Cell<&'static str>,
 }
 
 /// The composer in the footer. Cloning is cheap.
@@ -257,6 +259,7 @@ impl Prompt {
             target: RefCell::default(),
             quiet: Cell::new(false),
             layers: RefCell::default(),
+            view: Cell::new("prompt"),
         });
         connect(&inner);
         install_layers(&inner);
@@ -368,6 +371,11 @@ impl Prompt {
     pub fn set_agent(&self, agent: &str) {
         self.0.state.borrow_mut().agent = agent.to_owned();
         self.paint();
+    }
+
+    /// The session's agent ID.
+    pub fn agent_id(&self) -> String {
+        self.0.state.borrow().agent.clone()
     }
 
     /// The agent's name from the catalog, once it arrived.
@@ -550,6 +558,31 @@ impl Prompt {
     pub fn push_history(&self, prompt: &RunPrompt) {
         let mut state = self.0.state.borrow_mut();
         state.history = state.history.push(prompt);
+    }
+
+    /// The footer view around the prompt (`promptView`): `prompt` for the composer, else the name of the request
+    /// or panel that replaces it. The prompt's keys follow it.
+    pub fn set_view(&self, view: &'static str) {
+        self.0.view.set(view);
+        if view == "prompt" {
+            self.focus();
+        }
+    }
+
+    /// `submitText`: sends `text` as if typed, as the command menu does for `/new` and server commands.
+    pub fn submit_text(&self, text: &str) {
+        self.0
+            .submit_prompt(RunPrompt::text(text.to_owned()), Delivery::Steer);
+    }
+
+    /// `openEditor`: composes the draft in the external editor.
+    pub fn open_editor(&self) {
+        self.0.open_editor(None);
+    }
+
+    /// The location's agents, once the catalog arrived.
+    pub fn agents(&self) -> Vec<complete::Agent> {
+        self.0.state.borrow().catalog.agents.clone()
     }
 
     fn paint(&self) {
@@ -1667,9 +1700,31 @@ fn keymap(app: &App, config: &Info, textarea: &Textarea) -> DialogKeymap {
 /// The prompt's layers (`footer.prompt.tsx:1162-1344`, `footer.view.tsx:549-558`). The newest layer runs first,
 /// as in TS, where the later `createLayer` wins.
 fn install_layers(inner: &Rc<Inner>) {
+    // `input.prompt()`: the composer shows.
     let when = |check: fn(&Inner) -> bool| {
         let weak = Rc::downgrade(inner);
-        Condition::when(move || weak.upgrade().is_some_and(|inner| check(&inner)))
+        Condition::when(move || {
+            weak.upgrade()
+                .is_some_and(|inner| inner.view.get() == "prompt" && check(&inner))
+        })
+    };
+    // `baseBindingsEnabled`: everywhere but the panels.
+    let base = {
+        let weak = Rc::downgrade(inner);
+        Condition::when(move || {
+            weak.upgrade().is_some_and(|inner| {
+                !matches!(
+                    inner.view.get(),
+                    "command"
+                        | "skill"
+                        | "model"
+                        | "variant"
+                        | "settings"
+                        | "queued-menu"
+                        | "subagent-menu"
+                )
+            })
+        })
     };
     let run = |action: fn(&Rc<Inner>) -> bool| {
         let weak = Rc::downgrade(inner);
@@ -1696,6 +1751,7 @@ fn install_layers(inner: &Rc<Inner>) {
             ..KeymapLayer::default()
         },
         KeymapLayer {
+            enabled: base,
             commands: vec![command(
                 "prompt.clear",
                 "Clear prompt or exit",
@@ -1708,6 +1764,7 @@ fn install_layers(inner: &Rc<Inner>) {
             ..KeymapLayer::default()
         },
         KeymapLayer {
+            enabled: when(|_| true),
             commands: vec![
                 command("prompt.paste", "Paste", "Prompt", |inner| {
                     inner.paste(None);

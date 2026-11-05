@@ -1,7 +1,7 @@
 // While a turn runs, Enter steers the next prompt into the inbox and `prompt.queue` (Ctrl+X Enter) queues one;
 // an empty Enter steers the queued one; a shell command cannot be queued; Ctrl+L clears the screen.
 import { definePty } from "../../pty/run"
-import { event, leave, opened, server, statusMask } from "./fixture"
+import { event, leave, opened, server } from "./fixture"
 
 export default definePty({
   args: ["mini", "-s", "ses_mini"],
@@ -42,12 +42,6 @@ export default definePty({
     ...leave,
   ],
   exits: true,
-  masks: [
-    statusMask,
-    {
-      pattern: /^▪ esc (interrupt|stop) · (ctrl\+x q \d+ pending · )?build · model · demo( · ctrl\+p menu)?$/,
-      reason: "the pending and menu hints open M.3's views; without them the wider interrupt hint fits",
-    },
-  ],
+
   requests: "writes",
 })

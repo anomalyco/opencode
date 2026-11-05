@@ -16,6 +16,7 @@ pub struct Agent {
     pub name: String,
     pub mode: String,
     pub hidden: bool,
+    pub description: Option<String>,
 }
 
 /// `RunReference`.
@@ -326,6 +327,7 @@ mod tests {
             name: id.into(),
             mode: mode.into(),
             hidden: false,
+            description: None,
         };
         let command = |name: &str, description: &str| Command {
             name: name.into(),
