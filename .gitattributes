@@ -11,3 +11,4 @@ packages/core/src/**/*.txt text eol=lf
 packages/httpapi-codegen/test/generated/*.ts text eol=lf
 # The site tests compare source text and humans.txt byte for byte, so Windows checkouts keep LF.
 services/www/** text=auto eol=lf
+services/site/** text=auto eol=lf

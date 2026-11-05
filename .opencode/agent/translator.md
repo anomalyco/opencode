@@ -24,7 +24,7 @@ If no locale-specific glossary exists, use the global glossary only.
 
 # Website Copy (opencode.ai)
 
-When translating the marketing site (`services/www/site/src/i18n/<locale>.ts` and `src/i18n/content/<locale>.ts`):
+When translating the marketing site (`services/site/src/i18n/<locale>.ts` and `src/i18n/content/<locale>.ts`):
 
 - Keep every `{{param}}`, every link id in `[text](id)` (translate the text, keep the id) and every `` `code` `` span exactly.
 - Keep these names as written: OpenCode, OpenCode Models, OpenCode Go, OpenCode Go Plus, Claude Opus 5.5, Anomaly, Console, and every company, model and app name.
