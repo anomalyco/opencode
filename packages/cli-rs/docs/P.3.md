@@ -56,8 +56,8 @@ So the "library" is the port itself, kept as one crate with the TS module layout
   `render(lang, source, width, theme) -> cells`, as styled lines. `Rendered::Code` is TS's `undefined`;
   `Rendered::Syntax { kind, prefix }` is a syntax error with the drawable prefix, if any.
 - `Renderer` adds the streaming fallback; `widget(app, &Diagram)` is the `Text` it returns.
-- `Palette::from_theme(&Theme)`: `resolveOpenCodeDiagramPalette`. TS takes the theme mode from the
-  context; the plugin API passes only the theme, so a page background above half luminance means light.
+- `Palette::from_theme(&Theme, ThemeMode)`: `resolveOpenCodeDiagramPalette`, with the mode from
+  `Host::theme_mode`, as TS reads `context.themeMode`.
 
 ## Widget
 

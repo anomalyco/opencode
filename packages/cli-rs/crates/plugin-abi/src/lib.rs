@@ -35,8 +35,9 @@ use serde::{Deserialize, Serialize};
 
 /// The major version: changes only with a deliberate breaking change, and a mismatch refuses the plugin.
 pub const ABI_MAJOR: u32 = 1;
-/// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`].
-pub const ABI_MINOR: u32 = 1;
+/// The minor version: grows when entries are appended. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
+/// [`HostApi::theme_mode`].
+pub const ABI_MINOR: u32 = 2;
 
 /// The symbol every plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v1";
@@ -120,6 +121,34 @@ pub struct HostApi {
     pub call: unsafe extern "C" fn(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32,
     /// Frees a buffer `call` wrote.
     pub free: unsafe extern "C" fn(owned: Owned),
+    // 1.2
+    /// Whether the page theme is dark ([`THEME_DARK`]) or light ([`THEME_LIGHT`]), as TS plugins read
+    /// `api.themeMode`.
+    pub theme_mode: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
+}
+
+/// [`HostApi::theme_mode`] results.
+pub const THEME_DARK: u32 = 0;
+pub const THEME_LIGHT: u32 = 1;
+
+/// The 1.1 layout of [`HostApi`], a prefix of it. Hosts built against 1.1 pass this; kept to test that plugins
+/// read only what such a host offers.
+#[doc(hidden)]
+#[repr(C)]
+pub struct HostApiV1_1 {
+    pub size: usize,
+    pub major: u32,
+    pub minor: u32,
+    pub ctx: *mut c_void,
+    pub call: unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32,
+    pub free: unsafe extern "C" fn(Owned),
+}
+
+/// Dark or light, from [`Host::theme_mode`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThemeMode {
+    Dark,
+    Light,
 }
 
 /// What a plugin exports. The host reads an entry only when `size` covers it; entries added by later minor versions
@@ -366,6 +395,24 @@ impl Host {
     pub fn log(&self, level: Level, message: &str) {
         let _ = self.request(&HostRequest::Log { level, message: message.to_owned() });
     }
+
+    /// Whether the page theme is dark or light; `None` from a host older than 1.2.
+    pub fn theme_mode(&self) -> Option<ThemeMode> {
+        // SAFETY: the host keeps `api` alive until it destroys the instance; `size` says which entries it has.
+        let mode = unsafe {
+            let api = &*self.api;
+            let end = std::mem::offset_of!(HostApi, theme_mode) + size_of::<Option<unsafe extern "C" fn()>>();
+            if api.size < end {
+                return None;
+            }
+            (api.theme_mode?)(api.ctx)
+        };
+        match mode {
+            THEME_DARK => Some(ThemeMode::Dark),
+            THEME_LIGHT => Some(ThemeMode::Light),
+            _ => None,
+        }
+    }
 }
 
 type FenceFn = Box<dyn Fn(&Fence) -> Option<Vec<Line>>>;
@@ -607,4 +654,34 @@ pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
         .map(|message| (*message).to_owned())
         .or_else(|| panic.downcast_ref::<String>().cloned())
         .unwrap_or_else(|| "a panic without a message".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe extern "C" fn call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
+        unsafe { *out = Owned::EMPTY };
+        ERROR
+    }
+
+    unsafe extern "C" fn free(_: Owned) {}
+
+    unsafe extern "C" fn light(_: *mut c_void) -> u32 {
+        THEME_LIGHT
+    }
+
+    // Expected: a plugin reads the theme mode from a 1.2 host, and gets `None`, without reading past the table, from
+    // a 1.1 host or a 1.2 host that leaves the entry null.
+    #[test]
+    fn the_theme_mode_is_read_only_when_the_host_offers_it() {
+        let ctx = std::ptr::null_mut();
+        let current =
+            HostApi { size: size_of::<HostApi>(), major: 1, minor: 2, ctx, call, free, theme_mode: Some(light) };
+        assert_eq!(Host { api: &current }.theme_mode(), Some(ThemeMode::Light));
+        let null = HostApi { theme_mode: None, ..current };
+        assert_eq!(Host { api: &null }.theme_mode(), None);
+        let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
+        assert_eq!(Host { api: std::ptr::from_ref(&old).cast() }.theme_mode(), None);
+    }
 }

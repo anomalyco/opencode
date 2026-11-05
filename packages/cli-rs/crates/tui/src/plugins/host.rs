@@ -33,6 +33,10 @@ impl opencode_plugin::Host for Tui {
         self.page()
     }
 
+    fn theme_mode(&self) -> opentui::theme::ThemeMode {
+        self.theme.borrow().mode()
+    }
+
     fn keymap(&self) -> &DialogKeymap {
         &self.keymap
     }

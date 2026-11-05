@@ -232,6 +232,7 @@ impl<H: Host> Instance<H> {
             ctx: std::ptr::from_ref::<RefCell<Ctx<H>>>(&ctx).cast_mut().cast(),
             call: host_call::<H>,
             free: host_free,
+            theme_mode: Some(host_theme_mode::<H>),
         });
         let mut handle = std::ptr::null_mut();
         let mut out = Owned::EMPTY;
@@ -311,6 +312,15 @@ unsafe extern "C" fn host_call<H: Host>(ctx: *mut c_void, request: Bytes, out: *
     // SAFETY: `out` is valid for writes during the call.
     unsafe { *out = Owned::from_vec(bytes) };
     status
+}
+
+/// The host's side of [`HostApi::theme_mode`]. A host that is gone or panics answers dark.
+unsafe extern "C" fn host_theme_mode<H: Host>(ctx: *mut c_void) -> u32 {
+    // SAFETY: `ctx` is the `RefCell<Ctx<H>>` this instance was created with.
+    let ctx = unsafe { &*ctx.cast::<RefCell<Ctx<H>>>() };
+    let host = ctx.try_borrow().ok().and_then(|ctx| ctx.host.upgrade());
+    let light = catch_unwind(AssertUnwindSafe(|| host.is_some_and(|host| host.theme_mode() == ThemeMode::Light)));
+    if light.unwrap_or(false) { abi::THEME_LIGHT } else { abi::THEME_DARK }
 }
 
 unsafe extern "C" fn host_free(owned: Owned) {

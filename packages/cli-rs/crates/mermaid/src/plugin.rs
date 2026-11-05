@@ -5,7 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use opencode_plugin::{Definition, Host};
+use opencode_plugin::{Definition, Host, Setup};
 use opentui::input::{MouseButton, MouseEventKind};
 use opentui::prelude::{App, Attributes, Color, Length, Span, Style, Text, Widget, WrapMode};
 use opentui::widget::{AnyWidget, CodeBlock, Content};
@@ -16,9 +16,13 @@ use crate::{Diagram, Kind, Palette, Rendered, render};
 pub const ID: &str = "opencode.merman";
 
 pub fn plugin<H: Host>() -> Definition<H> {
-    Definition::new(ID, |setup| {
+    Definition::new(ID, |setup: &mut Setup<'_, H>| {
         let renderer = Rc::new(Renderer::default());
-        setup.code_block("mermaid", move |block, theme| renderer.render(block, &Palette::from_theme(theme)));
+        let host = Rc::downgrade(setup.host());
+        setup.code_block("mermaid", move |block, theme| {
+            let mode = host.upgrade()?.theme_mode();
+            renderer.render(block, &Palette::from_theme(theme, mode))
+        });
     })
 }
 
