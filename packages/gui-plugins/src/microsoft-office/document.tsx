@@ -217,29 +217,27 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
     }
 
     calls.set(attempt, call)
-    void client
-      .call("paint", { index, scale, ratio }, { key: `paint:${index}`, signal: call.controller.signal })
-      .then(
-        (bitmap) => {
-          settle()
-          // The worker answers without a bitmap only for a paint it was told to drop, or a page it cannot build.
-          dispatchPaint(
-            bitmap
-              ? { type: "paint.succeeded", index, attempt, bitmap }
-              : { type: "paint.failed", index, attempt, quiet: call.controller.signal.aborted },
-          )
-        },
-        (error: Error) => {
-          settle()
-          // A replaced or withdrawn paint shows nothing; a closed or stopped worker reports itself.
-          dispatchPaint({
-            type: "paint.failed",
-            index,
-            attempt,
-            quiet: error instanceof SupersededError || error instanceof WorkerClosedError,
-          })
-        },
-      )
+    void client.call("paint", { index, scale, ratio }, { key: `paint:${index}`, signal: call.controller.signal }).then(
+      (bitmap) => {
+        settle()
+        // The worker answers without a bitmap only for a paint it was told to drop, or a page it cannot build.
+        dispatchPaint(
+          bitmap
+            ? { type: "paint.succeeded", index, attempt, bitmap }
+            : { type: "paint.failed", index, attempt, quiet: call.controller.signal.aborted },
+        )
+      },
+      (error: Error) => {
+        settle()
+        // A replaced or withdrawn paint shows nothing; a closed or stopped worker reports itself.
+        dispatchPaint({
+          type: "paint.failed",
+          index,
+          attempt,
+          quiet: error instanceof SupersededError || error instanceof WorkerClosedError,
+        })
+      },
+    )
 
     // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
     // that, and a paint releases the pages far from its own: each built page holds megabytes in the engine.

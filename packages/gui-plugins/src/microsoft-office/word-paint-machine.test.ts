@@ -84,9 +84,9 @@ describe("transitionWordPaint", () => {
 
     const late = bitmap()
 
-    expect(transitionWordPaint(left.state, { type: "paint.succeeded", index: 0, attempt: 1, bitmap: late }).effects).toEqual(
-      [{ type: "close-bitmap", bitmap: late }],
-    )
+    expect(
+      transitionWordPaint(left.state, { type: "paint.succeeded", index: 0, attempt: 1, bitmap: late }).effects,
+    ).toEqual([{ type: "close-bitmap", bitmap: late }])
   })
 
   test("a replaced or withdrawn paint fails quietly", () => {
@@ -125,7 +125,12 @@ describe("transitionWordPaint", () => {
   })
 
   test("disposal withdraws running paints and frees bitmaps that arrive after it", () => {
-    const disposed = replay([started(0), started(1), { type: "paint.failed", index: 1, attempt: 2, quiet: false }, { type: "disposed" }])
+    const disposed = replay([
+      started(0),
+      started(1),
+      { type: "paint.failed", index: 1, attempt: 2, quiet: false },
+      { type: "disposed" },
+    ])
 
     expect(disposed.state.status).toBe("disposed")
     expect(transitionWordPaint(replay([started(0), started(1)]).state, { type: "disposed" }).effects).toEqual([
@@ -135,8 +140,8 @@ describe("transitionWordPaint", () => {
 
     const late = bitmap()
 
-    expect(transitionWordPaint(disposed.state, { type: "paint.succeeded", index: 0, attempt: 1, bitmap: late }).effects).toEqual(
-      [{ type: "close-bitmap", bitmap: late }],
-    )
+    expect(
+      transitionWordPaint(disposed.state, { type: "paint.succeeded", index: 0, attempt: 1, bitmap: late }).effects,
+    ).toEqual([{ type: "close-bitmap", bitmap: late }])
   })
 })

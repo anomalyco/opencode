@@ -116,7 +116,12 @@ export function SessionFileBrowserTab(props: {
       )
       .then(
         (result) => {
-          if (settle()) dispatchSearch({ type: "search.succeeded", attempt, files: result.data.map((entry) => file.resolve(entry.path)) })
+          if (settle())
+            dispatchSearch({
+              type: "search.succeeded",
+              attempt,
+              files: result.data.map((entry) => file.resolve(entry.path)),
+            })
         },
         (cause: unknown) => {
           if (settle())
@@ -276,9 +281,7 @@ export function SessionFileBrowserTab(props: {
                 <div role="alert" class="flex flex-col items-start gap-2 px-2 py-2">
                   <div class="flex flex-col gap-0.5">
                     <div class="text-12-medium text-text-strong">{ctx.t("search.failed")}</div>
-                    <div class="text-12-regular text-text-weak break-words">
-                      {failureText(failure())}
-                    </div>
+                    <div class="text-12-regular text-text-weak break-words">{failureText(failure())}</div>
                   </div>
                   <Button size="small" variant="outline" onClick={() => dispatchSearch({ type: "retry" })}>
                     {ctx.t("common.retry")}

@@ -55,7 +55,10 @@ const NONE: readonly WordPaintEffect[] = []
 
 export function transitionWordPaint(state: WordPaintState, event: WordPaintEvent): WordPaintTransition {
   if (state.status === "disposed")
-    return { state, effects: event.type === "paint.succeeded" ? [{ type: "close-bitmap", bitmap: event.bitmap }] : NONE }
+    return {
+      state,
+      effects: event.type === "paint.succeeded" ? [{ type: "close-bitmap", bitmap: event.bitmap }] : NONE,
+    }
 
   if (event.type === "disposed")
     return {
@@ -80,7 +83,9 @@ export function transitionWordPaint(state: WordPaintState, event: WordPaintEvent
   const slot = state.pages.get(event.index)
 
   if (event.type === "paint.retried")
-    return slot?.status === "failed" ? paint(state, event.index, slot.scale, slot.ratio, NONE) : { state, effects: NONE }
+    return slot?.status === "failed"
+      ? paint(state, event.index, slot.scale, slot.ratio, NONE)
+      : { state, effects: NONE }
 
   const current = slot && slot.attempt === event.attempt ? slot : undefined
 
@@ -150,10 +155,7 @@ function paint(
       issued: attempt,
       pages: withSlot(state.pages, index, { status: "painting", attempt, scale, ratio }),
     },
-    effects: [
-      ...aborts,
-      { type: "request-paint", index, attempt, scale, ratio, timeoutMs: WORD_PAINT_TIMEOUT_MS },
-    ],
+    effects: [...aborts, { type: "request-paint", index, attempt, scale, ratio, timeoutMs: WORD_PAINT_TIMEOUT_MS }],
   }
 }
 

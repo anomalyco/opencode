@@ -34,9 +34,9 @@ describe("reviewDiffNeedsLoad", () => {
     expect(
       reviewDiffNeedsLoad({ file: "assets/preview.png", patch: "", additions: 1, deletions: 0, status: "added" }),
     ).toBe(false)
-    expect(reviewDiffNeedsLoad({ file: "sounds/ping.mp3", patch: "", additions: 1, deletions: 0, status: "added" })).toBe(
-      false,
-    )
+    expect(
+      reviewDiffNeedsLoad({ file: "sounds/ping.mp3", patch: "", additions: 1, deletions: 0, status: "added" }),
+    ).toBe(false)
   })
 })
 

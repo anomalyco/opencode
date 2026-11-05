@@ -363,31 +363,31 @@ export function createReviewModel(input: {
   })
 
   const detailsContext = createMemo(
-      (): ReviewDiffContext => {
-        const project = view().project
+    (): ReviewDiffContext => {
+      const project = view().project
 
-        if (project && !project.vcs) return { kind: "no-vcs" }
-        const connected = view().server.connected
+      if (project && !project.vcs) return { kind: "no-vcs" }
+      const connected = view().server.connected
 
-        if (!project) return connected ? { kind: "waiting" } : { kind: "offline" }
+      if (!project) return connected ? { kind: "waiting" } : { kind: "offline" }
 
-        return {
-          kind: "ready",
-          target: {
-            kind: "vcs",
-            serverID: view().server.id,
-            directory: view().directory,
-            mode: "git",
-            branch: "",
-            defaultBranch: "",
-          },
-          connected,
-          demanded: input.demand.details > 0,
-        }
-      },
-      undefined,
-      { equals: sameDiffContext },
-    )
+      return {
+        kind: "ready",
+        target: {
+          kind: "vcs",
+          serverID: view().server.id,
+          directory: view().directory,
+          mode: "git",
+          branch: "",
+          defaultBranch: "",
+        },
+        connected,
+        demanded: input.demand.details > 0,
+      }
+    },
+    undefined,
+    { equals: sameDiffContext },
+  )
 
   createKeyed(detailsContext, details.sync)
 

@@ -230,7 +230,11 @@ function ReviewPanel(props: ReviewPanelProps) {
         (cause: unknown) => {
           if (!detailRequests.delete(attempt)) return
           clearTimeout(request.timer)
-          dispatchDetail({ type: "fetch.failed", attempt, message: cause instanceof Error ? cause.message : String(cause) })
+          dispatchDetail({
+            type: "fetch.failed",
+            attempt,
+            message: cause instanceof Error ? cause.message : String(cause),
+          })
         },
       )
     }, effect.delayMs)
@@ -245,7 +249,9 @@ function ReviewPanel(props: ReviewPanelProps) {
       return props.detail.target(diff, props.diffVersion ?? 0)
     },
     undefined,
-    { equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewDetailTarget(previous, next)) },
+    {
+      equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewDetailTarget(previous, next)),
+    },
   )
 
   // Syncs the previewed file's patch request with the file and the server's connection.
