@@ -5,13 +5,12 @@ import { artifactMime } from "@opencode/util/artifact"
 import { bytesToBase64 } from "@opencode/util/base64"
 import { checksum } from "@opencode/util/encode"
 import { showToast } from "@opencode/ui/toast"
-import { createQuery, focusManager, useQueries, useQueryClient } from "@tanstack/solid-query"
+import { createQuery, focusManager, useQueryClient } from "@tanstack/solid-query"
 import { debounce } from "@solid-primitives/scheduled"
 import { createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createKeyed,
-  createVisitState,
   type LineRange,
   type MountedSession,
   type SessionScreen,
@@ -19,7 +18,6 @@ import {
 } from "@opencode/plugin/gui"
 import type Review from "./index"
 import {
-  expandReviewFolders,
   filterRenderableDiff,
   isReviewFolder,
   normalizePath,
@@ -30,7 +28,31 @@ import {
   reviewRootDirectory,
 } from "./kinds"
 import {
+  INITIAL_REVIEW_FOLDER_STATE,
+  reviewExpandedDiffs,
+  reviewFolderCandidates,
+  reviewFolderLabels,
+  sameReviewFolderSource,
+  transitionReviewFolders,
+  type ReviewFolderEffect,
+  type ReviewFolderEvent,
+  type ReviewFolderSource,
+  type ReviewFolderState,
+} from "./folder-machine"
+import {
+  INITIAL_REVIEW_RENDER_STATE,
+  reviewMobileReady,
+  reviewPanelReady,
+  transitionReviewRender,
+  type ReviewRenderEvent,
+  type ReviewRenderState,
+} from "./render-machine"
+import {
   INITIAL_REVIEW_SCROLL_STATE,
+  REVIEW_SCROLL_INTERACTED,
+  REVIEW_SCROLL_RESTORE_REQUESTED,
+  canRestoreReviewScroll,
+  canSaveReviewScroll,
   sameReviewScrollContext,
   transitionReviewScroll,
   type ReviewScrollEvent,
@@ -58,8 +80,11 @@ type FileSelection = { startLine: number; endLine: number; startChar: number; en
 
 export type Demand = { tree: number; files: number; panel: number; details: number }
 
-/** The narrow review's list and the animation frame that scrolls it to a focused file. */
+/** The narrow review's list and the animation frame that restores its scroll or scrolls it to a focused file. */
 type ScrollTarget = { element?: HTMLDivElement; frame?: number }
+
+/** The frame, then task, that a session switch waits for before the review renders. */
+type RenderGate = { frame?: number; timer?: ReturnType<typeof setTimeout> }
 
 /** The diff request the driver runs: its abort controller and its timeout. */
 type DiffRequest = { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
@@ -94,7 +119,51 @@ export function createReviewModel(input: {
     initializingGit: {},
   })
 
-  const [rendered, setRendered] = createVisitState(false)
+  // The machines keep numbers, not the visit objects that tell routing visits apart.
+  const visits = { ids: new WeakMap<MountedSession["visit"], number>(), last: 0 }
+
+  const visitID = (visit: MountedSession["visit"]) => {
+    const existing = visits.ids.get(visit)
+
+    if (existing !== undefined) return existing
+    visits.last += 1
+    visits.ids.set(visit, visits.last)
+
+    return visits.last
+  }
+
+  const [renderState, setRenderState] = createSignal<ReviewRenderState>(INITIAL_REVIEW_RENDER_STATE)
+  const renderGate: RenderGate = {}
+
+  const dispatchRender = (event: ReviewRenderEvent) => {
+    const next = transitionReviewRender(untrack(renderState), event)
+
+    setRenderState(next.state)
+    next.effects.forEach((effect) => {
+      if (renderGate.frame !== undefined) cancelAnimationFrame(renderGate.frame)
+      clearTimeout(renderGate.timer)
+      renderGate.frame = undefined
+      renderGate.timer = undefined
+
+      if (effect.type === "frame.cancel") return
+
+      renderGate.frame = requestAnimationFrame(() => {
+        renderGate.frame = undefined
+        renderGate.timer = setTimeout(() => {
+          renderGate.timer = undefined
+          dispatchRender({ type: "frame.settled", attempt: effect.attempt })
+        }, 0)
+      })
+    })
+  }
+
+  // After a session switch the review renders a frame later, so the switch paints first. The gate follows the model's
+  // own routed session, which a panel can hold before the route publishes it, and keeps it while no session routes.
+  createKeyed(
+    () => visitID(view().visit),
+    (id) => dispatchRender({ type: "visit.synced", visitID: id }),
+  )
+  onCleanup(() => dispatchRender({ type: "disposed" }))
 
   // The routed session's review state. Desktop loads it asynchronously; until it has, its defaults are not the
   // session's choice, so nothing shows them or requests their diff, and changes wait to apply over the stored state.
@@ -105,23 +174,6 @@ export function createReviewModel(input: {
 
   // A memo, so the store a session switch reopens does not recompute the diffs, kinds and tree rows it feeds.
   const selectedFile = createMemo(() => stored()?.file)
-
-  // After a session switch the review renders a frame later, so the switch paints first.
-  createKeyed(
-    () => view().visit,
-    () => {
-      const run = { ended: false }
-
-      onCleanup(() => {
-        run.ended = true
-      })
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (!run.ended) setRendered(true)
-        }, 0)
-      })
-    },
-  )
 
   const vcs = createMemo(() => view().server.data.location.vcs.info({ directory: directory() }))
 
@@ -315,7 +367,7 @@ export function createReviewModel(input: {
 
   const refresh = debounce(() => {
     dispatchDiff({ type: "refresh", source: "vcs" })
-    void queryClient.invalidateQueries({ queryKey: vcsKey() })
+    dispatchFolders({ type: "refresh" })
     void queryClient.invalidateQueries({ queryKey: detailsKey() })
   }, 100)
 
@@ -362,65 +414,125 @@ export function createReviewModel(input: {
   }
 
   // Git lists an untracked folder as one row. Once the change tree opens it, the folder lists its entries one level
-  // deep; they stay loaded while it is closed again, until the changes' source changes.
-  const [openFolders, setOpenFolders] = createSignal<readonly string[]>([])
+  // deep; they stay loaded while it is closed again, until the changes' source changes or the folder goes away.
+  const [folderState, setFolderState] = createSignal<ReviewFolderState>(INITIAL_REVIEW_FOLDER_STATE)
+  const folderRequests = new Map<number, DiffRequest>()
 
-  createKeyed(
-    () => [...vcsKey(), mode()].join("\0"),
-    () => setOpenFolders([]),
-  )
+  const dispatchFolders = (event: ReviewFolderEvent) => {
+    const next = transitionReviewFolders(untrack(folderState), event)
 
-  const folderQueries = useQueries(() => ({
-    queries: openFolders().map((folder) => ({
-      queryKey: [...vcsKey(), mode(), "folder", folder] as const,
-      enabled: view().server.connected && mode() !== "turn",
-      queryFn: () =>
-        view()
-          .server.client.vcs.diff({
-            location: {
-              directory: reviewFolderDirectory(reviewRootDirectory(view().project?.worktree ?? directory()), folder),
-            },
-            mode: mode() === "branch" ? "branch" : "working",
+    setFolderState(next.state)
+    next.effects.forEach(runFolderEffect)
+  }
+
+  const runFolderEffect = (effect: ReviewFolderEffect) => {
+    if (effect.type === "abort") {
+      const request = folderRequests.get(effect.attempt)
+
+      folderRequests.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller?.abort()
+
+      return
+    }
+
+    const attempt = effect.attempt
+    const request: DiffRequest = {}
+
+    folderRequests.set(attempt, request)
+    // A retry waits out its backoff first; the request's own deadline starts with it.
+    request.timer = setTimeout(() => {
+      const controller = new AbortController()
+
+      request.controller = controller
+      request.timer = setTimeout(() => {
+        if (!folderRequests.delete(attempt)) return
+        controller.abort()
+        dispatchFolders({ type: "fetch.timed-out", folder: effect.folder, attempt })
+      }, REVIEW_DIFF_TIMEOUT_MS)
+      void view()
+        .server.client.vcs.diff(
+          {
+            location: { directory: reviewFolderDirectory(effect.source.root, effect.folder) },
+            mode: effect.source.mode === "branch" ? "branch" : "working",
             untracked: "folders",
-          })
-          .then((result) => result.data),
-    })),
-  }))
+          },
+          { signal: AbortSignal.any([ctx.signal, controller.signal]) },
+        )
+        .then(
+          (result) => {
+            if (!folderRequests.delete(attempt)) return
+            clearTimeout(request.timer)
+            dispatchFolders({ type: "fetch.succeeded", folder: effect.folder, attempt, entries: result.data })
+          },
+          () => {
+            if (!folderRequests.delete(attempt)) return
+            clearTimeout(request.timer)
+            dispatchFolders({ type: "fetch.failed", folder: effect.folder, attempt })
+          },
+        )
+    }, effect.delay)
+  }
 
-  const diffs = createMemo(() =>
-    expandReviewFolders(
-      rows(),
-      new Map(openFolders().map((folder, index) => [folder, folderQueries[index]?.data ?? []] as const)),
-    ),
-  )
+  const folderSource = createMemo(
+    (): ReviewFolderSource | undefined => {
+      const context = diffContext()
 
-  // An opened folder's entry count, and whether its listing stopped before showing or checking every entry.
-  const folderLabels = createMemo(
-    () =>
-      new Map(
-        openFolders().flatMap((folder, index) => {
-          const entries = folderQueries[index]?.data
+      if (context.kind !== "ready" || context.target.kind !== "vcs") return undefined
 
-          if (!entries) return []
-          const shown = entries.filter((entry) => !entry.more).length
-          const label = entries.some((entry) => entry.more) ? ctx.t("folder.more", { count: shown }) : `${shown}`
-
-          return [[normalizePath(folder), label] as const]
-        }),
-      ),
-  )
-
-  // The tree's expanded state belongs to the session screen's file model.
-  createKeyed(
-    () => {
-      const next = diffs()
-        .map((diff) => diff.file)
-        .filter((file) => isReviewFolder(file) && !openFolders().includes(file))
-        .filter((file) => screen.file.tree.state(normalizePath(file))?.expanded)
-
-      return next.length > 0 && next
+      return {
+        serverID: context.target.serverID,
+        root: reviewRootDirectory(view().project?.worktree ?? directory()),
+        directory: context.target.directory,
+        mode: context.target.mode,
+        branch: context.target.branch,
+        defaultBranch: context.target.defaultBranch,
+      }
     },
-    (next) => setOpenFolders((list) => [...list, ...next]),
+    undefined,
+    { equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewFolderSource(previous, next)) },
+  )
+
+  // The tree's expanded state belongs to the session screen's file model, which the change tree and the file
+  // browser share.
+  const expandedFolders = createMemo(
+    () =>
+      new Set(
+        reviewFolderCandidates(rows(), folderState()).filter(
+          (folder) => screen.file.tree.state(normalizePath(folder))?.expanded === true,
+        ),
+      ),
+    undefined,
+    { equals: (previous, next) => previous.size === next.size && [...previous].every((folder) => next.has(folder)) },
+  )
+
+  // Syncs the folders the tree expands, and the changes that list them, into the folder requests.
+  createKeyed(
+    () => ({
+      source: folderSource(),
+      connected: view().server.connected,
+      rows: rows(),
+      expanded: expandedFolders(),
+    }),
+    (context) => dispatchFolders({ type: "context.changed", context }),
+    {
+      equals: (previous, next) =>
+        previous.source === next.source &&
+        previous.connected === next.connected &&
+        previous.rows === next.rows &&
+        previous.expanded === next.expanded,
+    },
+  )
+  onCleanup(() => dispatchFolders({ type: "disposed" }))
+
+  const diffs = createMemo(() => reviewExpandedDiffs(rows(), folderState()))
+
+  // A loaded folder's entry count, whether its listing stopped before showing or checking every entry, or its failure.
+  const folderLabels = createMemo(() =>
+    reviewFolderLabels(folderState(), {
+      more: (count) => ctx.t("folder.more", { count }),
+      failed: ctx.t("folder.failed"),
+    }),
   )
 
   const renderable = createMemo(() => diffs().filter(filterRenderableDiff))
@@ -689,18 +801,6 @@ export function createReviewModel(input: {
   const scroller: ScrollTarget = {}
   const [hasScroller, setHasScroller] = createSignal(false)
   const [scrollState, setScrollState] = createSignal<ReviewScrollState>(INITIAL_REVIEW_SCROLL_STATE)
-  // The machine keeps numbers, not the visit objects that tell routing visits apart.
-  const visits = { ids: new WeakMap<MountedSession["visit"], number>(), last: 0 }
-
-  const visitID = (visit: MountedSession["visit"]) => {
-    const existing = visits.ids.get(visit)
-
-    if (existing !== undefined) return existing
-    visits.last += 1
-    visits.ids.set(visit, visits.last)
-
-    return visits.last
-  }
 
   const dispatchScroll = (event: ReviewScrollEvent) => {
     const next = transitionReviewScroll(untrack(scrollState), event)
@@ -711,6 +811,17 @@ export function createReviewModel(input: {
       scroller.frame = undefined
 
       if (effect.type === "frame.cancel") return
+
+      if (effect.type === "frame.restore") {
+        scroller.frame = requestAnimationFrame(() => {
+          scroller.frame = undefined
+
+          if (canRestoreReviewScroll(untrack(scrollState), effect.attempt)) restoreScroll()
+          dispatchScroll({ type: "restore.stepped", attempt: effect.attempt })
+        })
+
+        return
+      }
 
       // Scrolls the list to the file's diff, and settles once the diff stays at the top as the list above renders.
       scroller.frame = requestAnimationFrame(() => {
@@ -724,8 +835,31 @@ export function createReviewModel(input: {
     })
   }
 
+  // Returns the narrow list to the stored scroll, as far as the diffs rendered so far reach.
+  const restoreScroll = () => {
+    const element = scroller.element
+
+    if (!element || element.clientHeight === 0 || element.clientWidth === 0) return
+    const stored = layout.scroll.get(view(), "review")
+
+    if (!stored || (stored.x === 0 && stored.y === 0)) return
+    const top = Math.min(stored.y, Math.max(0, element.scrollHeight - element.clientHeight))
+    const left = Math.min(stored.x, Math.max(0, element.scrollWidth - element.clientWidth))
+
+    if (element.scrollTop !== top) element.scrollTop = top
+
+    if (element.scrollLeft !== left) element.scrollLeft = left
+  }
+
   createKeyed(
-    () => ({ visitID: visitID(view().visit), narrow: layout.narrow(), scroller: hasScroller(), ready: ready() }),
+    () => ({
+      visitID: visitID(view().visit),
+      narrow: layout.narrow(),
+      scroller: hasScroller(),
+      ready: ready(),
+      layoutReady: layout.ready(),
+      commentFocused: screen.comment.focus.current() !== null,
+    }),
     (context) => dispatchScroll({ type: "context.synced", context }),
     { equals: sameReviewScrollContext },
   )
@@ -745,9 +879,6 @@ export function createReviewModel(input: {
     dispatchDiff({ type: "refresh", source: "turn" })
     void queryClient.invalidateQueries({ queryKey: turnKey() })
   })
-
-  const deferRender = () => !rendered()
-  const panelRendered = createMemo<boolean>((previous) => previous || !deferRender(), false)
 
   return {
     screen,
@@ -775,7 +906,6 @@ export function createReviewModel(input: {
       update: updateComment,
     },
     count,
-    deferRender,
     details: (): FileDiffInfo[] | undefined => (detailsQuery.isFetched ? (detailsQuery.data ?? []) : undefined),
     /** What the review shows: diffs, or why there are none yet. */
     diff: diffView,
@@ -806,10 +936,16 @@ export function createReviewModel(input: {
 
         draft.open = unique
       }),
+    /** The narrow review mounts its list: one paint after each session switch. */
+    mobileReady: () => reviewMobileReady(renderState()),
     options,
-    panelRendered,
+    /** The wide panel mounts: one paint after the first visit, then across session switches. */
+    panelReady: () => reviewPanelReady(renderState()),
     ready,
-    retry: () => dispatchDiff({ type: "retry" }),
+    retry: () => {
+      dispatchDiff({ type: "retry" })
+      dispatchFolders({ type: "retry" })
+    },
     setMode: (value: ChangeMode) =>
       update((draft) => {
         draft.mode = value
@@ -819,8 +955,17 @@ export function createReviewModel(input: {
       scroller.element = element
       setHasScroller(!!element)
     },
-    /** The user scrolled the narrow review: it stops scrolling to a focused file. */
-    cancelScroll: () => dispatchScroll({ type: "interacted" }),
+    /** The user scrolled, touched or keyed the narrow review: it stops restoring and scrolling to a focused file. */
+    interacted: () => dispatchScroll(REVIEW_SCROLL_INTERACTED),
+    /** The narrow list mounted, or its diffs or wrapping changed: it returns to the stored scroll while restoring. */
+    requestRestore: () => dispatchScroll(REVIEW_SCROLL_RESTORE_REQUESTED),
+    /** Stores the narrow list's scroll once the user, a focused file or a focused comment placed it. */
+    saveScroll: (session: MountedSession, element: HTMLDivElement) => {
+      if (!canSaveReviewScroll(untrack(scrollState))) return
+
+      if (element.clientHeight === 0 || element.clientWidth === 0) return
+      layout.scroll.set(session, "review", { x: element.scrollLeft, y: element.scrollTop })
+    },
   }
 }
 

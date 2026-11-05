@@ -1867,6 +1867,56 @@ test("a failed diff request offers a retry instead of a clean working tree", asy
   await expect(failure).toHaveCount(0)
 })
 
+// An untracked folder whose listing failed used to look empty, and opening it again never asked the server again.
+test("an untracked folder that cannot load says so, and loads once it is opened again", async ({ page }) => {
+  const workspace = await openSession(page, {
+    name: "ReviewFolderFailure",
+    vcsDiff: (input) =>
+      input.directory.endsWith("/untracked")
+        ? [fileDiff("untracked/notes.ts", { status: "added" })]
+        : [fileDiff("src/alpha.ts"), fileDiff("untracked/", { status: "added" })],
+  })
+  const listing = { failing: true, failures: 0 }
+  await page.route(/\/api\/vcs\/diff\?/, (route) => {
+    const directory = new URL(route.request().url()).searchParams.get("location[directory]")
+
+    if (!listing.failing || directory !== `${workspace.directory}/untracked`) return route.fallback()
+    listing.failures += 1
+
+    return route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" }, json: {} })
+  })
+  const panel = page.locator("#review-panel")
+  const folder = panel.getByRole("treeitem", { name: "untracked" })
+  const notes = panel.getByRole("treeitem", { name: "notes.ts" })
+
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await openReviewLauncher(panel)
+  await expect(panel.getByRole("treeitem", { name: "alpha.ts" })).toBeVisible()
+  // Retries back off over 1, 2 and 4 seconds; the installed clock follows real time until a fast-forward skips it.
+  await page.clock.install()
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+
+  for (const failures of [1, 2, 3]) {
+    await expect.poll(() => listing.failures).toBe(failures)
+    await page.clock.fastForward(1_000 * 2 ** (failures - 1))
+  }
+
+  await expect.poll(() => listing.failures).toBe(4)
+  await expect(folder).toContainText("Couldn't load changes")
+  await expect(notes).toHaveCount(0)
+
+  listing.failing = false
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "false")
+  await expect(folder).not.toContainText("Couldn't load changes")
+  await folder.click()
+  await expect(folder).toHaveAttribute("aria-expanded", "true")
+  await expect(notes).toBeVisible()
+  await expect(folder).toContainText("1")
+  expect(listing.failures).toBe(4)
+})
+
 test("a chosen mode the session stops offering shows as Git, and comes back when it is offered again", async ({
   page,
 }) => {

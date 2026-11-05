@@ -90,7 +90,8 @@ export interface MockServerConfig {
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
-  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  // `directory` is the requested `location[directory]`, such as an untracked folder the review opened.
+  vcsDiff?: unknown[] | ((input: { mode?: string; directory: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
@@ -998,7 +999,7 @@ function mockHandlers(
           Effect.sync(() => ({
             location: location(config),
             data: Predicate.isFunction(config.vcsDiff)
-              ? config.vcsDiff({ mode: ctx.query.mode })
+              ? config.vcsDiff({ mode: ctx.query.mode, directory: requestDirectory(config, ctx.request) })
               : (config.vcsDiff ?? []),
           })),
         fsList: (ctx) =>

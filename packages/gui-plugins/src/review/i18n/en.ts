@@ -5,6 +5,7 @@ export default {
   "menu.count.one": "{{count}} file changed",
   "menu.count.other": "{{count}} files changed",
   "folder.more": "{{count}} · more not shown",
+  "folder.failed": "Couldn't load changes",
   "command.open": "Open review",
   "mobile.title.one": "Change",
   "mobile.title.other": "Changes",
