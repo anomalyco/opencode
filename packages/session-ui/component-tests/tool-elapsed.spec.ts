@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("tool timing ticks while running and freezes when completed or failed", async ({ mount, page }, testInfo) => {
   await page.clock.install()
