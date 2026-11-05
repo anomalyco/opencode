@@ -42,7 +42,15 @@ export type Result =
   | { readonly type: "rejected"; readonly diagnostics: readonly Diagnostic[] }
 
 const options = { errors: "all", onExcessProperty: "ignore" } as const
-const unsupportedTopLevel = ["logLevel", "server", "subagent_depth", "layout"] as const
+const unsupportedTopLevel = [
+  "logLevel",
+  "server",
+  "subagent_depth",
+  "layout",
+  "share",
+  "enterprise",
+  "autoshare",
+] as const
 const unsupportedExperimental = [
   "disable_paste_summary",
   "batch_tool",
@@ -76,11 +84,6 @@ export function normalize(input: unknown): Result {
   const nativeUpdate = own(input, "update")
     ? decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
     : undefined
-  const legacyShare = own(input, "autoshare")
-    ? decodeValue(Schema.Boolean, input.autoshare, ["autoshare"], diagnostics) === true
-      ? "auto"
-      : undefined
-    : undefined
   const legacyMedia = own(input, "attachment")
     ? decodeEncoded(ConfigMedia.Info, input.attachment, ["attachment"], diagnostics)
     : undefined
@@ -96,7 +99,6 @@ export function normalize(input: unknown): Result {
           : undefined
   const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
   if (update !== undefined) encoded.update = update
-  if (legacyShare !== undefined) encoded.share = legacyShare
 
   const legacyReferences = decodeMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics, decodeEncoded)
   const nativeReferences = decodeMap(
@@ -207,8 +209,6 @@ export function normalize(input: unknown): Result {
     $schema: Info.fields.$schema,
     shell: Info.fields.shell,
     default_agent: Info.fields.default_agent,
-    share: Info.fields.share,
-    enterprise: Info.fields.enterprise,
     username: Info.fields.username,
     timezone: Info.fields.timezone,
     snapshots: Info.fields.snapshots,

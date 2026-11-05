@@ -1719,8 +1719,6 @@ describe("Config", () => {
                 model: "anthropic/claude",
                 default_agent: "reviewer",
                 update: "notify",
-                share: "disabled",
-                enterprise: { url: "https://share.example.com" },
                 username: "test-user",
                 permissions: [
                   { action: "bash", resource: "*", effect: "ask" },
@@ -1804,8 +1802,6 @@ describe("Config", () => {
             expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
             expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.update).toBe("notify")
-            expect(documents[0]?.info.share).toBe("disabled")
-            expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
             expect(documents[0]?.info.username).toBe("test-user")
             expect(documents[0]?.info.permissions).toEqual([
               { action: "bash", resource: "*", effect: "ask" },
@@ -1934,7 +1930,6 @@ describe("Config", () => {
                 default_agent: "reviewer",
                 autoupdate: false,
                 snapshot: false,
-                autoshare: true,
                 permission: {
                   bash: "ask",
                   edit: { "*.md": "allow", "*": "deny" },
@@ -2022,7 +2017,6 @@ describe("Config", () => {
             expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.update).toBe("disable")
             expect(documents[0]?.info.snapshots).toBe(false)
-            expect(documents[0]?.info.share).toBe("auto")
             expect(documents[0]?.info.permissions).toEqual([
               { action: "shell", resource: "*", effect: "ask" },
               { action: "edit", resource: "*.md", effect: "allow" },

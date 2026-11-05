@@ -449,7 +449,7 @@ See [Models](/models) for the complete native model shape.
 ### Supported fields without direct native equivalents
 
 Most fields that keep the same shape, including `shell`, `model`, `default_agent`, `watcher`, `formatter`,
-`instructions`, `enterprise`, and `tool_output`, require no migration.
+`instructions`, and `tool_output`, require no migration.
 
 V2 accepts and preserves `lsp` configuration, but it does not run language servers, expose LSP tools, or produce LSP
 diagnostics. Replace workflows that depend on those capabilities with the project's lint, typecheck, or compiler commands.
@@ -472,6 +472,7 @@ they are not mistaken for active configuration:
 
 - `logLevel`: use `OPENCODE_LOG_LEVEL` when starting OpenCode.
 - `server`: use the V2 service and explicit server options; the server API is an intentional breaking change.
+- `share`, `autoshare`, and `enterprise`: V2 retired session sharing, so none of these fields have any behavior.
 - Top-level `subagent_depth`: use `experimental.subagent_depth` instead.
 - `compaction.tail_turns` and `compaction.prune`: V2 uses `compaction.keep.tokens` and checkpoint-based compaction instead.
 - Agent `name` inside V1 JSON configuration.
