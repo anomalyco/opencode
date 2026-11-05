@@ -102,8 +102,22 @@ impl Session {
             .child(&rest);
         let frame = crate::frame::SessionFrame::new(tui, &id, &column);
         let sidebar = sidebar::mount(tui, &frame.root(), &id);
-        load(tui, tui.data.session_sync(&id, true));
-        load(tui, tui.data.message_sync(&id));
+        let synced = (tui.data.session_sync(&id, true), tui.data.message_sync(&id));
+        load(tui, synced.0.clone());
+        load(tui, synced.1.clone());
+        // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
+        let weak = Rc::downgrade(&scroll.0);
+        tui.app.spawn(
+            async move { futures_util::future::join(synced.0, synced.1).await },
+            move |_, (session, messages)| {
+                let (Some(inner), Ok(()), Ok(())) = (weak.upgrade(), session, messages) else {
+                    return;
+                };
+                if let Some(tui) = inner.tui.upgrade() {
+                    scroll::Controls(inner).restore(&tui);
+                }
+            },
+        );
         Self {
             id,
             frame,
