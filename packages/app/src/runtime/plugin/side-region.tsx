@@ -150,7 +150,7 @@ export function SideRegion(props: {
                     style={index() > 0 ? { height: `${lowerHeight()}px` } : undefined}
                   >
                     <Show when={index() > 0}>
-                      <div onPointerDown={() => props.size.start()}>
+                      <div onPointerDown={(event) => props.size.start(event)}>
                         <ResizeHandle
                           direction="vertical"
                           edge="start"
