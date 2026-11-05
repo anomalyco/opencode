@@ -151,18 +151,20 @@ impl Run<'_> {
             (Some(info), true) => self.unresponsive(info).await?,
             _ => self.timeouts = None,
         }
-        if let Some(service) = probe.service {
+        let answered = match probe.service {
+            Some(service) => Some((service, file.clone())),
+            None if self.spawned => {
+                started_elsewhere(self.transport.as_ref(), self.options, &self.pool).await
+            }
+            None => None,
+        };
+        if let Some((service, file)) = answered {
             self.pool.service_answered();
             return match probe::decide(&service, None) {
                 Decision::Fail(reason) => Err(Error(reason)),
-                Decision::Reuse => Ok(Some(reuse(service, file))),
+                Decision::Reuse => Ok(Some(reuse(service, &file))),
                 Decision::Wait | Decision::Replace { .. } => Ok(None),
             };
-        }
-        if self.spawned
-            && let Some(found) = started_elsewhere(self.transport.as_ref(), self.options).await
-        {
-            return Ok(Some(found));
         }
         if let Some(failure) = self.pool.reap() {
             return Err(Error(failure));
@@ -223,17 +225,29 @@ impl Run<'_> {
 }
 
 // The TS binary registers under its own build channel, which may not be the client's. Any other
-// registration that answers ready is taken, newest first.
-async fn started_elsewhere(transport: &dyn Transport, options: &Options) -> Option<Ensured> {
+// registration that answers ready is taken, newest first. One that is starting or failed counts
+// only when this call started its process: it is the service this call waits for.
+async fn started_elsewhere(
+    transport: &dyn Transport,
+    options: &Options,
+    pool: &Pool<Contender>,
+) -> Option<(LocalService, PathBuf)> {
     let files = discover::scan(&options.state, std::slice::from_ref(&options.file));
-    let probes = files.iter().map(|file| async move {
-        let info = registration::read(file)?;
+    let probes = files.into_iter().map(|file| async move {
+        let info = registration::read(&file)?;
         let service = probe::probe(transport, &info, options.timing.request)
             .await
             .service?;
-        (probe::decide(&service, None) == Decision::Reuse).then(|| reuse(service, file))
+        Some((service, file))
     });
-    join_all(probes).await.into_iter().flatten().next()
+    let mut answered: Vec<_> = join_all(probes).await.into_iter().flatten().collect();
+    let ready = answered
+        .iter()
+        .position(|(service, _)| probe::decide(service, None) == Decision::Reuse);
+    let owned = answered
+        .iter()
+        .position(|(service, _)| pool.owns(service.registration.pid));
+    ready.or(owned).map(|index| answered.swap_remove(index))
 }
 
 fn reuse(service: LocalService, file: &Path) -> Ensured {
