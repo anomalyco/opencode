@@ -245,7 +245,7 @@ async fn run_counting(options: &Options) -> (Result<Ensured, ensure::Error>, usi
 }
 
 async fn status(url: &str) -> serde_json::Value {
-    reqwest::Client::new()
+    opencode_api::transport::http_client()
         .get(format!("{}/api/info", url.trim_end_matches('/')))
         .basic_auth("opencode", Some("private"))
         .timeout(Duration::from_secs(1))
