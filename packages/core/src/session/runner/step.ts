@@ -7,8 +7,10 @@ import {
   isContextOverflowFailure,
   type ToolCall,
 } from "@opencode/ai/effect"
+import type { StreamOptions } from "@opencode/ai/route"
 import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
+import { HttpClient } from "effect/http"
 import { SessionError } from "@opencode/schema/session-error"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -107,7 +109,8 @@ export const make = Effect.gen(function* () {
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
     // Read to the end, not just the finish event, so the next request can reuse this response.
-    const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
+    const options = { ...input.prepared.options, http: untracedHttp(input.prepared.options.http) }
+    const providerStream = llm.stream(input.prepared.request, options).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           if (publisher.record().providerFailed) return
@@ -188,6 +191,9 @@ export const make = Effect.gen(function* () {
           ...(tokens?.cacheReadInputTokens === undefined
             ? {}
             : { "gen_ai.usage.cache_read.input_tokens": tokens.cacheReadInputTokens }),
+          ...(tokens?.cacheWriteInputTokens === undefined
+            ? {}
+            : { "gen_ai.usage.cache_creation.input_tokens": tokens.cacheWriteInputTokens }),
           ...(llmFailure === undefined ? {} : { "error.type": llmFailure.reason._tag }),
         })
         if (
@@ -208,6 +214,7 @@ export const make = Effect.gen(function* () {
                 ),
               )
             : undefined
+        if (retry?.retry) yield* Effect.annotateCurrentSpan("opencode.retry.attempt", retry.attempt)
         if (llmFailure && llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
           yield* publisher.startAssistant()
@@ -255,6 +262,7 @@ export const make = Effect.gen(function* () {
                     .pipe(Effect.orElseSucceed(() => undefined))
               : undefined
           const usage = record.finish ? SessionUsage.record(record.finish.usage, input.model.cost) : undefined
+          if (usage) yield* Effect.annotateCurrentSpan("opencode.usage.cost_usd", usage.cost)
           if (record.failure) yield* publisher.publishStepFailure({ ...usage, snapshot, files })
           if (record.finish && usage && !record.failure)
             yield* bus.publish(SessionEvent.Step.Ended, {
@@ -296,6 +304,16 @@ export const make = Effect.gen(function* () {
 
   return { attempt }
 })
+
+// The attempt span owns each provider request: it names the failure on every attempt and fails only once retries give
+// up, so the HTTP client's own span would count every retried attempt as another error.
+const untracedHttp =
+  (middleware: StreamOptions["http"]): NonNullable<StreamOptions["http"]> =>
+  (request, send) => {
+    const untraced: typeof send = (request) =>
+      send(request).pipe(Effect.provideService(HttpClient.TracerDisabledWhen, () => true))
+    return middleware ? middleware(request, untraced) : untraced(request)
+  }
 
 const isInterruptedStream = (failure: AIError) => {
   if (failure.reason._tag === "InvalidProviderOutput") return failure.reason.classification === "incomplete-stream"

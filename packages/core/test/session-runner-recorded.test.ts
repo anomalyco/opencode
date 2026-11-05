@@ -268,8 +268,11 @@ describe("SessionRunnerLLM recorded", () => {
         "gen_ai.response.finish_reasons": ["stop"],
         "gen_ai.usage.input_tokens": 465,
         "gen_ai.usage.output_tokens": 2,
+        "opencode.usage.cost_usd": 0,
       })
       expect(attempt?.attributes.get("opencode.llm.first_output_ms")).toBeNumber()
+      // The attempt owns the provider request, so a retried request is not also an HTTP client error span.
+      expect(turn.filter((span) => span.attributes.has("http.request.method")).map((span) => span.name)).toEqual([])
     }).pipe(Effect.withSpan("fixture.request")),
   )
 })
