@@ -92,6 +92,32 @@ it.effect("updates inventory metadata without restarting an unchanged generation
   }),
 )
 
+it.effect("keeps activating the replacement when a replaced plugin's teardown dies", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const events: string[] = []
+    // A plugin whose shutdown hook dies, like one lazily importing a file from
+    // an npm cache generation that the update already pruned.
+    const plugin = (id: string, revision = "1", dyingTeardown = false): Plugin.Generation => ({
+      id,
+      revision,
+      effect: () =>
+        Effect.gen(function* () {
+          events.push(`start:${id}:${revision}`)
+          yield* Effect.addFinalizer(() => Effect.sync(() => events.push(`stop:${id}:${revision}`)))
+          if (dyingTeardown) yield* Effect.addFinalizer(() => Effect.die(new Error("teardown exploded")))
+        }),
+    })
+
+    yield* plugins.activate([plugin("a", "1", true)])
+    events.length = 0
+    yield* plugins.activate([plugin("a", "2"), plugin("b")])
+
+    expect(events).toEqual(["stop:a:1", "start:a:2", "start:b:1"])
+    expect((yield* plugins.list()).map((entry) => entry.id)).toEqual([Plugin.ID.make("a"), Plugin.ID.make("b")])
+  }),
+)
+
 it.live("loads a local plugin with its configured options", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

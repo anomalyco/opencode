@@ -143,8 +143,16 @@ const layer = Layer.effect(
                     ([id, slot]) =>
                       Effect.gen(function* () {
                         active.delete(id)
-                        if (slot.activation && !slot.activation.failure)
-                          yield* Scope.close(slot.activation.scope, Exit.void)
+                        if (!slot.activation || slot.activation.failure) return
+                        // A teardown defect (e.g. a shutdown hook importing a file from an
+                        // already pruned npm cache generation) must not abort the activation:
+                        // the old registrations are gone, so dying here would leave the
+                        // location without the replacement generation until the next reload.
+                        yield* Scope.close(slot.activation.scope, Exit.void).pipe(
+                          Effect.catchCause((cause) =>
+                            Effect.logWarning("failed to clean up replaced plugin", { "plugin.id": id, cause }),
+                          ),
+                        )
                       }),
                     { discard: true },
                   )
