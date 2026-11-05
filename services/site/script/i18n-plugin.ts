@@ -8,7 +8,7 @@
 //   code never runs before its strings (a top-level await in the boundary would do the same, but
 //   makes Rolldown split the shared chunks differently);
 // - the server reads where the files went (virtual:i18n-preload) to preload a page's own
-//   (src/i18n/preload.tsx), so no string costs a round trip before hydration.
+//   (src/i18n/preload.ts), so no string costs a round trip before hydration.
 //
 // The development server and the Worker keep the source files whole.
 import path from "node:path"

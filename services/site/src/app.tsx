@@ -8,7 +8,7 @@ import "./style/ibm-plex-mono.dev.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider, useI18n } from "~/context/i18n"
-import { I18nPreload } from "~/i18n/preload"
+import { preloadStrings } from "~/i18n/preload"
 import { config } from "~/config"
 import { ogImage } from "~/lib/og"
 import { strip } from "~/lib/language"
@@ -47,6 +47,7 @@ function AppMeta() {
   const matches = useCurrentMatches()
   // The 404 route and its /dev/404 previews (the dev server shows one for bad URLs).
   const notFound = () => matches().some((match) => match.route.pattern.includes("404"))
+  preloadStrings()
   return (
     <>
       <Title>opencode</Title>
@@ -82,7 +83,6 @@ export default function App() {
           <I18nProvider>
             <HeadMetaProvider>
               <AppMeta />
-              <I18nPreload />
               {/* OpenTUI Mono for every page, with or without the site shell (--font-mono and the
                   token stack name it). A plain style element, which hydration keeps. */}
               <style innerHTML={monoFontFaces} />
