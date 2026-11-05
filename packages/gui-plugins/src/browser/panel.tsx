@@ -170,15 +170,7 @@ export default function SessionBrowserPane(props: {
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
 
-  const error = () => {
-    const value = props.model.error(props.session)
-
-    if (value === "browser.pane.replaced") return plugin.t("replaced")
-
-    if (value === "browser.pane.unsupported") return plugin.t("unsupported")
-
-    return value
-  }
+  const error = () => props.model.error(props.session)
 
   const inspectable = () => !!address() && !failed() && !suspended()
   const overlayed = createMemo(() => overlayView(overlay(), props.session.key, state()?.id))
@@ -419,8 +411,8 @@ export default function SessionBrowserPane(props: {
   // A tab the user just opened starts in its address field, once its blank page is on screen. Syncs DOM focus.
   createKeyed(
     () => (visible() && empty() ? state()?.id : undefined),
-    () => {
-      if (props.model.opened(props.session)) focusAddress()
+    (tabID) => {
+      if (props.model.opened(props.session, tabID)) focusAddress()
     },
   )
 
