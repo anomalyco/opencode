@@ -1,5 +1,4 @@
-//! One module per top-level command. Each step fills its own module (plan 8.4); a stub reports that its command
-//! is not built yet.
+//! One module per top-level command. Each step fills its own module (plan 8.4).
 
 pub mod acp;
 pub mod api;
@@ -54,12 +53,4 @@ pub fn run(context: &Context, cli: &Cli) -> anyhow::Result<()> {
         Command::Pair(args) => pair::run(context, args),
         Command::Serve(args) => serve::run(context, args),
     }
-}
-
-/// The result of a command whose step has not landed yet.
-pub fn not_built(command: &str, step: &str) -> anyhow::Result<()> {
-    anyhow::bail!(
-        "`{} {command}` is not built yet (plan step {step})",
-        crate::help::name()
-    )
 }
