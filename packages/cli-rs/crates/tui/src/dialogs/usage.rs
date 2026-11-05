@@ -16,7 +16,7 @@ use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogCx, DialogOptions, HeaderProp
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
 use opentui::prelude::*;
 
-use crate::dialogs::model::Local;
+use crate::local::Local;
 
 /// One limit on a model (`ModelLimit`).
 #[derive(Clone, Debug, PartialEq)]

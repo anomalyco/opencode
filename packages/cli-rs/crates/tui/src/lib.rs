@@ -9,6 +9,7 @@ pub mod composer;
 pub mod dialogs;
 pub mod features;
 pub mod frame;
+pub mod local;
 pub mod panel;
 pub mod plugins;
 pub mod prompt;
