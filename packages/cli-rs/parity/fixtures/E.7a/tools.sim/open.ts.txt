@@ -1,0 +1,40 @@
+   Simulated session             +
+  ┃  Fix the off-by-one in the parser
+  ┃
+
+  ┃
+  ┃  $ printf 'running 2 tests\ntest next_stops_early ... FAILED\ntest next_reads ... ok\n'; exit
+  ┃  101
+  ┃
+  ┃  running 2 tests
+  ┃  test next_stops_early ... FAILED
+  ┃  test next_reads ... ok
+  ┃
+  ┃  Exited with code 101
+  ┃
+
+     → Read src/parser.rs:1-4
+
+  ┃
+  ┃  ← Patched src/parser.rs
+  ┃
+  ┃    1   fn next(tokens: &[Token], index: usize) -> Option<&Token> {
+  ┃    2 -     if index + 1 < tokens.len() {
+  ┃    2 +     if index < tokens.len() {
+  ┃    3           return tokens.get(index);
+  ┃    4       }
+  ┃    5       None
+  ┃    6   }
+  ┃
+
+     Fixed the bound.
+
+     Build · Simulated Model
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+

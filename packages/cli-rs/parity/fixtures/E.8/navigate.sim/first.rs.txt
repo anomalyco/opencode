@@ -1,0 +1,30 @@
+ • Navigate                      +
+
+  ┃
+  ┃  Question 1
+  ┃
+
+     → Explored: 2 reads
+
+     Answer 1 one.
+
+     Answer 1 two.
+
+     Answer 1 three.
+
+     Build · Simulated Model
+
+  ┃
+  ┃  Question 2
+  ┃
+
+     → Explored: 2 reads
+
+                                                                                  Jump to latest ↓
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+
