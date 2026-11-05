@@ -83,13 +83,14 @@ export function transitionErrorPage(state: ErrorPageState, event: ErrorPageEvent
   if (event.type === "disposed") return { state: DISPOSED, effects: NONE }
 
   if (event.type === "error.presented") {
-    // A new error starts over: its own record and report, no previous action's error or result.
+    // A new error gets its own record and report, and drops the previous action's error. An action still running
+    // stays busy until it settles: it acts on the app, not on the error, and a second one must not start beside it.
     const attempt = state.fatalAttempt + 1
 
     return {
       state: {
-        status: "idle",
-        attempt: state.attempt + 1,
+        status: state.status === "failed" ? "idle" : state.status,
+        attempt: state.attempt,
         fatalAttempt: attempt,
         fatal: "recording",
         report: state.report === "unavailable" ? "unavailable" : "ready",
