@@ -6,7 +6,8 @@ import {
   openPaletteWorkspace,
   paletteSession,
 } from "../utils/command-palette"
-import { mockWorkspace } from "../utils/workspace"
+import { REMOTE_SERVER, SERVER } from "../utils/app"
+import { mockRemoteServer, mockWorkspace } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -129,6 +130,38 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await input.press("Enter")
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
+test("titlebar search shows one server's matches while another server's search fails", async ({ page }) => {
+  await mockRemoteServer(page, { name: "Remote" })
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  // Only typed searches fail, so the remote server still lists its recent sessions.
+  await page.route(new RegExp(`^${escape(REMOTE_SERVER)}/api/session\\?.*search=[^&]`), (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, json: { message: "Search failed" }, headers: { "access-control-allow-origin": "*" } })
+      : route.fallback(),
+  )
+  // A session only the local server's search returns, so no list the app already holds can show it.
+  await page.route(new RegExp(`^${escape(SERVER)}/api/session\\?.*search=[^&]`), (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            ...paletteSession,
+            id: "ses_palette_found",
+            location: { directory: paletteSession.directory },
+            title: "Found by search",
+          },
+        ],
+      },
+    }),
+  )
+  await openPaletteWorkspace(page, true)
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("combobox").fill("found")
+  await expect(dialog.getByRole("option")).toHaveText([/Found by search/])
+  await expect(dialog.getByText("Request failed", { exact: true })).toHaveCount(0)
 })
 
 test("a working session keeps its project avatar in Search sessions and shows its activity ring in place of its age", async ({
