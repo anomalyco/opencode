@@ -11,11 +11,3 @@ await Promise.all(
   ),
 )
 await rm(snapshots, { recursive: true })
-
-const config = await Bun.file("dist/server/wrangler.json").json()
-
-delete config.kv_namespaces
-delete config.images
-delete config.previews
-
-await Bun.write("dist/server/wrangler.json", JSON.stringify(config))

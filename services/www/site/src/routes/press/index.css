@@ -1,0 +1,947 @@
+[data-page="press"] {
+  [data-component="facts"] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+
+    div {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    dt {
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
+      color: var(--text-weak);
+    }
+
+    dd {
+      font-family: var(--font-mono);
+      font-size: var(--fs-h1);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+  }
+
+  [data-slot="links"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* [data-variant] outranks the shared product list's icon grid (product-list.css), which loads later. */
+  [data-component="product-list"][data-variant="cards"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+
+    li {
+      display: flex;
+      min-width: 0;
+    }
+
+    strong {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    [data-slot="row-link"] > span {
+      color: var(--text-weak);
+      line-height: 1.4;
+    }
+
+    /* Side by side, each tint reaches half the gutter past its text (not the full 1rem below), so
+       two neighbours' tints and tap areas meet in the gutter instead of overlapping by 16px. Rows
+       keep the 1rem above and below: the 2rem row gap holds both. */
+    [data-slot="row-link"][data-slot] {
+      margin-inline: calc(var(--gutter) / -2);
+      padding-inline: calc(var(--gutter) / 2);
+    }
+  }
+
+  /* Each product or project is one link row, like the legal index's rows (legal.css, Settings › Legal
+     row hover "grey", the default): on hover, focus or press, a light grey tint and a 2px mid-grey
+     bar on the left edge, fading in over 150ms; no radius. The tint and bar sit outside the text
+     (padding and equal negative margins), so the name and description keep their exact place. */
+  [data-slot="row-link"] {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin: -1rem;
+    padding: 1rem;
+    color: var(--text);
+    text-decoration: none;
+    outline: 2px solid transparent;
+    outline-offset: 0;
+    transition:
+      background-color 150ms ease,
+      outline-color 150ms ease;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      inset-inline-start: 0;
+      width: 2px;
+      background: light-dark(hsl(0, 0%, 50%), hsl(0, 0%, 46%));
+      opacity: 0;
+      transition: opacity 150ms ease;
+    }
+
+    &:focus-visible {
+      outline-color: var(--link);
+      background: var(--bg-weak);
+
+      &::before {
+        opacity: 1;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--bg-weak);
+
+        &::before {
+          opacity: 1;
+        }
+      }
+    }
+
+    &:active {
+      background: var(--bg-weak);
+
+      &::before {
+        opacity: 1;
+      }
+    }
+
+    @media (hover: none) {
+      -webkit-touch-callout: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+
+      &::before {
+        transition: none;
+      }
+    }
+
+    [data-slot="external"] {
+      color: var(--text-weak);
+    }
+  }
+
+  /* Settings › Press Anomaly projects "list": one line per project, name and line side by side. */
+  [data-component="product-list"][data-style="list"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+
+    [data-slot="row-link"] {
+      display: grid;
+      grid-template-columns: 9rem minmax(0, 1fr);
+      gap: var(--gutter);
+      align-items: baseline;
+    }
+  }
+
+  /* Links in running text and notes, the same as the site's inline links. */
+  :is(
+      [data-slot="text"],
+      [data-slot="note"],
+      [data-component="press-rows"],
+      [data-component="press-contacts"],
+      [data-slot="portrait"]
+    )
+    a {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.15em;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--link);
+      }
+    }
+
+    &:focus-visible,
+    &:active {
+      color: var(--link);
+    }
+  }
+
+  [data-slot="note"] {
+    line-height: 1.5;
+    color: var(--text-weak);
+  }
+
+  /* Every section's text: the site's body size and colour, not the larger lead (as on /brand). */
+  [data-slot="text"] {
+    font-size: var(--body-size);
+    line-height: 1.5;
+    color: var(--text);
+    text-wrap: pretty;
+  }
+
+  /* Paragraphs that belong together keep the body's paragraph gap, not the section's. */
+  [data-slot="paragraphs"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  [data-slot="download-icon"] {
+    flex-shrink: 0;
+  }
+
+  /* A download's size, lighter than its label (60% of the button's text colour). */
+  [data-slot="size"] {
+    font-weight: 400;
+    opacity: 0.6;
+  }
+
+  /* Both labels share one cell, so the copy button keeps the width of the longer one. */
+  [data-slot="copy-labels"] {
+    display: inline-grid;
+
+    > span {
+      grid-area: 1 / 1;
+      visibility: hidden;
+    }
+
+    > [data-active] {
+      visibility: visible;
+    }
+  }
+
+  [data-slot="sr-only"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The boilerplate accordion: the site's FAQ rows (component/faq.tsx, styles in site.css), one per
+     product, full width. Until a row is toggled the answers don't animate, so the row that is open
+     from the server render paints at once. */
+  [data-slot="boilerplate-accordion"] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    [data-slot="faq-heading"] {
+      margin: 0;
+      font: inherit;
+    }
+
+    /* A divider between rows. Each row gets a little more room around its divider. */
+    > li + li {
+      border-top: 1px solid var(--border);
+    }
+
+    /* A line under the last row too; the next section drops its own divider (below), so the two
+       never stack. */
+    > li:last-child {
+      border-bottom: 1px solid var(--border);
+    }
+
+    [data-slot="faq-question"] {
+      --padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+
+    [data-slot="faq-answer"] {
+      max-width: none;
+    }
+
+    /* Room under the last line to the divider, equal to the room from the row title to the first
+       label (measured text to text: the label row is taller than a FAQ answer's first line). */
+    [data-slot="faq-answer-inner"][data-slot] {
+      padding-bottom: 1.1875rem;
+
+      @media (max-width: 60rem) {
+        padding-bottom: 0.9375rem;
+      }
+    }
+
+    /* [data-expanded] outranks the shared open animation, which would otherwise grow the row that is
+       open from the server render on hydration and push the page down. */
+    &:not([data-ready]) [data-slot="faq-answer"],
+    &:not([data-ready]) [data-slot="faq-answer"][data-expanded] {
+      animation: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      [data-slot="faq-answer"] {
+        animation: none;
+      }
+
+      [data-slot="faq-question"]::after {
+        transition: none;
+      }
+    }
+  }
+
+  /* The section after the accordion: no divider of its own, whatever Settings › Spacer draws (the
+     border keeps its width, so the spacing is the same). Doubled to outrank the shared spacer rules. */
+  [data-component="block"]:has(#about-opencode) + [data-component="block"][data-component="block"] {
+    border-top-color: transparent;
+    border-image: none;
+    background-image: none;
+
+    &::before,
+    &::after {
+      display: none;
+    }
+  }
+
+  /* One product's boilerplate in its row: the long and short versions. */
+  [data-component="boilerplate-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+
+    /* Under a product name, "Long version" and "Short version" are grey labels; hover and focus
+       darken them (see copy-label). */
+    h4,
+    h4 [data-slot="copy-label"] {
+      color: var(--text-weak);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      h4 [data-slot="copy-label"]:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    h4 [data-slot="copy-label"]:active {
+      color: var(--text-strong);
+    }
+
+    h4 [data-slot="copy-label"]:focus-visible {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-component="boilerplate"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    /* The label on the left and the copy action at the top right, on one row. */
+    [data-slot="head"] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      min-height: 2rem;
+    }
+
+    :is(h3, h4) {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    /* "label": the label and the home install row's copy icon as one button. Hover or focus brings
+       the label to the strong text colour and the icon up from faint. */
+    [data-slot="copy-label"] {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.25rem 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      color: var(--text-strong);
+      cursor: pointer;
+      transition: color 150ms ease;
+
+      [data-slot="download-icon"] {
+        color: var(--text-faint);
+        transition: color 150ms ease;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover,
+        &:hover [data-slot="download-icon"] {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active,
+      &:active [data-slot="download-icon"] {
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        color: var(--text-strong);
+        outline: 1px solid var(--link);
+        outline-offset: 2px;
+
+        [data-slot="download-icon"] {
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    &[data-copied] [data-slot="copy-label"] [data-slot="download-icon"] {
+      color: var(--text-strong);
+    }
+
+    /* "link": a mono Copy with no underline, in the text colour, blue on hover or focus. */
+    [data-slot="copy-link"] {
+      padding: 0.25rem 0;
+      border: 0;
+      background: none;
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-strong);
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--link);
+        }
+      }
+
+      &:active {
+        color: var(--link);
+      }
+
+      &:focus-visible {
+        color: var(--link);
+        outline: 1px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+
+    &[data-copied] [data-slot="copy-link"] {
+      color: var(--text-weak);
+    }
+
+    /* "icon": a 16px icon at the top right, shown on hover or focus of the block (always on touch). */
+    [data-slot="copy-icon"] {
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      margin-inline-end: -0.5rem;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--text-weak);
+      cursor: pointer;
+      opacity: 0;
+      transition:
+        opacity 150ms ease,
+        color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        opacity: 1;
+        color: var(--text-strong);
+        outline: 1px solid var(--link);
+      }
+
+      @media (hover: none), (pointer: coarse) {
+        opacity: 1;
+      }
+    }
+
+    &[data-copied] [data-slot="copy-icon"] {
+      opacity: 1;
+      color: var(--text-strong);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover [data-slot="copy-icon"] {
+        opacity: 1;
+      }
+    }
+
+    &:active [data-slot="copy-icon"] {
+      opacity: 1;
+    }
+
+    /* "click": the text is the button; a hint at the top right says so. */
+    [data-slot="copy-hint"] {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-weak);
+      opacity: 0;
+      transition: opacity 150ms ease;
+
+      @media (hover: none), (pointer: coarse) {
+        opacity: 1;
+      }
+    }
+
+    &[data-copied] [data-slot="copy-hint"],
+    &:has([data-slot="copy-text"]:is(:hover, :focus-visible)) [data-slot="copy-hint"] {
+      opacity: 1;
+    }
+
+    [data-slot="copy-text"] {
+      display: block;
+      width: calc(100% + 1rem);
+      margin: -0.5rem;
+      padding: 0.5rem;
+      border: 0;
+      background: none;
+      text-align: start;
+      font: inherit;
+      color: inherit;
+      cursor: copy;
+      transition: background-color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--bg-weak);
+        }
+      }
+
+      &:active {
+        background: var(--bg-weak);
+      }
+
+      &:focus-visible {
+        outline: 1px solid var(--link);
+      }
+
+      [data-slot="text"] {
+        display: block;
+      }
+    }
+  }
+
+  /* Milestones and releases: a 1px rail down the left through an outlined 9px square per item, as
+     in the changelog timeline (same marker, rail colour and mono dates). */
+  [data-component="press-timeline"] {
+    --marker: 9px;
+    --rail-gap: 1.25rem;
+    /* The room before each row's text for the marker and rail. */
+    --rail-pad: calc(var(--marker) + var(--rail-gap));
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      position: relative;
+      padding-inline-start: var(--rail-pad);
+      padding-bottom: 1.5rem;
+
+      &:last-child {
+        padding-bottom: 0;
+      }
+
+      /* The rail runs from this marker down to the next one. */
+      &:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        inset-inline-start: calc(var(--marker) / 2 - 0.5px);
+        top: var(--marker-top);
+        bottom: calc(-1 * var(--marker-top));
+        width: 1px;
+        background: var(--border);
+      }
+    }
+
+    [data-slot="marker"] {
+      position: absolute;
+      z-index: 1;
+      inset-inline-start: 0;
+      top: var(--marker-top);
+      width: var(--marker);
+      height: var(--marker);
+      box-sizing: border-box;
+      border: 1px solid var(--border-strong);
+      background: var(--bg);
+      transition:
+        background-color 150ms ease,
+        border-color 150ms ease;
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+
+    /* Hovering an entry, or focus inside it (the release's version link), fills its square with ink. */
+    li:focus-within [data-slot="marker"] {
+      border-color: var(--text-strong);
+      background: var(--text-strong);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      li:hover [data-slot="marker"] {
+        border-color: var(--text-strong);
+        background: var(--text-strong);
+      }
+    }
+
+    /* Dates are sans-serif and muted, like every date on the site; versions stay mono. */
+    [data-slot="date"] {
+      font-family: var(--font-sans);
+      font-size: var(--fs-small);
+      color: var(--text-weak);
+      white-space: nowrap;
+    }
+
+    /* Milestones: the date, then the text on the same line. */
+    /* The date column fits the longest date (at least --date-min), shared by every row through
+       subgrid, so translations can use their own month names. The rows' rail padding counts in the
+       first column, so the minimum adds it. */
+    &[data-variant="milestones"] {
+      --marker-top: 0.4rem;
+      --date-min: 6.5rem;
+      display: grid;
+      grid-template-columns: minmax(calc(var(--date-min) + var(--rail-pad)), max-content) minmax(0, 1fr);
+      column-gap: 1.5rem;
+
+      li {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        align-items: baseline;
+        line-height: 1.4;
+      }
+
+      [data-slot="text"] {
+        line-height: inherit;
+        color: var(--text);
+        white-space: nowrap;
+      }
+    }
+
+    /* Releases: the date and version, then the first feature as the title and the rest under it. */
+    &[data-variant="releases"] {
+      /* The square is centred on the date's line (Inter's cap centre is its line's centre). */
+      --date-leading: calc(var(--fs-small) * 1.6);
+      --marker-top: calc((var(--date-leading) - var(--marker)) / 2);
+
+      [data-slot="date"] {
+        line-height: var(--date-leading);
+      }
+
+      li {
+        display: grid;
+        grid-template-columns: 11rem minmax(0, 1fr);
+        column-gap: 1.5rem;
+        padding-bottom: 2rem;
+      }
+
+      [data-slot="meta"] {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+      }
+
+      /* The whole row is the version link: a grey tint on hover, a ring on keyboard focus. */
+      /* Stretched over the row (not the 2rem gap below it) and above its text, so every part of the
+         row clicks through. Hover shows no tint and no blue: the square fills with ink and the title
+         is underlined, like the site's inline links. */
+      [data-slot="version"]::after {
+        content: "";
+        position: absolute;
+        z-index: 2;
+        inset-block: -0.5rem 1.5rem;
+        inset-inline: calc(var(--marker) + var(--rail-gap) - 0.75rem) -0.75rem;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        li:has([data-slot="version"]:hover) strong {
+          text-decoration: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 0.15em;
+        }
+      }
+
+      li:last-child [data-slot="version"]::after {
+        bottom: -0.5rem;
+      }
+
+      [data-slot="version"]:focus-visible {
+        outline: none;
+
+        &::after {
+          outline: 2px solid var(--link);
+          outline-offset: 0;
+        }
+      }
+
+      [data-slot="version"] {
+        align-self: start;
+        font-family: var(--font-mono);
+        font-size: var(--fs-meta);
+        color: var(--text-strong);
+        text-decoration: none;
+      }
+
+      [data-slot="entry"] {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        line-height: 1.4;
+      }
+
+      strong {
+        font-weight: 500;
+        color: var(--text-strong);
+      }
+
+      [data-slot="entry"] span {
+        color: var(--text-weak);
+      }
+    }
+  }
+
+  /* Milestones, releases and coverage: a mono date or outlet, then the text. */
+  [data-component="press-rows"] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: grid;
+      grid-template-columns: 9rem minmax(0, 1fr);
+      gap: var(--gutter);
+      padding: 0.75rem 0;
+      border-top: 1px solid var(--border);
+      line-height: 1.4;
+
+      &:last-child {
+        border-bottom: 1px solid var(--border);
+      }
+    }
+
+    [data-slot="meta"] {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-weak);
+    }
+
+    [data-slot="text"] {
+      color: var(--text-weak);
+    }
+
+    a {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      margin-inline-end: 0.5ch;
+    }
+  }
+
+  [data-component="press-people"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      margin-bottom: 0.5rem;
+    }
+
+    :is(strong, a) {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    span {
+      color: var(--text-weak);
+      line-height: 1.4;
+    }
+  }
+
+  /* Anomaly logo: each file on a light and a dark tile, like the logo tiles on /brand. */
+  [data-component="logo-tiles"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+
+    [data-slot="preview"] {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 2 / 1;
+
+      &[data-tone="light"] {
+        background: #f5f5f5;
+      }
+
+      &[data-tone="dark"] {
+        background: #0a0a0a;
+        box-shadow: inset 0 0 0 1px var(--border);
+      }
+
+      /* Sized by width (a percentage height would stretch the 2:1 tile). */
+      img {
+        display: block;
+        height: auto;
+      }
+
+      &[data-kind="mark"] img {
+        width: 24%;
+      }
+
+      &[data-kind="wordmark"] img {
+        width: 46%;
+      }
+    }
+
+    [data-slot="meta"] {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem 1rem;
+    }
+
+    [data-slot="name"] {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-strong);
+    }
+
+    /* The buttons' size and spacing match /brand: asset-buttons.css. */
+    [data-slot="actions"] {
+      display: flex;
+    }
+  }
+
+  /* Contacts: each a title, then its text and links below, like every other section. */
+  [data-component="press-contacts"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    h3 {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      font-weight: 400;
+      color: var(--text-strong);
+    }
+
+    /* Settings › Press contacts "cards": the same, in bordered tiles. */
+    &[data-style="cards"] li {
+      padding: 1.25rem;
+      border: 1px solid var(--border);
+      background: var(--bg-weak);
+    }
+  }
+
+  /* The page's intro under the title: hero copy size, in body colour. */
+  [data-component="hero"] > p[data-slot="intro"] {
+    font-size: var(--hero-copy-size);
+    line-height: var(--hero-copy-leading);
+    color: var(--text);
+  }
+
+  /* Narrow screens: the rail runs through the centre of the top bar's logo mark (--timeline-x, shared
+     with the changelog), like the changelog's. On wider screens the timeline sits in the content
+     column, away from the logo, and keeps its own place. */
+  @media (max-width: 60rem) {
+    [data-component="press-timeline"] {
+      --rail-pad: round(calc(var(--timeline-x) + var(--marker) / 2 + var(--rail-gap)), 1px);
+
+      li:not(:last-child)::before {
+        inset-inline-start: calc(var(--timeline-x) - 0.5px);
+      }
+
+      [data-slot="marker"] {
+        inset-inline-start: calc(var(--timeline-x) - var(--marker) / 2);
+      }
+
+      &[data-variant="releases"] [data-slot="version"]::after {
+        inset-inline-start: round(calc(var(--timeline-x) + var(--marker) / 2 + var(--rail-gap) - 0.75rem), 1px);
+      }
+    }
+  }
+
+  @media (max-width: 40rem) {
+    [data-component="press-timeline"][data-variant="milestones"] {
+      /* Narrow enough that every milestone stays on one line at 360px. */
+      --date-min: 4.5rem;
+      column-gap: 0.75rem;
+
+      [data-slot="text"] {
+        white-space: normal;
+      }
+    }
+
+    [data-component="facts"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    [data-component="product-list"][data-variant="cards"],
+    [data-component="press-people"],
+    [data-component="logo-tiles"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-component="press-rows"] li,
+    [data-component="press-timeline"][data-variant="releases"] li,
+    [data-component="product-list"][data-style="list"] [data-slot="row-link"] {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 0.25rem;
+    }
+  }
+}
