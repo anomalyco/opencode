@@ -55,6 +55,7 @@ import {
   transitionEditorSync,
 } from "./machine"
 import { QuoteCommentEditor } from "./quote-comment"
+import { selectQuoteCommentView, type QuoteCommentController } from "../quote-comment-machine"
 import "../attachments/attachments.css"
 import "./editor.css"
 import "@/shell/palette-menu.css"
@@ -282,10 +283,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
               onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
               onFileRemove={(file) => props.controller.removeContext(file.key)}
-              editingQuote={props.controller.editingQuote()}
-              quoteAnchor={props.controller.quoteAnchor()}
+              quoteComment={props.controller.quoteComment}
               onQuoteFocus={props.controller.focusQuotePrompt}
-              onEditQuote={props.controller.editQuote}
               onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
               quoteSubmit={view.submit.quote}
               searchPaths={props.controller.searchPaths}
@@ -724,10 +723,8 @@ function ComposerAttachments(props: {
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
-  editingQuote?: string
-  quoteAnchor?: ReturnType<ComposerEditorModel["quoteAnchor"]>
+  quoteComment: QuoteCommentController
   onQuoteFocus?: () => void
-  onEditQuote?: (key?: string) => void
   onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
   quoteSubmit?: ComposerEditorModel["view"]["submit"]["quote"]
   searchPaths?: (query: string) => Promise<string[]>
@@ -739,15 +736,15 @@ function ComposerAttachments(props: {
 
   // Plain functions, not inline conditionals: the tooltip reads these from event handlers, outside any owner.
   const quoteTitle = (comment: ComposerComment) => (comment.type === "quote" ? quoteTooltip(comment) : undefined)
-  const quoteHint = (comment: ComposerComment) => comment.type === "quote" && props.editingQuote !== comment.key
+  const quoteHint = (comment: ComposerComment) => comment.type === "quote" && props.quoteComment.key() !== comment.key
 
   const commentActive = (comment: ComposerComment) =>
-    comment.key === props.activeCommentID || comment.key === props.editingQuote
+    comment.key === props.activeCommentID || comment.key === props.quoteComment.key()
 
   const editing = createMemo(() =>
     props.comments?.find(
       (comment): comment is Extract<ComposerComment, { type: "quote" }> =>
-        comment.type === "quote" && comment.key === props.editingQuote,
+        comment.type === "quote" && comment.key === props.quoteComment.key(),
     ),
   )
 
@@ -789,16 +786,13 @@ function ComposerAttachments(props: {
                     active={commentActive(comment)}
                     onClick={() => {
                       if (comment.type !== "quote") return props.onCommentClick?.(comment)
-                      props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
+                      props.quoteComment.set(props.quoteComment.key() === comment.key ? undefined : comment.key)
                     }}
                   />
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (props.editingQuote === comment.key) props.onEditQuote?.()
-                    props.onCommentRemove?.(comment)
-                  }}
+                  onClick={() => props.onCommentRemove?.(comment)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
@@ -922,24 +916,26 @@ function ComposerAttachments(props: {
               {(anchor) => (
                 <QuoteCommentEditor
                   anchor={anchor()}
-                  source={props.quoteAnchor}
+                  source={props.quoteComment.anchor()}
                   text={current.text}
                   comment={current.comment ?? ""}
+                  view={selectQuoteCommentView(props.quoteComment.state(), current.key, current.comment ?? "")}
                   mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
+                  onInput={props.quoteComment.setDraft}
                   send={
                     props.quoteSubmit && {
                       available: props.quoteSubmit.available(),
                       delivery: props.quoteSubmit.delivery(),
-                      onSubmit: (comment) => props.quoteSubmit!.onSubmit(current.key, comment),
+                      onSubmit: (comment) => props.quoteComment.send(comment, props.quoteSubmit!.onSubmit),
                     }
                   }
                   onSubmit={(comment) => {
                     props.onQuoteComment?.(current, comment)
-                    props.onEditQuote?.()
+                    props.quoteComment.set()
                     props.onQuoteFocus?.()
                   }}
                   onClose={(focus) => {
-                    props.onEditQuote?.()
+                    props.quoteComment.set()
 
                     if (focus) props.onQuoteFocus?.()
                   }}

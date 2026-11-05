@@ -41,7 +41,56 @@ test("Enter does not pick a file left over from the previous @ query while the n
   }
 })
 
-function setup(results: Record<string, string[]>) {
+test("a failed @ search clears the previous query's files instead of leaving them unselectable", async () => {
+  const value = setup({ re: ["re/plan.md"] })
+
+  try {
+    await value.type("@re")
+    await value.type("@rez", { search: false })
+    expect(value.editor.suggestions().map((item) => item.id)).toEqual(["file:re/plan.md"])
+    await value.search()
+    expect(value.editor.suggestions()).toEqual([])
+  } finally {
+    value.dispose()
+  }
+})
+
+test("closing @ aborts its session search, and reopening on the same word waits for a fresh one", async () => {
+  const searches: { word: string; signal: AbortSignal; done: PromiseWithResolvers<void> }[] = []
+
+  const value = setup(
+    {},
+    {
+      requestSessionSearch: (word, signal) => {
+        const done = Promise.withResolvers<void>()
+        searches.push({ word, signal, done })
+
+        return done.promise
+      },
+    },
+  )
+
+  try {
+    await value.type("@auth", { search: false })
+    searches[0]?.done.resolve()
+    await flush()
+    await value.type("", { search: false })
+    await value.type("@auth", { search: false })
+    await value.type("@auth ", { search: false })
+    expect(searches.map((search) => search.word)).toEqual(["auth", "auth"])
+    expect(value.editor.state.popover.type).toBe("context")
+
+    await value.type("", { search: false })
+    expect(searches[1]?.signal.aborted).toBe(true)
+  } finally {
+    value.dispose()
+  }
+})
+
+function setup(
+  results: Record<string, string[]>,
+  options?: { requestSessionSearch?: (word: string, signal: AbortSignal) => Promise<void> },
+) {
   jest.useFakeTimers()
 
   return createRoot((dispose) => {
@@ -55,7 +104,15 @@ function setup(results: Record<string, string[]>) {
       store,
       commands: () => [],
       context: () => [],
-      searchContextFiles: (query) => (results[query] ?? []).map(file),
+      searchContextFiles: (query) => {
+        const paths = results[query]
+
+        if (!paths) return Promise.reject(new Error(`No results for ${query}`))
+
+        return paths.map(file)
+      },
+      searchSessions: () => [],
+      requestSessionSearch: options?.requestSessionSearch,
       view: { submit: { stopping: () => false, onSubmit() {}, onStop() {} } },
     })
 

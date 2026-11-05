@@ -386,11 +386,7 @@ export function createActiveSessionRegion(input: {
 
         if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
 
-        if (anchor) {
-          prompt.capture().quoteSource.pend(contextItemKey(item))
-
-          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
-        }
+        if (anchor) return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
 
         focusPrompt()
       },

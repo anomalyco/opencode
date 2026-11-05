@@ -1,10 +1,11 @@
-import { batch, untrack, type Accessor } from "solid-js"
-import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
-import { createStore, type SetStoreFunction } from "solid-js/store"
+import { batch, getOwner, onCleanup, untrack, type Accessor } from "solid-js"
+import { createStore, unwrap, type SetStoreFunction } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Platform } from "@/runtime/platform/platform"
 import { clonePrompt } from "./prompt-parts"
+import { uploads } from "./attachments/uploads"
+import { createQuoteCommentController, type QuoteCommentController } from "./quote-comment-machine"
 import { createComposerQuoteSource } from "./quote-source"
 import {
   ComposerStore,
@@ -114,11 +115,7 @@ export interface ComposerStateValue {
     replace(items: ContextItem[]): void
     replaceComments(items: ContextItem[]): void
   }
-  readonly quoteComment: {
-    readonly key: Accessor<string | undefined>
-    readonly anchor: Accessor<ComposerQuoteAnchor | undefined>
-    readonly set: (key?: string, anchor?: ComposerQuoteAnchor) => void
-  }
+  readonly quoteComment: QuoteCommentController
   readonly quoteSource: ReturnType<typeof createComposerQuoteSource>
   readonly set: (prompt: Prompt, cursorPosition?: number) => void
   readonly reset: () => void
@@ -128,12 +125,18 @@ export interface ComposerStateValue {
 function createComposerStateValue(store: ComposerStore, setStore: SetStoreFunction<ComposerStore>): ComposerStateValue {
   const actions = createComposerActions(setStore)
   // The quote whose comment editor is open, by key; a request made before the composer shows waits for it.
-  const [quoteComment, setQuoteComment] = createStore<{ key?: string; anchor?: ComposerQuoteAnchor }>({})
+  const quoteComment = createQuoteCommentController()
 
-  const quoteSource = createComposerQuoteSource({
-    get: () => store.quoteSources,
-    set: (key, source) => setStore("quoteSources", (sources) => ({ ...sources, [key]: source })),
-  })
+  const quoteSource = createComposerQuoteSource(
+    {
+      get: () => store.quoteSources,
+      set: (key, source) => setStore("quoteSources", (sources) => ({ ...sources, [key]: source })),
+    },
+    quoteComment,
+  )
+
+  // Uploads outlive the composer view that started them, but not the draft they write into.
+  if (getOwner()) onCleanup(() => uploads.cancelScope(unwrap(store)))
 
   const retainQuoteSources = () => quoteSource.retain(store.context.items.map((item) => item.key))
 
@@ -223,21 +226,7 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
         clearRetry()
       },
     },
-    quoteComment: {
-      key: () => quoteComment.key,
-      anchor: () => quoteComment.anchor,
-      set: (key?: string, anchor?: ComposerQuoteAnchor) => {
-        setQuoteComment({ key, anchor: key ? anchor : undefined })
-
-        if (key && quoteSource.state.sources[key]) {
-          quoteSource.pend(key)
-
-          return
-        }
-
-        quoteSource.settle()
-      },
-    },
+    quoteComment,
     quoteSource,
     set: (prompt: Prompt, cursorPosition?: number) => actions.set(prompt, cursorPosition),
     reset: () => actions.reset(),

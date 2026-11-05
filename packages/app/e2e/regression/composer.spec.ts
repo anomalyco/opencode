@@ -115,6 +115,34 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   expect(prompts[1]?.text).toBe("@home now")
 })
 
+test("closing the @ menu aborts its session search", async ({ page }) => {
+  const view = await openSession(page, {
+    name: "SessionMentionAbort",
+    findFiles: () => [],
+    sessions: [{ id: "ses_mention_abort_source", title: "Review the plan" }],
+    seed: { tabs: ["ses_mention_abort_source"] },
+  })
+
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  const search = await holdRoute(page, /\/api\/session\?.*search=auth(&|$)/)
+
+  try {
+    await view.editor.pressSequentially("@auth")
+    const request = await search.arrived
+
+    const failed = page.waitForEvent("requestfailed", {
+      predicate: (candidate) => candidate === request,
+      timeout: 10_000,
+    })
+
+    await view.editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    expect((await failed).failure()?.errorText).toBe("net::ERR_ABORTED")
+  } finally {
+    search.release()
+  }
+})
+
 test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
   page,
   context,

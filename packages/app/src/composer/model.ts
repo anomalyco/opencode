@@ -2,7 +2,7 @@ import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
 import type { Links, MountedSession } from "@opencode/plugin/gui"
-import { createComponent, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createComponent, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
@@ -212,9 +212,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
 
-  let sessionSearch: string | undefined
-  const [sessionSearched, setSessionSearched] = createSignal<string>()
-
   const sessions = createServerSessionEntries({
     server: server.key,
     known: createKnownServerSessions(() => server.ctx),
@@ -371,25 +368,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     commands,
     context,
+    // The server narrows by the first word; the title match then needs the whole query.
+    requestSessionSearch: (word, signal) => sessions.search(word, signal).then(() => undefined),
     searchSessions: (query) => {
-      if (interaction[0].popover.type !== "context") {
-        // Closing aborts the search, so reopening on the same query must fetch again.
-        sessionSearch = undefined
-
-        return []
-      }
-
-      // The server narrows by the first word; the title match then needs the whole query.
-      const search = firstWord(query)
-
-      if (search !== sessionSearch) {
-        sessionSearch = search
-        void sessions.search(search).then(
-          () => sessionSearch === search && setSessionSearched(search),
-          () => sessionSearch === search && setSessionSearched(search),
-        )
-      }
-
       const project = sdk().current?.project.id
 
       const open = new Set(
@@ -437,7 +418,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         .slice(0, 5)
         .map((item) => item.suggestion)
     },
-    sessionsPending: (query) => sessionSearched() !== firstWord(query),
     searchContextFiles: async (query, signal) =>
       (await files.searchFilesAndDirectories(query, { signal })).map((path) => ({
         id: `file:${path}`,
@@ -662,8 +642,4 @@ function openComment(
   // It opens first, so a preview it replaces unmounts before the request, which then waits for the view to answer.
   links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
   comments.open({ file: item.path, id: item.commentID })
-}
-
-function firstWord(query: string) {
-  return query.toLowerCase().split(" ")[0] ?? ""
 }
