@@ -1,5 +1,13 @@
 import { batch, createComputed, createMemo, createReaction, createSignal, on, onCleanup, untrack } from "solid-js"
-import { createListState, transitionList, type ListEvent, type ListGroup } from "./list-machine"
+import {
+  createListState,
+  LIST_LOAD_TIMEOUT_MS,
+  selectListFailed,
+  selectListLoading,
+  transitionList,
+  type ListEvent,
+  type ListGroup,
+} from "./list-machine"
 
 export { groupItems } from "./list-machine"
 
@@ -20,8 +28,7 @@ export interface FilteredListProps<T> {
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [state, setState] = createSignal(createListState<T>(props.filter))
-  const lifetime = new AbortController()
-  onCleanup(() => lifetime.abort())
+  let loadTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatch = (event: ListEvent<T>, keyboard?: KeyboardEvent) => {
     const result = transitionList(untrack(state), event, props)
@@ -32,6 +39,8 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     batch(() => {
       setState(() => result.state)
       result.effects.forEach((effect) => {
+        if (effect.type === "cancel.load") clearTimeout(loadTimer)
+
         if (effect.type === "load") load(effect.attempt, effect.query)
       })
     })
@@ -45,23 +54,23 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   // Tracks what the last load read (`props.items`, or the signals `items(query)` reads) and reloads when it changes.
   const track = createReaction(() => dispatch({ type: "items.reload" }))
 
-  const load = (attempt: number, query: string) =>
+  const load = (attempt: number, query: string) => {
+    // A new attempt supersedes the previous one, whose timeout would otherwise fail it after it was replaced.
+    clearTimeout(loadTimer)
     track(() => {
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- `items` is either a list or a loader for one
       const items = typeof props.items === "function" ? props.items(query) : props.items
       untrack(() => settle(attempt, items))
     })
+  }
 
   const settle = (attempt: number, items: T[] | Promise<T[]>) => {
     if (Array.isArray(items)) return dispatch({ type: "load.resolved", attempt, items })
 
+    loadTimer = setTimeout(() => dispatch({ type: "load.timed-out", attempt }), LIST_LOAD_TIMEOUT_MS)
     void items.then(
-      (items) => {
-        if (!lifetime.signal.aborted) dispatch({ type: "load.resolved", attempt, items: items ?? [] })
-      },
-      () => {
-        if (!lifetime.signal.aborted) dispatch({ type: "load.failed", attempt })
-      },
+      (items) => dispatch({ type: "load.resolved", attempt, items: items ?? [] }),
+      () => dispatch({ type: "load.failed", attempt }),
     )
   }
 
@@ -73,10 +82,13 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     ),
   )
 
+  onCleanup(() => dispatch({ type: "disposed" }))
+
   dispatch({ type: "items.reload" })
 
   const groups = createMemo(() => state().groups)
-  const loading = createMemo(() => state().status === "loading")
+  const loading = createMemo(() => selectListLoading(state()))
+  const failed = createMemo(() => selectListFailed(state()))
 
   return {
     state,
@@ -88,8 +100,10 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       get loading() {
         return loading()
       },
-      get state(): "ready" | "refreshing" {
-        return loading() ? "refreshing" : "ready"
+      get state(): "ready" | "refreshing" | "errored" {
+        if (loading()) return "refreshing"
+
+        return failed() ? "errored" : "ready"
       },
     },
     filter: createMemo(() => state().filter.query),

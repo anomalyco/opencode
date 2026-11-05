@@ -151,6 +151,7 @@ const source = {
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
+  "ui.list.failed": "Failed to load results",
   "ui.list.clearFilter": "Clear filter",
   "ui.list.emptyWithFilter.prefix": "No results for",
   "ui.list.emptyWithFilter.suffix": "",
