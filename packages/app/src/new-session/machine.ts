@@ -5,8 +5,10 @@ type McpStates = Readonly<Record<string, boolean>>
 // Outlasts the request queue's 10 minute budget for `POST /api/worktree`, which runs the project's setup script, so the
 // phase only ends a create whose response stalled after that budget, never a slow setup script.
 export const NEW_SESSION_WORKTREE_TIMEOUT_MS = 11 * 60_000
+
 // Preparing waits for running MCP toggles (60 s each), then lists the servers, toggles them and lists them again.
 export const NEW_SESSION_MCP_TIMEOUT_MS = 2 * 60_000
+
 // Creating a Session is one small request. The prompt is sent only after it, so a create that lands later is empty.
 export const NEW_SESSION_CREATE_TIMEOUT_MS = 30_000
 
@@ -88,7 +90,12 @@ export type NewSessionStartEffect =
       readonly directory: string
       readonly timeoutMs: number
     }
-  | { readonly type: "session.promote"; readonly attempt: number; readonly sessionID: Session.ID; readonly directory: string }
+  | {
+      readonly type: "session.promote"
+      readonly attempt: number
+      readonly sessionID: Session.ID
+      readonly directory: string
+    }
   | { readonly type: "toast"; readonly attempt: number; readonly title: ToastTitle; readonly message: string }
   | { readonly type: "toast.timed-out"; readonly attempt: number; readonly title: ToastTitle }
   // Ends the attempt and restores the draft tab. A created worktree becomes the draft's workspace and keeps the MCP
@@ -146,8 +153,7 @@ export function transitionNewSessionStart(
     )
   }
 
-  if (state.type === "worktree" && event.type === "worktree.failed")
-    return rollback(state, toast(state, event.message))
+  if (state.type === "worktree" && event.type === "worktree.failed") return rollback(state, toast(state, event.message))
 
   if (state.type === "mcp" && event.type === "mcp.prepared") return create(state)
 

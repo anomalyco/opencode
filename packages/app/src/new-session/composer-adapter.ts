@@ -24,6 +24,9 @@ import {
   type NewSessionStartTransition,
 } from "./machine"
 
+// The phase each request runs in, which its timer ends.
+const PHASES = { "worktree.create": "worktree", "mcp.prepare": "mcp", "session.create": "session" } as const
+
 // Lives in the draft's tab memory, so an attempt outlives the draft screen that the pending tab replaces.
 export function createNewSessionStartStore() {
   const [state, setState] = createSignal(createNewSessionStartState())
@@ -123,6 +126,7 @@ export function createNewSessionComposerAdapter(props: {
             { server: server.key, sessionId: sessionID },
             { message, selection, view: props.start.view },
           )
+
           // Aborted when the attempt ends: MCP preparation stops between steps and a late Session create is undone.
           const ended = new AbortController()
           let timer: ReturnType<typeof setTimeout> | undefined
@@ -143,9 +147,13 @@ export function createNewSessionComposerAdapter(props: {
 
             if (effect.type === "tab.rollback" || effect.type === "session.promote") end()
 
-            if (effect.type === "worktree.create" || effect.type === "mcp.prepare" || effect.type === "session.create") {
-              const phase =
-                effect.type === "worktree.create" ? "worktree" : effect.type === "mcp.prepare" ? "mcp" : "session"
+            if (
+              effect.type === "worktree.create" ||
+              effect.type === "mcp.prepare" ||
+              effect.type === "session.create"
+            ) {
+              const phase = PHASES[effect.type]
+
               clearTimeout(timer)
               timer = setTimeout(() => props.start.dispatch({ type: "timed-out", attempt, phase }), effect.timeoutMs)
             }

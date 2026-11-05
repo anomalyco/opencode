@@ -1014,6 +1014,7 @@ test("a stalled session create returns to the draft, and the Session it creates 
     onPrompt: (prompt) => void prompts.push(prompt.sessionID),
     onSessionCreate: async (body, attempt) => {
       creates.push(String(body.id))
+
       if (attempt === 1) await held.promise
     },
   })
@@ -1032,7 +1033,9 @@ test("a stalled session create returns to the draft, and the Session it creates 
 
   await expectPath(page, draftHref(draftID))
   await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
-  await expect(page.getByText("The server took too long to respond. Send again to retry.", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("The server took too long to respond. Send again to retry.", { exact: true }),
+  ).toBeVisible()
   await expect(view.editor).toHaveText(text)
   await expect(submit(page)).toBeEnabled()
   await expect(tabLink(page, stalled)).toHaveCount(0)
@@ -1040,6 +1043,7 @@ test("a stalled session create returns to the draft, and the Session it creates 
   const removed = page.waitForRequest(
     (request) => request.method() === "DELETE" && new URL(request.url()).pathname === `/api/session/${stalled}`,
   )
+
   held.resolve()
   await removed
 

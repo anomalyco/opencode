@@ -99,6 +99,7 @@ export function isBrickBreakerBallMoving(state: BrickBreakerState) {
 /** Spare lives shown beside the paddle, not counting the ball in play. */
 export function brickBreakerSpares(state: BrickBreakerState) {
   if (state.status === "enter") return BRICK_BREAKER_LIVES - 1
+
   if (state.status === "serve" || state.status === "play" || state.status === "miss") return state.lives - 1
 
   return 0

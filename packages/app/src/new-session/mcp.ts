@@ -84,6 +84,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     if (missing) throw new Error(language.t("session.summary.mcp.unavailable", { name: missing[0] }))
 
     if (signal.aborted) return false
+
     const results = await Promise.all(
       entries.flatMap(([name, enabled]) => {
         const status = catalog.data.find((server) => server.name === name)?.status.status
