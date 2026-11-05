@@ -1,11 +1,4 @@
-import {
-  ServerConnection,
-  syncWhileBooting,
-  useCurrentRoute,
-  useGlobal,
-  useServers,
-  useTabs,
-} from "@opencode/app/desktop"
+import { ServerConnection, useCurrentRoute, useGlobal, useServers, useTabs } from "@opencode/app/desktop"
 import { onMount } from "solid-js"
 import type { ElectronAPI } from "../api-types"
 import type { StartupEvent } from "../startup/machine"
@@ -59,9 +52,8 @@ export function DesktopFirstLaunchOnboarding(props: {
       // Load the initial provider/model state before the draft transition exposes the composer.
       await Promise.all([
         ctx.projects.add(directory),
-        syncWhileBooting(() =>
-          Promise.all([ctx.data.location.provider.sync({ directory }), ctx.data.location.model.sync({ directory })]),
-        ),
+        ctx.data.location.provider.sync({ directory }),
+        ctx.data.location.model.sync({ directory }),
       ])
     }
 
