@@ -458,6 +458,7 @@ export function ImagePreview(props: ImagePreviewProps) {
     const shownBox = image.getBoundingClientRect()
     const clip = intersect(shownBox, viewport.getBoundingClientRect())
     const cropped = clip.width < shownBox.width - 0.5 || clip.height < shownBox.height - 0.5
+
     const radius = cropped
       ? 0
       : parseFloat(getComputedStyle(image).borderTopLeftRadius) * (props.video ? 1 : scaleSpring.value)
@@ -644,8 +645,7 @@ export function ImagePreview(props: ImagePreviewProps) {
     "wheel",
     (event: WheelEvent) => {
       if (!interactive()) return
-      const inside =
-        event.target instanceof Node && (viewport.contains(event.target) || event.target === props.video)
+      const inside = event.target instanceof Node && (viewport.contains(event.target) || event.target === props.video)
 
       const pinch = event.ctrlKey || event.metaKey
 
@@ -659,6 +659,7 @@ export function ImagePreview(props: ImagePreviewProps) {
       const next = pinch
         ? zoomAt(current, current.scale * wheelZoomFactor(pixels(event, event.deltaY)), point(event), bounds)
         : panBy(current, wheelPan(event), bounds)
+
       follow(next.scale, next.x, next.y)
     },
     { passive: false, capture: true },

@@ -73,12 +73,14 @@ story("a pan whose release never reaches the preview stops following the pointer
   if (!box) throw new Error("the preview body is not laid out")
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
+
   const pointer = await body.evaluateHandle((element) => {
     const seen = { id: -1 }
     element.addEventListener("pointerdown", (event) => (seen.id = event.pointerId), { once: true })
 
     return seen
   })
+
   await page.mouse.move(x, y)
   await page.mouse.down()
   await page.mouse.move(x + 30, y + 10)

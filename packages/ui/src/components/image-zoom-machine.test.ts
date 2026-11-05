@@ -10,13 +10,13 @@ import {
 } from "./image-zoom-machine"
 
 function replay(events: PreviewZoomEvent[], from = INITIAL_PREVIEW_ZOOM_STATE) {
-  return events.reduce(
+  return events.reduce<{ state: PreviewZoomState; effects: PreviewZoomEffect[] }>(
     (result, event) => {
       const next = transitionPreviewZoom(result.state, event)
 
       return { state: next.state, effects: [...result.effects, ...next.effects] }
     },
-    { state: from, effects: [] as PreviewZoomEffect[] },
+    { state: from, effects: [] },
   )
 }
 
@@ -32,6 +32,7 @@ function down(target: "viewport" | "video" | "content", options: { zoomed?: bool
 }
 
 const moved = { type: "pointer.moved", pointerId: 1 } satisfies PreviewZoomEvent
+
 const up = { type: "pointer.up", pointerId: 1 } satisfies PreviewZoomEvent
 
 describe("image preview zoom gesture", () => {
@@ -141,6 +142,7 @@ describe("image preview zoom gesture", () => {
       status: "gliding",
       gesture: { type: "panning", pointerId: 1, target: "video", onBackdrop: false, moved: false },
     }
+
     const disposed = transitionPreviewZoom(busy, { type: "disposed" })
 
     expect(disposed.effects).toEqual([

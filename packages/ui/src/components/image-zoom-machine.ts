@@ -64,7 +64,9 @@ export type PreviewZoomTransition = {
 }
 
 const IDLE: PreviewZoomGesture = Object.freeze({ type: "idle" })
+
 const BACKDROP_PRESS: PreviewZoomGesture = Object.freeze({ type: "backdrop-press" })
+
 const NONE: readonly PreviewZoomEffect[] = Object.freeze([])
 
 export const INITIAL_PREVIEW_ZOOM_STATE: PreviewZoomState = Object.freeze({ status: "still", gesture: IDLE })
@@ -128,7 +130,10 @@ export function transitionPreviewZoom(state: PreviewZoomState, event: PreviewZoo
   if (event.type === "backdrop.click") {
     if (state.gesture.type !== "backdrop-press") return unchanged(state)
 
-    return { state: { status: state.status, gesture: IDLE }, effects: event.onBackdrop ? [{ type: "dialog.close" }] : NONE }
+    return {
+      state: { status: state.status, gesture: IDLE },
+      effects: event.onBackdrop ? [{ type: "dialog.close" }] : NONE,
+    }
   }
 
   // An eased zoom takes over from a pan, so a pan never outlives a zoom back to fit.

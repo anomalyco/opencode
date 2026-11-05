@@ -66,7 +66,9 @@ export type PreviewFlightTransition = {
 export const INITIAL_PREVIEW_FLIGHT_STATE: PreviewFlightState = Object.freeze({ status: "pending", attempt: 0 })
 
 const CLOSED: PreviewFlightState = Object.freeze({ status: "closed" })
+
 const DISPOSED: PreviewFlightState = Object.freeze({ status: "disposed" })
+
 const NONE: readonly PreviewFlightEffect[] = Object.freeze([])
 
 export function transitionPreviewFlight(state: PreviewFlightState, event: PreviewFlightEvent): PreviewFlightTransition {
@@ -153,7 +155,8 @@ function open(
   origin: FlightFrame | undefined,
   borrowed: boolean,
 ): PreviewFlightTransition {
-  if (!origin) return { state: { status: "opening", mode: "fade", borrowed }, effects: [...before, { type: "open.fade" }] }
+  if (!origin)
+    return { state: { status: "opening", mode: "fade", borrowed }, effects: [...before, { type: "open.fade" }] }
 
   return {
     state: { status: "opening", mode: "flight", borrowed },
@@ -165,13 +168,20 @@ function close(state: PreviewFlightState, origin: FlightFrame | undefined): Prev
   if (state.status === "pending" || state.status === "decoding") {
     return {
       state: CLOSED,
-      effects: [...(state.status === "decoding" ? [{ type: "decode.cancel" } as const] : []), { type: "body.closing.acquire" }],
+      effects: [
+        ...(state.status === "decoding" ? [{ type: "decode.cancel" } as const] : []),
+        { type: "body.closing.acquire" },
+      ],
     }
   }
 
   if (state.status !== "opening" && state.status !== "open") return { state, effects: NONE }
   const hidden = originHidden(state)
-  const start: PreviewFlightEffect[] = [{ type: "body.closing.acquire" }, { type: state.borrowed ? "zoom.fit" : "zoom.settle" }]
+
+  const start: PreviewFlightEffect[] = [
+    { type: "body.closing.acquire" },
+    { type: state.borrowed ? "zoom.fit" : "zoom.settle" },
+  ]
 
   if (!origin) {
     return {

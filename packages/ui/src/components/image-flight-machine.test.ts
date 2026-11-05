@@ -8,34 +8,39 @@ import {
   transitionPreviewFlight,
   type PreviewFlightEffect,
   type PreviewFlightEvent,
+  type PreviewFlightStage,
   type PreviewFlightState,
 } from "./image-flight-machine"
 
 const box = { x: 10, y: 20, width: 80, height: 60 }
+
 const origin: FlightFrame = { image: box, clip: box, radius: 6, surface: box, surfaceRadius: 6, lift: 0 }
 
+type Replay = { state: PreviewFlightState; effects: readonly PreviewFlightEffect[]; stages: PreviewFlightStage[] }
+
 function replay(events: PreviewFlightEvent[], from = INITIAL_PREVIEW_FLIGHT_STATE) {
-  return events.reduce(
+  return events.reduce<Replay>(
     (result, event) => {
       const next = transitionPreviewFlight(result.state, event)
 
       return { state: next.state, effects: next.effects, stages: [...result.stages, selectFlightStage(next.state)] }
     },
-    { state: from, effects: [] as readonly PreviewFlightEffect[], stages: [] as string[] },
+    { state: from, effects: [], stages: [] },
   )
 }
 
-const flyingOpen: PreviewFlightEvent[] = [
-  { type: "image.loaded" },
-  { type: "decode.ready", attempt: 1, origin },
-]
+const flyingOpen: PreviewFlightEvent[] = [{ type: "image.loaded" }, { type: "decode.ready", attempt: 1, origin }]
 
 describe("image preview flight", () => {
   test("opens by flying out of a visible origin and lands at rest", () => {
     const opening = replay(flyingOpen)
 
     expect(opening.state).toEqual({ status: "opening", mode: "flight", borrowed: false })
-    expect(opening.effects).toEqual([{ type: "decode.cancel" }, { type: "origin.hide" }, { type: "open.flight", from: origin }])
+    expect(opening.effects).toEqual([
+      { type: "decode.cancel" },
+      { type: "origin.hide" },
+      { type: "open.flight", from: origin },
+    ])
     expect(opening.stages).toEqual(["pending", "flying"])
 
     const open = transitionPreviewFlight(opening.state, { type: "motion.settled" })
@@ -44,10 +49,9 @@ describe("image preview flight", () => {
   })
 
   test("opens by fading without an origin, and when the image fails to load", () => {
-    expect(replay([{ type: "image.loaded" }, { type: "decode.ready", attempt: 1, origin: undefined }]).effects).toEqual([
-      { type: "decode.cancel" },
-      { type: "open.fade" },
-    ])
+    expect(replay([{ type: "image.loaded" }, { type: "decode.ready", attempt: 1, origin: undefined }]).effects).toEqual(
+      [{ type: "decode.cancel" }, { type: "open.fade" }],
+    )
     const failed = replay([{ type: "image.failed" }])
     expect(failed.state).toEqual({ status: "opening", mode: "fade", borrowed: false })
     expect(failed.effects).toEqual([{ type: "open.fade" }])
