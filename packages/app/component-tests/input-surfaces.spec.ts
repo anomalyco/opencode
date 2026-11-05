@@ -125,6 +125,32 @@ story("select fields come in the text input sizes and default to the inline trig
   await expect(fields.nth(3)).toHaveCSS("box-shadow", "none")
 })
 
+story("a select previews the highlighted option, reverts it on Escape, and keeps the chosen one", async ({
+  mount,
+  page,
+}) => {
+  const root = await mount("ui-select--highlight-preview")
+  const trigger = root.locator('[data-component="select-v2"]')
+  const preview = root.locator('[data-slot="select-preview"]')
+
+  await trigger.click()
+  await page.getByRole("option", { name: "Cherry", exact: true }).hover()
+  await expect(preview).toHaveText("Showing Cherry")
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("listbox")).toHaveCount(0)
+  await expect(preview).toHaveText("Showing Apple")
+
+  await trigger.click()
+  const banana = page.getByRole("option", { name: "Banana", exact: true })
+  await banana.hover()
+  await expect(preview).toHaveText("Showing Banana")
+  await banana.click()
+  await expect(page.getByRole("listbox")).toHaveCount(0)
+  await expect(trigger).toContainText("Banana")
+  // Choosing the previewed option must not run its undo afterwards.
+  await expect(preview).toHaveText("Showing Banana")
+})
+
 story("compact checkboxes use the design system control states and focus ring", async ({ mount, page }) => {
   const root = await mount("ui-checkbox--compact")
 
