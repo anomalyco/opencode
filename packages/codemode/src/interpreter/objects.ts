@@ -717,6 +717,7 @@ export const isRuntimeReference = (value: Value): boolean =>
 const MAX_ARRAY_INDEX = 4_294_967_295
 
 export const parseArrayIndex = (key: string | number): number | undefined => {
+  if (typeof key === "number") return Number.isInteger(key) && key >= 0 && key < MAX_ARRAY_INDEX ? key : undefined
   const property = String(key)
   if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
   const index = Number(property)
@@ -732,12 +733,12 @@ const isIndexed = (target: Obj): target is Indexed => target instanceof Arr || t
 
 const elements = (target: Indexed): Array<Value> | Uint8Array => (target instanceof Arr ? target.items : target.bytes)
 
-const index = (target: Obj, key: string | symbol): number | undefined =>
-  isIndexed(target) && typeof key === "string" ? parseArrayIndex(key) : undefined
+const index = (target: Obj, key: string | number | symbol): number | undefined =>
+  isIndexed(target) && typeof key !== "symbol" ? parseArrayIndex(key) : undefined
 
 /** The own property under `key`, including an array's live indexes and `length`. */
 export const own = (target: Obj, key: PropertyKey): Slot | undefined => {
-  const name = canonical(key)
+  const name = typeof key === "number" && isIndexed(target) ? key : canonical(key)
   if (isIndexed(target)) {
     const at = index(target, name)
     if (at !== undefined) {
@@ -749,7 +750,7 @@ export const own = (target: Obj, key: PropertyKey): Slot | undefined => {
       return { value: target.items.length, writable: target.elements.writable, enumerable: false, configurable: false }
     }
   }
-  return target.props.get(name)
+  return target.props.get(typeof name === "number" ? String(name) : name)
 }
 
 const read = (slot: Slot, receiver: Value): Value =>
@@ -764,6 +765,9 @@ export const getOwn = (target: Obj, key: PropertyKey): Value => {
 
 /** [[Get]]: walks the prototype chain; accessors see `receiver`, which is the primitive for wrapper prototypes. */
 export const get = (target: Obj, key: PropertyKey, receiver: Value = target): Value => {
+  // An array's present element, without making its property slot.
+  if (typeof key === "number" && target instanceof Arr && key in target.items && parseArrayIndex(key) !== undefined)
+    return target.items[key]
   for (let current: Obj | null = target; current !== null; current = current.proto) {
     const slot = own(current, key)
     if (slot !== undefined) return read(slot, receiver)
@@ -785,7 +789,7 @@ export const hasPrototype = (value: Value, proto: Obj): boolean => {
   return false
 }
 
-const writeElement = (target: Indexed, name: string | symbol, value: Value): boolean | undefined => {
+const writeElement = (target: Indexed, name: string | number | symbol, value: Value): boolean | undefined => {
   const at = index(target, name)
   if (at !== undefined) {
     if (target instanceof Bytes) {
@@ -808,9 +812,16 @@ const writeElement = (target: Indexed, name: string | symbol, value: Value): boo
 
 /** [[Set]]: an inherited setter or read-only property decides before an own data property is created. */
 export const set = (target: Obj, key: PropertyKey, value: Value): boolean => {
+  // Overwriting an array's present, writable element: no setter or read-only slot can decide first.
+  if (typeof key === "number" && target instanceof Arr && target.elements.writable && key in target.items) {
+    if (parseArrayIndex(key) !== undefined) {
+      target.items[key] = value
+      return true
+    }
+  }
   const name = canonical(key)
   for (let current: Obj | null = target; current !== null; current = current.proto) {
-    const slot = own(current, name)
+    const slot = own(current, key)
     if (slot === undefined) continue
     if (!("value" in slot)) {
       if (slot.set === undefined) return false
@@ -820,14 +831,14 @@ export const set = (target: Obj, key: PropertyKey, value: Value): boolean => {
     if (!slot.writable) return false
     if (current !== target) break
     if (isIndexed(target)) {
-      const written = writeElement(target, name, value)
+      const written = writeElement(target, typeof key === "number" ? key : name, value)
       if (written !== undefined) return written
     }
     slot.value = value
     return true
   }
   if (isIndexed(target)) {
-    const written = writeElement(target, name, value)
+    const written = writeElement(target, typeof key === "number" ? key : name, value)
     if (written !== undefined) return written
   }
   rejectAddition(target, name)

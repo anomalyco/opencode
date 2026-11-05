@@ -1,45 +1,151 @@
-import { Invoke } from "../interpreter/signals.js"
+import { nativeKind } from "../machine/native-kind.js"
+import { Invoke, Push } from "../interpreter/signals.js"
+import { PENDING } from "../machine/frame.js"
+import type { MachineTask } from "../machine/task.js"
 import type { Builtins } from "../interpreter/intrinsics.js"
-import { constructor, methods, prototypeFrom, receiver } from "../interpreter/native.js"
+import { builtinCursor } from "../interpreter/operations.js"
+import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
-import { IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
+import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
 import {
   define,
   get,
   hidden,
   Arr,
   Bytes,
+  type Callable,
+  GeneratorObj,
   positionIterator,
   Obj,
-  type NativeResult,
+  PromiseObj,
   coerceToInteger,
   coerceToNumber,
   coerceToString,
   rejectAddition,
   type Value,
 } from "../interpreter/objects.js"
-import { rejectCircularInsertion } from "../interpreter/references.js"
-import { withPrimitives } from "../interpreter/callback.js"
+import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
+import { requireCallback, withPrimitives } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { compareText } from "../tool-runtime.js"
+
+const arrayLikeSource = (source: Value): { readonly length: number; readonly source: Obj } => {
+  // JS would treat a promise as an empty array-like; that would hide a missing `await`.
+  if (source instanceof Obj && !(source instanceof PromiseObj)) {
+    const length = Math.max(0, coerceToInteger(get(source, "length")))
+    checkArrayLength(length)
+    return { length, source }
+  }
+  throw invalidData(`Array.from expects an iterable or array-like value, received ${describeValue(source)}.`)
+}
+
+const iterable = (builtins: Builtins, value: Value) => {
+  if (builtinCursor(builtins, value) !== undefined) return true
+  if (!(value instanceof Obj)) return false
+  const method = get(value, IteratorSymbol)
+  return method !== undefined && method !== null
+}
+
+const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Push | Invoke => {
+  const source = args[0]
+  const mapper = args.length < 2 || args[1] === undefined ? undefined : requireCallback(args[1], "Array.from")
+  if (iterable(ctx.builtins, source)) {
+    return new Invoke(ctx.prelude.fn("arrayFromIterable"), undefined, [source, mapper, args[2]], undefined)
+  }
+  if (source instanceof GeneratorObj) {
+    throw typeError(`Array.from expects a synchronous iterable or array-like value, received ${describeValue(source)}.`)
+  }
+  const arrayLike = arrayLikeSource(source)
+  if (mapper === undefined) {
+    return new Arr(ctx.builtins.Array, Array.from({ length: arrayLike.length }, (_, index) => get(arrayLike.source, index)))
+  }
+  return new Push(ArrayCallback, ["from", arrayLike.source, mapper, args[2], arrayLike.length, 0, []])
+}
 
 /** Where a sort with a comparator puts its result: back into an array or bytes, or into a new array. */
 type SortInto = "Array.sort" | "Array.toSorted" | "Uint8Array.sort"
 
 /**
- * Sorts `target`'s values: at once without a comparator, otherwise in the prelude, which calls it. Holes and undefined
- * values sort last without being compared.
+ * Sorts `target`'s values: at once without a comparator, otherwise as a frame that calls it. A stable top-down merge
+ * sort that compares in the same order as the recursive one: the merges run in post-order, each over a range of one
+ * working copy. Holes and undefined values sort last without being compared.
  */
-export const sortArray = <R>(ctx: Interpreter<R>, target: Arr | Bytes, comparator: Value, into: SortInto): NativeResult => {
-  if (comparator !== undefined) return new Invoke(ctx.prelude.fn("sortWith"), undefined, [target, comparator, into], undefined)
+export const sortArray = (builtins: Builtins, target: Arr | Bytes, comparator: Value, into: SortInto): Value | Push => {
   const items = target instanceof Arr ? [...target.items] : [...target.bytes]
+  // Counted before any comparator runs; a comparator that changes the array does not change where holes go.
   let holes = 0
   if (target instanceof Arr) for (let index = 0; index < items.length; index++) if (!(index in target.items)) holes++
-  const result = items.sort((a, b) => compareText(coerceToString(a), coerceToString(b)))
-  return sorted(ctx.builtins, target, into, holes, result)
+  if (comparator === undefined) {
+    const result = items.sort((a, b) => compareText(coerceToString(a), coerceToString(b)))
+    return sorted(builtins, target, into, holes, result)
+  }
+  const callback = requireCallback(comparator, into)
+  const defined = items.filter((item) => item !== undefined)
+  const merges: Array<number> = []
+  const plan = (low: number, high: number) => {
+    if (high - low <= 1) return
+    const middle = low + Math.floor((high - low) / 2)
+    plan(low, middle)
+    plan(middle, high)
+    merges.push(low, middle, high)
+  }
+  plan(0, defined.length)
+  return new Push(Sort, [target, into, holes, callback, defined, items.length - defined.length, merges, 0, 0, 0, []])
 }
 
-export const sorted = (builtins: Builtins, target: Arr | Bytes, into: SortInto, holes: number, result: Array<Value>) => {
+// Slots: the target, where the result goes, its hole count, the comparator, the working copy, the undefined count, the
+// merges (low, middle, high, flattened), the next merge, the left and right positions within it, and the merged values
+// so far.
+const Sort = nativeKind("Array sort", (task, frame, input) => {
+  const slots = frame.slots
+  const callback = slots[3] as Callable
+  const work = slots[4] as Array<Value>
+  const merges = slots[6] as Array<number>
+  let merge = slots[7] as number
+  let left = slots[8] as number
+  let right = slots[9] as number
+  let merged = slots[10] as Array<Value>
+  let resumed = frame.phase === 1
+  for (; merge < merges.length; merge += 3) {
+    const low = merges[merge]!
+    const middle = merges[merge + 1]!
+    const high = merges[merge + 2]!
+    if (!resumed) {
+      left = low
+      right = middle
+      merged = []
+    }
+    while (left < middle && right < high) {
+      let order: Value
+      if (resumed) {
+        order = input as Value
+        resumed = false
+      } else {
+        const result = task.call(callback, undefined, [work[left], work[right]], frame.node)
+        if (result === PENDING) {
+          slots[7] = merge
+          slots[8] = left
+          slots[9] = right
+          slots[10] = merged
+          frame.phase = 1
+          return PENDING
+        }
+        order = result
+      }
+      // Treat a NaN comparator result as equal to preserve stable ordering.
+      const number = coerceToNumber(order)
+      if (Number.isNaN(number) || number <= 0) merged.push(work[left++])
+      else merged.push(work[right++])
+    }
+    while (left < middle) merged.push(work[left++])
+    while (right < high) merged.push(work[right++])
+    for (let index = 0; index < merged.length; index++) work[low + index] = merged[index]
+  }
+  const result = [...work, ...Array(slots[5] as number).fill(undefined)]
+  return sorted(task.ctx.builtins, slots[0] as Arr | Bytes, slots[1] as SortInto, slots[2] as number, result)
+})
+
+const sorted = (builtins: Builtins, target: Arr | Bytes, into: SortInto, holes: number, result: Array<Value>) => {
   if (target instanceof Bytes) {
     target.bytes.set(Uint8Array.from(result, coerceToNumber))
     return target
@@ -78,6 +184,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
   methods(builtins, array, [
     ["isArray", 1, (_, args) => args[0] instanceof Arr],
     ["of", 0, (_, args) => wrap([...args])],
+    ["from", 1, (_, args) => arrayFrom(ctx, args)],
   ])
 
   const self = (thisValue: Value, name: string) => receiver(Arr, thisValue, `Array.prototype.${name}`)
@@ -177,8 +284,8 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         return target
       },
     ],
-    ["sort", 1, (thisValue, args) => sortArray(ctx, mutable(self(thisValue, "sort")), args[0], "Array.sort")],
-    ["toSorted", 1, (thisValue, args) => sortArray(ctx, self(thisValue, "toSorted"), args[0], "Array.toSorted")],
+    ["sort", 1, (thisValue, args) => sortArray(builtins, mutable(self(thisValue, "sort")), args[0], "Array.sort")],
+    ["toSorted", 1, (thisValue, args) => sortArray(builtins, self(thisValue, "toSorted"), args[0], "Array.toSorted")],
     ["toReversed", 0, (thisValue) => wrap([...self(thisValue, "toReversed").items].reverse())],
     [
       "with",
@@ -264,7 +371,192 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["keys", 0, (thisValue) => positionIterator(builtins, self(thisValue, "keys"), "keys")],
     ["values", 0, (thisValue) => positionIterator(builtins, self(thisValue, "values"), "values")],
     ["entries", 0, (thisValue) => positionIterator(builtins, self(thisValue, "entries"), "entries")],
+    [
+      "flatMap",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "flatMap")
+        const callback = requireCallback(args[0], "Array.flatMap")
+        return new Push(ArrayCallback, ["flatMap", target, callback, args[1], target.items.length, 0, []])
+      },
+    ],
+    ...callbackMethods("Array", self),
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return array
+}
+
+/** What a callback method does with each element; see `callbackMethods`. */
+type CallbackOp =
+  | "from"
+  | "map"
+  | "filter"
+  | "find"
+  | "findIndex"
+  | "findLast"
+  | "findLastIndex"
+  | "some"
+  | "every"
+  | "forEach"
+  | "reduce"
+  | "reduceRight"
+  | "flatMap"
+
+/**
+ * The callback methods Array and Uint8Array share. They fix the iteration length while reading existing elements
+ * live; `map` and `filter` return the receiver's kind of collection.
+ */
+export const callbackMethods = <T extends Arr | Bytes>(
+  label: "Array" | "Uint8Array",
+  self: (thisValue: Value, name: string) => T,
+): Array<Method> => {
+  const method = (name: CallbackOp): Method => [
+    name,
+    1,
+    (thisValue, args) => {
+      const target = self(thisValue, name)
+      const callback = requireCallback(args[0], `${label}.${name}`)
+      const items = elements(target)
+      const length = items.length
+      if (name !== "reduce" && name !== "reduceRight") {
+        const start = name === "findLast" || name === "findLastIndex" ? length - 1 : 0
+        return new Push(ArrayCallback, [
+          name,
+          target,
+          callback,
+          args[1],
+          length,
+          start,
+          name === "map" ? new Array(length) : [],
+        ])
+      }
+      // reduce and reduceRight take an initial value where the others take a thisArg.
+      const step = name === "reduce" ? 1 : -1
+      let start = name === "reduce" ? 0 : length - 1
+      let accumulator = args[1]
+      if (args.length < 2) {
+        while (start >= 0 && start < length && !(start in items)) start += step
+        if (start < 0 || start >= length) throw typeError(`${label}.${name} of an empty array with no initial value.`)
+        accumulator = items[start]
+        start += step
+      }
+      return new Push(ArrayCallback, [name, target, callback, undefined, length, start, accumulator])
+    },
+  ]
+  return (["map", "filter", "find", "findIndex", "findLast", "findLastIndex", "some", "every", "forEach"] as const)
+    .map(method)
+    .concat([method("reduce"), method("reduceRight")])
+}
+
+const elements = (target: Obj): ArrayLike<Value> =>
+  target instanceof Arr ? target.items : target instanceof Bytes ? target.bytes : { length: 0 }
+
+// Whether a callback method visits holes: the find methods do, as undefined, and `Array.from` reads every index.
+const visitsHoles = (op: CallbackOp) => op.startsWith("find") || op === "from"
+const backwards = (op: CallbackOp) => op === "findLast" || op === "findLastIndex" || op === "reduceRight"
+export const NEXT: unique symbol = Symbol("next")
+
+// Slots: what the method does, the receiver, the callback, its `this`, the fixed length, the next index, what it has
+// built so far (the values, or the accumulator), and the element the callback is looking at.
+const ArrayCallback = nativeKind("Array callback", (task, frame, input) => {
+  const slots = frame.slots
+  const op = slots[0] as CallbackOp
+  const receiver = slots[1] as Obj
+  const callback = slots[2] as Callable
+  const thisArg = slots[3] as Value
+  const length = slots[4] as number
+  const step = backwards(op) ? -1 : 1
+  const reducing = op === "reduce" || op === "reduceRight"
+  const holes = visitsHoles(op)
+  const items = elements(receiver)
+  let index = slots[5] as number
+  if (frame.phase === 1) {
+    const out = received(task, slots, op, input as Value, index)
+    if (out !== NEXT) return out
+    index += step
+  }
+  for (; index >= 0 && index < length; index += step) {
+    if (!holes && !(index in items)) continue
+    const item = op === "from" ? get(receiver, index) : items[index]
+    const result = task.call(
+      callback,
+      thisArg,
+      reducing ? [slots[6] as Value, item, index, receiver] : op === "from" ? [item, index] : [item, index, receiver],
+      frame.node,
+    )
+    if (result === PENDING) {
+      slots[5] = index
+      slots[7] = item
+      frame.phase = 1
+      return PENDING
+    }
+    slots[7] = item
+    const out = received(task, slots, op, result, index)
+    if (out !== NEXT) return out
+  }
+  return finished(task, op, receiver, slots[6])
+})
+
+// What one callback result does: the method's result once it is decided, or NEXT to go on.
+const received = (task: MachineTask, slots: Array<unknown>, op: CallbackOp, result: Value, index: number) => {
+  const built = slots[6]
+  switch (op) {
+    case "map":
+      ;(built as Array<Value>)[index] = result
+      return NEXT
+    case "from":
+      ;(built as Array<Value>).push(result)
+      return NEXT
+    case "filter":
+      if (result) (built as Array<Value>).push(slots[7] as Value)
+      return NEXT
+    case "flatMap":
+      // forEach skips holes, as flattening does; spreading would turn them into undefined.
+      if (result instanceof Arr) result.items.forEach((item) => (built as Array<Value>).push(item))
+      else (built as Array<Value>).push(result)
+      return NEXT
+    case "find":
+    case "findLast":
+      return result ? (slots[7] as Value) : NEXT
+    case "findIndex":
+    case "findLastIndex":
+      return result ? index : NEXT
+    case "some":
+      return result ? true : NEXT
+    case "every":
+      return result ? NEXT : false
+    case "forEach":
+      return NEXT
+    case "reduce":
+    case "reduceRight":
+      slots[6] = result
+      return NEXT
+  }
+}
+
+const finished = (task: MachineTask, op: CallbackOp, receiver: Obj, built: unknown): Value => {
+  switch (op) {
+    case "map":
+    case "filter":
+      return receiver instanceof Arr
+        ? new Arr(task.ctx.builtins.Array, built as Array<Value>)
+        : new Bytes(task.ctx.builtins.Uint8Array, Uint8Array.from(built as Array<Value>, coerceToNumber))
+    case "from":
+    case "flatMap":
+      return new Arr(task.ctx.builtins.Array, built as Array<Value>)
+    case "find":
+    case "findLast":
+    case "forEach":
+      return undefined
+    case "findIndex":
+    case "findLastIndex":
+      return -1
+    case "some":
+      return false
+    case "every":
+      return true
+    case "reduce":
+    case "reduceRight":
+      return built as Value
+  }
 }
