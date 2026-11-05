@@ -31,7 +31,8 @@ export function createMenuRouterState(): MenuRouterState {
 
 export function transitionMenuRouter(state: MenuRouterState, event: MenuRouterEvent): MenuRouterTransition {
   if (event.type === "command.received") {
-    if (state.status === "unbound") return { state: { status: "unbound", queued: [...state.queued, event.id] }, commands: [] }
+    if (state.status === "unbound")
+      return { state: { status: "unbound", queued: [...state.queued, event.id] }, commands: [] }
 
     return { state, commands: [{ type: "trigger", handler: state.handler, ids: [event.id] }] }
   }

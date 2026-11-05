@@ -229,16 +229,19 @@ describe("plugin instance lifecycle", () => {
     expect(m.status("a")).toBe("loading")
   })
 
-  test.each([{ cancel: "at start" }, { cancel: "after load" }])("an activation cancelled $cancel settles stopped", (row) => {
-    const m = machine()
-    m.start("a", "a1", fake("a1"))
-    m.send({ type: "stop.requested", id: "a", keep: undefined, reply: m.reply("stop") })
-    m.send({ type: "dispose.settled", id: "a", attempt: m.attempt("dispose"), canRun: false })
-    m.send({ type: "activate.requested", id: "a", reply: m.reply("activate") })
+  test.each([{ cancel: "at start" }, { cancel: "after load" }])(
+    "an activation cancelled $cancel settles stopped",
+    (row) => {
+      const m = machine()
+      m.start("a", "a1", fake("a1"))
+      m.send({ type: "stop.requested", id: "a", keep: undefined, reply: m.reply("stop") })
+      m.send({ type: "dispose.settled", id: "a", attempt: m.attempt("dispose"), canRun: false })
+      m.send({ type: "activate.requested", id: "a", reply: m.reply("activate") })
 
-    if (row.cancel === "after load") m.send({ type: "load.started", id: "a", attempt: m.attempt("load") })
-    m.send({ type: "load.cancelled", id: "a", attempt: m.attempt("load") })
-    expect(m.state.plugins).toEqual({})
-    expect(m.log.at(-1)).toBe("settled activate")
-  })
+      if (row.cancel === "after load") m.send({ type: "load.started", id: "a", attempt: m.attempt("load") })
+      m.send({ type: "load.cancelled", id: "a", attempt: m.attempt("load") })
+      expect(m.state.plugins).toEqual({})
+      expect(m.log.at(-1)).toBe("settled activate")
+    },
+  )
 })

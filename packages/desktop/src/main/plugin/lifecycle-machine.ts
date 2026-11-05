@@ -136,9 +136,16 @@ function step<R extends Managed, Rev>(
   switch (event.type) {
     case "activate.requested": {
       if (entry === undefined || entry.status === "failed")
-        return load(ctx, { kept: undefined, fallback: undefined, error: entry?.error, replies: [event.reply], queue: [] })
+        return load(ctx, {
+          kept: undefined,
+          fallback: undefined,
+          error: entry?.error,
+          replies: [event.reply],
+          queue: [],
+        })
 
-      if (entry.status !== "active") return { ...entry, queue: [...entry.queue, { kind: "activate", reply: event.reply }] }
+      if (entry.status !== "active")
+        return { ...entry, queue: [...entry.queue, { kind: "activate", reply: event.reply }] }
       resolve(ctx, [event.reply])
 
       return entry
@@ -201,7 +208,13 @@ function step<R extends Managed, Rev>(
 
       // With no good instance running, the last good revision starts again.
       if (!entry.kept && entry.fallback !== undefined)
-        return create(ctx, { ...pending(entry), error, revision: entry.fallback, fallback: entry.fallback, isFallback: true })
+        return create(ctx, {
+          ...pending(entry),
+          error,
+          revision: entry.fallback,
+          fallback: entry.fallback,
+          isFallback: true,
+        })
       resolve(ctx, entry.replies)
 
       return drain(ctx, unloaded(entry, error), entry.fallback, entry.queue)
@@ -258,7 +271,12 @@ function step<R extends Managed, Rev>(
       resolve(ctx, entry.replies)
       const error = entry.isFallback ? entry.error : undefined
 
-      return drain(ctx, { status: "active", running: entry.running, revision: entry.revision, error }, entry.revision, entry.queue)
+      return drain(
+        ctx,
+        { status: "active", running: entry.running, revision: entry.revision, error },
+        entry.revision,
+        entry.queue,
+      )
     }
 
     case "setup.failed": {
@@ -417,7 +435,13 @@ function drain<R extends Managed, Rev>(
 
   if (item.kind === "activate") {
     if (settled?.status !== "active")
-      return load(ctx, { kept: undefined, fallback: undefined, error: settled?.error, replies: [item.reply], queue: rest })
+      return load(ctx, {
+        kept: undefined,
+        fallback: undefined,
+        error: settled?.error,
+        replies: [item.reply],
+        queue: rest,
+      })
     resolve(ctx, [item.reply])
 
     return drain(ctx, settled, fallback, rest)

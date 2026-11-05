@@ -27,15 +27,24 @@ describe("native menu install", () => {
   })
 
   test("plugin entries recorded before install are in the first build, and later changes rebuild", () => {
-    const installed = transitionMenu(transitionMenu(createMenuState(), { type: "provider.changed", provider: plugins }).state, {
-      type: "installed",
-      deps,
-    })
+    const installed = transitionMenu(
+      transitionMenu(createMenuState(), { type: "provider.changed", provider: plugins }).state,
+      {
+        type: "installed",
+        deps,
+      },
+    )
     expect(installed.commands).toEqual([{ type: "build", deps, provider: plugins }])
 
     expect(
-      replay([{ type: "refreshed" }, { type: "provider.changed", provider: () => [] }, { type: "provider.changed", provider: plugins }], installed.state)
-        .builds,
+      replay(
+        [
+          { type: "refreshed" },
+          { type: "provider.changed", provider: () => [] },
+          { type: "provider.changed", provider: plugins },
+        ],
+        installed.state,
+      ).builds,
     ).toEqual([1, 1, 1])
   })
 

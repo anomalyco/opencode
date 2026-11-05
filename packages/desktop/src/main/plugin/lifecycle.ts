@@ -125,19 +125,30 @@ export function createLifecycle(input: {
         // Stopped, disabled, or quitting while the code loaded: drop it, it may belong to an older revision.
         return void Promise.try(loader).then(
           (revision) =>
-            dispatch(canRun(id) ? { type: "load.succeeded", id, attempt, revision } : { type: "load.cancelled", id, attempt }),
+            dispatch(
+              canRun(id) ? { type: "load.succeeded", id, attempt, revision } : { type: "load.cancelled", id, attempt },
+            ),
           (error) =>
-            dispatch(canRun(id) ? { type: "load.failed", id, attempt, error } : { type: "load.cancelled", id, attempt }),
+            dispatch(
+              canRun(id) ? { type: "load.failed", id, attempt, error } : { type: "load.cancelled", id, attempt },
+            ),
         )
       }
 
       case "create":
-        return dispatch({ type: "instance.created", id, attempt: command.attempt, running: create(id, command.revision) })
+        return dispatch({
+          type: "instance.created",
+          id,
+          attempt: command.attempt,
+          running: create(id, command.revision),
+        })
 
       case "await-ready": {
         const attempt = command.attempt
 
-        return void command.running.ready.then(() => dispatch({ type: "instance.ready", id, attempt, canRun: canRun(id) }))
+        return void command.running.ready.then(() =>
+          dispatch({ type: "instance.ready", id, attempt, canRun: canRun(id) }),
+        )
       }
 
       case "run-setup": {
