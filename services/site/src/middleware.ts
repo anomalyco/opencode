@@ -97,7 +97,9 @@ export default [
       const englishOnly = locale !== null && !localized(path)
       const slash = requested.length > 1 && requested.endsWith("/") && !/^\/docs(\/|$)/.test(path)
       if (english || englishOnly || (slash && findPageMarkdown(path))) {
-        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", path)}${url.search}` } })
+        // Pages lose a trailing slash; other apps' addresses (the docs) keep theirs.
+        const target = findPageMarkdown(path) ? path : url.pathname
+        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", target)}${url.search}` } })
       }
       // One release as JSON, at a stable URL per version (for the apps' "What's new").
       const release = path.match(/^\/changelog\/(v\d[\w.+-]*)\.json$/)?.[1]
