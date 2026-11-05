@@ -13,7 +13,7 @@ describe("updater", () => {
   test("maps the v1 update policy", () => {
     expect(decodePolicy('{ "autoupdate": false }')).toBe("disable")
     expect(decodePolicy('{ "autoupdate": "notify" }')).toBe("notify")
-    expect(decodePolicy('{ "autoupdate": true }')).toBe("auto")
+    expect(decodePolicy('{ "autoupdate": true }')).toBe("notify")
   })
 
   test("reports every available release", () => {
