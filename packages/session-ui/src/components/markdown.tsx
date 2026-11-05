@@ -741,7 +741,18 @@ export function Markdown(
 
       return { key: owner, text: local.text, live }
     },
-    (src) => projectMarkdown(src.key, src.text, src.live),
+    // A failed projection renders the text unprojected, so the block still settles and the next delta projects again.
+    (src) =>
+      projectMarkdown(src.key, src.text, src.live).catch((error) => {
+        if (
+          !(error instanceof MarkdownWorkerDisposedError) &&
+          !(error instanceof MarkdownWorkerSupersededError) &&
+          !(error instanceof MarkdownWorkerUnavailableError)
+        )
+          console.error("Markdown projection worker failed", error)
+
+        return src.live ? pendingProjection(src.text) : completedProjection(src.text)
+      }),
     { initialValue: pendingProjection("") },
   )
 
