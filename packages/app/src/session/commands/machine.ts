@@ -1,17 +1,14 @@
-import type { SessionExportData } from "./export"
-
-// --- Session commands: /compact, /export and opening /fork ---
+// --- Session commands: /compact and opening /fork ---
 
 /**
- * The session commands stay mounted while tabs switch between sessions, so compactions and exports are keyed by the
- * session they run for; the /fork picker loads for the session it was asked from.
+ * The session commands stay mounted while tabs switch between sessions, so compactions are keyed by the session they
+ * run for; the /fork picker loads for the session it was asked from. /export runs through `export-machine.ts`.
  */
 export type SessionCommandsState =
   | {
       readonly status: "active"
       readonly issued: number
       readonly compacting: Readonly<Record<string, number>>
-      readonly exporting: Readonly<Record<string, number>>
       readonly forkDialog:
         | { readonly status: "closed" }
         | { readonly status: "loading"; readonly attempt: number; readonly sessionID: string }
@@ -22,21 +19,6 @@ export type SessionCommandsEvent =
   | { readonly type: "compact.requested"; readonly sessionID: string }
   | { readonly type: "compact.succeeded"; readonly attempt: number; readonly sessionID: string }
   | { readonly type: "compact.failed"; readonly attempt: number; readonly sessionID: string; readonly cause: unknown }
-  | { readonly type: "export.requested"; readonly sessionID: string }
-  | {
-      readonly type: "export.fetched"
-      readonly attempt: number
-      readonly sessionID: string
-      readonly data: SessionExportData
-    }
-  | {
-      readonly type: "export.saved"
-      readonly attempt: number
-      readonly sessionID: string
-      readonly filename: string
-      readonly saved: boolean
-    }
-  | { readonly type: "export.failed"; readonly attempt: number; readonly sessionID: string; readonly message?: string }
   | { readonly type: "fork.requested"; readonly sessionID: string }
   | { readonly type: "fork.loaded"; readonly attempt: number }
   | { readonly type: "fork.load-failed"; readonly attempt: number; readonly cause: unknown }
@@ -45,19 +27,9 @@ export type SessionCommandsEvent =
 
 export type SessionCommandsEffect =
   | { readonly type: "compact.run"; readonly attempt: number; readonly sessionID: string }
-  | { readonly type: "export.fetch"; readonly attempt: number; readonly sessionID: string }
-  | {
-      readonly type: "export.save"
-      readonly attempt: number
-      readonly sessionID: string
-      readonly data: SessionExportData
-    }
-  | { readonly type: "export.abort"; readonly attempt: number }
   | { readonly type: "fork.load"; readonly attempt: number }
   | { readonly type: "fork.show" }
   | { readonly type: "toast.request-failed"; readonly cause: unknown }
-  | { readonly type: "toast.exported"; readonly filename: string }
-  | { readonly type: "toast.export-failed"; readonly message?: string }
 
 export type SessionCommandsTransition = {
   readonly state: SessionCommandsState
@@ -65,7 +37,7 @@ export type SessionCommandsTransition = {
 }
 
 export function createSessionCommandsState(): SessionCommandsState {
-  return { status: "active", issued: 0, compacting: {}, exporting: {}, forkDialog: { status: "closed" } }
+  return { status: "active", issued: 0, compacting: {}, forkDialog: { status: "closed" } }
 }
 
 export function transitionSessionCommands(
@@ -74,12 +46,7 @@ export function transitionSessionCommands(
 ): SessionCommandsTransition {
   if (state.status === "disposed") return unchanged(state)
 
-  if (event.type === "disposed") {
-    return {
-      state: { status: "disposed" },
-      effects: Object.values(state.exporting).map((attempt) => ({ type: "export.abort", attempt })),
-    }
-  }
+  if (event.type === "disposed") return { state: { status: "disposed" }, effects: [] }
 
   if (event.type === "compact.requested") {
     // A compaction already admitting for this session answers a repeat, which would run with the same request.
@@ -99,37 +66,6 @@ export function transitionSessionCommands(
     if (event.type === "compact.succeeded") return { state: next, effects: [] }
 
     return { state: next, effects: [{ type: "toast.request-failed", cause: event.cause }] }
-  }
-
-  if (event.type === "export.requested") {
-    if (state.exporting[event.sessionID] !== undefined) return unchanged(state)
-    const attempt = state.issued + 1
-
-    return {
-      state: { ...state, issued: attempt, exporting: { ...state.exporting, [event.sessionID]: attempt } },
-      effects: [{ type: "export.fetch", attempt, sessionID: event.sessionID }],
-    }
-  }
-
-  if (event.type === "export.fetched") {
-    if (state.exporting[event.sessionID] !== event.attempt) return unchanged(state)
-
-    return {
-      state,
-      effects: [{ type: "export.save", attempt: event.attempt, sessionID: event.sessionID, data: event.data }],
-    }
-  }
-
-  if (event.type === "export.saved" || event.type === "export.failed") {
-    if (state.exporting[event.sessionID] !== event.attempt) return unchanged(state)
-    const next = { ...state, exporting: omit(state.exporting, event.sessionID) }
-
-    if (event.type === "export.failed") {
-      return { state: next, effects: [{ type: "toast.export-failed", message: event.message }] }
-    }
-
-    // A cancelled save dialog is not a failure.
-    return { state: next, effects: event.saved ? [{ type: "toast.exported", filename: event.filename }] : [] }
   }
 
   if (event.type === "fork.requested") {
