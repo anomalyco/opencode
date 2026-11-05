@@ -7,17 +7,12 @@
 //!   are only ever proven here: they change real state.
 
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved, merge};
-use opencode_local::paths::Paths;
+use opencode_local::cli_config::Info;
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_plugin::{Definition, Setup};
-use opencode_tui::app::Roots;
 use opencode_tui::dialogs::highlights::Highlight;
 use opencode_tui::dialogs::{pair, settings, status, theme_list};
 use opencode_tui::features::{highlights, update_notification};
@@ -25,94 +20,52 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::support::WAIT;
+use crate::support::{self, Fake, Log, WAIT, wait_for};
 
 const DIRECTORY: &str = "/tmp/opencode/app";
 
 type Answer = Box<dyn Fn(&str, &str, &Value) -> Option<(u16, Value)> + Send + Sync>;
 
 /// Answers with `answer` (method, path, body), else an empty session list, else 404; logs every request.
-struct Server {
-    answer: Answer,
-    log: Arc<Mutex<Vec<(String, String, Value)>>>,
-}
-
-impl Transport for Server {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        let full = match request.url.query() {
-            Some(query) => format!("{path}?{query}"),
-            None => path.clone(),
-        };
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        self.log.lock().unwrap().push((request.method.to_owned(), full, body.clone()));
-        let (status, body) = (self.answer)(request.method, &path, &body).unwrap_or_else(|| match path.as_str() {
+fn fake(answer: Answer) -> Fake {
+    Fake::new(move |seen| {
+        answer(&seen.method, &seen.path, &seen.body).unwrap_or_else(|| match seen.path.as_str() {
             "/api/session" => (200, json!({ "data": [], "cursor": {} })),
-            _ => (404, json!({})),
-        });
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
+            _ => support::not_found(),
         })
-    }
-}
-
-/// The harness config of `parity/lib/component.tsx` plus `extra`.
-fn info(extra: Value) -> Info {
-    merge(&[Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })), Some(extra)])
+    })
 }
 
 struct Mounted {
     tui: Rc<Tui>,
-    log: Arc<Mutex<Vec<(String, String, Value)>>>,
+    log: Log,
 }
 
 impl Mounted {
     /// The requests whose path starts with `prefix`, as `METHOD path?query`.
     fn requests(&self, prefix: &str) -> Vec<String> {
-        self.log
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(_, path, _)| path.starts_with(prefix))
-            .map(|(method, path, _)| format!("{method} {path}"))
+        let log = self.log.lock().unwrap();
+        log.iter()
+            .filter(|seen| seen.url().starts_with(prefix))
+            .map(|seen| format!("{} {}", seen.method, seen.url()))
             .collect()
     }
 }
 
 fn mount_with(app: &TestApp, info: Info, answer: Answer) -> Mounted {
-    let log = Arc::new(Mutex::new(Vec::new()));
-    let transport = Server { answer, log: log.clone() };
-    let client = Client::with_transport("http://opencode.local", Arc::new(transport)).unwrap();
-    let tui = opencode_tui::mount(
-        app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Home,
-            continue_: false,
-            events: false,
-        },
-    );
-    Mounted { tui, log }
+    let fake = fake(answer);
+    let log = fake.log();
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(info),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    Mounted { tui: opencode_tui::mount(app, deps), log }
 }
 
 fn mount(app: &TestApp, info: Info) -> Rc<Tui> {
     mount_with(app, info, Box::new(|_, _, _| None)).tui
-}
-
-fn wait_for(app: &TestApp, text: &str) -> String {
-    let found = app.wait_until(WAIT, || app.text().contains(text));
-    let screen = app.text();
-    assert!(found, "{text:?} never showed:\n{screen}");
-    screen
 }
 
 /// Compares the dialog panel with the fixture: every cell inside the bounding box of the cells whose background is
@@ -173,7 +126,7 @@ fn configured_theme(tui: &Tui) -> Option<String> {
 #[test]
 fn theme_list_matches_typescript_and_previews_in_the_dialog() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})));
+    let tui = mount(&app, support::component_info(json!({})));
     tui.keymap.dispatch("theme.switch", None);
     wait_for(&app, "Search themes");
     assert_dialog(&app, "E.18b/themes", "Search themes");
@@ -206,7 +159,7 @@ fn theme_list_matches_typescript_and_previews_in_the_dialog() {
 #[test]
 fn clearing_the_filter_previews_the_opening_theme_again() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})));
+    let tui = mount(&app, support::component_info(json!({})));
     theme_list::show(&tui, None);
     wait_for(&app, "Search themes");
     app.type_text("nord");
@@ -222,7 +175,7 @@ fn clearing_the_filter_previews_the_opening_theme_again() {
 #[test]
 fn settings_theme_opens_the_list_and_comes_back() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})));
+    let tui = mount(&app, support::component_info(json!({})));
     settings::show(&tui, Some("theme.name"));
     wait_for(&app, "opencode ↵");
     app.press("enter");
@@ -274,14 +227,14 @@ fn mcp(list: Value) -> Answer {
 #[test]
 fn status_matches_typescript() {
     let app = TestApp::new(80, 30);
-    let mounted = mount_with(&app, info(json!({})), mcp(servers()));
+    let mounted = mount_with(&app, support::component_info(json!({})), mcp(servers()));
     mounted.tui.keymap.dispatch("opencode.status", None);
     wait_for(&app, "5 MCP servers");
     assert_dialog(&app, "E.18b/status", "Status");
     assert_eq!(mounted.requests("/api/mcp").len(), 1);
 
     let app = TestApp::new(80, 30);
-    let tui = mount_with(&app, info(json!({})), mcp(json!([]))).tui;
+    let tui = mount_with(&app, support::component_info(json!({})), mcp(json!([]))).tui;
     status::show(&tui);
     wait_for(&app, "No MCP servers");
     assert_dialog(&app, "E.18b/status-empty", "Status");
@@ -332,7 +285,7 @@ fn team_plugin(mounted: Rc<std::cell::Cell<u32>>) -> Definition<Tui> {
 }
 
 fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, Rc<std::cell::Cell<u32>>) {
-    let mounted = mount_with(app, info(extra), plugin_server());
+    let mounted = mount_with(app, support::component_info(extra), plugin_server());
     let activations = Rc::new(std::cell::Cell::new(0));
     opencode_tui::plugins::host::add(&mounted.tui, team_plugin(activations.clone()));
     (mounted, activations)
@@ -405,8 +358,8 @@ fn plugin_manager_toggles_checks_and_updates() {
         .lock()
         .unwrap()
         .iter()
-        .find(|(_, path, _)| path.starts_with("/api/plugin/update"))
-        .map(|(_, _, body)| body.clone());
+        .find(|seen| seen.url().starts_with("/api/plugin/update"))
+        .map(|seen| seen.body.clone());
     assert_eq!(update, Some(json!({ "targets": ["git+ssh://git@github.com/example/team-plugins.git"] })));
 
     // ctrl+r checks for updates and takes the fresh flags.
@@ -461,7 +414,7 @@ fn pair_server(fails: bool) -> Answer {
 #[test]
 fn pair_matches_typescript() {
     let app = TestApp::new(100, 40);
-    let mounted = mount_with(&app, info(json!({})), pair_server(false));
+    let mounted = mount_with(&app, support::component_info(json!({})), pair_server(false));
     mounted.tui.keymap.dispatch("server.pair", None);
     wait_for(&app, "expire in");
     assert_dialog(&app, "E.18b/pair", "Pair");
@@ -470,13 +423,13 @@ fn pair_matches_typescript() {
     assert_eq!(mounted.requests("/api/info"), ["GET /api/info"]);
 
     let app = TestApp::new(80, 30);
-    let tui = mount_with(&app, info(json!({})), pair_server(false)).tui;
+    let tui = mount_with(&app, support::component_info(json!({})), pair_server(false)).tui;
     pair::show(&tui);
     wait_for(&app, "expire in");
     assert_dialog(&app, "E.18b/pair-narrow", "Pair");
 
     let app = TestApp::new(100, 40);
-    let tui = mount_with(&app, info(json!({})), pair_server(true)).tui;
+    let tui = mount_with(&app, support::component_info(json!({})), pair_server(true)).tui;
     pair::show(&tui);
     wait_for(&app, "Could not load");
     assert_dialog(&app, "E.18b/pair-error", "Pair");
@@ -511,7 +464,7 @@ fn release_highlights() -> Vec<Highlight> {
 #[test]
 fn highlights_match_typescript() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})));
+    let tui = mount(&app, support::component_info(json!({})));
     let release = highlights::Release { version: "2.0.27".to_owned(), items: release_highlights() };
     highlights::install_with(&tui, release, false);
     tui.keymap.dispatch("opencode.highlights", None);
@@ -521,7 +474,7 @@ fn highlights_match_typescript() {
     assert!(!app.text().contains("What's new"), "{}", app.text());
 
     let app = TestApp::new(80, 20);
-    let tui = mount(&app, info(json!({})));
+    let tui = mount(&app, support::component_info(json!({})));
     let mut items = release_highlights();
     items.extend(
         release_highlights().into_iter().map(|item| Highlight { title: format!("{} again", item.title), ..item }),
@@ -535,34 +488,14 @@ fn highlights_match_typescript() {
 
 /// A TUI over real roots in a temporary home, so the `highlights` storage and `prompt-history.jsonl` are real.
 fn mount_rooted(app: &TestApp, home: &std::path::Path, extra: Value) -> Rc<Tui> {
-    let vars = [
-        ("HOME", home.to_path_buf()),
-        ("XDG_CONFIG_HOME", home.join("config")),
-        ("XDG_STATE_HOME", home.join("state")),
-        ("XDG_DATA_HOME", home.join("data")),
-        ("XDG_CACHE_HOME", home.join("cache")),
-    ];
-    let paths = Paths::from_vars(|name| {
-        vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string())
-    })
-    .unwrap();
-    let client = Client::with_transport(
-        "http://opencode.local",
-        Arc::new(Server { answer: Box::new(|_, _, _| None), log: Default::default() }),
-    )
-    .unwrap();
-    opencode_tui::mount(
-        app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(info(extra), |_| None),
-            roots: Some(Roots { paths, storage_channel: "test".into() }),
-            route: Route::Home,
-            continue_: false,
-            events: false,
-        },
-    )
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::component_info(extra)),
+        roots: support::roots(support::xdg_paths(home), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake(Box::new(|_, _, _| None))))
+    };
+    opencode_tui::mount(app, deps)
 }
 
 #[test]
@@ -658,7 +591,7 @@ fn click_on(app: &TestApp, text: &str) {
 }
 
 fn with_updater(app: &TestApp, tui: Option<Rc<Tui>>) -> (Rc<Tui>, Rc<FakeUpdater>) {
-    let tui = tui.unwrap_or_else(|| mount(app, info(json!({}))));
+    let tui = tui.unwrap_or_else(|| mount(app, support::component_info(json!({}))));
     let updater = Rc::new(FakeUpdater::default());
     update_notification::set_source(&tui, updater.clone());
     (tui, updater)
@@ -777,7 +710,7 @@ fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
 #[test]
 fn without_an_updater_there_is_no_update_command_or_notice() {
     let app = TestApp::new(80, 30);
-    let tui = mount(&app, info(json!({})));
+    let tui = mount(&app, support::component_info(json!({})));
     update_notification::client_notice(&tui, available("2.0.28"));
     tui.keymap.dispatch("opencode.update", None);
     app.wait_until(Duration::from_millis(300), || app.text().contains("Update"));

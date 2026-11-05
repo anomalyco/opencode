@@ -3,65 +3,38 @@
 //! error and denied states, clicks that expand, and the warning color of a call that waits on a
 //! permission request.
 
-use std::sync::{Arc, Mutex};
+use crate::support::{self, Fake, Harness, Log, deref_harness};
+
+use std::sync::Arc;
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Grouping, Info, Resolved, Session};
-use opencode_tui::{Deps, Route, Tui};
+use opencode_local::cli_config::{Grouping, Info, Session};
+use opencode_tui::Deps;
 use opentui::prelude::Color;
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 /// Serves one session, its messages, its permission requests, and shell output; logs every request.
-struct Fixture {
-    messages: Vec<Value>,
-    permissions: Vec<Value>,
-    log: Mutex<Vec<String>>,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        let query = request.url.query().unwrap_or_default().to_owned();
-        self.log.lock().unwrap().push(format!("{} {path}?{query}", request.method));
-        Box::pin(async move {
-            let (status, body) = match (request.method, path.as_str()) {
-                ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
-                ("GET", "/api/session/ses_t") => (200, json!({ "data": session() })),
-                ("GET", "/api/session/ses_t/message") => {
-                    (200, json!({ "data": self.messages.iter().rev().collect::<Vec<_>>(), "cursor": {} }))
-                }
-                ("GET", "/api/session/ses_t/permission") => (200, json!({ "data": self.permissions })),
-                ("GET", "/api/shell/sh_1/output") => (
-                    200,
-                    json!({
-                        "location": { "directory": "/project" },
-                        "data": { "output": "hi from the shell\n", "cursor": 18, "size": 18, "truncated": false },
-                    }),
-                ),
-                _ => (404, json!({})),
-            };
-            let body = serde_json::to_vec(&body).unwrap();
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+fn fake(messages: Vec<Value>, permissions: Vec<Value>) -> Fake {
+    Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_t") => (200, json!({ "data": session() })),
+        ("GET", "/api/session/ses_t/message") => {
+            (200, json!({ "data": messages.iter().rev().collect::<Vec<_>>(), "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_t/permission") => (200, json!({ "data": permissions })),
+        ("GET", "/api/shell/sh_1/output") => (
+            200,
+            support::list(
+                "/project",
+                json!({ "output": "hi from the shell\n", "cursor": 18, "size": 18, "truncated": false }),
+            ),
+        ),
+        _ => support::not_found(),
+    })
 }
 
 fn session() -> Value {
-    json!({
-        "id": "ses_t", "title": "Tools", "projectID": "project", "cost": 0, "agent": "build",
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
+    support::merge(support::session("ses_t", "Tools"), json!({ "agent": "build" }))
 }
 
 /// A user prompt, then one assistant step that calls `tools`.
@@ -100,54 +73,32 @@ fn failed(input: Value, message: &str) -> Value {
     json!({ "status": "error", "input": input, "error": { "type": "unknown", "message": message } })
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
-    fixture: Arc<Fixture>,
+struct Tools {
+    harness: Harness,
+    seen: Log,
 }
 
-fn open(width: u16, height: u16, messages: Vec<Value>, permissions: Vec<Value>) -> Harness {
-    let fixture = Arc::new(Fixture { messages, permissions, log: Mutex::default() });
-    let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
-    let app = TestApp::new(width, height);
+deref_harness!(Tools);
+
+fn open(width: u16, height: u16, messages: Vec<Value>, permissions: Vec<Value>) -> Tools {
+    let fake = fake(messages, permissions);
+    let seen = fake.log();
     // Each call in its own row: grouping is E.8's.
     let info = Info {
         animations: Some(false),
         session: Some(Session { grouping: Some(Grouping::None), ..Session::default() }),
         ..Info::default()
     };
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID("ses_t".into()) },
-            continue_: false,
-            events: false,
-        },
-    );
-    Harness { app, tui, fixture }
+    let deps =
+        Deps { config: support::config(info), route: support::session_route("ses_t"), ..support::deps(Arc::new(fake)) };
+    Tools { harness: support::mount(width, height, deps), seen }
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        let log = self.fixture.log.lock().unwrap().clone();
-        assert!(found, "{text:?} never showed:\n{screen}\nrequests: {log:#?}");
-        screen
-    }
-
-    /// The column and row where `text` starts.
-    fn find(&self, text: &str) -> (u16, u16) {
-        let screen = self.app.text();
-        screen
-            .lines()
-            .enumerate()
-            .find_map(|(row, line)| line.find(text).map(|byte| (line[..byte].chars().count() as u16, row as u16)))
-            .unwrap_or_else(|| panic!("{text:?} is not on screen:\n{screen}"))
+impl Tools {
+    /// Every request, as `METHOD path?query`.
+    fn log(&self) -> Vec<String> {
+        let seen = self.seen.lock().unwrap();
+        seen.iter().map(|seen| format!("{} {}?{}", seen.method, seen.path, seen.query)).collect()
     }
 
     fn fg(&self, text: &str) -> Color {
@@ -281,7 +232,7 @@ fn shell_blocks_collapse_their_output_and_read_a_named_shell_on_click() {
     // A click on the named shell reads its output from the start.
     h.click("$ echo hi");
     h.wait_for("hi from the shell");
-    let log = h.fixture.log.lock().unwrap().clone();
+    let log = h.log();
     let reads: Vec<_> = log.iter().filter(|line| line.contains("/api/shell/")).collect();
     assert_eq!(
         reads,
@@ -417,7 +368,7 @@ fn a_running_shell_the_store_lists_reads_its_output_every_second() {
         turn(vec![tool("call_1", "shell", running(json!({ "command": "npm run dev" }), json!({ "shellID": "sh_1" })))]);
     let h = open(100, 30, messages, Vec::new());
     h.wait_for("npm run dev");
-    let reads = || h.fixture.log.lock().unwrap().iter().filter(|line| line.contains("/api/shell/sh_1/output")).count();
+    let reads = || h.log().iter().filter(|line| line.contains("/api/shell/sh_1/output")).count();
     // Not listed yet: nothing to read.
     h.app.advance(Duration::from_secs(2));
     assert_eq!(reads(), 0);
