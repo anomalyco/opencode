@@ -130,8 +130,9 @@ export const authorize = Effect.fnUntraced(function* (
 })
 
 /**
- * Runs one check under narrow unattended permissions and a 30s wall-clock cap, in the Session's Location or the global
- * config Location without a Session. A code check needs a Session.
+ * Runs one check under narrow unattended permissions and a 30s wall-clock cap, in the Session's Location or, without a
+ * Session, in the global config Location where its default agent's rules allow or deny the command. A code check needs
+ * a Session.
  */
 export const evaluate = Effect.fnUntraced(function* (
   session: SessionSchema.Info | undefined,

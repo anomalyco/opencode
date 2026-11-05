@@ -844,7 +844,7 @@ const layer = Layer.effect(
             ? yield* globalSettings
             : yield* settings(session).pipe(Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))
         if (!config.enabled) return yield* new DisabledError()
-        // A schedule with no Session has nothing to wake and no agent to ask, so it only runs shell commands. Shell
+        // A schedule with no Session has nothing to wake and nobody to ask, so it only runs shell commands. Shell
         // gates are allowed; a code check and a prompt both need a Session.
         if (session === undefined) {
           if (input.action.type === "prompt")
@@ -876,7 +876,8 @@ const layer = Layer.effect(
           check === undefined
             ? UNSEEDED
             : yield* Effect.gen(function* () {
-                // Nothing is asked without a Session: the caller that created it is trusted.
+                // Nothing is asked without a Session: nobody is present to answer. Its runs are held to the global
+                // config's rules instead.
                 if (session !== undefined)
                   yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
                     instances.provide(session),
@@ -910,7 +911,7 @@ const layer = Layer.effect(
               })
 
         // A shell action runs unattended, so ask for its shell and external_directory permissions now, once. A
-        // session-less schedule has no Session to ask through and trusts its API caller instead.
+        // session-less schedule has no Session to ask through: its runs are held to the global config's rules.
         if (session !== undefined && input.action.type === "shell")
           yield* ScheduleAction.authorize(session, input.name, when, input.action).pipe(
             instances.provide(session),
