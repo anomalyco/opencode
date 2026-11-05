@@ -32,10 +32,7 @@ export function mountFileMedia() {
   document.body.appendChild(host)
   render(
     () => (
-      <FileMedia
-        media={{ mode: "auto", path: "diagram.png", readFile: read() }}
-        fallback={() => <div>fallback</div>}
-      />
+      <FileMedia media={{ mode: "auto", path: "diagram.png", readFile: read() }} fallback={() => <div>fallback</div>} />
     ),
     host,
   )
