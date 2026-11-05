@@ -6,6 +6,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Shell as ShellSchema } from "@opencode/schema/shell"
 import { Bus } from "../../bus.js"
 import { Database } from "../../database/database.js"
+import { Detaching } from "../../detaching.js"
 import { Instance } from "../../instance/service.js"
 import { Job } from "../../job.js"
 import { Session } from "../../session.js"
@@ -14,6 +15,7 @@ import { ShellTool } from "../../tool/plugin/shell.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionHistory } from "../history.js"
+import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
@@ -81,6 +83,8 @@ export const layer = (options?: Options) =>
       const sessions = yield* Session.Service
       const instances = yield* Instance.Service
       const db = (yield* Database.Service).db
+      // Optional so restart built outside the application graph (tests) need not provide it.
+      const detaching = Option.getOrUndefined(yield* Effect.serviceOption(Detaching.Service))
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -182,12 +186,32 @@ export const layer = (options?: Options) =>
         )
       })
 
+      const reattach = (
+        shell: Shell.Interface,
+        sessionID: SessionSchema.ID,
+        info: ShellSchema.Info,
+        suspended: ReadonlySet<SessionSchema.ID>,
+        notificationID?: SessionMessage.ID,
+      ) =>
+        ShellTool.reattach({
+          shell,
+          jobs,
+          sessions,
+          scope,
+          sessionID,
+          info,
+          notificationID,
+          resume: () => (suspended.has(sessionID) ? false : undefined),
+          leaveRunning: () => detaching?.isDetaching() === true && shell.detachable(info.id),
+        })
+
       // A shell job the previous server left running is watched again if its command is still known (running or
       // finished during the restart); otherwise it is reported as lost.
       const recoverShellJob = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "shell" }>,
         suspended: ReadonlySet<SessionSchema.ID>,
+        reattached: Set<string>,
       ) {
         const shell = background.status === "running" ? yield* shellOf(recovery.sessionID) : undefined
         const info =
@@ -195,16 +219,8 @@ export const layer = (options?: Options) =>
             ? yield* shell.get(recovery.shellID).pipe(Effect.option)
             : Option.none()
         if (!shell || Option.isNone(info)) return yield* recoverToolJob(background, recovery)
-        yield* ShellTool.reattach({
-          shell,
-          jobs,
-          sessions,
-          scope,
-          sessionID: recovery.sessionID,
-          info: info.value,
-          notificationID: background.notificationID,
-          resume: () => (suspended.has(recovery.sessionID) ? false : undefined),
-        })
+        reattached.add(info.value.id)
+        yield* reattach(shell, recovery.sessionID, info.value, suspended, background.notificationID)
       })
 
       // A server killed while shutting down may leave a foreground shell call unsettled, its command still running
@@ -212,6 +228,7 @@ export const layer = (options?: Options) =>
       const settleBackgroundedCalls = Effect.fnUntraced(function* (
         sessionID: SessionSchema.ID,
         suspended: ReadonlySet<SessionSchema.ID>,
+        reattached: ReadonlySet<string>,
       ) {
         const calls = (yield* SessionHistory.incompleteAssistants(db, sessionID)).flatMap((message) =>
           message.type === "assistant"
@@ -233,7 +250,7 @@ export const layer = (options?: Options) =>
               assistantMessageID: call.assistantMessageID,
               callID: call.part.id,
             })
-            if (!info || (yield* jobs.get(info.id))) return
+            if (!info) return
             const result = ShellTool.backgroundToolResult(info.id, info.file)
             if (!isReadonlyArrayNonEmpty(result.content)) return
             yield* bus.publish(SessionEvent.Tool.Success, {
@@ -245,15 +262,9 @@ export const layer = (options?: Options) =>
               executed: call.part.executed === true,
             })
             yield* shell.timeout(info.id, 0).pipe(Effect.ignore)
-            yield* ShellTool.reattach({
-              shell,
-              jobs,
-              sessions,
-              scope,
-              sessionID,
-              info,
-              resume: () => (suspended.has(sessionID) ? false : undefined),
-            })
+            // Killed after backgrounding the job but before settling the call: the job was already reattached.
+            if (reattached.has(info.id) || (yield* jobs.get(info.id))) return
+            yield* reattach(shell, sessionID, info, suspended)
           }),
           { discard: true },
         )
@@ -327,26 +338,39 @@ export const layer = (options?: Options) =>
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
           yield* store.releaseChildClaims(children)
+          const recoverable = Effect.fnUntraced(function* (background: Job.Background) {
+            return (yield* jobs.get(background.id))?.status !== "running"
+          })
+          // Shell and tool outcomes first, then calls a killed server left unsettled, and only then recovered children,
+          // whose first resume would otherwise fail their own unsettled shell calls.
+          const reattached = new Set<string>()
           yield* Effect.forEach(
-            // Admit shell outcomes before a recovered child can start its first model request.
-            pending.toSorted((a, b) => Number(a.recovery.kind === "subagent") - Number(b.recovery.kind === "subagent")),
+            pending,
             Effect.fnUntraced(function* (background) {
-              if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
-              if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, suspended)
-              if (recovery.kind !== "subagent") return yield* recoverToolJob(background, recovery)
-              yield* recoverSubagent(background, recovery, suspended)
+              if (recovery.kind === "subagent" || !(yield* recoverable(background))) return
+              if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, suspended, reattached)
+              yield* recoverToolJob(background, recovery)
             }),
             { discard: true },
           )
           yield* Effect.forEach(
             suspended,
             (sessionID) =>
-              settleBackgroundedCalls(sessionID, suspended).pipe(
+              settleBackgroundedCalls(sessionID, suspended, reattached).pipe(
                 Effect.catch((error) =>
                   Effect.logWarning("failed to settle backgrounded shell calls", { sessionID, error }),
                 ),
               ),
+            { discard: true },
+          )
+          yield* Effect.forEach(
+            pending,
+            Effect.fnUntraced(function* (background) {
+              const recovery = background.recovery
+              if (recovery.kind !== "subagent" || !(yield* recoverable(background))) return
+              yield* recoverSubagent(background, recovery, suspended)
+            }),
             { discard: true },
           )
 
@@ -370,5 +394,14 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node, Instance.node, Database.node],
+  deps: [
+    SessionStore.node,
+    SessionExecution.node,
+    Bus.node,
+    Job.node,
+    Session.node,
+    Instance.node,
+    Database.node,
+    Detaching.node,
+  ],
 })
