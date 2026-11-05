@@ -839,10 +839,12 @@ function HomeSessionRow(
           props.onRowEvent({ type: "menu.closed", sessionID: sessionID() })
         }}
       >
+        {/* Disabled, so it takes no focus: Kobalte focuses the trigger on close, which would blur the rename editor
+            the Rename item just opened. Closing the menu restores focus to the row instead. */}
         <Menu.Trigger
           as="span"
           aria-hidden="true"
-          tabIndex={-1}
+          disabled
           class="pointer-events-none absolute size-px"
           style={{ left: `${menu()?.x ?? 0}px`, top: `${menu()?.y ?? 0}px` }}
         />
