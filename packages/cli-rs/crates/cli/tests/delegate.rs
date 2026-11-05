@@ -132,3 +132,46 @@ fn a_missing_binary_says_how_to_fix_it() {
         "{stderr}"
     );
 }
+
+// Ctrl+C reaches the whole foreground group. The CLI waits for the TS command to finish its own teardown
+// before it exits 130, so nothing it prints lands after the shell's prompt.
+#[test]
+fn an_interrupt_waits_for_the_remote_access_command() {
+    use std::os::unix::process::CommandExt;
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("opencode");
+    std::fs::write(
+        &bin,
+        "#!/bin/sh\ntrap 'sleep 0.5; echo done > \"$DELEGATE_DIR/teardown\"; exit 130' INT\necho > \"$DELEGATE_DIR/started\"\nwhile :; do sleep 0.05; done\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
+        .args(["service", "set", "remote", "true"])
+        .env("OPENCODE_TS_BIN", &bin)
+        .env("HOME", dir.path())
+        .env("XDG_CONFIG_HOME", dir.path().join("config"))
+        .env("XDG_DATA_HOME", dir.path().join("data"))
+        .env("XDG_STATE_HOME", dir.path().join("state"))
+        .env("DELEGATE_DIR", dir.path())
+        .stdin(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !dir.path().join("started").exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the fake never started"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let group = rustix::process::Pid::from_raw(child.id() as i32).unwrap();
+    rustix::process::kill_process_group(group, rustix::process::Signal::INT).unwrap();
+    let status = child.wait().unwrap();
+    assert_eq!(status.code(), Some(130));
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("teardown")).unwrap_or_default(),
+        "done\n"
+    );
+}

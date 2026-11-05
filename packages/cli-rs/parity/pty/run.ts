@@ -51,8 +51,8 @@ export type PtyStep = {
 
 export type PtyCase = {
   args: string[]
-  // Runs this program on each side instead of the CLI (`args` and `server` are then unused).
-  command?: (side: Side) => string[]
+  // Runs this program on each side instead of the CLI (`args` is then unused); `server` is the fake server's URL.
+  command?: (side: Side, server: string | undefined) => string[]
   server?: Options
   env?: Record<string, string>
   cols?: number
@@ -93,7 +93,7 @@ export async function runPty(side: Side, value: PtyCase) {
     onData: (data) => proc.terminal?.write(data),
   })
   setup.renderer.root.add(terminal)
-  const proc = Bun.spawn(value.command?.(side) ?? command(side, withServer(value.args, server?.url)), {
+  const proc = Bun.spawn(value.command?.(side, server?.url) ?? command(side, withServer(value.args, server?.url)), {
     cwd: box.cwd,
     env: box.env,
     terminal: {
