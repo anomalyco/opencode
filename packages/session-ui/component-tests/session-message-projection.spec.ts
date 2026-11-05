@@ -122,6 +122,43 @@ story.describe("message actions menu", () => {
   })
 })
 
+story("keeps the footer in view while an outside click closes the actions menu", async ({ mount, page }) => {
+  const timeline = await mount("current-prompt-message--pending")
+  const footer = timeline.locator('[data-slot="user-message-copy-wrapper"]')
+
+  await timeline.getByLabel("Delivery state").selectOption("delivered")
+  await timeline.locator('[data-component="user-message"]').hover()
+  await timeline.getByRole("button", { name: "More actions", exact: true }).click()
+  await expect(page.getByRole("menu")).toBeVisible()
+  await page.mouse.move(0, 0)
+
+  // Kobalte drops the expanded state a task before it returns focus to the trigger, so record every frame from the
+  // click until a few frames after the menu has gone rather than the settled state.
+  const frames = await footer.evaluateHandle((element) => {
+    const opacities: string[] = []
+    const closed = { frames: 0 }
+
+    const done = new Promise<string[]>((resolve) => {
+      const tick = () => {
+        opacities.push(getComputedStyle(element).opacity)
+
+        if (!document.querySelector('[role="menu"]')) closed.frames += 1
+
+        if (closed.frames < 5) return requestAnimationFrame(tick)
+
+        resolve(opacities)
+      }
+
+      requestAnimationFrame(tick)
+    })
+
+    return { done }
+  })
+
+  await page.mouse.click(0, 0)
+  expect(new Set(await frames.evaluate((sampler) => sampler.done))).toEqual(new Set(["1"]))
+})
+
 story("keeps pending steer actions usable after a request fails", async ({ mount }) => {
   const timeline = await mount("current-prompt-message--pending")
   const queue = timeline.getByRole("button", { name: "Move to queue", exact: true })
