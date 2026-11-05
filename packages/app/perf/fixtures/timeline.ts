@@ -176,6 +176,46 @@ export function streamedReply(deltas: number) {
   }
 }
 
+/**
+ * One round of request docks with fresh event IDs: a permission request takes the composer's place, an MCP
+ * elicitation stacks above it and is cancelled, then the permission is answered and the composer comes back.
+ */
+export function requestDocks() {
+  const permission = `per_bench_${eventSequence}`
+  const form = `frm_bench_${eventSequence}`
+
+  return {
+    asked: {
+      ...envelope(),
+      type: "permission.asked",
+      data: { id: permission, sessionID, action: "shell", resources: ["bun test"], metadata: {} },
+    } satisfies Extract<OpenCodeEvent, { type: "permission.asked" }>,
+    elicited: {
+      ...envelope(),
+      type: "form.created",
+      data: {
+        form: {
+          id: form,
+          sessionID,
+          title: "Input",
+          metadata: { kind: "mcp-elicitation" },
+          fields: [{ key: "answer", type: "string", title: "Continue?" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+    cancelled: {
+      ...envelope(),
+      type: "form.cancelled",
+      data: { sessionID, id: form },
+    } satisfies Extract<OpenCodeEvent, { type: "form.cancelled" }>,
+    replied: {
+      ...envelope(),
+      type: "permission.replied",
+      data: { sessionID, requestID: permission, reply: "once" },
+    } satisfies Extract<OpenCodeEvent, { type: "permission.replied" }>,
+  }
+}
+
 function performanceTurn(index: number) {
   const suffix = String(index).padStart(4, "0")
   const assistantID = `msg_0000_${suffix}_b_assistant`
