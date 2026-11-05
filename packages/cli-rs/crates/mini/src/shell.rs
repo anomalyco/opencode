@@ -119,6 +119,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         waiting: RefCell::new(Vec::new()),
         stream: RefCell::new(None),
         resize: Cell::new(None),
+        height_pending: Cell::new(false),
         size: Cell::new(mini_size(&app)),
         exit_splash: Cell::new(false),
         failure: RefCell::new(None),
@@ -213,6 +214,8 @@ struct Mini {
     waiting: RefCell<Vec<RunPrompt>>,
     stream: RefCell<Option<tokio::task::JoinHandle<()>>>,
     resize: Cell<Option<TimerId>>,
+    /// A footer height waits for the next frame.
+    height_pending: Cell<bool>,
     size: Cell<(u16, u16)>,
     exit_splash: Cell<bool>,
     failure: RefCell<Option<anyhow::Error>>,
@@ -263,7 +266,7 @@ impl Mini {
                 }
             })),
             layout: Some(Box::new(with(|mini| {
-                mini.apply_height();
+                mini.schedule_height();
                 mini.paint_status();
             }))),
             clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
@@ -1182,6 +1185,25 @@ impl Mini {
         if let Err(error) = self.footer.set_footer_height(height) {
             log::warn!("mini could not set the footer height: {error}");
         }
+    }
+
+    /// Applies the composer's height before the next frame, once for all the keys of one read. A split footer
+    /// that grows scrolls the transcript up, and shrinking does not bring it back, so a menu that opens and
+    /// closes within one paste must not resize the footer.
+    fn schedule_height(self: &Rc<Self>) {
+        if self.height_pending.replace(true) {
+            return;
+        }
+        let weak = Rc::downgrade(self);
+        self.app.animate(move |_, _| {
+            if let Some(mini) = weak.upgrade() {
+                mini.height_pending.set(false);
+                if !mini.state.borrow().closed {
+                    mini.apply_height();
+                }
+            }
+            false
+        });
     }
 
     fn patch(&self, change: impl FnOnce(&mut State)) {
