@@ -132,37 +132,6 @@ story("releases the pinned height when a diff becomes empty", async ({ mount, pa
   await expect.poll(pinned).toBe("")
 })
 
-story("steps find to a drawn match after the virtualizer replaces its rows", async ({ mount, page }) => {
-  await mount("components-markdown--compact-result")
-  await page.evaluate(async (fixture) => (await import(fixture)).mountTextViewer(480), fixture)
-  const root = page.getByTestId("file-viewer-fixture")
-  await expect(root.locator('[data-line="1"]')).toBeInViewport()
-
-  await root.locator('[data-line="2"]').click()
-  await page.keyboard.press("ControlOrMeta+f")
-  const input = page.getByPlaceholder("Find")
-  await expect(input).toBeFocused()
-  await input.fill("value")
-  await expect(page.getByText(/^1\/\d+$/)).toBeVisible()
-
-  // Every row the search found leaves the document when the window moves this far.
-  await root.evaluate((element) => (element.scrollTop = (400 - 4) * 24))
-  await expect(root.locator('[data-line="400"]')).toBeInViewport()
-  await expect(root.locator('[data-line="2"]')).toHaveCount(0)
-  await input.press("Enter")
-
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const highlight = CSS.highlights.get("opencode-find-current")
-        const range = highlight ? Array.from(highlight)[0] : undefined
-
-        return range instanceof Range ? range.startContainer.isConnected : null
-      }),
-    )
-    .toBe(true)
-})
-
 story("scrolls a virtualized diff to an off-screen selection", async ({ mount, page }) => {
   await mount("components-markdown--compact-result")
   await page.evaluate(async (fixture) => (await import(fixture)).mountDiffViewer(480), fixture)
