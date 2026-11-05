@@ -24,22 +24,15 @@ impl WebSearch {
     pub fn update(&self, _cx: &Context<'_>, props: &Props<'_>) {
         let query = props.input_str("query");
         // `<Show when={stringValue(metadata.provider)}>`: an empty name is no provider.
-        let provider = props
-            .metadata
-            .get("provider")
-            .filter(|value| value.as_str().is_some_and(|value| !value.is_empty()));
+        let provider =
+            props.metadata.get("provider").filter(|value| value.as_str().is_some_and(|value| !value.is_empty()));
         let label = match provider {
             Some(provider) => format!("Web Search via {}", web_search_provider_name(provider)),
             None => "Web Search".to_owned(),
         };
         self.0.set(Inline {
             text: format!("{label} \"{}\"", query.unwrap_or_default()),
-            ..Inline::new(
-                props,
-                "◈",
-                "Searching web…",
-                query.is_some_and(|query| !query.is_empty()),
-            )
+            ..Inline::new(props, "◈", "Searching web…", query.is_some_and(|query| !query.is_empty()))
         });
     }
 }

@@ -29,16 +29,10 @@ impl Channels {
     /// `OPENCODE_CHANNEL`, else `latest`. The storage channel is `OPENCODE_TUI_CHANNEL`, else the
     /// channel (`packages/cli/src/commands/handlers/default.ts:100`).
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> Self {
-        let set = |name: &str| {
-            var(name)
-                .filter(|value| !value.is_empty())
-                .map(|value| value.to_string_lossy().into_owned())
-        };
+        let set =
+            |name: &str| var(name).filter(|value| !value.is_empty()).map(|value| value.to_string_lossy().into_owned());
         let channel = set("OPENCODE_CHANNEL").unwrap_or_else(|| DEFAULT.to_string());
-        Self {
-            storage: set("OPENCODE_TUI_CHANNEL").unwrap_or_else(|| channel.clone()),
-            channel,
-        }
+        Self { storage: set("OPENCODE_TUI_CHANNEL").unwrap_or_else(|| channel.clone()), channel }
     }
 }
 
@@ -54,13 +48,7 @@ pub fn filename(channel: &str) -> String {
     }
     let safe: String = channel
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
-                c
-            } else {
-                '-'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
         .collect();
     format!("service-{safe}.json")
 }
@@ -118,31 +106,16 @@ mod tests {
     use std::collections::HashMap;
 
     fn channels(vars: &[(&str, &str)]) -> Channels {
-        let vars: HashMap<String, OsString> = vars
-            .iter()
-            .map(|(k, v)| (k.to_string(), OsString::from(v)))
-            .collect();
+        let vars: HashMap<String, OsString> = vars.iter().map(|(k, v)| (k.to_string(), OsString::from(v))).collect();
         Channels::from_vars(|name| vars.get(name).cloned())
     }
 
     #[test]
     fn channel_from_env() {
+        assert_eq!(channels(&[]), Channels { channel: "latest".into(), storage: "latest".into() });
         assert_eq!(
-            channels(&[]),
-            Channels {
-                channel: "latest".into(),
-                storage: "latest".into()
-            }
-        );
-        assert_eq!(
-            channels(&[
-                ("OPENCODE_CHANNEL", "oc-x"),
-                ("OPENCODE_TUI_CHANNEL", "dev")
-            ]),
-            Channels {
-                channel: "oc-x".into(),
-                storage: "dev".into()
-            }
+            channels(&[("OPENCODE_CHANNEL", "oc-x"), ("OPENCODE_TUI_CHANNEL", "dev")]),
+            Channels { channel: "oc-x".into(), storage: "dev".into() }
         );
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "beta")]).storage, "beta");
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "")]).channel, "latest");
@@ -167,26 +140,10 @@ mod tests {
     #[test]
     fn versions() {
         assert!(version_belongs_to_channel(Some("1.2.3"), "latest", "1.2.3"));
-        assert!(version_belongs_to_channel(
-            Some("0.0.0-oc-x-202601"),
-            "oc-x",
-            "1.2.3"
-        ));
-        assert!(version_belongs_to_channel(
-            Some("0.0.0-oc-x-2026.1"),
-            "oc-x",
-            "1.2.3"
-        ));
-        assert!(!version_belongs_to_channel(
-            Some("0.0.0-oc-x-2026."),
-            "oc-x",
-            "1.2.3"
-        ));
-        assert!(!version_belongs_to_channel(
-            Some("0.0.0-oc-y-1"),
-            "oc-x",
-            "1.2.3"
-        ));
+        assert!(version_belongs_to_channel(Some("0.0.0-oc-x-202601"), "oc-x", "1.2.3"));
+        assert!(version_belongs_to_channel(Some("0.0.0-oc-x-2026.1"), "oc-x", "1.2.3"));
+        assert!(!version_belongs_to_channel(Some("0.0.0-oc-x-2026."), "oc-x", "1.2.3"));
+        assert!(!version_belongs_to_channel(Some("0.0.0-oc-y-1"), "oc-x", "1.2.3"));
         assert!(!version_belongs_to_channel(None, "oc-x", "1.2.3"));
     }
 }

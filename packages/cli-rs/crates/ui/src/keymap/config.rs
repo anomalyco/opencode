@@ -24,18 +24,11 @@ impl<T: Clone> Keybinds<T> {
         let unknown: Vec<&str> = overrides
             .keys()
             .map(String::as_str)
-            .filter(|name| {
-                !DEFINITIONS
-                    .iter()
-                    .any(|definition| definition.name == *name)
-            })
+            .filter(|name| !DEFINITIONS.iter().any(|definition| definition.name == *name))
             .collect();
         if !unknown.is_empty() {
             let plural = if unknown.len() == 1 { "" } else { "s" };
-            return Err(format!(
-                "Unrecognized keybind{plural}: {}",
-                unknown.join(", ")
-            ));
+            return Err(format!("Unrecognized keybind{plural}: {}", unknown.join(", ")));
         }
         let mut overrides = overrides.clone();
         if !terminal_suspend {
@@ -54,10 +47,7 @@ impl<T: Clone> Keybinds<T> {
         let config = DEFINITIONS
             .iter()
             .map(|definition| {
-                let value = overrides
-                    .get(definition.name)
-                    .cloned()
-                    .unwrap_or_else(|| default_value(definition.name));
+                let value = overrides.get(definition.name).cloned().unwrap_or_else(|| default_value(definition.name));
                 binding_value(&value)
                     .map(|value| (definition.name.to_owned(), value))
                     .map_err(|reason| format!("Invalid keybind \"{}\": {reason}", definition.name))
@@ -68,9 +58,7 @@ impl<T: Clone> Keybinds<T> {
                 binding.desc = description(command).map(str::to_owned);
             }
         };
-        Ok(Self {
-            lookup: BindingLookup::with_options(config, None, Some(&defaults))?,
-        })
+        Ok(Self { lookup: BindingLookup::with_options(config, None, Some(&defaults))? })
     }
 
     /// The bindings of `name`, empty when it has none.
@@ -86,19 +74,13 @@ impl<T: Clone> Keybinds<T> {
 
 /// The default value of a keybind name, as JSON.
 pub fn default_value(name: &str) -> Value {
-    let definition = DEFINITIONS
-        .iter()
-        .find(|definition| definition.name == name)
-        .expect("a defined keybind name");
+    let definition = DEFINITIONS.iter().find(|definition| definition.name == name).expect("a defined keybind name");
     serde_json::from_str(definition.default).expect("generated defaults are JSON")
 }
 
 /// The description of a keybind name.
 pub fn description(name: &str) -> Option<&'static str> {
-    DEFINITIONS
-        .iter()
-        .find(|definition| definition.name == name)
-        .map(|definition| definition.description)
+    DEFINITIONS.iter().find(|definition| definition.name == name).map(|definition| definition.description)
 }
 
 /// Decodes a value as `TuiKeybind.BindingValueSchema` does, then maps it as `createBindingLookup` does.
@@ -107,11 +89,7 @@ fn binding_value<T>(value: &Value) -> Result<BindingValue<T>, String> {
         Value::Bool(false) => Ok(BindingValue::Disabled),
         Value::String(text) if text == "none" => Ok(BindingValue::Disabled),
         Value::Array(items) if items.is_empty() => Ok(BindingValue::Disabled),
-        Value::Array(items) => items
-            .iter()
-            .map(binding_item)
-            .collect::<Result<_, _>>()
-            .map(BindingValue::Items),
+        Value::Array(items) => items.iter().map(binding_item).collect::<Result<_, _>>().map(BindingValue::Items),
         item => Ok(BindingValue::Items(vec![binding_item(item)?])),
     }
 }
@@ -134,10 +112,7 @@ fn stroke(object: &Map<String, Value>) -> Result<Key, String> {
         Some(Value::Bool(on)) => Ok(*on),
         Some(_) => Err(format!("\"{name}\" must be a boolean")),
     };
-    let name = object
-        .get("name")
-        .and_then(Value::as_str)
-        .expect("checked by the caller");
+    let name = object.get("name").and_then(Value::as_str).expect("checked by the caller");
     Ok(Key::Stroke(Stroke {
         name: name.to_owned(),
         ctrl: flag("ctrl")?,
@@ -151,9 +126,7 @@ fn stroke(object: &Map<String, Value>) -> Result<Key, String> {
 fn binding_object<T>(object: &Map<String, Value>) -> Result<Binding<T>, String> {
     let key = match object.get("key") {
         Some(Value::String(text)) => Key::Text(text.clone()),
-        Some(Value::Object(stroke_object))
-            if stroke_object.get("name").is_some_and(Value::is_string) =>
-        {
+        Some(Value::Object(stroke_object)) if stroke_object.get("name").is_some_and(Value::is_string) => {
             stroke(stroke_object)?
         }
         _ => return Err("a binding object needs a \"key\" string or key stroke".to_owned()),
@@ -175,13 +148,7 @@ fn binding_object<T>(object: &Map<String, Value>) -> Result<Binding<T>, String> 
     if let Some(fallthrough) = flag("fallthrough")? {
         binding.fallthrough = fallthrough;
     }
-    binding.desc = object
-        .get("desc")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-    binding.group = object
-        .get("group")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
+    binding.desc = object.get("desc").and_then(Value::as_str).map(str::to_owned);
+    binding.group = object.get("group").and_then(Value::as_str).map(str::to_owned);
     Ok(binding)
 }

@@ -27,9 +27,7 @@ pub const MAX_FRECENCY_ENTRIES: usize = 1000;
 
 /// `Date.now()`.
 pub fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as i64)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
 /// `emptyPrompt()`.
@@ -39,14 +37,11 @@ pub fn empty_prompt() -> Value {
 
 /// `parsePromptInfo`: an object with a string `text` and an array `pasted`.
 pub fn is_prompt(value: &Value) -> bool {
-    value.get("text").is_some_and(Value::is_string)
-        && value.get("pasted").is_some_and(Value::is_array)
+    value.get("text").is_some_and(Value::is_string) && value.get("pasted").is_some_and(Value::is_array)
 }
 
 fn lines(text: &str) -> impl Iterator<Item = Value> + '_ {
-    text.split('\n')
-        .filter(|line| !line.is_empty())
-        .filter_map(|line| serde_json::from_str(line).ok())
+    text.split('\n').filter(|line| !line.is_empty()).filter_map(|line| serde_json::from_str(line).ok())
 }
 
 fn last<T>(mut items: Vec<T>, limit: usize) -> Vec<T> {
@@ -56,9 +51,7 @@ fn last<T>(mut items: Vec<T>, limit: usize) -> Vec<T> {
 }
 
 fn body<'a>(entries: impl Iterator<Item = &'a Value>) -> String {
-    entries
-        .map(|entry| jsonc::stringify(entry) + "\n")
-        .collect()
+    entries.map(|entry| jsonc::stringify(entry) + "\n").collect()
 }
 
 fn append_text(file: &Path, text: &str) {
@@ -66,11 +59,7 @@ fn append_text(file: &Path, text: &str) {
         if let Some(dir) = file.parent() {
             fs::create_dir_all(dir)?;
         }
-        fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(file)?
-            .write_all(text.as_bytes())
+        fs::OpenOptions::new().create(true).append(true).open(file)?.write_all(text.as_bytes())
     };
     let _ = append();
 }
@@ -103,10 +92,7 @@ impl History {
         if let Err(error) = healed {
             log::warn!("prompt-history.jsonl: {error}");
         }
-        Self {
-            entries: parse_history(&fs::read_to_string(&file).unwrap_or_default()),
-            index: 0,
-        }
+        Self { entries: parse_history(&fs::read_to_string(&file).unwrap_or_default()), index: 0 }
     }
 
     pub fn entries(&self) -> &[Value] {
@@ -135,11 +121,7 @@ impl History {
     /// cursor. Returns whether the entry is new, so the caller saves it.
     pub fn append(&mut self, entry: Value) -> bool {
         self.index = 0;
-        if self
-            .entries
-            .last()
-            .is_some_and(|previous| jsonc::stringify(previous) == jsonc::stringify(&entry))
-        {
+        if self.entries.last().is_some_and(|previous| jsonc::stringify(previous) == jsonc::stringify(&entry)) {
             return false;
         }
         self.entries.push(entry);
@@ -156,10 +138,7 @@ pub fn save_history(state: &Path, entry: &Value) -> Result<(), lock::Error> {
     let line = jsonc::stringify(entry);
     with_lock(state, &file, || {
         let text = fs::read_to_string(&file).unwrap_or_default();
-        let repeat = lines(&text)
-            .filter(is_prompt)
-            .last()
-            .is_some_and(|previous| jsonc::stringify(&previous) == line);
+        let repeat = lines(&text).filter(is_prompt).last().is_some_and(|previous| jsonc::stringify(&previous) == line);
         if !repeat {
             append_text(&file, &(line.clone() + "\n"));
         }
@@ -171,18 +150,9 @@ fn history_file(state: &Path) -> PathBuf {
     state.join("prompt-history.jsonl")
 }
 
-fn with_lock<T>(
-    state: &Path,
-    file: &Path,
-    f: impl FnOnce() -> io::Result<T>,
-) -> Result<T, lock::Error> {
-    lock::with_lock(
-        &state.join("locks"),
-        &file.to_string_lossy(),
-        &lock::Options::default(),
-        f,
-    )?
-    .map_err(lock::Error::Io)
+fn with_lock<T>(state: &Path, file: &Path, f: impl FnOnce() -> io::Result<T>) -> Result<T, lock::Error> {
+    lock::with_lock(&state.join("locks"), &file.to_string_lossy(), &lock::Options::default(), f)?
+        .map_err(lock::Error::Io)
 }
 
 // Rewrites `file` atomically with `change(text)` when that gives a new text. A client that appends
@@ -214,11 +184,7 @@ fn rewrite(file: &Path, change: impl FnOnce(&str) -> Option<String>) -> io::Resu
 
 // `Array.prototype.at`.
 fn at(items: &[Value], index: i64) -> Option<&Value> {
-    let index = if index < 0 {
-        items.len().checked_sub(index.unsigned_abs() as usize)?
-    } else {
-        index as usize
-    };
+    let index = if index < 0 { items.len().checked_sub(index.unsigned_abs() as usize)? } else { index as usize };
     items.get(index)
 }
 
@@ -258,10 +224,7 @@ impl Stash {
         if let Err(error) = healed {
             log::warn!("prompt-stash.jsonl: {error}");
         }
-        Self {
-            state: state.to_path_buf(),
-            entries: parse_stash(&fs::read_to_string(&file).unwrap_or_default()),
-        }
+        Self { state: state.to_path_buf(), entries: parse_stash(&fs::read_to_string(&file).unwrap_or_default()) }
     }
 
     pub fn list(&self) -> &[Value] {
@@ -352,10 +315,7 @@ pub fn parse_frecency(text: &str) -> Vec<Value> {
 }
 
 fn last_open(entry: &Value) -> f64 {
-    entry
-        .get("lastOpen")
-        .and_then(Value::as_f64)
-        .unwrap_or(f64::NAN)
+    entry.get("lastOpen").and_then(Value::as_f64).unwrap_or(f64::NAN)
 }
 
 /// `useFrecency`: how often and how recently files were opened, by absolute path, in memory.
@@ -386,11 +346,7 @@ impl Frecency {
             .iter()
             .filter_map(|entry| Some((entry.get("path")?.as_str()?.to_string(), visit(entry)?)))
             .collect();
-        Self {
-            state: state.to_path_buf(),
-            cwd: cwd.to_path_buf(),
-            data,
-        }
+        Self { state: state.to_path_buf(), cwd: cwd.to_path_buf(), data }
     }
 
     pub fn data(&self) -> &IndexMap<String, Visit> {
@@ -401,9 +357,7 @@ impl Frecency {
     pub fn score(&self, path: &str, now: i64) -> f64 {
         self.data
             .get(&resolve(&self.cwd, path))
-            .map_or(0.0, |visit| {
-                visit.frequency / (1.0 + (now as f64 - visit.last_open) / 86_400_000.0)
-            })
+            .map_or(0.0, |visit| visit.frequency / (1.0 + (now as f64 - visit.last_open) / 86_400_000.0))
     }
 
     /// `updateFrecency(path)` at the time `now`: [`save_frecency`], then [`Frecency::record`].
@@ -420,8 +374,7 @@ impl Frecency {
         if self.data.len() <= MAX_FRECENCY_ENTRIES {
             return;
         }
-        self.data
-            .sort_by(|_, a, _, b| b.last_open.total_cmp(&a.last_open));
+        self.data.sort_by(|_, a, _, b| b.last_open.total_cmp(&a.last_open));
         self.data.truncate(MAX_FRECENCY_ENTRIES);
     }
 }
@@ -429,12 +382,7 @@ impl Frecency {
 /// `updateFrecency(path)`'s write at the time `now`, under the lock: counts one more than the file's
 /// latest line for the path, which another client may have written since the load, and appends the
 /// line. It never trims; [`Frecency::load`] does. Returns the absolute path and its visit.
-pub fn save_frecency(
-    state: &Path,
-    cwd: &Path,
-    path: &str,
-    now: i64,
-) -> Result<(String, Visit), lock::Error> {
+pub fn save_frecency(state: &Path, cwd: &Path, path: &str, now: i64) -> Result<(String, Visit), lock::Error> {
     let file = frecency_file(state);
     let path = resolve(cwd, path);
     let visit = with_lock(state, &file, || {
@@ -444,10 +392,7 @@ pub fn save_frecency(
             .last()
             .and_then(|entry| visit(&entry))
             .map_or(0.0, |visit| visit.frequency);
-        let visit = Visit {
-            frequency: frequency + 1.0,
-            last_open: now as f64,
-        };
+        let visit = Visit { frequency: frequency + 1.0, last_open: now as f64 };
         append_text(&file, &(line(&path, &visit) + "\n"));
         Ok(visit)
     })?;
@@ -459,10 +404,7 @@ fn frecency_file(state: &Path) -> PathBuf {
 }
 
 fn visit(entry: &Value) -> Option<Visit> {
-    Some(Visit {
-        frequency: entry.get("frequency")?.as_f64()?,
-        last_open: entry.get("lastOpen")?.as_f64()?,
-    })
+    Some(Visit { frequency: entry.get("frequency")?.as_f64()?, last_open: entry.get("lastOpen")?.as_f64()? })
 }
 
 fn line(path: &str, visit: &Visit) -> String {
@@ -501,24 +443,14 @@ mod tests {
     fn history_heals_appends_and_moves() {
         let state = tempfile::tempdir().unwrap();
         let file = state.path().join("prompt-history.jsonl");
-        fs::write(
-            &file,
-            "{\"text\":\"a\",\"pasted\":[]}\nbroken\n{\"text\":1}\n",
-        )
-        .unwrap();
+        fs::write(&file, "{\"text\":\"a\",\"pasted\":[]}\nbroken\n{\"text\":1}\n").unwrap();
         let mut history = History::load(state.path());
-        assert_eq!(
-            fs::read_to_string(&file).unwrap(),
-            "{\"text\":\"a\",\"pasted\":[]}\n"
-        );
+        assert_eq!(fs::read_to_string(&file).unwrap(), "{\"text\":\"a\",\"pasted\":[]}\n");
         assert!(history.append(prompt("b")));
         assert!(!history.append(prompt("b")));
         assert_eq!(history.entries().len(), 2);
         assert_eq!(history.step(-1, ""), Some(prompt("b")));
-        assert_eq!(
-            history.step(-1, "b"),
-            Some(json!({"text": "a", "pasted": []}))
-        );
+        assert_eq!(history.step(-1, "b"), Some(json!({"text": "a", "pasted": []})));
         assert_eq!(history.step(-1, "a"), None);
         assert_eq!(history.step(1, "x"), None);
         assert_eq!(history.step(1, "a"), Some(prompt("b")));
@@ -621,12 +553,7 @@ mod tests {
         let state = tempfile::tempdir().unwrap();
         let file = state.path().join("frecency.jsonl");
         let full: String = (0..MAX_FRECENCY_ENTRIES)
-            .map(|n| {
-                format!(
-                    "{{\"path\":\"/w/f{n}.rs\",\"frequency\":1,\"lastOpen\":{}}}\n",
-                    1000 - n
-                )
-            })
+            .map(|n| format!("{{\"path\":\"/w/f{n}.rs\",\"frequency\":1,\"lastOpen\":{}}}\n", 1000 - n))
             .collect();
         fs::write(&file, full).unwrap();
         let mut frecency = Frecency::load(state.path(), Path::new("/w"));
@@ -637,9 +564,7 @@ mod tests {
         );
         frecency.update("new.rs", 6000);
         let latest = |path: &str| {
-            parse_frecency(&fs::read_to_string(&file).unwrap())
-                .into_iter()
-                .find(|entry| entry["path"] == path)
+            parse_frecency(&fs::read_to_string(&file).unwrap()).into_iter().find(|entry| entry["path"] == path)
         };
         assert!(latest("/w/from_ts.rs").is_some(), "from_ts.rs was lost");
         assert_eq!(latest("/w/f0.rs").unwrap()["frequency"], 20);
@@ -676,9 +601,7 @@ mod tests {
         assert_eq!(frecency.score("/a", 86_400_030), 3.0);
         assert_eq!(frecency.score("/w/../a", 172_800_030), 1.5);
         assert!(
-            fs::read_to_string(&file)
-                .unwrap()
-                .ends_with("{\"path\":\"/a\",\"frequency\":3,\"lastOpen\":86400030}\n")
+            fs::read_to_string(&file).unwrap().ends_with("{\"path\":\"/a\",\"frequency\":3,\"lastOpen\":86400030}\n")
         );
     }
 }

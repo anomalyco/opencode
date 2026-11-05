@@ -36,34 +36,20 @@ impl Transport for Fixture {
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/session/ses_root") => (200, json!({ "data": session("ses_root", None) })),
             // The root's children, which a child's arrival reads.
-            ("GET", "/api/session") => (
-                200,
-                json!({ "data": [session("ses_child", Some("ses_root"))], "cursor": {} }),
-            ),
+            ("GET", "/api/session") => (200, json!({ "data": [session("ses_child", Some("ses_root"))], "cursor": {} })),
             ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": self.root })),
             ("GET", "/api/session/ses_child/permission") => (200, json!({ "data": self.child })),
             // The goal footer's RPC read (E.14); no goal is set.
             ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
             ("POST", _) => {
-                let body = request
-                    .body
-                    .as_deref()
-                    .map_or(Value::Null, |body| serde_json::from_slice(body).unwrap());
-                self.sent.lock().unwrap().push(Sent {
-                    method: request.method,
-                    path,
-                    body,
-                });
+                let body = request.body.as_deref().map_or(Value::Null, |body| serde_json::from_slice(body).unwrap());
+                self.sent.lock().unwrap().push(Sent { method: request.method, path, body });
                 (204, Value::Null)
             }
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -106,9 +92,7 @@ fn mount(fixture: Fixture, permissions: Permissions) -> Harness {
             directory: "/project".into(),
             config,
             roots: None,
-            route: Route::Session {
-                id: SessionID("ses_root".into()),
-            },
+            route: Route::Session { id: SessionID("ses_root".into()) },
             continue_: false,
             events: false,
         },
@@ -118,23 +102,15 @@ fn mount(fixture: Fixture, permissions: Permissions) -> Harness {
 
 impl Harness {
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
-        assert!(
-            found,
-            "{text:?} never showed:\n{screen}\n{:?}",
-            self.fixture.sent.lock().unwrap()
-        );
+        assert!(found, "{text:?} never showed:\n{screen}\n{:?}", self.fixture.sent.lock().unwrap());
         screen
     }
 
     /// Waits for the replies and returns them.
     fn replies(&self, count: usize) -> Vec<Sent> {
-        let arrived = self.app.wait_until(Duration::from_secs(5), || {
-            self.fixture.sent.lock().unwrap().len() >= count
-        });
+        let arrived = self.app.wait_until(Duration::from_secs(5), || self.fixture.sent.lock().unwrap().len() >= count);
         let sent = std::mem::take(&mut *self.fixture.sent.lock().unwrap());
         assert!(arrived, "expected {count} replies, got {sent:?}");
         sent
@@ -142,38 +118,25 @@ impl Harness {
 }
 
 fn reply(request: &str, session: &str, body: Value) -> Sent {
-    Sent {
-        method: "POST",
-        path: format!("/api/session/{session}/permission/{request}/reply"),
-        body,
-    }
+    Sent { method: "POST", path: format!("/api/session/{session}/permission/{request}/reply"), body }
 }
 
 #[test]
 fn enter_allows_once_and_the_prompt_returns() {
     let harness = mount(
-        Fixture {
-            root: vec![request("per_1", "ses_root", "shell", &["ls -la"], &[])],
-            ..Fixture::default()
-        },
+        Fixture { root: vec![request("per_1", "ses_root", "shell", &["ls -la"], &[])], ..Fixture::default() },
         Permissions::Prompt,
     );
     let screen = harness.wait_for("Permission required");
     assert!(screen.contains("- ls -la"), "{screen}");
     assert!(screen.contains("Allow once"), "{screen}");
     assert!(screen.contains("Reject"), "{screen}");
-    assert!(
-        !screen.contains("Always allow"),
-        "no save patterns:\n{screen}"
-    );
+    assert!(!screen.contains("Always allow"), "no save patterns:\n{screen}");
     assert!(screen.contains("ctrl+f fullscreen"), "{screen}");
     assert!(!screen.contains("╹▀"), "the prompt hides:\n{screen}");
 
     harness.app.press("enter");
-    assert_eq!(
-        harness.replies(1),
-        [reply("per_1", "ses_root", json!({ "decision": "once" }))]
-    );
+    assert_eq!(harness.replies(1), [reply("per_1", "ses_root", json!({ "decision": "once" }))]);
     harness.wait_for("╹▀");
     assert!(!harness.app.text().contains("Permission required"));
 }
@@ -182,13 +145,7 @@ fn enter_allows_once_and_the_prompt_returns() {
 fn always_shows_the_saved_patterns_and_replies_always() {
     let harness = mount(
         Fixture {
-            root: vec![request(
-                "per_1",
-                "ses_root",
-                "shell",
-                &["git status"],
-                &["git *"],
-            )],
+            root: vec![request("per_1", "ses_root", "shell", &["git status"], &["git *"])],
             ..Fixture::default()
         },
         Permissions::Prompt,
@@ -198,43 +155,30 @@ fn always_shows_the_saved_patterns_and_replies_always() {
     let screen = harness.wait_for("This will always allow the following patterns");
     assert!(screen.contains("- git *"), "{screen}");
     harness.app.press("enter");
-    assert_eq!(
-        harness.replies(1),
-        [reply("per_1", "ses_root", json!({ "decision": "always" }))]
-    );
+    assert_eq!(harness.replies(1), [reply("per_1", "ses_root", json!({ "decision": "always" }))]);
 }
 
 #[test]
 fn escape_rejects_a_root_request() {
     let harness = mount(
-        Fixture {
-            root: vec![request("per_1", "ses_root", "read", &["/etc/hosts"], &[])],
-            ..Fixture::default()
-        },
+        Fixture { root: vec![request("per_1", "ses_root", "read", &["/etc/hosts"], &[])], ..Fixture::default() },
         Permissions::Prompt,
     );
     let screen = harness.wait_for("Read /etc/hosts");
     assert!(screen.contains("Path: /etc/hosts"), "{screen}");
     harness.app.press("escape");
-    assert_eq!(
-        harness.replies(1),
-        [reply("per_1", "ses_root", json!({ "decision": "reject" }))]
-    );
+    assert_eq!(harness.replies(1), [reply("per_1", "ses_root", json!({ "decision": "reject" }))]);
 }
 
 #[test]
 fn a_subagent_rejection_asks_what_to_do_differently() {
     let harness = mount(
-        Fixture {
-            child: vec![request("per_2", "ses_child", "grep", &["TODO"], &[])],
-            ..Fixture::default()
-        },
+        Fixture { child: vec![request("per_2", "ses_child", "grep", &["TODO"], &[])], ..Fixture::default() },
         Permissions::Prompt,
     );
     harness.wait_for("Fix the parser");
     // The child joins the root's family, and its pending requests are read.
-    let child: SessionInfo =
-        serde_json::from_value(session("ses_child", Some("ses_root"))).unwrap();
+    let child: SessionInfo = serde_json::from_value(session("ses_child", Some("ses_root"))).unwrap();
     harness.tui.data.remember(child);
     harness.wait_for("Grep \"TODO\"");
 
@@ -253,30 +197,18 @@ fn a_subagent_rejection_asks_what_to_do_differently() {
     harness.app.type_text("oops");
     harness.wait_for("oops");
     harness.app.press("ctrl+c");
-    assert!(harness.app.wait_until(Duration::from_secs(5), || {
-        !harness.app.text().contains("oops")
-    }));
+    assert!(harness.app.wait_until(Duration::from_secs(5), || { !harness.app.text().contains("oops") }));
     harness.wait_for("Reject permission");
     harness.app.type_text("use rg");
     harness.wait_for("use rg");
     harness.app.press("enter");
-    assert_eq!(
-        harness.replies(1),
-        [reply(
-            "per_2",
-            "ses_child",
-            json!({ "decision": "reject", "message": "use rg" })
-        )]
-    );
+    assert_eq!(harness.replies(1), [reply("per_2", "ses_child", json!({ "decision": "reject", "message": "use rg" }))]);
 }
 
 #[test]
 fn ctrl_f_toggles_fullscreen_and_escape_minimizes_first() {
     let harness = mount(
-        Fixture {
-            root: vec![request("per_1", "ses_root", "webfetch", &[], &[])],
-            ..Fixture::default()
-        },
+        Fixture { root: vec![request("per_1", "ses_root", "webfetch", &[], &[])], ..Fixture::default() },
         Permissions::Prompt,
     );
     harness.wait_for("ctrl+f fullscreen");
@@ -288,10 +220,7 @@ fn ctrl_f_toggles_fullscreen_and_escape_minimizes_first() {
     harness.app.press("ctrl+f");
     harness.wait_for("ctrl+f minimize");
     harness.app.press("enter");
-    assert_eq!(
-        harness.replies(1),
-        [reply("per_1", "ses_root", json!({ "decision": "once" }))]
-    );
+    assert_eq!(harness.replies(1), [reply("per_1", "ses_root", json!({ "decision": "once" }))]);
 }
 
 #[test]
@@ -328,39 +257,18 @@ fn presentation_matches_the_typescript_rules() {
         (current.icon, current.title, current.lines)
     };
     let cases = [
+        (show("bash", &[], json!({ "command": "ls" }), Value::Null), ("#", "Shell command", vec!["$ ls"])),
         (
-            show("bash", &[], json!({ "command": "ls" }), Value::Null),
-            ("#", "Shell command", vec!["$ ls"]),
-        ),
-        (
-            show(
-                "read",
-                &[],
-                json!({ "filePath": "/project/a.rs" }),
-                Value::Null,
-            ),
+            show("read", &[], json!({ "filePath": "/project/a.rs" }), Value::Null),
             ("→", "Read a.rs", vec!["Path: a.rs"]),
         ),
+        (show("glob", &["*.rs"], Value::Null, Value::Null), ("✱", "Glob \"*.rs\"", vec!["Pattern: *.rs"])),
         (
-            show("glob", &["*.rs"], Value::Null, Value::Null),
-            ("✱", "Glob \"*.rs\"", vec!["Pattern: *.rs"]),
-        ),
-        (
-            show(
-                "task",
-                &[],
-                json!({ "subagent_type": "explore", "description": "Find it" }),
-                Value::Null,
-            ),
+            show("task", &[], json!({ "subagent_type": "explore", "description": "Find it" }), Value::Null),
             ("#", "Explore Subagent", vec!["◉ Find it"]),
         ),
         (
-            show(
-                "webfetch",
-                &[],
-                Value::Null,
-                json!({ "url": "https://x.dev" }),
-            ),
+            show("webfetch", &[], Value::Null, json!({ "url": "https://x.dev" })),
             ("%", "WebFetch https://x.dev", vec!["URL: https://x.dev"]),
         ),
         (
@@ -370,24 +278,11 @@ fn presentation_matches_the_typescript_rules() {
                 json!({ "path": "/project/a.rs", "operation": "hover", "line": 3, "character": 7 }),
                 Value::Null,
             ),
-            (
-                "→",
-                "LSP hover a.rs:3:7",
-                vec!["Operation: hover", "Path: a.rs", "Position: 3:7"],
-            ),
+            ("→", "LSP hover a.rs:3:7", vec!["Operation: hover", "Path: a.rs", "Position: 3:7"]),
         ),
         (
-            show(
-                "external_directory",
-                &["/tmp/build/*"],
-                Value::Null,
-                Value::Null,
-            ),
-            (
-                "←",
-                "Access external directory /tmp/build",
-                vec!["- /tmp/build/*"],
-            ),
+            show("external_directory", &["/tmp/build/*"], Value::Null, Value::Null),
+            ("←", "Access external directory /tmp/build", vec!["- /tmp/build/*"]),
         ),
         (
             show("doom_loop", &[], Value::Null, Value::Null),
@@ -397,19 +292,12 @@ fn presentation_matches_the_typescript_rules() {
                 vec!["This keeps the session running despite repeated failures."],
             ),
         ),
-        (
-            show("mcp_tool", &[], Value::Null, Value::Null),
-            ("⚙", "Call tool mcp_tool", vec!["Tool: mcp_tool"]),
-        ),
+        (show("mcp_tool", &[], Value::Null, Value::Null), ("⚙", "Call tool mcp_tool", vec!["Tool: mcp_tool"])),
     ];
     for ((icon, title, lines), (want_icon, want_title, want_lines)) in cases {
         assert_eq!(
             (icon, title.as_str(), lines),
-            (
-                want_icon,
-                want_title,
-                want_lines.into_iter().map(str::to_owned).collect()
-            )
+            (want_icon, want_title, want_lines.into_iter().map(str::to_owned).collect())
         );
     }
 
@@ -425,15 +313,9 @@ fn presentation_matches_the_typescript_rules() {
     assert_eq!(edit.diff.as_deref(), Some("@@ -1 +1 @@\n-a\n+b\n"));
     assert_eq!(edit.patch, None, "a diff wins over the patch text");
 
-    assert_eq!(
-        always_lines("shell", &["*".to_owned()]),
-        ["This will always allow shell for this project."]
-    );
+    assert_eq!(always_lines("shell", &["*".to_owned()]), ["This will always allow shell for this project."]);
     assert_eq!(
         always_lines("shell", &["git *".to_owned()]),
-        [
-            "This will always allow the following patterns for this project.",
-            "- git *"
-        ]
+        ["This will always allow the following patterns for this project.", "- git *"]
     );
 }

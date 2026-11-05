@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use opencode_api::generated::{
     AgentInfo, ModelInfo, ModelRef, SessionID, SessionInboxInfo, SessionMessageAssistant,
-    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction,
-    SessionMessageID, SessionMessageInfo,
+    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID,
+    SessionMessageInfo,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
@@ -31,9 +31,7 @@ use opentui::syntax::SyntaxTheme;
 use opentui::widget::ScrollEdge;
 
 use super::super::tools;
-use super::{
-    assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user,
-};
+use super::{assistant, background, compaction, errors, footer, reasoning, revert, shell, skill, user};
 use crate::app::Tui;
 use crate::routes::session::grouping;
 
@@ -159,23 +157,10 @@ impl Transcript {
             .sticky(true)
             .sticky_start(ScrollEdge::Bottom)
             .scrollbars(false);
-        let hint = Text::new(app, "Loading session history…")
-            .fg(theme.text.feedback.info.base)
-            .visible(false);
+        let hint = Text::new(app, "Loading session history…").fg(theme.text.feedback.info.base).visible(false);
         // `index.tsx:1573`: one row under the transcript for the history and "Jump to latest" hints.
-        let status = View::new(app)
-            .row()
-            .height(1)
-            .shrink(0.0)
-            .justify(Justify::End)
-            .child(&hint);
-        let root = View::new(app)
-            .column()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_height(0)
-            .child(&scroll)
-            .child(&status);
+        let status = View::new(app).row().height(1).shrink(0.0).justify(Justify::End).child(&hint);
+        let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&scroll).child(&status);
         let background = background::Hint::new(app, &theme);
         let revert = revert::Banner::new(tui, &theme);
         scroll.add(background.root());
@@ -223,28 +208,15 @@ impl Transcript {
             *self.0.groups.expanded.borrow_mut() = tui.tabs.expanded_groups(&session.0);
         }
         let location = self.0.location(tui);
-        let catalogs = location
-            .as_ref()
-            .is_some_and(|location| changes.location(location));
+        let catalogs = location.as_ref().is_some_and(|location| changes.location(location));
         let pending = changes.pending(session);
         // A tool row waiting on a permission request takes the warning color.
         let permissions = changes.permissions(session);
-        if !changes.any_message(session)
-            && !changes.session(session)
-            && !catalogs
-            && !pending
-            && !permissions
-        {
+        if !changes.any_message(session) && !changes.session(session) && !catalogs && !pending && !permissions {
             return;
         }
-        let force = changes.messages(session)
-            || changes.session(session)
-            || catalogs
-            || pending
-            || permissions;
-        self.0.render(tui, |message| {
-            force || changes.message(session, &SessionMessageID(message.to_owned()))
-        });
+        let force = changes.messages(session) || changes.session(session) || catalogs || pending || permissions;
+        self.0.render(tui, |message| force || changes.message(session, &SessionMessageID(message.to_owned())));
     }
 
     /// Mounts older rows, or loads an older page when every row is mounted. Returns whether it did
@@ -339,9 +311,7 @@ impl Transcript {
             let row = &rows[key];
             match (key, &row.body) {
                 (_, Body::Group(group)) => group.anchors(&mut out),
-                (RowKey::Message(id) | RowKey::Part(id, _), _) => {
-                    out.push((id.clone(), row.wrapper.rect().screen_y))
-                }
+                (RowKey::Message(id) | RowKey::Part(id, _), _) => out.push((id.clone(), row.wrapper.rect().screen_y)),
                 _ => {}
             }
         }
@@ -365,15 +335,8 @@ impl Transcript {
                 _ => continue,
             };
             let Some(y) = self.row_y(key) else { continue };
-            let item = ScrollAnchor {
-                row: key.clone(),
-                screen_y: y - top,
-            };
-            if item.screen_y <= inset
-                && anchor
-                    .as_ref()
-                    .is_none_or(|anchor| item.screen_y > anchor.screen_y)
-            {
+            let item = ScrollAnchor { row: key.clone(), screen_y: y - top };
+            if item.screen_y <= inset && anchor.as_ref().is_none_or(|anchor| item.screen_y > anchor.screen_y) {
                 anchor = Some(item.clone());
             }
             first.get_or_insert(item);
@@ -398,19 +361,12 @@ impl Transcript {
         let window = {
             let specs = self.0.specs.borrow();
             let weights = self.0.weights.borrow();
-            specs
-                .iter()
-                .position(|spec| spec.key() == *key)
-                .map(|index| {
-                    let start = grouping::rows_before(&weights, index, BACKFILL_CHUNK);
-                    let end = grouping::rows_after(&weights, index, BACKFILL_CHUNK);
-                    let start = if start == 0 {
-                        Start::Top
-                    } else {
-                        Start::Row(specs[start].key())
-                    };
-                    (start, (end < specs.len()).then_some(end))
-                })
+            specs.iter().position(|spec| spec.key() == *key).map(|index| {
+                let start = grouping::rows_before(&weights, index, BACKFILL_CHUNK);
+                let end = grouping::rows_after(&weights, index, BACKFILL_CHUNK);
+                let start = if start == 0 { Start::Top } else { Start::Row(specs[start].key()) };
+                (start, (end < specs.len()).then_some(end))
+            })
         };
         let Some((start, end)) = window else {
             return false;
@@ -439,16 +395,7 @@ impl Transcript {
         let data = tui.data.clone();
         let weak = self.0.this.clone();
         tui.app.spawn(
-            async move {
-                data.message_load_more(
-                    &session,
-                    LoadMore {
-                        all: true,
-                        ..LoadMore::default()
-                    },
-                )
-                .await
-            },
+            async move { data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }).await },
             move |_, result| {
                 let Some(inner) = weak.upgrade() else { return };
                 let Some(tui) = inner.tui.upgrade() else {
@@ -468,11 +415,9 @@ impl Inner {
             return Some(location);
         }
         let session = self.session.borrow().clone()?;
-        let location = tui.data.read(|state| {
-            state
-                .session(&session)
-                .map(|info| Location::new(info.location.directory.as_str()))
-        })?;
+        let location = tui
+            .data
+            .read(|state| state.session(&session).map(|info| Location::new(info.location.directory.as_str())))?;
         for catalog in [Catalog::Agent, Catalog::Model] {
             drop(tui.data.catalog_sync(catalog, Some(&location)));
         }
@@ -491,8 +436,7 @@ impl Inner {
                 return;
             };
             if let Some(session) = inner.session.borrow().as_ref() {
-                tui.tabs
-                    .set_expanded_groups(&session.0, inner.groups.expanded.borrow().clone());
+                tui.tabs.set_expanded_groups(&session.0, inner.groups.expanded.borrow().clone());
             }
             inner.render(&tui, |_| true);
         }));
@@ -550,36 +494,21 @@ impl Inner {
     /// `session.toggle.thinking` (`index.tsx:1163-1180`): writes `session.thinking`, which the rows follow.
     fn register(&self, tui: &Tui) {
         let weak = self.this.clone();
-        let title = if self.view.get().hide_thinking {
-            "Expand thinking"
-        } else {
-            "Collapse thinking"
-        };
+        let title = if self.view.get().hide_thinking { "Expand thinking" } else { "Collapse thinking" };
         let toggle = TuiCommand::new("session.toggle.thinking", move |_, _| {
             let Some(inner) = weak.upgrade() else { return };
             let Some(tui) = inner.tui.upgrade() else {
                 return;
             };
-            let next = if inner.view.get().hide_thinking {
-                Visibility::Show
-            } else {
-                Visibility::Hide
-            };
+            let next = if inner.view.get().hide_thinking { Visibility::Show } else { Visibility::Hide };
             crate::dialogs::settings::update(&tui, move |draft| {
-                crate::dialogs::settings::set_path(
-                    draft,
-                    &["session", "thinking"],
-                    next.as_str().into(),
-                );
+                crate::dialogs::settings::set_path(draft, &["session", "thinking"], next.as_str().into());
             });
             tui.dialogs.clear();
         })
         .title(title)
         .group("Session");
-        let layer = KeymapLayer {
-            commands: vec![toggle],
-            ..KeymapLayer::default()
-        };
+        let layer = KeymapLayer { commands: vec![toggle], ..KeymapLayer::default() };
         match tui.keymap.layer(layer) {
             Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
             Err(error) => log::error!("transcript keymap layer: {error}"),
@@ -604,46 +533,28 @@ impl Inner {
             let messages = state.messages(&session);
             let all = messages;
             let info = state.session(&session);
-            let revert = info
-                .and_then(|info| info.revert.as_ref())
-                .map(|revert| revert.message_id.as_str());
+            let revert = info.and_then(|info| info.revert.as_ref()).map(|revert| revert.message_id.as_str());
             let messages = match revert {
                 // Messages after the revert boundary are hidden (`rows.ts:70`).
                 Some(boundary) => {
-                    let end = messages
-                        .iter()
-                        .position(|message| message.id() >= boundary)
-                        .unwrap_or(messages.len());
+                    let end = messages.iter().position(|message| message.id() >= boundary).unwrap_or(messages.len());
                     &messages[..end]
                 }
                 None => messages,
             };
             // Queued prompts show in the dock (E.10b), not the transcript (`rows.ts:63-67`).
-            let queued: HashSet<String> = crate::routes::session::queued::prompts(state, &session)
-                .into_iter()
-                .map(|(id, _)| id)
-                .collect();
+            let queued: HashSet<String> =
+                crate::routes::session::queued::prompts(state, &session).into_iter().map(|(id, _)| id).collect();
             let view = self.view.get();
             let mut rows = reduce(messages, view.turn_tokens.is_some());
             rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id)));
             let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
             // Compactions waiting in the inbox go last (`createSessionRows`).
-            specs.extend(
-                state
-                    .pending(&session)
-                    .iter()
-                    .filter_map(|item| match item {
-                        SessionInboxInfo::Compaction(compaction) => {
-                            Some(Spec::CompactionQueued(compaction.id.0.clone()))
-                        }
-                        _ => None,
-                    }),
-            );
-            let catalogs = self
-                .location
-                .borrow()
-                .as_ref()
-                .and_then(|location| state.location(Some(location)));
+            specs.extend(state.pending(&session).iter().filter_map(|item| match item {
+                SessionInboxInfo::Compaction(compaction) => Some(Spec::CompactionQueued(compaction.id.0.clone())),
+                _ => None,
+            }));
+            let catalogs = self.location.borrow().as_ref().and_then(|location| state.location(Some(location)));
             let cx = Context {
                 tui,
                 state,
@@ -657,9 +568,7 @@ impl Inner {
                     .iter()
                     .filter(|agent| !agent.hidden)
                     .collect(),
-                models: catalogs
-                    .and_then(|data| data.model.as_deref())
-                    .unwrap_or_default(),
+                models: catalogs.and_then(|data| data.model.as_deref()).unwrap_or_default(),
                 app: &tui.app,
                 theme: &self.theme,
                 syntax: &self.syntax,
@@ -673,35 +582,20 @@ impl Inner {
                 animations: opencode_ui::motion::enabled(tui.config().info.animations),
                 mode,
                 width,
-                session_agent: info
-                    .and_then(|info| info.agent.as_ref())
-                    .map(|agent| agent.as_str()),
-                index: messages
-                    .iter()
-                    .enumerate()
-                    .map(|(index, message)| (message.id(), index))
-                    .collect(),
+                session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
+                index: messages.iter().enumerate().map(|(index, message)| (message.id(), index)).collect(),
                 messages,
                 legacy: legacy(messages),
             };
-            *self.weights.borrow_mut() = specs
-                .iter()
-                .map(|spec| self.groups.weight(spec, cx.hide_thinking))
-                .collect();
+            *self.weights.borrow_mut() = specs.iter().map(|spec| self.groups.weight(spec, cx.hide_thinking)).collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
-            self.background
-                .update(messages, keys.background.clone(), errors::now());
-            let revert = info.and_then(|info| info.revert.as_ref()).map(|revert| {
-                (
-                    revert.message_id.as_str(),
-                    revert.files.as_deref().unwrap_or_default(),
-                )
-            });
-            self.revert
-                .update(tui, &session, revert, all, keys.redo.clone());
-            self.limits
-                .check(messages, &|id| state.has_input(&session, id))
+            self.background.update(messages, keys.background.clone(), errors::now());
+            let revert = info
+                .and_then(|info| info.revert.as_ref())
+                .map(|revert| (revert.message_id.as_str(), revert.files.as_deref().unwrap_or_default()));
+            self.revert.update(tui, &session, revert, all, keys.redo.clone());
+            self.limits.check(messages, &|id| state.has_input(&session, id))
         });
         for stop in stops {
             stop.run(tui);
@@ -718,11 +612,7 @@ impl Inner {
         if self.loading.get() || !matches!(self.specs.borrow().first(), Some(Spec::Group(_))) {
             return;
         }
-        let count = tui.data.read(|state| {
-            state
-                .has_more_messages(&session)
-                .then(|| state.messages(&session).len())
-        });
+        let count = tui.data.read(|state| state.has_more_messages(&session).then(|| state.messages(&session).len()));
         // A page that adds nothing would otherwise load again forever.
         let Some(count) = count.filter(|count| self.boundary.get() != Some(*count)) else {
             return;
@@ -731,19 +621,16 @@ impl Inner {
         self.loading.set(true);
         let data = tui.data.clone();
         let weak = self.this.clone();
-        tui.app.spawn(
-            async move { data.message_load_more(&session, LoadMore::default()).await },
-            move |_, result| {
-                let Some(inner) = weak.upgrade() else { return };
-                inner.loading.set(false);
-                if let Err(error) = result {
-                    log::error!("Failed to load older messages: {error}");
-                }
-                if let Some(tui) = inner.tui.upgrade() {
-                    inner.complete_group_boundary(&tui);
-                }
-            },
-        );
+        tui.app.spawn(async move { data.message_load_more(&session, LoadMore::default()).await }, move |_, result| {
+            let Some(inner) = weak.upgrade() else { return };
+            inner.loading.set(false);
+            if let Err(error) = result {
+                log::error!("Failed to load older messages: {error}");
+            }
+            if let Some(tui) = inner.tui.upgrade() {
+                inner.complete_group_boundary(&tui);
+            }
+        });
     }
 
     fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(&str) -> bool) {
@@ -769,17 +656,13 @@ impl Inner {
             && keys.first() != Some(first)
             && self.pin.borrow().is_none()
         {
-            *self.pin.borrow_mut() = Some(Pin {
-                height: self.scroll.content_view().rect().height,
-                frame: cx.app.frame_number(),
-            });
+            *self.pin.borrow_mut() =
+                Some(Pin { height: self.scroll.content_view().rect().height, frame: cx.app.frame_number() });
         }
 
         for (spec, key) in specs[start..].iter().zip(&keys) {
             let fresh = !rows.contains_key(key);
-            let row = rows
-                .entry(key.clone())
-                .or_insert_with(|| Row::new(cx, spec));
+            let row = rows.entry(key.clone()).or_insert_with(|| Row::new(cx, spec));
             if fresh || spec.messages().into_iter().any(&changed) {
                 row.update(cx, spec);
             }
@@ -815,11 +698,7 @@ impl Inner {
             let start = self.window_start(&specs);
             if start > 0 {
                 let next = grouping::rows_before(&self.weights.borrow(), start, BACKFILL_CHUNK);
-                Some(if next == 0 {
-                    Start::Top
-                } else {
-                    Start::Row(specs[next].key())
-                })
+                Some(if next == 0 { Start::Top } else { Start::Row(specs[next].key()) })
             } else {
                 None
             }
@@ -835,9 +714,7 @@ impl Inner {
     }
 
     fn at_end(&self) -> bool {
-        self.end
-            .get()
-            .is_none_or(|end| end >= self.specs.borrow().len())
+        self.end.get().is_none_or(|end| end >= self.specs.borrow().len())
     }
 
     /// `revealNewerRows`: near the end of a head window, mount [`BACKFILL_CHUNK`] more rows below it.
@@ -876,21 +753,18 @@ impl Inner {
         *self.start.borrow_mut() = Start::Top;
         let data = tui.data.clone();
         let weak = self.this.clone();
-        tui.app.spawn(
-            async move { data.message_load_more(&session, LoadMore::default()).await },
-            move |_, result| {
-                let Some(inner) = weak.upgrade() else { return };
-                inner.loading.set(false);
-                inner.hint.visible(false);
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
-                match result {
-                    Ok(_) => inner.complete_group_boundary(&tui),
-                    Err(error) => tui.toasts.error(error.to_string()),
-                }
-            },
-        );
+        tui.app.spawn(async move { data.message_load_more(&session, LoadMore::default()).await }, move |_, result| {
+            let Some(inner) = weak.upgrade() else { return };
+            inner.loading.set(false);
+            inner.hint.visible(false);
+            let Some(tui) = inner.tui.upgrade() else {
+                return;
+            };
+            match result {
+                Ok(_) => inner.complete_group_boundary(&tui),
+                Err(error) => tui.toasts.error(error.to_string()),
+            }
+        });
         true
     }
 
@@ -899,12 +773,7 @@ impl Inner {
     fn follow(&self, tui: &Tui, down: bool) {
         // Rows mounted since the last frame are not in the content's size yet.
         let frame = tui.app.frame_number();
-        if self
-            .pin
-            .borrow()
-            .as_ref()
-            .is_some_and(|pin| frame <= pin.frame + 1)
-        {
+        if self.pin.borrow().as_ref().is_some_and(|pin| frame <= pin.frame + 1) {
             return;
         }
         let (_, top) = self.scroll.scroll_position();
@@ -940,10 +809,7 @@ fn window_start(start: &Start, specs: &[Spec], weights: &[usize]) -> usize {
     match start {
         Start::Tail => tail,
         Start::Top => 0,
-        Start::Row(key) => specs
-            .iter()
-            .position(|spec| spec.key() == *key)
-            .map_or(tail, |index| index.min(tail)),
+        Start::Row(key) => specs.iter().position(|spec| spec.key() == *key).map_or(tail, |index| index.min(tail)),
     }
 }
 
@@ -1032,18 +898,10 @@ impl Context<'_> {
                 colors.push(color);
             }
         }
-        let Some(index) = self
-            .agents
-            .iter()
-            .position(|item| item.id.as_str() == agent)
-        else {
+        let Some(index) = self.agents.iter().position(|item| item.id.as_str() == agent) else {
             return colors[0];
         };
-        self.agents[index]
-            .color
-            .as_ref()
-            .and_then(|color| hex(color.as_str()))
-            .unwrap_or(colors[index % colors.len()])
+        self.agents[index].color.as_ref().and_then(|color| hex(color.as_str())).unwrap_or(colors[index % colors.len()])
     }
 
     /// The model's name, else `provider/model` (`AssistantFooter`'s `model`).
@@ -1051,10 +909,7 @@ impl Context<'_> {
         self.models
             .iter()
             .find(|item| item.provider_id == model.provider_id && item.id == model.id)
-            .map_or_else(
-                || format!("{}/{}", model.provider_id.as_str(), model.id),
-                |item| item.name.clone(),
-            )
+            .map_or_else(|| format!("{}/{}", model.provider_id.as_str(), model.id), |item| item.name.clone())
     }
 }
 
@@ -1067,15 +922,13 @@ pub enum Part {
 }
 
 impl Part {
-    pub fn resolve<'a>(
-        &self,
-        message: &'a SessionMessageAssistant,
-    ) -> Option<&'a SessionMessageAssistantContentItem> {
+    pub fn resolve<'a>(&self, message: &'a SessionMessageAssistant) -> Option<&'a SessionMessageAssistantContentItem> {
         let (want_text, ordinal) = match self {
             Self::Tool(id) => {
-                return message.content.iter().find(
-                    |item| matches!(item, SessionMessageAssistantContentItem::Tool(tool) if tool.id == *id),
-                );
+                return message
+                    .content
+                    .iter()
+                    .find(|item| matches!(item, SessionMessageAssistantContentItem::Tool(tool) if tool.id == *id));
             }
             Self::Text(ordinal) => (true, *ordinal),
             Self::Reasoning(ordinal) => (false, *ordinal),
@@ -1126,9 +979,7 @@ impl Spec {
             Self::Message(id) => RowKey::Message(id.clone()),
             Self::Part { message, part } => RowKey::Part(message.clone(), part.clone()),
             Self::Footer(id) => RowKey::Footer(id.clone()),
-            Self::TurnUsage { messages, .. } => {
-                RowKey::TurnUsage(messages.first().cloned().unwrap_or_default())
-            }
+            Self::TurnUsage { messages, .. } => RowKey::TurnUsage(messages.first().cloned().unwrap_or_default()),
             Self::Group(group) => RowKey::Group(group.id(0).unwrap_or_default()),
             Self::CompactionQueued(id) => RowKey::CompactionQueued(id.clone()),
         }
@@ -1138,18 +989,11 @@ impl Spec {
     /// group every row in it.
     fn messages(&self) -> Vec<&str> {
         match self {
-            Self::Message(id)
-            | Self::Footer(id)
-            | Self::Part { message: id, .. }
-            | Self::CompactionQueued(id) => vec![id],
-            Self::TurnUsage { messages, .. } => {
-                messages.last().map(String::as_str).into_iter().collect()
+            Self::Message(id) | Self::Footer(id) | Self::Part { message: id, .. } | Self::CompactionQueued(id) => {
+                vec![id]
             }
-            Self::Group(group) => group
-                .entries()
-                .into_iter()
-                .flat_map(|spec| spec.messages())
-                .collect(),
+            Self::TurnUsage { messages, .. } => messages.last().map(String::as_str).into_iter().collect(),
+            Self::Group(group) => group.entries().into_iter().flat_map(|spec| spec.messages()).collect(),
         }
     }
 }
@@ -1166,10 +1010,7 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
         if !turn_tokens {
             return;
         }
-        let used: Vec<_> = steps
-            .drain(..)
-            .filter(|step| footer::total(step) > 0.0)
-            .collect();
+        let used: Vec<_> = steps.drain(..).filter(|step| footer::total(step) > 0.0).collect();
         let Some(last) = used.last() else { return };
         rows.push(Spec::TurnUsage {
             messages: used.iter().map(|step| step.id.0.clone()).collect(),
@@ -1194,18 +1035,14 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
                 continue;
             }
             SessionMessageInfo::Synthetic(synthetic)
-                if synthetic
-                    .description
-                    .as_deref()
-                    .is_none_or(|text| text.trim().is_empty()) =>
+                if synthetic.description.as_deref().is_none_or(|text| text.trim().is_empty()) =>
             {
                 continue;
             }
             SessionMessageInfo::Compaction(compaction) => {
                 match compaction {
                     SessionMessageCompaction::Failed(failed) => {
-                        shown_error =
-                            Some((failed.error.r#type.clone(), failed.error.message.clone()))
+                        shown_error = Some((failed.error.r#type.clone(), failed.error.message.clone()))
                     }
                     SessionMessageCompaction::Completed(_) => {
                         shown_error = None;
@@ -1223,10 +1060,7 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
             }
         };
         steps.push(assistant);
-        shown_error = assistant
-            .error
-            .as_ref()
-            .map(|error| (error.r#type.clone(), error.message.clone()));
+        shown_error = assistant.error.as_ref().map(|error| (error.r#type.clone(), error.message.clone()));
         let (mut texts, mut reasonings) = (0, 0);
         for item in &assistant.content {
             let part = match item {
@@ -1247,16 +1081,10 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
                 SessionMessageAssistantContentItem::Tool(tool) => Part::Tool(tool.id.clone()),
                 SessionMessageAssistantContentItem::Unknown(_) => continue,
             };
-            rows.push(Spec::Part {
-                message: assistant.id.0.clone(),
-                part,
-            });
+            rows.push(Spec::Part { message: assistant.id.0.clone(), part });
         }
         let terminal = assistant.finish.as_ref().is_some_and(|finish| {
-            !matches!(
-                finish,
-                SessionMessageAssistantFinish::ToolCalls | SessionMessageAssistantFinish::Unknown2
-            )
+            !matches!(finish, SessionMessageAssistantFinish::ToolCalls | SessionMessageAssistantFinish::Unknown2)
         }) || assistant.error.is_some();
         if terminal || assistant.retry.is_some() {
             rows.push(Spec::Footer(assistant.id.0.clone()));
@@ -1269,9 +1097,7 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
 }
 
 pub fn legacy(messages: &[SessionMessageInfo]) -> bool {
-    !messages
-        .iter()
-        .any(|message| matches!(message, SessionMessageInfo::Idle(_)))
+    !messages.iter().any(|message| matches!(message, SessionMessageInfo::Idle(_)))
 }
 
 /// A row's wrapper (`SessionRowView`: one blank line above) and its content. Groups mount their
@@ -1298,17 +1124,12 @@ enum Body {
 
 impl Row {
     pub(crate) fn new(cx: &Context<'_>, spec: &Spec) -> Self {
-        let wrapper = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .margin_edge(Edge::Top, 1);
+        let wrapper = View::new(cx.app).column().shrink(0.0).margin_edge(Edge::Top, 1);
         let body = match spec {
             Spec::Message(id) => match cx.message(id) {
                 Some(SessionMessageInfo::User(_)) => Body::User(user::User::new(cx)),
                 Some(SessionMessageInfo::Shell(_)) => Body::Shell(shell::Shell::new(cx)),
-                Some(SessionMessageInfo::Compaction(_)) => {
-                    Body::Compaction(compaction::Compaction::new(cx))
-                }
+                Some(SessionMessageInfo::Compaction(_)) => Body::Compaction(compaction::Compaction::new(cx)),
                 Some(SessionMessageInfo::Idle(_)) => Body::Error(errors::ExecutionError::new(cx)),
                 _ => Body::Notice(skill::Notice::new(cx)),
             },
@@ -1370,24 +1191,21 @@ impl Row {
             }
             (Body::Text(view), Spec::Part { message, part }) => {
                 if let Some(assistant) = cx.assistant(message)
-                    && let Some(SessionMessageAssistantContentItem::Text(text)) =
-                        part.resolve(assistant)
+                    && let Some(SessionMessageAssistantContentItem::Text(text)) = part.resolve(assistant)
                 {
                     view.update(assistant, text);
                 }
             }
             (Body::Reasoning(view), Spec::Part { message, part }) => {
                 if let Some(assistant) = cx.assistant(message)
-                    && let Some(SessionMessageAssistantContentItem::Reasoning(reasoning)) =
-                        part.resolve(assistant)
+                    && let Some(SessionMessageAssistantContentItem::Reasoning(reasoning)) = part.resolve(assistant)
                 {
                     view.update(cx, assistant, reasoning);
                 }
             }
             (Body::Tool(view), Spec::Part { message, part }) => {
                 if let Some(assistant) = cx.assistant(message)
-                    && let Some(SessionMessageAssistantContentItem::Tool(tool)) =
-                        part.resolve(assistant)
+                    && let Some(SessionMessageAssistantContentItem::Tool(tool)) = part.resolve(assistant)
                 {
                     view.update(cx, assistant, tool);
                 }
@@ -1468,10 +1286,7 @@ mod tests {
             assistant("msg_3", json!([{ "type": "text", "text": "done" }]), Some("stop")),
             { "id": "msg_4", "type": "synthetic", "text": "hidden", "time": { "created": 1 } },
         ]));
-        let part = |message: &str, part| Spec::Part {
-            message: message.into(),
-            part,
-        };
+        let part = |message: &str, part| Spec::Part { message: message.into(), part };
         assert_eq!(
             reduce(&list, false),
             vec![
@@ -1487,23 +1302,15 @@ mod tests {
         let usage = reduce(&list, true);
         assert_eq!(
             usage.last(),
-            Some(&Spec::TurnUsage {
-                messages: vec!["msg_2".into(), "msg_3".into()],
-                previous: None,
-            })
+            Some(&Spec::TurnUsage { messages: vec!["msg_2".into(), "msg_3".into()], previous: None })
         );
     }
 
     #[test]
     fn the_window_follows_the_tail_until_pinned() {
-        let specs: Vec<Spec> = (0..100)
-            .map(|index| Spec::Message(format!("msg_{index:03}")))
-            .collect();
+        let specs: Vec<Spec> = (0..100).map(|index| Spec::Message(format!("msg_{index:03}"))).collect();
         let weights = vec![1; 100];
-        assert_eq!(
-            window_start(&Start::Tail, &specs, &weights),
-            100 - TAIL_ROWS
-        );
+        assert_eq!(window_start(&Start::Tail, &specs, &weights), 100 - TAIL_ROWS);
         assert_eq!(window_start(&Start::Top, &specs, &weights), 0);
         let pinned = Start::Row(RowKey::Message("msg_010".into()));
         assert_eq!(window_start(&pinned, &specs, &weights), 10);
@@ -1516,9 +1323,6 @@ mod tests {
         // An open group costs its children: fewer rows fill the tail.
         let mut heavy = weights.clone();
         heavy[95] = 10;
-        assert_eq!(
-            window_start(&Start::Tail, &specs, &heavy),
-            100 - TAIL_ROWS + 9
-        );
+        assert_eq!(window_start(&Start::Tail, &specs, &heavy), 100 - TAIL_ROWS + 9);
     }
 }

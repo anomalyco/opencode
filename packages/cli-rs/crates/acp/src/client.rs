@@ -17,17 +17,11 @@ pub fn classify(error: &Error) -> Failure {
         // The TS client reports a failed send or body read as a transport error.
         Error::Transport(_) => Failure::ServerUnavailable,
         Error::Declared(declared) => {
-            let text = |key: &str| {
-                declared
-                    .body
-                    .get(key)
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            };
+            let text = |key: &str| declared.body.get(key).and_then(Value::as_str).map(str::to_owned);
             match declared.tag.as_deref() {
-                Some("SessionNotFoundError") => Failure::SessionNotFound {
-                    session_id: text("sessionID").unwrap_or_default(),
-                },
+                Some("SessionNotFoundError") => {
+                    Failure::SessionNotFound { session_id: text("sessionID").unwrap_or_default() }
+                }
                 Some("InvalidRequestError") => Failure::InvalidRequest {
                     message: declared.message.clone().unwrap_or_default(),
                     field: text("field"),
@@ -36,16 +30,10 @@ pub fn classify(error: &Error) -> Failure {
                     message: declared.message.clone().unwrap_or_default(),
                     field: Some("cursor".to_owned()),
                 },
-                tag => Failure::Defect {
-                    name: tag.map(str::to_owned),
-                    detail: error.to_string(),
-                },
+                tag => Failure::Defect { name: tag.map(str::to_owned), detail: error.to_string() },
             }
         }
-        _ => Failure::Defect {
-            name: Some("ClientError".to_owned()),
-            detail: error.to_string(),
-        },
+        _ => Failure::Defect { name: Some("ClientError".to_owned()), detail: error.to_string() },
     }
 }
 
@@ -56,9 +44,7 @@ pub fn check<T>(result: Result<T, Error>) -> Result<T, Failure> {
 
 /// Whether `error` is the declared error `tag`.
 pub fn is_declared(error: &Error, tag: &str) -> bool {
-    error
-        .declared()
-        .is_some_and(|declared| declared.tag.as_deref() == Some(tag))
+    error.declared().is_some_and(|declared| declared.tag.as_deref() == Some(tag))
 }
 
 /// `decodeSessionID`: session IDs start with `ses`.
@@ -66,24 +52,17 @@ pub fn decode_session_id(value: &str) -> Result<String, Failure> {
     if value.starts_with("ses") {
         return Ok(value.to_owned());
     }
-    Err(Failure::invalid_request(
-        "Invalid session ID",
-        Some("sessionID"),
-    ))
+    Err(Failure::invalid_request("Invalid session ID", Some("sessionID")))
 }
 
 /// One `GET /api/event` stream of raw events. A failure to open the stream is its first item.
 pub fn subscribe(client: &Client) -> BoxStream<'static, Result<Value, Error>> {
     let client = client.clone();
     futures_util::stream::once(async move {
-        client
-            .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
-            .await
+        client.event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default()).await
     })
     .flat_map(|opened| match opened {
-        Ok(response) => SseResponse::<Value>::new(response.response)
-            .events(|| {})
-            .boxed(),
+        Ok(response) => SseResponse::<Value>::new(response.response).events(|| {}).boxed(),
         Err(error) => futures_util::stream::once(async move { Err(error) }).boxed(),
     })
     .boxed()
@@ -91,8 +70,5 @@ pub fn subscribe(client: &Client) -> BoxStream<'static, Result<Value, Error>> {
 
 /// The `type` of an event.
 pub fn event_type(event: &Value) -> &str {
-    event
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
+    event.get("type").and_then(Value::as_str).unwrap_or_default()
 }

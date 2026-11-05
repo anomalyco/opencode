@@ -39,12 +39,8 @@ const NOTICE: Duration = Duration::from_secs(3);
 
 pub fn run(input: Input) -> anyhow::Result<()> {
     let settings = MiniSettings::resolve(input.config.mini.as_ref());
-    let mut options = AppOptions {
-        exit_on_ctrl_c: false,
-        light_theme: None,
-        palette_size: 256,
-        ..AppOptions::default()
-    };
+    let mut options =
+        AppOptions { exit_on_ctrl_c: false, light_theme: None, palette_size: 256, ..AppOptions::default() };
     // `applyHeight` below sizes the footer to the composer before the first frame.
     options.host.split_footer = Some(FOOTER_HEIGHT);
     options.host.terminal.mouse = MouseTracking::Off;
@@ -54,41 +50,22 @@ pub fn run(input: Input) -> anyhow::Result<()> {
     let app = App::new(options)?;
     let footer = SplitFooter::of(app.session()).context("mini runs in a split footer")?;
     let theme_input = ThemeInput {
-        name: input
-            .config
-            .theme
-            .as_ref()
-            .and_then(|theme| theme.name.clone()),
-        mode: input
-            .config
-            .theme
-            .as_ref()
-            .and_then(|theme| theme.mode)
-            .and_then(|mode| match mode {
-                ConfigMode::Light => Some(ThemeMode::Light),
-                ConfigMode::Dark => Some(ThemeMode::Dark),
-                ConfigMode::System => None,
-            }),
+        name: input.config.theme.as_ref().and_then(|theme| theme.name.clone()),
+        mode: input.config.theme.as_ref().and_then(|theme| theme.mode).and_then(|mode| match mode {
+            ConfigMode::Light => Some(ThemeMode::Light),
+            ConfigMode::Dark => Some(ThemeMode::Dark),
+            ConfigMode::System => None,
+        }),
         palette: app.palette(),
         directories: input.theme_directories.clone(),
         mono: settings.mono,
     };
     let theme = theme::resolve(&theme_input);
     // The transcript always starts one row below the terminal's earlier output.
-    let writer = Writer::new(
-        footer.clone(),
-        Scrollback::new(&app)?,
-        theme.clone(),
-        settings.mono,
-        true,
-    );
+    let writer = Writer::new(footer.clone(), Scrollback::new(&app)?, theme.clone(), settings.mono, true);
     let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
     let footers = Footers::new(&app, &prompt, &theme, settings.mono);
-    let status = Text::new(&app, "")
-        .wrap(WrapMode::None)
-        .truncate(true)
-        .height(1)
-        .shrink(0.0);
+    let status = Text::new(&app, "").wrap(WrapMode::None).truncate(true).height(1).shrink(0.0);
     app.root()
         .direction(FlexDirection::Column)
         .child(footers.root())
@@ -245,9 +222,7 @@ impl Mini {
         let interrupt = weak.clone();
         let status = weak.clone();
         self.prompt.set_hooks(Hooks {
-            submit: Some(Box::new(move |prompt| {
-                submit.upgrade().is_some_and(|mini| mini.submit(prompt))
-            })),
+            submit: Some(Box::new(move |prompt| submit.upgrade().is_some_and(|mini| mini.submit(prompt)))),
             exit_request: Some(Box::new(with(|mini| {
                 let mini = mini.clone();
                 mini.app.clone().defer(move |cx| mini.request_exit(cx));
@@ -256,11 +231,7 @@ impl Mini {
                 let mini = mini.clone();
                 mini.app.clone().defer(move |cx| mini.close(cx));
             }))),
-            interrupt: Some(Box::new(move || {
-                interrupt
-                    .upgrade()
-                    .is_some_and(|mini| mini.request_interrupt())
-            })),
+            interrupt: Some(Box::new(move || interrupt.upgrade().is_some_and(|mini| mini.request_interrupt()))),
             input_clear: Some(Box::new(with(|mini| mini.input_clear()))),
             status: Some(Box::new(move |text| {
                 if let Some(mini) = status.upgrade() {
@@ -294,12 +265,7 @@ impl Mini {
                     mini.patch(|state| state.status = text.to_owned());
                 }
             })),
-            summary: Some(Box::new(move || {
-                summary
-                    .upgrade()
-                    .map(|mini| mini.summary())
-                    .unwrap_or_default()
-            })),
+            summary: Some(Box::new(move || summary.upgrade().map(|mini| mini.summary()).unwrap_or_default())),
             agent: Some(Box::new(move |id| {
                 if let Some(mini) = agent.upgrade() {
                     mini.select_agent(id);
@@ -332,18 +298,13 @@ impl Mini {
         self.app.spawn(
             async move {
                 target::resolve_session_target(&client, target, |next| async move {
-                    Ok(Prepared {
-                        model: next.model,
-                        agent: agent.or(next.agent),
-                    })
+                    Ok(Prepared { model: next.model, agent: agent.or(next.agent) })
                 })
                 .await
             },
             move |cx, result| match result {
                 Ok(target) => mini.opened(cx, target),
-                Err(TargetError::SessionNotFound) => {
-                    mini.fail(cx, InputError("Session not found".into()).into())
-                }
+                Err(TargetError::SessionNotFound) => mini.fail(cx, InputError("Session not found".into()).into()),
                 Err(error) => mini.fail(cx, anyhow::Error::new(error)),
             },
         );
@@ -371,18 +332,12 @@ impl Mini {
                 value
             }),
         };
-        self.trace(
-            "session.open",
-            json!({ "sessionID": session.id, "resume": target.resume }),
-        );
+        self.trace("session.open", json!({ "sessionID": session.id, "resume": target.resume }));
         self.set_title(session.title.as_deref());
-        let model = target.model.as_ref().map(|model| {
-            (
-                model.id.clone(),
-                Some(model.provider_id.0.clone()),
-                model.variant.clone(),
-            )
-        });
+        let model = target
+            .model
+            .as_ref()
+            .map(|model| (model.id.clone(), Some(model.provider_id.0.clone()), model.variant.clone()));
         self.patch(|state| {
             state.agent = session.agent.clone().unwrap_or_default();
             state.model = model;
@@ -396,12 +351,9 @@ impl Mini {
             self.input.replay_limit,
         ));
         *self.session.borrow_mut() = Some(session.clone());
-        self.prompt
-            .set_agent(session.agent.as_deref().unwrap_or_default());
-        self.prompt
-            .open(&self.client, &session.id, &session.directory, target.resume);
-        self.footers
-            .open(&self.client, &session.id, &session.directory);
+        self.prompt.set_agent(session.agent.as_deref().unwrap_or_default());
+        self.prompt.open(&self.client, &session.id, &session.directory, target.resume);
+        self.footers.open(&self.client, &session.id, &session.directory);
         if target.resume {
             self.reset_for_replay(cx);
         }
@@ -409,16 +361,8 @@ impl Mini {
             self.load_default_model(&session.directory);
         }
         let proxy = self.app.proxy();
-        let limit = self
-            .input
-            .replay_limit
-            .unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
-        let task = self.app.runtime().spawn(replay::connect(
-            self.client.clone(),
-            session.id,
-            limit,
-            proxy,
-        ));
+        let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
+        let task = self.app.runtime().spawn(replay::connect(self.client.clone(), session.id, limit, proxy));
         *self.stream.borrow_mut() = Some(task);
     }
 
@@ -427,15 +371,12 @@ impl Mini {
         let client = self.client.clone();
         let directory = directory.to_owned();
         let mini = self.clone();
-        self.app.spawn(
-            async move { replay::default_model(&client, &directory).await },
-            move |_, model| {
-                let Some((provider_id, model_id)) = model else {
-                    return;
-                };
-                mini.patch(|state| state.model = Some((model_id, Some(provider_id), None)));
-            },
-        );
+        self.app.spawn(async move { replay::default_model(&client, &directory).await }, move |_, model| {
+            let Some((provider_id, model_id)) = model else {
+                return;
+            };
+            mini.patch(|state| state.model = Some((model_id, Some(provider_id), None)));
+        });
     }
 
     /// `resetForReplay`: clears the terminal and its scrollback, then writes the entry header the transcript
@@ -446,10 +387,11 @@ impl Mini {
             writer.reset(true);
             self.footer.reset_for_replay(true)?;
             let width = self.footer.renderer_size().0;
-            let directory = self.session.borrow().as_ref().map_or_else(
-                || self.input.directory.clone(),
-                |session| session.directory.clone(),
-            );
+            let directory = self
+                .session
+                .borrow()
+                .as_ref()
+                .map_or_else(|| self.input.directory.clone(), |session| session.directory.clone());
             let detail = directory_label(&directory, &self.input.home);
             let header = crate::splash::entry(
                 writer.app(),
@@ -459,13 +401,7 @@ impl Mini {
                 &writer.theme().splash,
                 writer.mono(),
             );
-            writer.write_widget(
-                &header,
-                Flags {
-                    start_on_new_line: true,
-                    trailing_newline: false,
-                },
-            )
+            writer.write_widget(&header, Flags { start_on_new_line: true, trailing_newline: false })
         });
         if let Err(error) = result {
             cx.fail(error);
@@ -483,10 +419,7 @@ impl Mini {
             };
             match incoming {
                 Incoming::Hydrated { messages, active } => {
-                    self.trace(
-                        "recv.hydrate",
-                        json!({ "messages": messages.len(), "active": active }),
-                    );
+                    self.trace("recv.hydrate", json!({ "messages": messages.len(), "active": active }));
                     transcript.hydrate(&messages, active)
                 }
                 Incoming::Event(event) => {
@@ -507,12 +440,8 @@ impl Mini {
                 }
             }
         };
-        let hydrated = output.patch.is_some()
-            && self
-                .transcript
-                .borrow()
-                .as_ref()
-                .is_some_and(|transcript| transcript.connected);
+        let hydrated =
+            output.patch.is_some() && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
         self.output(cx, output);
         if hydrated {
             self.send_waiting(cx);
@@ -522,10 +451,7 @@ impl Mini {
     /// Writes a transcript output: footer events, commits, then the status.
     fn output(&self, cx: &mut Cx<'_>, output: Output) {
         for event in &output.footer {
-            if event["type"]
-                .as_str()
-                .is_some_and(|kind| kind.starts_with("session.inbox."))
-            {
+            if event["type"].as_str().is_some_and(|kind| kind.starts_with("session.inbox.")) {
                 self.prompt.inbox_event(event);
                 self.footers.queue_changed();
                 self.paint_status();
@@ -593,11 +519,7 @@ impl Mini {
         if self.state.borrow().closed {
             return false;
         }
-        let ready = self
-            .transcript
-            .borrow()
-            .as_ref()
-            .is_some_and(|transcript| transcript.connected);
+        let ready = self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
         if !ready {
             self.waiting.borrow_mut().push(prompt);
             return true;
@@ -658,11 +580,7 @@ impl Mini {
         self.output(
             cx,
             Output {
-                patch: Some(replay::Patch {
-                    running: Some(false),
-                    status: Some(String::new()),
-                    usage: None,
-                }),
+                patch: Some(replay::Patch { running: Some(false), status: Some(String::new()), usage: None }),
                 ..Output::default()
             },
         );
@@ -684,13 +602,7 @@ impl Mini {
 
     /// `renderPromptError`.
     fn prompt_error(self: &Rc<Self>, cx: &mut Cx<'_>, id: &str, error: String) {
-        self.append(
-            cx,
-            Commit {
-                text: error,
-                ..Commit::error("").message(id)
-            },
-        );
+        self.append(cx, Commit { text: error, ..Commit::error("").message(id) });
     }
 
     /// `run`: a shell command waits for its answer; a server command is admitted; an ordinary prompt switches
@@ -705,10 +617,7 @@ impl Mini {
         if prompt.shell {
             let id = opencode_api::id::message();
             self.sending("running shell");
-            self.trace(
-                "send.shell",
-                json!({ "sessionID": session.id, "id": id, "command": prompt.text }),
-            );
+            self.trace("send.shell", json!({ "sessionID": session.id, "id": id, "command": prompt.text }));
             let command = prompt.text.clone();
             self.app.spawn(
                 {
@@ -724,10 +633,7 @@ impl Mini {
             );
             return;
         }
-        let id = prompt
-            .message_id
-            .clone()
-            .unwrap_or_else(opencode_api::id::message);
+        let id = prompt.message_id.clone().unwrap_or_else(opencode_api::id::message);
         let delivery = prompt.delivery.unwrap_or(Delivery::Steer);
         self.sending("sending prompt");
         let started = std::time::Instant::now();
@@ -757,10 +663,7 @@ impl Mini {
                         )
                         .await?;
                     }
-                    let prompt = RunPrompt {
-                        message_id: Some(id),
-                        ..prompt
-                    };
+                    let prompt = RunPrompt { message_id: Some(id), ..prompt };
                     crate::prompt::api::admit(&client, &session.id, &prompt, delivery).await
                 }
             },
@@ -794,10 +697,7 @@ impl Mini {
             return;
         };
         let id = prompt.message_id.clone().unwrap_or_default();
-        self.trace(
-            "send.prompt",
-            json!({ "sessionID": session.id, "messageID": id, "delivery": delivery.as_str() }),
-        );
+        self.trace("send.prompt", json!({ "sessionID": session.id, "messageID": id, "delivery": delivery.as_str() }));
         let client = self.client.clone();
         let mini = self.clone();
         let command = prompt.command.is_some();
@@ -806,13 +706,8 @@ impl Mini {
         self.app.spawn(
             async move {
                 if !command {
-                    crate::prompt::api::select(
-                        &client,
-                        &session.id,
-                        session.agent.as_deref(),
-                        session.model.as_ref(),
-                    )
-                    .await?;
+                    crate::prompt::api::select(&client, &session.id, session.agent.as_deref(), session.model.as_ref())
+                        .await?;
                 }
                 crate::prompt::api::admit(&client, &session.id, &prompt, delivery).await
             },
@@ -837,11 +732,7 @@ impl Mini {
 
     /// `mergePending`: an admitted prompt waits in the pending list until the server delivers it.
     fn pending(&self, id: &str, delivery: Delivery, prompt: &RunPrompt) {
-        let promoted = self
-            .transcript
-            .borrow()
-            .as_ref()
-            .is_some_and(|transcript| transcript.promoted(id));
+        let promoted = self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.promoted(id));
         if promoted {
             return;
         }
@@ -858,16 +749,13 @@ impl Mini {
         self.sending("compacting session");
         let client = self.client.clone();
         let mini = self.clone();
-        self.app.spawn(
-            async move { crate::prompt::api::compact(&client, &session.id).await },
-            move |cx, result| {
-                if let Err(error) = result {
-                    let id = opencode_api::id::message();
-                    mini.prompt_error(cx, &id, error);
-                }
-                mini.finish(cx);
-            },
-        );
+        self.app.spawn(async move { crate::prompt::api::compact(&client, &session.id).await }, move |cx, result| {
+            if let Err(error) = result {
+                let id = opencode_api::id::message();
+                mini.prompt_error(cx, &id, error);
+            }
+            mini.finish(cx);
+        });
     }
 
     /// `/new`: a new session at the launch directory, with the current agent and model (`onNewSession`).
@@ -880,9 +768,7 @@ impl Mini {
         let mini = self.clone();
         let model = session.model.as_ref().and_then(|model| {
             Some(opencode_api::generated::ModelRef {
-                provider_id: opencode_api::generated::ProviderID(
-                    model["providerID"].as_str()?.to_owned(),
-                ),
+                provider_id: opencode_api::generated::ProviderID(model["providerID"].as_str()?.to_owned()),
                 id: model["id"].as_str()?.to_owned(),
                 variant: model["variant"].as_str().map(str::to_owned),
             })
@@ -897,10 +783,7 @@ impl Mini {
         self.app.spawn(
             async move {
                 target::resolve_session_target(&client, input, |next| async move {
-                    Ok(Prepared {
-                        model: next.model,
-                        agent: agent.or(next.agent),
-                    })
+                    Ok(Prepared { model: next.model, agent: agent.or(next.agent) })
                 })
                 .await
             },
@@ -931,10 +814,7 @@ impl Mini {
     fn settle(self: &Rc<Self>, session: &str, started: std::time::Instant) {
         let client = self.client.clone();
         let session = session.to_owned();
-        let limit = self
-            .input
-            .replay_limit
-            .unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
+        let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let mini = self.clone();
         self.app.spawn(
             {
@@ -984,10 +864,7 @@ impl Mini {
             model,
             duration: duration(started.elapsed().as_millis() as u64),
         };
-        let mut commit = Commit::system(format!(
-            "{} · {} · {}",
-            summary.agent, summary.model, summary.duration
-        ));
+        let mut commit = Commit::system(format!("{} · {} · {}", summary.agent, summary.model, summary.duration));
         commit.summary = Some(summary);
         self.write(cx, commit);
     }
@@ -1008,9 +885,7 @@ impl Mini {
             return;
         }
         let mini = self.clone();
-        let timer = self
-            .app
-            .set_timeout(TWO_PRESS, move |_| mini.patch(|state| state.exit = 0));
+        let timer = self.app.set_timeout(TWO_PRESS, move |_| mini.patch(|state| state.exit = 0));
         if let Some(previous) = self.state.borrow_mut().exit_timer.replace(timer) {
             self.app.cancel_timer(previous);
         }
@@ -1029,9 +904,7 @@ impl Mini {
         };
         if interrupt < 2 {
             let mini = self.clone();
-            let timer = self
-                .app
-                .set_timeout(TWO_PRESS, move |_| mini.patch(|state| state.interrupt = 0));
+            let timer = self.app.set_timeout(TWO_PRESS, move |_| mini.patch(|state| state.interrupt = 0));
             if let Some(previous) = self.state.borrow_mut().interrupt_timer.replace(timer) {
                 self.app.cancel_timer(previous);
             }
@@ -1045,14 +918,11 @@ impl Mini {
         };
         self.trace("send.interrupt", json!({ "sessionID": session.id }));
         let client = self.client.clone();
-        self.app.spawn(
-            async move { replay::interrupt(&client, &session.id).await },
-            |_, result| {
-                if let Err(error) = result {
-                    log::warn!("mini interrupt failed: {error}");
-                }
-            },
-        );
+        self.app.spawn(async move { replay::interrupt(&client, &session.id).await }, |_, result| {
+            if let Err(error) = result {
+                log::warn!("mini interrupt failed: {error}");
+            }
+        });
         true
     }
 
@@ -1130,15 +1000,7 @@ impl Mini {
                 &session.id,
                 &writer.theme().splash,
                 writer.mono(),
-            ) && writer
-                .write_widget(
-                    &banner,
-                    Flags {
-                        start_on_new_line: true,
-                        trailing_newline: true,
-                    },
-                )
-                .is_ok()
+            ) && writer.write_widget(&banner, Flags { start_on_new_line: true, trailing_newline: true }).is_ok()
             {
                 self.exit_splash.set(true);
             }
@@ -1195,36 +1057,24 @@ impl Mini {
         };
         self.trace("replay.resize", json!({ "sessionID": session }));
         let client = self.client.clone();
-        let limit = self
-            .input
-            .replay_limit
-            .unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
+        let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let mini = self.clone();
-        self.app.spawn(
-            async move { replay::hydration(&client, &session, limit).await },
-            move |cx, result| {
-                let output = match result {
-                    Ok((messages, active)) => {
-                        mini.reset_for_replay(cx);
-                        mini.transcript
-                            .borrow_mut()
-                            .as_mut()
-                            .map(|transcript| transcript.replayed(&messages, active))
-                    }
-                    // Nothing was cleared; the events that waited still apply.
-                    Err(error) => {
-                        log::warn!("mini resize replay failed: {error}");
-                        mini.transcript
-                            .borrow_mut()
-                            .as_mut()
-                            .map(Transcript::abort_replay)
-                    }
-                };
-                if let Some(output) = output {
-                    mini.output(cx, output);
+        self.app.spawn(async move { replay::hydration(&client, &session, limit).await }, move |cx, result| {
+            let output = match result {
+                Ok((messages, active)) => {
+                    mini.reset_for_replay(cx);
+                    mini.transcript.borrow_mut().as_mut().map(|transcript| transcript.replayed(&messages, active))
                 }
-            },
-        );
+                // Nothing was cleared; the events that waited still apply.
+                Err(error) => {
+                    log::warn!("mini resize replay failed: {error}");
+                    mini.transcript.borrow_mut().as_mut().map(Transcript::abort_replay)
+                }
+            };
+            if let Some(output) = output {
+                mini.output(cx, output);
+            }
+        });
     }
 
     /// Re-resolves the theme (SIGUSR2, resize). New entries take it; written rows keep theirs.
@@ -1326,18 +1176,9 @@ impl Mini {
     fn status_groups(&self, state: &State) -> Vec<status::Group> {
         let keymap = self.prompt.keymap();
         let shortcut = |id: &str| {
-            keymap
-                .shortcut(id)
-                .filter(|key| !key.is_empty())
-                .map(|key| mono_shortcut(&key, self.settings.mono))
+            keymap.shortcut(id).filter(|key| !key.is_empty()).map(|key| mono_shortcut(&key, self.settings.mono))
         };
-        let interrupt = shortcut("session.interrupt").map(|key| {
-            if key == "escape" {
-                "esc".to_owned()
-            } else {
-                key
-            }
-        });
+        let interrupt = shortcut("session.interrupt").map(|key| if key == "escape" { "esc".to_owned() } else { key });
         let busy = state.running;
         let armed = state.interrupt > 0;
         let exiting = state.exit > 0;
@@ -1348,16 +1189,8 @@ impl Mini {
         let width = usize::from(self.footer.terminal_size().0);
         let status_width = width.saturating_sub(if busy { 2 } else { 0 }).max(1);
         let text = if exiting || (busy && armed) {
-            let key = if exiting {
-                shortcut("prompt.clear")
-            } else {
-                interrupt.clone()
-            };
-            let (verb, action) = if exiting {
-                ("exit", "exit")
-            } else {
-                ("interrupt", "stop")
-            };
+            let key = if exiting { shortcut("prompt.clear") } else { interrupt.clone() };
+            let (verb, action) = if exiting { ("exit", "exit") } else { ("interrupt", "stop") };
             match key {
                 None if exiting => "Exit pending".to_owned(),
                 None => "Stop pending".to_owned(),
@@ -1368,11 +1201,7 @@ impl Mini {
                         format!("{key} again: {action}"),
                         format!("{key} {action}"),
                     ];
-                    phrases
-                        .iter()
-                        .find(|text| text.width() <= status_width)
-                        .unwrap_or(&phrases[3])
-                        .clone()
+                    phrases.iter().find(|text| text.width() <= status_width).unwrap_or(&phrases[3]).clone()
                 }
             }
         } else if !notice.is_empty() {
@@ -1383,30 +1212,20 @@ impl Mini {
             if state.status.trim() == "reconnecting" {
                 "reconnecting".to_owned()
             } else {
-                interrupt
-                    .as_ref()
-                    .map_or_else(|| "Running".to_owned(), |key| format!("{key} stop"))
+                interrupt.as_ref().map_or_else(|| "Running".to_owned(), |key| format!("{key} stop"))
             }
         } else if !state.status.trim().is_empty() {
             state.status.trim().to_owned()
         } else {
             if shell { "Shell" } else { "" }.to_owned()
         };
-        let model = state
-            .model
-            .clone()
-            .unwrap_or_else(|| ("Default model".into(), None, None));
+        let model = state.model.clone().unwrap_or_else(|| ("Default model".into(), None, None));
         let shown = details && !shell;
         let queued = self.prompt.queued().len();
         let work = match shortcut("session.queued_prompts") {
-            Some(key) if shown && queued > 0 => vec![(
-                status::Id::Queued,
-                status::Action {
-                    key,
-                    label: format!("{queued} pending"),
-                    expanded: None,
-                },
-            )],
+            Some(key) if shown && queued > 0 => {
+                vec![(status::Id::Queued, status::Action { key, label: format!("{queued} pending"), expanded: None })]
+            }
             _ => Vec::new(),
         };
         let usage = state.usage.as_ref().filter(|_| details);
@@ -1415,9 +1234,7 @@ impl Mini {
             mono: self.settings.mono,
             status: Some((
                 text,
-                (details && busy)
-                    .then(|| interrupt.as_ref().map(|key| format!("{key} interrupt")))
-                    .flatten(),
+                (details && busy).then(|| interrupt.as_ref().map(|key| format!("{key} interrupt"))).flatten(),
             )),
             escape: (shell && !takeover).then(|| status::Action {
                 key: "esc".into(),
@@ -1429,23 +1246,16 @@ impl Mini {
             agent: shown.then(|| self.agent_label(&state.agent)),
             context: usage.filter(|usage| usage.tokens > 0).map(|usage| {
                 let full = status::context_usage(usage.tokens, usage.percent);
-                let compact = usage
-                    .percent
-                    .map_or_else(|| full.clone(), |percent| format!("{percent}% ctx"));
+                let compact = usage.percent.map_or_else(|| full.clone(), |percent| format!("{percent}% ctx"));
                 (compact, full)
             }),
-            cost: usage
-                .and_then(|usage| usage.cost)
-                .filter(|cost| *cost != 0.0)
-                .map(status::money),
+            cost: usage.and_then(|usage| usage.cost).filter(|cost| *cost != 0.0).map(status::money),
             provider: if shown { model.1.clone() } else { None },
-            menu: shortcut("command.palette.show")
-                .filter(|_| !takeover && !shell)
-                .map(|key| status::Action {
-                    key,
-                    label: "menu".into(),
-                    expanded: None,
-                }),
+            menu: shortcut("command.palette.show").filter(|_| !takeover && !shell).map(|key| status::Action {
+                key,
+                label: "menu".into(),
+                expanded: None,
+            }),
             spinner: busy.then(|| if self.settings.mono { "*" } else { "▪" }.to_owned()),
         })
     }
@@ -1493,9 +1303,7 @@ impl Mini {
 
     /// `currentAgent`: the catalog's name for the agent, else its ID in title case.
     fn agent_label(&self, agent: &str) -> String {
-        self.prompt
-            .agent_name(agent)
-            .unwrap_or_else(|| capitalize(agent))
+        self.prompt.agent_name(agent).unwrap_or_else(|| capitalize(agent))
     }
 
     /// The terminal title on Linux (`setTitle`): `OC | <title>`, or `OpenCode` without a real title.
@@ -1527,28 +1335,21 @@ impl Mini {
 /// status row, leaving one transcript row.
 pub fn prompt_height(terminal: u16, rows: u16) -> u16 {
     let padding = u16::from(terminal >= PROMPT_MAX_ROWS + 4);
-    (padding * 2 + 1 + rows.max(1))
-        .min(terminal.saturating_sub(1))
-        .max(1)
+    (padding * 2 + 1 + rows.max(1)).min(terminal.saturating_sub(1)).max(1)
 }
 
 /// `isFallbackTitle`: a stored `New session - <ISO time>` or `Child session - <ISO time>` title.
 fn is_fallback_title(title: &str) -> bool {
-    let Some(stamp) = title
-        .strip_prefix("New session - ")
-        .or_else(|| title.strip_prefix("Child session - "))
-    else {
+    let Some(stamp) = title.strip_prefix("New session - ").or_else(|| title.strip_prefix("Child session - ")) else {
         return false;
     };
     let shape = "0000-00-00T00:00:00.000Z";
     stamp.len() == shape.len()
-        && stamp.bytes().zip(shape.bytes()).all(|(have, want)| {
-            if want == b'0' {
-                have.is_ascii_digit()
-            } else {
-                have == want
-            }
-        })
+        && stamp.bytes().zip(shape.bytes()).all(
+            |(have, want)| {
+                if want == b'0' { have.is_ascii_digit() } else { have == want }
+            },
+        )
 }
 
 /// `directoryLabel`: the home directory as `~`, with forward slashes.
@@ -1603,9 +1404,7 @@ mod tests {
     #[test]
     fn fallback_titles_and_labels() {
         assert!(is_fallback_title("New session - 2026-11-05T10:20:30.123Z"));
-        assert!(is_fallback_title(
-            "Child session - 2026-11-05T10:20:30.123Z"
-        ));
+        assert!(is_fallback_title("Child session - 2026-11-05T10:20:30.123Z"));
         assert!(!is_fallback_title("New session - today"));
         assert!(!is_fallback_title("Fix the bug"));
         let home = std::path::Path::new("/home/me");

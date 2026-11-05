@@ -164,12 +164,7 @@ pub struct Footers(Rc<Inner>);
 
 impl Footers {
     pub fn new(app: &App, prompt: &Prompt, theme: &RunTheme, mono: bool) -> Self {
-        let body = View::new(app)
-            .column()
-            .width(Length::percent(100.0))
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_height(0);
+        let body = View::new(app).column().width(Length::percent(100.0)).grow(1.0).basis(Length::Auto).min_height(0);
         let root = View::new(app)
             .column()
             .width(Length::percent(100.0))
@@ -238,9 +233,7 @@ impl Footers {
         let desired = match (&state.shown, state.route) {
             (Some(Shown::Permission(_)), _) => BASE + PERMISSION_ROWS,
             (Some(Shown::Form(_)), _) => BASE + FORM_ROWS,
-            (_, Some(Route::Queued)) => {
-                1 + state.panel.as_ref().map_or(0, |panel| panel.rows(rows)) as u16
-            }
+            (_, Some(Route::Queued)) => 1 + state.panel.as_ref().map_or(0, |panel| panel.rows(rows)) as u16,
             (_, Some(Route::Command | Route::Agent | Route::Model)) => {
                 let layout = panel::layout(rows, panel::LIST_ROWS);
                 1 + (layout.frame + layout.limit) as u16
@@ -252,11 +245,8 @@ impl Footers {
 
     /// Opens a session: forgets the last one's requests and lists its pending ones (`hydrate`).
     pub fn open(&self, client: &Client, session: &str, directory: &str) {
-        *self.0.target.borrow_mut() = Some(Target {
-            client: client.clone(),
-            session: session.to_owned(),
-            directory: directory.to_owned(),
-        });
+        *self.0.target.borrow_mut() =
+            Some(Target { client: client.clone(), session: session.to_owned(), directory: directory.to_owned() });
         {
             let mut state = self.0.state.borrow_mut();
             state.permissions.clear();
@@ -271,18 +261,8 @@ impl Footers {
             async move {
                 let options = RequestOptions::default();
                 let (permissions, forms) = futures_util::future::join(
-                    client.permission_list(
-                        &PermissionListInput {
-                            session_id: SessionID(id.clone()),
-                        },
-                        &options,
-                    ),
-                    client.session_form_list(
-                        &SessionFormListInput {
-                            session_id: id.clone(),
-                        },
-                        &options,
-                    ),
+                    client.permission_list(&PermissionListInput { session_id: SessionID(id.clone()) }, &options),
+                    client.session_form_list(&SessionFormListInput { session_id: id.clone() }, &options),
                 )
                 .await;
                 let mut requests = Vec::new();
@@ -312,13 +292,7 @@ impl Footers {
                 let Ok(request) = serde_json::from_value::<PermissionRequest>(data.clone()) else {
                     return;
                 };
-                if inner
-                    .state
-                    .borrow()
-                    .permissions
-                    .iter()
-                    .any(|item| item.info.id == request.id)
-                {
+                if inner.state.borrow().permissions.iter().any(|item| item.info.id == request.id) {
                     return;
                 }
                 let Some(target) = inner.target.borrow().clone() else {
@@ -331,11 +305,7 @@ impl Footers {
                         let Some(inner) = weak.upgrade() else { return };
                         {
                             let mut state = inner.state.borrow_mut();
-                            if state
-                                .permissions
-                                .iter()
-                                .any(|item| item.info.id == request.info.id)
-                            {
+                            if state.permissions.iter().any(|item| item.info.id == request.info.id) {
                                 return;
                             }
                             state.permissions.push(request);
@@ -346,11 +316,7 @@ impl Footers {
             }
             "permission.replied" => {
                 let id = data["requestID"].as_str().unwrap_or_default();
-                inner
-                    .state
-                    .borrow_mut()
-                    .permissions
-                    .retain(|item| item.info.id.0 != id);
+                inner.state.borrow_mut().permissions.retain(|item| item.info.id.0 != id);
                 inner.sync();
             }
             "form.created" => {
@@ -368,11 +334,7 @@ impl Footers {
             }
             "form.replied" | "form.cancelled" => {
                 let id = data["id"].as_str().unwrap_or_default();
-                inner
-                    .state
-                    .borrow_mut()
-                    .forms
-                    .retain(|item| item.id.0 != id);
+                inner.state.borrow_mut().forms.retain(|item| item.id.0 != id);
                 inner.sync();
             }
             _ => {}
@@ -382,26 +344,13 @@ impl Footers {
 
 /// `resolvePermissionSources`: the request with its tool call's input and metadata, read from its message.
 async fn source(client: &Client, session: &str, info: PermissionRequest) -> permission::Request {
-    let mut request = permission::Request {
-        info,
-        input: Value::Null,
-        metadata: Value::Null,
-    };
-    let Some(source) = request
-        .info
-        .source
-        .clone()
-        .filter(|source| source.r#type == "tool")
-    else {
+    let mut request = permission::Request { info, input: Value::Null, metadata: Value::Null };
+    let Some(source) = request.info.source.clone().filter(|source| source.r#type == "tool") else {
         return request;
     };
     let call = Call::new(
         "GET",
-        format!(
-            "/api/session/{}/message/{}",
-            encode(session),
-            encode(&source.message_id)
-        ),
+        format!("/api/session/{}/message/{}", encode(session), encode(&source.message_id)),
         200,
         &[400, 401, 404],
     );
@@ -417,10 +366,7 @@ async fn source(client: &Client, session: &str, info: PermissionRequest) -> perm
         .into_iter()
         .flatten()
         .find(|item| item["type"] == "tool" && item["id"] == source.id.as_str());
-    if let Some(state) = tool
-        .map(|tool| &tool["state"])
-        .filter(|state| state["status"] != "streaming")
-    {
+    if let Some(state) = tool.map(|tool| &tool["state"]).filter(|state| state["status"] != "streaming") {
         request.input = state["input"].clone();
         request.metadata = state["metadata"].clone();
     }
@@ -471,12 +417,7 @@ impl Inner {
                 .permissions
                 .first()
                 .map(|request| Shown::Permission(request.info.id.0.clone()))
-                .or_else(|| {
-                    state
-                        .forms
-                        .first()
-                        .map(|form| Shown::Form(form.id.0.clone()))
-                })
+                .or_else(|| state.forms.first().map(|form| Shown::Form(form.id.0.clone())))
                 .unwrap_or(Shown::Prompt);
             let changed = state.shown.as_ref() != Some(&next);
             if changed {
@@ -540,25 +481,16 @@ impl Inner {
         match shown {
             Some(Shown::Permission(id)) => {
                 let state = self.state.borrow();
-                let (Some(request), Some(current)) = (
-                    state
-                        .permissions
-                        .iter()
-                        .find(|request| request.info.id.0 == id),
-                    state.permission.as_ref(),
-                ) else {
+                let (Some(request), Some(current)) =
+                    (state.permissions.iter().find(|request| request.info.id.0 == id), state.permission.as_ref())
+                else {
                     return;
                 };
-                let directory = self
-                    .target
-                    .borrow()
-                    .as_ref()
-                    .map(|target| target.directory.clone());
+                let directory = self.target.borrow().as_ref().map(|target| target.directory.clone());
                 let cwd = std::env::current_dir().unwrap_or_default();
                 let home = self.home.clone();
-                let format = move |path: &str| {
-                    opencode_ui::path::format(path, directory.as_deref(), &cwd, home.as_deref())
-                };
+                let format =
+                    move |path: &str| opencode_ui::path::format(path, directory.as_deref(), &cwd, home.as_deref());
                 let info = permission::info(request, &format, self.mono);
                 let painted = permission::paint(
                     &self.app,
@@ -581,11 +513,7 @@ impl Inner {
                 let Some(info) = state.forms.iter().find(|form| form.id.0 == id).cloned() else {
                     return;
                 };
-                let current = state
-                    .form_states
-                    .entry(id.clone())
-                    .or_insert_with(|| form::State::new(&info))
-                    .clone();
+                let current = state.form_states.entry(id.clone()).or_insert_with(|| form::State::new(&info)).clone();
                 drop(state);
                 let painted = form::paint(
                     &self.app,
@@ -739,22 +667,13 @@ impl Inner {
         let route = self.state.borrow().route;
         let Some(route) = route else { return };
         let keymap = self.prompt.keymap().clone();
-        let shortcut = |id: &str| {
-            keymap
-                .shortcut(id)
-                .filter(|key| !key.is_empty())
-                .map(|key| mono_shortcut(&key, self.mono))
-        };
+        let shortcut =
+            |id: &str| keymap.shortcut(id).filter(|key| !key.is_empty()).map(|key| mono_shortcut(&key, self.mono));
         let queued = self.prompt.queued();
         let entries: Vec<Entry<Pick>> = match route {
             Route::Command => command_entries(
-                queued
-                    .iter()
-                    .map(|item| item.prompt.text.as_str())
-                    .collect(),
-                keymap
-                    .shortcut_all("variant.cycle")
-                    .map(|key| mono_shortcut(&key, self.mono)),
+                queued.iter().map(|item| item.prompt.text.as_str()).collect(),
+                keymap.shortcut_all("variant.cycle").map(|key| mono_shortcut(&key, self.mono)),
                 shortcut("app.clear"),
             ),
             Route::Agent => {
@@ -793,14 +712,7 @@ impl Inner {
                     keywords: item.prompt.text.clone(),
                     item: Item {
                         display: item.prompt.text.replace('\n', " "),
-                        footer: Some(
-                            if item.delivery == Delivery::Queue {
-                                "queued"
-                            } else {
-                                "steering"
-                            }
-                            .to_owned(),
-                        ),
+                        footer: Some(if item.delivery == Delivery::Queue { "queued" } else { "steering" }.to_owned()),
                         ..Item::default()
                     },
                     action: Pick::Pending(item.id.clone(), item.delivery),
@@ -830,12 +742,7 @@ impl Inner {
                 delete.map(|key| format!("{key} delete")),
                 undo.map(|key| format!("{key} undo")),
             ];
-            panel.hint = Some(
-                hint.into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(separator),
-            );
+            panel.hint = Some(hint.into_iter().flatten().collect::<Vec<_>>().join(separator));
         }
     }
 
@@ -928,11 +835,7 @@ impl Inner {
                 self.close_route();
             }
             Pick::Pending(id, delivery) => {
-                let next = if delivery == Delivery::Queue {
-                    Delivery::Steer
-                } else {
-                    Delivery::Queue
-                };
+                let next = if delivery == Delivery::Queue { Delivery::Steer } else { Delivery::Queue };
                 let weak = Rc::downgrade(self);
                 self.prompt.queued_action(&id, Some(next), move |ok| {
                     if let Some(inner) = weak.upgrade().filter(|_| ok) {
@@ -958,13 +861,8 @@ impl Inner {
 
     /// `queued_prompt.undo` and `queued_prompt.delete` on the highlighted pending prompt.
     fn pending(self: &Rc<Self>, undo: bool) -> bool {
-        let selected = self
-            .state
-            .borrow()
-            .panel
-            .as_ref()
-            .and_then(|panel| panel.selected())
-            .map(|entry| entry.action.clone());
+        let selected =
+            self.state.borrow().panel.as_ref().and_then(|panel| panel.selected()).map(|entry| entry.action.clone());
         let Some(Pick::Pending(id, _)) = selected else {
             return false;
         };
@@ -1006,11 +904,7 @@ impl Inner {
         let Some(Shown::Permission(id)) = &state.shown else {
             return None;
         };
-        state
-            .permissions
-            .iter()
-            .find(|request| request.info.id.0 == *id)
-            .cloned()
+        state.permissions.iter().find(|request| request.info.id.0 == *id).cloned()
     }
 
     /// The permission body's keys (`useKeyboard`).
@@ -1045,16 +939,9 @@ impl Inner {
             return true;
         }
         if current.submitting {
-            return matches!(
-                name,
-                "left" | "right" | "h" | "l" | "tab" | "shift+tab" | "return" | "escape"
-            );
+            return matches!(name, "left" | "right" | "h" | "l" | "tab" | "shift+tab" | "return" | "escape");
         }
-        let saves = request
-            .info
-            .save
-            .as_ref()
-            .is_some_and(|save| !save.is_empty());
+        let saves = request.info.save.as_ref().is_some_and(|save| !save.is_empty());
         let choices = current.choices(saves);
         match name {
             "tab" | "right" | "l" => current.shift(true, &choices),
@@ -1082,13 +969,7 @@ impl Inner {
             stage
         };
         self.paint();
-        if stage
-            != self
-                .state
-                .borrow()
-                .permission
-                .as_ref()
-                .map(|current| current.stage)
+        if stage != self.state.borrow().permission.as_ref().map(|current| current.stage)
             && let Some(scroll) = &self.widgets.borrow().scroll
         {
             scroll.top();
@@ -1113,12 +994,7 @@ impl Inner {
         let weak = Rc::downgrade(self);
         let id = request.info.id.0.clone();
         self.app.spawn(
-            async move {
-                target
-                    .client
-                    .permission_reply(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { target.client.permission_reply(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(inner) = weak.upgrade() else { return };
                 if let Err(error) = result {
@@ -1145,11 +1021,7 @@ impl Inner {
             return None;
         };
         let info = state.forms.iter().find(|form| form.id.0 == *id)?.clone();
-        let current = state
-            .form_states
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| form::State::new(&info));
+        let current = state.form_states.get(id).cloned().unwrap_or_else(|| form::State::new(&info));
         Some((info, current))
     }
 
@@ -1184,17 +1056,18 @@ impl Inner {
         }
         let unsupported = form::unsupported(&info).is_some();
         let confirm = form::confirm(&info, &current);
-        let editing = !unsupported
-            && !confirm
-            && (opencode_ui::form::textual(form::current(&info, &current)) || current.editing);
+        let editing =
+            !unsupported && !confirm && (opencode_ui::form::textual(form::current(&info, &current)) || current.editing);
         if editing {
             if name != "return" {
                 return false;
             }
-            let text = self.widgets.borrow().field.as_ref().map_or_else(
-                || current.input(form::current(&info, &current)),
-                Textarea::text,
-            );
+            let text = self
+                .widgets
+                .borrow()
+                .field
+                .as_ref()
+                .map_or_else(|| current.input(form::current(&info, &current)), Textarea::text);
             current.commit(&info, &text);
             if !current.error.is_empty() {
                 self.set_form(current);
@@ -1220,8 +1093,7 @@ impl Inner {
                 let next = (current.field + if back { total - 1 } else { 1 }) % total;
                 if !back && !confirm {
                     let problem = match &field {
-                        Some(field @ opencode_api::generated::FormField::External(_)) => (current
-                            .answer(field)
+                        Some(field @ opencode_api::generated::FormField::External(_)) => (current.answer(field)
                             != Some(&opencode_api::generated::FormValue::Bool(true)))
                         .then(|| format!("Acknowledge {}", opencode_ui::form::label(field))),
                         Some(field) => opencode_ui::form::validate(field, current.answer(field)),
@@ -1255,10 +1127,7 @@ impl Inner {
             digit => {
                 let total = opencode_ui::form::rows(field.as_ref()).len()
                     + usize::from(opencode_ui::form::custom(field.as_ref()));
-                let Some(number) = digit
-                    .parse::<usize>()
-                    .ok()
-                    .filter(|number| (1..=total.min(9)).contains(number))
+                let Some(number) = digit.parse::<usize>().ok().filter(|number| (1..=total.min(9)).contains(number))
                 else {
                     return false;
                 };
@@ -1272,10 +1141,8 @@ impl Inner {
     fn choose(self: &Rc<Self>, info: &FormInfo, mut current: form::State, selected: usize) {
         current.select(selected);
         current.pick(info);
-        let multiple = matches!(
-            form::current(info, &current),
-            Some(opencode_api::generated::FormField::Multiselect(_))
-        );
+        let multiple =
+            matches!(form::current(info, &current), Some(opencode_api::generated::FormField::Multiselect(_)));
         if current.editing || multiple || !form::single(info) {
             self.set_form(current);
             return;
@@ -1285,9 +1152,7 @@ impl Inner {
 
     /// `external`: opens the URL, then acknowledges it on the next Enter.
     fn external(self: &Rc<Self>, info: &FormInfo, mut current: form::State) {
-        let Some(opencode_api::generated::FormField::External(field)) =
-            form::current(info, &current).cloned()
-        else {
+        let Some(opencode_api::generated::FormField::External(field)) = form::current(info, &current).cloned() else {
             return;
         };
         if current.answer(&opencode_api::generated::FormField::External(field.clone()))
@@ -1331,20 +1196,11 @@ impl Inner {
         current.submitting = true;
         current.error.clear();
         self.set_form(current);
-        let input = SessionFormReplyInput {
-            session_id: info.session_id.clone(),
-            form_id: info.id.clone(),
-            answer,
-        };
+        let input = SessionFormReplyInput { session_id: info.session_id.clone(), form_id: info.id.clone(), answer };
         let id = info.id.0.clone();
         let weak = Rc::downgrade(self);
         self.app.spawn(
-            async move {
-                target
-                    .client
-                    .session_form_reply(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { target.client.session_form_reply(&input, &RequestOptions::default()).await },
             move |_, result| {
                 if let Some(inner) = weak.upgrade() {
                     inner.form_settled(&id, result);
@@ -1364,20 +1220,12 @@ impl Inner {
         current.submitting = true;
         current.error.clear();
         self.set_form(current);
-        let input = SessionFormCancelInput {
-            session_id: info.session_id.clone(),
-            form_id: info.id.clone(),
-            message: None,
-        };
+        let input =
+            SessionFormCancelInput { session_id: info.session_id.clone(), form_id: info.id.clone(), message: None };
         let id = info.id.0.clone();
         let weak = Rc::downgrade(self);
         self.app.spawn(
-            async move {
-                target
-                    .client
-                    .session_form_cancel(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { target.client.session_form_cancel(&input, &RequestOptions::default()).await },
             move |_, result| {
                 if let Some(inner) = weak.upgrade() {
                     inner.form_settled(&id, result);
@@ -1391,21 +1239,12 @@ impl Inner {
     fn form_settled(self: &Rc<Self>, id: &str, result: Result<(), opencode_api::error::Error>) {
         if let Err(error) = result {
             let settled = error.declared().is_some_and(|declared| {
-                matches!(
-                    declared.tag.as_deref(),
-                    Some("FormNotFoundError" | "FormAlreadySettledError")
-                )
+                matches!(declared.tag.as_deref(), Some("FormNotFoundError" | "FormAlreadySettledError"))
             });
             if !settled {
                 let message = error
                     .declared()
-                    .and_then(|declared| {
-                        declared
-                            .body
-                            .get("message")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned)
-                    })
+                    .and_then(|declared| declared.body.get("message").and_then(Value::as_str).map(str::to_owned))
                     .filter(|message| !message.trim().is_empty())
                     .unwrap_or_else(|| "Form request failed".to_owned());
                 let mut state = self.state.borrow_mut();
@@ -1446,53 +1285,17 @@ fn open_url(url: &str) -> bool {
 
 /// `RunCommandMenuBody`'s entries, without the subagent and variant-list rows, which need the subagent stream and
 /// M.4's variants.
-fn command_entries(
-    queued: Vec<&str>,
-    variant_cycle: Option<String>,
-    clear: Option<String>,
-) -> Vec<Entry<Pick>> {
-    let entry =
-        |category: &str, display: &str, footer: Option<String>, keywords: &str, action: Pick| {
-            Entry {
-                item: Item {
-                    display: display.to_owned(),
-                    category: Some(category.to_owned()),
-                    footer,
-                    ..Item::default()
-                },
-                keywords: keywords.to_owned(),
-                action,
-            }
-        };
+fn command_entries(queued: Vec<&str>, variant_cycle: Option<String>, clear: Option<String>) -> Vec<Entry<Pick>> {
+    let entry = |category: &str, display: &str, footer: Option<String>, keywords: &str, action: Pick| Entry {
+        item: Item { display: display.to_owned(), category: Some(category.to_owned()), footer, ..Item::default() },
+        keywords: keywords.to_owned(),
+        action,
+    };
     let mut entries = vec![
-        entry(
-            "Session",
-            "Open editor",
-            Some("/editor".into()),
-            "editor compose draft external editor",
-            Pick::Editor,
-        ),
-        entry(
-            "Session",
-            "Show status",
-            None,
-            "status activity model context usage footer",
-            Pick::Status,
-        ),
-        entry(
-            "Session",
-            "Compact session",
-            Some("/compact".into()),
-            "compact session context",
-            Pick::Slash("compact"),
-        ),
-        entry(
-            "Session",
-            "New session",
-            Some("/new".into()),
-            "new session clear",
-            Pick::Slash("new"),
-        ),
+        entry("Session", "Open editor", Some("/editor".into()), "editor compose draft external editor", Pick::Editor),
+        entry("Session", "Show status", None, "status activity model context usage footer", Pick::Status),
+        entry("Session", "Compact session", Some("/compact".into()), "compact session context", Pick::Slash("compact")),
+        entry("Session", "New session", Some("/new".into()), "new session clear", Pick::Slash("new")),
         entry("Agent", "Switch agent", None, "", Pick::Agents),
         entry("Agent", "Switch model", None, "", Pick::Models),
     ];
@@ -1506,20 +1309,8 @@ fn command_entries(
         ));
     }
     entries.extend([
-        entry(
-            "Agent",
-            "Variant cycle",
-            variant_cycle,
-            "variant cycle",
-            Pick::VariantCycle,
-        ),
-        entry(
-            "System",
-            "Clear screen",
-            clear,
-            "clear screen cls redraw",
-            Pick::Clear,
-        ),
+        entry("Agent", "Variant cycle", variant_cycle, "variant cycle", Pick::VariantCycle),
+        entry("System", "Clear screen", clear, "clear screen cls redraw", Pick::Clear),
         entry(
             "System",
             "Settings",
@@ -1527,13 +1318,7 @@ fn command_entries(
             "/settings settings preferences configuration",
             Pick::Settings,
         ),
-        entry(
-            "System",
-            "Exit",
-            Some("/exit".into()),
-            "/exit exit",
-            Pick::Exit,
-        ),
+        entry("System", "Exit", Some("/exit".into()), "/exit exit", Pick::Exit),
     ]);
     entries
 }
@@ -1579,12 +1364,9 @@ fn install_layers(inner: &Rc<Inner>) {
         KeymapLayer {
             enabled: when(|inner| composer(inner) && !inner.prompt.menu_visible()),
             commands: vec![
-                TuiCommand::new(
-                    "command.palette.show",
-                    run(|inner| inner.open_route(Route::Command)),
-                )
-                .title("Open command palette")
-                .group("Prompt"),
+                TuiCommand::new("command.palette.show", run(|inner| inner.open_route(Route::Command)))
+                    .title("Open command palette")
+                    .group("Prompt"),
                 TuiCommand::new("variant.cycle", run(Inner::cycle_variant_rc))
                     .title("Cycle model variant")
                     .group("Model"),
@@ -1605,8 +1387,8 @@ fn install_layers(inner: &Rc<Inner>) {
             enabled: when(|inner| route(inner).is_some()),
             commands: keys(
                 &[
-                    "escape", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n", "pageup", "pagedown",
-                    "home", "end", "return", "ctrl+u",
+                    "escape", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n", "pageup", "pagedown", "home", "end",
+                    "return", "ctrl+u",
                 ],
                 Inner::panel_key,
             ),
@@ -1618,9 +1400,7 @@ fn install_layers(inner: &Rc<Inner>) {
             commands: vec![
                 TuiCommand::new("queued_prompt.undo", {
                     let weak = Rc::downgrade(inner);
-                    move |_: Option<&str>, _: Option<&KeyEvent>| {
-                        weak.upgrade().is_some_and(|inner| inner.pending(true))
-                    }
+                    move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| inner.pending(true))
                 })
                 .title("Undo")
                 .group("Prompt"),
@@ -1639,18 +1419,7 @@ fn install_layers(inner: &Rc<Inner>) {
             priority: 2,
             enabled: when(|inner| matches!(shown(inner), Some(Shown::Permission(_)))),
             commands: keys(
-                &[
-                    "pageup",
-                    "pagedown",
-                    "tab",
-                    "shift+tab",
-                    "left",
-                    "h",
-                    "right",
-                    "l",
-                    "return",
-                    "escape",
-                ],
+                &["pageup", "pagedown", "tab", "shift+tab", "left", "h", "right", "l", "return", "escape"],
                 Inner::permission_key,
             ),
             ..KeymapLayer::default()

@@ -21,10 +21,7 @@ pub struct Transcript {
 
 impl Transcript {
     pub(crate) fn new(items: Vec<SessionMessageInfo>) -> Self {
-        let mut transcript = Self {
-            items,
-            index: HashMap::new(),
-        };
+        let mut transcript = Self { items, index: HashMap::new() };
         transcript.reindex(0);
         transcript
     }
@@ -103,9 +100,7 @@ impl Transcript {
     /// The last assistant message that has not completed (`activeAssistant`).
     pub(crate) fn active_assistant(&mut self) -> Option<&mut SessionMessageAssistant> {
         self.items.iter_mut().rev().find_map(|item| match item {
-            SessionMessageInfo::Assistant(assistant) if assistant.time.completed.is_none() => {
-                Some(assistant)
-            }
+            SessionMessageInfo::Assistant(assistant) if assistant.time.completed.is_none() => Some(assistant),
             _ => None,
         })
     }
@@ -157,10 +152,7 @@ impl MessageExt for SessionMessageInfo {
             Self::Compaction(SessionMessageCompaction::Failed(item)) => item.time.created,
             Self::Idle(item) => item.time.created,
             Self::Compaction(SessionMessageCompaction::Unknown(value)) | Self::Unknown(value) => {
-                value
-                    .pointer("/time/created")
-                    .and_then(Value::as_f64)
-                    .unwrap_or_default()
+                value.pointer("/time/created").and_then(Value::as_f64).unwrap_or_default()
             }
         }
     }
@@ -176,12 +168,8 @@ impl MessageExt for SessionMessageInfo {
             Self::Skill(item) => item.time.created = created,
             Self::Shell(item) => item.time.created = created,
             Self::Assistant(item) => item.time.created = created,
-            Self::Compaction(SessionMessageCompaction::Running(item)) => {
-                item.time.created = created
-            }
-            Self::Compaction(SessionMessageCompaction::Completed(item)) => {
-                item.time.created = created
-            }
+            Self::Compaction(SessionMessageCompaction::Running(item)) => item.time.created = created,
+            Self::Compaction(SessionMessageCompaction::Completed(item)) => item.time.created = created,
             Self::Compaction(SessionMessageCompaction::Failed(item)) => item.time.created = created,
             Self::Idle(item) => item.time.created = created,
             Self::Compaction(SessionMessageCompaction::Unknown(value)) | Self::Unknown(value) => {
@@ -223,9 +211,7 @@ fn omit_message_file_data(message: &mut SessionMessageInfo) {
             continue;
         };
         match &mut tool.state {
-            SessionMessageAssistantToolState::Completed(state) => {
-                omit_file_data(&mut state.content)
-            }
+            SessionMessageAssistantToolState::Completed(state) => omit_file_data(&mut state.content),
             SessionMessageAssistantToolState::Error(state) => {
                 if let Some(content) = &mut state.content {
                     omit_file_data(content);
@@ -247,10 +233,7 @@ pub struct LoadMore {
 
 impl State {
     pub fn messages(&self, session: &SessionID) -> &[SessionMessageInfo] {
-        self.messages
-            .get(session)
-            .map(Transcript::items)
-            .unwrap_or_default()
+        self.messages.get(session).map(Transcript::items).unwrap_or_default()
     }
 
     pub fn transcript(&self, session: &SessionID) -> Option<&Transcript> {
@@ -308,10 +291,8 @@ impl State {
         message: &SessionMessageID,
         f: impl FnOnce(&mut SessionMessageAssistant),
     ) {
-        let Some(SessionMessageInfo::Assistant(assistant)) = self
-            .messages
-            .get_mut(session)
-            .and_then(|transcript| transcript.get_mut(&message.0))
+        let Some(SessionMessageInfo::Assistant(assistant)) =
+            self.messages.get_mut(session).and_then(|transcript| transcript.get_mut(&message.0))
         else {
             return;
         };
@@ -328,14 +309,10 @@ impl State {
         f: impl FnOnce(&mut SessionMessageAssistantTool),
     ) {
         self.edit_assistant(session, message, |assistant| {
-            let part = assistant
-                .content
-                .iter_mut()
-                .rev()
-                .find_map(|part| match part {
-                    SessionMessageAssistantContentItem::Tool(part) if part.id == tool => Some(part),
-                    _ => None,
-                });
+            let part = assistant.content.iter_mut().rev().find_map(|part| match part {
+                SessionMessageAssistantContentItem::Tool(part) if part.id == tool => Some(part),
+                _ => None,
+            });
             if let Some(part) = part {
                 f(part);
             }
@@ -350,14 +327,10 @@ impl State {
         f: impl FnOnce(&mut SessionMessageAssistantText),
     ) {
         self.edit_assistant(session, message, |assistant| {
-            let part = assistant
-                .content
-                .iter_mut()
-                .rev()
-                .find_map(|part| match part {
-                    SessionMessageAssistantContentItem::Text(part) => Some(part),
-                    _ => None,
-                });
+            let part = assistant.content.iter_mut().rev().find_map(|part| match part {
+                SessionMessageAssistantContentItem::Text(part) => Some(part),
+                _ => None,
+            });
             if let Some(part) = part {
                 f(part);
             }
@@ -372,21 +345,14 @@ impl State {
         f: impl FnOnce(&mut SessionMessageAssistantReasoning),
     ) {
         self.edit_assistant(session, message, |assistant| {
-            let part = assistant
-                .content
-                .iter_mut()
-                .rev()
-                .find_map(|part| match part {
-                    SessionMessageAssistantContentItem::Reasoning(part)
-                        if part
-                            .time
-                            .as_ref()
-                            .is_none_or(|time| time.completed.is_none()) =>
-                    {
-                        Some(part)
-                    }
-                    _ => None,
-                });
+            let part = assistant.content.iter_mut().rev().find_map(|part| match part {
+                SessionMessageAssistantContentItem::Reasoning(part)
+                    if part.time.as_ref().is_none_or(|time| time.completed.is_none()) =>
+                {
+                    Some(part)
+                }
+                _ => None,
+            });
             if let Some(part) = part {
                 f(part);
             }
@@ -398,9 +364,7 @@ impl State {
         let session = &data.session_id;
         let started = data.started as f64;
         let transcript = self.transcript_mut(session);
-        if let Some(SessionMessageInfo::Assistant(existing)) =
-            transcript.get_mut(&data.assistant_message_id.0)
-        {
+        if let Some(SessionMessageInfo::Assistant(existing)) = transcript.get_mut(&data.assistant_message_id.0) {
             existing.agent = data.agent.clone();
             existing.model = data.model.clone();
             existing.retry = None;
@@ -429,17 +393,11 @@ impl State {
             agent: data.agent.clone(),
             model: data.model.clone(),
             metadata: event.metadata.clone(),
-            snapshot: data
-                .snapshot
-                .as_ref()
-                .map(|snapshot| SessionMessageAssistantSnapshot {
-                    start: Some(snapshot.clone()),
-                    ..Default::default()
-                }),
-            time: SessionMessageAssistantTime {
-                created: started,
+            snapshot: data.snapshot.as_ref().map(|snapshot| SessionMessageAssistantSnapshot {
+                start: Some(snapshot.clone()),
                 ..Default::default()
-            },
+            }),
+            time: SessionMessageAssistantTime { created: started, ..Default::default() },
             ..Default::default()
         };
         self.insert_message(session, SessionMessageInfo::Assistant(assistant));
@@ -447,11 +405,9 @@ impl State {
 
     pub(crate) fn on_step_streamed(&mut self, event: &SessionStepStreamed) {
         let created = event.created;
-        self.edit_assistant(
-            &event.data.session_id,
-            &event.data.assistant_message_id,
-            |assistant| assistant.time.streamed = Some(created),
-        );
+        self.edit_assistant(&event.data.session_id, &event.data.assistant_message_id, |assistant| {
+            assistant.time.streamed = Some(created)
+        });
     }
 
     pub(crate) fn on_step_ended(&mut self, event: &SessionStepEnded) {
@@ -473,9 +429,7 @@ impl State {
         let data = &event.data;
         self.edit_assistant(&data.session_id, &data.assistant_message_id, |assistant| {
             assistant.time.completed = Some(event.created);
-            assistant.finish = Some(SessionMessageAssistantFinish::from(
-                data.finish.as_deref().unwrap_or("error"),
-            ));
+            assistant.finish = Some(SessionMessageAssistantFinish::from(data.finish.as_deref().unwrap_or("error")));
             assistant.raw_finish = data.raw_finish.clone();
             assistant.native = data.native.clone();
             assistant.error = Some(data.error.clone());
@@ -489,45 +443,30 @@ impl State {
 
     pub(crate) fn on_text_started(&mut self, session: &SessionID, message: &SessionMessageID) {
         self.edit_assistant(session, message, |assistant| {
-            assistant
-                .content
-                .push(SessionMessageAssistantContentItem::Text(
-                    SessionMessageAssistantText {
-                        r#type: "text".into(),
-                        ..Default::default()
-                    },
-                ));
+            assistant.content.push(SessionMessageAssistantContentItem::Text(SessionMessageAssistantText {
+                r#type: "text".into(),
+                ..Default::default()
+            }));
         });
     }
 
     pub(crate) fn on_text_delta(&mut self, data: &SessionTextDeltaData) {
-        self.edit_text(&data.session_id, &data.assistant_message_id, |text| {
-            text.text.push_str(&data.delta)
-        });
+        self.edit_text(&data.session_id, &data.assistant_message_id, |text| text.text.push_str(&data.delta));
     }
 
     pub(crate) fn on_text_ended(&mut self, data: &SessionTextEndedData) {
-        self.edit_text(&data.session_id, &data.assistant_message_id, |text| {
-            text.text.clone_from(&data.text)
-        });
+        self.edit_text(&data.session_id, &data.assistant_message_id, |text| text.text.clone_from(&data.text));
     }
 
     pub(crate) fn on_reasoning_started(&mut self, event: &SessionReasoningStarted) {
         let data = &event.data;
         self.edit_assistant(&data.session_id, &data.assistant_message_id, |assistant| {
-            assistant
-                .content
-                .push(SessionMessageAssistantContentItem::Reasoning(
-                    SessionMessageAssistantReasoning {
-                        r#type: "reasoning".into(),
-                        text: String::new(),
-                        native: data.native.clone(),
-                        time: Some(SessionMessageShellTime {
-                            created: event.created,
-                            completed: None,
-                        }),
-                    },
-                ));
+            assistant.content.push(SessionMessageAssistantContentItem::Reasoning(SessionMessageAssistantReasoning {
+                r#type: "reasoning".into(),
+                text: String::new(),
+                native: data.native.clone(),
+                time: Some(SessionMessageShellTime { created: event.created, completed: None }),
+            }));
         });
     }
 
@@ -542,10 +481,7 @@ impl State {
         self.edit_reasoning(&data.session_id, &data.assistant_message_id, |reasoning| {
             reasoning.text.clone_from(&data.text);
             reasoning.time = Some(SessionMessageShellTime {
-                created: reasoning
-                    .time
-                    .as_ref()
-                    .map_or(event.created, |time| time.created),
+                created: reasoning.time.as_ref().map_or(event.created, |time| time.created),
                 completed: Some(event.created),
             });
             if data.native.is_some() {
@@ -557,148 +493,106 @@ impl State {
     pub(crate) fn on_tool_input_started(&mut self, event: &SessionToolInputStarted) {
         let data = &event.data;
         self.edit_assistant(&data.session_id, &data.assistant_message_id, |assistant| {
-            assistant
-                .content
-                .push(SessionMessageAssistantContentItem::Tool(
-                    SessionMessageAssistantTool {
-                        r#type: "tool".into(),
-                        id: data.id.clone(),
-                        name: data.name.clone(),
-                        executed: None,
-                        native: None,
-                        time: SessionMessageAssistantToolTime {
-                            created: event.created,
-                            ..Default::default()
-                        },
-                        state: SessionMessageAssistantToolState::Streaming(
-                            SessionMessageToolStateStreaming {
-                                status: "streaming".into(),
-                                input: String::new(),
-                            },
-                        ),
-                    },
-                ));
+            assistant.content.push(SessionMessageAssistantContentItem::Tool(SessionMessageAssistantTool {
+                r#type: "tool".into(),
+                id: data.id.clone(),
+                name: data.name.clone(),
+                executed: None,
+                native: None,
+                time: SessionMessageAssistantToolTime { created: event.created, ..Default::default() },
+                state: SessionMessageAssistantToolState::Streaming(SessionMessageToolStateStreaming {
+                    status: "streaming".into(),
+                    input: String::new(),
+                }),
+            }));
         });
     }
 
     pub(crate) fn on_tool_input_delta(&mut self, data: &SessionToolInputDeltaData) {
-        self.edit_tool(
-            &data.session_id,
-            &data.assistant_message_id,
-            &data.id,
-            |tool| {
-                if let SessionMessageAssistantToolState::Streaming(state) = &mut tool.state {
-                    state.input.push_str(&data.delta);
-                }
-            },
-        );
+        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
+            if let SessionMessageAssistantToolState::Streaming(state) = &mut tool.state {
+                state.input.push_str(&data.delta);
+            }
+        });
     }
 
     pub(crate) fn on_tool_input_ended(&mut self, data: &SessionToolInputEndedData) {
-        self.edit_tool(
-            &data.session_id,
-            &data.assistant_message_id,
-            &data.id,
-            |tool| {
-                if let SessionMessageAssistantToolState::Streaming(state) = &mut tool.state {
-                    state.input.clone_from(&data.text);
-                }
-            },
-        );
+        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
+            if let SessionMessageAssistantToolState::Streaming(state) = &mut tool.state {
+                state.input.clone_from(&data.text);
+            }
+        });
     }
 
     pub(crate) fn on_tool_called(&mut self, event: &SessionToolCalled) {
         let data = &event.data;
-        self.edit_tool(
-            &data.session_id,
-            &data.assistant_message_id,
-            &data.id,
-            |tool| {
-                tool.time.ran = Some(event.created);
-                tool.executed = Some(data.executed);
-                tool.native = data.native.clone();
-                tool.state =
-                    SessionMessageAssistantToolState::Running(SessionMessageToolStateRunning {
-                        status: "running".into(),
-                        input: data.input.clone(),
-                        metadata: Default::default(),
-                    });
-            },
-        );
+        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
+            tool.time.ran = Some(event.created);
+            tool.executed = Some(data.executed);
+            tool.native = data.native.clone();
+            tool.state = SessionMessageAssistantToolState::Running(SessionMessageToolStateRunning {
+                status: "running".into(),
+                input: data.input.clone(),
+                metadata: Default::default(),
+            });
+        });
     }
 
     pub(crate) fn on_tool_progress(&mut self, data: &SessionToolProgressData) {
-        self.edit_tool(
-            &data.session_id,
-            &data.assistant_message_id,
-            &data.id,
-            |tool| {
-                if let SessionMessageAssistantToolState::Running(state) = &mut tool.state {
-                    state.metadata.clone_from(&data.metadata);
-                }
-            },
-        );
+        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
+            if let SessionMessageAssistantToolState::Running(state) = &mut tool.state {
+                state.metadata.clone_from(&data.metadata);
+            }
+        });
     }
 
     pub(crate) fn on_tool_success(&mut self, event: &SessionToolSuccess) {
         let data = &event.data;
         let omit = self.omit_file_data;
-        self.edit_tool(
-            &data.session_id,
-            &data.assistant_message_id,
-            &data.id,
-            |tool| {
-                let SessionMessageAssistantToolState::Running(state) = &tool.state else {
-                    return;
-                };
-                let mut content = data.content.clone();
-                if omit {
-                    omit_file_data(&mut content);
-                }
-                tool.state =
-                    SessionMessageAssistantToolState::Completed(SessionMessageToolStateCompleted {
-                        status: "completed".into(),
-                        input: state.input.clone(),
-                        metadata: data.metadata.clone(),
-                        content,
-                    });
-                tool.executed = Some(data.executed || tool.executed == Some(true));
-                merge_native(&mut tool.native, &data.native);
-                tool.time.completed = Some(event.created);
-            },
-        );
+        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
+            let SessionMessageAssistantToolState::Running(state) = &tool.state else {
+                return;
+            };
+            let mut content = data.content.clone();
+            if omit {
+                omit_file_data(&mut content);
+            }
+            tool.state = SessionMessageAssistantToolState::Completed(SessionMessageToolStateCompleted {
+                status: "completed".into(),
+                input: state.input.clone(),
+                metadata: data.metadata.clone(),
+                content,
+            });
+            tool.executed = Some(data.executed || tool.executed == Some(true));
+            merge_native(&mut tool.native, &data.native);
+            tool.time.completed = Some(event.created);
+        });
     }
 
     pub(crate) fn on_tool_failed(&mut self, event: &SessionToolFailed) {
         let data = &event.data;
         let omit = self.omit_file_data;
-        self.edit_tool(
-            &data.session_id,
-            &data.assistant_message_id,
-            &data.id,
-            |tool| {
-                let input = match &tool.state {
-                    SessionMessageAssistantToolState::Streaming(_) => Default::default(),
-                    SessionMessageAssistantToolState::Running(state) => state.input.clone(),
-                    _ => return,
-                };
-                let mut content = data.content.clone();
-                if omit && let Some(content) = &mut content {
-                    omit_file_data(content);
-                }
-                tool.state =
-                    SessionMessageAssistantToolState::Error(SessionMessageToolStateError {
-                        status: "error".into(),
-                        error: data.error.clone(),
-                        input,
-                        metadata: data.metadata.clone(),
-                        content,
-                    });
-                tool.executed = Some(data.executed || tool.executed == Some(true));
-                merge_native(&mut tool.native, &data.native);
-                tool.time.completed = Some(event.created);
-            },
-        );
+        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
+            let input = match &tool.state {
+                SessionMessageAssistantToolState::Streaming(_) => Default::default(),
+                SessionMessageAssistantToolState::Running(state) => state.input.clone(),
+                _ => return,
+            };
+            let mut content = data.content.clone();
+            if omit && let Some(content) = &mut content {
+                omit_file_data(content);
+            }
+            tool.state = SessionMessageAssistantToolState::Error(SessionMessageToolStateError {
+                status: "error".into(),
+                error: data.error.clone(),
+                input,
+                metadata: data.metadata.clone(),
+                content,
+            });
+            tool.executed = Some(data.executed || tool.executed == Some(true));
+            merge_native(&mut tool.native, &data.native);
+            tool.time.completed = Some(event.created);
+        });
     }
 
     pub(crate) fn on_retry_scheduled(&mut self, data: &SessionRetryScheduledData) {
@@ -745,9 +639,7 @@ impl State {
         let shell = &event.data.shell;
         let mut metadata = event.metadata.clone();
         if shell.metadata.get("background") == Some(&Value::Bool(true)) {
-            metadata
-                .get_or_insert_default()
-                .insert("background".into(), Value::Bool(true));
+            metadata.get_or_insert_default().insert("background".into(), Value::Bool(true));
         }
         let message = SessionMessageShell {
             id: from_event(&event.id),
@@ -758,10 +650,7 @@ impl State {
             exit: shell.exit.map(SessionMessageShellExit::Number),
             metadata,
             output: None,
-            time: SessionMessageShellTime {
-                created: event.created,
-                completed: None,
-            },
+            time: SessionMessageShellTime { created: event.created, completed: None },
         };
         self.insert_message(&event.data.session_id, SessionMessageInfo::Shell(message));
     }
@@ -771,17 +660,10 @@ impl State {
         let Some(transcript) = self.messages.get_mut(session) else {
             return;
         };
-        let Some(shell) = transcript
-            .items_mut()
-            .iter_mut()
-            .rev()
-            .find_map(|item| match item {
-                SessionMessageInfo::Shell(shell) if shell.shell_id == event.data.shell.id => {
-                    Some(shell)
-                }
-                _ => None,
-            })
-        else {
+        let Some(shell) = transcript.items_mut().iter_mut().rev().find_map(|item| match item {
+            SessionMessageInfo::Shell(shell) if shell.shell_id == event.data.shell.id => Some(shell),
+            _ => None,
+        }) else {
             return;
         };
         shell.status = event.data.shell.status.clone();
@@ -795,11 +677,7 @@ impl State {
     /// `session.revert.committed`: drops messages at or after the boundary.
     pub(crate) fn revert_messages(&mut self, session: &SessionID, to: &SessionMessageID) {
         let transcript = self.transcript_mut(session);
-        let Some(position) = transcript
-            .items()
-            .iter()
-            .position(|item| item.id() >= to.as_str())
-        else {
+        let Some(position) = transcript.items().iter().position(|item| item.id() >= to.as_str()) else {
             return;
         };
         transcript.truncate(position);
@@ -829,21 +707,19 @@ impl State {
         let session = &data.session_id;
         let transcript = self.transcript_mut(session);
         let completed = |id: SessionMessageID, metadata, time| {
-            SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(
-                SessionMessageCompactionCompleted {
-                    r#type: "compaction".into(),
-                    id,
-                    metadata,
-                    time,
-                    status: "completed".into(),
-                    reason: data.reason.clone(),
-                    model: data.model.clone(),
-                    native: data.native.clone(),
-                    summary: data.text.clone(),
-                    cost: data.cost,
-                    tokens: data.tokens.clone(),
-                },
-            ))
+            SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(SessionMessageCompactionCompleted {
+                r#type: "compaction".into(),
+                id,
+                metadata,
+                time,
+                status: "completed".into(),
+                reason: data.reason.clone(),
+                model: data.model.clone(),
+                native: data.native.clone(),
+                summary: data.text.clone(),
+                cost: data.cost,
+                tokens: data.tokens.clone(),
+            }))
         };
         if let Some(position) = running_compaction(transcript) {
             let SessionMessageInfo::Compaction(SessionMessageCompaction::Running(current)) =
@@ -857,13 +733,7 @@ impl State {
             self.log.message(session, &id);
             return;
         }
-        let item = completed(
-            from_event(&event.id),
-            None,
-            SessionInboxUserTime {
-                created: event.created,
-            },
-        );
+        let item = completed(from_event(&event.id), None, SessionInboxUserTime { created: event.created });
         self.insert_message(session, item);
     }
 
@@ -871,64 +741,46 @@ impl State {
         let data = &event.data;
         let session = &data.session_id;
         let transcript = self.transcript_mut(session);
-        let running = running_compaction(transcript).and_then(|position| {
-            match &transcript.items()[position] {
-                SessionMessageInfo::Compaction(SessionMessageCompaction::Running(current)) => {
-                    Some((position, current.clone()))
-                }
-                _ => None,
+        let running = running_compaction(transcript).and_then(|position| match &transcript.items()[position] {
+            SessionMessageInfo::Compaction(SessionMessageCompaction::Running(current)) => {
+                Some((position, current.clone()))
             }
+            _ => None,
         });
         let failed = |id, metadata, time| {
-            SessionMessageInfo::Compaction(SessionMessageCompaction::Failed(
-                SessionMessageCompactionFailed {
-                    r#type: "compaction".into(),
-                    id,
-                    metadata,
-                    time,
-                    status: "failed".into(),
-                    reason: data.reason.clone(),
-                    error: data.error.clone(),
-                    cost: data.cost,
-                    tokens: data.tokens.clone(),
-                },
-            ))
+            SessionMessageInfo::Compaction(SessionMessageCompaction::Failed(SessionMessageCompactionFailed {
+                r#type: "compaction".into(),
+                id,
+                metadata,
+                time,
+                status: "failed".into(),
+                reason: data.reason.clone(),
+                error: data.error.clone(),
+                cost: data.cost,
+                tokens: data.tokens.clone(),
+            }))
         };
         if let Some((position, current)) = running {
-            transcript.items_mut()[position] =
-                failed(current.id.clone(), current.metadata, current.time);
+            transcript.items_mut()[position] = failed(current.id.clone(), current.metadata, current.time);
             self.log.message(session, &current.id);
             return;
         }
-        let id = data
-            .input_id
-            .clone()
-            .unwrap_or_else(|| from_event(&event.id));
-        let item = failed(
-            id,
-            event.metadata.clone(),
-            SessionInboxUserTime {
-                created: event.created,
-            },
-        );
+        let id = data.input_id.clone().unwrap_or_else(|| from_event(&event.id));
+        let item = failed(id, event.metadata.clone(), SessionInboxUserTime { created: event.created });
         self.insert_message(session, item);
     }
 }
 
 fn running_compaction(transcript: &Transcript) -> Option<usize> {
-    transcript.items().iter().rposition(|item| {
-        matches!(
-            item,
-            SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))
-        )
-    })
+    transcript
+        .items()
+        .iter()
+        .rposition(|item| matches!(item, SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))))
 }
 
 fn merge_native(target: &mut Option<SessionMessageNative>, next: &Option<SessionMessageNative>) {
     if let Some(next) = next {
-        target
-            .get_or_insert_default()
-            .extend(next.iter().map(|(key, value)| (key.clone(), value.clone())));
+        target.get_or_insert_default().extend(next.iter().map(|(key, value)| (key.clone(), value.clone())));
     }
 }
 
@@ -936,11 +788,7 @@ impl Data {
     /// Reads the newest page of a transcript once per invalidation (`message.sync`).
     pub fn message_sync(&self, session: &SessionID) -> Task<()> {
         let session = session.clone();
-        let limit = self
-            .inner
-            .options
-            .initial_message_limit
-            .unwrap_or(MESSAGE_PAGE);
+        let limit = self.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE);
         self.sync_start(
             format!("session.message:{}", session.0),
             |state| state.deletion_epoch,
@@ -960,12 +808,7 @@ impl Data {
                     if state.deleted_since(&session, started) {
                         return;
                     }
-                    let fetched: Vec<_> = response
-                        .data
-                        .into_iter()
-                        .rev()
-                        .map(|item| state.stored(item))
-                        .collect();
+                    let fetched: Vec<_> = response.data.into_iter().rev().map(|item| state.stored(item)).collect();
                     // A read racing an admission must not wipe its local transcript row.
                     let ids: HashSet<&str> = fetched.iter().map(MessageExt::id).collect();
                     let admitted: HashSet<&str> = state
@@ -981,16 +824,13 @@ impl Data {
                         .iter()
                         .filter(|item| {
                             !ids.contains(item.id())
-                                && (state.outbox.contains(item.id())
-                                    || admitted.contains(item.id()))
+                                && (state.outbox.contains(item.id()) || admitted.contains(item.id()))
                         })
                         .cloned()
                         .collect();
                     let mut messages = fetched;
                     messages.extend(local);
-                    state
-                        .messages
-                        .insert(session.clone(), Transcript::new(messages));
+                    state.messages.insert(session.clone(), Transcript::new(messages));
                     match response.cursor.next.flatten() {
                         Some(next) => state.cursor.insert(session.clone(), next),
                         None => state.cursor.remove(&session),
@@ -1003,36 +843,19 @@ impl Data {
     }
 
     pub fn message_invalidate(&self, session: &SessionID) {
-        self.write(|state| {
-            state
-                .syncs
-                .invalidate(&format!("session.message:{}", session.0))
-        });
+        self.write(|state| state.syncs.invalidate(&format!("session.message:{}", session.0)));
     }
 
     /// Loads older pages (`message.loadMore`). Joins a load in flight; with `all`, it then
     /// continues to the oldest page.
-    pub async fn message_load_more(
-        &self,
-        session: &SessionID,
-        options: LoadMore,
-    ) -> Result<(), Error> {
-        let cancelled = || {
-            options
-                .cancel
-                .as_ref()
-                .is_some_and(|token| token.is_cancelled())
-        };
+    pub async fn message_load_more(&self, session: &SessionID, options: LoadMore) -> Result<(), Error> {
+        let cancelled = || options.cancel.as_ref().is_some_and(|token| token.is_cancelled());
         if cancelled() {
             return Ok(());
         }
         loop {
-            let Some(pending) = self.read(|state| {
-                state
-                    .message_loads
-                    .get(session)
-                    .map(|(_, task)| task.clone())
-            }) else {
+            let Some(pending) = self.read(|state| state.message_loads.get(session).map(|(_, task)| task.clone()))
+            else {
                 break;
             };
             let published = match &options.cancel {
@@ -1075,11 +898,7 @@ impl Data {
             data.write(|state| {
                 state.loading.remove(&id);
                 state.log.messages(&id);
-                if state
-                    .message_loads
-                    .get(&id)
-                    .is_some_and(|(current, _)| *current == token)
-                {
+                if state.message_loads.get(&id).is_some_and(|(current, _)| *current == token) {
                     state.message_loads.remove(&id);
                 }
             });
@@ -1088,9 +907,7 @@ impl Data {
                 result => result,
             }
         });
-        state
-            .message_loads
-            .insert(session.clone(), (token, task.clone()));
+        state.message_loads.insert(session.clone(), (token, task.clone()));
         self.flush(&mut state);
         Some(task)
     }
@@ -1135,16 +952,8 @@ async fn load_pages(
     data.write(|state| {
         let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
         let transcript = state.transcript_mut(session);
-        let ids: HashSet<String> = transcript
-            .items()
-            .iter()
-            .map(|item| item.id().to_owned())
-            .collect();
-        let mut messages: Vec<_> = fetched
-            .into_iter()
-            .rev()
-            .filter(|item| !ids.contains(item.id()))
-            .collect();
+        let ids: HashSet<String> = transcript.items().iter().map(|item| item.id().to_owned()).collect();
+        let mut messages: Vec<_> = fetched.into_iter().rev().filter(|item| !ids.contains(item.id())).collect();
         messages.extend(transcript.items().iter().cloned());
         *transcript = Transcript::new(messages);
         match &next {

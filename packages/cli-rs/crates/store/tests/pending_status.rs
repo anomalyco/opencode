@@ -31,19 +31,14 @@ fn fixture() -> Fixture {
         }),
         Options::default(),
     );
-    Fixture {
-        data,
-        seq: AtomicU64::new(0),
-    }
+    Fixture { data, seq: AtomicU64::new(0) }
 }
 
 impl Fixture {
     fn emit(&self, kind: &str, payload: Value) {
         let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         let mut data = json!({ "sessionID": SESSION });
-        data.as_object_mut()
-            .unwrap()
-            .extend(payload.as_object().unwrap().clone());
+        data.as_object_mut().unwrap().extend(payload.as_object().unwrap().clone());
         emit(
             &self.data,
             json!({
@@ -80,10 +75,7 @@ impl Fixture {
     }
 
     fn move_to(&self, id: &str, delivery: &str) {
-        self.emit(
-            "session.inbox.delivery.changed",
-            json!({ "inboxID": id, "delivery": delivery }),
-        );
+        self.emit("session.inbox.delivery.changed", json!({ "inboxID": id, "delivery": delivery }));
     }
 
     fn status(&self, id: &str) -> Option<PendingStatus> {
@@ -119,17 +111,12 @@ async fn an_idle_send_is_starting_from_optimistic_admission_until_delivery() {
     assert_eq!(setup.status("msg_first"), Some(PendingStatus::Starting));
     setup.deliver("msg_first");
     assert_eq!(setup.status("msg_first"), None);
-    let tag = setup.data.read(|state| {
-        state
-            .message(&session(), "msg_first")
-            .map(|item| item.tag().to_owned())
-    });
+    let tag = setup.data.read(|state| state.message(&session(), "msg_first").map(|item| item.tag().to_owned()));
     assert_eq!(tag.as_deref(), Some("user"));
 }
 
 #[tokio::test]
-async fn a_steer_sent_after_the_execution_delivered_input_is_steering_and_follows_delivery_changes()
-{
+async fn a_steer_sent_after_the_execution_delivered_input_is_steering_and_follows_delivery_changes() {
     let setup = fixture();
     setup.enqueue("msg_first", "steer");
     setup.started();
@@ -164,10 +151,7 @@ async fn stranded(outcome: &str) {
     setup.started();
     assert_eq!(setup.status("msg_first"), Some(PendingStatus::Starting));
     setup.settled(outcome);
-    assert_eq!(
-        setup.data.read(|state| state.status(&session())),
-        SessionStatus::Idle
-    );
+    assert_eq!(setup.data.read(|state| state.status(&session())), SessionStatus::Idle);
     assert_eq!(setup.status("msg_first"), Some(PendingStatus::Stranded));
     // A new idle send starts fresh, and its execution promotes the stranded steer with it.
     setup.enqueue("msg_retry", "steer");

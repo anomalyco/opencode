@@ -31,10 +31,7 @@ impl Host for TestHost {
     }
 
     fn theme(&self) -> Theme {
-        Catalog::default()
-            .load("opencode", ThemeMode::Dark)
-            .unwrap()
-            .theme
+        Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
     }
 
     fn keymap(&self) -> &DialogKeymap {
@@ -46,23 +43,17 @@ impl Host for TestHost {
     }
 
     fn storage_write(&self, key: &str, json: &str) -> Result<(), String> {
-        self.storage
-            .borrow_mut()
-            .insert(key.to_owned(), json.to_owned());
+        self.storage.borrow_mut().insert(key.to_owned(), json.to_owned());
         Ok(())
     }
 
     fn toast(&self, variant: Toast, title: Option<&str>, message: &str) {
         let title = title.map(str::to_owned);
-        self.toasts
-            .borrow_mut()
-            .push((variant, title, message.to_owned()));
+        self.toasts.borrow_mut().push((variant, title, message.to_owned()));
     }
 
     fn open_route(&self, id: &str, name: &str) {
-        self.routes
-            .borrow_mut()
-            .push((id.to_owned(), name.to_owned()));
+        self.routes.borrow_mut().push((id.to_owned(), name.to_owned()));
     }
 
     fn remount(&self) {
@@ -98,18 +89,10 @@ struct Fake {
 }
 
 impl Backend<TestHost> for Fake {
-    fn load(
-        &self,
-        library: &[u8],
-        options: Option<&str>,
-    ) -> Result<(Definition<TestHost>, ErrorFn), String> {
+    fn load(&self, library: &[u8], options: Option<&str>) -> Result<(Definition<TestHost>, ErrorFn), String> {
         self.loads.set(self.loads.get() + 1);
         let text = String::from_utf8_lossy(library).into_owned();
-        let id = text
-            .strip_prefix("id=")
-            .ok_or(text.clone())?
-            .trim()
-            .to_owned();
+        let id = text.strip_prefix("id=").ok_or(text.clone())?.trim().to_owned();
         assert_eq!(options, None);
         let active = self.active.clone();
         let definition = Definition::new(id, move |setup| {
@@ -158,30 +141,17 @@ fn discover_lists_subdirectories_by_name() {
     write(&plugins.join(entry_file()), "");
     assert_eq!(
         discover(&[plugins.clone(), root.path().join("missing")]),
-        [
-            plugins.join("Alpha"),
-            plugins.join("beta"),
-            plugins.join("gamma")
-        ]
+        [plugins.join("Alpha"), plugins.join("beta"), plugins.join("gamma")]
     );
 }
 
 #[test]
 fn local_source_resolves_paths_and_urls_but_not_packages() {
     let dir = Path::new("/home/me/.config/opencode");
-    assert_eq!(
-        local_source("./plugins/x", dir),
-        Some(dir.join("plugins/x"))
-    );
-    assert_eq!(
-        local_source("../x.wasm", dir),
-        Some("/home/me/.config/x.wasm".into())
-    );
+    assert_eq!(local_source("./plugins/x", dir), Some(dir.join("plugins/x")));
+    assert_eq!(local_source("../x.wasm", dir), Some("/home/me/.config/x.wasm".into()));
     assert_eq!(local_source("/abs/x", dir), Some("/abs/x".into()));
-    assert_eq!(
-        local_source("file:///abs/y.wasm", dir),
-        Some("/abs/y.wasm".into())
-    );
+    assert_eq!(local_source("file:///abs/y.wasm", dir), Some("/abs/y.wasm".into()));
     assert_eq!(local_source("@acme/opencode-tui", dir), None);
 }
 
@@ -193,27 +163,14 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let ts_dir = config.join("plugins/typescript");
     fs::create_dir_all(&ts_dir).unwrap();
     write(&lib_dir.join(entry_file()), "id=fake");
-    let file = root
-        .path()
-        .join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
+    let file = root.path().join(format!("extra.{}", std::env::consts::DLL_EXTENSION));
     write(&file, "id=extra");
     let host = host();
     let registry = Registry::<TestHost>::new(Vec::new(), [file.to_str().unwrap(), "@acme/tui"]);
     let fake = Rc::new(Fake::default());
-    let configured = registry
-        .skipped()
-        .into_iter()
-        .map(|target| Configured {
-            target,
-            options: None,
-        })
-        .collect();
-    let loader = Loader::new(
-        fake.clone() as Rc<dyn Backend<TestHost>>,
-        config.clone(),
-        root.path().to_path_buf(),
-        configured,
-    );
+    let configured = registry.skipped().into_iter().map(|target| Configured { target, options: None }).collect();
+    let loader =
+        Loader::new(fake.clone() as Rc<dyn Backend<TestHost>>, config.clone(), root.path().to_path_buf(), configured);
     let lib_target = lib_dir.to_string_lossy().into_owned();
     let file_target = file.to_string_lossy().into_owned();
     let ts_target = ts_dir.to_string_lossy().into_owned();
@@ -224,14 +181,8 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     assert_eq!(entry(&entries, &lib_target).source, Source::External);
     assert_eq!(entry(&entries, &lib_target).status, Status::Active);
     assert_eq!(entry(&entries, &file_target).id, "extra");
-    assert_eq!(
-        entry(&entries, &ts_target).status,
-        Status::Skipped(SKIPPED.to_owned())
-    );
-    assert_eq!(
-        entry(&entries, "@acme/tui").status,
-        Status::Skipped(SKIPPED.to_owned())
-    );
+    assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED.to_owned()));
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED.to_owned()));
     assert_eq!(fake.active.get(), 2);
     assert_eq!(host.remounts.get(), 1);
     assert!(loader.watch_dirs().contains(&lib_dir));
@@ -244,10 +195,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     write(&lib_dir.join(entry_file()), "boom");
     assert!(loader.reconcile(&host, &registry));
     let entries = registry.entries();
-    assert_eq!(
-        entry(&entries, &lib_target).status,
-        Status::Failed("boom (previous version still active)".to_owned())
-    );
+    assert_eq!(entry(&entries, &lib_target).status, Status::Failed("boom (previous version still active)".to_owned()));
     assert_eq!(fake.active.get(), 2);
     // The same broken build is not retried.
     assert!(!loader.reconcile(&host, &registry));
@@ -272,10 +220,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     fs::remove_file(lib_dir.join(entry_file())).unwrap();
     assert!(loader.reconcile(&host, &registry));
     let entries = registry.entries();
-    assert_eq!(
-        entry(&entries, &lib_target).status,
-        Status::Skipped(SKIPPED.to_owned())
-    );
+    assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED.to_owned()));
     assert!(!entries.iter().any(|entry| entry.id == "fake2"));
     assert_eq!(fake.active.get(), 1);
 }
@@ -284,18 +229,9 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
 fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     let root = tempfile::tempdir().unwrap();
     let config = root.path().join("config");
-    write(
-        &config.join(format!("plugins/a/{}", entry_file())),
-        "id=same",
-    );
-    write(
-        &config.join(format!("plugins/b/{}", entry_file())),
-        "id=same",
-    );
-    write(
-        &config.join(format!("plugins/c/{}", entry_file())),
-        "not a library",
-    );
+    write(&config.join(format!("plugins/a/{}", entry_file())), "id=same");
+    write(&config.join(format!("plugins/b/{}", entry_file())), "id=same");
+    write(&config.join(format!("plugins/c/{}", entry_file())), "not a library");
     let host = host();
     let registry = Registry::<TestHost>::new(Vec::new(), []);
     let loader = Loader::new(
@@ -306,22 +242,10 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     );
     loader.reconcile(&host, &registry);
     let entries = registry.entries();
-    let target = |name: &str| {
-        config
-            .join("plugins")
-            .join(name)
-            .to_string_lossy()
-            .into_owned()
-    };
+    let target = |name: &str| config.join("plugins").join(name).to_string_lossy().into_owned();
     assert_eq!(entry(&entries, &target("a")).status, Status::Active);
-    assert_eq!(
-        entry(&entries, &target("b")).status,
-        Status::Failed("plugin ID same is already registered".to_owned())
-    );
-    assert_eq!(
-        entry(&entries, &target("c")).status,
-        Status::Failed("not a library".to_owned())
-    );
+    assert_eq!(entry(&entries, &target("b")).status, Status::Failed("plugin ID same is already registered".to_owned()));
+    assert_eq!(entry(&entries, &target("c")).status, Status::Failed("not a library".to_owned()));
     assert_eq!(entry(&entries, &target("c")).source, Source::Configured);
 }
 
@@ -336,35 +260,19 @@ const ONE: &str = "./one.dll";
 fn directives_after_an_entry_disable_an_external_plugin() {
     let root = tempfile::tempdir().unwrap();
     let config = root.path().join("config");
-    write(
-        &config.join(format!("one.{}", std::env::consts::DLL_EXTENSION)),
-        "id=one",
-    );
-    write(
-        &config.join(format!("plugins/two/{}", entry_file())),
-        "id=two",
-    );
+    write(&config.join(format!("one.{}", std::env::consts::DLL_EXTENSION)), "id=one");
+    write(&config.join(format!("plugins/two/{}", entry_file())), "id=two");
     let host = host();
     let registry = Registry::<TestHost>::new(Vec::new(), ["-one", ONE, "-two", "-*", "two"]);
     let loader = Loader::new(
         Rc::new(Fake::default()) as Rc<dyn Backend<TestHost>>,
         config.clone(),
         root.path().to_path_buf(),
-        vec![Configured {
-            target: ONE.to_owned(),
-            options: None,
-        }],
+        vec![Configured { target: ONE.to_owned(), options: None }],
     );
     loader.reconcile(&host, &registry);
     let entries = registry.entries();
-    let status = |id: &str| {
-        entries
-            .iter()
-            .find(|entry| entry.id == id)
-            .unwrap()
-            .status
-            .clone()
-    };
+    let status = |id: &str| entries.iter().find(|entry| entry.id == id).unwrap().status.clone();
     // `-one` comes before its entry, `-*` after it; `two` is discovered, so every directive applies.
     assert_eq!(status("one"), Status::Inactive);
     assert_eq!(status("two"), Status::Active);

@@ -16,8 +16,8 @@ use std::time::Duration;
 
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, ExperimentalUsageLimitsInput, IntegrationInfo, LocationQueryInput,
-    ModelInfo, ModelInfoStatus, ModelRef, ProviderInfo, SessionID, SessionInfo, UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, ExperimentalUsageLimitsInput, IntegrationInfo, LocationQueryInput, ModelInfo,
+    ModelInfoStatus, ModelRef, ProviderInfo, SessionID, SessionInfo, UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
@@ -44,11 +44,7 @@ pub struct Selection {
 impl Selection {
     // `selectionKey`.
     fn key(&self) -> String {
-        format!(
-            "{}:{}",
-            self.model.key(),
-            model_pref::normalize_variant(self.variant.as_deref()).unwrap_or("default")
-        )
+        format!("{}:{}", self.model.key(), model_pref::normalize_variant(self.variant.as_deref()).unwrap_or("default"))
     }
 }
 
@@ -65,13 +61,8 @@ pub type RouteFn = Rc<dyn Fn() -> Option<Routed>>;
 pub type LocationFn = Rc<dyn Fn() -> Location>;
 
 /// The store catalogs [`Local`] reads.
-const CATALOGS: [Catalog; 5] = [
-    Catalog::Model,
-    Catalog::Provider,
-    Catalog::Agent,
-    Catalog::Integration,
-    Catalog::Config,
-];
+const CATALOGS: [Catalog; 5] =
+    [Catalog::Model, Catalog::Provider, Catalog::Agent, Catalog::Integration, Catalog::Config];
 
 /// The client-local files [`Local`] uses.
 pub struct Files {
@@ -218,8 +209,7 @@ impl Local {
         let Some(location) = self.state.borrow().location.clone() else {
             return;
         };
-        self.data
-            .catalog_invalidate(Catalog::Integration, Some(&location));
+        self.data.catalog_invalidate(Catalog::Integration, Some(&location));
         self.read(Catalog::Integration, &location);
     }
 
@@ -280,9 +270,7 @@ impl Local {
                 data.provider.clone(),
                 data.agent.clone(),
                 data.integration.clone(),
-                data.config
-                    .as_deref()
-                    .and_then(crate::prompt::metadata::configured),
+                data.config.as_deref().and_then(crate::prompt::metadata::configured),
             ))
         });
         {
@@ -320,34 +308,22 @@ impl Local {
     /// loaded ones meanwhile.
     pub fn load_usage(&self, refresh: bool) {
         let key = self.usage_location().key();
-        if self.usage_loading.borrow().contains(&key)
-            || (!refresh && self.state.borrow().usage.contains_key(&key))
-        {
+        if self.usage_loading.borrow().contains(&key) || (!refresh && self.state.borrow().usage.contains_key(&key)) {
             return;
         }
         self.usage_loading.borrow_mut().insert(key.clone());
         let client = self.client.clone();
-        let input = ExperimentalUsageLimitsInput {
-            location: self.location(),
-        };
+        let input = ExperimentalUsageLimitsInput { location: self.location() };
         let weak = self.this.clone();
         self.app.spawn(
-            async move {
-                client
-                    .experimental_usage_limits(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.experimental_usage_limits(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(local) = weak.upgrade() else { return };
                 local.usage_loading.borrow_mut().remove(&key);
                 match result {
                     Ok(output) => {
                         // Filed under the location the server answered for, as `locationResource` publishes.
-                        local
-                            .state
-                            .borrow_mut()
-                            .usage
-                            .insert(Location::from(&output.location).key(), output.data);
+                        local.state.borrow_mut().usage.insert(Location::from(&output.location).key(), output.data);
                         local.notify();
                     }
                     Err(error) => log::warn!("usage limits: {error}"),
@@ -376,12 +352,7 @@ impl Local {
     }
 
     fn notify(&self) {
-        let listeners: Vec<_> = self
-            .listeners
-            .borrow()
-            .iter()
-            .map(|(_, listener)| listener.clone())
-            .collect();
+        let listeners: Vec<_> = self.listeners.borrow().iter().map(|(_, listener)| listener.clone()).collect();
         for listener in listeners {
             listener();
         }
@@ -392,9 +363,7 @@ impl Local {
     pub(crate) fn location(&self) -> Option<LocationQueryInput> {
         let location = self.state.borrow().location.clone();
         let location = location.unwrap_or_else(|| (self.location)());
-        Some(LocationQueryInput {
-            directory: Some(location.directory),
-        })
+        Some(LocationQueryInput { directory: Some(location.directory) })
     }
 
     fn load_preferences(&self) {
@@ -418,10 +387,7 @@ impl Local {
     }
 
     // `model.json` writes, in order, off the UI thread.
-    fn write(
-        &self,
-        job: impl FnOnce(&ModelPreferences) -> Result<(), opencode_local::lock::Error> + Send + 'static,
-    ) {
+    fn write(&self, job: impl FnOnce(&ModelPreferences) -> Result<(), opencode_local::lock::Error> + Send + 'static) {
         let (Some(writer), Some(preferences)) = (&self.writer, self.preferences.clone()) else {
             return;
         };
@@ -449,13 +415,7 @@ impl Local {
     }
 
     pub fn model_info(&self, model: &Model) -> Option<ModelInfo> {
-        self.state
-            .borrow()
-            .models
-            .as_ref()?
-            .iter()
-            .find(|item| is(item, model))
-            .cloned()
+        self.state.borrow().models.as_ref()?.iter().find(|item| is(item, model)).cloned()
     }
 
     pub fn providers(&self) -> Vec<ProviderInfo> {
@@ -463,13 +423,7 @@ impl Local {
     }
 
     pub fn provider(&self, id: &str) -> Option<ProviderInfo> {
-        self.state
-            .borrow()
-            .providers
-            .as_ref()?
-            .iter()
-            .find(|item| item.id.0 == id)
-            .cloned()
+        self.state.borrow().providers.as_ref()?.iter().find(|item| item.id.0 == id).cloned()
     }
 
     pub fn integrations(&self) -> Option<Vec<IntegrationInfo>> {
@@ -501,19 +455,16 @@ impl Local {
         match level(&usage, &model) {
             Level::Plenty => None,
             Level::Reached => Some(("Limit reached".to_owned(), true)),
-            level => Some((
-                format!("{} left", format_dollars(usage.left)),
-                level == Level::Out,
-            )),
+            level => Some((format!("{} left", format_dollars(usage.left)), level == Level::Out)),
         }
     }
 
     /// The prompt's effect (`prompt/index.tsx:1578-1582`): loads the limits once when OpenCode Console serves the
     /// selected model.
     fn load_served_usage(&self) {
-        let served = self.current().is_some_and(|model| {
-            crate::dialogs::usage::served_by_console(self.provider(&model.provider_id).as_ref())
-        });
+        let served = self
+            .current()
+            .is_some_and(|model| crate::dialogs::usage::served_by_console(self.provider(&model.provider_id).as_ref()));
         if served && self.usage().is_none() {
             self.load_usage(false);
         }
@@ -537,11 +488,7 @@ impl Local {
     }
 
     fn is_valid(&self, model: &Model) -> bool {
-        self.state
-            .borrow()
-            .models
-            .as_ref()
-            .is_some_and(|models| models.iter().any(|item| is(item, model)))
+        self.state.borrow().models.as_ref().is_some_and(|models| models.iter().any(|item| is(item, model)))
     }
 
     // Agents.
@@ -574,20 +521,12 @@ impl Local {
                         let startup = self.startup_agent.borrow().clone();
                         startup.filter(|_| !draft)
                     })
-                    .or_else(|| {
-                        routed
-                            .session
-                            .and_then(|session| session.agent.map(|agent| agent.0))
-                    })
+                    .or_else(|| routed.session.and_then(|session| session.agent.map(|agent| agent.0)))
                     .or_else(|| state.agent.clone()),
                 None => state.agent.clone(),
             }
         };
-        agents
-            .iter()
-            .find(|agent| Some(&agent.id.0) == selected.as_ref())
-            .or(agents.first())
-            .cloned()
+        agents.iter().find(|agent| Some(&agent.id.0) == selected.as_ref()).or(agents.first()).cloned()
     }
 
     /// `agent.set`: a warning toast for an unknown agent.
@@ -608,9 +547,7 @@ impl Local {
             let mut state = self.state.borrow_mut();
             state.agent = Some(id.to_owned());
             if let Some(routed) = &routed {
-                state
-                    .agent_drafts
-                    .insert(routed.id.0.clone(), Some(id.to_owned()));
+                state.agent_drafts.insert(routed.id.0.clone(), Some(id.to_owned()));
             }
         }
         // Retain both selections while agent and model commits arrive separately.
@@ -665,13 +602,9 @@ impl Local {
     // `newSessionModel`.
     fn new_session_model(&self) -> Option<Model> {
         let agent = self.agent();
-        let chosen = agent.as_ref().and_then(|agent| {
-            self.state
-                .borrow()
-                .new_session
-                .get(&self.location_agent_key(&agent.id.0))
-                .cloned()
-        });
+        let chosen = agent
+            .as_ref()
+            .and_then(|agent| self.state.borrow().new_session.get(&self.location_agent_key(&agent.id.0)).cloned());
         let configured = agent
             .as_ref()
             .and_then(|agent| agent.model.as_ref())
@@ -687,31 +620,20 @@ impl Local {
     fn preferred(&self, model: &Model) -> Selection {
         let configured = self.agent().and_then(|agent| agent.model);
         let fallback = self.configured();
-        let preferred = self
-            .state
-            .borrow()
-            .preference
-            .variant
-            .get(&model.key())
-            .cloned();
+        let preferred = self.state.borrow().preference.variant.get(&model.key()).cloned();
         let variant = preferred
             .or_else(|| {
                 configured
                     .filter(|c| c.provider_id.0 == model.provider_id && c.id == model.model_id)
                     .and_then(|c| c.variant)
             })
-            .or_else(|| {
-                fallback
-                    .filter(|f| f.model == *model)
-                    .and_then(|f| f.variant)
-            });
+            .or_else(|| fallback.filter(|f| f.model == *model).and_then(|f| f.variant));
         let variant = model_pref::normalize_variant(variant.as_deref()).map(str::to_owned);
         let info = self.model_info(model);
         Selection {
             model: model.clone(),
-            variant: variant.filter(|variant| {
-                info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant))
-            }),
+            variant: variant
+                .filter(|variant| info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant))),
         }
     }
 
@@ -728,28 +650,15 @@ impl Local {
     fn session_selection(&self, routed: &Routed) -> Option<Selection> {
         let agent = self.agent()?;
         let session = routed.session.as_ref();
-        let drafted = self
-            .state
-            .borrow()
-            .selections
-            .get(&routed.id.0)
-            .and_then(|drafts| drafts.get(&agent.id.0))
-            .cloned();
-        let own = session
-            .and_then(|session| session.agent.as_ref())
-            .is_none_or(|other| *other == agent.id);
+        let drafted =
+            self.state.borrow().selections.get(&routed.id.0).and_then(|drafts| drafts.get(&agent.id.0)).cloned();
+        let own = session.and_then(|session| session.agent.as_ref()).is_none_or(|other| *other == agent.id);
         let selected = drafted.or_else(|| own.then(|| Self::durable(session)).flatten());
         if let Some(selected) = selected {
             let info = self.model_info(&selected.model);
-            let keep = info.is_none_or(|info| {
-                info.variants
-                    .iter()
-                    .any(|item| Some(&item.id) == selected.variant.as_ref())
-            });
-            return Some(Selection {
-                variant: selected.variant.filter(|_| keep),
-                ..selected
-            });
+            let keep =
+                info.is_none_or(|info| info.variants.iter().any(|item| Some(&item.id) == selected.variant.as_ref()));
+            return Some(Selection { variant: selected.variant.filter(|_| keep), ..selected });
         }
         self.new_session_model().map(|model| self.preferred(&model))
     }
@@ -770,32 +679,21 @@ impl Local {
     /// `model.parsed`: the provider and model names the prompt footer shows.
     pub fn parsed(&self) -> (String, String, bool) {
         let Some(selection) = self.selection() else {
-            return (
-                "Connect a provider".into(),
-                "No provider selected".into(),
-                false,
-            );
+            return ("Connect a provider".into(), "No provider selected".into(), false);
         };
         let provider = self
             .provider(&selection.model.provider_id)
-            .map_or(selection.model.provider_id.clone(), |provider| {
-                provider.name
-            });
+            .map_or(selection.model.provider_id.clone(), |provider| provider.name);
         let info = self.model_info(&selection.model);
         let reasoning = info.as_ref().is_some_and(|info| !info.variants.is_empty());
-        let model = info.map_or_else(
-            || format!("{} (unavailable)", selection.model.model_id),
-            |info| info.name,
-        );
+        let model = info.map_or_else(|| format!("{} (unavailable)", selection.model.model_id), |info| info.name);
         (provider, model, reasoning)
     }
 
     fn set_session_draft(&self, routed: &Routed, selection: Selection) {
         let Some(agent) = self.agent() else { return };
         let session = routed.session.as_ref();
-        let own = session
-            .and_then(|session| session.agent.as_ref())
-            .is_none_or(|other| *other == agent.id);
+        let own = session.and_then(|session| session.agent.as_ref()).is_none_or(|other| *other == agent.id);
         let same = Self::durable(session).is_some_and(|durable| durable.key() == selection.key());
         let mut state = self.state.borrow_mut();
         let drafts = state.selections.entry(routed.id.0.clone()).or_default();
@@ -821,33 +719,22 @@ impl Local {
             return false;
         };
         let key = self.location_agent_key(&agent.id.0);
-        self.state
-            .borrow_mut()
-            .new_session
-            .insert(key, model.clone());
+        self.state.borrow_mut().new_session.insert(key, model.clone());
         true
     }
 
     // `locationAgentKey`: a model chosen for a new session belongs to the location and the agent.
     fn location_agent_key(&self, agent: &str) -> String {
         let location = self.state.borrow().location.clone();
-        format!(
-            "{}:{agent}",
-            location.unwrap_or_else(|| (self.location)()).key()
-        )
+        format!("{}:{agent}", location.unwrap_or_else(|| (self.location)()).key())
     }
 
     /// `trackSessionCommit`: a submit is committing `model` and `agent` to `session`; once the session
     /// reports both, the draft that chose them gives way to the session's own selection.
     pub fn track_commit(&self, session: &SessionID, model: &ModelRef, agent: &str) {
-        let selection = Selection {
-            model: Model::new(&model.provider_id.0, &model.id),
-            variant: model.variant.clone(),
-        };
-        self.state
-            .borrow_mut()
-            .commits
-            .insert(session.0.clone(), (agent.to_owned(), selection.key()));
+        let selection =
+            Selection { model: Model::new(&model.provider_id.0, &model.id), variant: model.variant.clone() };
+        self.state.borrow_mut().commits.insert(session.0.clone(), (agent.to_owned(), selection.key()));
         // An unchanged model emits no event; the agent may be the only durable change.
         self.reconcile(session);
     }
@@ -873,26 +760,19 @@ impl Local {
             return;
         };
         let durable = Self::durable(Some(&session));
-        if agent.as_ref() != Some(&expected_agent)
-            || durable.is_none_or(|durable| durable.key() != expected_selection)
+        if agent.as_ref() != Some(&expected_agent) || durable.is_none_or(|durable| durable.key() != expected_selection)
         {
             return;
         }
         self.state.borrow_mut().commits.remove(&id.0);
         // Inactive agents keep their remembered choices after another agent commits.
         let here = (self.route)().is_some_and(|routed| routed.id == *id);
-        if !here
-            || self
-                .agent()
-                .is_none_or(|agent| agent.id.0 != expected_agent)
-        {
+        if !here || self.agent().is_none_or(|agent| agent.id.0 != expected_agent) {
             return;
         }
         let mut state = self.state.borrow_mut();
         if let Some(drafts) = state.selections.get_mut(&id.0)
-            && drafts
-                .get(&expected_agent)
-                .is_some_and(|draft| draft.key() == expected_selection)
+            && drafts.get(&expected_agent).is_some_and(|draft| draft.key() == expected_selection)
         {
             drafts.remove(&expected_agent);
         }
@@ -910,17 +790,10 @@ impl Local {
 
     /// `model.remember`: keeps the current selection for the current agent in this session.
     fn remember(&self) {
-        let (Some(routed), Some(agent), Some(selection)) =
-            ((self.route)(), self.agent(), self.selection())
-        else {
+        let (Some(routed), Some(agent), Some(selection)) = ((self.route)(), self.agent(), self.selection()) else {
             return;
         };
-        self.state
-            .borrow_mut()
-            .selections
-            .entry(routed.id.0)
-            .or_default()
-            .insert(agent.id.0, selection);
+        self.state.borrow_mut().selections.entry(routed.id.0).or_default().insert(agent.id.0, selection);
     }
 
     /// `model.set`: selects a model, and with `recent` adds it to the recent models.
@@ -951,8 +824,7 @@ impl Local {
         let enabled = {
             let mut state = self.state.borrow_mut();
             let enabled = !state.preference.favorite.contains(model);
-            state.preference.favorite =
-                model_pref::favorite_models(model, &state.preference.favorite, enabled);
+            state.preference.favorite = model_pref::favorite_models(model, &state.preference.favorite, enabled);
             enabled
         };
         let model = model.clone();
@@ -965,11 +837,7 @@ impl Local {
         let Some(current) = self.selection() else {
             return;
         };
-        let recent: Vec<Model> = self
-            .recent()
-            .into_iter()
-            .filter(|item| self.is_valid(item))
-            .collect();
+        let recent: Vec<Model> = self.recent().into_iter().filter(|item| self.is_valid(item)).collect();
         let len = recent.len() as i64;
         let next = match recent.iter().position(|item| *item == current.model) {
             None if direction == 1 => 0,
@@ -992,11 +860,7 @@ impl Local {
 
     /// `model.cycleFavorite`: the next or previous favorite, added to the recent models.
     pub fn cycle_favorite(&self, direction: i64) {
-        let favorites: Vec<Model> = self
-            .favorite()
-            .into_iter()
-            .filter(|item| self.is_valid(item))
-            .collect();
+        let favorites: Vec<Model> = self.favorite().into_iter().filter(|item| self.is_valid(item)).collect();
         if favorites.is_empty() {
             self.toasts.show(
                 ToastOptions::new(Variant::Info, "Add a favorite model to use this shortcut")
@@ -1005,9 +869,7 @@ impl Local {
             return;
         }
         let len = favorites.len() as i64;
-        let index = self
-            .selection()
-            .and_then(|current| favorites.iter().position(|item| *item == current.model));
+        let index = self.selection().and_then(|current| favorites.iter().position(|item| *item == current.model));
         let index = match index {
             None if direction == 1 => 0,
             None => len - 1,
@@ -1034,12 +896,7 @@ impl Local {
     pub fn variants(&self) -> Vec<String> {
         self.selection()
             .and_then(|selection| self.model_info(&selection.model))
-            .map(|info| {
-                info.variants
-                    .into_iter()
-                    .map(|variant| variant.id)
-                    .collect()
-            })
+            .map(|info| info.variants.into_iter().map(|variant| variant.id).collect())
             .unwrap_or_default()
     }
 
@@ -1056,17 +913,10 @@ impl Local {
         if let Some(routed) = (self.route)() {
             self.set_session_draft(
                 &routed,
-                Selection {
-                    variant: model_pref::normalize_variant(value).map(str::to_owned),
-                    ..current.clone()
-                },
+                Selection { variant: model_pref::normalize_variant(value).map(str::to_owned), ..current.clone() },
             );
         }
-        self.state
-            .borrow_mut()
-            .preference
-            .variant
-            .insert(current.model.key(), value.unwrap_or("default").to_owned());
+        self.state.borrow_mut().preference.variant.insert(current.model.key(), value.unwrap_or("default").to_owned());
         let model = current.model;
         let value = value.map(str::to_owned);
         self.write(move |file| file.save_variant(&model, value.as_deref()));
@@ -1117,11 +967,7 @@ fn sort_rows(rows: &mut [Row], grouped: bool) {
         } else {
             std::cmp::Ordering::Equal
         };
-        let name = if grouped {
-            locale_compare(&a.provider_name, &b.provider_name)
-        } else {
-            std::cmp::Ordering::Equal
-        };
+        let name = if grouped { locale_compare(&a.provider_name, &b.provider_name) } else { std::cmp::Ordering::Equal };
         provider.then(name).then(b.free.cmp(&a.free))
     });
 }
@@ -1181,10 +1027,7 @@ pub fn locale_compare(a: &str, b: &str) -> std::cmp::Ordering {
     };
     let primaries = |s: &str| s.chars().map(primary).collect::<Vec<_>>();
     let tertiary = |s: &str| s.chars().map(char::is_uppercase).collect::<Vec<_>>();
-    primaries(a)
-        .cmp(&primaries(b))
-        .then_with(|| tertiary(a).cmp(&tertiary(b)))
-        .then_with(|| a.cmp(b))
+    primaries(a).cmp(&primaries(b)).then_with(|| tertiary(a).cmp(&tertiary(b))).then_with(|| a.cmp(b))
 }
 
 /// Opens the model dialog (`DialogModel`): the free models picker with nothing connected, else the connected
@@ -1216,12 +1059,7 @@ fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
 impl Local {}
 
 // The select of `DialogConnectedModels`.
-fn build(
-    cx: &Rc<opencode_ui::dialog::DialogCx>,
-    local: &Rc<Local>,
-    provider: Option<String>,
-    filter: &str,
-) -> View {
+fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Option<String>, filter: &str) -> View {
     // Favoriting does not reorder the list until the dialog is reopened.
     let favorites_at_open = local.favorite();
     let marker = cx.theme.text.formfield.selected;
@@ -1229,15 +1067,8 @@ fn build(
         let weak = Rc::downgrade(local);
         let provider = provider.clone();
         Rc::new(move |query: &str| {
-            weak.upgrade().map_or_else(Vec::new, |local| {
-                options(
-                    &local,
-                    provider.as_deref(),
-                    query,
-                    &favorites_at_open,
-                    marker,
-                )
-            })
+            weak.upgrade()
+                .map_or_else(Vec::new, |local| options(&local, provider.as_deref(), query, &favorites_at_open, marker))
         })
     };
     let title = provider
@@ -1276,17 +1107,13 @@ fn build(
             }
         })
     };
-    let provider_title = if connected {
-        "connect integration"
-    } else {
-        "view all integrations"
-    };
+    let provider_title = if connected { "connect integration" } else { "view all integrations" };
     let favorite_title = {
         let weak = Rc::downgrade(local);
         move |option: Option<&SelectOption<Model>>| -> String {
-            let favorite = weak.upgrade().is_some_and(|local| {
-                option.is_some_and(|option| local.favorite().contains(&option.value))
-            });
+            let favorite = weak
+                .upgrade()
+                .is_some_and(|local| option.is_some_and(|option| local.favorite().contains(&option.value)));
             if favorite { "unfavorite" } else { "favorite" }.into()
         }
     };
@@ -1351,21 +1178,14 @@ fn options(
     let needle = query.trim();
     let connected = local.connected();
     let show_sections = connected && provider.is_none() && needle.is_empty();
-    let favorites: Vec<Model> = if connected {
-        favorites_at_open.to_vec()
-    } else {
-        Vec::new()
-    };
+    let favorites: Vec<Model> = if connected { favorites_at_open.to_vec() } else { Vec::new() };
     let favorite_now = local.favorite();
     let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
     let recents = local.recent();
     let models = local.models();
     let providers = local.providers();
     let provider_name = |id: &str| {
-        providers
-            .iter()
-            .find(|item| item.id.0 == id)
-            .map_or(id.to_owned(), |provider| provider.name.clone())
+        providers.iter().find(|item| item.id.0 == id).map_or(id.to_owned(), |provider| provider.name.clone())
     };
     let usage = local.usage().flatten();
     // The detail row shows the price, so the trailing slot only marks favorites.
@@ -1375,11 +1195,7 @@ fn options(
             option.footer_fg = Some(marker);
         }
         let provider = providers.iter().find(|item| item.id == model.provider_id);
-        option.detail = Some(detail(
-            model,
-            true,
-            usage_label(usage.as_ref(), model, provider),
-        ));
+        option.detail = Some(detail(model, true, usage_label(usage.as_ref(), model, provider)));
     };
     let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
         if !show_sections {
@@ -1389,29 +1205,20 @@ fn options(
             .iter()
             .filter_map(|item| {
                 let model = models.iter().find(|model| is(model, item))?;
-                let mut option = SelectOption::new(
-                    model.name.clone(),
-                    Model::new(&model.provider_id.0, &model.id),
-                )
-                .description(provider_name(&model.provider_id.0))
-                .category(category);
+                let mut option = SelectOption::new(model.name.clone(), Model::new(&model.provider_id.0, &model.id))
+                    .description(provider_name(&model.provider_id.0))
+                    .category(category);
                 marked(&mut option, model, favorite_now.contains(item));
                 Some(option)
             })
             .collect()
     };
     let favorite_options = section(&favorites, "Favorites");
-    let recent_items: Vec<Model> = recents
-        .iter()
-        .filter(|item| !favorites.contains(item))
-        .cloned()
-        .collect();
+    let recent_items: Vec<Model> = recents.iter().filter(|item| !favorites.contains(item)).cloned().collect();
     let recent_options = section(&recent_items, "Recent");
 
     // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
-    let free_group = |model: &ModelInfo| {
-        provider.is_none() && model.provider_id.0 == "opencode" && is_free(model)
-    };
+    let free_group = |model: &ModelInfo| provider.is_none() && model.provider_id.0 == "opencode" && is_free(model);
     let mut rows: Vec<Row> = models
         .iter()
         .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated))
@@ -1424,22 +1231,14 @@ fn options(
                 provider_id: model.provider_id.0.clone(),
                 provider_name: name.clone(),
                 title: model.name.clone(),
-                category: connected.then(|| {
-                    if free_group(model) {
-                        "Free".to_owned()
-                    } else {
-                        name
-                    }
-                }),
+                category: connected.then(|| if free_group(model) { "Free".to_owned() } else { name }),
                 favorite,
                 free: is_free(model),
                 model: model.clone(),
                 value,
             }
         })
-        .filter(|row| {
-            !show_sections || (!favorites.contains(&row.value) && !recents.contains(&row.value))
-        })
+        .filter(|row| !show_sections || (!favorites.contains(&row.value) && !recents.contains(&row.value)))
         .collect();
     sort_rows(&mut rows, connected);
 
@@ -1450,17 +1249,9 @@ fn options(
         option
     };
     if !needle.is_empty() {
-        let matches = fuzzy::go(
-            needle,
-            &rows,
-            |row| [Some(row.title.as_str()), row.category.as_deref()],
-            best_key,
-            0.0,
-        );
-        let mut results: Vec<Row> = matches
-            .into_iter()
-            .map(|index| rows[index].clone())
-            .collect();
+        let matches =
+            fuzzy::go(needle, &rows, |row| [Some(row.title.as_str()), row.category.as_deref()], best_key, 0.0);
+        let mut results: Vec<Row> = matches.into_iter().map(|index| rows[index].clone()).collect();
         sort_rows(&mut results, false);
         prioritize(&mut results, |row| &row.value, &favorite_priority);
         return results
@@ -1476,9 +1267,7 @@ fn options(
             })
             .collect();
     }
-    let (free, paid): (Vec<Row>, Vec<Row>) = rows
-        .into_iter()
-        .partition(|row| row.category.as_deref() == Some("Free"));
+    let (free, paid): (Vec<Row>, Vec<Row>) = rows.into_iter().partition(|row| row.category.as_deref() == Some("Free"));
     favorite_options
         .into_iter()
         .chain(recent_options)
@@ -1500,15 +1289,11 @@ fn usage_label(
         let level = crate::dialogs::usage::level(&usage, model);
         return Some((
             format!("{} left", crate::dialogs::usage::format_dollars(usage.left)),
-            matches!(
-                level,
-                crate::dialogs::usage::Level::Out | crate::dialogs::usage::Level::Reached
-            ),
+            matches!(level, crate::dialogs::usage::Level::Out | crate::dialogs::usage::Level::Reached),
         ));
     }
     let paid = !model.cost.iter().all(|cost| cost.input == 0.0);
-    (crate::dialogs::usage::served_by_console(provider) && paid)
-        .then(|| ("No limit".to_owned(), false))
+    (crate::dialogs::usage::served_by_console(provider) && paid).then(|| ("No limit".to_owned(), false))
 }
 
 /// `ModelDetail`: the selected model's price (unless `price` is false), input modalities, context window, and
@@ -1520,18 +1305,13 @@ pub fn detail(model: &ModelInfo, price: bool, usage: Option<(String, bool)>) -> 
         let cost = if is_free(&model) {
             "Free".to_owned()
         } else {
-            model.cost.first().map_or(String::new(), |cost| {
-                format!("${}/${}", dollars(cost.input), dollars(cost.output))
-            })
+            model
+                .cost
+                .first()
+                .map_or(String::new(), |cost| format!("${}/${}", dollars(cost.input), dollars(cost.output)))
         };
         let mut facts: Vec<String> = vec![
-            model
-                .capabilities
-                .input
-                .iter()
-                .map(|value| modality(value))
-                .collect::<Vec<_>>()
-                .join(", "),
+            model.capabilities.input.iter().map(|value| modality(value)).collect::<Vec<_>>().join(", "),
             tokens(model.limit.context),
         ];
         if !model.variants.is_empty() {
@@ -1554,27 +1334,15 @@ pub fn detail(model: &ModelInfo, price: bool, usage: Option<(String, bool)>) -> 
             Some((text, danger)) => {
                 row.add(
                     &Text::new(app, text.as_str())
-                        .fg(if *danger {
-                            theme.text.feedback.error.base
-                        } else {
-                            theme.text.muted
-                        })
+                        .fg(if *danger { theme.text.feedback.error.base } else { theme.text.muted })
                         .wrap(WrapMode::None),
                 );
-                let price = if !cost.is_empty() && cost != "Free" {
-                    format!("{cost} per 1M")
-                } else {
-                    cost.clone()
-                };
+                let price = if !cost.is_empty() && cost != "Free" { format!("{cost} per 1M") } else { cost.clone() };
                 row.add(&list([vec![price], facts.clone()].concat()));
             }
             None => {
                 if price {
-                    row.add(
-                        &Text::new(app, cost.as_str())
-                            .fg(theme.text.muted)
-                            .wrap(WrapMode::None),
-                    );
+                    row.add(&Text::new(app, cost.as_str()).fg(theme.text.muted).wrap(WrapMode::None));
                 } else {
                     row.justify(Justify::Start);
                 }
@@ -1595,9 +1363,7 @@ fn modality(value: &str) -> String {
         return "PDF".to_owned();
     }
     let mut chars = value.chars();
-    chars.next().map_or(String::new(), |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
+    chars.next().map_or(String::new(), |first| first.to_uppercase().chain(chars).collect())
 }
 
 fn tokens(value: i64) -> String {
@@ -1658,30 +1424,16 @@ pub fn install(tui: &Rc<Tui>) {
         command("model.cycle_recent", |local| local.cycle(1)).title("Model cycle"),
         command("model.cycle_recent_reverse", |local| local.cycle(-1)).title("Model cycle reverse"),
         command("model.cycle_favorite", |local| local.cycle_favorite(1)).title("Favorite cycle"),
-        command("model.cycle_favorite_reverse", |local| {
-            local.cycle_favorite(-1)
-        })
-        .title("Favorite cycle reverse"),
-        command("agent.list", crate::dialogs::agent::show)
-            .title("Switch agent")
-            .palette()
-            .slash(slash("agents", &[])),
-        command("usage.show", crate::dialogs::usage::show)
-            .title("View usage")
-            .palette()
-            .slash(slash("usage", &[])),
+        command("model.cycle_favorite_reverse", |local| local.cycle_favorite(-1)).title("Favorite cycle reverse"),
+        command("agent.list", crate::dialogs::agent::show).title("Switch agent").palette().slash(slash("agents", &[])),
+        command("usage.show", crate::dialogs::usage::show).title("View usage").palette().slash(slash("usage", &[])),
         command("agent.cycle", |local| local.move_agent(1)).title("Agent cycle"),
-        command("variant.cycle", |local| local.cycle_variant())
-            .title("Variant cycle")
-            .palette(),
+        command("variant.cycle", |local| local.cycle_variant()).title("Variant cycle").palette(),
         command("variant.list", |local| {
             if local.variants().is_empty() {
                 local.toasts.show(
-                    ToastOptions::new(
-                        Variant::Info,
-                        "The current model does not support any variants.",
-                    )
-                    .title("No variants available"),
+                    ToastOptions::new(Variant::Info, "The current model does not support any variants.")
+                        .title("No variants available"),
                 );
                 return;
             }
@@ -1692,20 +1444,10 @@ pub fn install(tui: &Rc<Tui>) {
         .slash(slash("variants", &["thinking", "effort"])),
         command("agent.cycle.reverse", |local| local.move_agent(-1)).title("Agent cycle reverse"),
     ];
-    let names: Vec<String> = commands
-        .iter()
-        .filter_map(|command| command.id.clone())
-        .collect();
+    let names: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands,
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            bindings: names,
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
+        KeymapLayer { bindings: names, ..KeymapLayer::default() },
     ];
     for layer in layers {
         match tui.keymap.layer(layer) {
@@ -1773,35 +1515,23 @@ pub fn usage_alerts(local: &Local) {
         return;
     }
     let reached = level == Level::Reached;
-    let key = format!(
-        "{}/{}:{}",
-        model.provider_id.0,
-        model.id,
-        if reached { "reached" } else { "low" }
-    );
+    let key = format!("{}/{}:{}", model.provider_id.0, model.id, if reached { "reached" } else { "low" });
     if !local.warned.borrow_mut().insert(key) {
         return;
     }
     let weak = local.this.clone();
     let toast = if reached {
-        ToastOptions::new(
-            Variant::Error,
-            format!("Resets {}", format_reset(usage.resets_at)),
-        )
-        .title(format!("{} limit reached", model.name))
-        .action("Switch model", move || {
-            if let Some(local) = weak.upgrade() {
-                show(&local, None);
-            }
-        })
+        ToastOptions::new(Variant::Error, format!("Resets {}", format_reset(usage.resets_at)))
+            .title(format!("{} limit reached", model.name))
+            .action("Switch model", move || {
+                if let Some(local) = weak.upgrade() {
+                    show(&local, None);
+                }
+            })
     } else {
         ToastOptions::new(
             Variant::Warning,
-            format!(
-                "{} left · resets {}",
-                format_dollars(usage.left),
-                format_reset(usage.resets_at)
-            ),
+            format!("{} left · resets {}", format_dollars(usage.left), format_reset(usage.resets_at)),
         )
         .title(format!("Running low on {}", model.name))
         .action("View usage", move || {

@@ -3,8 +3,7 @@
 
 use super::core::{self, Base, Prompt};
 use super::style::{
-    S_BAR, S_BAR_END, S_PASSWORD_MASK, cyan, dim, gray, hidden, inverse, strikethrough, symbol,
-    yellow,
+    S_BAR, S_BAR_END, S_PASSWORD_MASK, cyan, dim, gray, hidden, inverse, strikethrough, symbol, yellow,
 };
 use super::{Cancelled, Output, State, Validate};
 
@@ -18,13 +17,7 @@ pub struct Text<'a> {
 }
 
 pub fn text(message: impl Into<String>) -> Text<'static> {
-    Text {
-        message: message.into(),
-        placeholder: None,
-        default_value: None,
-        initial_value: None,
-        validate: None,
-    }
+    Text { message: message.into(), placeholder: None, default_value: None, initial_value: None, validate: None }
 }
 
 impl<'a> Text<'a> {
@@ -53,18 +46,12 @@ impl<'a> Text<'a> {
     where
         'a: 'b,
     {
-        Text {
-            validate: Some(Box::new(validate)),
-            ..self
-        }
+        Text { validate: Some(Box::new(validate)), ..self }
     }
 
     pub fn prompt(self) -> Result<String, Cancelled> {
         let initial = self.initial_value.clone();
-        let mut prompt = TextPrompt {
-            options: self,
-            value: None,
-        };
+        let mut prompt = TextPrompt { options: self, value: None };
         core::run(&mut prompt, Output::Stdout, initial.as_deref())?;
         Ok(prompt.value.unwrap_or_default())
     }
@@ -94,19 +81,11 @@ impl Prompt for TextPrompt<'_> {
     }
 
     fn validate(&self, _base: &Base) -> Option<String> {
-        self.options
-            .validate
-            .as_ref()
-            .and_then(|validate| validate(self.value.as_deref().unwrap_or("")))
+        self.options.validate.as_ref().and_then(|validate| validate(self.value.as_deref().unwrap_or("")))
     }
 
     fn render(&self, base: &Base) -> String {
-        let title = format!(
-            "{}\n{}  {}\n",
-            gray(S_BAR()),
-            symbol(base.state),
-            self.options.message
-        );
+        let title = format!("{}\n{}  {}\n", gray(S_BAR()), symbol(base.state), self.options.message);
         let placeholder = match self.options.placeholder.as_deref() {
             Some(placeholder) if !placeholder.is_empty() => {
                 let split = placeholder.chars().next().map_or(0, char::len_utf8);
@@ -114,11 +93,7 @@ impl Prompt for TextPrompt<'_> {
             }
             _ => inverse(&hidden("_")),
         };
-        let input = if base.user_input.is_empty() {
-            placeholder
-        } else {
-            with_cursor(base)
-        };
+        let input = if base.user_input.is_empty() { placeholder } else { with_cursor(base) };
         let value = self.value.as_deref().unwrap_or("");
         match base.state {
             State::Error => format!(
@@ -133,11 +108,7 @@ impl Prompt for TextPrompt<'_> {
                 "{title}{}  {}{}",
                 gray(S_BAR()),
                 strikethrough(&dim(value)),
-                if value.trim().is_empty() {
-                    String::new()
-                } else {
-                    format!("\n{}", gray(S_BAR()))
-                }
+                if value.trim().is_empty() { String::new() } else { format!("\n{}", gray(S_BAR())) }
             ),
             _ => format!("{title}{}  {input}\n{}\n", cyan(S_BAR()), cyan(S_BAR_END())),
         }
@@ -155,10 +126,7 @@ pub fn with_cursor(base: &Base) -> String {
     }
     let before: String = chars[..base.cursor].iter().collect();
     let after: String = chars[base.cursor + 1..].iter().collect();
-    format!(
-        "{before}{}{after}",
-        inverse(&chars[base.cursor].to_string())
-    )
+    format!("{before}{}{after}", inverse(&chars[base.cursor].to_string()))
 }
 
 /// Hidden input shown as one mask character per character.
@@ -168,10 +136,7 @@ pub struct Password<'a> {
 }
 
 pub fn password(message: impl Into<String>) -> Password<'static> {
-    Password {
-        message: message.into(),
-        validate: None,
-    }
+    Password { message: message.into(), validate: None }
 }
 
 impl<'a> Password<'a> {
@@ -179,17 +144,11 @@ impl<'a> Password<'a> {
     where
         'a: 'b,
     {
-        Password {
-            validate: Some(Box::new(validate)),
-            ..self
-        }
+        Password { validate: Some(Box::new(validate)), ..self }
     }
 
     pub fn prompt(self) -> Result<String, Cancelled> {
-        let mut prompt = PasswordPrompt {
-            options: self,
-            value: String::new(),
-        };
+        let mut prompt = PasswordPrompt { options: self, value: String::new() };
         core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.value)
     }
@@ -207,11 +166,7 @@ impl PasswordPrompt<'_> {
         base.user_input
             .chars()
             .map(|char| {
-                if matches!(char, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
-                    char.to_string()
-                } else {
-                    mask.to_string()
-                }
+                if matches!(char, '\n' | '\r' | '\u{2028}' | '\u{2029}') { char.to_string() } else { mask.to_string() }
             })
             .collect()
     }
@@ -242,19 +197,11 @@ impl Prompt for PasswordPrompt<'_> {
     }
 
     fn validate(&self, _base: &Base) -> Option<String> {
-        self.options
-            .validate
-            .as_ref()
-            .and_then(|validate| validate(&self.value))
+        self.options.validate.as_ref().and_then(|validate| validate(&self.value))
     }
 
     fn render(&self, base: &Base) -> String {
-        let title = format!(
-            "{}\n{}  {}\n",
-            gray(S_BAR()),
-            symbol(base.state),
-            self.options.message
-        );
+        let title = format!("{}\n{}  {}\n", gray(S_BAR()), symbol(base.state), self.options.message);
         let masked = self.masked(base);
         match base.state {
             State::Error => format!(
@@ -269,18 +216,9 @@ impl Prompt for PasswordPrompt<'_> {
                 "{title}{}  {}{}",
                 gray(S_BAR()),
                 strikethrough(&dim(&masked)),
-                if masked.is_empty() {
-                    String::new()
-                } else {
-                    format!("\n{}", gray(S_BAR()))
-                }
+                if masked.is_empty() { String::new() } else { format!("\n{}", gray(S_BAR())) }
             ),
-            _ => format!(
-                "{title}{}  {}\n{}\n",
-                cyan(S_BAR()),
-                self.with_cursor(base),
-                cyan(S_BAR_END())
-            ),
+            _ => format!("{title}{}  {}\n{}\n", cyan(S_BAR()), self.with_cursor(base), cyan(S_BAR_END())),
         }
     }
 }

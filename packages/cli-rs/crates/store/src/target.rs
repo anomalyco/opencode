@@ -74,9 +74,7 @@ impl std::fmt::Display for TargetError {
         match self {
             TargetError::SessionNotFound => f.write_str("Session not found"),
             // `SessionTargetMutationError` and a rethrown client error both read as `errorMessage`.
-            TargetError::Mutation(error) | TargetError::Request(error) => {
-                f.write_str(&error.error_message())
-            }
+            TargetError::Mutation(error) | TargetError::Request(error) => f.write_str(&error.error_message()),
             TargetError::Prepare(message) => f.write_str(message),
         }
     }
@@ -102,23 +100,17 @@ where
                 Some(session) => Some(session.location.directory.0.clone()),
                 None => input.directory.clone(),
             };
-            resolve_location(client, directory)
-                .await
-                .map_err(TargetError::Request)?
+            resolve_location(client, directory).await.map_err(TargetError::Request)?
         }
     };
     let prepared = prepare(Preparation {
         location: location.clone(),
         session: selected.clone(),
-        model: input
-            .model
+        model: input.model.clone().or_else(|| selected.as_ref().and_then(|session| session.model.clone())),
+        agent: input
+            .agent
             .clone()
-            .or_else(|| selected.as_ref().and_then(|session| session.model.clone())),
-        agent: input.agent.clone().or_else(|| {
-            selected
-                .as_ref()
-                .and_then(|session| session.agent.as_ref().map(|agent| agent.0.clone()))
-        }),
+            .or_else(|| selected.as_ref().and_then(|session| session.agent.as_ref().map(|agent| agent.0.clone()))),
     })
     .await?;
     let resume = selected.is_some();
@@ -130,9 +122,7 @@ where
                     id: input.session.clone().map(Some),
                     agent: prepared.agent.clone().map(|agent| Some(AgentID(agent))),
                     model: prepared.model.clone().map(Some),
-                    location: Some(Some(LocationPublicRef {
-                        directory: location.directory.clone(),
-                    })),
+                    location: Some(Some(LocationPublicRef { directory: location.directory.clone() })),
                     ..Default::default()
                 },
                 &RequestOptions::default(),
@@ -141,20 +131,10 @@ where
             .map_err(TargetError::Mutation)?,
     };
     if let Some(variables) = input.environment {
-        crate::environment::upload(client, &session.id, variables)
-            .await
-            .map_err(TargetError::Mutation)?;
+        crate::environment::upload(client, &session.id, variables).await.map_err(TargetError::Mutation)?;
     }
-    let agent = prepared
-        .agent
-        .or_else(|| session.agent.as_ref().map(|agent| agent.0.clone()));
-    Ok(SessionTarget {
-        session,
-        location,
-        model: prepared.model,
-        agent,
-        resume,
-    })
+    let agent = prepared.agent.or_else(|| session.agent.as_ref().map(|agent| agent.0.clone()));
+    Ok(SessionTarget { session, location, model: prepared.model, agent, resume })
 }
 
 /// The selected session, and the location when finding it already read it.
@@ -163,10 +143,7 @@ async fn select_session(
     input: &TargetInput,
 ) -> Result<(Option<SessionInfo>, Option<LocationPublicInfo>), TargetError> {
     if let Some(id) = &input.session {
-        let Some(explicit) = find_session(client, id)
-            .await
-            .map_err(TargetError::Request)?
-        else {
+        let Some(explicit) = find_session(client, id).await.map_err(TargetError::Request)? else {
             if input.fork {
                 return Err(TargetError::SessionNotFound);
             }
@@ -177,57 +154,29 @@ async fn select_session(
     if !input.continue_latest {
         return Ok((None, None));
     }
-    let location = resolve_location(client, input.directory.clone())
-        .await
-        .map_err(TargetError::Request)?;
-    let Some(selected) = latest_session(client, &location)
-        .await
-        .map_err(TargetError::Request)?
-    else {
+    let location = resolve_location(client, input.directory.clone()).await.map_err(TargetError::Request)?;
+    let Some(selected) = latest_session(client, &location).await.map_err(TargetError::Request)? else {
         return Ok((None, Some(location)));
     };
     Ok((Some(fork_if(client, selected, input.fork).await?), None))
 }
 
-async fn fork_if(
-    client: &Client,
-    session: SessionInfo,
-    fork: bool,
-) -> Result<SessionInfo, TargetError> {
+async fn fork_if(client: &Client, session: SessionInfo, fork: bool) -> Result<SessionInfo, TargetError> {
     if !fork {
         return Ok(session);
     }
     client
-        .session_fork(
-            &SessionForkInput {
-                session_id: session.id,
-                before: None,
-            },
-            &RequestOptions::default(),
-        )
+        .session_fork(&SessionForkInput { session_id: session.id, before: None }, &RequestOptions::default())
         .await
         .map_err(TargetError::Mutation)
 }
 
 /// A session, or `None` when the server does not know it (`findSession`).
-pub async fn find_session(
-    client: &Client,
-    id: &SessionID,
-) -> Result<Option<SessionInfo>, opencode_api::error::Error> {
-    match client
-        .session_get(
-            &SessionGetInput {
-                session_id: id.clone(),
-            },
-            &RequestOptions::default(),
-        )
-        .await
-    {
+pub async fn find_session(client: &Client, id: &SessionID) -> Result<Option<SessionInfo>, opencode_api::error::Error> {
+    match client.session_get(&SessionGetInput { session_id: id.clone() }, &RequestOptions::default()).await {
         Ok(session) => Ok(Some(session)),
         Err(error)
-            if error.declared().is_some_and(|declared| {
-                declared.tag.as_deref() == Some("SessionNotFoundError")
-            }) =>
+            if error.declared().is_some_and(|declared| declared.tag.as_deref() == Some("SessionNotFoundError")) =>
         {
             Ok(None)
         }
@@ -258,11 +207,7 @@ async fn latest_session(
             )
             .await?;
         let empty = page.data.is_empty();
-        if let Some(session) = page
-            .data
-            .into_iter()
-            .find(|session| session.location.directory == location.directory)
-        {
+        if let Some(session) = page.data.into_iter().find(|session| session.location.directory == location.directory) {
             return Ok(Some(session));
         }
         let Some(Some(next)) = page.cursor.next else {
@@ -282,9 +227,7 @@ async fn resolve_location(
     client
         .location_get(
             &LocationGetInput {
-                location: directory.map(|directory| LocationQueryInput {
-                    directory: Some(directory),
-                }),
+                location: directory.map(|directory| LocationQueryInput { directory: Some(directory) }),
             },
             &RequestOptions::default(),
         )
@@ -305,9 +248,7 @@ pub async fn create_worktree_location(
     directory: Option<String>,
     name: Option<String>,
 ) -> Result<WorktreeLocation, TargetError> {
-    let base = resolve_location(client, directory)
-        .await
-        .map_err(TargetError::Request)?;
+    let base = resolve_location(client, directory).await.map_err(TargetError::Request)?;
     let created = client
         .worktree_create(
             &WorktreeCreateInput {
@@ -322,10 +263,7 @@ pub async fn create_worktree_location(
         .map_err(TargetError::Mutation)?;
     let root = created.directory.0;
     let Some(subfolder) = subfolder(&base.project.directory.0, &base.directory.0) else {
-        return Ok(WorktreeLocation {
-            directory: root.clone(),
-            root,
-        });
+        return Ok(WorktreeLocation { directory: root.clone(), root });
     };
     let directory = format!("{}/{subfolder}", root.trim_end_matches('/'));
     let directory = match resolve_location(client, Some(directory.clone())).await {
@@ -338,18 +276,16 @@ pub async fn create_worktree_location(
 /// `directory` relative to `project` when it is strictly inside it (`path.relative`).
 fn subfolder(project: &str, directory: &str) -> Option<String> {
     let segments = |value: &str| -> Vec<String> {
-        value
-            .split('/')
-            .fold(Vec::new(), |mut result: Vec<String>, segment| {
-                match segment {
-                    "" | "." => {}
-                    ".." => {
-                        result.pop();
-                    }
-                    _ => result.push(segment.to_owned()),
+        value.split('/').fold(Vec::new(), |mut result: Vec<String>, segment| {
+            match segment {
+                "" | "." => {}
+                ".." => {
+                    result.pop();
                 }
-                result
-            })
+                _ => result.push(segment.to_owned()),
+            }
+            result
+        })
     };
     let project = segments(project);
     let directory = segments(directory);
@@ -389,10 +325,7 @@ mod tests {
 
     #[test]
     fn subfolders_stay_inside_the_project() {
-        assert_eq!(
-            subfolder("/project", "/project/packages/cli").as_deref(),
-            Some("packages/cli")
-        );
+        assert_eq!(subfolder("/project", "/project/packages/cli").as_deref(), Some("packages/cli"));
         assert_eq!(subfolder("/project", "/project"), None);
         assert_eq!(subfolder("/project", "/projects/other"), None);
         assert_eq!(subfolder("/project", "/project/../other"), None);

@@ -9,9 +9,8 @@ use super::parse::measure;
 
 /// Writes `text` to a temporary file, runs the editor on it, and reads it back: `None` when it came back empty.
 pub fn edit(command: &str, text: &str, cwd: &Path) -> Result<Option<String>, String> {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_millis());
+    let stamp =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis());
     let file = std::env::temp_dir().join(format!("{stamp}.md"));
     std::fs::write(&file, text).map_err(|error| error.to_string())?;
     let result = run(command, &file, cwd);
@@ -50,23 +49,14 @@ fn exit_reason(status: &std::process::ExitStatus) -> String {
         };
         return format!("signal {name}");
     }
-    format!(
-        "code {}",
-        status
-            .code()
-            .map_or_else(|| "null".to_owned(), |code| code.to_string())
-    )
+    format!("code {}", status.code().map_or_else(|| "null".to_owned(), |code| code.to_string()))
 }
 
 /// Drops the trailing line break that editors add to a one-line text (`normalizePromptContent`).
 pub fn normalize(content: &str) -> String {
     for ending in ["\r\n", "\n"] {
         if let Some(body) = content.strip_suffix(ending) {
-            return if body.contains(['\n', '\r']) {
-                content.to_owned()
-            } else {
-                body.to_owned()
-            };
+            return if body.contains(['\n', '\r']) { content.to_owned() } else { body.to_owned() };
         }
     }
     content.to_owned()
@@ -110,11 +100,8 @@ pub fn realign_mentions(content: &str, mentions: &[Option<Mention>]) -> Vec<Opti
             .filter(|candidate| !protected.iter().any(|range| overlaps(candidate, range)))
             .collect();
         for (index, candidate) in assign(items, &available) {
-            aligned[index] = Some(Mention {
-                start: candidate.offset,
-                end: candidate.offset + measure(&text),
-                text: text.clone(),
-            });
+            aligned[index] =
+                Some(Mention { start: candidate.offset, end: candidate.offset + measure(&text), text: text.clone() });
         }
         protected.extend(candidates);
     }
@@ -126,11 +113,7 @@ fn occurrences(content: &str, text: &str) -> Vec<Candidate> {
     let mut from = 0;
     while let Some(at) = content[from..].find(text) {
         let start = from + at;
-        found.push(Candidate {
-            start,
-            end: start + text.len(),
-            offset: measure(&content[..start]),
-        });
+        found.push(Candidate { start, end: start + text.len(), offset: measure(&content[..start]) });
         from = start + text.len();
     }
     found
@@ -168,21 +151,11 @@ fn solve(
     let range = candidates[candidate];
     let mut pairs = vec![(index, range)];
     pairs.extend(tail.2);
-    let matched = (
-        tail.0 + 1,
-        tail.1 + u64::from(range.offset.abs_diff(current.start)),
-        pairs,
-    );
-    let options = [
-        solve(items, candidates, item + 1, candidate, memo),
-        solve(items, candidates, item, candidate + 1, memo),
-    ];
+    let matched = (tail.0 + 1, tail.1 + u64::from(range.offset.abs_diff(current.start)), pairs);
+    let options =
+        [solve(items, candidates, item + 1, candidate, memo), solve(items, candidates, item, candidate + 1, memo)];
     let best = options.into_iter().fold(matched, |best, next| {
-        let better = if next.0 != best.0 {
-            next.0 > best.0
-        } else {
-            next.1 < best.1
-        };
+        let better = if next.0 != best.0 { next.0 > best.0 } else { next.1 < best.1 };
         if better { next } else { best }
     });
     memo.insert((item, candidate), best.clone());

@@ -48,13 +48,7 @@ pub struct Record {
 
 impl Record {
     fn clear(id: &str) -> Self {
-        Self {
-            state: ProgramState::Clear,
-            id: id.to_owned(),
-            app: None,
-            title: None,
-            message: None,
-        }
+        Self { state: ProgramState::Clear, id: id.to_owned(), app: None, title: None, message: None }
     }
 
     fn status(&self) -> ProgramStatus<'_> {
@@ -76,17 +70,13 @@ pub type Sent = IndexMap<String, Record>;
 pub fn sync(tui: &Tui) {
     let reports = reports(&pending(tui));
     let mut sent = tui.attention.program.borrow_mut();
-    update(&mut sent, &reports, |record| {
-        tui.app.set_program_status(record.status())
-    });
+    update(&mut sent, &reports, |record| tui.app.set_program_status(record.status()));
 }
 
 /// Clears the root record, as the TS provider's cleanup does.
 pub fn clear(tui: &Tui) {
     let mut sent = tui.attention.program.borrow_mut();
-    send(&mut sent, ROOT, Record::clear(ROOT), |record| {
-        tui.app.set_program_status(record.status())
-    });
+    send(&mut sent, ROOT, Record::clear(ROOT), |record| tui.app.set_program_status(record.status()));
 }
 
 /// The open tabs, then the viewed session, each once, that wait on the user or work.
@@ -107,18 +97,13 @@ fn pending(tui: &Tui) -> Vec<Pending> {
                     kind: ProgramKind::Permission,
                     message: "Permission needs input".to_owned(),
                 },
-                Some(Attention::Question) => PendingState::Blocked {
-                    kind: ProgramKind::Question,
-                    message: "Input needs response".to_owned(),
-                },
+                Some(Attention::Question) => {
+                    PendingState::Blocked { kind: ProgramKind::Question, message: "Input needs response".to_owned() }
+                }
                 None if status.busy => PendingState::Working,
                 None => return None,
             };
-            Some(Pending {
-                title: title(tui, &id),
-                id,
-                state,
-            })
+            Some(Pending { title: title(tui, &id), id, state })
         })
         .collect()
 }
@@ -127,26 +112,15 @@ fn pending(tui: &Tui) -> Vec<Pending> {
 fn title(tui: &Tui, id: &str) -> Option<String> {
     tui.data.read(|state| {
         let info = state.session(&SessionID(id.to_owned()))?;
-        Some(
-            info.title
-                .clone()
-                .unwrap_or_else(|| crate::dialogs::session_list::title(info)),
-        )
+        Some(info.title.clone().unwrap_or_else(|| crate::dialogs::session_list::title(info)))
     })
 }
 
 /// `createProgramStatus`'s effect: clears the records of sessions no longer pending, then sends each report that
 /// differs from the one sent. `send` says whether the terminal took the record.
-fn update(
-    sent: &mut Sent,
-    reports: &IndexMap<String, Record>,
-    mut deliver: impl FnMut(&Record) -> bool,
-) {
-    let gone: Vec<String> = sent
-        .keys()
-        .filter(|key| key.as_str() != ROOT && !reports.contains_key(*key))
-        .cloned()
-        .collect();
+fn update(sent: &mut Sent, reports: &IndexMap<String, Record>, mut deliver: impl FnMut(&Record) -> bool) {
+    let gone: Vec<String> =
+        sent.keys().filter(|key| key.as_str() != ROOT && !reports.contains_key(*key)).cloned().collect();
     for key in gone {
         send(sent, &key, Record::clear(&key), &mut deliver);
     }
@@ -180,10 +154,8 @@ pub fn reports(sessions: &[Pending]) -> IndexMap<String, Record> {
 }
 
 fn root(sessions: &[Pending]) -> Record {
-    let blocked: Vec<&Pending> = sessions
-        .iter()
-        .filter(|session| matches!(session.state, PendingState::Blocked { .. }))
-        .collect();
+    let blocked: Vec<&Pending> =
+        sessions.iter().filter(|session| matches!(session.state, PendingState::Blocked { .. })).collect();
     let working = sessions.len() - blocked.len();
     let summary = |state, message: String| Record {
         state,
@@ -206,13 +178,9 @@ fn root(sessions: &[Pending]) -> Record {
             )
         }
         ([], 1) => record(&sessions[0], ROOT),
-        ([], 0) => Record {
-            state: ProgramState::Idle,
-            id: ROOT.to_owned(),
-            app: Some(APP),
-            title: None,
-            message: None,
-        },
+        ([], 0) => {
+            Record { state: ProgramState::Idle, id: ROOT.to_owned(), app: Some(APP), title: None, message: None }
+        }
         ([], count) => summary(ProgramState::Working, format!("{count} sessions working")),
     }
 }
@@ -220,41 +188,26 @@ fn root(sessions: &[Pending]) -> Record {
 fn record(session: &Pending, id: &str) -> Record {
     let (state, message) = match &session.state {
         PendingState::Working => (ProgramState::Working, None),
-        PendingState::Blocked { kind, message } => (
-            ProgramState::Blocked(Some(*kind)),
-            clip(Some(message), 2048),
-        ),
+        PendingState::Blocked { kind, message } => (ProgramState::Blocked(Some(*kind)), clip(Some(message), 2048)),
     };
-    Record {
-        state,
-        id: id.to_owned(),
-        app: Some(APP),
-        title: clip(session.title.as_deref(), 192),
-        message,
-    }
+    Record { state, id: id.to_owned(), app: Some(APP), title: clip(session.title.as_deref(), 192), message }
 }
 
 /// `recordID`: record IDs must be 1 to 32 bytes of `[A-Za-z0-9_.+-]`, but session IDs only need a `ses` prefix.
 fn record_id(id: &str) -> String {
-    let valid = (1..=32).contains(&id.len())
-        && id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_.+-".contains(&byte));
+    let valid =
+        (1..=32).contains(&id.len()) && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"_.+-".contains(&byte));
     if valid {
         return id.to_owned();
     }
-    let hex: String = Sha256::digest(id.as_bytes())
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
+    let hex: String = Sha256::digest(id.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect();
     format!("ses_{}", &hex[..16])
 }
 
 /// `clip`: records reject control characters and oversized fields, so the text becomes one line within `bytes`,
 /// cut with an ellipsis.
 fn clip(input: Option<&str>, bytes: usize) -> Option<String> {
-    static CONTROLS: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"[\x00-\x1f\x7f-\x{9f}]+").unwrap());
+    static CONTROLS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\x00-\x1f\x7f-\x{9f}]+").unwrap());
     // JavaScript's `\s`.
     static SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s\x{feff}]+").unwrap());
     let text = CONTROLS.replace_all(input.unwrap_or_default(), " ");
@@ -267,10 +220,7 @@ fn clip(input: Option<&str>, bytes: usize) -> Option<String> {
         return Some(text.to_owned());
     }
     // Leave room for the 3-byte ellipsis and drop a character the byte cut split.
-    let cut = (0..=bytes - 3)
-        .rev()
-        .find(|&index| text.is_char_boundary(index))
-        .unwrap_or(0);
+    let cut = (0..=bytes - 3).rev().find(|&index| text.is_char_boundary(index)).unwrap_or(0);
     Some(format!("{}…", text[..cut].trim_end_matches('\u{fffd}')))
 }
 
@@ -279,21 +229,14 @@ mod tests {
     use super::*;
 
     fn working(id: &str, title: &str) -> Pending {
-        Pending {
-            id: id.to_owned(),
-            title: Some(title.to_owned()),
-            state: PendingState::Working,
-        }
+        Pending { id: id.to_owned(), title: Some(title.to_owned()), state: PendingState::Working }
     }
 
     fn blocked(id: &str, kind: ProgramKind) -> Pending {
         Pending {
             id: id.to_owned(),
             title: None,
-            state: PendingState::Blocked {
-                kind,
-                message: "Permission needs input".to_owned(),
-            },
+            state: PendingState::Blocked { kind, message: "Permission needs input".to_owned() },
         }
     }
 
@@ -309,30 +252,17 @@ mod tests {
         let permission = ProgramState::Blocked(Some(ProgramKind::Permission));
         let table = [
             (vec![], (ProgramState::Idle, None, None)),
-            (
-                vec![working("ses_a", "A")],
-                (ProgramState::Working, Some("A".to_owned()), None),
-            ),
+            (vec![working("ses_a", "A")], (ProgramState::Working, Some("A".to_owned()), None)),
             (
                 vec![working("ses_a", "A"), working("ses_b", "B")],
-                (
-                    ProgramState::Working,
-                    None,
-                    Some("2 sessions working".to_owned()),
-                ),
+                (ProgramState::Working, None, Some("2 sessions working".to_owned())),
             ),
             (
-                vec![
-                    working("ses_a", "A"),
-                    blocked("ses_b", ProgramKind::Permission),
-                ],
+                vec![working("ses_a", "A"), blocked("ses_b", ProgramKind::Permission)],
                 (permission, None, Some("Permission needs input".to_owned())),
             ),
             (
-                vec![
-                    blocked("ses_a", ProgramKind::Permission),
-                    blocked("ses_b", ProgramKind::Permission),
-                ],
+                vec![blocked("ses_a", ProgramKind::Permission), blocked("ses_b", ProgramKind::Permission)],
                 (permission, None, need(2)),
             ),
             (
@@ -351,10 +281,7 @@ mod tests {
 
     #[test]
     fn each_session_has_its_own_record() {
-        let all = reports(&[
-            working("ses_a", "A"),
-            blocked("bad id", ProgramKind::Question),
-        ]);
+        let all = reports(&[working("ses_a", "A"), blocked("bad id", ProgramKind::Question)]);
         let keys: Vec<&str> = all.keys().map(String::as_str).collect();
         assert_eq!(keys, ["", "ses_a", "ses_4b2d2ff66c98b2a1"]);
         assert_eq!(all["ses_a"].state, ProgramState::Working);
@@ -375,11 +302,7 @@ mod tests {
         };
         step(&mut sent, &[working("ses_a", "A")], true);
         step(&mut sent, &[working("ses_a", "A")], true);
-        step(
-            &mut sent,
-            &[blocked("ses_a", ProgramKind::Permission)],
-            true,
-        );
+        step(&mut sent, &[blocked("ses_a", ProgramKind::Permission)], true);
         step(&mut sent, &[], true);
         // A terminal that did not take a record gets it again next time.
         step(&mut sent, &[working("ses_b", "B")], false);
@@ -407,10 +330,7 @@ mod tests {
     fn ids_are_kept_when_valid() {
         let long = "s".repeat(33);
         let table = [
-            (
-                "ses_01JABCDEFGHJKMNPQRSTVWXYZ0",
-                "ses_01JABCDEFGHJKMNPQRSTVWXYZ0",
-            ),
+            ("ses_01JABCDEFGHJKMNPQRSTVWXYZ0", "ses_01JABCDEFGHJKMNPQRSTVWXYZ0"),
             ("a.b+c-d_e", "a.b+c-d_e"),
             ("", "ses_e3b0c44298fc1c14"),
             ("bad id", "ses_4b2d2ff66c98b2a1"),
@@ -425,10 +345,7 @@ mod tests {
     fn text_is_one_line_within_the_byte_limit() {
         assert_eq!(clip(None, 10), None);
         assert_eq!(clip(Some(" \n\t "), 10), None);
-        assert_eq!(
-            clip(Some("a\x1b[31m\n\nb\u{a0} c"), 20).as_deref(),
-            Some("a [31m b c")
-        );
+        assert_eq!(clip(Some("a\x1b[31m\n\nb\u{a0} c"), 20).as_deref(), Some("a [31m b c"));
         assert_eq!(clip(Some("abcdefghij"), 10).as_deref(), Some("abcdefghij"));
         assert_eq!(clip(Some("abcdefghijk"), 10).as_deref(), Some("abcdefg…"));
         // "é" is two bytes: the cut at byte 6 splits the third one.

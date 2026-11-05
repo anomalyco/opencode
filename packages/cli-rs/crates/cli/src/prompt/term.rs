@@ -11,8 +11,8 @@ use std::time::{Duration, Instant};
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 use rustix::io::Errno;
 use rustix::termios::{
-    ControlModes, InputModes, LocalModes, OptionalActions, OutputModes, SpecialCodeIndex, Termios,
-    isatty, tcgetattr, tcgetwinsize, tcsetattr,
+    ControlModes, InputModes, LocalModes, OptionalActions, OutputModes, SpecialCodeIndex, Termios, isatty, tcgetattr,
+    tcgetwinsize, tcsetattr,
 };
 
 use super::Output;
@@ -24,13 +24,7 @@ const ESCAPE_TIMEOUT: Duration = Duration::from_millis(50);
 /// nothing else in the CLI fills while a prompt runs.
 fn stdin() -> BorrowedFd<'static> {
     static FD: std::sync::OnceLock<std::os::fd::OwnedFd> = std::sync::OnceLock::new();
-    FD.get_or_init(|| {
-        std::io::stdin()
-            .as_fd()
-            .try_clone_to_owned()
-            .expect("stdin has a descriptor")
-    })
-    .as_fd()
+    FD.get_or_init(|| std::io::stdin().as_fd().try_clone_to_owned().expect("stdin has a descriptor")).as_fd()
 }
 
 /// Both ends are terminals, as `requireInteractive` in `packages/cli/src/ui/prompt.ts` checks.
@@ -44,10 +38,7 @@ pub fn columns() -> Option<usize> {
     if !isatty(&stdout) {
         return None;
     }
-    tcgetwinsize(&stdout)
-        .ok()
-        .map(|size| usize::from(size.ws_col))
-        .filter(|columns| *columns > 0)
+    tcgetwinsize(&stdout).ok().map(|size| usize::from(size.ws_col)).filter(|columns| *columns > 0)
 }
 
 /// `process.stdout.rows`: unset when stdout is not a terminal.
@@ -56,10 +47,7 @@ pub fn stdout_rows() -> Option<usize> {
     if !isatty(&stdout) {
         return None;
     }
-    tcgetwinsize(&stdout)
-        .ok()
-        .map(|size| usize::from(size.ws_row))
-        .filter(|rows| *rows > 0)
+    tcgetwinsize(&stdout).ok().map(|size| usize::from(size.ws_row)).filter(|rows| *rows > 0)
 }
 
 /// The rows of the prompt's output terminal, or 10 when it is not one (`limitOptions`).
@@ -112,9 +100,7 @@ type Active = Vec<(u64, BorrowedFd<'static>, Termios, Output)>;
 static ACTIVE: std::sync::Mutex<Active> = std::sync::Mutex::new(Vec::new());
 
 fn active() -> std::sync::MutexGuard<'static, Active> {
-    ACTIVE
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    ACTIVE.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Raw {
@@ -124,21 +110,15 @@ impl Raw {
 
     fn enable_on(fd: BorrowedFd<'static>, output: Output) -> Raw {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let saved = isatty(fd)
-            .then(|| tcgetattr(fd).ok())
-            .flatten()
-            .map(|saved| (NEXT.fetch_add(1, Ordering::Relaxed), saved));
+        let saved =
+            isatty(fd).then(|| tcgetattr(fd).ok()).flatten().map(|saved| (NEXT.fetch_add(1, Ordering::Relaxed), saved));
         if let Some((id, saved)) = &saved {
             let mut raw = saved.clone();
-            raw.input_modes -= InputModes::BRKINT
-                | InputModes::ICRNL
-                | InputModes::INPCK
-                | InputModes::ISTRIP
-                | InputModes::IXON;
+            raw.input_modes -=
+                InputModes::BRKINT | InputModes::ICRNL | InputModes::INPCK | InputModes::ISTRIP | InputModes::IXON;
             raw.output_modes |= OutputModes::ONLCR;
             raw.control_modes |= ControlModes::CS8;
-            raw.local_modes -=
-                LocalModes::ECHO | LocalModes::ICANON | LocalModes::IEXTEN | LocalModes::ISIG;
+            raw.local_modes -= LocalModes::ECHO | LocalModes::ICANON | LocalModes::IEXTEN | LocalModes::ISIG;
             raw.special_codes[SpecialCodeIndex::VMIN] = 1;
             raw.special_codes[SpecialCodeIndex::VTIME] = 0;
             active().push((*id, fd, saved.clone(), output));
@@ -214,20 +194,12 @@ enum Fill {
 
 impl Keys {
     pub fn new() -> Keys {
-        Keys {
-            bytes: Vec::new(),
-            chars: VecDeque::new(),
-            stop: None,
-        }
+        Keys { bytes: Vec::new(), chars: VecDeque::new(), stop: None }
     }
 
     /// A reader that gives up (as at the end of input) once `stop` is set.
     pub fn stoppable(stop: Arc<AtomicBool>) -> Keys {
-        Keys {
-            bytes: Vec::new(),
-            chars: VecDeque::new(),
-            stop: Some(stop),
-        }
+        Keys { bytes: Vec::new(), chars: VecDeque::new(), stop: Some(stop) }
     }
 
     /// Drops what was read but not delivered yet. Effect CLI's prompts lose the rest of a chunk when one ends.
@@ -264,11 +236,7 @@ impl Keys {
     fn fill(&mut self, timeout: Option<Duration>) -> Fill {
         let deadline = timeout.map(|timeout| Instant::now() + timeout);
         loop {
-            if self
-                .stop
-                .as_ref()
-                .is_some_and(|stop| stop.load(Ordering::Relaxed))
-            {
+            if self.stop.as_ref().is_some_and(|stop| stop.load(Ordering::Relaxed)) {
                 return Fill::End;
             }
             let left = deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
@@ -281,10 +249,7 @@ impl Keys {
                 (None, Some(_)) => Some(ESCAPE_TIMEOUT),
                 (left, None) => left,
             };
-            let spec = wait.map(|wait| Timespec {
-                tv_sec: wait.as_secs() as _,
-                tv_nsec: wait.subsec_nanos() as _,
-            });
+            let spec = wait.map(|wait| Timespec { tv_sec: wait.as_secs() as _, tv_nsec: wait.subsec_nanos() as _ });
             let fd = stdin();
             let mut fds = [PollFd::new(&fd, PollFlags::IN)];
             match poll(&mut fds, spec.as_ref()) {
@@ -322,8 +287,7 @@ impl Keys {
                 }
                 Err(error) => {
                     let (valid, after) = rest.split_at(error.valid_up_to());
-                    self.chars
-                        .extend(std::str::from_utf8(valid).expect("checked above").chars());
+                    self.chars.extend(std::str::from_utf8(valid).expect("checked above").chars());
                     match error.error_len() {
                         Some(length) => {
                             self.chars.push_back('\u{fffd}');
@@ -429,14 +393,7 @@ fn decode(pull: &mut dyn FnMut(bool) -> Option<String>) -> Option<Option<Press>>
                 key.shift = first.is_some_and(|first| first.is_ascii_uppercase());
                 (Some(ch.to_ascii_lowercase()), escaped)
             }
-            _ if escaped => (
-                (if ch.is_empty() {
-                    Some("escape".to_string())
-                } else {
-                    None
-                }),
-                true,
-            ),
+            _ if escaped => ((if ch.is_empty() { Some("escape".to_string()) } else { None }), true),
             _ => (None, false),
         };
         key.name = name;
@@ -444,10 +401,7 @@ fn decode(pull: &mut dyn FnMut(bool) -> Option<String>) -> Option<Option<Press>>
     }
     key.sequence = s.clone();
     if !s.is_empty() && (key.name.is_some() || escaped) {
-        return Some(Some(Press {
-            char: (!escaped).then_some(s),
-            key,
-        }));
+        return Some(Some(Press { char: (!escaped).then_some(s), key }));
     }
     if s.chars().count() == 1 {
         return Some(Some(Press { char: Some(s), key }));
@@ -458,10 +412,7 @@ fn decode(pull: &mut dyn FnMut(bool) -> Option<String>) -> Option<Option<Press>>
 /// The code and modifier of a CSI command, as Node's two patterns read it.
 fn command(cmd: &str) -> (String, u32) {
     let bytes = cmd.as_bytes();
-    let digits = bytes
-        .iter()
-        .take_while(|byte| byte.is_ascii_digit())
-        .count();
+    let digits = bytes.iter().take_while(|byte| byte.is_ascii_digit()).count();
     // /^(?:(\d\d?)(?:;(\d))?([~^$])|(\d{3}~))$/
     if digits == 3 && cmd.len() == 4 && bytes[3] == b'~' {
         return (cmd.to_string(), 0);
@@ -474,27 +425,18 @@ fn command(cmd: &str) -> (String, u32) {
             _ => (0, 0),
         };
         if matches!(end, b'~' | b'^' | b'$') {
-            return (
-                format!("{}{}", &cmd[..digits], char::from(end)),
-                modifier.saturating_sub(1),
-            );
+            return (format!("{}{}", &cmd[..digits], char::from(end)), modifier.saturating_sub(1));
         }
     }
     // /^((\d;)?(\d))?([A-Za-z])$/
     let letter = |byte: &u8| byte.is_ascii_alphabetic();
     match bytes {
         [end] if letter(end) => (char::from(*end).to_string(), 0),
-        [digit, end] if digit.is_ascii_digit() && letter(end) => (
-            char::from(*end).to_string(),
-            u32::from(digit - b'0').saturating_sub(1),
-        ),
-        [first, b';', digit, end]
-            if first.is_ascii_digit() && digit.is_ascii_digit() && letter(end) =>
-        {
-            (
-                char::from(*end).to_string(),
-                u32::from(digit - b'0').saturating_sub(1),
-            )
+        [digit, end] if digit.is_ascii_digit() && letter(end) => {
+            (char::from(*end).to_string(), u32::from(digit - b'0').saturating_sub(1))
+        }
+        [first, b';', digit, end] if first.is_ascii_digit() && digit.is_ascii_digit() && letter(end) => {
+            (char::from(*end).to_string(), u32::from(digit - b'0').saturating_sub(1))
         }
         _ => (cmd.to_string(), 0),
     }
@@ -568,23 +510,13 @@ mod tests {
         grantpt(&master).unwrap();
         unlockpt(&master).unwrap();
         let name = ptsname(&master, Vec::new()).unwrap();
-        let slave = open(
-            name.as_c_str(),
-            OFlags::RDWR | OFlags::NOCTTY,
-            Mode::empty(),
-        )
-        .unwrap();
+        let slave = open(name.as_c_str(), OFlags::RDWR | OFlags::NOCTTY, Mode::empty()).unwrap();
         let slave: &'static std::os::fd::OwnedFd = Box::leak(Box::new(slave));
         let fd = slave.as_fd();
         let cooked = tcgetattr(fd).unwrap().local_modes;
         assert!(cooked.contains(LocalModes::ICANON));
         let raw = Raw::enable_on(fd, Output::Stdout);
-        assert!(
-            !tcgetattr(fd)
-                .unwrap()
-                .local_modes
-                .contains(LocalModes::ICANON)
-        );
+        assert!(!tcgetattr(fd).unwrap().local_modes.contains(LocalModes::ICANON));
         // A shutdown step runs on the signal thread while the prompt still holds raw mode.
         std::thread::spawn(restore).join().unwrap();
         assert_eq!(tcgetattr(fd).unwrap().local_modes, cooked);
@@ -596,139 +528,32 @@ mod tests {
 
     fn presses(input: &str) -> Vec<Press> {
         let mut chars: VecDeque<String> = input.chars().map(String::from).collect();
-        let mut pull =
-            |after_escape: bool| chars.pop_front().or_else(|| after_escape.then(String::new));
+        let mut pull = |after_escape: bool| chars.pop_front().or_else(|| after_escape.then(String::new));
         std::iter::from_fn(|| decode(&mut pull)).flatten().collect()
     }
 
     fn key(name: Option<&str>, sequence: &str) -> Key {
-        Key {
-            name: name.map(String::from),
-            sequence: sequence.to_string(),
-            ..Key::default()
-        }
+        Key { name: name.map(String::from), sequence: sequence.to_string(), ..Key::default() }
     }
 
     #[test]
     fn decodes_like_emit_keypress_events() {
         // Expected values from Bun's `readline.emitKeypressEvents`.
         let cases: Vec<(&str, Vec<Press>)> = vec![
-            (
-                "a",
-                vec![Press {
-                    char: Some("a".into()),
-                    key: key(Some("a"), "a"),
-                }],
-            ),
-            (
-                "A",
-                vec![Press {
-                    char: Some("A".into()),
-                    key: Key {
-                        shift: true,
-                        ..key(Some("a"), "A")
-                    },
-                }],
-            ),
-            (
-                "\r",
-                vec![Press {
-                    char: Some("\r".into()),
-                    key: key(Some("return"), "\r"),
-                }],
-            ),
-            (
-                "\n",
-                vec![Press {
-                    char: Some("\n".into()),
-                    key: key(Some("enter"), "\n"),
-                }],
-            ),
-            (
-                "\x03",
-                vec![Press {
-                    char: Some("\x03".into()),
-                    key: Key {
-                        ctrl: true,
-                        ..key(Some("c"), "\x03")
-                    },
-                }],
-            ),
-            (
-                "\x1b[A",
-                vec![Press {
-                    char: None,
-                    key: key(Some("up"), "\x1b[A"),
-                }],
-            ),
-            (
-                "\x1b[1;5C",
-                vec![Press {
-                    char: None,
-                    key: Key {
-                        ctrl: true,
-                        ..key(Some("right"), "\x1b[1;5C")
-                    },
-                }],
-            ),
-            (
-                "\x1b[3~",
-                vec![Press {
-                    char: None,
-                    key: key(Some("delete"), "\x1b[3~"),
-                }],
-            ),
-            (
-                "\x1b[Z",
-                vec![Press {
-                    char: None,
-                    key: Key {
-                        shift: true,
-                        ..key(Some("tab"), "\x1b[Z")
-                    },
-                }],
-            ),
-            (
-                "\x1bb",
-                vec![Press {
-                    char: None,
-                    key: Key {
-                        meta: true,
-                        ..key(Some("b"), "\x1bb")
-                    },
-                }],
-            ),
-            (
-                "\x1b",
-                vec![Press {
-                    char: None,
-                    key: Key {
-                        meta: true,
-                        ..key(Some("escape"), "\x1b")
-                    },
-                }],
-            ),
-            (
-                ".",
-                vec![Press {
-                    char: Some(".".into()),
-                    key: key(None, "."),
-                }],
-            ),
-            (
-                "é",
-                vec![Press {
-                    char: Some("é".into()),
-                    key: key(None, "é"),
-                }],
-            ),
-            (
-                "\x1b[99x",
-                vec![Press {
-                    char: None,
-                    key: key(Some("undefined"), "\x1b[99x"),
-                }],
-            ),
+            ("a", vec![Press { char: Some("a".into()), key: key(Some("a"), "a") }]),
+            ("A", vec![Press { char: Some("A".into()), key: Key { shift: true, ..key(Some("a"), "A") } }]),
+            ("\r", vec![Press { char: Some("\r".into()), key: key(Some("return"), "\r") }]),
+            ("\n", vec![Press { char: Some("\n".into()), key: key(Some("enter"), "\n") }]),
+            ("\x03", vec![Press { char: Some("\x03".into()), key: Key { ctrl: true, ..key(Some("c"), "\x03") } }]),
+            ("\x1b[A", vec![Press { char: None, key: key(Some("up"), "\x1b[A") }]),
+            ("\x1b[1;5C", vec![Press { char: None, key: Key { ctrl: true, ..key(Some("right"), "\x1b[1;5C") } }]),
+            ("\x1b[3~", vec![Press { char: None, key: key(Some("delete"), "\x1b[3~") }]),
+            ("\x1b[Z", vec![Press { char: None, key: Key { shift: true, ..key(Some("tab"), "\x1b[Z") } }]),
+            ("\x1bb", vec![Press { char: None, key: Key { meta: true, ..key(Some("b"), "\x1bb") } }]),
+            ("\x1b", vec![Press { char: None, key: Key { meta: true, ..key(Some("escape"), "\x1b") } }]),
+            (".", vec![Press { char: Some(".".into()), key: key(None, ".") }]),
+            ("é", vec![Press { char: Some("é".into()), key: key(None, "é") }]),
+            ("\x1b[99x", vec![Press { char: None, key: key(Some("undefined"), "\x1b[99x") }]),
         ];
         for (input, expected) in cases {
             assert_eq!(presses(input), expected, "{input:?}");

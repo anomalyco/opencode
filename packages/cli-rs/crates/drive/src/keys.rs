@@ -102,14 +102,9 @@ pub fn press(key: &str, modifiers: KeyModifiers) -> Vec<u8> {
     if let Some(mapped) = mapped {
         name = Some(mapped.to_owned());
     }
-    let name = name.map(|name| {
-        name.strip_prefix("arrow_")
-            .map(str::to_owned)
-            .unwrap_or(name)
-    });
-    if let Some(code) = name
-        .and_then(|name| KITTY_CODES.iter().find(|(kitty, _)| *kitty == name))
-        .map(|(_, code)| *code)
+    let name = name.map(|name| name.strip_prefix("arrow_").map(str::to_owned).unwrap_or(name));
+    if let Some(code) =
+        name.and_then(|name| KITTY_CODES.iter().find(|(kitty, _)| *kitty == name)).map(|(_, code)| *code)
     {
         return kitty(code, modifiers);
     }
@@ -122,11 +117,7 @@ pub fn press(key: &str, modifiers: KeyModifiers) -> Vec<u8> {
         return kitty(u32::from(unit), modifiers);
     }
     // Core falls through to legacy encoding, which only prefixes Escape for Meta on a multi-character key.
-    let prefix = if modifiers.meta && !value.starts_with('\x1b') {
-        "\x1b"
-    } else {
-        ""
-    };
+    let prefix = if modifiers.meta && !value.starts_with('\x1b') { "\x1b" } else { "" };
     format!("{prefix}{value}").into_bytes()
 }
 
@@ -225,10 +216,9 @@ pub enum Mouse {
 impl Mouse {
     pub fn position(&self) -> (u32, u32) {
         match *self {
-            Self::Move { x, y, .. }
-            | Self::Down { x, y, .. }
-            | Self::Up { x, y, .. }
-            | Self::Scroll { x, y, .. } => (x, y),
+            Self::Move { x, y, .. } | Self::Down { x, y, .. } | Self::Up { x, y, .. } | Self::Scroll { x, y, .. } => {
+                (x, y)
+            }
         }
     }
 }
@@ -248,17 +238,9 @@ impl MouseState {
                 Some(&held) => (Kind::Drag, held, modifiers),
                 None => (Kind::Move, 0, modifiers),
             },
-            Mouse::Down {
-                modifiers, button, ..
-            } => (Kind::Down, button_code(button), modifiers),
-            Mouse::Up {
-                modifiers, button, ..
-            } => (Kind::Up, button_code(button), modifiers),
-            Mouse::Scroll {
-                modifiers,
-                direction,
-                ..
-            } => {
+            Mouse::Down { modifiers, button, .. } => (Kind::Down, button_code(button), modifiers),
+            Mouse::Up { modifiers, button, .. } => (Kind::Up, button_code(button), modifiers),
+            Mouse::Scroll { modifiers, direction, .. } => {
                 let wheel = match direction {
                     Direction::Up => 64,
                     Direction::Down => 65,
@@ -268,24 +250,17 @@ impl MouseState {
                 (Kind::Scroll, wheel, modifiers)
             }
         };
-        let modifier_bits = u16::from(modifiers.shift) << 2
-            | u16::from(modifiers.alt) << 3
-            | u16::from(modifiers.ctrl) << 4;
+        let modifier_bits =
+            u16::from(modifiers.shift) << 2 | u16::from(modifiers.alt) << 3 | u16::from(modifiers.ctrl) << 4;
         let code = modifier_bits
             | match kind {
                 Kind::Move => 32 | 3,
                 Kind::Drag => u16::from(button) | 32,
                 Kind::Down | Kind::Up | Kind::Scroll => u16::from(button),
             };
-        let suffix = if matches!(kind, Kind::Up | Kind::Move | Kind::Drag) {
-            'm'
-        } else {
-            'M'
-        };
+        let suffix = if matches!(kind, Kind::Up | Kind::Move | Kind::Drag) { 'm' } else { 'M' };
         match kind {
-            Kind::Down if button < 64 && !self.pressed.contains(&button) => {
-                self.pressed.push(button)
-            }
+            Kind::Down if button < 64 && !self.pressed.contains(&button) => self.pressed.push(button),
             Kind::Up => self.pressed.retain(|held| *held != button),
             _ => {}
         }
@@ -322,13 +297,7 @@ mod tests {
     fn keys_encode_as_core_mock_keys_in_kitty_mode() {
         let none = KeyModifiers::default();
         let ctrl = KeyModifiers { ctrl: true, ..none };
-        let all = KeyModifiers {
-            ctrl: true,
-            shift: true,
-            meta: true,
-            super_: true,
-            hyper: true,
-        };
+        let all = KeyModifiers { ctrl: true, shift: true, meta: true, super_: true, hyper: true };
         let cases: &[(&str, KeyModifiers, &str)] = &[
             ("a", none, "\x1b[97u"),
             ("A", none, "\x1b[65u"),
@@ -338,14 +307,7 @@ mod tests {
             ("Escape", ctrl, "\x1b[27;5u"),
             ("return", none, "\x1b[13u"),
             ("linefeed", none, "\x1b[13u"),
-            (
-                "tab",
-                KeyModifiers {
-                    shift: true,
-                    ..none
-                },
-                "\x1b[9;2u",
-            ),
+            ("tab", KeyModifiers { shift: true, ..none }, "\x1b[9;2u"),
             ("backspace", none, "\x1b[127u"),
             ("delete", none, "\x1b[57349u"),
             ("home", none, "\x1b[57356u"),
@@ -361,11 +323,7 @@ mod tests {
             ("😀", none, "😀"),
         ];
         for (key, modifiers, expected) in cases {
-            assert_eq!(
-                text(press(key, *modifiers)),
-                *expected,
-                "{key:?} {modifiers:?}"
-            );
+            assert_eq!(text(press(key, *modifiers)), *expected, "{key:?} {modifiers:?}");
         }
         assert_eq!(text(enter()), "\x1b[13u");
         assert_eq!(text(arrow(Direction::Up)), "\x1b[57352u");
@@ -380,33 +338,15 @@ mod tests {
         let mut state = MouseState::default();
         let cases: &[(&str, &str)] = &[
             (r#"{"action":"move","x":0,"y":0}"#, "\x1b[<35;1;1m"),
-            (
-                r#"{"action":"move","x":3,"y":4,"modifiers":{"ctrl":true}}"#,
-                "\x1b[<51;4;5m",
-            ),
-            (
-                r#"{"action":"down","x":2,"y":1,"button":"right"}"#,
-                "\x1b[<2;3;2M",
-            ),
+            (r#"{"action":"move","x":3,"y":4,"modifiers":{"ctrl":true}}"#, "\x1b[<51;4;5m"),
+            (r#"{"action":"down","x":2,"y":1,"button":"right"}"#, "\x1b[<2;3;2M"),
             (r#"{"action":"move","x":5,"y":1}"#, "\x1b[<34;6;2m"),
-            (
-                r#"{"action":"up","x":5,"y":1,"button":"right"}"#,
-                "\x1b[<2;6;2m",
-            ),
+            (r#"{"action":"up","x":5,"y":1,"button":"right"}"#, "\x1b[<2;6;2m"),
             (r#"{"action":"move","x":6,"y":1}"#, "\x1b[<35;7;2m"),
-            (
-                r#"{"action":"down","x":0,"y":0,"modifiers":{"shift":true,"alt":true}}"#,
-                "\x1b[<12;1;1M",
-            ),
+            (r#"{"action":"down","x":0,"y":0,"modifiers":{"shift":true,"alt":true}}"#, "\x1b[<12;1;1M"),
             (r#"{"action":"up","x":0,"y":0}"#, "\x1b[<0;1;1m"),
-            (
-                r#"{"action":"scroll","x":9,"y":9,"direction":"down"}"#,
-                "\x1b[<65;10;10M",
-            ),
-            (
-                r#"{"action":"scroll","x":9,"y":9,"direction":"left","modifiers":{"ctrl":true}}"#,
-                "\x1b[<82;10;10M",
-            ),
+            (r#"{"action":"scroll","x":9,"y":9,"direction":"down"}"#, "\x1b[<65;10;10M"),
+            (r#"{"action":"scroll","x":9,"y":9,"direction":"left","modifiers":{"ctrl":true}}"#, "\x1b[<82;10;10M"),
         ];
         for (json, expected) in cases {
             assert_eq!(text(state.encode(decode(json))), *expected, "{json}");

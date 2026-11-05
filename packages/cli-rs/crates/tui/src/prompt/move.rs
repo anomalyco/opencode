@@ -10,9 +10,7 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{
-    LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput,
-};
+use opencode_api::generated::{LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput};
 use opencode_store::Location;
 use opencode_ui::keymap::{Bind, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
@@ -45,9 +43,7 @@ impl Move {
     pub fn new(app: &App, animations: bool) -> Self {
         let spinner = Spinner::new(app).animations(animations);
         let dots_text = Text::new(app, "").wrap(WrapMode::None);
-        let label = Text::new(app, "(new worktree)")
-            .wrap(WrapMode::None)
-            .truncate(true);
+        let label = Text::new(app, "(new worktree)").wrap(WrapMode::None).truncate(true);
         let root = View::new(app)
             .row()
             .height(1)
@@ -112,8 +108,7 @@ impl Move {
         self.spinner.set_color(accent);
         self.spinner.set_label(progress.clone());
         self.spinner.visible(progress.is_some());
-        self.dots_text
-            .set_text(vec![".".repeat(self.dots.get()).fg(theme.text.muted)]);
+        self.dots_text.set_text(vec![".".repeat(self.dots.get()).fg(theme.text.muted)]);
         self.dots_text.visible(progress.is_some());
         self.label.set_text(vec!["(new worktree)".fg(accent)]);
         self.label.visible(progress.is_none() && pending);
@@ -144,21 +139,18 @@ impl Move {
     }
 
     fn tick(&self, prompt: Weak<Inner>) {
-        self.timer.set(Some(self.app.set_timeout(
-            Duration::from_secs(1),
-            move |_| {
-                let Some(prompt) = prompt.upgrade() else {
-                    return;
-                };
-                let staging = &prompt.staging;
-                staging.timer.set(None);
-                staging.dots.set(staging.dots.get() % 3 + 1);
-                if let Some(tui) = prompt.tui.upgrade() {
-                    prompt.refresh(&tui);
-                }
-                staging.tick(Rc::downgrade(&prompt));
-            },
-        )));
+        self.timer.set(Some(self.app.set_timeout(Duration::from_secs(1), move |_| {
+            let Some(prompt) = prompt.upgrade() else {
+                return;
+            };
+            let staging = &prompt.staging;
+            staging.timer.set(None);
+            staging.dots.set(staging.dots.get() % 3 + 1);
+            if let Some(tui) = prompt.tui.upgrade() {
+                prompt.refresh(&tui);
+            }
+            staging.tick(Rc::downgrade(&prompt));
+        })));
     }
 
     /// `finishSubmit`.
@@ -191,11 +183,7 @@ pub fn command(prompt: Weak<Inner>) -> TuiCommand {
     .title("Manage workspaces")
     .group("Session")
     .palette()
-    .slash(Slash {
-        name: "worktrees".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    })
+    .slash(Slash { name: "worktrees".to_owned(), aliases: Vec::new(), arguments: false })
 }
 
 /// Submits a staged new worktree: creates it, then `then` gets its directory (`None` after a failure,
@@ -231,12 +219,7 @@ fn open(tui: &Tui, prompt: &Rc<Inner>) {
             return;
         };
         let session = prompt.session_info(&tui);
-        show(
-            &tui,
-            &prompt,
-            session.as_ref().map(|s| s.project_id.clone()),
-            session,
-        );
+        show(&tui, &prompt, session.as_ref().map(|s| s.project_id.clone()), session);
     });
 }
 
@@ -248,20 +231,10 @@ fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
         return;
     }
     let client = tui.data.client().clone();
-    let input = LocationGetInput {
-        location: Some(LocationQueryInput {
-            directory: Some(home.directory),
-        }),
-    };
+    let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(home.directory) }) };
     let weak = prompt.this.clone();
     tui.app.spawn(
-        async move {
-            client
-                .location_get(&input, &RequestOptions::default())
-                .await
-                .ok()
-                .map(|info| info.project.id)
-        },
+        async move { client.location_get(&input, &RequestOptions::default()).await.ok().map(|info| info.project.id) },
         move |_, project| {
             let Some(prompt) = weak.upgrade() else { return };
             let Some(tui) = prompt.tui.upgrade() else {
@@ -274,10 +247,7 @@ fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
 
 fn show(tui: &Tui, prompt: &Rc<Inner>, project: Option<ProjectID>, session: Option<SessionInfo>) {
     let Some(project) = project else {
-        tui.toasts.show(ToastOptions::new(
-            Variant::Error,
-            "Unable to determine current project",
-        ));
+        tui.toasts.show(ToastOptions::new(Variant::Error, "Unable to determine current project"));
         return;
     };
     let home = home_location(tui, prompt);
@@ -285,10 +255,7 @@ fn show(tui: &Tui, prompt: &Rc<Inner>, project: Option<ProjectID>, session: Opti
         Some(match &session {
             Some(session) => Selection::Directory {
                 directory: session.location.directory.0.clone(),
-                subdirectory: session
-                    .subpath
-                    .as_ref()
-                    .is_some_and(|sub| !sub.0.is_empty()),
+                subdirectory: session.subpath.as_ref().is_some_and(|sub| !sub.0.is_empty()),
             },
             None => {
                 let root = tui.data.read(|state| {
@@ -349,21 +316,13 @@ fn select_workspace(tui: &Tui, prompt: &Rc<Inner>, selection: Selection) {
 }
 
 /// `create`: the worktree, then its location info, so the new session finds its project.
-fn create(
-    tui: &Tui,
-    prompt: &Rc<Inner>,
-    name: String,
-    then: impl FnOnce(&Tui, &Rc<Inner>, Option<String>) + 'static,
-) {
+fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &Rc<Inner>, Option<String>) + 'static) {
     let staging = &prompt.staging;
     staging.set_creating(prompt, true);
     staging.set_progress(prompt, Some("Creating worktree"));
     let session = prompt.session_info(tui);
     let lost = prompt.session.is_some() && session.is_none();
-    let location = session.map_or_else(
-        || home_location(tui, prompt),
-        |session| Location::from(&session.location),
-    );
+    let location = session.map_or_else(|| home_location(tui, prompt), |session| Location::from(&session.location));
     let data = tui.data.clone();
     let weak = prompt.this.clone();
     tui.app.spawn(
@@ -371,27 +330,15 @@ fn create(
             if lost {
                 return Err("Unable to determine current session location".to_owned());
             }
-            if data
-                .read(|state| state.location(Some(&location)).and_then(|d| d.info.clone()))
-                .is_none()
-            {
-                data.location_sync_info(Some(&location))
-                    .await
-                    .map_err(|error| worktrees::error_message(&error))?;
+            if data.read(|state| state.location(Some(&location)).and_then(|d| d.info.clone())).is_none() {
+                data.location_sync_info(Some(&location)).await.map_err(|error| worktrees::error_message(&error))?;
             }
             let project = data
                 .read(|state| {
-                    state
-                        .location(Some(&location))
-                        .and_then(|d| d.info.as_ref())
-                        .map(|info| info.project.id.clone())
+                    state.location(Some(&location)).and_then(|d| d.info.as_ref()).map(|info| info.project.id.clone())
                 })
                 .ok_or_else(|| "Unable to determine current project".to_owned())?;
-            let input = WorktreeCreateInput {
-                project_id: project,
-                name: Some(name),
-                ..WorktreeCreateInput::default()
-            };
+            let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
             let directory = data
                 .client()
                 .worktree_create(&input, &RequestOptions::default())
@@ -414,20 +361,15 @@ fn create(
             };
             match result {
                 Ok(directory) => {
-                    prompt.staging.stage(Some(Selection::Directory {
-                        directory: directory.clone(),
-                        subdirectory: false,
-                    }));
                     prompt
                         .staging
-                        .set_progress(&prompt, Some("Creating session"));
+                        .stage(Some(Selection::Directory { directory: directory.clone(), subdirectory: false }));
+                    prompt.staging.set_progress(&prompt, Some("Creating session"));
                     then(&tui, &prompt, Some(directory));
                 }
                 Err(error) => {
                     prompt.staging.finish(&prompt);
-                    tui.toasts.show(
-                        ToastOptions::new(Variant::Error, error).title("Creating workspace failed"),
-                    );
+                    tui.toasts.show(ToastOptions::new(Variant::Error, error).title("Creating workspace failed"));
                     then(&tui, &prompt, None);
                 }
             }
@@ -442,9 +384,6 @@ fn home_location(tui: &Tui, prompt: &Inner) -> Location {
 
 fn stored_project(tui: &Tui, location: &Location) -> Option<ProjectID> {
     tui.data.read(|state| {
-        state
-            .location(Some(location))
-            .and_then(|data| data.info.as_ref())
-            .map(|info| info.project.id.clone())
+        state.location(Some(location)).and_then(|data| data.info.as_ref()).map(|info| info.project.id.clone())
     })
 }

@@ -8,9 +8,7 @@ use std::time::Duration;
 
 use super::Output;
 use super::core::{ERASE_DOWN, HIDE, SHOW, move_cursor};
-use super::style::{
-    S_BAR, S_STEP_CANCEL, S_STEP_ERROR, S_STEP_SUBMIT, gray, green, magenta, red, unicode,
-};
+use super::style::{S_BAR, S_STEP_CANCEL, S_STEP_ERROR, S_STEP_SUBMIT, gray, green, magenta, red, unicode};
 use super::term::{Keys, Raw};
 
 /// Printed when Ctrl+C ends the process, or when the spinner is dropped while spinning.
@@ -38,11 +36,7 @@ struct Threads {
 
 pub fn spinner() -> Spinner {
     Spinner {
-        shared: Arc::new(Mutex::new(Shared {
-            message: String::new(),
-            previous: None,
-            raw: None,
-        })),
+        shared: Arc::new(Mutex::new(Shared { message: String::new(), previous: None, raw: None })),
         threads: None,
     }
 }
@@ -65,11 +59,7 @@ impl Spinner {
         let shared = self.shared.clone();
         let frame_thread = std::thread::spawn(move || {
             let ci = std::env::var("CI").as_deref() == Ok("true");
-            let frames: [&str; 4] = if unicode() {
-                ["◒", "◐", "◓", "◑"]
-            } else {
-                ["•", "o", "O", "0"]
-            };
+            let frames: [&str; 4] = if unicode() { ["◒", "◐", "◓", "◑"] } else { ["•", "o", "O", "0"] };
             let delay = Duration::from_millis(if unicode() { 80 } else { 120 });
             let mut index = 0;
             let mut dots = 0.0f64;
@@ -87,10 +77,7 @@ impl Spinner {
                     format!(
                         "{frame}  {}{}",
                         shared.message,
-                        ".".repeat(dots.floor() as usize)
-                            .chars()
-                            .take(3)
-                            .collect::<String>()
+                        ".".repeat(dots.floor() as usize).chars().take(3).collect::<String>()
                     )
                 };
                 output.write(&line);
@@ -111,11 +98,7 @@ impl Spinner {
                         // `block` shows the cursor and exits; the exit hook then stops the spinner with code 0.
                         let mut shared = lock(&shared);
                         output.write(SHOW);
-                        clear_previous(
-                            &shared,
-                            output,
-                            std::env::var("CI").as_deref() == Ok("true"),
-                        );
+                        clear_previous(&shared, output, std::env::var("CI").as_deref() == Ok("true"));
                         output.write(&format!("{}  {CANCELED}\n", green(S_STEP_SUBMIT())));
                         output.write(SHOW);
                         shared.raw.take();
@@ -124,12 +107,7 @@ impl Spinner {
                 }
             })
         };
-        self.threads = Some(Threads {
-            frames,
-            frame_thread,
-            stop_input,
-            input_thread,
-        });
+        self.threads = Some(Threads { frames, frame_thread, stop_input, input_thread });
     }
 
     #[allow(dead_code, reason = "only opencode-prompt-demo uses it")]
@@ -154,11 +132,7 @@ impl Spinner {
         let _ = threads.input_thread.join();
         let mut shared = lock(&self.shared);
         let output = Output::Stdout;
-        clear_previous(
-            &shared,
-            output,
-            std::env::var("CI").as_deref() == Ok("true"),
-        );
+        clear_previous(&shared, output, std::env::var("CI").as_deref() == Ok("true"));
         let step = match code {
             0 => green(S_STEP_SUBMIT()),
             1 => red(S_STEP_CANCEL()),
@@ -181,9 +155,7 @@ impl Drop for Spinner {
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
-    shared
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn clear_previous(shared: &Shared, output: Output, ci: bool) {

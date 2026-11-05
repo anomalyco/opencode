@@ -5,10 +5,7 @@ use crate::parse::Role;
 /// The symbol a command names and its spacing role (`symbolTable`).
 pub fn symbol(command: &str) -> Option<(&'static str, Role)> {
     let role = |table: &[(&str, &'static str)], role: Role| {
-        table
-            .iter()
-            .find(|(name, _)| *name == command)
-            .map(|(_, value)| (*value, role))
+        table.iter().find(|(name, _)| *name == command).map(|(_, value)| (*value, role))
     };
     role(ORDINARY, Role::Ordinary)
         .or_else(|| role(BINARY, Role::Binary))
@@ -32,17 +29,11 @@ pub fn delimiter(name: &str) -> Option<&'static str> {
 
 /// The width in cells of a spacing command (`spacingCommands`).
 pub fn spacing(command: &str) -> Option<usize> {
-    SPACING
-        .iter()
-        .find(|(name, _)| *name == command)
-        .map(|(_, width)| *width)
+    SPACING.iter().find(|(name, _)| *name == command).map(|(_, width)| *width)
 }
 
 fn lookup(table: &[(&str, &'static str)], name: &str) -> Option<&'static str> {
-    table
-        .iter()
-        .find(|(key, _)| *key == name)
-        .map(|(_, value)| *value)
+    table.iter().find(|(key, _)| *key == name).map(|(_, value)| *value)
 }
 
 const ORDINARY: &[(&str, &str)] = &[
@@ -237,14 +228,8 @@ const ARROWS: &[(&str, &str)] = &[
     ("nwarrow", "↖"),
 ];
 
-const PUNCTUATION: &[(&str, &str)] = &[
-    ("cdots", "⋯"),
-    ("ldots", "…"),
-    ("dots", "…"),
-    ("vdots", "⋮"),
-    ("ddots", "⋱"),
-    ("colon", ":"),
-];
+const PUNCTUATION: &[(&str, &str)] =
+    &[("cdots", "⋯"), ("ldots", "…"), ("dots", "…"), ("vdots", "⋮"), ("ddots", "⋱"), ("colon", ":")];
 
 const LARGE_OPERATORS: &[(&str, &str)] = &[
     ("sum", "∑"),
@@ -264,9 +249,9 @@ const LARGE_OPERATORS: &[(&str, &str)] = &[
 ];
 
 const NAMED_OPERATORS: &[&str] = &[
-    "arccos", "arcsin", "arctan", "arg", "cos", "cosh", "cot", "coth", "csc", "deg", "det", "dim",
-    "exp", "gcd", "hom", "inf", "ker", "lg", "lim", "liminf", "limsup", "ln", "log", "max", "min",
-    "mod", "Pr", "sec", "sin", "sinh", "sup", "tan", "tanh",
+    "arccos", "arcsin", "arctan", "arg", "cos", "cosh", "cot", "coth", "csc", "deg", "det", "dim", "exp", "gcd", "hom",
+    "inf", "ker", "lg", "lim", "liminf", "limsup", "ln", "log", "max", "min", "mod", "Pr", "sec", "sin", "sinh", "sup",
+    "tan", "tanh",
 ];
 
 const DELIMITERS: &[(&str, &str)] = &[
@@ -297,13 +282,5 @@ const DELIMITERS: &[(&str, &str)] = &[
     (".", ""),
 ];
 
-const SPACING: &[(&str, usize)] = &[
-    (",", 0),
-    (":", 1),
-    (";", 1),
-    ("!", 0),
-    ("quad", 2),
-    ("qquad", 4),
-    ("enspace", 1),
-    ("thinspace", 0),
-];
+const SPACING: &[(&str, usize)] =
+    &[(",", 0), (":", 1), (";", 1), ("!", 0), ("quad", 2), ("qquad", 4), ("enspace", 1), ("thinspace", 0)];

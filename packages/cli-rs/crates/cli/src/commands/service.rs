@@ -38,12 +38,7 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> anyhow::Result<()> {
             print(&(found.map_or("stopped".into(), |found| found.service.endpoint.url) + "\n"))
         }
         ServiceCommand::Stop => block_on(local.stop(true))?,
-        ServiceCommand::Get(get) => print(
-            &(local
-                .config()
-                .get(get.key.as_deref(), get.name.as_deref())?
-                + "\n"),
-        ),
+        ServiceCommand::Get(get) => print(&(local.config().get(get.key.as_deref(), get.name.as_deref())? + "\n")),
         ServiceCommand::Set(set) => {
             let edit = Edit::set(&set.key, &set.value, set.env_value.as_deref())?;
             if edit.needs_tunnel() {
@@ -58,9 +53,7 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> anyhow::Result<()> {
             }
             local.edit(&edit)
         }
-        ServiceCommand::Unset(unset) => {
-            local.edit(&Edit::unset(&unset.key, unset.name.as_deref())?)
-        }
+        ServiceCommand::Unset(unset) => local.edit(&Edit::unset(&unset.key, unset.name.as_deref())?),
     }
 }
 
@@ -83,12 +76,7 @@ impl Local {
             _ => None,
         })
         .channel;
-        Self {
-            paths,
-            env,
-            channel,
-            transport: Arc::new(Reqwest::default()),
-        }
+        Self { paths, env, channel, transport: Arc::new(Reqwest::default()) }
     }
 
     pub fn config(&self) -> ServiceConfig {
@@ -101,13 +89,7 @@ impl Local {
 
     /// The ready service this client would use (`Service.discover` without a version).
     pub async fn discover(&self) -> Option<Found> {
-        discover::discover(
-            self.transport.as_ref(),
-            &self.paths,
-            self.env.channel.as_deref(),
-        )
-        .await
-        .ok()
+        discover::discover(self.transport.as_ref(), &self.paths, self.env.channel.as_deref()).await.ok()
     }
 
     /// A ready service, started quietly when none runs (`Service.ensure`).
@@ -118,22 +100,12 @@ impl Local {
     /// `ServerConnection.shutdownPersistentPty` (when `terminals`), then `Service.stop`. The registration
     /// stopped is the discovered service's, else one that is still starting, else the client channel's.
     pub async fn stop(&self, terminals: bool) -> anyhow::Result<()> {
-        let file = match discover::discover(
-            self.transport.as_ref(),
-            &self.paths,
-            self.env.channel.as_deref(),
-        )
-        .await
-        {
+        let file = match discover::discover(self.transport.as_ref(), &self.paths, self.env.channel.as_deref()).await {
             Ok(found) => {
                 if terminals {
                     // An explicit stop ends the persistent terminals; only a restart through the TUI hands
                     // them over. TS ignores a failure here.
-                    let _ = stop::shutdown_persistent_pty(
-                        self.transport.clone(),
-                        &found.service.endpoint,
-                    )
-                    .await;
+                    let _ = stop::shutdown_persistent_pty(self.transport.clone(), &found.service.endpoint).await;
                 }
                 found.file
             }

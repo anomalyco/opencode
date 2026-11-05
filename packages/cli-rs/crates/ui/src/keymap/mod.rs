@@ -17,8 +17,8 @@ use opentui::input::KeyEvent;
 use opentui::keymap::addons::{self, EDIT_COMMANDS, ManagedTextarea, TimedLeader};
 use opentui::keymap::extras::{FormatOptions, format_command_bindings, format_key_sequence};
 use opentui::keymap::{
-    Binding, Command, CommandQuery, Condition, Disposer, Key, KeyResult, Keymap, Layer, Outcome,
-    RunResult, Stroke, Visibility,
+    Binding, Command, CommandQuery, Condition, Disposer, Key, KeyResult, Keymap, Layer, Outcome, RunResult, Stroke,
+    Visibility,
 };
 use opentui::widget::EditorAction;
 use std::cell::{Cell, RefCell};
@@ -98,11 +98,7 @@ impl TuiCommand {
         id: impl Into<String>,
         run: impl Fn(Option<&str>, Option<&KeyEvent>) -> R + 'static,
     ) -> Self {
-        Self {
-            id: Some(id.into()),
-            bind: Bind::Default,
-            ..Self::inline("", run)
-        }
+        Self { id: Some(id.into()), bind: Bind::Default, ..Self::inline("", run) }
     }
 
     /// An inline command bound to `bind`.
@@ -237,21 +233,14 @@ pub struct TuiKeymap<T> {
 impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     pub fn new(keybinds: Keybinds<T>, options: Options) -> Self {
         let keymap = Keymap::new();
-        let textarea_bindings: Vec<Binding<T>> = EDIT_COMMANDS
-            .iter()
-            .flat_map(|(_, name, _)| keybinds.get(name).iter().cloned())
-            .collect();
+        let textarea_bindings: Vec<Binding<T>> =
+            EDIT_COMMANDS.iter().flat_map(|(_, name, _)| keybinds.get(name).iter().cloned()).collect();
         // The order of `keymap.tsx:78-136`. EDIT_COMMANDS lists the 36 `input.*` names in that file's order.
         let addons = vec![
             addons::comma_bindings(&keymap),
             addons::key_aliases(
                 &keymap,
-                &[
-                    ("enter", "return"),
-                    ("esc", "escape"),
-                    ("pgdown", "pagedown"),
-                    ("pgup", "pageup"),
-                ],
+                &[("enter", "return"), ("esc", "escape"), ("pgdown", "pagedown"), ("pgup", "pageup")],
             ),
             addons::base_layout_fallback(&keymap),
             addons::escape_clears_pending_sequence(&keymap, 0),
@@ -265,17 +254,12 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                 },
             ),
         ];
-        let leader_key = keybinds
-            .get("leader")
-            .first()
-            .map(|binding| binding.key.clone());
-        let leader = leader_key.clone().and_then(|key| {
-            addons::timed_leader(&keymap, "leader", key, options.leader_timeout).ok()
-        });
-        let leader_stroke = leader_key
-            .as_ref()
-            .and_then(|key| keymap.parse_key(key.clone()).ok())
-            .map(|part| part.stroke);
+        let leader_key = keybinds.get("leader").first().map(|binding| binding.key.clone());
+        let leader = leader_key
+            .clone()
+            .and_then(|key| addons::timed_leader(&keymap, "leader", key, options.leader_timeout).ok());
+        let leader_stroke =
+            leader_key.as_ref().and_then(|key| keymap.parse_key(key.clone()).ok()).map(|part| part.stroke);
         let format = format_options(leader_key.as_ref());
         let tui = Self {
             keymap,
@@ -311,9 +295,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     /// Runs a reachable command by ID; its handler receives `input`.
     pub fn dispatch(&self, id: &str, input: Option<&str>) -> RunResult {
         self.sync_mode();
-        let previous = self
-            .invocation
-            .replace(Some((id.to_owned(), input.map(str::to_owned))));
+        let previous = self.invocation.replace(Some((id.to_owned(), input.map(str::to_owned))));
         let result = self.keymap.dispatch_command(id);
         self.invocation.replace(previous);
         result
@@ -345,9 +327,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
 
     /// Whether `event` is the configured leader key.
     pub fn is_leader(&self, event: &KeyEvent) -> bool {
-        self.leader_stroke
-            .as_ref()
-            .is_some_and(|stroke| *stroke == Stroke::from_event(event))
+        self.leader_stroke.as_ref().is_some_and(|stroke| *stroke == Stroke::from_event(event))
     }
 
     /// Registers a layer, as `Keymap.createLayer` does. Fails on the command shapes TS rejects.
@@ -399,17 +379,9 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                 bindings.push(Binding::new(key.as_str()).cmd(id.as_str()));
             }
         }
-        bindings.extend(
-            layer
-                .bindings
-                .iter()
-                .flat_map(|id| self.keybinds.get(id).iter().cloned()),
-        );
-        let mut engine = Layer::new()
-            .priority(layer.priority)
-            .enabled(layer.enabled)
-            .commands(commands)
-            .bindings(bindings);
+        bindings.extend(layer.bindings.iter().flat_map(|id| self.keybinds.get(id).iter().cloned()));
+        let mut engine =
+            Layer::new().priority(layer.priority).enabled(layer.enabled).commands(commands).bindings(bindings);
         engine.target = layer.target;
         match layer.mode.as_deref() {
             Some(GLOBAL_MODE) => {}
@@ -440,13 +412,9 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
 
     fn inline_binding(&self, key: String, command: TuiCommand) -> Binding<T> {
         let mut binding = Binding::new(key);
-        binding.desc = command
-            .title
-            .clone()
-            .or_else(|| command.description.clone());
+        binding.desc = command.title.clone().or_else(|| command.description.clone());
         binding.group = command.group.clone();
-        binding
-            .run(move |_| check(&command.enabled) && (command.run)(None, None) == Outcome::Handled)
+        binding.run(move |_| check(&command.enabled) && (command.run)(None, None) == Outcome::Handled)
     }
 
     /// The current input mode: the newest pushed mode that is active, else [`BASE_MODE`].
@@ -459,11 +427,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     pub fn push_mode(&self, mode: &str, active: impl Into<Condition>) -> Disposer {
         let id = self.next_mode.get();
         self.next_mode.set(id + 1);
-        self.modes.borrow_mut().push(ModeEntry {
-            id,
-            mode: mode.to_owned(),
-            active: active.into(),
-        });
+        self.modes.borrow_mut().push(ModeEntry { id, mode: mode.to_owned(), active: active.into() });
         self.sync_mode();
         let modes = self.modes.clone();
         let keymap = self.keymap.downgrade();
@@ -515,9 +479,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     /// The first shortcut of a registered command, such as `ctrl+x n`.
     pub fn shortcut(&self, id: &str) -> Option<String> {
         let sequences = self.sequences(id)?;
-        sequences
-            .first()
-            .map(|sequence| format_key_sequence(sequence, &self.format))
+        sequences.first().map(|sequence| format_key_sequence(sequence, &self.format))
     }
 
     /// Every shortcut of a registered command, joined, such as `ctrl+c, ctrl+d, ctrl+x q`.
@@ -536,22 +498,13 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     }
 
     fn sequences(&self, id: &str) -> Option<Vec<Vec<opentui::keymap::KeySequencePart>>> {
-        let query = CommandQuery {
-            names: Some(vec![id.to_owned()]),
-            ..CommandQuery::visibility(Visibility::Registered)
-        };
+        let query =
+            CommandQuery { names: Some(vec![id.to_owned()]), ..CommandQuery::visibility(Visibility::Registered) };
         if self.keymap.commands(&query).is_empty() {
             return None;
         }
         let bindings = self.keymap.command_bindings(Visibility::Registered, &[id]);
-        Some(
-            bindings
-                .get(id)
-                .into_iter()
-                .flatten()
-                .map(|binding| binding.sequence.clone())
-                .collect(),
-        )
+        Some(bindings.get(id).into_iter().flatten().map(|binding| binding.sequence.clone()).collect())
     }
 
     /// The pending key sequence, formatted per stroke.
@@ -568,20 +521,12 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
 
     /// Whether the pending sequence starts with the leader.
     pub fn leader_active(&self) -> bool {
-        self.keymap
-            .pending_sequence()
-            .first()
-            .is_some_and(|part| part.token.as_deref() == Some("leader"))
+        self.keymap.pending_sequence().first().is_some_and(|part| part.token.as_deref() == Some("leader"))
     }
 }
 
 fn current_mode(modes: &[ModeEntry]) -> String {
-    modes
-        .iter()
-        .rev()
-        .find(|entry| check(&entry.active))
-        .map_or(BASE_MODE, |entry| entry.mode.as_str())
-        .to_owned()
+    modes.iter().rev().find(|entry| check(&entry.active)).map_or(BASE_MODE, |entry| entry.mode.as_str()).to_owned()
 }
 
 fn publish_mode<T: Clone + PartialEq + 'static>(keymap: &Keymap<T>, mode: &str) {
@@ -592,18 +537,10 @@ fn publish_mode<T: Clone + PartialEq + 'static>(keymap: &Keymap<T>, mode: &str) 
 
 /// `formatOptions` of `keymap.tsx:496-515`.
 fn format_options(leader: Option<&Key>) -> FormatOptions {
-    let owned = |pairs: &[(&str, &str)]| {
-        pairs
-            .iter()
-            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
-            .collect()
-    };
+    let owned =
+        |pairs: &[(&str, &str)]| pairs.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect();
     FormatOptions {
-        token_display: [(
-            "leader".to_owned(),
-            leader.map_or_else(|| LEADER_DEFAULT.to_owned(), Key::to_string),
-        )]
-        .into(),
+        token_display: [("leader".to_owned(), leader.map_or_else(|| LEADER_DEFAULT.to_owned(), Key::to_string))].into(),
         key_name_aliases: owned(&[
             ("up", "↑"),
             ("down", "↓"),

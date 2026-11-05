@@ -26,11 +26,7 @@ pub fn entry_file() -> String {
 pub trait Backend<H: Host> {
     /// Loads the build `library` and runs its setup once with `options` (JSON text), returning the definition,
     /// not yet active, and its failure while it runs. An error is why the build cannot load.
-    fn load(
-        &self,
-        library: &[u8],
-        options: Option<&str>,
-    ) -> Result<(Definition<H>, ErrorFn), String>;
+    fn load(&self, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String>;
 }
 
 /// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a native build.
@@ -82,31 +78,18 @@ pub struct Loader<H: Host> {
 }
 
 impl<H: Host> Loader<H> {
-    pub fn new(
-        backend: Rc<dyn Backend<H>>,
-        config_dir: PathBuf,
-        cwd: PathBuf,
-        configured: Vec<Configured>,
-    ) -> Self {
-        Self {
-            backend,
-            config_dir,
-            cwd,
-            configured,
-            seen: RefCell::default(),
-        }
+    pub fn new(backend: Rc<dyn Backend<H>>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
+        Self { backend, config_dir, cwd, configured, seen: RefCell::default() }
     }
 
     /// The discovered directories, then the configured entries, merged by local path (TS `mergePluginTargets`:
     /// a later entry replaces an earlier one in its place).
     pub fn targets(&self) -> Vec<Target> {
-        let discovered = discover(&plugin_directories(&self.config_dir, &self.cwd))
-            .into_iter()
-            .map(|path| Target {
-                target: path.to_string_lossy().into_owned(),
-                local: Some(path),
-                options: None,
-            });
+        let discovered = discover(&plugin_directories(&self.config_dir, &self.cwd)).into_iter().map(|path| Target {
+            target: path.to_string_lossy().into_owned(),
+            local: Some(path),
+            options: None,
+        });
         let configured = self.configured.iter().map(|entry| Target {
             target: entry.target.clone(),
             local: local_source(&entry.target, &self.config_dir),
@@ -115,10 +98,10 @@ impl<H: Host> Loader<H> {
         let mut targets: Vec<Target> = Vec::new();
         for target in discovered.chain(configured) {
             let key = |target: &Target| {
-                target.local.as_ref().map_or_else(
-                    || target.target.clone(),
-                    |local| local.to_string_lossy().into_owned(),
-                )
+                target
+                    .local
+                    .as_ref()
+                    .map_or_else(|| target.target.clone(), |local| local.to_string_lossy().into_owned())
             };
             match targets.iter_mut().find(|known| key(known) == key(&target)) {
                 Some(known) => *known = target,
@@ -141,11 +124,7 @@ impl<H: Host> Loader<H> {
             .collect();
         for target in self.targets() {
             let Some(local) = target.local else { continue };
-            let dir = if local.is_dir() {
-                local
-            } else {
-                local.parent().map(Path::to_path_buf).unwrap_or(local)
-            };
+            let dir = if local.is_dir() { local } else { local.parent().map(Path::to_path_buf).unwrap_or(local) };
             dirs.push(dir);
         }
         let mut unique: Vec<PathBuf> = Vec::new();
@@ -166,11 +145,7 @@ impl<H: Host> Loader<H> {
             .seen
             .borrow()
             .keys()
-            .filter(|target| {
-                !targets
-                    .iter()
-                    .any(|known| known.target == **target && known.library().is_some())
-            })
+            .filter(|target| !targets.iter().any(|known| known.target == **target && known.library().is_some()))
             .cloned()
             .collect();
         for target in stale {
@@ -192,9 +167,10 @@ impl<H: Host> Loader<H> {
         let name = target.target.as_str();
         let skip = |reason: &str| {
             let status = Some(Status::Skipped(reason.to_owned()));
-            let changed = registry.entries().iter().all(|entry| {
-                entry.target.as_deref() != Some(name) || Some(&entry.status) != status.as_ref()
-            });
+            let changed = registry
+                .entries()
+                .iter()
+                .all(|entry| entry.target.as_deref() != Some(name) || Some(&entry.status) != status.as_ref());
             registry.set_unloaded(name, status);
             changed
         };
@@ -214,21 +190,15 @@ impl<H: Host> Loader<H> {
         let mut hasher = DefaultHasher::new();
         hasher.write(&bytes);
         let digest = hasher.finish();
-        if self
-            .seen
-            .borrow()
-            .get(name)
-            .is_some_and(|seen| seen.digest == digest)
-        {
+        if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
             return false;
         }
-        let loaded = self
-            .backend
-            .load(&bytes, target.options.as_deref())
-            .and_then(|loaded| match registry.id_taken(&loaded.0.id, name) {
+        let loaded = self.backend.load(&bytes, target.options.as_deref()).and_then(|loaded| {
+            match registry.id_taken(&loaded.0.id, name) {
                 true => Err(format!("plugin ID {} is already registered", loaded.0.id)),
                 false => Ok(loaded),
-            });
+            }
+        });
         let (definition, error) = match loaded {
             Ok(loaded) => loaded,
             Err(error) => return self.fail(registry, name, digest, error),
@@ -239,9 +209,7 @@ impl<H: Host> Loader<H> {
             let reload = reload.clone();
             Rc::new(move || error().or_else(|| reload.borrow().clone()))
         };
-        self.seen
-            .borrow_mut()
-            .insert(name.to_owned(), Seen { digest, reload });
+        self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
         registry.load(host, definition.external(name, failure));
         true
     }
@@ -254,17 +222,10 @@ impl<H: Host> Loader<H> {
         match seen.get_mut(target) {
             Some(previous) => {
                 previous.digest = digest;
-                *previous.reload.borrow_mut() =
-                    Some(format!("{error} (previous version still active)"));
+                *previous.reload.borrow_mut() = Some(format!("{error} (previous version still active)"));
             }
             None => {
-                seen.insert(
-                    target.to_owned(),
-                    Seen {
-                        digest,
-                        reload: Rc::default(),
-                    },
-                );
+                seen.insert(target.to_owned(), Seen { digest, reload: Rc::default() });
                 registry.set_unloaded(target, Some(Status::Failed(error)));
             }
         }
@@ -319,11 +280,7 @@ pub fn discover(directories: &[PathBuf]) -> Vec<PathBuf> {
                 .collect();
             // `localeCompare` without the ICU tables: case-insensitive, then by code point.
             entries.sort_by_key(|path| {
-                let name = path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned();
+                let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
                 (name.to_lowercase(), name)
             });
             entries
@@ -336,10 +293,7 @@ pub fn discover(directories: &[PathBuf]) -> Vec<PathBuf> {
 pub fn local_source(target: &str, directory: &Path) -> Option<PathBuf> {
     let path = match target.strip_prefix("file://") {
         Some(path) => PathBuf::from(path),
-        None if target.starts_with("./")
-            || target.starts_with("../")
-            || Path::new(target).is_absolute() =>
-        {
+        None if target.starts_with("./") || target.starts_with("../") || Path::new(target).is_absolute() => {
             directory.join(target)
         }
         None => return None,

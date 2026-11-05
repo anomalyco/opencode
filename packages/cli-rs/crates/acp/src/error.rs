@@ -12,11 +12,7 @@ pub struct RpcError {
 
 impl RpcError {
     pub fn new(code: i64, message: impl Into<String>, data: Option<Value>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            data,
-        }
+        Self { code, message: message.into(), data }
     }
 
     pub fn parse_error() -> Self {
@@ -28,11 +24,7 @@ impl RpcError {
     }
 
     pub fn method_not_found(method: &str) -> Self {
-        Self::new(
-            -32601,
-            format!("\"Method not found\": {method}"),
-            Some(json!({ "method": method })),
-        )
+        Self::new(-32601, format!("\"Method not found\": {method}"), Some(json!({ "method": method })))
     }
 
     pub fn invalid_params(data: Value, detail: &str) -> Self {
@@ -44,11 +36,7 @@ impl RpcError {
     }
 
     pub fn auth_required(data: Value, detail: &str) -> Self {
-        Self::new(
-            -32000,
-            with_detail("Authentication required", detail),
-            Some(data),
-        )
+        Self::new(-32000, with_detail("Authentication required", detail), Some(data))
     }
 
     /// The `error` member of a response. `data` is left out when unset, as `JSON.stringify` drops
@@ -133,10 +121,7 @@ pub enum Failure {
 
 impl Failure {
     pub fn invalid_request(message: impl Into<String>, field: Option<&str>) -> Self {
-        Self::InvalidRequest {
-            message: message.into(),
-            field: field.map(str::to_owned),
-        }
+        Self::InvalidRequest { message: message.into(), field: field.map(str::to_owned) }
     }
 
     pub fn tag(&self) -> &'static str {
@@ -175,52 +160,33 @@ impl Failure {
                 json!({ "configId": config_id }),
                 &format!("unknown config option: {config_id}"),
             ),
-            Self::InvalidModel {
-                model_id,
-                provider_id,
-            } => {
+            Self::InvalidModel { model_id, provider_id } => {
                 let mut data = Map::new();
                 if let Some(provider_id) = provider_id {
                     data.insert("providerId".to_owned(), json!(provider_id));
                 }
                 data.insert("modelId".to_owned(), json!(model_id));
-                RpcError::invalid_params(
-                    Value::Object(data),
-                    &format!("model not found: {model_id}"),
-                )
+                RpcError::invalid_params(Value::Object(data), &format!("model not found: {model_id}"))
             }
-            Self::InvalidEffort { effort } => RpcError::invalid_params(
-                json!({ "effort": effort }),
-                &format!("effort not found: {effort}"),
-            ),
-            Self::InvalidMode { mode } => RpcError::invalid_params(
-                json!({ "mode": mode }),
-                &format!("mode not found: {mode}"),
-            ),
+            Self::InvalidEffort { effort } => {
+                RpcError::invalid_params(json!({ "effort": effort }), &format!("effort not found: {effort}"))
+            }
+            Self::InvalidMode { mode } => {
+                RpcError::invalid_params(json!({ "mode": mode }), &format!("mode not found: {mode}"))
+            }
             Self::InvalidAdditionalDirectory { directory } => RpcError::invalid_params(
                 json!({ "additionalDirectory": directory }),
-                &format!(
-                    "additional directory must be an absolute path without glob characters: {directory}"
-                ),
+                &format!("additional directory must be an absolute path without glob characters: {directory}"),
             ),
-            Self::AuthRequired => {
-                RpcError::auth_required(json!({}), "provider authentication required")
+            Self::AuthRequired => RpcError::auth_required(json!({}), "provider authentication required"),
+            Self::UnknownAuthMethod { method_id } => {
+                RpcError::invalid_params(json!({ "methodId": method_id }), &format!("unknown auth method: {method_id}"))
             }
-            Self::UnknownAuthMethod { method_id } => RpcError::invalid_params(
-                json!({ "methodId": method_id }),
-                &format!("unknown auth method: {method_id}"),
-            ),
             Self::InvalidRequest { message, field } => RpcError::invalid_params(
-                field
-                    .as_ref()
-                    .map_or_else(|| json!({}), |field| json!({ "field": field })),
+                field.as_ref().map_or_else(|| json!({}), |field| json!({ "field": field })),
                 message,
             ),
-            Self::ServiceFailure {
-                safe_message,
-                service,
-                error_name,
-            } => {
+            Self::ServiceFailure { safe_message, service, error_name } => {
                 let mut data = Map::new();
                 if let Some(service) = service {
                     data.insert("service".to_owned(), json!(service));
@@ -230,10 +196,9 @@ impl Failure {
                 }
                 RpcError::internal_error(Value::Object(data), safe_message)
             }
-            Self::ServerUnavailable => RpcError::internal_error(
-                json!({ "errorName": "ServerUnavailable" }),
-                "OpenCode server is unavailable",
-            ),
+            Self::ServerUnavailable => {
+                RpcError::internal_error(json!({ "errorName": "ServerUnavailable" }), "OpenCode server is unavailable")
+            }
             Self::CatalogNotReady(reason) => Self::ServiceFailure {
                 safe_message: not_ready_message(*reason).to_owned(),
                 service: None,
@@ -259,11 +224,7 @@ pub fn not_ready_message(reason: NotReady) -> &'static str {
 
 /// `fromUnknown`: a defect reaches the client only as its error name.
 pub fn from_unknown(name: Option<String>) -> Failure {
-    Failure::ServiceFailure {
-        safe_message: "Internal service failure".to_owned(),
-        service: None,
-        error_name: name,
-    }
+    Failure::ServiceFailure { safe_message: "Internal service failure".to_owned(), service: None, error_name: name }
 }
 
 impl From<RpcError> for Failure {

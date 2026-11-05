@@ -13,8 +13,7 @@ use crate::layout::Options;
 /// and cell styles, or fails to parse in both.
 #[test]
 fn layouts_match_typescript() {
-    let cases: Vec<Value> =
-        serde_json::from_str(include_str!("../../../parity/fixtures/P.2/layouts.json")).unwrap();
+    let cases: Vec<Value> = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/layouts.json")).unwrap();
     let failures: Vec<String> = cases
         .iter()
         .filter_map(|case| {
@@ -38,17 +37,10 @@ fn layouts_match_typescript() {
             let object = expected.as_object_mut().unwrap();
             object.remove("source");
             object.remove("options");
-            (actual != expected)
-                .then(|| format!("{source:?}\n  expected {expected}\n  actual   {actual}"))
+            (actual != expected).then(|| format!("{source:?}\n  expected {expected}\n  actual   {actual}"))
         })
         .collect();
-    assert!(
-        failures.is_empty(),
-        "{} of {} differ:\n{}",
-        failures.len(),
-        cases.len(),
-        failures.join("\n")
-    );
+    assert!(failures.is_empty(), "{} of {} differ:\n{}", failures.len(), cases.len(), failures.join("\n"));
 }
 
 fn styled(layout: &crate::Layout) -> Vec<String> {
@@ -67,11 +59,7 @@ fn styled(layout: &crate::Layout) -> Vec<String> {
                 if flags.is_empty() && style.color.is_none() {
                     return None;
                 }
-                Some(
-                    format!("{x},{y} {flags} {}", style.color.as_deref().unwrap_or(""))
-                        .trim_end()
-                        .to_owned(),
-                )
+                Some(format!("{x},{y} {flags} {}", style.color.as_deref().unwrap_or("")).trim_end().to_owned())
             })
         })
         .collect()
@@ -79,10 +67,7 @@ fn styled(layout: &crate::Layout) -> Vec<String> {
 
 /// A test app in dark `opencode`, with the screen cleared as the TypeScript screen is (`crates/ui/tests/all/content.rs`).
 fn app(width: u16, height: u16) -> (TestApp, Theme) {
-    let theme = Catalog::default()
-        .load("opencode", ThemeMode::Dark)
-        .unwrap()
-        .theme;
+    let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
     let options = AppOptions {
         theme: opentui::theme::Theme {
             background: theme.background.base,
@@ -110,23 +95,11 @@ fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
 /// P-COMP: the fences of `parity/component/P.2-latex.tsx` in the transcript's Markdown, every cell.
 #[test]
 fn transcript_fences_match_typescript() {
-    let corpus: Value =
-        serde_json::from_str(include_str!("../../../parity/fixtures/P.2/corpus.json")).unwrap();
-    for (name, width, height) in [
-        ("structures", 60, 30),
-        ("adapter", 60, 36),
-        ("wide", 30, 8),
-        ("invalid", 60, 20),
-    ] {
+    let corpus: Value = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/corpus.json")).unwrap();
+    for (name, width, height) in [("structures", 60, 30), ("adapter", 60, 36), ("wide", 30, 8), ("invalid", 60, 20)] {
         let (app, theme) = app(width, height);
-        let text =
-            markdown(&app, &theme, false).set_markdown(corpus[name].as_str().unwrap().trim());
-        app.root().add(
-            &View::new(&app)
-                .padding_edge(Edge::Left, 3)
-                .shrink(0.0)
-                .child(&text),
-        );
+        let text = markdown(&app, &theme, false).set_markdown(corpus[name].as_str().unwrap().trim());
+        app.root().add(&View::new(&app).padding_edge(Edge::Left, 3).shrink(0.0).child(&text));
         opencode_parity::assert_fixture(&app.render(), &format!("P.2/{name}"));
     }
 }
@@ -156,24 +129,14 @@ fn streaming_renders_once_the_formula_parses() {
     let frames = stream(&["```latex\n\\frac{1}{", "2}", "\n```"], true);
     assert!(frames[0].contains("\\frac{1}{"), "{}", frames[0]);
     for frame in &frames[1..] {
-        assert!(
-            frame.contains("───") && !frame.contains("\\frac"),
-            "{frame}"
-        );
+        assert!(frame.contains("───") && !frame.contains("\\frac"), "{frame}");
     }
 }
 
 /// `markdown.test.ts`: "retains the last valid Unicode formula while the next fraction is incomplete".
 #[test]
 fn streaming_keeps_the_last_formula_that_parsed() {
-    let frames = stream(
-        &[
-            "```latex\n\\frac{a_1+b_1}{c_1+d_1}",
-            "+\\frac{a_",
-            "2+b_2}{c_2+d_2}",
-        ],
-        false,
-    );
+    let frames = stream(&["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\frac{a_", "2+b_2}{c_2+d_2}"], false);
     assert_eq!(frames[1], frames[0]);
     assert_ne!(frames[2], frames[0]);
     assert!(!frames[2].contains("\\frac"), "{}", frames[2]);
@@ -183,11 +146,7 @@ fn streaming_keeps_the_last_formula_that_parsed() {
 #[test]
 fn closing_the_fence_drops_a_retained_preview() {
     let frames = stream(&["```latex\nx^2", " + \\frac{1}{", "\n```"], false);
-    assert!(
-        frames[1].contains("x²") && !frames[1].contains('\\'),
-        "{}",
-        frames[1]
-    );
+    assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
     assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
 }
 
@@ -196,24 +155,12 @@ fn closing_the_fence_drops_a_retained_preview() {
 #[test]
 fn stopping_drops_a_retained_preview() {
     let frames = stream(&["```latex\nx^2", " + \\frac{1}{"], true);
-    assert!(
-        frames[1].contains("x²") && !frames[1].contains('\\'),
-        "{}",
-        frames[1]
-    );
+    assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
     assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
     // The closing fence arrives with the broken math, so the source shows before the stream ends too.
     let frames = stream(&["```latex\nx^2", " + \\unsupported{x}\n```"], true);
-    assert!(
-        frames[1].contains("x^2 + \\unsupported{x}"),
-        "{}",
-        frames[1]
-    );
-    assert!(
-        frames[2].contains("x^2 + \\unsupported{x}"),
-        "{}",
-        frames[2]
-    );
+    assert!(frames[1].contains("x^2 + \\unsupported{x}"), "{}", frames[1]);
+    assert!(frames[2].contains("x^2 + \\unsupported{x}"), "{}", frames[2]);
 }
 
 /// `markdown.test.ts`: "does not reuse another fence's preview or keep a removed fence's preview".
@@ -234,21 +181,14 @@ fn a_preview_belongs_to_its_fence() {
 #[test]
 fn wide_formulas_scroll_sideways() {
     let (app, theme) = app(24, 6);
-    let view = markdown(&app, &theme, false).set_markdown(
-        "```latex\n\\text{Start a very long formula with enough content to overflow Finish}\n```",
-    );
+    let view = markdown(&app, &theme, false)
+        .set_markdown("```latex\n\\text{Start a very long formula with enough content to overflow Finish}\n```");
     app.root().add(&view);
     let frame = app.render().text();
-    assert!(
-        frame.contains("Start") && !frame.contains("Finish"),
-        "{frame}"
-    );
+    assert!(frame.contains("Start") && !frame.contains("Finish"), "{frame}");
     for _ in 0..80 {
         app.mouse(MouseEventKind::ScrollRight, 2, 0);
     }
     let frame = app.render().text();
-    assert!(
-        frame.contains("Finish") && !frame.contains("Start"),
-        "{frame}"
-    );
+    assert!(frame.contains("Finish") && !frame.contains("Start"), "{frame}");
 }

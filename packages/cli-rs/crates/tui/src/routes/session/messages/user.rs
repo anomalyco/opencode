@@ -28,17 +28,8 @@ impl User {
     pub fn new(cx: &Context<'_>) -> Self {
         let theme = cx.theme;
         let raised = theme.background.raised.base;
-        let text = Text::new(cx.app, "")
-            .fg(theme.text.base)
-            .wrap(WrapMode::Word);
-        let chips = || {
-            View::new(cx.app)
-                .row()
-                .flex_wrap(Wrap::Wrap)
-                .gap(1)
-                .padding_edge(Edge::Top, 1)
-                .visible(false)
-        };
+        let text = Text::new(cx.app, "").fg(theme.text.base).wrap(WrapMode::Word);
+        let chips = || View::new(cx.app).row().flex_wrap(Wrap::Wrap).gap(1).padding_edge(Edge::Top, 1).visible(false);
         let (skills, files) = (chips(), chips());
         let body = View::new(cx.app)
             .column()
@@ -68,9 +59,7 @@ impl User {
                 return;
             }
             let message = clicked.borrow().clone();
-            let delivery = tui
-                .data
-                .read(|state| crate::routes::session::queued::delivery(state, &session, &message));
+            let delivery = tui.data.read(|state| crate::routes::session::queued::delivery(state, &session, &message));
             if delivery == Some(SessionInboxDelivery::Steer) {
                 crate::dialogs::pending_steer::show(&tui, session.clone(), message);
                 return;
@@ -85,16 +74,7 @@ impl User {
             .bg(raised)
             .child(images.root())
             .child(&body);
-        Self {
-            root,
-            text,
-            skills,
-            files,
-            images,
-            color: Cell::new(None),
-            rendered: RefCell::default(),
-            id,
-        }
+        Self { root, text, skills, files, images, color: Cell::new(None), rendered: RefCell::default(), id }
     }
 
     pub fn root(&self) -> &View {
@@ -119,8 +99,7 @@ impl User {
         let files = message.files.as_deref().unwrap_or_default();
         self.images.update(cx, images::user_images(files));
         let skills = message.skills.as_deref().unwrap_or_default();
-        self.root
-            .visible(!message.text.trim().is_empty() || !files.is_empty() || !skills.is_empty());
+        self.root.visible(!message.text.trim().is_empty() || !files.is_empty() || !skills.is_empty());
         self.text.set_text(message.text.as_str());
 
         self.skills.clear();
@@ -131,11 +110,7 @@ impl User {
         self.files.clear();
         self.files.visible(!files.is_empty());
         for file in files {
-            let label = if file.mime == "application/x-directory" {
-                "dir"
-            } else {
-                "file"
-            };
+            let label = if file.mime == "application/x-directory" { "dir" } else { "file" };
             let name = match (&file.name, &file.source) {
                 (Some(name), _) => name.as_str(),
                 (None, PromptFileSource::Uri(source)) => source.uri.as_str(),
@@ -150,26 +125,14 @@ impl User {
 /// ` label ` on the accent, then ` name ` on a darker raised surface.
 fn chip(cx: &Context<'_>, label: &str, name: &str) -> Text {
     let theme = cx.theme;
-    let accent = theme.accent().step(if cx.mode == ThemeMode::Light {
-        300
-    } else {
-        200
-    });
+    let accent = theme.accent().step(if cx.mode == ThemeMode::Light { 300 } else { 200 });
     Text::new(
         cx.app,
         vec![
-            Span::styled(
-                format!(" {label} "),
-                Style::new()
-                    .bg(accent)
-                    .fg(theme.background.raised.base)
-                    .bold(),
-            ),
+            Span::styled(format!(" {label} "), Style::new().bg(accent).fg(theme.background.raised.base).bold()),
             Span::styled(
                 format!(" {name} "),
-                Style::new()
-                    .bg(theme.decrease(&theme.background.raised.base, 1))
-                    .fg(theme.text.muted),
+                Style::new().bg(theme.decrease(&theme.background.raised.base, 1)).fg(theme.text.muted),
             ),
         ],
     )

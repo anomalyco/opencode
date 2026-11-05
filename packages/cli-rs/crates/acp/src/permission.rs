@@ -12,8 +12,7 @@ use crate::client::{check, is_declared};
 use crate::connection::Connection;
 use crate::error::Failure;
 use crate::tools::{
-    DiffSource, absolute_path, canonical_name, file_path, locations, patch, patch_hunks,
-    pending_tool_call, text,
+    DiffSource, absolute_path, canonical_name, file_path, locations, patch, patch_hunks, pending_tool_call, text,
 };
 use crate::translate::Tool;
 
@@ -45,11 +44,7 @@ struct Diff {
 
 impl Diff {
     fn new(path: String, old_text: Option<String>, new_text: String) -> Self {
-        Self {
-            path,
-            old_text,
-            new_text,
-        }
+        Self { path, old_text, new_text }
     }
 
     fn json(&self) -> Value {
@@ -60,13 +55,7 @@ impl Diff {
 /// Asks the client and returns the decision: `once`, `always`, or `reject`.
 pub async fn ask(input: &Input) -> Result<String, Failure> {
     let tool_name = input.tool.as_ref().map_or_else(
-        || {
-            input
-                .data("action")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned()
-        },
+        || input.data("action").and_then(Value::as_str).unwrap_or_default().to_owned(),
         |tool| tool.name.clone(),
     );
     let tool_input = input
@@ -75,47 +64,24 @@ pub async fn ask(input: &Input) -> Result<String, Failure> {
         .map(|tool| tool.input.clone())
         .or_else(|| input.data("metadata").cloned())
         .unwrap_or_else(|| json!({}));
-    let previews = permission_previews(&tool_name, &tool_input, input.data("metadata"), &input.cwd)
-        .await
-        .unwrap_or_default();
+    let previews =
+        permission_previews(&tool_name, &tool_input, input.data("metadata"), &input.cwd).await.unwrap_or_default();
     let request_id = input.data("id").and_then(Value::as_str).unwrap_or_default();
-    let tool_call_id = child::tool_call_id(
-        input.child.as_ref(),
-        input
-            .tool
-            .as_ref()
-            .map_or(request_id, |tool| tool.id.as_str()),
-    );
+    let tool_call_id =
+        child::tool_call_id(input.child.as_ref(), input.tool.as_ref().map_or(request_id, |tool| tool.id.as_str()));
     let title = permission_title(&tool_name, &tool_input, &previews)
         .filter(|title| !title.is_empty())
         .map(|title| child::prefix_title(input.child.as_ref(), &title))
         .or_else(|| input.child.as_ref().and_then(|child| child.title.clone()));
-    let mut tool_call = pending_tool_call(
-        &tool_call_id,
-        &tool_name,
-        &tool_input,
-        title.as_deref(),
-        &input.cwd,
-    );
+    let mut tool_call = pending_tool_call(&tool_call_id, &tool_name, &tool_input, title.as_deref(), &input.cwd);
     if let Some(object) = tool_call.as_object_mut() {
         if input.tool.is_none() {
             object.shift_remove("name");
             object.shift_remove("rawInput");
         }
-        object.insert(
-            "locations".to_owned(),
-            json!(permission_locations(
-                &tool_name,
-                &tool_input,
-                input,
-                &input.cwd
-            )),
-        );
+        object.insert("locations".to_owned(), json!(permission_locations(&tool_name, &tool_input, input, &input.cwd)));
         if !previews.is_empty() {
-            object.insert(
-                "content".to_owned(),
-                json!(previews.iter().map(Diff::json).collect::<Vec<_>>()),
-            );
+            object.insert("content".to_owned(), json!(previews.iter().map(Diff::json).collect::<Vec<_>>()));
         }
         if let Some(child) = &input.child {
             object.insert("_meta".to_owned(), child::meta(child));
@@ -137,16 +103,9 @@ pub async fn ask(input: &Input) -> Result<String, Failure> {
         )
         .await?;
     let outcome = result.get("outcome");
-    let selected = (outcome
-        .and_then(|outcome| outcome.get("outcome"))
-        .and_then(Value::as_str)
-        == Some("selected"))
-    .then(|| {
-        outcome
-            .and_then(|outcome| outcome.get("optionId"))
-            .and_then(Value::as_str)
-    })
-    .flatten();
+    let selected = (outcome.and_then(|outcome| outcome.get("outcome")).and_then(Value::as_str) == Some("selected"))
+        .then(|| outcome.and_then(|outcome| outcome.get("optionId")).and_then(Value::as_str))
+        .flatten();
     Ok(match selected {
         Some(decision @ ("once" | "always")) => decision.to_owned(),
         _ => "reject".to_owned(),
@@ -159,13 +118,7 @@ pub async fn respond(input: &Input, decision: &str) -> Result<(), Failure> {
         .permission_reply(
             &PermissionReplyInput {
                 session_id: SessionID(input.session_id.clone()),
-                request_id: PermissionID(
-                    input
-                        .data("id")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_owned(),
-                ),
+                request_id: PermissionID(input.data("id").and_then(Value::as_str).unwrap_or_default().to_owned()),
                 decision: match decision {
                     "once" => PermissionReply::Once,
                     "always" => PermissionReply::Always,
@@ -188,29 +141,16 @@ pub async fn with_completed_diffs(update: Value, source: Option<&DiffSource>, cw
     if update.get("sessionUpdate").and_then(Value::as_str) != Some("tool_call_update") {
         return update;
     }
-    let hunks = if canonical_name(&source.tool_name) == "patch" {
-        patch_hunks(&source.input)
-    } else {
-        Vec::new()
-    };
+    let hunks = if canonical_name(&source.tool_name) == "patch" { patch_hunks(&source.input) } else { Vec::new() };
     let mut diffs = Vec::new();
-    for file in decode_files(
-        source
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.get("files")),
-    ) {
+    for file in decode_files(source.metadata.as_ref().and_then(|metadata| metadata.get("files"))) {
         diffs.extend(completed_diff(&file, &hunks, cwd).await);
     }
     if diffs.is_empty() {
         return update;
     }
     let mut update = update;
-    let mut content = update
-        .get("content")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let mut content = update.get("content").and_then(Value::as_array).cloned().unwrap_or_default();
     content.extend(diffs.iter().map(Diff::json));
     update["content"] = Value::Array(content);
     update
@@ -231,20 +171,15 @@ async fn completed_diff(file: &FileDiff, hunks: &[patch::Hunk], cwd: &str) -> Op
     }
     // Core trims indentation from patch-tool diffs, so rebuild those from its hunks and keep them if the ranges agree.
     let chunks = hunks.iter().find_map(|hunk| match hunk {
-        patch::Hunk::Update {
-            path: from,
-            move_path,
-            chunks,
-        } if absolute_path(move_path.as_deref().unwrap_or(from), cwd) == path => {
+        patch::Hunk::Update { path: from, move_path, chunks }
+            if absolute_path(move_path.as_deref().unwrap_or(from), cwd) == path =>
+        {
             Some((from, chunks))
         }
         _ => None,
     });
     let (from, chunks) = chunks?;
-    if chunks
-        .iter()
-        .any(|chunk| chunk.old_lines.is_empty() || chunk.new_lines.is_empty())
-    {
+    if chunks.iter().any(|chunk| chunk.old_lines.is_empty() || chunk.new_lines.is_empty()) {
         return None;
     }
     let reversed: Vec<patch::Chunk> = chunks
@@ -262,12 +197,7 @@ async fn completed_diff(file: &FileDiff, hunks: &[patch::Hunk], cwd: &str) -> Op
 
 // Core trims the patch tool's diffs for display, which breaks `applyPatch`, so its previews come from its own hunks.
 // Any failure drops every preview, as the TS `Effect.forEach` does.
-async fn permission_previews(
-    tool_name: &str,
-    input: &Value,
-    metadata: Option<&Value>,
-    cwd: &str,
-) -> Option<Vec<Diff>> {
+async fn permission_previews(tool_name: &str, input: &Value, metadata: Option<&Value>, cwd: &str) -> Option<Vec<Diff>> {
     if canonical_name(tool_name) == "patch" {
         return patch_previews(input, cwd).await;
     }
@@ -296,21 +226,12 @@ async fn patch_previews(input: &Value, cwd: &str) -> Option<Vec<Diff>> {
         let path = absolute_path(hunk.path(), cwd);
         let preview = match hunk {
             patch::Hunk::Add { contents, .. } => {
-                let new_text = if contents.is_empty() || contents.ends_with('\n') {
-                    contents
-                } else {
-                    format!("{contents}\n")
-                };
+                let new_text =
+                    if contents.is_empty() || contents.ends_with('\n') { contents } else { format!("{contents}\n") };
                 Diff::new(path, None, new_text)
             }
-            patch::Hunk::Delete { .. } => {
-                Diff::new(path.clone(), Some(read_text(&path).await?), String::new())
-            }
-            patch::Hunk::Update {
-                path: from,
-                move_path,
-                chunks,
-            } => {
+            patch::Hunk::Delete { .. } => Diff::new(path.clone(), Some(read_text(&path).await?), String::new()),
+            patch::Hunk::Update { path: from, move_path, chunks } => {
                 let old_text = read_text(&path).await?;
                 let derived = patch::derive(&from, &chunks, &old_text).ok()?;
                 let target = move_path.map_or(path, |target| absolute_path(&target, cwd));
@@ -327,9 +248,9 @@ fn permission_title(tool_name: &str, input: &Value, previews: &[Diff]) -> Option
         return Some(format!("{} files", previews.len()));
     }
     match canonical_name(tool_name).as_str() {
-        "external_directory" => text(input, "description")
-            .or_else(|| text(input, "command"))
-            .or_else(|| text(input, "parentDir")),
+        "external_directory" => {
+            text(input, "description").or_else(|| text(input, "command")).or_else(|| text(input, "parentDir"))
+        }
         "webfetch" => text(input, "url"),
         "websearch" => text(input, "query"),
         "grep" | "glob" => text(input, "pattern"),
@@ -340,12 +261,7 @@ fn permission_title(tool_name: &str, input: &Value, previews: &[Diff]) -> Option
     }
 }
 
-fn permission_locations(
-    tool_name: &str,
-    tool_input: &Value,
-    input: &Input,
-    cwd: &str,
-) -> Vec<Value> {
+fn permission_locations(tool_name: &str, tool_input: &Value, input: &Input, cwd: &str) -> Vec<Value> {
     let found = locations(tool_name, tool_input, cwd);
     let action = input.data("action").and_then(Value::as_str);
     if !found.is_empty() || !matches!(action, Some("read" | "edit" | "external_directory")) {
@@ -383,20 +299,12 @@ fn decode_files(value: Option<&Value>) -> Vec<FileDiff> {
     let Some(items) = value.and_then(Value::as_array) else {
         return Vec::new();
     };
-    items
-        .iter()
-        .map(decode_file)
-        .collect::<Option<Vec<_>>>()
-        .unwrap_or_default()
+    items.iter().map(decode_file).collect::<Option<Vec<_>>>().unwrap_or_default()
 }
 
 fn decode_file(value: &Value) -> Option<FileDiff> {
-    let count = |key: &str| {
-        value
-            .get(key)
-            .and_then(Value::as_f64)
-            .is_some_and(|number| number >= 0.0 && number.fract() == 0.0)
-    };
+    let count =
+        |key: &str| value.get(key).and_then(Value::as_f64).is_some_and(|number| number >= 0.0 && number.fract() == 0.0);
     let status = value.get("status")?.as_str()?;
     let more = value.get("more");
     if !count("additions")

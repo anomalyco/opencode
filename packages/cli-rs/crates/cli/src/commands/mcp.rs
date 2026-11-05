@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use opencode_api::generated::{
-    ConnectionInfo, CredentialRemoveInput, IntegrationGetInput, IntegrationInfo, IntegrationMethod,
-    McpListInput, McpServer, McpServerStatus,
+    ConnectionInfo, CredentialRemoveInput, IntegrationGetInput, IntegrationInfo, IntegrationMethod, McpListInput,
+    McpServer, McpServerStatus,
 };
 use opencode_local::jsonc::{self, Segment};
 use opencode_local::paths::Paths;
@@ -12,8 +12,8 @@ use serde_json::{Map, Value, json};
 
 use super::Context;
 use super::auth::{
-    IntegrationChoice, Server, answer_form, js_length, load_integrations, location, oauth_login,
-    pad_end, prompted, require_interactive, select_integration,
+    IntegrationChoice, Server, answer_form, js_length, load_integrations, location, oauth_login, pad_end, prompted,
+    require_interactive, select_integration,
 };
 use super::client::locale_compare;
 use crate::args::{McpAddArgs, McpArgs, McpAuthArgs, McpCommand, McpLogoutArgs};
@@ -33,12 +33,8 @@ pub fn run(context: &Context, args: &McpArgs) -> anyhow::Result<()> {
 // `list`, `add`, and `logout` let failures escape, so they print as `Error: ...` (C40-handler-errors).
 
 fn servers(server: &Server) -> anyhow::Result<Vec<McpServer>> {
-    let input = McpListInput {
-        location: location()?,
-    };
-    Ok(server
-        .run(server.client().mcp_list(&input, &Default::default()))?
-        .data)
+    let input = McpListInput { location: location()? };
+    Ok(server.run(server.client().mcp_list(&input, &Default::default()))?.data)
 }
 
 fn list(context: &Context) -> anyhow::Result<()> {
@@ -48,11 +44,7 @@ fn list(context: &Context) -> anyhow::Result<()> {
         return print("No MCP servers configured\n");
     }
     servers.sort_by(|a, b| locale_compare(&a.name, &b.name));
-    let width = servers
-        .iter()
-        .map(|server| js_length(&server.name))
-        .max()
-        .unwrap_or(0);
+    let width = servers.iter().map(|server| js_length(&server.name)).max().unwrap_or(0);
     let lines: Vec<String> = servers
         .iter()
         .map(|server| {
@@ -91,10 +83,7 @@ fn add(args: &McpAddArgs) -> anyhow::Result<()> {
     // Repeated keys keep their first place and take the last value, as an object built in order does.
     let record = |pairs: &[(String, String)]| {
         Value::Object(
-            pairs
-                .iter()
-                .map(|(key, value)| (key.clone(), Value::from(value.as_str())))
-                .collect::<Map<_, _>>(),
+            pairs.iter().map(|(key, value)| (key.clone(), Value::from(value.as_str()))).collect::<Map<_, _>>(),
         )
     };
     let server = match url {
@@ -121,19 +110,11 @@ fn add(args: &McpAddArgs) -> anyhow::Result<()> {
     };
     let edited = jsonc::modify(
         &text,
-        &[
-            Segment::Key("mcp".into()),
-            Segment::Key("servers".into()),
-            Segment::Key(args.name.clone()),
-        ],
+        &[Segment::Key("mcp".into()), Segment::Key("servers".into()), Segment::Key(args.name.clone())],
         Some(&server),
     )?;
     std::fs::write(&path, edited)?;
-    print(&format!(
-        "MCP server \"{}\" added to {}\n",
-        args.name,
-        path.display()
-    ))
+    print(&format!("MCP server \"{}\" added to {}\n", args.name, path.display()))
 }
 
 /// `resolveConfigPath`: the first config file that exists, else `opencode.json` in `directory`.
@@ -144,19 +125,13 @@ fn config_path(directory: &Path) -> PathBuf {
         directory.join(".opencode").join("opencode.json"),
         directory.join(".opencode").join("opencode.jsonc"),
     ];
-    candidates
-        .iter()
-        .find(|candidate| candidate.is_file())
-        .unwrap_or(&candidates[0])
-        .clone()
+    candidates.iter().find(|candidate| candidate.is_file()).unwrap_or(&candidates[0]).clone()
 }
 
 fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
     let name = args.name.as_deref();
     if name.is_none() {
-        require_interactive(
-            "Pass an MCP server name when running without an interactive terminal",
-        )?;
+        require_interactive("Pass an MCP server name when running without an interactive terminal")?;
     }
     prompt::intro("Authenticate an MCP server");
     let server = Server::connect(context)?;
@@ -181,9 +156,7 @@ fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
         Some(found) => found.integration_id.as_ref().map(ToString::to_string),
         None => Some(select_integration(choices, "MCP server")?),
     };
-    let integration = integrations
-        .iter()
-        .find(|integration| Some(integration.id.to_string()) == integration_id);
+    let integration = integrations.iter().find(|integration| Some(integration.id.to_string()) == integration_id);
     let method = integration.and_then(|integration| {
         integration.methods.iter().find_map(|method| match method {
             IntegrationMethod::Oauth(method) => Some(method),
@@ -191,10 +164,7 @@ fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
         })
     });
     let (Some(integration), Some(method)) = (integration, method) else {
-        anyhow::bail!(
-            "MCP server \"{}\" is not an OAuth-capable remote server",
-            name.unwrap_or("undefined")
-        );
+        anyhow::bail!("MCP server \"{}\" is not an OAuth-capable remote server", name.unwrap_or("undefined"));
     };
     if !integration.connections.is_empty() {
         let needs_auth = servers
@@ -202,17 +172,12 @@ fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
             .find(|server| server.integration_id.as_ref() == Some(&integration.id))
             .is_some_and(|server| matches!(server.status, McpServerStatus::NeedsAuth(_)));
         if needs_auth {
-            prompt::log::warn(&format!(
-                "{} has expired credentials. Re-authenticating...",
-                integration.name
-            ));
+            prompt::log::warn(&format!("{} has expired credentials. Re-authenticating...", integration.name));
         }
         if !needs_auth && prompt::is_interactive() {
-            let again = prompt::confirm(format!(
-                "{} already has valid credentials. Re-authenticate?",
-                integration.name
-            ))
-            .prompt()?;
+            let again =
+                prompt::confirm(format!("{} already has valid credentials. Re-authenticate?", integration.name))
+                    .prompt()?;
             if !again {
                 prompt::outro("Cancelled");
                 return Ok(());
@@ -222,13 +187,10 @@ fn auth(context: &Context, args: &McpAuthArgs) -> anyhow::Result<()> {
     // Re-authenticating replaces the previous sign-in rather than adding an account. The new credential keeps
     // the active one's label, and the old ones go only once it is stored, so a failed attempt keeps them.
     let previous = credential_ids(integration);
-    let label = integration
-        .connections
-        .iter()
-        .find_map(|connection| match connection {
-            ConnectionInfo::Credential(credential) => Some(credential.label.clone()),
-            _ => None,
-        });
+    let label = integration.connections.iter().find_map(|connection| match connection {
+        ConnectionInfo::Credential(credential) => Some(credential.label.clone()),
+        _ => None,
+    });
     let answer = answer_form(method.form.as_deref(), &[])?;
     let _attempt = oauth_login(&server, integration, method, answer, label)?;
     remove(&server, &previous)?;
@@ -252,14 +214,10 @@ fn auth_choices(servers: &[McpServer], integrations: &[IntegrationInfo]) -> Vec<
     let mut choices: Vec<IntegrationChoice> = servers
         .iter()
         .filter_map(|server| {
-            let integration = integrations
-                .iter()
-                .find(|integration| Some(&integration.id) == server.integration_id.as_ref())?;
-            integration
-                .methods
-                .iter()
-                .any(|method| matches!(method, IntegrationMethod::Oauth(_)))
-                .then(|| IntegrationChoice {
+            let integration =
+                integrations.iter().find(|integration| Some(&integration.id) == server.integration_id.as_ref())?;
+            integration.methods.iter().any(|method| matches!(method, IntegrationMethod::Oauth(_))).then(|| {
+                IntegrationChoice {
                     value: integration.id.to_string(),
                     label: server.name.clone(),
                     category: "MCP",
@@ -270,12 +228,11 @@ fn auth_choices(servers: &[McpServer], integrations: &[IntegrationInfo]) -> Vec<
                         McpServerStatus::Disabled(_) => Some("disabled".to_owned()),
                         _ => None,
                     },
-                })
+                }
+            })
         })
         .collect();
-    choices.sort_by(|a, b| {
-        locale_compare(&a.label, &b.label).then_with(|| locale_compare(&a.value, &b.value))
-    });
+    choices.sort_by(|a, b| locale_compare(&a.label, &b.label).then_with(|| locale_compare(&a.value, &b.value)));
     choices
 }
 
@@ -296,9 +253,7 @@ fn remove(server: &Server, credentials: &[String]) -> anyhow::Result<()> {
             server
                 .client()
                 .credential_remove(
-                    &CredentialRemoveInput {
-                        credential_id: credential.clone().into(),
-                    },
+                    &CredentialRemoveInput { credential_id: credential.clone().into() },
                     &Default::default(),
                 )
                 .await?;
@@ -316,15 +271,8 @@ fn logout(context: &Context, args: &McpLogoutArgs) -> anyhow::Result<()> {
     // Resolved through the server's own integration ID: provider integrations may share its name.
     let integration = match &found.integration_id {
         Some(integration_id) => {
-            let input = IntegrationGetInput {
-                integration_id: integration_id.clone(),
-                location: location()?,
-            };
-            Some(
-                server
-                    .run(server.client().integration_get(&input, &Default::default()))?
-                    .data,
-            )
+            let input = IntegrationGetInput { integration_id: integration_id.clone(), location: location()? };
+            Some(server.run(server.client().integration_get(&input, &Default::default()))?.data)
         }
         None => None,
     };
@@ -346,10 +294,7 @@ mod tests {
         assert_eq!(config_path(dir.path()), dir.path().join("opencode.json"));
         std::fs::create_dir(dir.path().join(".opencode")).unwrap();
         std::fs::write(dir.path().join(".opencode/opencode.jsonc"), "{}").unwrap();
-        assert_eq!(
-            config_path(dir.path()),
-            dir.path().join(".opencode/opencode.jsonc")
-        );
+        assert_eq!(config_path(dir.path()), dir.path().join(".opencode/opencode.jsonc"));
         std::fs::write(dir.path().join("opencode.jsonc"), "{}").unwrap();
         assert_eq!(config_path(dir.path()), dir.path().join("opencode.jsonc"));
     }

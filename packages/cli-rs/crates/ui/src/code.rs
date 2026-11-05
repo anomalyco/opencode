@@ -22,61 +22,22 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
         (&["prompt"], fg(theme.accent().step(200))),
         (&["extmark.file"], fg(feedback.warning.base).bold()),
         (&["extmark.agent"], fg(categorical[0].step(200)).bold()),
-        (
-            &["extmark.skill"],
-            fg(categorical.get(1).unwrap_or(&categorical[0]).step(200)).bold(),
-        ),
+        (&["extmark.skill"], fg(categorical.get(1).unwrap_or(&categorical[0]).step(200)).bold()),
         // V1 migration preserves its selected/inverse foreground in this action state.
+        (&["extmark.paste"], fg(theme.text.action.primary.focused).bg(feedback.warning.base).bold()),
+        (&["comment", "comment.documentation"], fg(syntax.comment).italic()),
+        (&["string", "symbol", "character.special", "character"], fg(syntax.string)),
+        (&["number", "boolean", "constant", "float"], fg(syntax.number)),
         (
-            &["extmark.paste"],
-            fg(theme.text.action.primary.focused)
-                .bg(feedback.warning.base)
-                .bold(),
-        ),
-        (
-            &["comment", "comment.documentation"],
-            fg(syntax.comment).italic(),
-        ),
-        (
-            &["string", "symbol", "character.special", "character"],
-            fg(syntax.string),
-        ),
-        (
-            &["number", "boolean", "constant", "float"],
-            fg(syntax.number),
-        ),
-        (
-            &[
-                "keyword.return",
-                "keyword.conditional",
-                "keyword.repeat",
-                "keyword.coroutine",
-            ],
+            &["keyword.return", "keyword.conditional", "keyword.repeat", "keyword.coroutine"],
             fg(syntax.keyword).italic(),
         ),
         (&["keyword.type"], fg(syntax.r#type).bold().italic()),
-        (
-            &["keyword.function", "function.method"],
-            fg(syntax.function),
-        ),
+        (&["keyword.function", "function.method"], fg(syntax.function)),
         (&["keyword"], fg(syntax.keyword).italic()),
+        (&["keyword.import", "string.escape", "string.regexp", "tag.attribute", "keyword.export"], fg(syntax.keyword)),
         (
-            &[
-                "keyword.import",
-                "string.escape",
-                "string.regexp",
-                "tag.attribute",
-                "keyword.export",
-            ],
-            fg(syntax.keyword),
-        ),
-        (
-            &[
-                "operator",
-                "keyword.operator",
-                "punctuation.delimiter",
-                "keyword.conditional.ternary",
-            ],
+            &["operator", "keyword.operator", "punctuation.delimiter", "keyword.conditional.ternary"],
             fg(syntax.operator),
         ),
         (
@@ -91,16 +52,10 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
             ],
             fg(syntax.variable),
         ),
-        (
-            &["variable.member", "function", "constructor"],
-            fg(syntax.function),
-        ),
+        (&["variable.member", "function", "constructor"], fg(syntax.function)),
         (&["type", "module", "class", "namespace"], fg(syntax.r#type)),
         (&["type.definition"], fg(syntax.r#type).bold()),
-        (
-            &["punctuation", "punctuation.bracket"],
-            fg(syntax.punctuation),
-        ),
+        (&["punctuation", "punctuation.bracket"], fg(syntax.punctuation)),
         (
             &[
                 "variable.builtin",
@@ -112,14 +67,8 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
             ],
             fg(feedback.error.base),
         ),
-        (
-            &["keyword.directive", "keyword.modifier", "keyword.exception"],
-            fg(syntax.keyword).italic(),
-        ),
-        (
-            &["punctuation.special", "tag.delimiter"],
-            fg(syntax.operator),
-        ),
+        (&["keyword.directive", "keyword.modifier", "keyword.exception"], fg(syntax.keyword).italic()),
+        (&["punctuation.special", "tag.delimiter"], fg(syntax.operator)),
         (
             &[
                 "markup.heading",
@@ -131,63 +80,28 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
             ],
             fg(markdown.heading).bold(),
         ),
-        (
-            &["markup.heading.1"],
-            fg(markdown.heading).bold().underline(),
-        ),
-        (
-            &["markup.bold", "markup.strong"],
-            fg(markdown.strong).bold(),
-        ),
+        (&["markup.heading.1"], fg(markdown.heading).bold().underline()),
+        (&["markup.bold", "markup.strong"], fg(markdown.strong).bold()),
         (&["markup.italic"], fg(markdown.emphasis).italic()),
         (&["markup.list"], fg(markdown.list_item)),
         (&["markup.quote"], fg(markdown.block_quote).italic()),
         (&["markup.raw", "markup.raw.block"], fg(markdown.code)),
-        (
-            &["markup.raw.inline"],
-            fg(markdown.code).bg(theme.background.base),
-        ),
-        (
-            &[
-                "markup.link",
-                "markup.link.url",
-                "string.special",
-                "string.special.url",
-            ],
-            fg(markdown.link).underline(),
-        ),
+        (&["markup.raw.inline"], fg(markdown.code).bg(theme.background.base)),
+        (&["markup.link", "markup.link.url", "string.special", "string.special.url"], fg(markdown.link).underline()),
         (&["markup.link.label"], fg(markdown.link_text).underline()),
         (&["label"], fg(markdown.link_text)),
         (&["spell", "nospell"], fg(theme.text.base)),
         (&["markup.underline"], fg(theme.text.base).underline()),
         (&["comment.error"], fg(feedback.error.base).italic().bold()),
-        (
-            &["comment.warning"],
-            fg(feedback.warning.base).italic().bold(),
-        ),
-        (
-            &["comment.todo", "comment.note"],
-            fg(feedback.info.base).italic().bold(),
-        ),
+        (&["comment.warning"], fg(feedback.warning.base).italic().bold()),
+        (&["comment.todo", "comment.note"], fg(feedback.info.base).italic().bold()),
         (&["attribute", "annotation"], fg(feedback.warning.base)),
         (&["tag"], fg(feedback.error.base)),
-        (
-            &["markup.strikethrough", "markup.list.unchecked", "debug"],
-            fg(theme.text.muted),
-        ),
+        (&["markup.strikethrough", "markup.list.unchecked", "debug"], fg(theme.text.muted)),
         (&["markup.list.checked"], fg(feedback.success.base)),
-        (
-            &["diff.plus"],
-            fg(theme.diff.text.added).bg(theme.diff.background.added),
-        ),
-        (
-            &["diff.minus"],
-            fg(theme.diff.text.removed).bg(theme.diff.background.removed),
-        ),
-        (
-            &["diff.delta"],
-            fg(theme.diff.text.context).bg(theme.diff.background.context),
-        ),
+        (&["diff.plus"], fg(theme.diff.text.added).bg(theme.diff.background.added)),
+        (&["diff.minus"], fg(theme.diff.text.removed).bg(theme.diff.background.removed)),
+        (&["diff.delta"], fg(theme.diff.text.context).bg(theme.diff.background.context)),
         (&["error"], fg(feedback.error.base).bold()),
         (&["warning"], fg(feedback.warning.base).bold()),
         (&["info"], fg(feedback.info.base)),
@@ -203,13 +117,7 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
 
 /// Read-only code in the theme's text color, highlighted as `filetype` (`<code conceal={false} fg={text.base}>`).
 /// It shows all its lines, wraps at a word as Core's `<code>` does, and takes no focus, as in the transcript.
-pub fn view(
-    app: &App,
-    theme: &Theme,
-    syntax: &SyntaxTheme,
-    filetype: Option<&str>,
-    content: &str,
-) -> Code {
+pub fn view(app: &App, theme: &Theme, syntax: &SyntaxTheme, filetype: Option<&str>, content: &str) -> Code {
     crate::grammars::register();
     Code::new(app)
         .fg(theme.text.base)
@@ -225,8 +133,5 @@ pub fn view(
 pub fn numbered(app: &App, theme: &Theme, code: &Code) -> LineNumbers {
     // Core's gutter grows its target to the rest of the row.
     code.grow(1.0).basis(Length::Auto);
-    LineNumbers::new(app, code)
-        .fg(theme.text.muted)
-        .gutter_min_width(3)
-        .gutter_padding(1)
+    LineNumbers::new(app, code).fg(theme.text.muted).gutter_min_width(3).gutter_padding(1)
 }

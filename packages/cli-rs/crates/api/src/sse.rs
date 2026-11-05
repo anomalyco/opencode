@@ -139,10 +139,7 @@ fn utf16_units(bytes: &[u8]) -> usize {
 
 /// Decodes a response body into events. `activity` runs for every chunk, including keepalive comments
 /// that yield no event. The stream ends after the first error.
-pub fn events<T, S, E>(
-    body: S,
-    activity: impl FnMut() + Send + 'static,
-) -> impl Stream<Item = Result<T, Error>> + Send
+pub fn events<T, S, E>(body: S, activity: impl FnMut() + Send + 'static) -> impl Stream<Item = Result<T, Error>> + Send
 where
     T: DeserializeOwned + Send,
     S: Stream<Item = Result<Bytes, E>> + Send + Unpin,
@@ -155,18 +152,11 @@ where
         ready: VecDeque<String>,
         ended: bool,
     }
-    let state = State {
-        body,
-        activity,
-        decoder: Decoder::new(),
-        ready: VecDeque::new(),
-        ended: false,
-    };
+    let state = State { body, activity, decoder: Decoder::new(), ready: VecDeque::new(), ended: false };
     futures_util::stream::unfold(state, |mut state| async move {
         loop {
             if let Some(data) = state.ready.pop_front() {
-                let item = serde_json::from_str(&data)
-                    .map_err(|error| Error::MalformedResponse(error.to_string()));
+                let item = serde_json::from_str(&data).map_err(|error| Error::MalformedResponse(error.to_string()));
                 if item.is_err() {
                     state.ended = true;
                     state.ready.clear();
@@ -224,20 +214,14 @@ mod tests {
     #[tokio::test]
     async fn exposes_the_event_stream_wire_projection() {
         let selected = json!({ "id": "evt_model", "created": 1_717_171_717_000_i64, "type": "session.model.selected", "data": {} });
-        let text = format!(
-            ": heartbeat\n\n{}{}",
-            frame(&connected("evt_connected")),
-            frame(&selected)
-        );
+        let text = format!(": heartbeat\n\n{}{}", frame(&connected("evt_connected")), frame(&selected));
         let received = collect(vec![text.into_bytes()]).await;
         assert_eq!(received, vec![Ok(connected("evt_connected")), Ok(selected)]);
     }
 
     #[tokio::test]
     async fn delivers_every_event_from_one_chunk() {
-        let events = (0..4)
-            .map(|index| connected(&format!("evt_burst_{index}")))
-            .collect::<Vec<_>>();
+        let events = (0..4).map(|index| connected(&format!("evt_burst_{index}"))).collect::<Vec<_>>();
         let text = events.iter().map(frame).collect::<String>();
         let received = collect(vec![text.into_bytes()]).await;
         assert_eq!(received, events.into_iter().map(Ok).collect::<Vec<_>>());
@@ -247,31 +231,20 @@ mod tests {
     async fn parses_split_json_and_a_split_multibyte_code_point() {
         let event = json!({ "id": "evt_split", "created": 1, "type": "server.connected", "data": { "text": "split snowman \u{2603}\u{2603}\u{2603}" } });
         let encoded = frame(&event).into_bytes();
-        let multibyte = encoded
-            .iter()
-            .position(|byte| *byte == "\u{2603}".as_bytes()[0])
-            .unwrap();
+        let multibyte = encoded.iter().position(|byte| *byte == "\u{2603}".as_bytes()[0]).unwrap();
         let boundaries = [9, multibyte + 1, multibyte + 2, encoded.len()];
         let chunks = boundaries
             .iter()
             .enumerate()
-            .map(|(index, end)| {
-                encoded[if index == 0 { 0 } else { boundaries[index - 1] }..*end].to_vec()
-            })
+            .map(|(index, end)| encoded[if index == 0 { 0 } else { boundaries[index - 1] }..*end].to_vec())
             .collect();
         assert_eq!(collect(chunks).await, vec![Ok(event)]);
     }
 
     #[tokio::test]
     async fn ignores_heartbeat_comments() {
-        let text = format!(
-            ": heartbeat\n\n{}: heartbeat\n\n",
-            frame(&connected("evt_sentinel"))
-        );
-        assert_eq!(
-            collect(vec![text.into_bytes()]).await,
-            vec![Ok(connected("evt_sentinel"))]
-        );
+        let text = format!(": heartbeat\n\n{}: heartbeat\n\n", frame(&connected("evt_sentinel")));
+        assert_eq!(collect(vec![text.into_bytes()]).await, vec![Ok(connected("evt_sentinel"))]);
     }
 
     #[tokio::test]
@@ -301,7 +274,8 @@ mod tests {
 
     #[tokio::test]
     async fn accepts_a_fragmented_event_below_the_size_limit() {
-        let event = json!({ "id": "evt_large", "type": "test.large", "data": { "output": "x".repeat(12 * 1024 * 1024) } });
+        let event =
+            json!({ "id": "evt_large", "type": "test.large", "data": { "output": "x".repeat(12 * 1024 * 1024) } });
         let encoded = frame(&event).into_bytes();
         let chunks = encoded.chunks(64 * 1024).map(<[u8]>::to_vec).collect();
         assert_eq!(collect(chunks).await, vec![Ok(event)]);
@@ -309,14 +283,8 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_an_event_above_the_size_limit() {
-        let text = format!(
-            "data: {}",
-            json!({ "output": "x".repeat(16 * 1024 * 1024) })
-        );
-        assert_eq!(
-            collect(vec![text.into_bytes()]).await,
-            vec![Err(Error::EventTooLarge)]
-        );
+        let text = format!("data: {}", json!({ "output": "x".repeat(16 * 1024 * 1024) }));
+        assert_eq!(collect(vec![text.into_bytes()]).await, vec![Err(Error::EventTooLarge)]);
     }
 
     #[tokio::test]
@@ -326,17 +294,8 @@ mod tests {
             Err("contract failure".to_owned()),
         ]);
         let received: Vec<Result<Value, Error>> = events(chunks, || {}).collect().await;
-        assert_eq!(
-            received,
-            vec![
-                Ok(connected("evt_1")),
-                Err(Error::Transport("contract failure".into()))
-            ]
-        );
-        assert_eq!(
-            received[1].as_ref().unwrap_err().to_string(),
-            "Transport: contract failure"
-        );
+        assert_eq!(received, vec![Ok(connected("evt_1")), Err(Error::Transport("contract failure".into()))]);
+        assert_eq!(received[1].as_ref().unwrap_err().to_string(), "Transport: contract failure");
     }
 
     // solid-connection.test.ts "a reconnect does not ask the volatile event stream to replay": the reader
@@ -344,9 +303,7 @@ mod tests {
     #[test]
     fn ignores_fields_other_than_data() {
         let mut decoder = Decoder::new();
-        let payloads = decoder
-            .push(b"id: timeline-event-7\nevent: x\nretry: 5\ndata: {}\n\n")
-            .unwrap();
+        let payloads = decoder.push(b"id: timeline-event-7\nevent: x\nretry: 5\ndata: {}\n\n").unwrap();
         assert_eq!(payloads, vec!["{}"]);
     }
 
@@ -355,19 +312,14 @@ mod tests {
         let mut decoder = Decoder::new();
         assert_eq!(decoder.push(b"data: 1\r").unwrap(), Vec::<String>::new());
         assert_eq!(decoder.push(b"\n\r").unwrap(), Vec::<String>::new());
-        assert_eq!(
-            decoder.push(b"\ndata: 2\r\rdata: 3\n").unwrap(),
-            vec!["1", "2"]
-        );
+        assert_eq!(decoder.push(b"\ndata: 2\r\rdata: 3\n").unwrap(), vec!["1", "2"]);
         assert_eq!(decoder.finish().unwrap(), vec!["3"]);
     }
 
     #[test]
     fn joins_data_lines_and_drops_a_leading_bom() {
         let mut decoder = Decoder::new();
-        let payloads = decoder
-            .push("\u{feff}data:a\ndata:  b\n\n".as_bytes())
-            .unwrap();
+        let payloads = decoder.push("\u{feff}data:a\ndata:  b\n\n".as_bytes()).unwrap();
         assert_eq!(payloads, vec!["a\nb"]);
     }
 
@@ -375,10 +327,7 @@ mod tests {
     #[test]
     fn a_buffer_ending_in_a_multibyte_character_takes_the_next_chunk() {
         let mut decoder = Decoder::new();
-        assert_eq!(
-            decoder.push("data: \u{2580}".as_bytes()).unwrap(),
-            Vec::<String>::new()
-        );
+        assert_eq!(decoder.push("data: \u{2580}".as_bytes()).unwrap(), Vec::<String>::new());
         assert_eq!(decoder.push(b"x\n\n").unwrap(), vec!["\u{2580}x"]);
     }
 
@@ -392,10 +341,7 @@ mod tests {
         ];
         let read = |chunks: &[&[u8]]| {
             let mut decoder = Decoder::new();
-            let mut payloads = chunks
-                .iter()
-                .flat_map(|chunk| decoder.push(chunk).unwrap())
-                .collect::<Vec<_>>();
+            let mut payloads = chunks.iter().flat_map(|chunk| decoder.push(chunk).unwrap()).collect::<Vec<_>>();
             payloads.extend(decoder.finish().unwrap());
             payloads
         };
@@ -408,11 +354,7 @@ mod tests {
             assert_eq!(whole.len(), 3, "{character}");
             for split in 1..bytes.len() {
                 let (first, second) = bytes.split_at(split);
-                assert_eq!(
-                    read(&[first, second]),
-                    whole,
-                    "{character} split at byte {split}"
-                );
+                assert_eq!(read(&[first, second]), whole, "{character} split at byte {split}");
             }
         }
     }
@@ -421,10 +363,7 @@ mod tests {
     fn invalid_utf8_becomes_a_replacement_character() {
         let mut decoder = Decoder::new();
         assert_eq!(decoder.push(b"data: \xff\n\n").unwrap(), vec!["\u{fffd}"]);
-        assert_eq!(
-            decoder.push(b"data: \xe2\x98").unwrap(),
-            Vec::<String>::new()
-        );
+        assert_eq!(decoder.push(b"data: \xe2\x98").unwrap(), Vec::<String>::new());
         assert_eq!(decoder.finish().unwrap(), vec!["\u{fffd}"]);
     }
 

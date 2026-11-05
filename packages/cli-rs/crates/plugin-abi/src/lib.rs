@@ -60,10 +60,7 @@ pub struct Bytes {
 
 impl Bytes {
     pub fn new(bytes: &[u8]) -> Self {
-        Self {
-            ptr: bytes.as_ptr(),
-            len: bytes.len(),
-        }
+        Self { ptr: bytes.as_ptr(), len: bytes.len() }
     }
 
     /// # Safety
@@ -85,19 +82,11 @@ pub struct Owned {
 }
 
 impl Owned {
-    pub const EMPTY: Self = Self {
-        ptr: std::ptr::null_mut(),
-        len: 0,
-        cap: 0,
-    };
+    pub const EMPTY: Self = Self { ptr: std::ptr::null_mut(), len: 0, cap: 0 };
 
     pub fn from_vec(bytes: Vec<u8>) -> Self {
         let mut bytes = std::mem::ManuallyDrop::new(bytes);
-        Self {
-            ptr: bytes.as_mut_ptr(),
-            len: bytes.len(),
-            cap: bytes.capacity(),
-        }
+        Self { ptr: bytes.as_mut_ptr(), len: bytes.len(), cap: bytes.capacity() }
     }
 
     /// # Safety
@@ -114,14 +103,7 @@ impl Owned {
     /// # Safety
     /// `ptr` must point to `len` readable bytes, or be null.
     pub unsafe fn to_vec(&self) -> Vec<u8> {
-        unsafe {
-            Bytes {
-                ptr: self.ptr,
-                len: self.len,
-            }
-            .as_slice()
-            .to_vec()
-        }
+        unsafe { Bytes { ptr: self.ptr, len: self.len }.as_slice().to_vec() }
     }
 }
 
@@ -153,12 +135,8 @@ pub struct PluginApi {
     pub requires_minor: u32,
     /// Runs the plugin's setup with `options` (the JSON of its `plugins` entry's options, or empty). On [`OK`] it
     /// sets `instance` and writes the [`Manifest`] JSON into `out`.
-    pub create: unsafe extern "C" fn(
-        host: *const HostApi,
-        options: Bytes,
-        instance: *mut *mut c_void,
-        out: *mut Owned,
-    ) -> i32,
+    pub create:
+        unsafe extern "C" fn(host: *const HostApi, options: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32,
     /// Handles a [`Request`] and writes the JSON result into `out`.
     pub call: unsafe extern "C" fn(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32,
     pub destroy: unsafe extern "C" fn(instance: *mut c_void),
@@ -255,10 +233,7 @@ pub struct Span {
 
 impl Span {
     pub fn new(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            ..Self::default()
-        }
+        Self { text: text.into(), ..Self::default() }
     }
 
     pub fn fg(mut self, color: impl Into<String>) -> Self {
@@ -295,17 +270,9 @@ pub struct Fence {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Request {
     Fence(Fence),
-    Slot {
-        claim: usize,
-        session_id: Option<String>,
-    },
-    Route {
-        name: String,
-    },
-    Command {
-        name: String,
-        input: Option<String>,
-    },
+    Slot { claim: usize, session_id: Option<String> },
+    Route { name: String },
+    Command { name: String, input: Option<String> },
 }
 
 /// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), everything else `null`.
@@ -377,43 +344,27 @@ impl Host {
 
     /// The JSON text stored under one of the plugin's storage keys.
     pub fn storage_get(&self, key: &str) -> Option<String> {
-        let value = self
-            .request(&HostRequest::StorageGet {
-                key: key.to_owned(),
-            })
-            .ok()?;
+        let value = self.request(&HostRequest::StorageGet { key: key.to_owned() }).ok()?;
         serde_json::from_value(value).ok().flatten()
     }
 
     /// Stores JSON text (an object or an array) under one of the plugin's storage keys.
     pub fn storage_set(&self, key: &str, value: &str) -> Result<(), String> {
-        self.request(&HostRequest::StorageSet {
-            key: key.to_owned(),
-            value: value.to_owned(),
-        })
-        .map(drop)
+        self.request(&HostRequest::StorageSet { key: key.to_owned(), value: value.to_owned() }).map(drop)
     }
 
     /// Shows a toast once the current call returns.
     pub fn toast(&self, variant: Toast, message: &str) {
-        let _ = self.request(&HostRequest::Toast {
-            variant,
-            message: message.to_owned(),
-        });
+        let _ = self.request(&HostRequest::Toast { variant, message: message.to_owned() });
     }
 
     /// Opens one of the plugin's routes once the current call returns.
     pub fn open_route(&self, name: &str) {
-        let _ = self.request(&HostRequest::OpenRoute {
-            name: name.to_owned(),
-        });
+        let _ = self.request(&HostRequest::OpenRoute { name: name.to_owned() });
     }
 
     pub fn log(&self, level: Level, message: &str) {
-        let _ = self.request(&HostRequest::Log {
-            level,
-            message: message.to_owned(),
-        });
+        let _ = self.request(&HostRequest::Log { level, message: message.to_owned() });
     }
 }
 
@@ -460,26 +411,14 @@ impl Setup {
     }
 
     /// Renders Markdown fences of `language`; `None` keeps the plain code view.
-    pub fn code_block(
-        &mut self,
-        language: &str,
-        render: impl Fn(&Fence) -> Option<Vec<Line>> + 'static,
-    ) {
+    pub fn code_block(&mut self, language: &str, render: impl Fn(&Fence) -> Option<Vec<Line>> + 'static) {
         self.manifest.fences.push(language.to_owned());
         self.fences.push((language.to_owned(), Box::new(render)));
     }
 
     /// Claims a place in the slot tree; `render` receives the slot's session ID, if it has one.
-    pub fn slot(
-        &mut self,
-        kind: SlotKind,
-        path: &str,
-        render: impl Fn(Option<&str>) -> Vec<Line> + 'static,
-    ) {
-        self.manifest.slots.push(SlotClaim {
-            kind,
-            path: path.to_owned(),
-        });
+    pub fn slot(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
+        self.manifest.slots.push(SlotClaim { kind, path: path.to_owned() });
         self.slots.push(Box::new(render));
     }
 
@@ -490,38 +429,23 @@ impl Setup {
     }
 
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
-        let json = |value: Result<serde_json::Value, serde_json::Error>| {
-            value.map_err(|error| error.to_string())
-        };
+        let json = |value: Result<serde_json::Value, serde_json::Error>| value.map_err(|error| error.to_string());
         match request {
             Request::Fence(fence) => {
-                let render = self
-                    .fences
-                    .iter()
-                    .find(|(language, _)| *language == fence.language)
-                    .map(|(_, render)| render);
-                json(serde_json::to_value(
-                    render.and_then(|render| render(&fence)),
-                ))
+                let render =
+                    self.fences.iter().find(|(language, _)| *language == fence.language).map(|(_, render)| render);
+                json(serde_json::to_value(render.and_then(|render| render(&fence))))
             }
             Request::Slot { claim, session_id } => {
                 let render = self.slots.get(claim).ok_or("no such slot claim")?;
                 json(serde_json::to_value(render(session_id.as_deref())))
             }
             Request::Route { name } => {
-                let (_, render) = self
-                    .routes
-                    .iter()
-                    .find(|(route, _)| *route == name)
-                    .ok_or("no such route")?;
+                let (_, render) = self.routes.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
                 json(serde_json::to_value(render()))
             }
             Request::Command { name, input } => {
-                let (_, run) = self
-                    .commands
-                    .iter()
-                    .find(|(command, _)| *command == name)
-                    .ok_or("no such command")?;
+                let (_, run) = self.commands.iter().find(|(command, _)| *command == name).ok_or("no such command")?;
                 run(input.as_deref());
                 Ok(serde_json::Value::Null)
             }
@@ -610,13 +534,9 @@ pub mod runtime {
         // SAFETY: the host passes valid pointers for the length of the call.
         let options = unsafe { options.as_slice() };
         guard(out, || {
-            let options =
-                (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
+            let options = (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
             let mut registered = Setup {
-                manifest: Manifest {
-                    id: id.to_owned(),
-                    ..Manifest::default()
-                },
+                manifest: Manifest { id: id.to_owned(), ..Manifest::default() },
                 options,
                 host: Host { api: host },
                 fences: Vec::new(),
@@ -625,8 +545,7 @@ pub mod runtime {
                 commands: Vec::new(),
             };
             setup(&mut registered)?;
-            let manifest =
-                serde_json::to_vec(&registered.manifest).map_err(|error| error.to_string())?;
+            let manifest = serde_json::to_vec(&registered.manifest).map_err(|error| error.to_string())?;
             // SAFETY: `instance` is valid for writes during the call.
             unsafe { *instance = Box::into_raw(Box::new(registered)).cast() };
             Ok(manifest)
@@ -637,9 +556,7 @@ pub mod runtime {
     /// `out` must be valid for writes.
     pub unsafe fn describe(version: &str, out: *mut Owned) -> i32 {
         guard(out, || {
-            let metadata = Metadata {
-                version: Some(version.to_owned()),
-            };
+            let metadata = Metadata { version: Some(version.to_owned()) };
             serde_json::to_vec(&metadata).map_err(|error| error.to_string())
         })
     }
@@ -650,8 +567,7 @@ pub mod runtime {
         // SAFETY: as documented.
         let (setup, request) = unsafe { (&*instance.cast::<Setup>(), request.as_slice()) };
         guard(out, || {
-            let request: Request =
-                serde_json::from_slice(request).map_err(|error| error.to_string())?;
+            let request: Request = serde_json::from_slice(request).map_err(|error| error.to_string())?;
             let value = setup.handle(request)?;
             serde_json::to_vec(&value).map_err(|error| error.to_string())
         })

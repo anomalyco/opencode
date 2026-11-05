@@ -83,8 +83,7 @@ impl DeclaredError {
         Self {
             status,
             tag: text(body.get("_tag")).or_else(|| text(body.get("name"))),
-            message: text(body.get("message"))
-                .or_else(|| text(body.get("data").and_then(|data| data.get("message")))),
+            message: text(body.get("message")).or_else(|| text(body.get("data").and_then(|data| data.get("message")))),
             body,
         }
     }
@@ -132,12 +131,8 @@ mod tests {
     #[test]
     fn the_error_message_leaves_out_the_tag() {
         let declared = |body| Error::Declared(Box::new(DeclaredError::new(400, body)));
-        let tagged =
-            declared(json!({ "_tag": "InvalidRequestError", "message": "Unknown agent: nope" }));
-        assert_eq!(
-            tagged.to_string(),
-            "InvalidRequestError: Unknown agent: nope"
-        );
+        let tagged = declared(json!({ "_tag": "InvalidRequestError", "message": "Unknown agent: nope" }));
+        assert_eq!(tagged.to_string(), "InvalidRequestError: Unknown agent: nope");
         assert_eq!(tagged.error_message(), "Unknown agent: nope");
         let nested = declared(json!({ "name": "NotFound", "data": { "message": "gone" } }));
         assert_eq!(nested.error_message(), "gone");

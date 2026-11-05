@@ -51,33 +51,24 @@ impl Handler for Agent {
             "session/list" => object(&params).and_then(|params| {
                 let cwd = nullable_string(params, "cwd")?;
                 let cursor = nullable_string(params, "cursor")?;
-                Ok(
-                    Box::pin(async move { service.list_sessions(cwd, cursor).await })
-                        as BoxFuture<'static, _>,
-                )
+                Ok(Box::pin(async move { service.list_sessions(cwd, cursor).await }) as BoxFuture<'static, _>)
             }),
-            "session/delete" => session_id(&params).map(|id| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.delete_session(&id).await })
-            }),
-            "session/close" => session_id(&params).map(|id| -> BoxFuture<'static, _> {
-                Box::pin(async move { service.close_session(&id).await })
-            }),
+            "session/delete" => session_id(&params)
+                .map(|id| -> BoxFuture<'static, _> { Box::pin(async move { service.delete_session(&id).await }) }),
+            "session/close" => session_id(&params)
+                .map(|id| -> BoxFuture<'static, _> { Box::pin(async move { service.close_session(&id).await }) }),
             "session/set_mode" => object(&params).and_then(|params| {
                 let id = string(params, "sessionId")?;
                 let mode = string(params, "modeId")?;
-                Ok(Box::pin(async move { service.set_mode(&id, &mode).await })
+                Ok(Box::pin(async move { service.set_mode(&id, &mode).await }) as BoxFuture<'static, _>)
+            }),
+            "session/set_config_option" => object(&params).and_then(|params| {
+                let id = string(params, "sessionId")?;
+                let config_id = string(params, "configId")?;
+                let value = config_value(params)?;
+                Ok(Box::pin(async move { service.set_config_option(&id, &config_id, &value).await })
                     as BoxFuture<'static, _>)
             }),
-            "session/set_config_option" => {
-                object(&params).and_then(|params| {
-                    let id = string(params, "sessionId")?;
-                    let config_id = string(params, "configId")?;
-                    let value = config_value(params)?;
-                    Ok(Box::pin(
-                        async move { service.set_config_option(&id, &config_id, &value).await },
-                    ) as BoxFuture<'static, _>)
-                })
-            }
             "session/prompt" => object(&params).and_then(|params| {
                 let id = string(params, "sessionId")?;
                 let prompt = content_blocks(params)?;
@@ -128,13 +119,7 @@ fn issue(path: Option<&str>, message: String) -> RpcError {
 }
 
 fn expected(path: &str, kind: &str, value: Option<&Value>) -> RpcError {
-    issue(
-        Some(path),
-        format!(
-            "Invalid input: expected {kind}, received {}",
-            received(value)
-        ),
-    )
+    issue(Some(path), format!("Invalid input: expected {kind}, received {}", received(value)))
 }
 
 fn object(params: &Value) -> Result<&Value, RpcError> {
@@ -142,21 +127,11 @@ fn object(params: &Value) -> Result<&Value, RpcError> {
         return Ok(params);
     }
     let value = (!params.is_null()).then_some(params);
-    Err(issue(
-        None,
-        format!(
-            "Invalid input: expected object, received {}",
-            received(value)
-        ),
-    ))
+    Err(issue(None, format!("Invalid input: expected object, received {}", received(value))))
 }
 
 fn string(params: &Value, key: &str) -> Result<String, RpcError> {
-    params
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| expected(key, "string", params.get(key)))
+    params.get(key).and_then(Value::as_str).map(str::to_owned).ok_or_else(|| expected(key, "string", params.get(key)))
 }
 
 fn nullable_string(params: &Value, key: &str) -> Result<Option<String>, RpcError> {
@@ -181,27 +156,14 @@ fn session_id(params: &Value) -> Result<String, RpcError> {
 
 fn setup(params: &Value, with_session: bool, mcp_required: bool) -> Result<Setup, RpcError> {
     let params = object(params)?;
-    let session_id = if with_session {
-        string(params, "sessionId")?
-    } else {
-        String::new()
-    };
+    let session_id = if with_session { string(params, "sessionId")? } else { String::new() };
     let cwd = string(params, "cwd")?;
     let mcp = params.get("mcpServers");
     if mcp_required && mcp.is_none() {
-        return Err(issue(
-            Some("mcpServers"),
-            "Required value is missing".to_owned(),
-        ));
+        return Err(issue(Some("mcpServers"), "Required value is missing".to_owned()));
     }
     let strings = |value: Option<&Value>| -> Vec<String> {
-        value
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect()
+        value.and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect()
     };
     Ok(Setup {
         cwd,
@@ -225,11 +187,7 @@ fn pairs(value: &Value, key: &str) -> bool {
     value
         .get(key)
         .and_then(Value::as_array)
-        .is_some_and(|items| {
-            items
-                .iter()
-                .all(|item| is_string(item, "name") && is_string(item, "value"))
-        })
+        .is_some_and(|items| items.iter().all(|item| is_string(item, "name") && is_string(item, "value")))
 }
 
 /// Whether `server` parses as one of the SDK's MCP server variants.
@@ -242,10 +200,7 @@ fn mcp_server(server: &Value) -> bool {
         Some("acp") => is_string(server, "serverId"),
         _ => {
             is_string(server, "command")
-                && server
-                    .get("args")
-                    .and_then(Value::as_array)
-                    .is_some_and(|args| args.iter().all(Value::is_string))
+                && server.get("args").and_then(Value::as_array).is_some_and(|args| args.iter().all(Value::is_string))
                 && pairs(server, "env")
         }
     }
@@ -254,9 +209,7 @@ fn mcp_server(server: &Value) -> bool {
 fn config_value(params: &Value) -> Result<Value, RpcError> {
     match params.get("value") {
         Some(Value::String(value)) => Ok(json!(value)),
-        Some(Value::Bool(value)) if params.get("type") == Some(&json!("boolean")) => {
-            Ok(json!(value))
-        }
+        Some(Value::Bool(value)) if params.get("type") == Some(&json!("boolean")) => Ok(json!(value)),
         other => Err(expected("value", "string", other)),
     }
 }
@@ -282,8 +235,7 @@ fn content_block(block: &Value) -> bool {
         Some("image" | "audio") => is_string(block, "data") && is_string(block, "mimeType"),
         Some("resource_link") => is_string(block, "uri") && is_string(block, "name"),
         Some("resource") => block.get("resource").is_some_and(|resource| {
-            is_string(resource, "uri")
-                && (is_string(resource, "text") || is_string(resource, "blob"))
+            is_string(resource, "uri") && (is_string(resource, "text") || is_string(resource, "blob"))
         }),
         _ => false,
     }

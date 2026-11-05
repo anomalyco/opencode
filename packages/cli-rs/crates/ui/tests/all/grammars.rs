@@ -13,10 +13,7 @@ const CORPUS: &str = include_str!("../../../../parity/fixtures/U.4b/corpus.json"
 #[test]
 fn default_grammars_match_typescript() {
     let corpus: serde_json::Map<String, serde_json::Value> = serde_json::from_str(CORPUS).unwrap();
-    let theme = Catalog::default()
-        .load("opencode", ThemeMode::Dark)
-        .unwrap()
-        .theme;
+    let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
     let syntax = code::syntax_theme(&theme);
     let mut failed = Vec::new();
     for (filetype, source) in &corpus {
@@ -30,22 +27,14 @@ fn default_grammars_match_typescript() {
             ..AppOptions::default()
         };
         let app = TestApp::with_options(60, 12, options);
-        let view = code::view(
-            &app,
-            &theme,
-            &syntax,
-            Some(filetype),
-            source.as_str().unwrap(),
-        );
+        let view = code::view(&app, &theme, &syntax, Some(filetype), source.as_str().unwrap());
         app.root().add(&view);
         let name = format!("U.4b/{filetype}");
         let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
         let actual = Fixture::from_capture(&app.render());
         let comparison = compare(&expected, &actual);
         if !comparison.is_equal() {
-            let path = std::env::temp_dir()
-                .join("opencode-parity")
-                .join(format!("{name}.json"));
+            let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, actual.to_json()).unwrap();
             failed.push(format!("{name}: {comparison} ({})", path.display()));

@@ -39,16 +39,8 @@ impl Execute {
     pub fn new(cx: &Context<'_>) -> Self {
         let inline = InlineTool::new(cx);
         let calls = View::new(cx.app).column();
-        let output = View::new(cx.app)
-            .column()
-            .padding_edge(Edge::Left, 3)
-            .visible(false);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(inline.root())
-            .child(&calls)
-            .child(&output);
+        let output = View::new(cx.app).column().padding_edge(Edge::Left, 3).visible(false);
+        let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(&calls).child(&output);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -89,8 +81,7 @@ impl Execute {
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let inner = &self.0;
         let status = props.status();
-        let failed =
-            props.metadata.get("error") == Some(&Value::Bool(true)) || status == Status::Error;
+        let failed = props.metadata.get("error") == Some(&Value::Bool(true)) || status == Status::Error;
         inner.inline.set(Inline {
             color: failed.then_some(cx.theme.text.feedback.error.base),
             spinner: matches!(status, Status::Streaming | Status::Running),
@@ -144,11 +135,12 @@ impl Execute {
             for (index, line) in preview.iter().flat_map(|text| text.split('\n')).enumerate() {
                 // TS sets `paddingLeft={3}` on the text too, but Core lays a text out without it.
                 inner.output.add(
-                    &Text::new(
-                        &inner.app,
-                        format!("{}{line}", if index == 0 { "↳ " } else { "  " }),
-                    )
-                    .fg(inner.theme.text.feedback.error.base),
+                    &Text::new(&inner.app, format!("{}{line}", if index == 0 { "↳ " } else { "  " })).fg(inner
+                        .theme
+                        .text
+                        .feedback
+                        .error
+                        .base),
                 );
             }
             *inner.shown_output.borrow_mut() = preview;
@@ -179,10 +171,7 @@ struct CallInner {
 impl Call {
     fn new(app: &App, theme: &Theme, call: ExecuteCall) -> Self {
         let icon = Text::new(app, "").width(ICON_WIDTH).shrink(0.0);
-        let text = Text::new(app, "")
-            .grow(1.0)
-            .wrap(WrapMode::None)
-            .truncate(true);
+        let text = Text::new(app, "").grow(1.0).wrap(WrapMode::None).truncate(true);
         let details = View::new(app)
             .column()
             .padding_edge(Edge::Left, 1)
@@ -215,12 +204,7 @@ impl Call {
         let weak = Rc::downgrade(&inner);
         inner.root.on_click(move |cx, _| {
             let Some(inner) = weak.upgrade() else { return };
-            if !inner.expandable()
-                || cx
-                    .app()
-                    .selected_text()
-                    .is_some_and(|text| !text.is_empty())
-            {
+            if !inner.expandable() || cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
             inner.expanded.set(!inner.expanded.get());
@@ -245,11 +229,7 @@ impl Call {
 
 impl CallInner {
     fn expandable(&self) -> bool {
-        self.call
-            .borrow()
-            .input
-            .as_ref()
-            .is_some_and(|input| !input.is_empty())
+        self.call.borrow().input.as_ref().is_some_and(|input| !input.is_empty())
     }
 
     fn paint(&self) {
@@ -267,17 +247,9 @@ impl CallInner {
             theme.text.muted
         };
         self.icon.fg(color);
-        self.icon.set_text(if call.status == ExecuteStatus::Error {
-            "✗"
-        } else {
-            "›"
-        });
+        self.icon.set_text(if call.status == ExecuteStatus::Error { "✗" } else { "›" });
         self.text.fg(color);
-        self.text.set_text(if expanded {
-            call.tool.clone()
-        } else {
-            execute_call_summary(&call)
-        });
+        self.text.set_text(if expanded { call.tool.clone() } else { execute_call_summary(&call) });
         self.details.clear();
         self.details.visible(expanded);
         if !expanded {
@@ -291,17 +263,8 @@ impl CallInner {
             self.details.add(
                 &View::new(&self.app)
                     .row()
-                    .child(
-                        &Text::new(&self.app, format!("{key}: "))
-                            .shrink(0.0)
-                            .fg(theme.text.muted),
-                    )
-                    .child(
-                        &Text::new(&self.app, value)
-                            .grow(1.0)
-                            .wrap(WrapMode::Word)
-                            .fg(theme.text.base),
-                    ),
+                    .child(&Text::new(&self.app, format!("{key}: ")).shrink(0.0).fg(theme.text.muted))
+                    .child(&Text::new(&self.app, value).grow(1.0).wrap(WrapMode::Word).fg(theme.text.base)),
             );
         }
     }

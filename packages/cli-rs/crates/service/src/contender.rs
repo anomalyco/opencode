@@ -43,11 +43,7 @@ impl Attempt for Contender {
             (None, None) => return None,
         };
         let stderr = self.stderr();
-        Some(if stderr.is_empty() {
-            message
-        } else {
-            format!("{message}\n{stderr}")
-        })
+        Some(if stderr.is_empty() { message } else { format!("{message}\n{stderr}") })
     }
 
     fn release(&self) {
@@ -96,13 +92,7 @@ pub struct Pool<A> {
 
 impl<A: Attempt> Pool<A> {
     pub fn new(delays: Delays) -> Self {
-        Self {
-            delays,
-            contenders: Vec::new(),
-            failure: None,
-            spawn_delay: delays.spawn,
-            last_spawn: None,
-        }
+        Self { delays, contenders: Vec::new(), failure: None, spawn_delay: delays.spawn, last_spawn: None }
     }
 
     /// The first startup failure seen since the last eviction.
@@ -141,9 +131,8 @@ impl<A: Attempt> Pool<A> {
 
     /// Collects finished attempts. Returns the startup failure once no attempt is left alive.
     pub fn reap(&mut self) -> Option<String> {
-        let (finished, alive): (Vec<A>, Vec<A>) = std::mem::take(&mut self.contenders)
-            .into_iter()
-            .partition(Attempt::finished);
+        let (finished, alive): (Vec<A>, Vec<A>) =
+            std::mem::take(&mut self.contenders).into_iter().partition(Attempt::finished);
         self.contenders = alive;
         if self.failure.is_none() {
             self.failure = finished.iter().find_map(Attempt::failure);
@@ -151,11 +140,7 @@ impl<A: Attempt> Pool<A> {
         if finished.iter().any(Attempt::clean) {
             self.spawn_delay = (self.spawn_delay * 2).min(self.delays.max_spawn);
         }
-        if self.contenders.is_empty() {
-            self.failure.clone()
-        } else {
-            None
-        }
+        if self.contenders.is_empty() { self.failure.clone() } else { None }
     }
 
     /// Whether to start another attempt now. A registration that has not answered yet gets one
@@ -168,9 +153,7 @@ impl<A: Attempt> Pool<A> {
         // survivors finish without recruiting replacements that could hide the error.
         self.failure.is_none()
             && self.contenders.len() < 2
-            && self
-                .last_spawn
-                .is_none_or(|last| now.saturating_duration_since(last) >= self.spawn_delay)
+            && self.last_spawn.is_none_or(|last| now.saturating_duration_since(last) >= self.spawn_delay)
     }
 
     pub fn add(&mut self, contender: A, now: Instant) {
@@ -199,11 +182,7 @@ mod tests {
 
     impl Fake {
         fn new(pid: u32) -> Self {
-            Self {
-                pid,
-                exit: Rc::default(),
-                released: Rc::default(),
-            }
+            Self { pid, exit: Rc::default(), released: Rc::default() }
         }
 
         fn exit(&self, code: i32) {
@@ -222,10 +201,7 @@ mod tests {
             self.exit.get() == Some(0)
         }
         fn failure(&self) -> Option<String> {
-            self.exit
-                .get()
-                .filter(|code| *code != 0)
-                .map(|code| format!("failure of {} ({code})", self.pid))
+            self.exit.get().filter(|code| *code != 0).map(|code| format!("failure of {} ({code})", self.pid))
         }
         fn release(&self) {
             self.released.set(true);
@@ -233,10 +209,7 @@ mod tests {
     }
 
     fn pool(spawn: u64, max_spawn: u64) -> Pool<Fake> {
-        Pool::new(Delays {
-            spawn: Duration::from_millis(spawn),
-            max_spawn: Duration::from_millis(max_spawn),
-        })
+        Pool::new(Delays { spawn: Duration::from_millis(spawn), max_spawn: Duration::from_millis(max_spawn) })
     }
 
     fn ms(start: Instant, offset: u64) -> Instant {
@@ -333,26 +306,15 @@ mod tests {
 
     #[test]
     fn a_real_contender_reports_its_exit_code_and_stderr() {
-        let contender = Contender::spawn(
-            &["sh".into(), "-c".into(), "echo denied >&2; exit 23".into()],
-            &[],
-        )
-        .unwrap();
+        let contender = Contender::spawn(&["sh".into(), "-c".into(), "echo denied >&2; exit 23".into()], &[]).unwrap();
         while !contender.finished() {
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert_eq!(
-            contender.failure().as_deref(),
-            Some("Server process exited with code 23\ndenied")
-        );
-        let killed =
-            Contender::spawn(&["sh".into(), "-c".into(), "kill -9 $$".into()], &[]).unwrap();
+        assert_eq!(contender.failure().as_deref(), Some("Server process exited with code 23\ndenied"));
+        let killed = Contender::spawn(&["sh".into(), "-c".into(), "kill -9 $$".into()], &[]).unwrap();
         while !killed.finished() {
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert_eq!(
-            killed.failure().as_deref(),
-            Some("Server process terminated by SIGKILL")
-        );
+        assert_eq!(killed.failure().as_deref(), Some("Server process terminated by SIGKILL"));
     }
 }

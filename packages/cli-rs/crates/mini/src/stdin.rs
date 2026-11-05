@@ -12,19 +12,15 @@ pub fn take_piped() -> Result<Option<String>, String> {
         return Ok(None);
     }
     let mut bytes = Vec::new();
-    std::io::stdin()
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("failed to read stdin: {error}"))?;
+    std::io::stdin().read_to_end(&mut bytes).map_err(|error| format!("failed to read stdin: {error}"))?;
     reopen_terminal()?;
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 #[cfg(unix)]
 fn reopen_terminal() -> Result<(), String> {
-    let terminal = std::fs::OpenOptions::new()
-        .read(true)
-        .open("/dev/tty")
-        .map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())?;
+    let terminal =
+        std::fs::OpenOptions::new().read(true).open("/dev/tty").map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())?;
     rustix::stdio::dup2_stdin(&terminal).map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())
 }
 
@@ -51,25 +47,13 @@ mod tests {
     #[test]
     fn merge_input_matches_mini_ts() {
         // The first two are the cases of `packages/cli/test/mini.test.ts`.
-        assert_eq!(
-            merge_input(Some("from stdin"), None).as_deref(),
-            Some("from stdin")
-        );
-        assert_eq!(
-            merge_input(Some("from stdin"), Some("from flag")).as_deref(),
-            Some("from stdin\nfrom flag")
-        );
+        assert_eq!(merge_input(Some("from stdin"), None).as_deref(), Some("from stdin"));
+        assert_eq!(merge_input(Some("from stdin"), Some("from flag")).as_deref(), Some("from stdin\nfrom flag"));
         assert_eq!(merge_input(None, None), None);
         assert_eq!(merge_input(Some(""), Some("")), None);
         assert_eq!(merge_input(Some("piped"), None).as_deref(), Some("piped"));
         assert_eq!(merge_input(None, Some("prompt")).as_deref(), Some("prompt"));
-        assert_eq!(
-            merge_input(Some(""), Some("prompt")).as_deref(),
-            Some("prompt")
-        );
-        assert_eq!(
-            merge_input(Some("piped\n"), Some("prompt")).as_deref(),
-            Some("piped\n\nprompt")
-        );
+        assert_eq!(merge_input(Some(""), Some("prompt")).as_deref(), Some("prompt"));
+        assert_eq!(merge_input(Some("piped\n"), Some("prompt")).as_deref(), Some("piped\n\nprompt"));
     }
 }

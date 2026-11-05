@@ -8,14 +8,13 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
-    ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationAttemptStatus,
-    IntegrationID, IntegrationMethod, IntegrationMethodID, IntegrationOauthCancelInput,
-    IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
+    ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationAttemptStatus, IntegrationID,
+    IntegrationMethod, IntegrationMethodID, IntegrationOauthCancelInput, IntegrationOauthConnectInput,
+    IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
 };
 use opencode_local::model_pref::Model;
 use opencode_ui::dialog::{
-    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header,
-    layout_view,
+    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -40,10 +39,7 @@ impl Seen {
     fn from_value(value: &Value) -> Self {
         Self {
             last_seen_at: value.get("lastSeenAt").and_then(Value::as_f64),
-            dont_show: value
-                .get("dontShow")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            dont_show: value.get("dontShow").and_then(Value::as_bool).unwrap_or(false),
         }
     }
 }
@@ -65,10 +61,7 @@ fn claim(draft: &mut Value, now: f64) -> Claim {
     if stored.dont_show {
         return Claim::DontShow(stored.last_seen_at);
     }
-    if stored
-        .last_seen_at
-        .is_some_and(|at| at > 0.0 && now - at < DAY_MS)
-    {
+    if stored.last_seen_at.is_some_and(|at| at > 0.0 && now - at < DAY_MS) {
         return Claim::Recent(stored.last_seen_at);
     }
     if !draft.is_object() {
@@ -99,10 +92,7 @@ pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
     if memory.dont_show {
         return;
     }
-    if memory
-        .last_seen_at
-        .is_some_and(|at| at > 0.0 && now - at < DAY_MS)
-    {
+    if memory.last_seen_at.is_some_and(|at| at > 0.0 && now - at < DAY_MS) {
         return;
     }
     let previous = memory.last_seen_at;
@@ -116,8 +106,7 @@ pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
         async move {
             tokio::task::spawn_blocking(move || {
                 let mut result = Claim::Claimed;
-                let written =
-                    storage.update("go-upsell", &json!({}), |draft| result = claim(draft, now));
+                let written = storage.update("go-upsell", &json!({}), |draft| result = claim(draft, now));
                 // A failed write still offers it, as TS does.
                 written.map_or(Claim::Claimed, |_| result)
             })
@@ -190,9 +179,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
                 } else {
                     theme.text.muted
                 };
-                label
-                    .fg(fg)
-                    .bg(if active { Color::TRANSPARENT } else { text_bg });
+                label.fg(fg).bg(if active { Color::TRANSPARENT } else { text_bg });
                 if active {
                     label.bold();
                 } else {
@@ -230,9 +217,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         })
     };
     let bind = |key: &str, title: &str, run: Rc<dyn Fn()>| {
-        TuiCommand::inline(key, move |_, _| run())
-            .title(title)
-            .group("Dialog")
+        TuiCommand::inline(key, move |_, _| run()).title(title).group("Dialog")
     };
     let confirm: Rc<dyn Fn()> = {
         let run = run.clone();
@@ -282,10 +267,11 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     };
 
     let inset = if narrow { 2 } else { 3 };
-    let root = View::new(app)
-        .padding_x(inset)
-        .padding_edge(Edge::Bottom, if short { 0 } else { 1 })
-        .gap(if short { 0 } else { 1 });
+    let root = View::new(app).padding_x(inset).padding_edge(Edge::Bottom, if short { 0 } else { 1 }).gap(if short {
+        0
+    } else {
+        1
+    });
     let close = Text::new(app, "esc").fg(theme.text.muted).bg(text_bg);
     let dialogs = cx.dialogs.clone();
     close.on_mouse(move |_, event| {
@@ -298,32 +284,19 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
             .row()
             .justify(Justify::SpaceBetween)
             .shrink(0.0)
-            .child(
-                &Text::new(app, "Free limit reached")
-                    .bold()
-                    .fg(theme.text.base)
-                    .bg(text_bg),
-            )
+            .child(&Text::new(app, "Free limit reached").bold().fg(theme.text.base).bg(text_bg))
             .child(&close),
     );
-    let reset = offer
-        .reset
-        .as_ref()
-        .map_or(String::new(), |reset| format!(" Resets at {reset}."));
+    let reset = offer.reset.as_ref().map_or(String::new(), |reset| format!(" Resets at {reset}."));
     let used = Text::new(app, format!("You've used today's free messages.{reset}"))
         .fg(theme.text.muted)
         .bg(text_bg)
         .wrap(WrapMode::Word);
-    let pitch = Text::new(
-        app,
-        "OpenCode Go gives you reliable access to the best open-source models for $10/month.",
-    )
-    .fg(theme.text.muted)
-    .bg(text_bg)
-    .wrap(WrapMode::Word);
-    let link = Text::new(app, vec![GO_URL.fg(primary).link(GO_URL)])
+    let pitch = Text::new(app, "OpenCode Go gives you reliable access to the best open-source models for $10/month.")
+        .fg(theme.text.muted)
         .bg(text_bg)
-        .wrap(WrapMode::None);
+        .wrap(WrapMode::Word);
+    let link = Text::new(app, vec![GO_URL.fg(primary).link(GO_URL)]).bg(text_bg).wrap(WrapMode::None);
     let compact = short || height < if narrow { 26 } else { 22 };
     if compact {
         // TS's scrollbox takes its whole `maxHeight`, so the panel reaches the buttons at the bottom.
@@ -331,10 +304,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         let footer_rows = if narrow { ACTIONS.len() as u16 } else { 1 };
         let gaps = if short { 1 } else { 4 };
         let body = height.saturating_sub(top + footer_rows + gaps).max(2);
-        let scroll = ScrollBox::new(app)
-            .scrollbars(false)
-            .height(u32::from(body))
-            .shrink(1.0);
+        let scroll = ScrollBox::new(app).scrollbars(false).height(u32::from(body)).shrink(1.0);
         scroll.add(&used);
         scroll.add(&pitch);
         scroll.add(&link);
@@ -363,13 +333,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
                 .justify(Justify::SpaceBetween)
                 .shrink(0.0)
                 .child(&button(0))
-                .child(
-                    &View::new(app)
-                        .row()
-                        .gap(1)
-                        .child(&button(1))
-                        .child(&button(2)),
-                ),
+                .child(&View::new(app).row().gap(1).child(&button(1)).child(&button(2))),
         );
     }
     paint();
@@ -427,13 +391,7 @@ struct Connect {
 fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     let app = &cx.app;
     let title = Text::new(app, "Connect an integration").fg(cx.theme.text.base);
-    let head = header(
-        cx,
-        HeaderProps {
-            title_view: Some(title.as_any()),
-            ..HeaderProps::default()
-        },
-    );
+    let head = header(cx, HeaderProps { title_view: Some(title.as_any()), ..HeaderProps::default() });
     let body = View::new(app).gap(1);
     let footer_slot = View::new(app);
     let state = Rc::new_cyclic(|me| Connect {
@@ -469,21 +427,13 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     };
     let enabled = {
         let state = Rc::downgrade(&state);
-        Condition::when(move || {
-            state
-                .upgrade()
-                .is_some_and(|state| state.attempt.borrow().is_some())
-        })
+        Condition::when(move || state.upgrade().is_some_and(|state| state.attempt.borrow().is_some()))
     };
     cx.layer(KeymapLayer {
         enabled,
         commands: vec![
-            TuiCommand::inline("return", open)
-                .title("Open authorization URL")
-                .group("Dialog"),
-            TuiCommand::inline("c", copy)
-                .title("Copy authorization details")
-                .group("Dialog"),
+            TuiCommand::inline("return", open).title("Open authorization URL").group("Dialog"),
+            TuiCommand::inline("c", copy).title("Copy authorization details").group("Dialog"),
         ],
         ..KeymapLayer::default()
     });
@@ -507,17 +457,8 @@ impl Connect {
         let attempt = self.attempt.borrow().clone();
         if let Some(attempt) = &attempt {
             let details = View::new(app).gap(1).child(
-                &Text::new(
-                    app,
-                    vec![
-                        attempt
-                            .url
-                            .as_str()
-                            .fg(theme.markdown.link)
-                            .link(attempt.url.clone()),
-                    ],
-                )
-                .wrap(WrapMode::Word),
+                &Text::new(app, vec![attempt.url.as_str().fg(theme.markdown.link).link(attempt.url.clone())])
+                    .wrap(WrapMode::Word),
             );
             if !attempt.instructions.is_empty() {
                 details.add(&Text::new(app, attempt.instructions.clone()).fg(theme.text.muted));
@@ -535,11 +476,7 @@ impl Connect {
         let primary = match &attempt {
             Some(attempt) => vec![
                 action(
-                    if oauth_code(&attempt.instructions).is_some() {
-                        "copy code"
-                    } else {
-                        "copy link"
-                    },
+                    if oauth_code(&attempt.instructions).is_some() { "copy code" } else { "copy link" },
                     "c",
                     Connect::copy,
                 ),
@@ -547,58 +484,31 @@ impl Connect {
             ],
             None => Vec::new(),
         };
-        self.footer.add(&footer(
-            &self.cx,
-            FooterProps {
-                primary,
-                ..FooterProps::default()
-            },
-        ));
+        self.footer.add(&footer(&self.cx, FooterProps { primary, ..FooterProps::default() }));
         self.body.add(
-            &Text::new(
-                app,
-                if attempt.is_some() {
-                    "Waiting for authorization…"
-                } else {
-                    "Starting authorization…"
-                },
-            )
-            .fg(theme.text.muted),
+            &Text::new(app, if attempt.is_some() { "Waiting for authorization…" } else { "Starting authorization…" })
+                .fg(theme.text.muted),
         );
         app.request_redraw();
     }
 
     // The `opencode` integration and its device OAuth method, once the integrations have loaded.
     fn method(&self) -> Option<(String, Vec<Value>)> {
-        let integration = self
-            .local
-            .integrations()?
-            .into_iter()
-            .find(|item| item.id.0 == "opencode")?;
-        integration
-            .methods
-            .into_iter()
-            .find_map(|method| match method {
-                // The fields as JSON: only `type`, `key`, and `default` matter for the answer.
-                IntegrationMethod::Oauth(method) if method.id.0 == "device" => Some((
-                    method.label,
-                    method
-                        .form
-                        .unwrap_or_default()
-                        .iter()
-                        .filter_map(|field| serde_json::to_value(field).ok())
-                        .collect(),
-                )),
-                _ => None,
-            })
+        let integration = self.local.integrations()?.into_iter().find(|item| item.id.0 == "opencode")?;
+        integration.methods.into_iter().find_map(|method| match method {
+            // The fields as JSON: only `type`, `key`, and `default` matter for the answer.
+            IntegrationMethod::Oauth(method) if method.id.0 == "device" => Some((
+                method.label,
+                method.form.unwrap_or_default().iter().filter_map(|field| serde_json::to_value(field).ok()).collect(),
+            )),
+            _ => None,
+        })
     }
 
     // The first credential connection has no error status.
     fn valid(&self) -> bool {
-        let Some(integration) = self
-            .local
-            .integrations()
-            .and_then(|list| list.into_iter().find(|item| item.id.0 == "opencode"))
+        let Some(integration) =
+            self.local.integrations().and_then(|list| list.into_iter().find(|item| item.id.0 == "opencode"))
         else {
             return false;
         };
@@ -656,19 +566,13 @@ impl Connect {
             integration_id: IntegrationID("opencode".into()),
             location: self.location(),
             method_id: IntegrationMethodID("device".into()),
-            answer: (!answer.is_empty())
-                .then(|| serde_json::from_value(Value::Object(answer)).ok())
-                .flatten(),
+            answer: (!answer.is_empty()).then(|| serde_json::from_value(Value::Object(answer)).ok()).flatten(),
             label: None,
         };
         let client = self.local.client.clone();
         let weak = Rc::downgrade(self);
         self.local.app.spawn(
-            async move {
-                client
-                    .integration_oauth_connect(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.integration_oauth_connect(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(state) = weak.upgrade() else { return };
                 match result {
@@ -694,11 +598,7 @@ impl Connect {
         let client = self.local.client.clone();
         let weak = Rc::downgrade(self);
         self.local.app.spawn(
-            async move {
-                client
-                    .integration_oauth_status(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.integration_oauth_status(&input, &RequestOptions::default()).await },
             move |cx, result| {
                 let Some(state) = weak.upgrade() else { return };
                 if state.closed.get() {
@@ -715,14 +615,11 @@ impl Connect {
                 match status {
                     IntegrationAttemptStatus::Pending(_) => {
                         let weak = Rc::downgrade(&state);
-                        state.timer.set(Some(cx.set_timeout(
-                            Duration::from_millis(500),
-                            move |_| {
-                                if let Some(state) = weak.upgrade() {
-                                    state.poll(attempt);
-                                }
-                            },
-                        )));
+                        state.timer.set(Some(cx.set_timeout(Duration::from_millis(500), move |_| {
+                            if let Some(state) = weak.upgrade() {
+                                state.poll(attempt);
+                            }
+                        })));
                     }
                     IntegrationAttemptStatus::Complete(_) => {
                         state.settled.set(true);
@@ -760,32 +657,19 @@ impl Connect {
                 let options = RequestOptions::default();
                 let integrations = client
                     .integration_list(
-                        &opencode_api::generated::IntegrationListInput {
-                            location: location.clone(),
-                        },
+                        &opencode_api::generated::IntegrationListInput { location: location.clone() },
                         &options,
                     )
                     .await?;
                 let models = client
                     .model_list(
-                        &opencode_api::generated::ModelListInput {
-                            location: location.clone(),
-                            types: None,
-                        },
+                        &opencode_api::generated::ModelListInput { location: location.clone(), types: None },
                         &options,
                     )
                     .await?;
-                let providers = client
-                    .provider_list(
-                        &opencode_api::generated::ProviderListInput { location },
-                        &options,
-                    )
-                    .await?;
-                Ok::<_, opencode_api::error::Error>((
-                    integrations.data,
-                    models.data,
-                    providers.data,
-                ))
+                let providers =
+                    client.provider_list(&opencode_api::generated::ProviderListInput { location }, &options).await?;
+                Ok::<_, opencode_api::error::Error>((integrations.data, models.data, providers.data))
             },
             move |_, result| {
                 let Some(state) = weak.upgrade() else { return };
@@ -810,10 +694,7 @@ impl Connect {
                         .integrations()
                         .and_then(|list| list.into_iter().find(|item| item.id.0 == "opencode"))
                         .map_or("OpenCode Console".to_owned(), |item| item.name);
-                    state.local.toasts.show(ToastOptions::new(
-                        Variant::Success,
-                        format!("Connected {name}"),
-                    ));
+                    state.local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {name}")));
                 }
                 state.finish();
                 done(Some(true));
@@ -827,10 +708,10 @@ impl Connect {
             local.dialogs.clear();
             return;
         }
-        let go = local.models().into_iter().find(|item| {
-            item.provider_id.0 == "opencode-go"
-                && !matches!(item.status, ModelInfoStatus::Deprecated)
-        });
+        let go = local
+            .models()
+            .into_iter()
+            .find(|item| item.provider_id.0 == "opencode-go" && !matches!(item.status, ModelInfoStatus::Deprecated));
         match go {
             Some(go) => {
                 local.set(&Model::new(&go.provider_id.0, &go.id), true);
@@ -842,9 +723,7 @@ impl Connect {
     }
 
     fn fail(&self, message: String) {
-        self.local
-            .toasts
-            .show(ToastOptions::new(Variant::Error, message));
+        self.local.toasts.show(ToastOptions::new(Variant::Error, message));
         self.local.dialogs.clear();
     }
 
@@ -855,14 +734,9 @@ impl Connect {
             location: self.location(),
         };
         let client = self.local.client.clone();
-        self.local.app.spawn(
-            async move {
-                client
-                    .integration_oauth_cancel(&input, &RequestOptions::default())
-                    .await
-            },
-            |_, _| {},
-        );
+        self.local
+            .app
+            .spawn(async move { client.integration_oauth_cancel(&input, &RequestOptions::default()).await }, |_, _| {});
     }
 
     fn close(&self) {
@@ -896,9 +770,7 @@ impl Connect {
         };
         let value = oauth_code(&attempt.instructions).unwrap_or(attempt.url);
         if self.local.app.copy_to_clipboard(&value) {
-            self.local
-                .toasts
-                .show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
+            self.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
             return;
         }
         self.local.toasts.error("Could not copy to the clipboard");
@@ -914,11 +786,7 @@ fn oauth_code(text: &str) -> Option<String> {
         if !head.iter().all(code) || chars.get(start + 4) != Some(&'-') {
             return None;
         }
-        let tail = chars[start + 5..]
-            .iter()
-            .take(5)
-            .take_while(|c| code(c))
-            .count();
+        let tail = chars[start + 5..].iter().take(5).take_while(|c| code(c)).count();
         (tail >= 4).then(|| chars[start..start + 5 + tail].iter().collect())
     })
 }
@@ -963,14 +831,8 @@ mod tests {
 
     #[test]
     fn finds_the_device_code() {
-        assert_eq!(
-            oauth_code("Enter code ABCD-1234 at the page").as_deref(),
-            Some("ABCD-1234")
-        );
-        assert_eq!(
-            oauth_code("code WXYZ-12345!").as_deref(),
-            Some("WXYZ-12345")
-        );
+        assert_eq!(oauth_code("Enter code ABCD-1234 at the page").as_deref(), Some("ABCD-1234"));
+        assert_eq!(oauth_code("code WXYZ-12345!").as_deref(), Some("WXYZ-12345"));
         assert_eq!(oauth_code("abcd-1234"), None);
         assert_eq!(oauth_code("ABCD-123"), None);
     }

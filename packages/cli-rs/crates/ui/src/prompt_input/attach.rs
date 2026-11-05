@@ -20,11 +20,7 @@ pub enum Resolved {
     /// An SVG: its text is pasted as `[SVG: name]`.
     Text { content: String, filename: String },
     /// An image or PDF as a `data:` URI, with the absolute path it came from.
-    File {
-        uri: String,
-        filename: String,
-        path: String,
-    },
+    File { uri: String, filename: String, path: String },
 }
 
 /// Whether `text` names files [`resolve`] could attach: one path with an attachable extension, or several
@@ -129,22 +125,14 @@ pub fn label(files: &[Value], uri: &str, name: Option<&str>) -> Result<String, S
     } else {
         return Err(format!("Unsupported inline attachment: {uri}"));
     };
-    let metadata = |file: &Value| {
-        (
-            file["name"].as_str().map(str::to_owned),
-            file["description"].as_str().map(str::to_owned),
-        )
-    };
+    let metadata =
+        |file: &Value| (file["name"].as_str().map(str::to_owned), file["description"].as_str().map(str::to_owned));
     let wanted = (name.map(str::to_owned), None);
     if kind == "Image"
         && let Some(existing) = files
             .iter()
             .filter(|file| file["uri"] == uri && metadata(file) == wanted)
-            .find_map(|file| {
-                file["mention"]["text"]
-                    .as_str()
-                    .filter(|text| !text.is_empty())
-            })
+            .find_map(|file| file["mention"]["text"].as_str().filter(|text| !text.is_empty()))
     {
         return Ok(existing.to_owned());
     }
@@ -172,20 +160,11 @@ pub fn images(prompt: &Value) -> Vec<(String, Option<String>)> {
         .iter()
         .filter(|file| {
             let uri = file["uri"].as_str().unwrap_or_default();
-            let mention = file["mention"]["text"]
-                .as_str()
-                .filter(|text| !text.is_empty());
-            let Some(mention) =
-                mention.filter(|_| files.len() >= 2 && uri.starts_with("data:image/"))
-            else {
+            let mention = file["mention"]["text"].as_str().filter(|text| !text.is_empty());
+            let Some(mention) = mention.filter(|_| files.len() >= 2 && uri.starts_with("data:image/")) else {
                 return true;
             };
-            let key = (
-                file["name"].clone(),
-                file["description"].clone(),
-                mention.to_owned(),
-                uri.to_owned(),
-            );
+            let key = (file["name"].clone(), file["description"].clone(), mention.to_owned(), uri.to_owned());
             if seen.contains(&key) {
                 return false;
             }
@@ -194,12 +173,8 @@ pub fn images(prompt: &Value) -> Vec<(String, Option<String>)> {
         })
         .filter_map(|file| {
             let uri = file["uri"].as_str()?;
-            uri.starts_with("data:image/").then(|| {
-                (
-                    uri.to_owned(),
-                    file["mention"]["text"].as_str().map(str::to_owned),
-                )
-            })
+            uri.starts_with("data:image/")
+                .then(|| (uri.to_owned(), file["mention"]["text"].as_str().map(str::to_owned)))
         })
         .collect()
 }
@@ -225,8 +200,7 @@ fn read_local_attachment(path: &str, max: u64) -> Option<Local> {
     let bytes = read_bounded(path, max)?;
     if mime == "image/svg+xml" {
         let content = String::from_utf8_lossy(&bytes).into_owned();
-        return (!content.is_empty() && content.len() as u64 <= max)
-            .then_some(Local::Text(content));
+        return (!content.is_empty() && content.len() as u64 <= max).then_some(Local::Text(content));
     }
     Some(Local::Binary(mime, bytes))
 }
@@ -242,10 +216,7 @@ fn read_bounded(path: &str, max: u64) -> Option<Vec<u8>> {
 
 /// The attachable types by extension; anything else is `application/octet-stream`, which never attaches.
 fn mime(path: &str) -> Option<&'static str> {
-    let extension = Path::new(path)
-        .extension()?
-        .to_string_lossy()
-        .to_lowercase();
+    let extension = Path::new(path).extension()?.to_string_lossy().to_lowercase();
     Some(match extension.as_str() {
         "avif" => "image/avif",
         "gif" => "image/gif",
@@ -419,14 +390,8 @@ mod tests {
         for (input, expected) in cases {
             assert_eq!(normalize_pasted_filepath(input, false), expected, "{input}");
         }
-        assert_eq!(
-            normalize_pasted_filepath("file:///C:/Users/a.png", true),
-            "C:\\Users\\a.png"
-        );
-        assert_eq!(
-            normalize_pasted_filepath("file://host/share/a.png", true),
-            "\\\\host\\share\\a.png"
-        );
+        assert_eq!(normalize_pasted_filepath("file:///C:/Users/a.png", true), "C:\\Users\\a.png");
+        assert_eq!(normalize_pasted_filepath("file://host/share/a.png", true), "\\\\host\\share\\a.png");
     }
 
     #[test]
@@ -440,15 +405,9 @@ mod tests {
             ["/a.png", "/b c.png"]
         );
         assert!(parse_pasted_filepaths("'/open.png", false).is_empty());
-        let many = (0..33)
-            .map(|i| format!("/{i}.png"))
-            .collect::<Vec<_>>()
-            .join(" ");
+        let many = (0..33).map(|i| format!("/{i}.png")).collect::<Vec<_>>().join(" ");
         assert!(parse_pasted_filepaths(&many, false).is_empty());
-        let limit = (0..32)
-            .map(|i| format!("/{i}.png"))
-            .collect::<Vec<_>>()
-            .join(" ");
+        let limit = (0..32).map(|i| format!("/{i}.png")).collect::<Vec<_>>().join(" ");
         assert_eq!(parse_pasted_filepaths(&limit, false).len(), 32);
     }
 
@@ -480,10 +439,7 @@ mod tests {
         let both = format!("{} {}", quoted, svg.display());
         assert_eq!(
             resolve(&both, false).unwrap()[1],
-            Resolved::Text {
-                content: "<svg/>".into(),
-                filename: "logo.svg".into()
-            }
+            Resolved::Text { content: "<svg/>".into(), filename: "logo.svg".into() }
         );
         // One missing file drops the whole list.
         assert_eq!(resolve(&format!("{quoted} /missing.png"), false), None);
@@ -495,33 +451,20 @@ mod tests {
             json!({ "uri": "data:image/png;base64,AA", "name": "clipboard", "mention": { "text": "[Image 1]" } }),
             json!({ "uri": "data:application/pdf;base64,AA", "mention": { "text": "[PDF 3]" } }),
         ];
-        assert_eq!(
-            label(&files, "data:image/png;base64,AA", Some("clipboard")),
-            Ok("[Image 1]".into())
-        );
-        assert_eq!(
-            label(&files, "data:image/png;base64,BB", Some("clipboard")),
-            Ok("[Image 2]".into())
-        );
-        assert_eq!(
-            label(&files, "data:application/pdf;base64,AA", None),
-            Ok("[PDF 4]".into())
-        );
+        assert_eq!(label(&files, "data:image/png;base64,AA", Some("clipboard")), Ok("[Image 1]".into()));
+        assert_eq!(label(&files, "data:image/png;base64,BB", Some("clipboard")), Ok("[Image 2]".into()));
+        assert_eq!(label(&files, "data:application/pdf;base64,AA", None), Ok("[PDF 4]".into()));
         assert!(label(&files, "https://x", None).is_err());
     }
 
     #[test]
     fn server_files_drop_the_path_and_a_local_server_gets_its_url() {
-        let entry =
-            json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": "/tmp/a b.png" }] });
+        let entry = json!({ "files": [{ "uri": "data:image/png;base64,AA", "path": "/tmp/a b.png" }] });
         assert_eq!(
             files_for_server(&entry, true),
             json!([{ "uri": "data:image/png;base64,AA", "source": { "type": "uri", "uri": "file:///tmp/a%20b.png" } }])
         );
-        assert_eq!(
-            files_for_server(&entry, false),
-            json!([{ "uri": "data:image/png;base64,AA" }])
-        );
+        assert_eq!(files_for_server(&entry, false), json!([{ "uri": "data:image/png;base64,AA" }]));
     }
 
     #[test]
@@ -535,14 +478,8 @@ mod tests {
         assert_eq!(
             images(&prompt),
             [
-                (
-                    "data:image/png;base64,AA".to_owned(),
-                    Some("[Image 1]".to_owned())
-                ),
-                (
-                    "data:image/png;base64,BB".to_owned(),
-                    Some("[Image 2]".to_owned())
-                ),
+                ("data:image/png;base64,AA".to_owned(), Some("[Image 1]".to_owned())),
+                ("data:image/png;base64,BB".to_owned(), Some("[Image 2]".to_owned())),
             ]
         );
     }

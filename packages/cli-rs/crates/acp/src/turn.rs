@@ -14,9 +14,8 @@ use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    PromptInputFileAttachment, SessionCommandInput, SessionCompactInput, SessionGetInput,
-    SessionID, SessionInboxDelivery, SessionInterruptInput, SessionMessageID, SessionPromptInput,
-    SessionSyntheticInput,
+    PromptInputFileAttachment, SessionCommandInput, SessionCompactInput, SessionGetInput, SessionID,
+    SessionInboxDelivery, SessionInterruptInput, SessionMessageID, SessionPromptInput, SessionSyntheticInput,
 };
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -85,9 +84,7 @@ pub struct Turns {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl Turns {
@@ -134,14 +131,7 @@ impl Turns {
         let serial = self.serial.fetch_add(1, Ordering::Relaxed);
         let cancel = request.child_token();
         let (done_sender, done) = watch::channel(false);
-        turns.insert(
-            session_id.clone(),
-            Handle {
-                serial,
-                cancel: cancel.clone(),
-                done,
-            },
-        );
+        turns.insert(session_id.clone(), Handle { serial, cancel: cancel.clone(), done });
         drop(turns);
         let (result_sender, result) = oneshot::channel();
         let this = self.clone();
@@ -149,10 +139,7 @@ impl Turns {
             let response = this.run(&session_id, &content, &cancel).await;
             {
                 let mut turns = lock(&this.turns);
-                if turns
-                    .get(&session_id)
-                    .is_some_and(|handle| handle.serial == serial)
-                {
+                if turns.get(&session_id).is_some_and(|handle| handle.serial == serial) {
                     turns.remove(&session_id);
                 }
             }
@@ -190,10 +177,7 @@ impl Turns {
         let result = self
             .client
             .session_interrupt(
-                &SessionInterruptInput {
-                    session_id: SessionID(id),
-                    resume: None,
-                },
+                &SessionInterruptInput { session_id: SessionID(id), resume: None },
                 &RequestOptions::default(),
             )
             .await;
@@ -382,11 +366,7 @@ impl Turns {
                         &SessionCommandInput {
                             session_id: session_id(),
                             name: command.name.clone(),
-                            text: prepared
-                                .slash
-                                .as_ref()
-                                .map(|slash| slash.args.clone())
-                                .unwrap_or_default(),
+                            text: prepared.slash.as_ref().map(|slash| slash.args.clone()).unwrap_or_default(),
                             files,
                             delivery: Some(Some(SessionInboxDelivery::Steer)),
                             ..SessionCommandInput::default()
@@ -424,10 +404,7 @@ impl Turns {
         if let Err(error) = self
             .client
             .session_interrupt(
-                &SessionInterruptInput {
-                    session_id: SessionID(turn.ctx.session_id.clone()),
-                    resume: None,
-                },
+                &SessionInterruptInput { session_id: SessionID(turn.ctx.session_id.clone()), resume: None },
                 &RequestOptions::default(),
             )
             .await
@@ -437,9 +414,7 @@ impl Turns {
         if !lock(&turn.state).started {
             return;
         }
-        if let Ok(Ok(())) =
-            tokio::time::timeout(self.drain_timeout, async { join(result).await.map(|_| ()) }).await
-        {
+        if let Ok(Ok(())) = tokio::time::timeout(self.drain_timeout, async { join(result).await.map(|_| ()) }).await {
             return;
         }
         events.abort();
@@ -504,40 +479,24 @@ impl Turns {
         if let Err(failure) = self.send_usage_update(attached, current).await {
             log::warn!(cause = failure.tag(); "ACP usage update failed");
         }
-        let terminal = if cancel.is_cancelled() {
-            Terminal::Interrupted
-        } else {
-            terminal
-        };
+        let terminal = if cancel.is_cancelled() { Terminal::Interrupted } else { terminal };
         Ok(translate::response(current, &attached.id, terminal))
     }
 
-    async fn send_usage_update(
-        &self,
-        attached: &Attached,
-        state: &TurnState,
-    ) -> Result<(), Failure> {
+    async fn send_usage_update(&self, attached: &Attached, state: &TurnState) -> Result<(), Failure> {
         let used = state.usage.map_or(0.0, |usage| usage.last.total());
         if used == 0.0 {
             return Ok(());
         }
         let catalog = self.catalogs.get(&attached.cwd).await?;
-        let model = find_model(
-            &catalog.models,
-            &current_model(&catalog, &attached.selection()),
-        );
-        let Some(size) = model
-            .map(|model| model.limit.context)
-            .filter(|size| *size != 0)
-        else {
+        let model = find_model(&catalog.models, &current_model(&catalog, &attached.selection()));
+        let Some(size) = model.map(|model| model.limit.context).filter(|size| *size != 0) else {
             return Ok(());
         };
         let info = check(
             self.client
                 .session_get(
-                    &SessionGetInput {
-                        session_id: SessionID(attached.id.clone()),
-                    },
+                    &SessionGetInput { session_id: SessionID(attached.id.clone()) },
                     &RequestOptions::default(),
                 )
                 .await,
@@ -558,11 +517,7 @@ impl Turns {
         let folded = {
             let mut state = lock(&turn.state);
             let folded = if turn.background && !translate::from_tracked_child(&state, &event) {
-                Folded {
-                    state: state.clone(),
-                    outputs: Vec::new(),
-                    terminal: None,
-                }
+                Folded { state: state.clone(), outputs: Vec::new(), terminal: None }
             } else {
                 translate::fold(&state, &event, &turn.ctx)
             };
@@ -601,16 +556,14 @@ impl Turns {
                 if turn.background {
                     return Ok(());
                 }
-                let update =
-                    permission::with_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
+                let update = permission::with_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
                 self.connection.session_update(&turn.ctx.session_id, update)
             }
             Output::ChildUpdate { mut update, diff } => {
                 if update.get("type").and_then(Value::as_str) == Some("update")
                     && let Some(inner) = update.get("update").cloned()
                 {
-                    let enriched =
-                        permission::with_completed_diffs(inner, diff.as_ref(), &turn.ctx.cwd).await;
+                    let enriched = permission::with_completed_diffs(inner, diff.as_ref(), &turn.ctx.cwd).await;
                     if let Some(object) = update.as_object_mut() {
                         object.insert("update".to_owned(), enriched);
                     }
@@ -622,19 +575,11 @@ impl Turns {
             }
             Output::PermissionAsk { event, tool, child } => {
                 let data = event.get("data").cloned().unwrap_or(Value::Null);
-                let id = data
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned();
+                let id = data.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
                 let input = Arc::new(permission::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),
-                    session_id: data
-                        .get("sessionID")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_owned(),
+                    session_id: data.get("sessionID").and_then(Value::as_str).unwrap_or_default().to_owned(),
                     event,
                     client_session_id: turn.ctx.session_id.clone(),
                     cwd: turn.ctx.cwd.clone(),
@@ -647,26 +592,18 @@ impl Turns {
                     id,
                     Box::pin(async move { permission::ask(&asking).await }),
                     "reject".to_owned(),
-                    move |decision| {
-                        Box::pin(async move { permission::respond(&input, &decision).await })
-                    },
+                    move |decision| Box::pin(async move { permission::respond(&input, &decision).await }),
                 );
                 Ok(())
             }
             Output::FormAsk { form, child } => {
                 let capabilities = *lock(&self.capabilities);
-                let Some(requested_schema) = elicitation::requested_schema(&form, &capabilities)
-                else {
+                let Some(requested_schema) = elicitation::requested_schema(&form, &capabilities) else {
                     elicitation::cancel_unshown(&self.client, &form).await;
                     return Ok(());
                 };
-                let id = form
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned();
-                let tool_call_sent =
-                    !turn.background && (child.is_none() || !turn.ctx.child_updates);
+                let id = form.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
+                let tool_call_sent = !turn.background && (child.is_none() || !turn.ctx.child_updates);
                 let input = Arc::new(elicitation::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),
@@ -682,9 +619,7 @@ impl Turns {
                     id,
                     Box::pin(async move { elicitation::ask(&asking).await }),
                     elicitation::Outcome::Cancel,
-                    move |outcome| {
-                        Box::pin(async move { elicitation::respond(&input, outcome).await })
-                    },
+                    move |outcome| Box::pin(async move { elicitation::respond(&input, outcome).await }),
                 );
                 Ok(())
             }
@@ -706,9 +641,7 @@ impl Drop for AbortOnDrop {
     }
 }
 
-async fn join(
-    result: &mut watch::Receiver<Option<Result<Terminal, Failure>>>,
-) -> Result<Terminal, Failure> {
+async fn join(result: &mut watch::Receiver<Option<Result<Terminal, Failure>>>) -> Result<Terminal, Failure> {
     match result.wait_for(Option::is_some).await {
         Ok(value) => value.clone().unwrap_or(Err(Failure::ServerUnavailable)),
         Err(_) => Err(Failure::ServerUnavailable),

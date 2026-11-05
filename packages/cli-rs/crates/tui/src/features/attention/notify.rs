@@ -66,13 +66,9 @@ pub fn install(tui: &Tui) {
 /// Sends `request` as a terminal notification under the current config and focus.
 pub fn notify(tui: &Tui, request: &Request) -> Outcome {
     let destroyed = tui.app.is_quitting();
-    decide(
-        &tui.settings.info(),
-        tui.attention.focus(),
-        destroyed,
-        request,
-        |message, title| tui.app.notify(message, Some(title)),
-    )
+    decide(&tui.settings.info(), tui.attention.focus(), destroyed, request, |message, title| {
+        tui.app.notify(message, Some(title))
+    })
 }
 
 /// `notify` without the terminal: `trigger` sends the notification and says whether the terminal took it.
@@ -101,16 +97,9 @@ fn decide(
     let requested = notifications && request.notification.is_some();
     let notification = requested
         && notification_skip.is_none()
-        && trigger(
-            &message,
-            &normalize_text(request.title.as_deref(), DEFAULT_TITLE, TITLE_LIMIT),
-        );
+        && trigger(&message, &normalize_text(request.title.as_deref(), DEFAULT_TITLE, TITLE_LIMIT));
     // E.19b plays the sound; the focus rule already decides what a skipped request reports.
-    let sound_skip = request
-        .sound
-        .as_ref()
-        .filter(|_| sounds)
-        .and_then(|sound| focus::skip(sound.when, focus));
+    let sound_skip = request.sound.as_ref().filter(|_| sounds).and_then(|sound| focus::skip(sound.when, focus));
     let sound = false;
 
     if !notification && !sound {
@@ -121,19 +110,11 @@ fn decide(
             return skipped(skip);
         }
     }
-    Outcome {
-        ok: notification || sound,
-        notification,
-        sound,
-        skipped: None,
-    }
+    Outcome { ok: notification || sound, notification, sound, skipped: None }
 }
 
 fn skipped(reason: Skip) -> Outcome {
-    Outcome {
-        skipped: Some(reason),
-        ..Outcome::default()
-    }
+    Outcome { skipped: Some(reason), ..Outcome::default() }
 }
 
 /// `normalizeText`: escape sequences and control characters removed, line breaks as one space, trimmed, at most
@@ -178,11 +159,7 @@ mod tests {
             title: Some("Demo session".to_owned()),
             message: "Session done".to_owned(),
             notification,
-            sound: sound.map(|when| Sound {
-                name: AttentionSoundName::Done,
-                when,
-                volume: None,
-            }),
+            sound: sound.map(|when| Sound { name: AttentionSoundName::Done, when, volume: None }),
         }
     }
 
@@ -200,41 +177,18 @@ mod tests {
     fn notifications_follow_the_config_and_the_focus() {
         let blurred = request(Some(When::Blurred), Some(When::Always));
         let sent = Some(("Session done".to_owned(), "Demo session".to_owned()));
-        let ok = Outcome {
-            ok: true,
-            notification: true,
-            ..Outcome::default()
-        };
+        let ok = Outcome { ok: true, notification: true, ..Outcome::default() };
         let table = [
-            (
-                info(false, false),
-                Focus::Blurred,
-                skipped(Skip::AttentionDisabled),
-                None,
-            ),
+            (info(false, false), Focus::Blurred, skipped(Skip::AttentionDisabled), None),
             (info(true, false), Focus::Blurred, ok, sent.clone()),
-            (
-                info(true, false),
-                Focus::Focused,
-                skipped(Skip::Focused),
-                None,
-            ),
-            (
-                info(true, false),
-                Focus::Unknown,
-                skipped(Skip::FocusUnknown),
-                None,
-            ),
+            (info(true, false), Focus::Focused, skipped(Skip::Focused), None),
+            (info(true, false), Focus::Unknown, skipped(Skip::FocusUnknown), None),
             // Sounds on but not played yet (E.19b): `always` holds, so nothing reports a skip.
             (info(false, true), Focus::Focused, Outcome::default(), None),
             (info(true, true), Focus::Blurred, ok, sent),
         ];
         for (info, focus, outcome, notification) in table {
-            assert_eq!(
-                run(&info, focus, &blurred),
-                (outcome, notification),
-                "{focus:?}"
-            );
+            assert_eq!(run(&info, focus, &blurred), (outcome, notification), "{focus:?}");
         }
     }
 
@@ -251,42 +205,15 @@ mod tests {
             skipped(Skip::Blurred),
             "the sound's rule reports when no notification was asked for"
         );
-        assert!(
-            run(&on, Focus::Focused, &request(Some(When::Focused), None))
-                .0
-                .notification
-        );
-        assert!(
-            run(&on, Focus::Unknown, &request(Some(When::Always), None))
-                .0
-                .notification
-        );
+        assert!(run(&on, Focus::Focused, &request(Some(When::Focused), None)).0.notification);
+        assert!(run(&on, Focus::Unknown, &request(Some(When::Always), None)).0.notification);
         let mut empty = request(Some(When::Always), None);
         empty.message = " \x1b[31m\n ".to_owned();
-        assert_eq!(
-            run(&on, Focus::Focused, &empty).0,
-            skipped(Skip::EmptyMessage)
-        );
-        let destroyed = decide(
-            &on,
-            Focus::Blurred,
-            true,
-            &request(Some(When::Always), None),
-            |_, _| true,
-        );
+        assert_eq!(run(&on, Focus::Focused, &empty).0, skipped(Skip::EmptyMessage));
+        let destroyed = decide(&on, Focus::Blurred, true, &request(Some(When::Always), None), |_, _| true);
         assert_eq!(destroyed, skipped(Skip::RendererDestroyed));
-        let refused = decide(
-            &on,
-            Focus::Blurred,
-            false,
-            &request(Some(When::Blurred), None),
-            |_, _| false,
-        );
-        assert_eq!(
-            refused,
-            Outcome::default(),
-            "a terminal without notifications"
-        );
+        let refused = decide(&on, Focus::Blurred, false, &request(Some(When::Blurred), None), |_, _| false);
+        assert_eq!(refused, Outcome::default(), "a terminal without notifications");
     }
 
     #[test]
@@ -295,21 +222,12 @@ mod tests {
             ("\x1b[1mBold\x1b[0m text", "", 240, "Bold text"),
             ("one  \r\n\t two\nthree", "", 240, "one two three"),
             ("bell\x07 and\x7f\u{85} c1", "", 240, "bell and c1"),
-            (
-                "\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\",
-                "",
-                240,
-                "link",
-            ),
+            ("\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\", "", 240, "link"),
             ("   ", "OpenCode", 80, "OpenCode"),
             ("ééééé", "", 3, "ééé"),
         ];
         for (input, fallback, limit, expected) in table {
-            assert_eq!(
-                normalize_text(Some(input), fallback, limit),
-                expected,
-                "{input:?}"
-            );
+            assert_eq!(normalize_text(Some(input), fallback, limit), expected, "{input:?}");
         }
         assert_eq!(normalize_text(None, "OpenCode", 80), "OpenCode");
     }

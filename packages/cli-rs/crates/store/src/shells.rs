@@ -16,10 +16,7 @@ pub struct Shell {
 impl Shell {
     /// The session that started the shell, if any (`metadata.sessionID`).
     pub fn session_id(&self) -> Option<&str> {
-        self.info
-            .metadata
-            .get("sessionID")
-            .and_then(serde_json::Value::as_str)
+        self.info.metadata.get("sessionID").and_then(serde_json::Value::as_str)
     }
 }
 
@@ -42,20 +39,12 @@ impl State {
     }
 
     pub fn shell(&self, id: &ShellID) -> Option<&Shell> {
-        self.locations
-            .values()
-            .find_map(|data| data.shell.as_ref().and_then(|shells| shells.get(id)))
+        self.locations.values().find_map(|data| data.shell.as_ref().and_then(|shells| shells.get(id)))
     }
 
     pub(crate) fn on_shell_created(&mut self, info: &ShellInfo, location: &Location) {
-        let shell = Shell {
-            info: info.clone(),
-            location: location.clone(),
-        };
-        self.location_mut(location)
-            .shell
-            .get_or_insert_default()
-            .insert(info.id.clone(), shell);
+        let shell = Shell { info: info.clone(), location: location.clone() };
+        self.location_mut(location).shell.get_or_insert_default().insert(info.id.clone(), shell);
     }
 
     pub(crate) fn remove_shell(&mut self, id: &ShellID, location: &Location) {

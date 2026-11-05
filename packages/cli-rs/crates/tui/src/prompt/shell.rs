@@ -24,17 +24,11 @@ pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {
             }
         }
     };
-    let inline = |key: &str, title: &str, mode: Mode| {
-        TuiCommand::inline(key, set(mode))
-            .title(title)
-            .group("Prompt")
-    };
+    let inline = |key: &str, title: &str, mode: Mode| TuiCommand::inline(key, set(mode)).title(title).group("Prompt");
     vec![
         KeymapLayer {
             target: Some(target),
-            enabled: when(|prompt| {
-                prompt.mode.get() == Mode::Normal && prompt.textarea.cursor_offset() == 0
-            }),
+            enabled: when(|prompt| prompt.mode.get() == Mode::Normal && prompt.textarea.cursor_offset() == 0),
             commands: vec![inline("!", "Shell mode", Mode::Shell)],
             ..KeymapLayer::default()
         },
@@ -51,9 +45,7 @@ pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {
         },
         KeymapLayer {
             target: Some(target),
-            enabled: when(|prompt| {
-                prompt.mode.get() == Mode::Shell && prompt.textarea.cursor_offset() == 0
-            }),
+            enabled: when(|prompt| prompt.mode.get() == Mode::Shell && prompt.textarea.cursor_offset() == 0),
             commands: vec![inline("backspace", "Exit shell mode", Mode::Normal)],
             ..KeymapLayer::default()
         },

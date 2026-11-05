@@ -5,8 +5,7 @@
 use std::rc::Rc;
 
 use opencode_api::generated::{
-    SessionID, SessionMessageAssistantContentItem, SessionMessageAssistantToolState,
-    SessionMessageInfo,
+    SessionID, SessionMessageAssistantContentItem, SessionMessageAssistantToolState, SessionMessageInfo,
 };
 use opencode_plugin::{Definition, Placement, slot};
 use opencode_store::MessageExt;
@@ -20,14 +19,11 @@ use crate::routes::session::sidebar::{Fold, Section, on_click};
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.todo", |cx| {
         let fold = Fold::load(cx.host(), cx.storage_key("view"));
-        cx.slot(
-            Placement::append(slot::SIDEBAR_CONTENT),
-            move |tui, input| {
-                let session = SessionID(input.session_id.clone().unwrap_or_default());
-                let fold = fold.clone();
-                Box::new(Section::new(tui, move |tui| view(tui, &session, &fold)))
-            },
-        );
+        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), move |tui, input| {
+            let session = SessionID(input.session_id.clone().unwrap_or_default());
+            let fold = fold.clone();
+            Box::new(Section::new(tui, move |tui| view(tui, &session, &fold)))
+        });
     })
 }
 
@@ -47,11 +43,8 @@ pub struct Todo {
 
 fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
     let list = tui.data.read(|state| {
-        let boundary = state.session(session).and_then(|info| {
-            info.revert
-                .as_ref()
-                .map(|revert| revert.message_id.0.clone())
-        });
+        let boundary =
+            state.session(session).and_then(|info| info.revert.as_ref().map(|revert| revert.message_id.0.clone()));
         todos(state.messages(session), boundary.as_deref())
     });
     if list.is_empty() {
@@ -66,10 +59,7 @@ fn view(tui: &Tui, session: &SessionID, fold: &Rc<Fold>) -> Option<View> {
     }
     let mut title = vec!["Todo".fg(theme.text.base).bold()];
     if foldable && !fold.open() {
-        let remaining = list
-            .iter()
-            .filter(|item| matches!(item.status, Status::Pending | Status::InProgress))
-            .count();
+        let remaining = list.iter().filter(|item| matches!(item.status, Status::Pending | Status::InProgress)).count();
         title.push(format!(" ({remaining} remaining)").fg(theme.text.muted));
     }
     header.add(&Text::new(app, title));
@@ -98,20 +88,13 @@ fn item_view(app: &App, theme: &Theme, todo: &Todo) -> View {
         Status::Cancelled => theme.text.faint,
         _ => theme.text.muted,
     };
-    let content = Text::new(app, todo.content.clone())
-        .fg(color)
-        .wrap(WrapMode::Word)
-        .grow(1.0);
+    let content = Text::new(app, todo.content.clone()).fg(color).wrap(WrapMode::Word).grow(1.0);
     if todo.status == Status::Cancelled {
         content.strikethrough();
     }
     View::new(app)
         .row()
-        .child(
-            &Text::new(app, format!("{} ", marker(todo.status)))
-                .fg(color)
-                .shrink(0.0),
-        )
+        .child(&Text::new(app, format!("{} ", marker(todo.status))).fg(color).shrink(0.0))
         .child(&content)
 }
 
@@ -138,12 +121,10 @@ pub fn todos(messages: &[SessionMessageInfo], boundary: Option<&str>) -> Vec<Tod
         })
         .rev()
         .find_map(|item| match item {
-            SessionMessageAssistantContentItem::Tool(tool) if tool.name == "todowrite" => {
-                match &tool.state {
-                    SessionMessageAssistantToolState::Completed(state) => state.input.get("todos"),
-                    _ => None,
-                }
-            }
+            SessionMessageAssistantContentItem::Tool(tool) if tool.name == "todowrite" => match &tool.state {
+                SessionMessageAssistantToolState::Completed(state) => state.input.get("todos"),
+                _ => None,
+            },
             _ => None,
         });
     parse(input)
@@ -157,20 +138,14 @@ fn parse(value: Option<&Value>) -> Vec<Todo> {
     items
         .iter()
         .filter_map(|item| {
-            let content = item
-                .get("content")?
-                .as_str()
-                .filter(|text| !text.is_empty())?;
+            let content = item.get("content")?.as_str().filter(|text| !text.is_empty())?;
             let status = match item.get("status").and_then(Value::as_str) {
                 Some("in_progress") => Status::InProgress,
                 Some("completed") => Status::Completed,
                 Some("cancelled") => Status::Cancelled,
                 _ => Status::Pending,
             };
-            Some(Todo {
-                content: content.to_owned(),
-                status,
-            })
+            Some(Todo { content: content.to_owned(), status })
         })
         .collect()
 }
@@ -191,14 +166,8 @@ mod tests {
         ]);
         let list = parse(Some(&value));
         assert_eq!(
-            list.iter()
-                .map(|todo| (todo.content.as_str(), todo.status))
-                .collect::<Vec<_>>(),
-            [
-                ("a", Status::Completed),
-                ("b", Status::Pending),
-                ("c", Status::InProgress)
-            ]
+            list.iter().map(|todo| (todo.content.as_str(), todo.status)).collect::<Vec<_>>(),
+            [("a", Status::Completed), ("b", Status::Pending), ("c", Status::InProgress)]
         );
         assert!(parse(Some(&json!({}))).is_empty());
     }

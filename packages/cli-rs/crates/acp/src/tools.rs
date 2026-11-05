@@ -18,13 +18,7 @@ pub struct DiffSource {
     pub metadata: Option<Value>,
 }
 
-pub fn pending_tool_call(
-    tool_call_id: &str,
-    tool_name: &str,
-    input: &Value,
-    title: Option<&str>,
-    cwd: &str,
-) -> Value {
+pub fn pending_tool_call(tool_call_id: &str, tool_name: &str, input: &Value, title: Option<&str>, cwd: &str) -> Value {
     json!({
         "toolCallId": tool_call_id,
         "name": tool_name,
@@ -56,17 +50,13 @@ pub fn completed_tool_update(
     cwd: &str,
 ) -> Value {
     let normalized = tool_content(content);
-    let first_text = content
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|part| part.get("type").and_then(Value::as_str) == Some("text"));
+    let first_text =
+        content.as_array().into_iter().flatten().find(|part| part.get("type").and_then(Value::as_str) == Some("text"));
     let read = first_text
         .filter(|_| canonical_name(tool_name) == "read")
         .and_then(|part| read_display_text(part.get("text").and_then(Value::as_str)?));
-    let (images, others): (Vec<Value>, Vec<Value>) = normalized
-        .into_iter()
-        .partition(|part| part["content"]["type"] == "image");
+    let (images, others): (Vec<Value>, Vec<Value>) =
+        normalized.into_iter().partition(|part| part["content"]["type"] == "image");
     let mut parts = match read {
         Some(text) => {
             vec![json!({ "type": "content", "content": { "type": "text", "text": text } })]
@@ -122,11 +112,7 @@ fn kind(tool_name: &str) -> &'static str {
         "shell" => "execute",
         "webfetch" => "fetch",
         "edit" | "patch" | "write" => "edit",
-        "grep"
-        | "glob"
-        | "context"
-        | "context7_resolve_library_id"
-        | "context7_get_library_docs" => "search",
+        "grep" | "glob" | "context" | "context7_resolve_library_id" | "context7_get_library_docs" => "search",
         "read" => "read",
         "subagent" => "think",
         _ => "other",
@@ -136,11 +122,7 @@ fn kind(tool_name: &str) -> &'static str {
 /// `toLocations`: the files and directories a tool call touches, absolute against `cwd`.
 pub fn locations(tool_name: &str, input: &Value, cwd: &str) -> Vec<Value> {
     let values: Vec<Option<String>> = match canonical_name(tool_name).as_str() {
-        "shell" => vec![Some(
-            text(input, "workdir")
-                .or_else(|| text(input, "cwd"))
-                .unwrap_or_else(|| cwd.to_owned()),
-        )],
+        "shell" => vec![Some(text(input, "workdir").or_else(|| text(input, "cwd")).unwrap_or_else(|| cwd.to_owned()))],
         "read" | "edit" | "write" => vec![file_path(input)],
         "patch" => patch_hunks(input)
             .into_iter()
@@ -153,11 +135,9 @@ pub fn locations(tool_name: &str, input: &Value, cwd: &str) -> Vec<Value> {
             })
             .collect(),
         "external_directory" => vec![text(input, "filepath")],
-        "grep"
-        | "glob"
-        | "context"
-        | "context7_resolve_library_id"
-        | "context7_get_library_docs" => vec![text(input, "path")],
+        "grep" | "glob" | "context" | "context7_resolve_library_id" | "context7_get_library_docs" => {
+            vec![text(input, "path")]
+        }
         _ => Vec::new(),
     };
     location_from(cwd, values)
@@ -183,10 +163,7 @@ pub fn file_path(input: &Value) -> Option<String> {
 
 /// The hunks of a patch tool's `patchText`, empty when it is missing or does not parse.
 pub fn patch_hunks(input: &Value) -> Vec<patch::Hunk> {
-    text(input, "patchText")
-        .filter(|text| !text.is_empty())
-        .and_then(|text| patch::parse(&text))
-        .unwrap_or_default()
+    text(input, "patchText").filter(|text| !text.is_empty()).and_then(|text| patch::parse(&text)).unwrap_or_default()
 }
 
 /// `absolutePath`: absolute paths stay as they are; relative ones resolve against `cwd`.
@@ -212,18 +189,12 @@ fn tool_title(tool_name: &str, input: &Value, fallback: Option<&str>) -> String 
             .or_else(|| fallback.map(str::to_owned))
             .unwrap_or_else(|| tool_name.to_owned());
     }
-    fallback
-        .filter(|title| !title.is_empty())
-        .unwrap_or(tool_name)
-        .to_owned()
+    fallback.filter(|title| !title.is_empty()).unwrap_or(tool_name).to_owned()
 }
 
 fn raw_input(tool_name: &str, input: &Value, cwd: &str) -> Value {
-    let truthy = |key: &str| {
-        input
-            .get(key)
-            .is_some_and(|value| !value.is_null() && value != "" && value != &json!(false))
-    };
+    let truthy =
+        |key: &str| input.get(key).is_some_and(|value| !value.is_null() && value != "" && value != &json!(false));
     if !is_shell(tool_name) || truthy("cwd") || truthy("workdir") {
         return input.clone();
     }
@@ -243,9 +214,8 @@ fn raw_output(metadata: Option<&Value>, error: Option<&str>) -> Value {
     Value::Object(output)
 }
 
-static DATA_IMAGE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$").expect("data URL pattern")
-});
+static DATA_IMAGE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$").expect("data URL pattern"));
 
 /// Text parts as text content, and `data:image/...;base64` file parts as images.
 fn tool_content(content: &Value) -> Vec<Value> {
@@ -279,10 +249,7 @@ fn read_display_text(text: &str) -> Option<String> {
     if !text.starts_with('{') {
         return None;
     }
-    let envelope = serde_json::from_str::<Value>(text)
-        .ok()
-        .filter(Value::is_object)
-        .unwrap_or_else(|| json!({}));
+    let envelope = serde_json::from_str::<Value>(text).ok().filter(Value::is_object).unwrap_or_else(|| json!({}));
     if let Some(content) = envelope.get("content").and_then(Value::as_str)
         && (envelope.get("type").and_then(Value::as_str) == Some("text-page")
             || envelope.get("encoding").and_then(Value::as_str) == Some("utf8"))
@@ -290,10 +257,8 @@ fn read_display_text(text: &str) -> Option<String> {
         return Some(content.to_owned());
     }
     let entries = envelope.get("entries")?.as_array()?;
-    let lines: Vec<&str> = entries
-        .iter()
-        .filter_map(|entry| entry.as_str().or_else(|| entry.get("path")?.as_str()))
-        .collect();
+    let lines: Vec<&str> =
+        entries.iter().filter_map(|entry| entry.as_str().or_else(|| entry.get("path")?.as_str())).collect();
     Some(lines.join("\n"))
 }
 
@@ -308,14 +273,7 @@ mod tests {
             { "type": "text", "text": "{\"type\":\"text-page\",\"content\":\"hello\"}" },
             { "type": "file", "uri": "data:text/plain;base64,AAAA" },
         ]);
-        let update = completed_tool_update(
-            "c",
-            "read",
-            &json!({ "path": "a.ts" }),
-            &content,
-            None,
-            "/w",
-        );
+        let update = completed_tool_update("c", "read", &json!({ "path": "a.ts" }), &content, None, "/w");
         assert_eq!(
             update["content"],
             json!([
@@ -324,10 +282,7 @@ mod tests {
             ])
         );
         assert_eq!(update["locations"], json!([{ "path": "/w/a.ts" }]));
-        assert_eq!(
-            read_display_text("{\"entries\":[\"a\",{\"path\":\"b\"},3]}").as_deref(),
-            Some("a\nb")
-        );
+        assert_eq!(read_display_text("{\"entries\":[\"a\",{\"path\":\"b\"},3]}").as_deref(), Some("a\nb"));
         assert_eq!(read_display_text("plain"), None);
     }
 
@@ -336,19 +291,10 @@ mod tests {
         let patch = "*** Begin Patch\n*** Update File: a.ts\n*** Move to: b.ts\n@@\n-x\n+y\n*** Add File: a.ts\n+z\n*** End Patch";
         assert_eq!(
             locations("apply_patch", &json!({ "patchText": patch }), "/w"),
-            json!([{ "path": "/w/a.ts" }, { "path": "/w/b.ts" }])
-                .as_array()
-                .unwrap()
-                .clone()
+            json!([{ "path": "/w/a.ts" }, { "path": "/w/b.ts" }]).as_array().unwrap().clone()
         );
-        assert_eq!(
-            locations("bash", &json!({ "cwd": "sub" }), "/w"),
-            vec![json!({ "path": "/w/sub" })]
-        );
-        assert_eq!(
-            locations("glob", &json!({ "path": "/abs/../x" }), "/w"),
-            vec![json!({ "path": "/abs/../x" })]
-        );
+        assert_eq!(locations("bash", &json!({ "cwd": "sub" }), "/w"), vec![json!({ "path": "/w/sub" })]);
+        assert_eq!(locations("glob", &json!({ "path": "/abs/../x" }), "/w"), vec![json!({ "path": "/abs/../x" })]);
         assert!(locations("webfetch", &json!({ "url": "x" }), "/w").is_empty());
     }
 }

@@ -1,10 +1,7 @@
 //! `confirm` (`@clack/prompts` `confirm.ts` on `@clack/core`'s `ConfirmPrompt`).
 
 use super::core::{self, Base, Prompt, move_cursor};
-use super::style::{
-    S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE, cyan, dim, gray, green, strikethrough,
-    symbol,
-};
+use super::style::{S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE, cyan, dim, gray, green, strikethrough, symbol};
 use super::{Cancelled, Output, State};
 
 /// Yes or no. Y and N answer at once; every movement key, Space included, flips the answer.
@@ -16,12 +13,7 @@ pub struct Confirm {
 }
 
 pub fn confirm(message: impl Into<String>) -> Confirm {
-    Confirm {
-        message: message.into(),
-        active: "Yes".to_string(),
-        inactive: "No".to_string(),
-        initial_value: true,
-    }
+    Confirm { message: message.into(), active: "Yes".to_string(), inactive: "No".to_string(), initial_value: true }
 }
 
 impl Confirm {
@@ -46,10 +38,7 @@ impl Confirm {
     }
 
     pub fn prompt(self) -> Result<bool, Cancelled> {
-        let mut prompt = ConfirmPrompt {
-            value: self.initial_value,
-            options: self,
-        };
+        let mut prompt = ConfirmPrompt { value: self.initial_value, options: self };
         core::run(&mut prompt, Output::Stdout, None)?;
         Ok(prompt.value)
     }
@@ -78,22 +67,12 @@ impl Prompt for ConfirmPrompt {
     }
 
     fn render(&self, base: &Base) -> String {
-        let title = format!(
-            "{}\n{}  {}\n",
-            gray(S_BAR()),
-            symbol(base.state),
-            self.options.message
-        );
+        let title = format!("{}\n{}  {}\n", gray(S_BAR()), symbol(base.state), self.options.message);
         let (active, inactive) = (&self.options.active, &self.options.inactive);
         let value = if self.value { active } else { inactive };
         match base.state {
             State::Submit => format!("{title}{}  {}", gray(S_BAR()), dim(value)),
-            State::Cancel => format!(
-                "{title}{}  {}\n{}",
-                gray(S_BAR()),
-                strikethrough(&dim(value)),
-                gray(S_BAR())
-            ),
+            State::Cancel => format!("{title}{}  {}\n{}", gray(S_BAR()), strikethrough(&dim(value)), gray(S_BAR())),
             _ => {
                 let choice = |selected: bool, label: &str| {
                     if selected {

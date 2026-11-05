@@ -62,17 +62,10 @@ fn entries() -> Vec<Entry> {
     use tree_sitter_md as md;
     use tree_sitter_typescript as ts;
     let mut entries = vec![
-        entry!(
-            "javascript",
-            tree_sitter_javascript::LANGUAGE,
-            ["javascriptreact"]
-        ),
+        entry!("javascript", tree_sitter_javascript::LANGUAGE, ["javascriptreact"]),
         entry!("typescript", ts::LANGUAGE_TYPESCRIPT),
         entry!("typescriptreact", ts::LANGUAGE_TSX),
-        Entry {
-            injections: MARKDOWN_INJECTIONS,
-            ..entry!("markdown", md::LANGUAGE)
-        },
+        Entry { injections: MARKDOWN_INJECTIONS, ..entry!("markdown", md::LANGUAGE) },
         entry!("markdown_inline", md::INLINE_LANGUAGE),
         entry!("zig", tree_sitter_zig::LANGUAGE),
         entry!("rust", tree_sitter_rust::LANGUAGE),
@@ -128,9 +121,7 @@ pub fn register() {
             syntax::register_lazy(entry.filetype, move || {
                 #[cfg(test)]
                 tests::loaded(entry.filetype);
-                compile(&entry)
-                    .inspect_err(|error| log::warn!("grammar {}: {error}", entry.filetype))
-                    .ok()
+                compile(&entry).inspect_err(|error| log::warn!("grammar {}: {error}", entry.filetype)).ok()
             });
             for alias in entry.aliases {
                 syntax::register_alias(alias, entry.filetype);
@@ -144,9 +135,7 @@ pub fn register() {
 fn compile(entry: &Entry) -> Result<CompiledGrammar, GrammarError> {
     let mut query = Cow::Borrowed(entry.query);
     loop {
-        let grammar = Grammar::new((entry.language)(), query.clone())
-            .injections(entry.injections)
-            .core_captures();
+        let grammar = Grammar::new((entry.language)(), query.clone()).injections(entry.injections).core_captures();
         match grammar.compile() {
             Err(GrammarError::Query(error)) if error.kind == QueryErrorKind::Structure => {
                 let Some(rest) = without_pattern(&query, error.offset) else {
@@ -216,12 +205,8 @@ mod tests {
                 .iter()
                 .find(|item| item["filetype"] == entry.filetype)
                 .unwrap_or_else(|| panic!("{} is not in the manifest", entry.filetype));
-            let aliases: Vec<&str> = listed["aliases"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|alias| alias.as_str().unwrap())
-                .collect();
+            let aliases: Vec<&str> =
+                listed["aliases"].as_array().unwrap().iter().map(|alias| alias.as_str().unwrap()).collect();
             assert_eq!(aliases, entry.aliases, "{} aliases", entry.filetype);
         }
         // Every filetype of the manifest but Kotlin and Swift with grammars-all; seven or fifteen otherwise.
@@ -250,12 +235,7 @@ mod tests {
     }
 
     fn loads(filetype: &str) -> usize {
-        LOADS
-            .lock()
-            .unwrap()
-            .get(filetype)
-            .copied()
-            .unwrap_or_default()
+        LOADS.lock().unwrap().get(filetype).copied().unwrap_or_default()
     }
 
     /// Registering the whole set compiles no query; highlighting a filetype compiles its query once.
@@ -281,10 +261,7 @@ mod tests {
     fn without_pattern_drops_the_pattern_and_its_captures() {
         let query = "; a (comment)\n(a) @x\n\n((b\n  (c \")\") @y)\n  (#eq? @y \"z\"))\n[\"d\"] @w\n(e) @v\n";
         let at = query.find("(c \"").unwrap();
-        assert_eq!(
-            without_pattern(query, at).as_deref(),
-            Some("; a (comment)\n(a) @x\n\n\n[\"d\"] @w\n(e) @v\n")
-        );
+        assert_eq!(without_pattern(query, at).as_deref(), Some("; a (comment)\n(a) @x\n\n\n[\"d\"] @w\n(e) @v\n"));
         let at = query.find("[\"d").unwrap();
         assert_eq!(
             without_pattern(query, at).as_deref(),
@@ -298,11 +275,8 @@ mod tests {
     fn typescript_uses_cores_capture_names() {
         register();
         let source = "import { a } from \"b\"\n// note\n";
-        let names: Vec<&str> = syntax::highlights(source, "typescript")
-            .unwrap()
-            .iter()
-            .map(|capture| capture.name)
-            .collect();
+        let names: Vec<&str> =
+            syntax::highlights(source, "typescript").unwrap().iter().map(|capture| capture.name).collect();
         assert!(names.contains(&"keyword.import"), "{names:?}");
         assert!(names.contains(&"spell"), "{names:?}");
     }

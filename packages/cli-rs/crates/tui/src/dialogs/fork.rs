@@ -7,9 +7,7 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionForkInput, SessionID, SessionMessageID, SessionMessageInfo};
-use opencode_ui::dialog::{
-    DIALOG_LIST_INSET, DialogOptions, DialogSize, HeaderProps, header, layout_with,
-};
+use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize, HeaderProps, header, layout_with};
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -37,20 +35,13 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
             }
         }
     };
-    let options: Vec<_> =
-        std::iter::once(SelectOption::new("Full session", None).on_select(pick(None)))
-            .chain(
-                tui.data
-                    .read(|state| prompts(state.messages(&session)))
-                    .into_iter()
-                    .rev()
-                    .map(|(id, title, created)| {
-                        SelectOption::new(title, Some(id.clone()))
-                            .footer(time(created))
-                            .on_select(pick(Some(id)))
-                    }),
-            )
-            .collect();
+    let options: Vec<_> = std::iter::once(SelectOption::new("Full session", None).on_select(pick(None)))
+        .chain(tui.data.read(|state| prompts(state.messages(&session))).into_iter().rev().map(
+            |(id, title, created)| {
+                SelectOption::new(title, Some(id.clone())).footer(time(created)).on_select(pick(Some(id)))
+            },
+        ))
+        .collect();
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {
@@ -73,53 +64,31 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
 fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
     pending(tui);
     let prompt = message.as_deref().and_then(|message| {
-        tui.data
-            .read(|state| match state.message(&session, message) {
-                Some(SessionMessageInfo::User(user)) => Some(restored(&user.text)),
-                _ => None,
-            })
+        tui.data.read(|state| match state.message(&session, message) {
+            Some(SessionMessageInfo::User(user)) => Some(restored(&user.text)),
+            _ => None,
+        })
     });
     let client = tui.data.client().clone();
-    let input = SessionForkInput {
-        session_id: session,
-        before: message.map(SessionMessageID),
-    };
+    let input = SessionForkInput { session_id: session, before: message.map(SessionMessageID) };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_fork(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            tui.dialogs.clear();
-            let info = match result {
-                Ok(info) => info,
-                Err(error) => {
-                    tui.toasts.show(
-                        ToastOptions::new(Variant::Error, error.to_string())
-                            .duration(Duration::from_millis(5000)),
-                    );
-                    return;
-                }
-            };
-            if let Some(prompt) = prompt {
-                tui.prompt.drafts.save(
-                    Some(&info.id),
-                    Draft {
-                        prompt,
-                        cursor: u32::MAX,
-                    },
-                );
+    tui.app.spawn(async move { client.session_fork(&input, &RequestOptions::default()).await }, move |_, result| {
+        let Some(tui) = weak.upgrade() else { return };
+        tui.dialogs.clear();
+        let info = match result {
+            Ok(info) => info,
+            Err(error) => {
+                tui.toasts
+                    .show(ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000)));
+                return;
             }
-            tui.navigate(Route::Session { id: info.id });
-            tui.toasts.show(
-                ToastOptions::new(Variant::Success, "Forked session")
-                    .duration(Duration::from_millis(4000)),
-            );
-        },
-    );
+        };
+        if let Some(prompt) = prompt {
+            tui.prompt.drafts.save(Some(&info.id), Draft { prompt, cursor: u32::MAX });
+        }
+        tui.navigate(Route::Session { id: info.id });
+        tui.toasts.show(ToastOptions::new(Variant::Success, "Forked session").duration(Duration::from_millis(4000)));
+    });
 }
 
 /// The pending view: the header and a spinner, at the list inset.
@@ -127,19 +96,11 @@ fn pending(tui: &Tui) {
     let animations = opencode_ui::motion::enabled(tui.config().info.animations);
     tui.dialogs.replace(
         move |cx| {
-            let spinner = Spinner::new(&cx.app)
-                .color(cx.theme.text.muted)
-                .label("Forking session…")
-                .animations(animations);
+            let spinner =
+                Spinner::new(&cx.app).color(cx.theme.text.muted).label("Forking session…").animations(animations);
             layout_with(
                 cx,
-                &header(
-                    cx,
-                    HeaderProps {
-                        title: "Fork session".into(),
-                        ..HeaderProps::default()
-                    },
-                ),
+                &header(cx, HeaderProps { title: "Fork session".into(), ..HeaderProps::default() }),
                 &spinner,
                 None,
                 DIALOG_LIST_INSET,
@@ -160,8 +121,5 @@ pub(crate) fn restored(text: &str) -> serde_json::Value {
 }
 
 fn large() -> DialogOptions {
-    DialogOptions {
-        size: DialogSize::Large,
-        ..DialogOptions::default()
-    }
+    DialogOptions { size: DialogSize::Large, ..DialogOptions::default() }
 }

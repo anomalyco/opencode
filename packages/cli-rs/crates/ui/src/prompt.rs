@@ -5,8 +5,7 @@
 //! the busy state and the value.
 
 use crate::dialog::{
-    DialogCx, DialogSize, FocusId, FooterAction, FooterProps, HeaderProps, footer, header,
-    layout_view,
+    DialogCx, DialogSize, FocusId, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
 use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
@@ -124,14 +123,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     if !prompt.busy() {
         cx.focus(&prompt.0.field);
     }
-    let root = layout_view(
-        cx,
-        &head,
-        &body,
-        Some(&prompt.0.footer_slot),
-        crate::dialog::DIALOG_INSET,
-        2,
-    );
+    let root = layout_view(cx, &head, &body, Some(&prompt.0.footer_slot), crate::dialog::DIALOG_INSET, 2);
     (root, prompt)
 }
 
@@ -179,9 +171,7 @@ impl Prompt {
         let weak = Rc::downgrade(&self.0);
         let busy = {
             let weak = weak.clone();
-            Condition::When(Rc::new(move || {
-                weak.upgrade().is_some_and(|inner| !inner.busy.get())
-            }))
+            Condition::When(Rc::new(move || weak.upgrade().is_some_and(|inner| !inner.busy.get())))
         };
         let submit = weak.clone();
         let mut commands = vec![
@@ -202,12 +192,7 @@ impl Prompt {
                         run(&Prompt(inner));
                     }
                 })
-                .title(
-                    action
-                        .command_title
-                        .clone()
-                        .unwrap_or_else(|| action.title.clone()),
-                )
+                .title(action.command_title.clone().unwrap_or_else(|| action.title.clone()))
                 .group("Dialog"),
             );
         }
@@ -248,28 +233,14 @@ impl Prompt {
         let inner = &self.0;
         let theme = &inner.cx.theme;
         let busy = inner.busy.get();
-        let text = if busy {
-            theme.text.formfield.disabled
+        let text = if busy { theme.text.formfield.disabled } else { theme.text.formfield.base };
+        inner.field.colors(text, Color::TRANSPARENT).focused_colors(text, Color::TRANSPARENT).cursor_color(if busy {
+            theme.background.formfield.disabled
         } else {
-            theme.text.formfield.base
-        };
-        inner
-            .field
-            .colors(text, Color::TRANSPARENT)
-            .focused_colors(text, Color::TRANSPARENT)
-            .cursor_color(if busy {
-                theme.background.formfield.disabled
-            } else {
-                theme.text.base
-            });
+            theme.text.base
+        });
         // The `Spinner` with `animations: false`; the animated frames come with U.6.
-        inner
-            .busy_line
-            .set_text(format!(
-                "⋯ {}",
-                inner.props.busy_text.as_deref().unwrap_or("Working…")
-            ))
-            .visible(busy);
+        inner.busy_line.set_text(format!("⋯ {}", inner.props.busy_text.as_deref().unwrap_or("Working…"))).visible(busy);
         self.render_footer();
     }
 
@@ -279,13 +250,11 @@ impl Prompt {
         let slot = &inner.footer_slot;
         slot.clear();
         let weak: Weak<Inner> = Rc::downgrade(&self.0);
-        let submit = FooterAction::new("submit")
-            .command("dialog.prompt.submit")
-            .on_trigger(move || {
-                if let Some(inner) = weak.upgrade() {
-                    Prompt(inner).confirm();
-                }
-            });
+        let submit = FooterAction::new("submit").command("dialog.prompt.submit").on_trigger(move || {
+            if let Some(inner) = weak.upgrade() {
+                Prompt(inner).confirm();
+            }
+        });
         let extra: Vec<FooterAction> = inner
             .props
             .actions
@@ -305,12 +274,6 @@ impl Prompt {
             .collect();
         let mut primary = extra;
         primary.push(submit.disabled(inner.busy.get()));
-        slot.add(&footer(
-            cx,
-            FooterProps {
-                primary,
-                ..FooterProps::default()
-            },
-        ));
+        slot.add(&footer(cx, FooterProps { primary, ..FooterProps::default() }));
     }
 }

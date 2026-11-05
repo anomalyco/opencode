@@ -115,16 +115,8 @@ pub struct Rect {
 }
 
 pub fn note_connector(note: &Rect, side: NoteSide, target: &Rect) -> NoteConnector {
-    let note_x = if side == NoteSide::Right {
-        note.left - 1
-    } else {
-        note.left + note.width
-    };
-    let target_x = if side == NoteSide::Right {
-        target.left + target.width
-    } else {
-        target.left - 1
-    };
+    let note_x = if side == NoteSide::Right { note.left - 1 } else { note.left + note.width };
+    let target_x = if side == NoteSide::Right { target.left + target.width } else { target.left - 1 };
     let target_bottom = target.top + target.height - 1;
     let note_bottom = note.top + note.height - 1;
     let above = note_bottom < target.top;
@@ -134,47 +126,23 @@ pub fn note_connector(note: &Rect, side: NoteSide, target: &Rect) -> NoteConnect
         return NoteConnector {
             connector_y,
             points: vec![
-                Point {
-                    x: target_x,
-                    y: if above {
-                        target.top - 1
-                    } else {
-                        target_bottom + 1
-                    },
-                },
-                Point {
-                    x: target_x,
-                    y: connector_y,
-                },
-                Point {
-                    x: note_x,
-                    y: connector_y,
-                },
+                Point { x: target_x, y: if above { target.top - 1 } else { target_bottom + 1 } },
+                Point { x: target_x, y: connector_y },
+                Point { x: note_x, y: connector_y },
             ],
         };
     }
     let connector_y = (note.top + 1).max(target.center_y.min(note.top + note.height - 2));
     NoteConnector {
         connector_y,
-        points: vec![
-            Point {
-                x: target_x,
-                y: connector_y,
-            },
-            Point {
-                x: note_x,
-                y: connector_y,
-            },
-        ],
+        points: vec![Point { x: target_x, y: connector_y }, Point { x: note_x, y: connector_y }],
     }
 }
 
 // visible-model.ts
 
 pub fn is_hidden_composite_marker(state: Option<&State>) -> bool {
-    state.is_some_and(|state| {
-        state.parent_id.is_some() && matches!(state.kind, StateKind::Start | StateKind::End)
-    })
+    state.is_some_and(|state| state.parent_id.is_some() && matches!(state.kind, StateKind::Start | StateKind::End))
 }
 
 fn collapse_once(transitions: &[Transition], states: &[State]) -> Option<Vec<Transition>> {
@@ -186,20 +154,16 @@ fn collapse_once(transitions: &[Transition], states: &[State]) -> Option<Vec<Tra
         .into_iter()
         .collect();
     for marker in hidden {
-        let incoming: Vec<usize> = (0..transitions.len())
-            .filter(|&i| transitions[i].to == marker && transitions[i].from != marker)
-            .collect();
-        let outgoing: Vec<usize> = (0..transitions.len())
-            .filter(|&i| transitions[i].from == marker && transitions[i].to != marker)
-            .collect();
+        let incoming: Vec<usize> =
+            (0..transitions.len()).filter(|&i| transitions[i].to == marker && transitions[i].from != marker).collect();
+        let outgoing: Vec<usize> =
+            (0..transitions.len()).filter(|&i| transitions[i].from == marker && transitions[i].to != marker).collect();
         if incoming.is_empty() || outgoing.is_empty() {
             continue;
         }
         let skipped: HashSet<usize> = incoming.iter().chain(&outgoing).copied().collect();
-        let mut next: Vec<Transition> = (0..transitions.len())
-            .filter(|i| !skipped.contains(i))
-            .map(|i| transitions[i].clone())
-            .collect();
+        let mut next: Vec<Transition> =
+            (0..transitions.len()).filter(|i| !skipped.contains(i)).map(|i| transitions[i].clone()).collect();
         for &i in &incoming {
             for &o in &outgoing {
                 let label = [transitions[i].label.as_str(), transitions[o].label.as_str()]
@@ -207,11 +171,7 @@ fn collapse_once(transitions: &[Transition], states: &[State]) -> Option<Vec<Tra
                     .filter(|label| !label.is_empty())
                     .collect::<Vec<_>>()
                     .join("<br/>");
-                next.push(Transition {
-                    from: transitions[i].from.clone(),
-                    to: transitions[o].to.clone(),
-                    label,
-                });
+                next.push(Transition { from: transitions[i].from.clone(), to: transitions[o].to.clone(), label });
             }
         }
         return Some(next);
@@ -225,11 +185,7 @@ pub fn visible(diagram: &Diagram) -> Diagram {
     while let Some(next) = collapse_once(&transitions, &diagram.states) {
         transitions = next;
     }
-    let by_id: HashMap<&str, &State> = diagram
-        .states
-        .iter()
-        .map(|state| (state.id.as_str(), state))
-        .collect();
+    let by_id: HashMap<&str, &State> = diagram.states.iter().map(|state| (state.id.as_str(), state)).collect();
     let mut referenced: HashSet<&str> = HashSet::new();
     for transition in &transitions {
         for id in [&transition.from, &transition.to] {
@@ -244,9 +200,7 @@ pub fn visible(diagram: &Diagram) -> Diagram {
         states: diagram
             .states
             .iter()
-            .filter(|state| {
-                !is_hidden_composite_marker(Some(state)) || referenced.contains(state.id.as_str())
-            })
+            .filter(|state| !is_hidden_composite_marker(Some(state)) || referenced.contains(state.id.as_str()))
             .cloned()
             .collect(),
         transitions,
@@ -267,13 +221,7 @@ pub struct SearchSpace {
 }
 
 pub fn search_space(space: &SpatialIndex, clearance: impl Fn(Role) -> i32) -> SearchSpace {
-    let mut result = SearchSpace {
-        blocked: HashSet::new(),
-        min_x: 0,
-        min_y: 0,
-        max_x: 0,
-        max_y: 0,
-    };
+    let mut result = SearchSpace { blocked: HashSet::new(), min_x: 0, min_y: 0, max_x: 0, max_y: 0 };
     for claim in space.claims() {
         let padding = clearance(claim.role);
         for span in &claim.spans {
@@ -313,8 +261,7 @@ pub fn manhattan_path(
             queue.push(point);
         }
     }
-    let mut parents: HashMap<Point, Option<Point>> =
-        queue.iter().map(|&point| (point, None)).collect();
+    let mut parents: HashMap<Point, Option<Point>> = queue.iter().map(|&point| (point, None)).collect();
     let mut cursor = 0;
     while cursor < queue.len() && *budget > 0 {
         let current = queue[cursor];
@@ -325,34 +272,16 @@ pub fn manhattan_path(
         let dy = (goal.y - current.y).signum();
         let mut candidates: Vec<Point> = Vec::with_capacity(6);
         if dx != 0 {
-            candidates.push(Point {
-                x: current.x + dx,
-                y: current.y,
-            });
+            candidates.push(Point { x: current.x + dx, y: current.y });
         }
         if dy != 0 {
-            candidates.push(Point {
-                x: current.x,
-                y: current.y + dy,
-            });
+            candidates.push(Point { x: current.x, y: current.y + dy });
         }
         candidates.extend([
-            Point {
-                x: current.x + 1,
-                y: current.y,
-            },
-            Point {
-                x: current.x,
-                y: current.y + 1,
-            },
-            Point {
-                x: current.x - 1,
-                y: current.y,
-            },
-            Point {
-                x: current.x,
-                y: current.y - 1,
-            },
+            Point { x: current.x + 1, y: current.y },
+            Point { x: current.x, y: current.y + 1 },
+            Point { x: current.x - 1, y: current.y },
+            Point { x: current.x, y: current.y - 1 },
         ]);
         for candidate in candidates {
             if candidate.x < bounds.min_x

@@ -40,39 +40,12 @@ enum Status {
 impl Compaction {
     pub fn new(cx: &Context<'_>) -> Self {
         let (left, label, right) = rule(cx);
-        let markdown = opencode_ui::markdown::view(
-            cx.app,
-            cx.theme,
-            cx.syntax,
-            cx.renderers,
-            cx.conceal,
-            true,
-        );
-        let body = View::new(cx.app)
-            .padding_edge(Edge::Top, 1)
-            .padding_edge(Edge::Left, 3)
-            .visible(false)
-            .child(&markdown);
-        let line = View::new(cx.app)
-            .row()
-            .align_items(Align::Center)
-            .child(&left)
-            .child(&label)
-            .child(&right);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(&line)
-            .child(&body);
-        Self {
-            root,
-            left,
-            label,
-            right,
-            body,
-            markdown,
-            rendered: RefCell::default(),
-        }
+        let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
+        let body =
+            View::new(cx.app).padding_edge(Edge::Top, 1).padding_edge(Edge::Left, 3).visible(false).child(&markdown);
+        let line = View::new(cx.app).row().align_items(Align::Center).child(&left).child(&label).child(&right);
+        let root = View::new(cx.app).column().shrink(0.0).child(&line).child(&body);
+        Self { root, left, label, right, body, markdown, rendered: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -86,50 +59,34 @@ impl Compaction {
                 Status::Completed,
                 done.summary.as_str(),
                 done.tokens.as_ref(),
-                done.native
-                    .as_ref()
-                    .is_some_and(|native| native.get("messages").is_some_and(truthy)),
+                done.native.as_ref().is_some_and(|native| native.get("messages").is_some_and(truthy)),
             ),
             SessionMessageCompaction::Failed(failed) if failed.error.r#type == "aborted" => {
                 (Status::Cancelled, "", failed.tokens.as_ref(), false)
             }
-            SessionMessageCompaction::Failed(failed) => (
-                Status::Failed,
-                failed.error.message.as_str(),
-                failed.tokens.as_ref(),
-                false,
-            ),
+            SessionMessageCompaction::Failed(failed) => {
+                (Status::Failed, failed.error.message.as_str(), failed.tokens.as_ref(), false)
+            }
             SessionMessageCompaction::Unknown(_) => return,
         };
         let rendered = Rendered {
             status,
-            title: if native {
-                "Provider compaction"
-            } else {
-                "Compaction"
-            },
+            title: if native { "Provider compaction" } else { "Compaction" },
             // The compaction request's own usage; the context it leaves shows on the next step.
-            usage: (status != Status::Running)
-                .then(|| tokens.and_then(usage))
-                .flatten(),
+            usage: (status != Status::Running).then(|| tokens.and_then(usage)).flatten(),
             content: text.trim().to_owned(),
         };
         if self.rendered.borrow().as_ref() == Some(&rendered) {
             return;
         }
         let theme = cx.theme;
-        let color = if status == Status::Failed {
-            theme.text.feedback.error.base
-        } else {
-            theme.text.muted
-        };
+        let color = if status == Status::Failed { theme.text.feedback.error.base } else { theme.text.muted };
         self.left.border_color(color);
         self.right.border_color(color);
         self.label.clear();
         match status {
             Status::Running => {
-                self.label
-                    .add(&Spinner::new(cx.app).color(color).animations(cx.animations));
+                self.label.add(&Spinner::new(cx.app).color(color).animations(cx.animations));
             }
             Status::Failed => {
                 self.label.add(&Text::new(cx.app, "✗").fg(color));
@@ -141,8 +98,7 @@ impl Compaction {
             self.label.add(&Text::new(cx.app, "· cancelled").fg(color));
         }
         if let Some(usage) = &rendered.usage {
-            self.label
-                .add(&Text::new(cx.app, format!("· {usage}")).fg(color));
+            self.label.add(&Text::new(cx.app, format!("· {usage}")).fg(color));
         }
         let previous = self.rendered.borrow().as_ref().map(|r| r.content.clone());
         if previous.as_deref() != Some(rendered.content.as_str()) {
@@ -167,13 +123,8 @@ impl Queued {
         let muted = cx.theme.text.muted;
         label.add(&Text::new(cx.app, "◇").fg(muted));
         label.add(&Text::new(cx.app, "Compaction queued").fg(muted));
-        let root = View::new(cx.app)
-            .row()
-            .shrink(0.0)
-            .align_items(Align::Center)
-            .child(&left)
-            .child(&label)
-            .child(&right);
+        let root =
+            View::new(cx.app).row().shrink(0.0).align_items(Align::Center).child(&left).child(&label).child(&right);
         Self { root }
     }
 
@@ -186,30 +137,15 @@ impl Queued {
 /// (`reduceSessionRows`).
 pub fn running_last(messages: &[SessionMessageInfo]) -> impl Iterator<Item = &SessionMessageInfo> {
     let running = |message: &&SessionMessageInfo| {
-        matches!(
-            message,
-            SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))
-        )
+        matches!(message, SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_)))
     };
-    messages
-        .iter()
-        .filter(move |message| !running(message))
-        .chain(messages.iter().filter(running))
+    messages.iter().filter(move |message| !running(message)).chain(messages.iter().filter(running))
 }
 
 /// Two growing top-border boxes around a padded label row.
 fn rule(cx: &Context<'_>) -> (View, View, View) {
-    let line = || {
-        View::new(cx.app)
-            .border(BorderStyle::Single)
-            .border_sides(Sides::TOP)
-            .grow(1.0)
-    };
-    let label = View::new(cx.app)
-        .row()
-        .gap(1)
-        .padding_edge(Edge::Left, 1)
-        .padding_edge(Edge::Right, 1);
+    let line = || View::new(cx.app).border(BorderStyle::Single).border_sides(Sides::TOP).grow(1.0);
+    let label = View::new(cx.app).row().gap(1).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1);
     (line(), label, line())
 }
 

@@ -64,12 +64,7 @@ impl Source {
                 ]
             }))
             .collect();
-        Self {
-            port,
-            home,
-            zed_terminal,
-            zed_db,
-        }
+        Self { port, home, zed_terminal, zed_db }
     }
 }
 
@@ -104,11 +99,7 @@ impl Range {
             return None;
         }
         let (start, end) = (self.selection.start.line, self.selection.end.line);
-        Some(if start == end {
-            format!("#{start}")
-        } else {
-            format!("#{start}-{end}")
-        })
+        Some(if start == end { format!("#{start}") } else { format!("#{start}-{end}") })
     }
 }
 
@@ -148,20 +139,13 @@ impl Selection {
         if let Ok(value) = Ranges::deserialize(value)
             && !value.ranges.is_empty()
         {
-            return Some(Self {
-                file_path: value.file_path,
-                source: value.source,
-                ranges: value.ranges,
-            });
+            return Some(Self { file_path: value.file_path, source: value.source, ranges: value.ranges });
         }
         let value = Single::deserialize(value).ok()?;
         Some(Self {
             file_path: value.file_path,
             source: value.source,
-            ranges: vec![Range {
-                text: value.text,
-                selection: value.selection,
-            }],
+            ranges: vec![Range { text: value.text, selection: value.selection }],
         })
     }
 
@@ -171,13 +155,8 @@ impl Selection {
         for range in &self.ranges {
             let span = range.selection;
             parts.extend(
-                [
-                    span.start.line,
-                    span.start.character,
-                    span.end.line,
-                    span.end.character,
-                ]
-                .map(|value| value.to_string()),
+                [span.start.line, span.start.character, span.end.line, span.end.character]
+                    .map(|value| value.to_string()),
             );
             parts.push(range.text.clone());
         }
@@ -188,10 +167,7 @@ impl Selection {
     /// how many more ranges there are.
     pub fn label(&self) -> String {
         let path = Path::new(&self.file_path);
-        let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
+        let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
         let is_index = name
             .strip_prefix("index.")
             .is_some_and(|extension| !extension.is_empty() && !extension.contains(['.', '/']));
@@ -199,19 +175,13 @@ impl Selection {
             Some(parent) if is_index => format!("{}/{name}", parent.to_string_lossy()),
             _ => name,
         };
-        let first = self
-            .ranges
-            .iter()
-            .find(|range| range.selects())
-            .or(self.ranges.first());
-        let label = [
-            first.and_then(Range::label),
-            (self.ranges.len() > 1).then(|| format!("+{}", self.ranges.len() - 1)),
-        ]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" ");
+        let first = self.ranges.iter().find(|range| range.selects()).or(self.ranges.first());
+        let label =
+            [first.and_then(Range::label), (self.ranges.len() > 1).then(|| format!("+{}", self.ranges.len() - 1))]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" ");
         format!("{file}{label}")
     }
 
@@ -228,11 +198,7 @@ impl Selection {
             .iter()
             .enumerate()
             .map(|(index, range)| {
-                let prefix = if selected.len() > 1 {
-                    format!("Selection {}: ", index + 1)
-                } else {
-                    String::new()
-                };
+                let prefix = if selected.len() > 1 { format!("Selection {}: ", index + 1) } else { String::new() };
                 format!(
                     "Note: The user selected {prefix}{} from \"{}\". ```{}```\n\n",
                     range.label().unwrap_or_default(),
@@ -346,11 +312,7 @@ pub fn start(tui: &Tui, source: Source) {
     let proxy = tui.app.proxy();
     state.generation += 1;
     let task = spawn(tui, &source, &state.directory, state.generation, &proxy);
-    state.started = Some(Started {
-        source,
-        proxy,
-        task,
-    });
+    state.started = Some(Started { source, proxy, task });
 }
 
 fn spawn(
@@ -360,12 +322,7 @@ fn spawn(
     generation: u64,
     proxy: &AppProxy,
 ) -> tokio::task::JoinHandle<()> {
-    tui.app.runtime().spawn(worker(
-        source.clone(),
-        directory.to_owned(),
-        generation,
-        proxy.clone(),
-    ))
+    tui.app.runtime().spawn(worker(source.clone(), directory.to_owned(), generation, proxy.clone()))
 }
 
 impl Context {
@@ -420,10 +377,7 @@ impl Context {
         let weak = Rc::downgrade(&self.0);
         Disposer::new(move || {
             if let Some(state) = weak.upgrade() {
-                state
-                    .borrow_mut()
-                    .mentions
-                    .retain(|(other, _)| *other != id);
+                state.borrow_mut().mentions.retain(|(other, _)| *other != id);
             }
         })
     }
@@ -435,10 +389,7 @@ impl Context {
         let weak: Weak<RefCell<State>> = Rc::downgrade(&self.0);
         Disposer::new(move || {
             if let Some(state) = weak.upgrade() {
-                state
-                    .borrow_mut()
-                    .watchers
-                    .retain(|(other, _)| *other != id);
+                state.borrow_mut().watchers.retain(|(other, _)| *other != id);
             }
         })
     }
@@ -446,10 +397,7 @@ impl Context {
     /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. The selection is
     /// cleared unless a new session asked to keep it.
     pub fn reconnect(&self, tui: &Tui, directory: Option<&str>) {
-        let resolved = directory
-            .filter(|directory| !directory.is_empty())
-            .unwrap_or(&tui.directory)
-            .to_owned();
+        let resolved = directory.filter(|directory| !directory.is_empty()).unwrap_or(&tui.directory).to_owned();
         let same = self.0.borrow().directory == resolved;
         let preserved = std::mem::take(&mut self.0.borrow_mut().preserve);
         if !preserved {
@@ -483,8 +431,7 @@ impl Context {
     fn set_selection(&self, selection: Option<Selection>) {
         let changed = {
             let mut state = self.0.borrow_mut();
-            let changed = state.selection.as_ref().map(Selection::key)
-                != selection.as_ref().map(Selection::key);
+            let changed = state.selection.as_ref().map(Selection::key) != selection.as_ref().map(Selection::key);
             state.selection = selection;
             if changed {
                 state.sent = false;
@@ -497,13 +444,7 @@ impl Context {
     }
 
     fn notify(&self) {
-        let watchers: Vec<_> = self
-            .0
-            .borrow()
-            .watchers
-            .iter()
-            .map(|(_, watcher)| watcher.clone())
-            .collect();
+        let watchers: Vec<_> = self.0.borrow().watchers.iter().map(|(_, watcher)| watcher.clone()).collect();
         watchers.iter().for_each(|watcher| watcher());
     }
 
@@ -514,18 +455,11 @@ impl Context {
         match &posted.event {
             Event::Status(status) => self.0.borrow_mut().status = *status,
             Event::Server(server) => self.0.borrow_mut().server = Some(server.clone()),
-            Event::Selection(selection) => self.set_selection(Some(Selection {
-                source: Some(SourceKind::Websocket),
-                ..selection.clone()
-            })),
+            Event::Selection(selection) => {
+                self.set_selection(Some(Selection { source: Some(SourceKind::Websocket), ..selection.clone() }))
+            }
             Event::Mention(mention) => {
-                let listeners: Vec<_> = self
-                    .0
-                    .borrow()
-                    .mentions
-                    .iter()
-                    .map(|(_, listener)| listener.clone())
-                    .collect();
+                let listeners: Vec<_> = self.0.borrow().mentions.iter().map(|(_, listener)| listener.clone()).collect();
                 listeners.iter().for_each(|listener| listener(mention));
             }
             Event::Zed(selection) => {
@@ -534,11 +468,7 @@ impl Context {
                     return;
                 }
                 self.0.borrow_mut().last_zed_key = key;
-                self.0.borrow_mut().status = if selection.is_some() {
-                    Status::Connected
-                } else {
-                    Status::Disabled
-                };
+                self.0.borrow_mut().status = if selection.is_some() { Status::Connected } else { Status::Disabled };
                 self.set_selection(selection.clone());
             }
         }
@@ -560,17 +490,8 @@ pub fn insert_mention(prompt: &crate::prompt::editor::Inner, tui: &Tui, mention:
         name.push_str(&format!("-{end}"));
     }
     let cursor = prompt.textarea.cursor_offset();
-    let start = prompt
-        .autocomplete
-        .get()
-        .map_or(cursor, |complete| complete.mention_start(cursor));
-    parts::insert(
-        prompt,
-        start,
-        &name,
-        parts::Kind::File,
-        json!({ "uri": uri, "name": name }),
-    );
+    let start = prompt.autocomplete.get().map_or(cursor, |complete| complete.mention_start(cursor));
+    parts::insert(prompt, start, &name, parts::Kind::File, json!({ "uri": uri, "name": name }));
 }
 
 /// An IDE server to connect to.
@@ -583,15 +504,9 @@ pub struct Connection {
 /// The environment's port, else the best lock file for `directory` (`resolveEditorConnection`).
 pub fn resolve_connection(source: &Source, directory: &str) -> Option<Connection> {
     if let Some(port) = source.port {
-        return Some(Connection {
-            url: format!("ws://127.0.0.1:{port}"),
-            auth_token: None,
-        });
+        return Some(Connection { url: format!("ws://127.0.0.1:{port}"), auth_token: None });
     }
-    discover(
-        &source.home.as_ref()?.join(".claude").join("ide"),
-        directory,
-    )
+    discover(&source.home.as_ref()?.join(".claude").join("ide"), directory)
 }
 
 /// The `<port>.lock` in `root` whose workspace folder contains `directory` most closely, newest first on a tie
@@ -603,16 +518,9 @@ pub fn discover(root: &Path, directory: &str) -> Option<Connection> {
         .flatten()
         .filter_map(|entry| {
             let path = entry.path();
-            let port = path
-                .file_name()?
-                .to_str()?
-                .strip_suffix(".lock")
-                .and_then(parse_port)?;
+            let port = path.file_name()?.to_str()?.strip_suffix(".lock").and_then(parse_port)?;
             let value: Value = serde_json::from_str(&std::fs::read_to_string(&path).ok()?).ok()?;
-            if value
-                .get("transport")
-                .is_some_and(|transport| transport != "ws")
-            {
+            if value.get("transport").is_some_and(|transport| transport != "ws") {
                 return None;
             }
             let score = value["workspaceFolders"]
@@ -622,11 +530,7 @@ pub fn discover(root: &Path, directory: &str) -> Option<Connection> {
                 .filter_map(Value::as_str)
                 .map(|folder| {
                     let folder = absolute(folder);
-                    if contains(&folder, &directory) {
-                        folder.to_string_lossy().encode_utf16().count()
-                    } else {
-                        0
-                    }
+                    if contains(&folder, &directory) { folder.to_string_lossy().encode_utf16().count() } else { 0 }
                 })
                 .max()
                 .filter(|score| *score > 0)?;
@@ -642,10 +546,7 @@ pub fn discover(root: &Path, directory: &str) -> Option<Connection> {
         })
         .collect();
     found.sort_by(|left, right| right.0.cmp(&left.0).then(right.1.cmp(&left.1)));
-    found
-        .into_iter()
-        .next()
-        .map(|(_, _, connection)| connection)
+    found.into_iter().next().map(|(_, _, connection)| connection)
 }
 
 /// `Number.parseInt(value, 10)` limited to a port: leading digits, 1 to 65535.
@@ -659,10 +560,7 @@ fn parse_port(value: &str) -> Option<u16> {
 /// `path.resolve`: absolute against the process's directory, and lexically normalized.
 fn absolute(path: &str) -> PathBuf {
     let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
-    PathBuf::from(super::autocomplete::parse::resolve(
-        &base.to_string_lossy(),
-        path,
-    ))
+    PathBuf::from(super::autocomplete::parse::resolve(&base.to_string_lossy(), path))
 }
 
 /// Whether `child` is `parent` or inside it (`pathContains`); both absolute and normalized.
@@ -679,10 +577,7 @@ async fn worker(source: Arc<Source>, directory: String, generation: u64, proxy: 
     loop {
         let connection = {
             let (source, directory) = (source.clone(), directory.clone());
-            tokio::task::spawn_blocking(move || resolve_connection(&source, &directory))
-                .await
-                .ok()
-                .flatten()
+            tokio::task::spawn_blocking(move || resolve_connection(&source, &directory)).await.ok().flatten()
         };
         let delay = match connection {
             Some(connection) => {
@@ -737,16 +632,12 @@ fn backoff(attempt: u32) -> Duration {
     Duration::from_millis((1000u64 << attempt.saturating_sub(1).min(4)).min(10_000))
 }
 
-type Socket =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+type Socket = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 async fn open(connection: &Connection) -> Option<Socket> {
     let mut request = connection.url.as_str().into_client_request().ok()?;
     if let Some(token) = &connection.auth_token {
-        request.headers_mut().insert(
-            "x-claude-code-ide-authorization",
-            HeaderValue::from_str(token).ok()?,
-        );
+        request.headers_mut().insert("x-claude-code-ide-authorization", HeaderValue::from_str(token).ok()?);
     }
     let (socket, _) = tokio_tungstenite::connect_async(request).await.ok()?;
     Some(socket)
@@ -810,11 +701,7 @@ async fn session(mut socket: Socket, request_id: &mut i64, post: &impl Fn(Event)
             return false;
         }
         let initialized = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-        if socket
-            .send(Frame::text(initialized.to_string()))
-            .await
-            .is_err()
-        {
+        if socket.send(Frame::text(initialized.to_string())).await.is_err() {
             return true;
         }
     }
@@ -830,9 +717,8 @@ fn server_info(result: &Value) -> bool {
     let string_or_absent = |value: Option<&Value>| value.is_none_or(Value::is_string);
     string_or_absent(result.get("protocolVersion"))
         && result.get("serverInfo").is_none_or(|info| {
-            info.as_object().is_some_and(|info| {
-                string_or_absent(info.get("name")) && string_or_absent(info.get("version"))
-            })
+            info.as_object()
+                .is_some_and(|info| string_or_absent(info.get("name")) && string_or_absent(info.get("version")))
         })
 }
 
@@ -881,18 +767,11 @@ pub mod zed {
                 let (start, end) = (char_end(&text, start), char_end(&text, end));
                 Range {
                     text: text[start..end].to_owned(),
-                    selection: Span {
-                        start: position(&text, start),
-                        end: position(&text, end),
-                    },
+                    selection: Span { start: position(&text, start), end: position(&text, end) },
                 }
             })
             .collect();
-        Some(Some(Selection {
-            file_path: buffer,
-            source: Some(SourceKind::Zed),
-            ranges,
-        }))
+        Some(Some(Selection { file_path: buffer, source: Some(SourceKind::Zed), ranges }))
     }
 
     /// `None` when unavailable; `Some(None)` when no workspace contains `cwd` or its active item is no editor.
@@ -915,16 +794,7 @@ pub mod zed {
             )
             .ok()?;
         let raw: Vec<[Sql; 6]> = query
-            .query_map([], |row| {
-                Ok([
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ])
-            })
+            .query_map([], |row| Ok([row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?]))
             .ok()?
             .collect::<Result<_, _>>()
             .ok()?;
@@ -988,9 +858,7 @@ pub mod zed {
             )
             .ok()?;
         let raw: Vec<(Sql, Sql)> = query
-            .query_map(params![editor, workspace], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_map(params![editor, workspace], |row| Ok((row.get(0)?, row.get(1)?)))
             .ok()?
             .collect::<Result<_, _>>()
             .ok()?;
@@ -1000,10 +868,8 @@ pub mod zed {
             Sql::Real(number) => Some(Some(*number as i64)),
             _ => None,
         };
-        let decoded: Vec<(Option<i64>, Option<i64>)> = raw
-            .iter()
-            .filter_map(|(start, end)| Some((number(start)?, number(end)?)))
-            .collect();
+        let decoded: Vec<(Option<i64>, Option<i64>)> =
+            raw.iter().filter_map(|(start, end)| Some((number(start)?, number(end)?))).collect();
         if !raw.is_empty() && decoded.is_empty() {
             return None;
         }
@@ -1032,10 +898,9 @@ pub mod zed {
     fn workspace_score(paths: Option<&str>, cwd: &Path) -> usize {
         let Some(paths) = paths else { return 0 };
         let list: Vec<String> = match serde_json::from_str::<serde_json::Value>(paths) {
-            Ok(serde_json::Value::Array(items)) => items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_owned))
-                .collect(),
+            Ok(serde_json::Value::Array(items)) => {
+                items.iter().filter_map(|item| item.as_str().map(str::to_owned)).collect()
+            }
             _ => paths
                 .split('\n')
                 .map(|line| line.strip_suffix('\r').unwrap_or(line).to_owned())
@@ -1056,10 +921,7 @@ pub mod zed {
         if offset == 0 {
             return 0;
         }
-        text.char_indices()
-            .map(|(index, c)| index + c.len_utf8())
-            .find(|end| *end >= offset)
-            .unwrap_or(text.len())
+        text.char_indices().map(|(index, c)| index + c.len_utf8()).find(|end| *end >= offset).unwrap_or(text.len())
     }
 
     /// The 1-based line and UTF-16 column of byte index `index` (`offsetsToSelection`).
@@ -1081,14 +943,8 @@ mod tests {
         Range {
             text: text.to_owned(),
             selection: Span {
-                start: Position {
-                    line: start.0,
-                    character: start.1,
-                },
-                end: Position {
-                    line: end.0,
-                    character: end.1,
-                },
+                start: Position { line: start.0, character: start.1 },
+                end: Position { line: end.0, character: end.1 },
             },
         }
     }
@@ -1115,10 +971,7 @@ mod tests {
         assert_eq!(many.source, Some(SourceKind::Zed));
         assert_eq!(many.label(), "lib.rs#2-4 +1");
         assert!(Selection::decode(&json!({ "filePath": "/a", "ranges": [] })).is_none());
-        assert!(
-            Selection::decode(&json!({ "filePath": "/a", "source": "vim", "ranges": [] }))
-                .is_none()
-        );
+        assert!(Selection::decode(&json!({ "filePath": "/a", "source": "vim", "ranges": [] })).is_none());
         let cursor = Selection::decode(&json!({
             "text": "", "filePath": "/w/a.ts",
             "selection": { "start": { "line": 1, "character": 1 }, "end": { "line": 1, "character": 1 } },
@@ -1141,31 +994,16 @@ mod tests {
         let write = |name: &str, value: Value| {
             std::fs::write(root.path().join(name), value.to_string()).unwrap();
         };
-        write(
-            "4100.lock",
-            json!({ "workspaceFolders": ["/w"], "transport": "ws" }),
-        );
-        write(
-            "4200.lock",
-            json!({ "workspaceFolders": ["/w/app"], "authToken": "secret" }),
-        );
-        write(
-            "4300.lock",
-            json!({ "workspaceFolders": ["/w/app/deep"], "transport": "sse" }),
-        );
+        write("4100.lock", json!({ "workspaceFolders": ["/w"], "transport": "ws" }));
+        write("4200.lock", json!({ "workspaceFolders": ["/w/app"], "authToken": "secret" }));
+        write("4300.lock", json!({ "workspaceFolders": ["/w/app/deep"], "transport": "sse" }));
         write("nope.lock", json!({ "workspaceFolders": ["/w"] }));
         write("4400.lock", json!({ "workspaceFolders": ["/other"] }));
         assert_eq!(
             discover(root.path(), "/w/app/deep/src"),
-            Some(Connection {
-                url: "ws://127.0.0.1:4200".into(),
-                auth_token: Some("secret".into()),
-            })
+            Some(Connection { url: "ws://127.0.0.1:4200".into(), auth_token: Some("secret".into()) })
         );
-        assert_eq!(
-            discover(root.path(), "/w/x").map(|found| found.url),
-            Some("ws://127.0.0.1:4100".into())
-        );
+        assert_eq!(discover(root.path(), "/w/x").map(|found| found.url), Some("ws://127.0.0.1:4100".into()));
         assert_eq!(discover(root.path(), "/elsewhere"), None);
         assert_eq!(parse_port("8123abc"), Some(8123));
         assert_eq!(parse_port("0"), None);
@@ -1177,8 +1015,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let db = root.path().join("db.sqlite");
         let connection = rusqlite::Connection::open(&db).unwrap();
-        connection.execute_batch(
-            "create table workspaces (workspace_id integer, paths text, timestamp text);
+        connection
+            .execute_batch(
+                "create table workspaces (workspace_id integer, paths text, timestamp text);
             create table panes (pane_id integer, workspace_id integer, active integer);
             create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
             create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
@@ -1188,29 +1027,22 @@ mod tests {
             insert into items values (100, 1, 10, 'Editor', 1), (200, 2, 20, 'Editor', 1);
             insert into editors values (100, 1, '/w/a.ts', 'x'), (200, 2, '/w/app/b.ts', 'héllo\n日本語 end');
             insert into editor_selections values (200, 2, 14, 1);",
-        ).unwrap();
+            )
+            .unwrap();
         drop(connection);
         let selection = zed::resolve(&db, Path::new("/w/app/src")).unwrap().unwrap();
         assert_eq!(selection.file_path, "/w/app/b.ts");
         // Bytes 1..14 end inside 語, so the range takes the whole character.
-        assert_eq!(
-            selection.ranges,
-            vec![range("éllo\n日本語", (1, 2), (2, 4))]
-        );
+        assert_eq!(selection.ranges, vec![range("éllo\n日本語", (1, 2), (2, 4))]);
         // An editor without selections cannot tell, so the last selection stays.
         assert_eq!(zed::resolve(&db, Path::new("/w/lib")), None);
         assert_eq!(zed::resolve(&db, Path::new("/elsewhere")), Some(None));
-        assert_eq!(
-            zed::resolve(&root.path().join("missing"), Path::new("/w")),
-            None
-        );
+        assert_eq!(zed::resolve(&root.path().join("missing"), Path::new("/w")), None);
     }
 
     #[test]
     fn backoff_doubles_to_ten_seconds() {
-        let seconds: Vec<u64> = (1..=6)
-            .map(|attempt| backoff(attempt).as_millis() as u64)
-            .collect();
+        let seconds: Vec<u64> = (1..=6).map(|attempt| backoff(attempt).as_millis() as u64).collect();
         assert_eq!(seconds, [1000, 2000, 4000, 8000, 10_000, 10_000]);
     }
 }

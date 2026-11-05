@@ -123,10 +123,7 @@ impl Dialogs {
         let weak = Rc::downgrade(&self.0);
         let open = {
             let weak = weak.clone();
-            Condition::When(Rc::new(move || {
-                weak.upgrade()
-                    .is_some_and(|inner| !inner.stack.borrow().is_empty())
-            }))
+            Condition::When(Rc::new(move || weak.upgrade().is_some_and(|inner| !inner.stack.borrow().is_empty())))
         };
         let close = |ctrl_c: bool, weak: Weak<Inner>| {
             move |_: Option<&str>, _: Option<&KeyEvent>| {
@@ -165,9 +162,9 @@ impl Dialogs {
             match event.kind {
                 // TS asks whether a selection exists. A press on text has started a drag by now, so a drag that
                 // starts inside the panel keeps the dialog open.
-                MouseEventKind::Down(_) => inner
-                    .dismiss
-                    .set(inner.app.is_selecting() || inner.app.selected_text().is_some()),
+                MouseEventKind::Down(_) => {
+                    inner.dismiss.set(inner.app.is_selecting() || inner.app.selected_text().is_some())
+                }
                 MouseEventKind::Up(_) => {
                     if inner.dismiss.replace(false) {
                         return;
@@ -183,11 +180,7 @@ impl Dialogs {
                 return;
             }
             // A selection release bubbles on to the copy-on-select handler; the backdrop's flag keeps it open.
-            if inner
-                .app
-                .selected_text()
-                .is_some_and(|text| !text.is_empty())
-            {
+            if inner.app.selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
             inner.dismiss.set(false);
@@ -229,18 +222,12 @@ impl Dialogs {
         });
         // The mode goes first, so layers registered while building see it.
         if self.0.mode.borrow().is_none() {
-            *self.0.mode.borrow_mut() =
-                Some(self.0.keymap.push_mode(MODAL_MODE, Condition::Always));
+            *self.0.mode.borrow_mut() = Some(self.0.keymap.push_mode(MODAL_MODE, Condition::Always));
         }
         let content = build(&cx);
         self.0.panel.add(&content);
         let focus = cx.focus.borrow_mut().take();
-        self.0.stack.borrow_mut().push(Entry {
-            on_close,
-            key: options.key,
-            content,
-            cx,
-        });
+        self.0.stack.borrow_mut().push(Entry { on_close, key: options.key, content, cx });
         self.layout_frame();
         if let Some(widget) = focus {
             widget.focus();
@@ -305,31 +292,16 @@ impl Dialogs {
         self.0
             .backdrop
             .size(u32::from(width), u32::from(height))
-            .justify(if centered {
-                Justify::Center
-            } else {
-                Justify::Start
-            })
-            .padding_edge(
-                Edge::Top,
-                if centered {
-                    0.0
-                } else {
-                    f32::from(height) / 4.0
-                },
-            )
+            .justify(if centered { Justify::Center } else { Justify::Start })
+            .padding_edge(Edge::Top, if centered { 0.0 } else { f32::from(height) / 4.0 })
             .visible(open);
-        self.0
-            .panel
-            .width(self.0.size.get().width())
-            .max_width(i32::from(width) - 2)
-            .bg(self
-                .0
-                .theme
-                .borrow()
-                .surface(Surface::Dialog)
-                .background
-                .base);
+        self.0.panel.width(self.0.size.get().width()).max_width(i32::from(width) - 2).bg(self
+            .0
+            .theme
+            .borrow()
+            .surface(Surface::Dialog)
+            .background
+            .base);
     }
 
     pub fn is_open(&self) -> bool {
@@ -346,11 +318,7 @@ impl Dialogs {
 
     /// The top dialog's key.
     pub fn key(&self) -> Option<String> {
-        self.0
-            .stack
-            .borrow()
-            .last()
-            .and_then(|entry| entry.key.clone())
+        self.0.stack.borrow().last().and_then(|entry| entry.key.clone())
     }
 
     pub fn size(&self) -> DialogSize {
@@ -471,9 +439,7 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
             row.add(&Text::new(&cx.app, props.title).fg(theme.text.base));
         }
     }
-    let close = Text::new(&cx.app, props.close_label.as_deref().unwrap_or("esc"))
-        .fg(theme.text.muted)
-        .shrink(0.0);
+    let close = Text::new(&cx.app, props.close_label.as_deref().unwrap_or("esc")).fg(theme.text.muted).shrink(0.0);
     let dialogs = cx.dialogs.clone();
     let on_close = props.on_close;
     close.on_mouse(move |_cx, event| {
@@ -485,27 +451,17 @@ pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
         }
     });
     row.add(&close);
-    match props
-        .description
-        .filter(|description| !description.is_empty())
-    {
-        Some(description) => View::new(&cx.app).child(&row).child(
-            &Text::new(&cx.app, description)
-                .fg(theme.text.muted)
-                .wrap(WrapMode::Word),
-        ),
+    match props.description.filter(|description| !description.is_empty()) {
+        Some(description) => View::new(&cx.app)
+            .child(&row)
+            .child(&Text::new(&cx.app, description).fg(theme.text.muted).wrap(WrapMode::Word)),
         None => row,
     }
 }
 
 /// `DialogLayout`: header, body, and footer, one blank row between each and one at the bottom, with the side
 /// padding.
-pub fn layout(
-    cx: &DialogCx,
-    header: &impl Widget,
-    body: &impl Widget,
-    footer: Option<FooterProps>,
-) -> View {
+pub fn layout(cx: &DialogCx, header: &impl Widget, body: &impl Widget, footer: Option<FooterProps>) -> View {
     layout_with(cx, header, body, footer, DIALOG_INSET, 1)
 }
 
@@ -531,10 +487,7 @@ pub fn layout_view(
     inset: u32,
     footer_gap: u32,
 ) -> View {
-    let root = View::new(&cx.app)
-        .padding_x(inset)
-        .padding_edge(Edge::Bottom, 1)
-        .gap(1);
+    let root = View::new(&cx.app).padding_x(inset).padding_edge(Edge::Bottom, 1).gap(1);
     root.add(header);
     let wrapper = View::new(&cx.app).child(body);
     if footer.is_some() {
@@ -563,10 +516,7 @@ pub struct FooterAction {
 
 impl FooterAction {
     pub fn new(title: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            ..Self::default()
-        }
+        Self { title: title.into(), ..Self::default() }
     }
 
     pub fn key(mut self, key: impl Into<String>) -> Self {
@@ -612,8 +562,7 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
             .into_iter()
             .filter_map(|mut action| {
                 // An action with neither shows its title alone; one with a command hides without a shortcut.
-                let Some(command) = action.command.as_deref().filter(|_| action.key.is_none())
-                else {
+                let Some(command) = action.command.as_deref().filter(|_| action.key.is_none()) else {
                     return Some(action);
                 };
                 action.key = Some(cx.keymap.shortcut(command)?);
@@ -624,14 +573,8 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
     let secondary = resolve(props.secondary);
     let primary = resolve(props.primary);
     // A hidden child is content that renders nothing in TS.
-    let band = !secondary.is_empty()
-        || !primary.is_empty()
-        || props.children.iter().any(|child| child.is_visible());
-    let root = View::new(&cx.app)
-        .row()
-        .justify(Justify::SpaceBetween)
-        .gap(2)
-        .shrink(0.0);
+    let band = !secondary.is_empty() || !primary.is_empty() || props.children.iter().any(|child| child.is_visible());
+    let root = View::new(&cx.app).row().justify(Justify::SpaceBetween).gap(2).shrink(0.0);
     if band {
         // Hoverable actions carry one cell of padding on each side; the band gives that cell back so labels keep
         // their column.
@@ -646,11 +589,7 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
         root.padding_x(inset);
     }
     let left = View::new(&cx.app)
-        .direction(if narrow {
-            FlexDirection::Column
-        } else {
-            FlexDirection::Row
-        })
+        .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
         .flex_wrap(Wrap::Wrap)
         .shrink(1.0)
         .min_width(0);
@@ -673,35 +612,20 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
 fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget {
     let theme = &cx.theme;
     let disabled = theme.text.action.primary.disabled;
-    let title_fg = if action.disabled {
-        disabled
-    } else {
-        action.color.unwrap_or(theme.text.base)
-    };
+    let title_fg = if action.disabled { disabled } else { action.color.unwrap_or(theme.text.base) };
     let mut spans = vec![action.title.clone().fg(title_fg)];
     if let Some(key) = &action.key {
-        let key_fg = if action.disabled {
-            disabled
-        } else {
-            action.color.unwrap_or(theme.text.muted)
-        };
+        let key_fg = if action.disabled { disabled } else { action.color.unwrap_or(theme.text.muted) };
         spans.push(format!(" {key}").fg(key_fg));
     }
     let text = Text::new(&cx.app, spans);
     let item = View::new(&cx.app).padding_x(1).shrink(0.0).child(&text);
-    let hovered = if primary {
-        theme.background.action.primary.hovered
-    } else {
-        theme.background.action.secondary.hovered
-    };
+    let hovered =
+        if primary { theme.background.action.primary.hovered } else { theme.background.action.secondary.hovered };
     let hover_item = item.clone();
     let enabled = !action.disabled;
     item.on_hover(move |_cx, over| {
-        hover_item.bg(if over && enabled {
-            hovered
-        } else {
-            Color::TRANSPARENT
-        });
+        hover_item.bg(if over && enabled { hovered } else { Color::TRANSPARENT });
     });
     item.on_mouse(move |_cx, event| {
         if matches!(event.kind, MouseEventKind::Up(_))
@@ -731,7 +655,5 @@ pub fn route_keys(app: &App, keymap: Rc<DialogKeymap>) -> HandlerId {
 
 /// The focused widget's id followed by its ancestors' ids, the path `Keymap::set_focus` takes.
 pub fn focus_path(app: &App) -> Vec<FocusId> {
-    std::iter::successors(app.focused(), |widget| widget.parent())
-        .map(|widget| widget.id())
-        .collect()
+    std::iter::successors(app.focused(), |widget| widget.parent()).map(|widget| widget.id()).collect()
 }

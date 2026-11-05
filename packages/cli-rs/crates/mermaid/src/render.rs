@@ -65,46 +65,28 @@ pub fn render(source: &str, width: u16, palette: &Palette) -> Rendered {
         Err(Failure::Syntax(error)) => error,
     };
     let lines: Vec<&str> = source.split('\n').collect();
-    let trailing = lines
-        .iter()
-        .skip(error.line)
-        .any(|line| !crate::core::text::js_trim(line).is_empty());
+    let trailing = lines.iter().skip(error.line).any(|line| !crate::core::text::js_trim(line).is_empty());
     let prefix = if error.line <= 2 || trailing {
         None
     } else {
-        prepare(
-            kind,
-            &lines[..error.line - 1].join("\n"),
-            palette,
-            max_width,
-        )
-        .ok()
-        .filter(|diagram| diagram.height() > 0)
+        prepare(kind, &lines[..error.line - 1].join("\n"), palette, max_width)
+            .ok()
+            .filter(|diagram| diagram.height() > 0)
     };
     Rendered::Syntax { kind, prefix }
 }
 
-fn prepare(
-    kind: Kind,
-    source: &str,
-    palette: &Palette,
-    max_width: i32,
-) -> Result<Diagram, Failure> {
+fn prepare(kind: Kind, source: &str, palette: &Palette, max_width: i32) -> Result<Diagram, Failure> {
     let lines = match kind {
         Kind::Flowchart => {
             let diagram = flowchart::parser::parse(source).map_err(Failure::Syntax)?;
-            let options = flowchart::layout::Options {
-                compact: true,
-                layout_max_width: Some(max_width),
-            };
-            let grid =
-                flowchart::drawing::draw(&diagram, &options).map_err(|_| Failure::Unrenderable)?;
+            let options = flowchart::layout::Options { compact: true, layout_max_width: Some(max_width) };
+            let grid = flowchart::drawing::draw(&diagram, &options).map_err(|_| Failure::Unrenderable)?;
             flowchart_lines(&grid, palette)
         }
         Kind::Sequence => {
             let diagram = sequence::parser::parse(source).map_err(Failure::Syntax)?;
-            let grid =
-                sequence::drawing::draw(&diagram, true).map_err(|_| Failure::Unrenderable)?;
+            let grid = sequence::drawing::draw(&diagram, true).map_err(|_| Failure::Unrenderable)?;
             sequence_lines(&grid, palette)
         }
         Kind::Gantt => {
@@ -119,8 +101,7 @@ fn prepare(
         }
         Kind::State => {
             let diagram = state::parser::parse(source).map_err(Failure::Syntax)?;
-            let grid = state::drawing::draw(&diagram, Some(max_width))
-                .map_err(|_| Failure::Unrenderable)?;
+            let grid = state::drawing::draw(&diagram, Some(max_width)).map_err(|_| Failure::Unrenderable)?;
             state_lines(&grid, palette)
         }
         Kind::Timeline => {
@@ -147,13 +128,7 @@ fn flowchart_lines(grid: &flowchart::drawing::Grid, palette: &Palette) -> Vec<Ve
         Style::DatabaseFade(step) => database_fades[usize::from(step)],
     };
     let bg = |style: Style| (style == Style::Label).then_some(palette.label_background);
-    runs(
-        grid,
-        TRIM_BOTH,
-        |cell| (cell.style, cell.attributes),
-        |style| style.map(fg),
-        |style| style.and_then(bg),
-    )
+    runs(grid, TRIM_BOTH, |cell| (cell.style, cell.attributes), |style| style.map(fg), |style| style.and_then(bg))
 }
 
 fn sequence_lines(grid: &sequence::drawing::Grid, palette: &Palette) -> Vec<Vec<Run>> {
@@ -180,13 +155,7 @@ fn sequence_lines(grid: &sequence::drawing::Grid, palette: &Palette) -> Vec<Vec<
         Style::FragmentLabel => Some(palette.background),
         _ => None,
     };
-    runs(
-        grid,
-        TRIM_NONE,
-        |cell| cell.style,
-        |style| style.map(fg),
-        |style| style.and_then(bg),
-    )
+    runs(grid, TRIM_NONE, |cell| cell.style, |style| style.map(fg), |style| style.and_then(bg))
 }
 
 fn gantt_lines(grid: &gantt::Grid, palette: &Palette) -> Vec<Vec<Run>> {
@@ -200,13 +169,7 @@ fn gantt_lines(grid: &gantt::Grid, palette: &Palette) -> Vec<Vec<Run>> {
         Style::Milestone => rgb(198, 160, 246),
         Style::TrackFaint => blend(palette.muted, palette.background, 0.72),
     };
-    runs(
-        grid,
-        TRIM_BOTTOM,
-        |cell| cell.style,
-        |style| style.map(fg),
-        |_| None,
-    )
+    runs(grid, TRIM_BOTTOM, |cell| cell.style, |style| style.map(fg), |_| None)
 }
 
 fn gitgraph_lines(grid: &gitgraph::Grid, palette: &Palette) -> Vec<Vec<Run>> {
@@ -218,13 +181,7 @@ fn gitgraph_lines(grid: &gitgraph::Grid, palette: &Palette) -> Vec<Vec<Run>> {
         Style::Highlight | Style::Reverse => palette.warning,
         Style::Label => palette.text,
     };
-    runs(
-        grid,
-        TRIM_BOTTOM,
-        |cell| cell.style,
-        |style| style.map(fg),
-        |_| None,
-    )
+    runs(grid, TRIM_BOTTOM, |cell| cell.style, |style| style.map(fg), |_| None)
 }
 
 fn timeline_lines(grid: &timeline::Grid, palette: &Palette) -> Vec<Vec<Run>> {
@@ -240,13 +197,7 @@ fn timeline_lines(grid: &timeline::Grid, palette: &Palette) -> Vec<Vec<Run>> {
         Style::SectionFade(step) => blend(section, spine, FADES[usize::from(step)]),
         Style::PeriodFade(step) => blend(period, spine, FADES[usize::from(step)]),
     };
-    runs(
-        grid,
-        TRIM_BOTTOM,
-        |cell| cell.style,
-        |style| style.map(fg),
-        |_| None,
-    )
+    runs(grid, TRIM_BOTTOM, |cell| cell.style, |style| style.map(fg), |_| None)
 }
 
 fn state_lines(grid: &state::drawing::Grid, palette: &Palette) -> Vec<Vec<Run>> {
@@ -268,13 +219,7 @@ fn state_lines(grid: &state::drawing::Grid, palette: &Palette) -> Vec<Vec<Run>> 
         Style::DepartureRamp(step) => departure_ramp[usize::from(step)],
     };
     let bg = |style: Style| (style == Style::Label).then_some(palette.label_background);
-    runs(
-        grid,
-        TRIM_BOTH,
-        |cell| cell.style,
-        |style| style.map(fg),
-        |style| style.and_then(bg),
-    )
+    runs(grid, TRIM_BOTH, |cell| cell.style, |style| style.map(fg), |style| style.and_then(bg))
 }
 
 fn runs<S: Copy + PartialEq, K: PartialEq>(
@@ -288,12 +233,7 @@ fn runs<S: Copy + PartialEq, K: PartialEq>(
         .into_iter()
         .map(|row| {
             row.into_iter()
-                .map(|(text, cell)| Run {
-                    text,
-                    fg: fg(cell.style),
-                    bg: bg(cell.style),
-                    attributes: cell.attributes,
-                })
+                .map(|(text, cell)| Run { text, fg: fg(cell.style), bg: bg(cell.style), attributes: cell.attributes })
                 .collect()
         })
         .collect()

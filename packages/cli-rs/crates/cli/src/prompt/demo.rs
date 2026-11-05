@@ -29,9 +29,7 @@ fn providers() -> Vec<Choice<String>> {
 }
 
 fn many() -> Vec<Choice<String>> {
-    (1..=20)
-        .map(|index| Choice::new(format!("item-{index}"), format!("Item {index}")))
-        .collect()
+    (1..=20).map(|index| Choice::new(format!("item-{index}"), format!("Item {index}"))).collect()
 }
 
 fn main() {
@@ -39,11 +37,7 @@ fn main() {
     match name.as_str() {
         "text" => {
             prompt::intro("Text");
-            show(check(
-                prompt::text("Your name")
-                    .placeholder("Ada Lovelace")
-                    .prompt(),
-            ));
+            show(check(prompt::text("Your name").placeholder("Ada Lovelace").prompt()));
             prompt::outro("Done");
         }
         "text-validate" => {
@@ -51,65 +45,34 @@ fn main() {
                 (!value.is_empty() && !value.chars().all(|char| char.is_ascii_digit()))
                     .then(|| "Expected a number".to_string())
             };
-            show(check(
-                prompt::text("Port")
-                    .initial_value("80")
-                    .default_value("8080")
-                    .validate(number)
-                    .prompt(),
-            ));
+            show(check(prompt::text("Port").initial_value("80").default_value("8080").validate(number).prompt()));
             let required = |value: &str| value.is_empty().then(|| "Required".to_string());
             show(check(prompt::text("Required").validate(required).prompt()));
         }
         "password" => {
             let required = |value: &str| value.is_empty().then(|| "Required".to_string());
-            show(check(
-                prompt::password("API key").validate(required).prompt(),
-            ));
+            show(check(prompt::password("API key").validate(required).prompt()));
         }
         "confirm" => {
             show(check(prompt::confirm("Continue?").prompt()));
-            show(check(
-                prompt::confirm("Delete it?")
-                    .initial_value(false)
-                    .active("Delete")
-                    .inactive("Keep")
-                    .prompt(),
-            ));
+            show(check(prompt::confirm("Delete it?").initial_value(false).active("Delete").inactive("Keep").prompt()));
         }
         "select" => {
-            show(check(
-                prompt::select("Provider", providers())
-                    .initial_value("openai".to_string())
-                    .prompt(),
-            ));
+            show(check(prompt::select("Provider", providers()).initial_value("openai".to_string()).prompt()));
         }
         "select-long" => {
-            show(check(
-                prompt::select("Pick one", many()).max_items(7).prompt(),
-            ));
+            show(check(prompt::select("Pick one", many()).max_items(7).prompt()));
         }
         "multiselect" => {
-            let chosen = check(
-                prompt::multiselect("Providers", providers())
-                    .initial_values(vec!["google".into()])
-                    .prompt(),
-            );
+            let chosen =
+                check(prompt::multiselect("Providers", providers()).initial_values(vec!["google".into()]).prompt());
             show(chosen.join(","));
-            let chosen = check(
-                prompt::multiselect("Optional", providers()[..2].to_vec())
-                    .required(false)
-                    .prompt(),
-            );
+            let chosen = check(prompt::multiselect("Optional", providers()[..2].to_vec()).required(false).prompt());
             show(chosen.join(","));
         }
         "autocomplete" => {
             let options = providers().into_iter().chain(many()).collect();
-            let chosen = check(
-                prompt::autocomplete("Search", options)
-                    .max_items(6)
-                    .prompt(),
-            );
+            let chosen = check(prompt::autocomplete("Search", options).max_items(6).prompt());
             show(chosen.unwrap_or_else(|| "undefined".to_string()));
         }
         "spinner" => {

@@ -13,8 +13,8 @@ use serde_json::{Map, Value};
 use super::Context;
 use super::client::{block_on, connect, pretty};
 use crate::args::{
-    SessionArgs, SessionCommand, SessionDeleteArgs, SessionExportArgs, SessionImportArgs,
-    SessionListArgs, SessionListFormat,
+    SessionArgs, SessionCommand, SessionDeleteArgs, SessionExportArgs, SessionImportArgs, SessionListArgs,
+    SessionListFormat,
 };
 use crate::output::{Exit, print};
 use crate::prompt::{self, Choice, Output};
@@ -55,15 +55,10 @@ fn list(context: &Context, args: &SessionListArgs) -> anyhow::Result<()> {
         return Ok(());
     }
     let output = match args.format {
-        SessionListFormat::Json => pretty(&Value::Array(
-            sessions.iter().map(summary).collect::<Vec<_>>(),
-        ))?,
+        SessionListFormat::Json => pretty(&Value::Array(sessions.iter().map(summary).collect::<Vec<_>>()))?,
         SessionListFormat::Table => table(&sessions) + "\n",
     };
-    if !std::io::stdout().is_terminal()
-        || args.max_count.is_some()
-        || args.format == SessionListFormat::Json
-    {
+    if !std::io::stdout().is_terminal() || args.max_count.is_some() || args.format == SessionListFormat::Json {
         return print(&output);
     }
     page(&output)
@@ -71,11 +66,7 @@ fn list(context: &Context, args: &SessionListArgs) -> anyhow::Result<()> {
 
 // `less -R -S` reads the list on stdin and draws on the terminal; without `less`, the list is printed.
 fn page(output: &str) -> anyhow::Result<()> {
-    let Ok(mut pager) = Command::new("less")
-        .args(["-R", "-S"])
-        .stdin(Stdio::piped())
-        .spawn()
-    else {
+    let Ok(mut pager) = Command::new("less").args(["-R", "-S"]).stdin(Stdio::piped()).spawn() else {
         return print(output);
     };
     // Quitting `less` before it read everything closes the pipe; that is not an error.
@@ -100,9 +91,7 @@ fn summary(session: &Value) -> Value {
         fields
             .iter()
             .filter_map(|(key, path)| {
-                let value = path
-                    .iter()
-                    .try_fold(session, |value, name| value.get(name))?;
+                let value = path.iter().try_fold(session, |value, name| value.get(name))?;
                 Some((key.to_string(), value.clone()))
             })
             .collect::<Map<_, _>>(),
@@ -113,15 +102,8 @@ fn table(sessions: &[Value]) -> String {
     sessions
         .iter()
         .map(|session| {
-            let title = session["title"]
-                .as_str()
-                .unwrap_or("Untitled session")
-                .replace(['\r', '\n', '\t'], " ");
-            format!(
-                "{}\t{title}\t{}",
-                text(&session["id"]),
-                locale_string(&session["time"]["updated"])
-            )
+            let title = session["title"].as_str().unwrap_or("Untitled session").replace(['\r', '\n', '\t'], " ");
+            format!("{}\t{title}\t{}", text(&session["id"]), locale_string(&session["time"]["updated"]))
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -134,9 +116,7 @@ fn delete(context: &Context, args: &SessionDeleteArgs) -> anyhow::Result<()> {
             server
                 .client
                 .session_remove(
-                    &SessionRemoveInput {
-                        session_id: args.session_id.clone().into(),
-                    },
+                    &SessionRemoveInput { session_id: args.session_id.clone().into() },
                     &RequestOptions::default(),
                 )
                 .await?,
@@ -160,10 +140,7 @@ fn export(context: &Context, args: &SessionExportArgs) -> anyhow::Result<()> {
         };
         let mut call = Call::new(
             "GET",
-            format!(
-                "/api/experimental/session/{}/export",
-                opencode_api::client::path_param(&session)?
-            ),
+            format!("/api/experimental/session/{}/export", opencode_api::client::path_param(&session)?),
             200,
             &[400, 401, 404, 500],
         );
@@ -207,10 +184,7 @@ async fn pick(client: &Client) -> anyhow::Result<Option<String>> {
             Choice::new(id, label).hint(hint)
         })
         .collect();
-    let selected = prompt::autocomplete("Select session to export", choices)
-        .max_items(10)
-        .output(output)
-        .prompt();
+    let selected = prompt::autocomplete("Select session to export", choices).max_items(10).output(output).prompt();
     let Ok(selected) = selected else {
         output.cancel("Cancelled");
         return Err(Exit(130).into());
@@ -220,15 +194,13 @@ async fn pick(client: &Client) -> anyhow::Result<Option<String>> {
 }
 
 fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
-    let text = block_on(read(&args.file))?
-        .map_err(|error| anyhow::anyhow!("Failed to read session data: {error:#}"))?;
+    let text =
+        block_on(read(&args.file))?.map_err(|error| anyhow::anyhow!("Failed to read session data: {error:#}"))?;
     let Value::Object(mut body) = serde_json::from_str::<Value>(&text)? else {
         anyhow::bail!("Expected an object, got {}", text.trim());
     };
     let directory = match &args.directory {
-        Some(directory) if std::path::Path::new(directory).is_absolute() => {
-            super::debug::normalize(directory, false)
-        }
+        Some(directory) if std::path::Path::new(directory).is_absolute() => super::debug::normalize(directory, false),
         Some(directory) => super::debug::normalize(&format!("{}/{directory}", cwd()?), false),
         None => cwd()?,
     };
@@ -236,16 +208,8 @@ fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
         let server = connect(context).await?;
         let location = location(&server.client, &directory).await?;
         // A `location` in the file keeps its place and takes the new value, as the TS spread does.
-        body.insert(
-            "location".to_owned(),
-            serde_json::json!({ "directory": location["directory"] }),
-        );
-        let mut call = Call::new(
-            "POST",
-            "/api/experimental/session/import".to_owned(),
-            200,
-            &[],
-        );
+        body.insert("location".to_owned(), serde_json::json!({ "directory": location["directory"] }));
+        let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[]);
         call.json(&body)?;
         match get(&server.client, call).await {
             Err(ApiError::UnexpectedStatus { status: 409 }) => anyhow::Ok(None),
@@ -284,10 +248,7 @@ async fn read(file: &str) -> anyhow::Result<String> {
     }
     let response = reqwest::get(file).await?;
     if !response.status().is_success() {
-        anyhow::bail!(
-            "Failed to fetch session data: {}",
-            response.status().canonical_reason().unwrap_or_default()
-        );
+        anyhow::bail!("Failed to fetch session data: {}", response.status().canonical_reason().unwrap_or_default());
     }
     Ok(response.text().await?)
 }
@@ -322,10 +283,7 @@ fn cwd() -> anyhow::Result<String> {
 
 // `errorMessage`: a declared error's message, else the `ClientError` message (`reason: detail`).
 fn message(error: &anyhow::Error) -> String {
-    match error
-        .downcast_ref::<ApiError>()
-        .and_then(ApiError::declared)
-    {
+    match error.downcast_ref::<ApiError>().and_then(ApiError::declared) {
         Some(declared) => declared.message.clone().unwrap_or_default(),
         None => format!("{error:#}"),
     }
@@ -343,10 +301,7 @@ fn text(value: &Value) -> String {
 /// `new Date(ms).toLocaleString()` as Bun writes it: `en-US` in the local time zone, whatever `LANG`
 /// says, for example `11/4/2025, 4:04:05 PM`.
 fn locale_string(value: &Value) -> String {
-    let Some(time) = value
-        .as_f64()
-        .and_then(|ms| Local.timestamp_millis_opt(ms as i64).single())
-    else {
+    let Some(time) = value.as_f64().and_then(|ms| Local.timestamp_millis_opt(ms as i64).single()) else {
         return "Invalid Date".to_owned();
     };
     time.format("%-m/%-d/%Y, %-I:%M:%S %p").to_string()

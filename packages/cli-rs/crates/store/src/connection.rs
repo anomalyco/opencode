@@ -44,10 +44,7 @@ impl Data {
         let follows: Vec<Follow> = {
             let mut state = self.lock();
             state.batch += 1;
-            let follows = events
-                .iter()
-                .flat_map(|event| state.apply_event(event))
-                .collect();
+            let follows = events.iter().flat_map(|event| state.apply_event(event)).collect();
             state.batch -= 1;
             self.flush(&mut state);
             follows
@@ -78,9 +75,7 @@ impl Data {
             }
             Follow::Catalogs(catalogs, location) => self.refresh_catalogs(catalogs, location),
             Follow::Settle(key, catalog, location) => self.settle(key, catalog, location),
-            Follow::Websearch(location) => {
-                self.refresh(move |data| data.websearch_refresh(Some(&location)))
-            }
+            Follow::Websearch(location) => self.refresh(move |data| data.websearch_refresh(Some(&location))),
         }
     }
 
@@ -88,19 +83,12 @@ impl Data {
     /// supersede the snapshot; a snapshot of an older connection is ignored.
     fn rehydrate(&self, token: u64) {
         self.refresh(move |data| async move {
-            let result = data
-                .client()
-                .session_active(&RequestOptions::default())
-                .await;
+            let result = data.client().session_active(&RequestOptions::default()).await;
             let active = match result {
                 Ok(active) => active,
                 Err(error) => {
                     data.write(|state| {
-                        if state
-                            .active_updates
-                            .as_ref()
-                            .is_some_and(|(current, _)| *current == token)
-                        {
+                        if state.active_updates.as_ref().is_some_and(|(current, _)| *current == token) {
                             state.active_updates = None;
                         }
                     });
@@ -115,10 +103,8 @@ impl Data {
                     state.active_updates = Some((current, updates));
                     return Vec::new();
                 }
-                let mut snapshot: std::collections::HashMap<SessionID, SessionStatus> = active
-                    .into_keys()
-                    .map(|id| (SessionID(id), SessionStatus::Running))
-                    .collect();
+                let mut snapshot: std::collections::HashMap<SessionID, SessionStatus> =
+                    active.into_keys().map(|id| (SessionID(id), SessionStatus::Running)).collect();
                 for (id, status) in updates {
                     match status {
                         Some(status) => snapshot.insert(id, status),
@@ -141,9 +127,7 @@ impl Data {
                 state
                     .active
                     .iter()
-                    .filter(|(id, status)| {
-                        **status == SessionStatus::Running && !state.info.contains_key(*id)
-                    })
+                    .filter(|(id, status)| **status == SessionStatus::Running && !state.info.contains_key(*id))
                     .map(|(id, _)| id.clone())
                     .collect()
             });
@@ -187,22 +171,15 @@ impl State {
             V2Event::SessionAgentSelected(event) => self.on_agent_selected(event),
             V2Event::SessionModelSelected(event) => return self.on_model_selected(event),
             V2Event::SessionRenamed(event) => {
-                return vec![Follow::Renamed(
-                    event.data.session_id.clone(),
-                    event.data.title.clone(),
-                )];
+                return vec![Follow::Renamed(event.data.session_id.clone(), event.data.title.clone())];
             }
             V2Event::SessionPermissions(event) => self.on_permissions(&event.data),
             V2Event::SessionMetadataUpdated(event) => self.on_metadata(&event.data),
-            V2Event::SessionArchived(event) => {
-                self.on_archived(&event.data.session_id, Some(event.created))
-            }
+            V2Event::SessionArchived(event) => self.on_archived(&event.data.session_id, Some(event.created)),
             V2Event::SessionUnarchived(event) => self.on_archived(&event.data.session_id, None),
             V2Event::SessionMoved(event) => self.on_moved(event),
             V2Event::SessionInboxDelivered(event) => self.on_inbox_delivered(event),
-            V2Event::SessionInboxDeliveryChanged(event) => {
-                self.on_inbox_delivery_changed(&event.data)
-            }
+            V2Event::SessionInboxDeliveryChanged(event) => self.on_inbox_delivery_changed(&event.data),
             V2Event::SessionInboxCancelled(event) => self.on_inbox_cancelled(&event.data),
             V2Event::SessionInboxEnqueued(event) => self.on_inbox_enqueued(event),
             V2Event::SessionInstructionsUpdated(event) => {
@@ -215,9 +192,7 @@ impl State {
                         text: text.clone(),
                         description: Some(format!("Instructions updated: {}", keys.join(", "))),
                         metadata: event.metadata.clone(),
-                        time: SessionInboxUserTime {
-                            created: event.created,
-                        },
+                        time: SessionInboxUserTime { created: event.created },
                     };
                     self.insert_message(&event.data.session_id, SessionMessageInfo::System(row));
                 }
@@ -229,9 +204,7 @@ impl State {
                     text: event.data.text.clone(),
                     description: event.data.description.clone(),
                     metadata: event.data.metadata.clone(),
-                    time: SessionInboxUserTime {
-                        created: event.created,
-                    },
+                    time: SessionInboxUserTime { created: event.created },
                 };
                 self.insert_message(&event.data.session_id, SessionMessageInfo::Synthetic(row));
             }
@@ -299,9 +272,7 @@ impl State {
             V2Event::SessionCompactionEnded(event) => self.on_compaction_ended(event),
             V2Event::SessionCompactionFailed(event) => self.on_compaction_failed_inbox(event),
             V2Event::PermissionAsked(event) => self.on_permission_asked(&event.data),
-            V2Event::PermissionReplied(event) => {
-                self.remove_permission(&event.data.session_id, &event.data.request_id)
-            }
+            V2Event::PermissionReplied(event) => self.remove_permission(&event.data.session_id, &event.data.request_id),
             V2Event::ProjectUpdated(event) => self.on_project_updated(&event.data),
             V2Event::WorktreeResolved(event) => return self.on_worktree_resolved(&event.data),
             V2Event::FormReplied(event) => {
@@ -320,11 +291,7 @@ impl State {
 
 /// Drives the store from a connection: applies its batches and tracks whether it is connected.
 /// Returns when the batch receiver closes.
-pub async fn run(
-    data: Data,
-    mut state: watch::Receiver<events::State>,
-    mut batches: mpsc::Receiver<Vec<V2Event>>,
-) {
+pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
     let mut watching = true;
     loop {
         tokio::select! {
@@ -421,14 +388,7 @@ impl Source<V2Event> for Events {
 pub fn connect(data: &Data, options: events::Options) -> (Connection, JoinHandle<()>) {
     let _runtime = data.runtime().enter();
     data.set_online(false);
-    let (connection, batches) = events::connect(
-        Events {
-            client: data.client().clone(),
-        },
-        options,
-    );
-    let task = data
-        .runtime()
-        .spawn(run(data.clone(), connection.watch(), batches));
+    let (connection, batches) = events::connect(Events { client: data.client().clone() }, options);
+    let task = data.runtime().spawn(run(data.clone(), connection.watch(), batches));
     (connection, task)
 }

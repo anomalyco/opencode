@@ -31,15 +31,8 @@ type Details = (Vec<(String, String)>, String);
 impl Generic {
     pub fn new(cx: &Context<'_>) -> Self {
         let inline = InlineTool::new(cx);
-        let details = View::new(cx.app)
-            .column()
-            .padding_edge(Edge::Left, 3 + ICON_WIDTH)
-            .visible(false);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(inline.root())
-            .child(&details);
+        let details = View::new(cx.app).column().padding_edge(Edge::Left, 3 + ICON_WIDTH).visible(false);
+        let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(&details);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             root,
@@ -84,16 +77,7 @@ impl Generic {
             spinner: matches!(status, Status::Streaming | Status::Running),
             text: summary(tool, &props.input),
             clickable: !entries.is_empty() || !output.is_empty(),
-            ..Inline::new(
-                props,
-                if status == Status::Error {
-                    "✗"
-                } else {
-                    "✓"
-                },
-                tool,
-                status == Status::Completed,
-            )
+            ..Inline::new(props, if status == Status::Error { "✗" } else { "✓" }, tool, status == Status::Completed)
         });
         let next = Some((entries, output));
         if *inner.entries.borrow() != next {
@@ -122,11 +106,7 @@ impl Inner {
             self.details.add(
                 &View::new(&self.app)
                     .row()
-                    .child(
-                        &Text::new(&self.app, format!("{key}: "))
-                            .shrink(0.0)
-                            .fg(self.muted),
-                    )
+                    .child(&Text::new(&self.app, format!("{key}: ")).shrink(0.0).fg(self.muted))
                     .child(&Text::new(&self.app, value).grow(1.0).fg(self.base)),
             );
         }
@@ -135,10 +115,7 @@ impl Inner {
 
 /// `genericToolSummary`: the name and the primitive inputs on one line.
 pub fn summary(tool: &str, input: &serde_json::Map<String, Value>) -> String {
-    let args = primitive_input_summary(input, &[])
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let args = primitive_input_summary(input, &[]).split_whitespace().collect::<Vec<_>>().join(" ");
     if args.is_empty() {
         return tool.to_owned();
     }

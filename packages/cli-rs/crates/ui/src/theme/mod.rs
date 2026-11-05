@@ -29,8 +29,8 @@ pub use discovery::{config_directories, discover};
 pub use state::{Effect, ModeSetting, ThemeError, ThemeState, ThemeStateOptions};
 pub use system::{TerminalColors, generate_system, terminal_mode};
 pub use tokens::{
-    ActionStates, Actions, Background, Base, Diff, DiffBackground, DiffLineNumber, DiffPair,
-    DiffText, Feedback, Markdown, Raised, Stateful, Syntax, Text, TextFeedback, Tokens,
+    ActionStates, Actions, Background, Base, Diff, DiffBackground, DiffLineNumber, DiffPair, DiffText, Feedback,
+    Markdown, Raised, Stateful, Syntax, Text, TextFeedback, Tokens,
 };
 
 /// The hue steps, lightest role first: index 0 is step 100.
@@ -102,19 +102,13 @@ impl PartialEq for Theme {
 
 impl std::fmt::Debug for Theme {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Theme")
-            .field("surface", &self.surface)
-            .field("tokens", &**self)
-            .finish_non_exhaustive()
+        f.debug_struct("Theme").field("surface", &self.surface).field("tokens", &**self).finish_non_exhaustive()
     }
 }
 
 impl Theme {
     fn new(views: Views) -> Self {
-        Self {
-            views: Rc::new(views),
-            surface: 0,
-        }
+        Self { views: Rc::new(views), surface: 0 }
     }
 
     /// The same theme on a raised surface. Absolute: every view's surfaces are the page theme's.
@@ -123,18 +117,12 @@ impl Theme {
             Surface::Dialog => 1,
             Surface::DialogFooter => 2,
         };
-        Theme {
-            views: self.views.clone(),
-            surface,
-        }
+        Theme { views: self.views.clone(), surface }
     }
 
     /// The page view.
     pub fn page(&self) -> Theme {
-        Theme {
-            views: self.views.clone(),
-            surface: 0,
-        }
+        Theme { views: self.views.clone(), surface: 0 }
     }
 
     /// Every named hue in definition order, the semantic `accent`, `interactive`, and `neutral` among them.
@@ -143,11 +131,7 @@ impl Theme {
     }
 
     pub fn hue(&self, name: &str) -> Option<&Scale> {
-        self.views
-            .hue
-            .iter()
-            .find(|(hue, _)| hue == name)
-            .map(|(_, scale)| scale)
+        self.views.hue.iter().find(|(hue, _)| hue == name).map(|(_, scale)| scale)
     }
 
     pub fn accent(&self) -> &Scale {
@@ -177,10 +161,7 @@ impl Theme {
     pub fn source(&self, color: &Color) -> Option<HueSource<'_>> {
         self.identity(color)
             .flatten()
-            .map(|(hue, position)| HueSource {
-                hue: &self.views.hue[hue].0,
-                step: STEPS[position],
-            })
+            .map(|(hue, position)| HueSource { hue: &self.views.hue[hue].0, step: STEPS[position] })
     }
 
     /// `color` moved `amount` steps toward 900 on its hue, clamped. See [`Theme::decrease`].
@@ -231,18 +212,12 @@ impl Theme {
             });
         }
         let named = self.views.hue.iter().map(|(_, scale)| scale).enumerate();
-        let categorical = self
-            .views
-            .categorical
-            .iter()
-            .zip(&self.views.categorical_hues)
-            .map(|(scale, hue)| (*hue, scale));
+        let categorical =
+            self.views.categorical.iter().zip(&self.views.categorical_hues).map(|(scale, hue)| (*hue, scale));
         tiers[2] = named
             .chain(categorical)
             .flat_map(|(hue, scale)| {
-                (0..STEPS.len())
-                    .filter(|step| scale.0[*step] == *color)
-                    .map(move |step| Some((hue, step)))
+                (0..STEPS.len()).filter(|step| scale.0[*step] == *color).map(move |step| Some((hue, step)))
             })
             .collect();
         tiers
@@ -265,21 +240,10 @@ impl Theme {
             }
         }
         let step = |scale: &Scale| scale.0.iter().position(|step| std::ptr::eq(step, color));
-        let hue = self
-            .views
-            .hue
-            .iter()
-            .enumerate()
-            .find_map(|(hue, (_, scale))| Some((hue, step(scale)?)));
+        let hue = self.views.hue.iter().enumerate().find_map(|(hue, (_, scale))| Some((hue, step(scale)?)));
         hue.or_else(|| {
-            let categorical = self
-                .views
-                .categorical
-                .iter()
-                .zip(&self.views.categorical_hues);
-            categorical
-                .into_iter()
-                .find_map(|(scale, hue)| Some((*hue, step(scale)?)))
+            let categorical = self.views.categorical.iter().zip(&self.views.categorical_hues);
+            categorical.into_iter().find_map(|(scale, hue)| Some((*hue, step(scale)?)))
         })
         .map(Some)
     }
@@ -290,10 +254,7 @@ pub(crate) fn mode_name(mode: ThemeMode) -> &'static str {
 }
 
 /// A built-in or custom theme document resolved in `mode`, or in its first mode when it lacks `mode`.
-pub(crate) fn resolve(
-    document: &serde_json::Value,
-    mode: ThemeMode,
-) -> Result<(Theme, ThemeMode), String> {
+pub(crate) fn resolve(document: &serde_json::Value, mode: ThemeMode) -> Result<(Theme, ThemeMode), String> {
     let (views, mode) = resolve::resolve_document(document, mode)?;
     Ok((Theme::new(views), mode))
 }

@@ -68,31 +68,12 @@ pub struct Layout {
 pub fn layout(height: u16, lines: u16, options: u16, status_rows: u16, images: bool) -> Layout {
     let padding = u16::from(height >= PROMPT_MAX_ROWS + 4);
     let available = height.saturating_sub(1 + status_rows + padding * 2).max(1);
-    let preview = if images && options == 0 {
-        4.min(available.saturating_sub(MAX_ROWS.min(lines.max(1))))
-    } else {
-        0
-    };
+    let preview = if images && options == 0 { 4.min(available.saturating_sub(MAX_ROWS.min(lines.max(1)))) } else { 0 };
     let images = if preview >= 3 { preview } else { 0 };
-    let textarea = available
-        .saturating_sub(images + u16::from(options > 0))
-        .clamp(1, MAX_ROWS);
+    let textarea = available.saturating_sub(images + u16::from(options > 0)).clamp(1, MAX_ROWS);
     let rows = textarea.min(lines.max(1));
-    let menu = if options > 0 {
-        MENU_ROWS
-            .min(options)
-            .min(available.saturating_sub(rows))
-            .max(1)
-    } else {
-        0
-    };
-    Layout {
-        padding,
-        textarea,
-        menu,
-        images,
-        rows: rows + menu + images,
-    }
+    let menu = if options > 0 { MENU_ROWS.min(options).min(available.saturating_sub(rows)).max(1) } else { 0 };
+    Layout { padding, textarea, menu, images, rows: rows + menu + images }
 }
 
 /// `MenuMode`.
@@ -221,18 +202,12 @@ impl Prompt {
             .column()
             .width(Length::percent(100.0))
             .border_sides(Sides::LEFT)
-            .border_chars(Some([
-                ' ', ' ', ' ', ' ', ' ', vertical, ' ', ' ', ' ', ' ', ' ',
-            ]))
+            .border_chars(Some([' ', ' ', ' ', ' ', ' ', vertical, ' ', ' ', ' ', ' ', ' ']))
             .padding_edge(Edge::Left, 1)
             .padding_edge(Edge::Right, 2)
             .child(previews.root())
             .child(&textarea);
-        let body = View::new(app)
-            .column()
-            .width(Length::percent(100.0))
-            .shrink(0.0)
-            .child(&rail);
+        let body = View::new(app).column().width(Length::percent(100.0)).shrink(0.0).child(&rail);
         let keymap = Rc::new(keymap(app, config, &textarea));
         let terminal = opentui::term::size().unwrap_or((app.size().0, 0));
         let inner = Rc::new(Inner {
@@ -242,19 +217,11 @@ impl Prompt {
             rail,
             menu: Menu::new(app),
             previews,
-            image_preview: config
-                .prompt
-                .as_ref()
-                .and_then(|prompt| prompt.image_preview)
-                == Some(true),
+            image_preview: config.prompt.as_ref().and_then(|prompt| prompt.image_preview) == Some(true),
             keymap,
             theme: RefCell::new(theme.clone()),
             mono,
-            state: RefCell::new(State {
-                first: true,
-                terminal,
-                ..State::default()
-            }),
+            state: RefCell::new(State { first: true, terminal, ..State::default() }),
             hooks: RefCell::default(),
             target: RefCell::default(),
             quiet: Cell::new(false),
@@ -298,14 +265,11 @@ impl Prompt {
                 return;
             };
             let keymap = Rc::downgrade(&keys);
-            timer.set(Some(cx.set_timeout(
-                deadline.saturating_duration_since(cx.now()),
-                move |cx| {
-                    if let Some(keys) = keymap.upgrade() {
-                        keys.expire_leader(cx.now());
-                    }
-                },
-            )));
+            timer.set(Some(cx.set_timeout(deadline.saturating_duration_since(cx.now()), move |cx| {
+                if let Some(keys) = keymap.upgrade() {
+                    keys.expire_leader(cx.now());
+                }
+            })));
         });
     }
 
@@ -381,12 +345,7 @@ impl Prompt {
     /// The agent's name from the catalog, once it arrived.
     pub fn agent_name(&self, id: &str) -> Option<String> {
         let state = self.0.state.borrow();
-        state
-            .catalog
-            .agents
-            .iter()
-            .find(|agent| agent.id == id)
-            .map(|agent| agent.name.clone())
+        state.catalog.agents.iter().find(|agent| agent.id == id).map(|agent| agent.name.clone())
     }
 
     /// The color of the session's agent (`agentColor`).
@@ -404,11 +363,8 @@ impl Prompt {
 
     /// Opens the session: reads the catalogs, the prompt history, and the inbox.
     pub fn open(&self, client: &Client, session: &str, directory: &str, resume: bool) {
-        *self.0.target.borrow_mut() = Some(Target {
-            client: client.clone(),
-            session: session.to_owned(),
-            directory: directory.to_owned(),
-        });
+        *self.0.target.borrow_mut() =
+            Some(Target { client: client.clone(), session: session.to_owned(), directory: directory.to_owned() });
         {
             let mut state = self.0.state.borrow_mut();
             state.queued.clear();
@@ -418,46 +374,37 @@ impl Prompt {
         }
         let weak = Rc::downgrade(&self.0);
         let (client, directory) = (client.clone(), directory.to_owned());
-        self.0.app.spawn(
-            async move { api::catalog(&client, &directory).await },
-            move |_, catalog| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.state.borrow_mut().catalog = catalog;
-                    inner.paint();
-                    inner.refresh();
-                }
-            },
-        );
+        self.0.app.spawn(async move { api::catalog(&client, &directory).await }, move |_, catalog| {
+            if let Some(inner) = weak.upgrade() {
+                inner.state.borrow_mut().catalog = catalog;
+                inner.paint();
+                inner.refresh();
+            }
+        });
         let Some(target) = self.0.target.borrow().clone() else {
             return;
         };
         let weak = Rc::downgrade(&self.0);
         let client = target.client.clone();
         let session = target.session.clone();
-        self.0.app.spawn(
-            async move { inbox(&client, &session).await },
-            move |_, queued| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.state.borrow_mut().queued = queued;
-                }
-            },
-        );
+        self.0.app.spawn(async move { inbox(&client, &session).await }, move |_, queued| {
+            if let Some(inner) = weak.upgrade() {
+                inner.state.borrow_mut().queued = queued;
+            }
+        });
         if !resume {
             return;
         }
         let weak = Rc::downgrade(&self.0);
-        self.0.app.spawn(
-            async move { api::history(&target.client, &target.session).await },
-            move |_, history| {
-                if let Some(inner) = weak.upgrade() {
-                    let mut state = inner.state.borrow_mut();
-                    state.history = History::new(&history);
-                    state.first = history.is_empty();
-                    drop(state);
-                    inner.paint();
-                }
-            },
-        );
+        self.0.app.spawn(async move { api::history(&target.client, &target.session).await }, move |_, history| {
+            if let Some(inner) = weak.upgrade() {
+                let mut state = inner.state.borrow_mut();
+                state.history = History::new(&history);
+                state.first = history.is_empty();
+                drop(state);
+                inner.paint();
+            }
+        });
     }
 
     /// An inbox event of the session (`syncPending`): the queued and steering prompts.
@@ -491,11 +438,7 @@ impl Prompt {
     pub fn admitted(&self, id: &str, delivery: Delivery, prompt: &RunPrompt) {
         let mut state = self.0.state.borrow_mut();
         if !state.queued.iter().any(|queued| queued.id == id) {
-            state.queued.push(Queued {
-                id: id.to_owned(),
-                delivery,
-                prompt: prompt.copy(),
-            });
+            state.queued.push(Queued { id: id.to_owned(), delivery, prompt: prompt.copy() });
         }
     }
 
@@ -506,12 +449,7 @@ impl Prompt {
 
     /// `queuedPromptAction` for M.3's pending-prompts panel: moves the prompt to `delivery`, or cancels it with
     /// `None` (`queued_prompt.delete`). Calls `done` with whether it worked; a failure shows in the status row.
-    pub fn queued_action(
-        &self,
-        id: &str,
-        delivery: Option<Delivery>,
-        done: impl FnOnce(bool) + 'static,
-    ) {
+    pub fn queued_action(&self, id: &str, delivery: Option<Delivery>, done: impl FnOnce(bool) + 'static) {
         self.0.queued_action(id, delivery, None, Box::new(done));
     }
 
@@ -525,13 +463,8 @@ impl Prompt {
         }
         let weak = Rc::downgrade(inner);
         let id = id.to_owned();
-        let queued = inner
-            .state
-            .borrow()
-            .queued
-            .iter()
-            .find(|queued| queued.id == id)
-            .map(|queued| queued.prompt.clone());
+        let queued =
+            inner.state.borrow().queued.iter().find(|queued| queued.id == id).map(|queued| queued.prompt.clone());
         let Some(prompt) = queued else {
             return done(false);
         };
@@ -571,8 +504,7 @@ impl Prompt {
 
     /// `submitText`: sends `text` as if typed, as the command menu does for `/new` and server commands.
     pub fn submit_text(&self, text: &str) {
-        self.0
-            .submit_prompt(RunPrompt::text(text.to_owned()), Delivery::Steer);
+        self.0.submit_prompt(RunPrompt::text(text.to_owned()), Delivery::Steer);
     }
 
     /// `openEditor`: composes the draft in the external editor.
@@ -618,10 +550,7 @@ impl Inner {
             .filter(|agent| !agent.hidden)
             .position(|agent| agent.id == state.agent)
             .unwrap_or(0);
-        colors
-            .get(index % colors.len().max(1))
-            .copied()
-            .unwrap_or(theme.footer.border)
+        colors.get(index % colors.len().max(1)).copied().unwrap_or(theme.footer.border)
     }
 
     /// The placeholder and the rail's color.
@@ -640,11 +569,7 @@ impl Inner {
             "Ask anything, / for commands, @ for context…"
         };
         self.textarea.placeholder(placeholder);
-        let rail = if shell {
-            self.theme.borrow().footer.formfield_focused_text
-        } else {
-            self.agent_color()
-        };
+        let rail = if shell { self.theme.borrow().footer.formfield_focused_text } else { self.agent_color() };
         self.rail.border_color(rail);
     }
 
@@ -674,19 +599,9 @@ impl Inner {
         let Some(mode) = state.mode else {
             return Vec::new();
         };
-        let directory = self
-            .target
-            .borrow()
-            .as_ref()
-            .map(|target| target.directory.clone())
-            .unwrap_or_default();
+        let directory = self.target.borrow().as_ref().map(|target| target.directory.clone()).unwrap_or_default();
         let files = if mode == Mode::Mention {
-            complete::files(
-                &state.files,
-                parse::file_line_range(&state.query).1,
-                &directory,
-                self.width(),
-            )
+            complete::files(&state.files, parse::file_line_range(&state.query).1, &directory, self.width())
         } else {
             Vec::new()
         };
@@ -714,30 +629,17 @@ impl Inner {
             };
             (state.mode.is_some(), uris)
         };
-        let count = if visible {
-            options.len().max(1) as u16
-        } else {
-            0
-        };
-        let next = layout(
-            terminal.1,
-            lines.min(u32::from(u16::MAX)) as u16,
-            count,
-            u16::from(!visible),
-            !uris.is_empty(),
-        );
+        let count = if visible { options.len().max(1) as u16 } else { 0 };
+        let next =
+            layout(terminal.1, lines.min(u32::from(u16::MAX)) as u16, count, u16::from(!visible), !uris.is_empty());
         let selection = {
             let mut state = self.state.borrow_mut();
             state.layout = next;
-            state.selection = state
-                .selection
-                .reconcile(options.len(), usize::from(next.menu.max(1)));
+            state.selection = state.selection.reconcile(options.len(), usize::from(next.menu.max(1)));
             state.selection
         };
-        self.textarea
-            .height(u32::from(next.rows - next.menu - next.images));
-        self.previews
-            .show(&uris, next.images, self.theme.borrow().footer.muted);
+        self.textarea.height(u32::from(next.rows - next.menu - next.images));
+        self.previews.show(&uris, next.images, self.theme.borrow().footer.muted);
         self.body.padding_y(u32::from(next.padding));
         if visible {
             let items: Vec<menu::Item> = options.iter().map(Choice::item).collect();
@@ -807,11 +709,7 @@ impl Inner {
                 continue;
             }
             let mut copy = part.clone();
-            copy.set_mention(Mention {
-                start: mark.start,
-                end: mark.end,
-                text,
-            });
+            copy.set_mention(Mention { start: mark.start, end: mark.end, text });
             tracked += 1;
             next[index] = Some(copy);
         }
@@ -832,10 +730,7 @@ impl Inner {
             .enumerate()
             .filter_map(|(index, part)| {
                 let mention = part.mention()?;
-                let id = self.textarea.add_extmark(
-                    mention.start..mention.end,
-                    ExtmarkOptions::default().atomic(),
-                );
+                let id = self.textarea.add_extmark(mention.start..mention.end, ExtmarkOptions::default().atomic());
                 Some((id, index))
             })
             .collect();
@@ -849,18 +744,8 @@ impl Inner {
         self.sync_parts();
         let text = self.textarea.text();
         let state = self.state.borrow();
-        let command = if state.shell {
-            None
-        } else {
-            selected_command(&text, state.command.as_ref())
-        };
-        RunPrompt {
-            text,
-            parts: state.parts.clone(),
-            shell: state.shell,
-            command,
-            ..RunPrompt::default()
-        }
+        let command = if state.shell { None } else { selected_command(&text, state.command.as_ref()) };
+        RunPrompt { text, parts: state.parts.clone(), shell: state.shell, command, ..RunPrompt::default() }
     }
 
     /// `restore`: shows `prompt` with its marks, the cursor at `cursor` (the end by default).
@@ -876,8 +761,7 @@ impl Inner {
         });
         self.restore_parts(prompt.parts.clone());
         let end = measure(&prompt.text);
-        self.textarea
-            .set_cursor_offset(cursor.unwrap_or(end).min(end));
+        self.textarea.set_cursor_offset(cursor.unwrap_or(end).min(end));
         self.paint();
         self.rows();
         self.textarea.focus();
@@ -902,12 +786,7 @@ impl Inner {
 
     fn clear_draft(&self) -> bool {
         let has = !self.textarea.text().is_empty()
-            || self
-                .state
-                .borrow()
-                .parts
-                .iter()
-                .any(|part| matches!(part, Part::File(_)));
+            || self.state.borrow().parts.iter().any(|part| matches!(part, Part::File(_)));
         if has {
             self.input_clear();
             self.reset();
@@ -1076,23 +955,15 @@ impl Inner {
         };
         let shell = self.state.borrow().shell;
         match choice {
-            Choice::Slash {
-                action: Some(Action::Editor),
-                ..
-            } => {
+            Choice::Slash { action: Some(Action::Editor), .. } => {
                 let text = self.textarea.text();
                 let value = match parse::slash_head(&text) {
-                    Some((name, arguments, _)) if name.eq_ignore_ascii_case("editor") => {
-                        arguments.to_owned()
-                    }
+                    Some((name, arguments, _)) if name.eq_ignore_ascii_case("editor") => arguments.to_owned(),
                     _ => text,
                 };
                 self.open_editor(Some(value));
             }
-            Choice::Slash {
-                action: Some(Action::Settings),
-                ..
-            } if !shell => {
+            Choice::Slash { action: Some(Action::Settings), .. } if !shell => {
                 self.cancel();
                 if let Some(settings) = &self.hooks().settings {
                     settings();
@@ -1103,8 +974,7 @@ impl Inner {
                 let cursor = self.cursor();
                 let head = parse::slash_head(&text);
                 let local = !shell && (name == "new" || is_exit(&format!("/{name}")));
-                let spaced =
-                    head.is_some_and(|(_, _, end)| text[end..].starts_with(char::is_whitespace));
+                let spaced = head.is_some_and(|(_, _, end)| text[end..].starts_with(char::is_whitespace));
                 let separator = if !shell && !local && spaced { "" } else { " " };
                 let inserted = format!("/{name}{separator}");
                 let end = match head {
@@ -1127,28 +997,21 @@ impl Inner {
                 let (at, cursor) = (self.state.borrow().at, self.cursor());
                 let next = self.range(cursor, cursor + 1);
                 let mention = format!("@{value}");
-                let inserted = if next == " " {
-                    mention.clone()
-                } else {
-                    format!("{mention} ")
-                };
+                let inserted = if next == " " { mention.clone() } else { format!("{mention} ") };
                 self.edit(|| replace(&self.textarea, at, cursor, &inserted));
                 let end = at + measure(&mention);
                 let mut part = part;
-                part.set_mention(Mention {
-                    start: at,
-                    end,
-                    text: mention,
-                });
+                part.set_mention(Mention { start: at, end, text: mention });
                 if let Part::File(file) = &part {
-                    let previous = self.state.borrow().parts.iter().position(
-                        |item| matches!(item, Part::File(other) if other.url == file.url),
-                    );
+                    let previous = self
+                        .state
+                        .borrow()
+                        .parts
+                        .iter()
+                        .position(|item| matches!(item, Part::File(other) if other.url == file.url));
                     if let Some(previous) = previous {
                         let mut state = self.state.borrow_mut();
-                        if let Some(position) =
-                            state.marks.iter().position(|(_, index)| *index == previous)
-                        {
+                        if let Some(position) = state.marks.iter().position(|(_, index)| *index == previous) {
                             let (mark, _) = state.marks.remove(position);
                             self.textarea.remove_extmark(mark);
                         }
@@ -1160,9 +1023,7 @@ impl Inner {
                         }
                     }
                 }
-                let mark = self
-                    .textarea
-                    .add_extmark(at..end, ExtmarkOptions::default().atomic());
+                let mark = self.textarea.add_extmark(at..end, ExtmarkOptions::default().atomic());
                 {
                     let mut state = self.state.borrow_mut();
                     let index = state.parts.len();
@@ -1180,12 +1041,7 @@ impl Inner {
     fn expand(self: &Rc<Self>) {
         let options = self.options();
         let selected = self.state.borrow().selection.selected;
-        let Some(Choice::Mention {
-            value,
-            directory: true,
-            ..
-        }) = options.get(selected)
-        else {
+        let Some(Choice::Mention { value, directory: true, .. }) = options.get(selected) else {
             return;
         };
         let (at, cursor) = (self.state.borrow().at, self.cursor());
@@ -1220,32 +1076,17 @@ impl Inner {
         }
         if !next.has_content() {
             let queued = (delivery == Delivery::Steer)
-                .then(|| {
-                    self.state
-                        .borrow()
-                        .queued
-                        .iter()
-                        .find(|queued| queued.delivery == Delivery::Queue)
-                        .cloned()
-                })
+                .then(|| self.state.borrow().queued.iter().find(|queued| queued.delivery == Delivery::Queue).cloned())
                 .flatten();
             if let Some(queued) = queued {
                 self.steer(queued.id);
                 return;
             }
             let running = self.state.borrow().running;
-            self.status(if running {
-                "waiting for current response"
-            } else {
-                "empty prompt ignored"
-            });
+            self.status(if running { "waiting for current response" } else { "empty prompt ignored" });
             return;
         }
-        let command = if next.shell {
-            None
-        } else {
-            selected_command(&next.text, next.command.as_ref())
-        };
+        let command = if next.shell { None } else { selected_command(&next.text, next.command.as_ref()) };
         let local = parts::is_new(&next.text)
             || parts::is_compact(&next.text)
             || is_exit(&next.text)
@@ -1267,10 +1108,7 @@ impl Inner {
             }
             return;
         }
-        let skill = next
-            .parts
-            .iter()
-            .any(|part| matches!(part, Part::Skill { .. }));
+        let skill = next.parts.iter().any(|part| matches!(part, Part::Skill { .. }));
         let command = if command.is_some() || skill || next.shell || parts::is_new(&next.text) {
             command
         } else {
@@ -1283,18 +1121,10 @@ impl Inner {
                 Slash::Command(command) => Some(command),
             }
         };
-        let submit = RunPrompt {
-            command,
-            delivery: Some(delivery),
-            ..next.clone()
-        };
+        let submit = RunPrompt { command, delivery: Some(delivery), ..next.clone() };
         self.state.borrow_mut().submitting = true;
         self.reset();
-        let accepted = self
-            .hooks()
-            .submit
-            .as_ref()
-            .is_some_and(|submit_hook| submit_hook(submit));
+        let accepted = self.hooks().submit.as_ref().is_some_and(|submit_hook| submit_hook(submit));
         self.state.borrow_mut().submitting = false;
         if !accepted {
             self.restore(&next, None);
@@ -1393,9 +1223,7 @@ impl Inner {
         let end = measure(&text);
         let view = self.textarea.view();
         let row = view.viewport().map_or(0, |viewport| viewport.y)
-            + view
-                .position(EditorQuery::Cursor)
-                .map_or(0, |position| position.visual_row);
+            + view.position(EditorQuery::Cursor).map_or(0, |position| position.visual_row);
         if up {
             if cursor == 0 {
                 return false;
@@ -1410,9 +1238,7 @@ impl Inner {
         if cursor == end {
             return false;
         }
-        let last = view
-            .info(false)
-            .map_or(0, |info| info.total_virtual_line_count.saturating_sub(1));
+        let last = view.info(false).map_or(0, |info| info.total_virtual_line_count.saturating_sub(1));
         if row >= last {
             self.textarea.set_cursor_offset(end);
         } else {
@@ -1428,36 +1254,24 @@ impl Inner {
         self.hide();
         self.rows();
         let value = value.unwrap_or_else(|| current.text.clone());
-        let directory = self
-            .target
-            .borrow()
-            .as_ref()
-            .map(|target| target.directory.clone())
-            .unwrap_or_else(|| ".".to_owned());
-        let command = ["VISUAL", "EDITOR"]
-            .iter()
-            .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()));
+        let directory =
+            self.target.borrow().as_ref().map(|target| target.directory.clone()).unwrap_or_else(|| ".".to_owned());
+        let command =
+            ["VISUAL", "EDITOR"].iter().find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()));
         let weak = Rc::downgrade(self);
         let task = move |_: &mut Cx<'_>| {
             let Some(inner) = weak.upgrade() else { return };
             let result = command
                 .ok_or_else(|| "Set $VISUAL or $EDITOR to open an external editor".to_owned())
                 .and_then(|command| {
-                    opencode_ui::prompt_input::editor::edit(
-                        &command,
-                        &value,
-                        std::path::Path::new(&directory),
-                    )
+                    opencode_ui::prompt_input::editor::edit(&command, &value, std::path::Path::new(&directory))
                 });
             match result {
                 Ok(None) => {}
                 Ok(Some(content)) => {
                     let text = normalize(&content);
-                    let mentions: Vec<Option<Mention>> = current
-                        .parts
-                        .iter()
-                        .map(|part| part.mention().cloned())
-                        .collect();
+                    let mentions: Vec<Option<Mention>> =
+                        current.parts.iter().map(|part| part.mention().cloned()).collect();
                     let aligned = realign_mentions(&text, &mentions);
                     let parts = current
                         .parts
@@ -1473,14 +1287,7 @@ impl Inner {
                             }
                         })
                         .collect();
-                    inner.restore(
-                        &RunPrompt {
-                            text,
-                            parts,
-                            ..current
-                        },
-                        None,
-                    );
+                    inner.restore(&RunPrompt { text, parts, ..current }, None);
                 }
                 Err(_) => {
                     inner.restore(&current, None);
@@ -1497,32 +1304,26 @@ impl Inner {
         let weak = Rc::downgrade(self);
         let Some(text) = text else {
             self.state.borrow_mut().pasting = true;
-            self.app.read_clipboard_as(
-                &["image/png", "text/plain"],
-                move |_, outcome: ClipboardOutcome| {
-                    let Some(inner) = weak.upgrade() else { return };
-                    match content(outcome) {
-                        Err(error) => {
-                            inner.state.borrow_mut().pasting = false;
-                            inner.status(&error);
-                        }
-                        Ok(None) => inner.state.borrow_mut().pasting = false,
-                        Ok(Some(Content::Image { mime, data })) => {
-                            inner.state.borrow_mut().pasting = false;
-                            if inner.state.borrow().shell {
-                                inner.status("image attachments are unavailable in shell mode");
-                                return;
-                            }
-                            inner.attachment(
-                                &format!("data:{mime};base64,{data}"),
-                                Some("clipboard"),
-                            );
-                            inner.pasted();
-                        }
-                        Ok(Some(Content::Text(text))) => inner.paste_text(text),
+            self.app.read_clipboard_as(&["image/png", "text/plain"], move |_, outcome: ClipboardOutcome| {
+                let Some(inner) = weak.upgrade() else { return };
+                match content(outcome) {
+                    Err(error) => {
+                        inner.state.borrow_mut().pasting = false;
+                        inner.status(&error);
                     }
-                },
-            );
+                    Ok(None) => inner.state.borrow_mut().pasting = false,
+                    Ok(Some(Content::Image { mime, data })) => {
+                        inner.state.borrow_mut().pasting = false;
+                        if inner.state.borrow().shell {
+                            inner.status("image attachments are unavailable in shell mode");
+                            return;
+                        }
+                        inner.attachment(&format!("data:{mime};base64,{data}"), Some("clipboard"));
+                        inner.pasted();
+                    }
+                    Ok(Some(Content::Text(text))) => inner.paste_text(text),
+                }
+            });
             return;
         };
         self.state.borrow_mut().pasting = true;
@@ -1542,12 +1343,7 @@ impl Inner {
         let input = normalized.clone();
         let before = self.textarea.text();
         self.app.spawn(
-            async move {
-                tokio::task::spawn_blocking(move || attach::resolve(&input, windows))
-                    .await
-                    .ok()
-                    .flatten()
-            },
+            async move { tokio::task::spawn_blocking(move || attach::resolve(&input, windows)).await.ok().flatten() },
             move |_, resolved| {
                 let Some(inner) = weak.upgrade() else { return };
                 inner.state.borrow_mut().pasting = false;
@@ -1606,13 +1402,8 @@ impl Inner {
         });
         let end = self.cursor().saturating_sub(1);
         let start = end.saturating_sub(measure(&label));
-        let mark = self
-            .textarea
-            .add_extmark(start..end, ExtmarkOptions::default().atomic());
-        let mime = uri
-            .strip_prefix("data:")
-            .and_then(|rest| rest.split(';').next())
-            .map(str::to_owned);
+        let mark = self.textarea.add_extmark(start..end, ExtmarkOptions::default().atomic());
+        let mime = uri.strip_prefix("data:").and_then(|rest| rest.split(';').next()).map(str::to_owned);
         let mut state = self.state.borrow_mut();
         let index = state.parts.len();
         state.marks.push((mark, index));
@@ -1621,11 +1412,7 @@ impl Inner {
             mime,
             filename: filename.map(str::to_owned),
             description: None,
-            mention: Some(Mention {
-                start,
-                end,
-                text: label,
-            }),
+            mention: Some(Mention { start, end, text: label }),
         }));
     }
 
@@ -1667,18 +1454,11 @@ fn keymap(app: &App, config: &Info, textarea: &Textarea) -> DialogKeymap {
         Keybinds::defaults()
     });
     let leader_timeout = Duration::from_millis(
-        config
-            .leader
-            .as_ref()
-            .and_then(|leader| leader.timeout)
-            .map_or(2000, |timeout| timeout.0),
+        config.leader.as_ref().and_then(|leader| leader.timeout).map_or(2000, |timeout| timeout.0),
     );
     let focused = {
         let (app, textarea) = (app.clone(), textarea.clone());
-        Condition::when(move || {
-            app.focused()
-                .is_some_and(|widget| widget.id() == textarea.id())
-        })
+        Condition::when(move || app.focused().is_some_and(|widget| widget.id() == textarea.id()))
     };
     let run = {
         let textarea = textarea.clone();
@@ -1689,11 +1469,7 @@ fn keymap(app: &App, config: &Info, textarea: &Textarea) -> DialogKeymap {
     };
     DialogKeymap::new(
         keybinds,
-        opencode_ui::keymap::Options {
-            leader_timeout,
-            textarea_enabled: focused,
-            textarea_run: run,
-        },
+        opencode_ui::keymap::Options { leader_timeout, textarea_enabled: focused, textarea_run: run },
     )
 }
 
@@ -1703,10 +1479,7 @@ fn install_layers(inner: &Rc<Inner>) {
     // `input.prompt()`: the composer shows.
     let when = |check: fn(&Inner) -> bool| {
         let weak = Rc::downgrade(inner);
-        Condition::when(move || {
-            weak.upgrade()
-                .is_some_and(|inner| inner.view.get() == "prompt" && check(&inner))
-        })
+        Condition::when(move || weak.upgrade().is_some_and(|inner| inner.view.get() == "prompt" && check(&inner)))
     };
     // `baseBindingsEnabled`: everywhere but the panels.
     let base = {
@@ -1715,30 +1488,20 @@ fn install_layers(inner: &Rc<Inner>) {
             weak.upgrade().is_some_and(|inner| {
                 !matches!(
                     inner.view.get(),
-                    "command"
-                        | "skill"
-                        | "model"
-                        | "variant"
-                        | "settings"
-                        | "queued-menu"
-                        | "subagent-menu"
+                    "command" | "skill" | "model" | "variant" | "settings" | "queued-menu" | "subagent-menu"
                 )
             })
         })
     };
     let run = |action: fn(&Rc<Inner>) -> bool| {
         let weak = Rc::downgrade(inner);
-        move |_: Option<&str>, _: Option<&KeyEvent>| {
-            weak.upgrade().is_some_and(|inner| action(&inner))
-        }
+        move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| action(&inner))
     };
     let command = |id: &str, title: &str, group: &str, action: fn(&Rc<Inner>) -> bool| {
         TuiCommand::new(id, run(action)).title(title).group(group)
     };
     let inline = |key: &str, title: &str, action: fn(&Rc<Inner>) -> bool| {
-        TuiCommand::inline(key, run(action))
-            .title(title)
-            .group("Prompt")
+        TuiCommand::inline(key, run(action)).title(title).group("Prompt")
     };
     let layers = vec![
         KeymapLayer {
@@ -1752,15 +1515,10 @@ fn install_layers(inner: &Rc<Inner>) {
         },
         KeymapLayer {
             enabled: base,
-            commands: vec![command(
-                "prompt.clear",
-                "Clear prompt or exit",
-                "Prompt",
-                |inner| {
-                    inner.request_exit();
-                    true
-                },
-            )],
+            commands: vec![command("prompt.clear", "Clear prompt or exit", "Prompt", |inner| {
+                inner.request_exit();
+                true
+            })],
             ..KeymapLayer::default()
         },
         KeymapLayer {
@@ -1770,26 +1528,16 @@ fn install_layers(inner: &Rc<Inner>) {
                     inner.paste(None);
                     true
                 }),
-                command(
-                    "session.interrupt",
-                    "Interrupt session",
-                    "Session",
-                    |inner| {
-                        if inner
-                            .hooks()
-                            .interrupt
-                            .as_ref()
-                            .is_some_and(|interrupt| interrupt())
-                        {
-                            return true;
-                        }
-                        // `onKeyDown`: Escape while idle disarms the two-press gestures.
-                        if !inner.state.borrow().running {
-                            inner.input_clear();
-                        }
-                        false
-                    },
-                ),
+                command("session.interrupt", "Interrupt session", "Session", |inner| {
+                    if inner.hooks().interrupt.as_ref().is_some_and(|interrupt| interrupt()) {
+                        return true;
+                    }
+                    // `onKeyDown`: Escape while idle disarms the two-press gestures.
+                    if !inner.state.borrow().running {
+                        inner.input_clear();
+                    }
+                    false
+                }),
             ],
             ..KeymapLayer::default()
         },
@@ -1818,18 +1566,8 @@ fn install_layers(inner: &Rc<Inner>) {
             priority: 1,
             enabled: when(|inner| !visible(inner)),
             commands: vec![
-                command(
-                    "prompt.history.previous",
-                    "Previous prompt history",
-                    "Prompt",
-                    |inner| inner.history(true),
-                ),
-                command(
-                    "prompt.history.next",
-                    "Next prompt history",
-                    "Prompt",
-                    |inner| inner.history(false),
-                ),
+                command("prompt.history.previous", "Previous prompt history", "Prompt", |inner| inner.history(true)),
+                command("prompt.history.next", "Next prompt history", "Prompt", |inner| inner.history(false)),
             ],
             ..KeymapLayer::default()
         },
@@ -1864,75 +1602,42 @@ fn install_layers(inner: &Rc<Inner>) {
         KeymapLayer {
             enabled: when(visible),
             commands: vec![
-                command(
-                    "prompt.autocomplete.prev",
-                    "Previous autocomplete item",
-                    "Autocomplete",
-                    |inner| {
-                        inner.move_selection(false);
-                        true
-                    },
-                ),
-                command(
-                    "prompt.autocomplete.next",
-                    "Next autocomplete item",
-                    "Autocomplete",
-                    |inner| {
-                        inner.move_selection(true);
-                        true
-                    },
-                ),
-                command(
-                    "prompt.autocomplete.hide",
-                    "Hide autocomplete",
-                    "Autocomplete",
-                    |inner| {
-                        inner.cancel();
-                        true
-                    },
-                ),
-                command(
-                    "prompt.autocomplete.select",
-                    "Select autocomplete item",
-                    "Autocomplete",
-                    |inner| {
-                        if inner.state.borrow().mode == Some(Mode::Slash)
-                            && inner.options().is_empty()
-                        {
-                            inner.hide();
-                            inner.rows();
-                            return true;
-                        }
-                        inner.select(Delivery::Steer);
-                        true
-                    },
-                ),
-                command(
-                    "prompt.autocomplete.complete",
-                    "Complete autocomplete item",
-                    "Autocomplete",
-                    |inner| {
-                        let options = inner.options();
-                        if inner.state.borrow().mode == Some(Mode::Slash) && options.is_empty() {
-                            inner.hide();
-                            inner.rows();
-                            return true;
-                        }
-                        let selected = inner.state.borrow().selection.selected;
-                        if matches!(
-                            options.get(selected),
-                            Some(Choice::Mention {
-                                directory: true,
-                                ..
-                            })
-                        ) {
-                            inner.expand();
-                            return true;
-                        }
-                        inner.select(Delivery::Steer);
-                        true
-                    },
-                ),
+                command("prompt.autocomplete.prev", "Previous autocomplete item", "Autocomplete", |inner| {
+                    inner.move_selection(false);
+                    true
+                }),
+                command("prompt.autocomplete.next", "Next autocomplete item", "Autocomplete", |inner| {
+                    inner.move_selection(true);
+                    true
+                }),
+                command("prompt.autocomplete.hide", "Hide autocomplete", "Autocomplete", |inner| {
+                    inner.cancel();
+                    true
+                }),
+                command("prompt.autocomplete.select", "Select autocomplete item", "Autocomplete", |inner| {
+                    if inner.state.borrow().mode == Some(Mode::Slash) && inner.options().is_empty() {
+                        inner.hide();
+                        inner.rows();
+                        return true;
+                    }
+                    inner.select(Delivery::Steer);
+                    true
+                }),
+                command("prompt.autocomplete.complete", "Complete autocomplete item", "Autocomplete", |inner| {
+                    let options = inner.options();
+                    if inner.state.borrow().mode == Some(Mode::Slash) && options.is_empty() {
+                        inner.hide();
+                        inner.rows();
+                        return true;
+                    }
+                    let selected = inner.state.borrow().selection.selected;
+                    if matches!(options.get(selected), Some(Choice::Mention { directory: true, .. })) {
+                        inner.expand();
+                        return true;
+                    }
+                    inner.select(Delivery::Steer);
+                    true
+                }),
             ],
             ..KeymapLayer::default()
         },
@@ -1968,9 +1673,7 @@ enum Slash {
 
 /// `parseSlashCommand`: `/name args` for a server command.
 fn parse_slash_command(text: &str, commands: Option<&[complete::Command]>) -> Slash {
-    let Some((name, arguments, _)) =
-        parse::slash_head(text).filter(|(name, _, _)| !name.is_empty())
-    else {
+    let Some((name, arguments, _)) = parse::slash_head(text).filter(|(name, _, _)| !name.is_empty()) else {
         return Slash::None;
     };
     let Some(commands) = commands else {
@@ -2027,16 +1730,7 @@ mod tests {
     #[test]
     fn layout_follows_footer_prompt_layout() {
         // 20 rows: padded, one row, no menu.
-        assert_eq!(
-            layout(20, 1, 0, 1, false),
-            Layout {
-                padding: 1,
-                textarea: 6,
-                menu: 0,
-                images: 0,
-                rows: 1
-            }
-        );
+        assert_eq!(layout(20, 1, 0, 1, false), Layout { padding: 1, textarea: 6, menu: 0, images: 0, rows: 1 });
         // Nine slash options in 20 rows: eight menu rows.
         assert_eq!(layout(20, 1, 9, 0, false).menu, 8);
         assert_eq!(layout(20, 1, 9, 0, false).rows, 9);
@@ -2052,28 +1746,14 @@ mod tests {
 
     #[test]
     fn slash_commands_parse_against_the_catalog() {
-        let commands = [complete::Command {
-            name: "review".into(),
-            description: None,
-            source: None,
-        }];
+        let commands = [complete::Command { name: "review".into(), description: None, source: None }];
         assert!(
             matches!(parse_slash_command("/review src", Some(&commands)), Slash::Command(command) if command.arguments == "src")
         );
-        assert!(matches!(
-            parse_slash_command("/nope", Some(&commands)),
-            Slash::None
-        ));
-        assert!(matches!(
-            parse_slash_command("/review", None),
-            Slash::Pending
-        ));
+        assert!(matches!(parse_slash_command("/nope", Some(&commands)), Slash::None));
+        assert!(matches!(parse_slash_command("/review", None), Slash::Pending));
         assert!(matches!(parse_slash_command("plain", None), Slash::None));
-        let restored = Command {
-            name: "review".into(),
-            arguments: String::new(),
-            source: Some("command".into()),
-        };
+        let restored = Command { name: "review".into(), arguments: String::new(), source: Some("command".into()) };
         assert_eq!(
             selected_command("/review now", Some(&restored)).map(|command| command.arguments),
             Some("now".into())

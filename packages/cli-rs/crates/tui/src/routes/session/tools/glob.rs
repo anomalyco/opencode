@@ -16,19 +16,12 @@ impl Glob {
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let count = finite(props.metadata.get("count"));
-        self.0
-            .set(search(cx, props, "Glob", "Finding files…", count));
+        self.0.set(search(cx, props, "Glob", "Finding files…", count));
     }
 }
 
 /// The line Glob and Grep share: `Glob "<pattern>" in <path> (<n> matches)`.
-pub fn search(
-    cx: &Context<'_>,
-    props: &Props<'_>,
-    name: &str,
-    pending: &str,
-    matches: Option<f64>,
-) -> Inline {
+pub fn search(cx: &Context<'_>, props: &Props<'_>, name: &str, pending: &str, matches: Option<f64>) -> Inline {
     let pattern = props.input_str("pattern");
     let mut text = format!("{name} \"{}\" ", pattern.unwrap_or_default());
     if let Some(path) = props.input_str("path").filter(|path| !path.is_empty()) {
@@ -38,13 +31,5 @@ pub fn search(
         let noun = if matches == 1.0 { "match" } else { "matches" };
         text.push_str(&format!("({} {noun})", number(matches)));
     }
-    Inline {
-        text,
-        ..Inline::new(
-            props,
-            "✱",
-            pending,
-            pattern.is_some_and(|pattern| !pattern.is_empty()),
-        )
-    }
+    Inline { text, ..Inline::new(props, "✱", pending, pattern.is_some_and(|pattern| !pattern.is_empty())) }
 }

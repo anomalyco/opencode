@@ -41,9 +41,7 @@ pub fn install() {
 /// the step in the report when it does not finish in time.
 pub fn on_shutdown(label: impl Into<String>, step: impl FnOnce() + Send + 'static) -> Registration {
     let shutdown = SHUTDOWN.get().cloned();
-    let id = shutdown.as_ref().map_or(0, |shutdown| {
-        shutdown.register(label.into(), Box::new(step))
-    });
+    let id = shutdown.as_ref().map_or(0, |shutdown| shutdown.register(label.into(), Box::new(step)));
     Registration { shutdown, id }
 }
 
@@ -70,10 +68,7 @@ pub fn wait_child(
             }
             #[cfg(not(unix))]
             let _ = (pid, stop);
-            let _done = exited
-                .1
-                .wait_while(done, |done| !*done)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let _done = exited.1.wait_while(done, |done| !*done).unwrap_or_else(std::sync::PoisonError::into_inner);
         }
     });
     let status = child.wait();
@@ -81,10 +76,7 @@ pub fn wait_child(
     exited.1.notify_all();
     drop(registration);
     // Teardown owns the exit once it started; returning would race it with the command's own exit code.
-    while SHUTDOWN
-        .get()
-        .is_some_and(|shutdown| shutdown.started.load(Ordering::SeqCst))
-    {
+    while SHUTDOWN.get().is_some_and(|shutdown| shutdown.started.load(Ordering::SeqCst)) {
         std::thread::park();
     }
     status
@@ -94,9 +86,7 @@ pub fn wait_child(
 fn listen(shutdown: Arc<Shutdown>, hangup: bool) -> std::io::Result<()> {
     use tokio::signal::unix::{SignalKind, signal};
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
     // Register on this thread, so a signal that arrives once the command starts is already handled.
     let (mut terminate, mut interrupt, mut hangup) = {
         let _guard = runtime.enter();
@@ -106,44 +96,38 @@ fn listen(shutdown: Arc<Shutdown>, hangup: bool) -> std::io::Result<()> {
             hangup.then(|| signal(SignalKind::hangup())).transpose()?,
         )
     };
-    std::thread::Builder::new()
-        .name("opencode-signals".into())
-        .spawn(move || {
-            runtime.block_on(async move {
-                loop {
-                    let hangup = async {
-                        match &mut hangup {
-                            Some(hangup) => hangup.recv().await,
-                            None => std::future::pending().await,
-                        }
-                    };
-                    let name = tokio::select! {
-                        _ = terminate.recv() => "SIGTERM",
-                        _ = interrupt.recv() => "SIGINT",
-                        // TS re-sends SIGHUP to itself as SIGTERM.
-                        _ = hangup => "SIGTERM",
-                    };
-                    shutdown.signal(name);
-                }
-            });
-        })?;
+    std::thread::Builder::new().name("opencode-signals".into()).spawn(move || {
+        runtime.block_on(async move {
+            loop {
+                let hangup = async {
+                    match &mut hangup {
+                        Some(hangup) => hangup.recv().await,
+                        None => std::future::pending().await,
+                    }
+                };
+                let name = tokio::select! {
+                    _ = terminate.recv() => "SIGTERM",
+                    _ = interrupt.recv() => "SIGINT",
+                    // TS re-sends SIGHUP to itself as SIGTERM.
+                    _ = hangup => "SIGTERM",
+                };
+                shutdown.signal(name);
+            }
+        });
+    })?;
     Ok(())
 }
 
 #[cfg(not(unix))]
 fn listen(shutdown: Arc<Shutdown>, _hangup: bool) -> std::io::Result<()> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    std::thread::Builder::new()
-        .name("opencode-signals".into())
-        .spawn(move || {
-            runtime.block_on(async move {
-                while tokio::signal::ctrl_c().await.is_ok() {
-                    shutdown.signal("SIGINT");
-                }
-            });
-        })?;
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    std::thread::Builder::new().name("opencode-signals".into()).spawn(move || {
+        runtime.block_on(async move {
+            while tokio::signal::ctrl_c().await.is_ok() {
+                shutdown.signal("SIGINT");
+            }
+        });
+    })?;
     Ok(())
 }
 
@@ -209,48 +193,38 @@ impl Shutdown {
             return;
         }
         log::info!(signal = name; "shutdown started");
-        let steps: Vec<(String, Step)> = std::mem::take(&mut *lock(&self.steps))
-            .into_iter()
-            .rev()
-            .map(|(_, label, step)| (label, step))
-            .collect();
-        *lock(&self.queue) = steps
-            .iter()
-            .map(|(label, _)| (label.clone(), None))
-            .collect();
+        let steps: Vec<(String, Step)> =
+            std::mem::take(&mut *lock(&self.steps)).into_iter().rev().map(|(_, label, step)| (label, step)).collect();
+        *lock(&self.queue) = steps.iter().map(|(label, _)| (label.clone(), None)).collect();
         let teardown = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("opencode-shutdown".into())
-            .spawn(move || {
-                for (_, step) in steps {
-                    if let Some(first) = lock(&teardown.queue).first_mut() {
-                        first.1 = Some(Instant::now());
-                    }
-                    step();
-                    lock(&teardown.queue).remove(0);
+        let _ = std::thread::Builder::new().name("opencode-shutdown".into()).spawn(move || {
+            for (_, step) in steps {
+                if let Some(first) = lock(&teardown.queue).first_mut() {
+                    first.1 = Some(Instant::now());
                 }
-                if !teardown.done.swap(true, Ordering::SeqCst) {
-                    (teardown.exit)(130);
-                }
-            });
+                step();
+                lock(&teardown.queue).remove(0);
+            }
+            if !teardown.done.swap(true, Ordering::SeqCst) {
+                (teardown.exit)(130);
+            }
+        });
         let timer = self.clone();
-        let _ = std::thread::Builder::new()
-            .name("opencode-shutdown-deadline".into())
-            .spawn(move || {
-                std::thread::sleep(timer.deadline);
-                if timer.done.swap(true, Ordering::SeqCst) {
-                    return;
-                }
-                let deadline = format_duration(timer.deadline);
-                let pending = timer.pending();
-                timer.report(&format!("shutdown did not finish within {deadline}"));
-                log::error!(
-                    deadline = deadline.as_str(),
-                    pending = pending.join(", ").as_str();
-                    "shutdown deadline exceeded"
-                );
-                (timer.exit)(1);
-            });
+        let _ = std::thread::Builder::new().name("opencode-shutdown-deadline".into()).spawn(move || {
+            std::thread::sleep(timer.deadline);
+            if timer.done.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            let deadline = format_duration(timer.deadline);
+            let pending = timer.pending();
+            timer.report(&format!("shutdown did not finish within {deadline}"));
+            log::error!(
+                deadline = deadline.as_str(),
+                pending = pending.join(", ").as_str();
+                "shutdown deadline exceeded"
+            );
+            (timer.exit)(1);
+        });
     }
 
     /// The running step and the steps after it, as `<label> for <ms>ms`, like `Teardown.pending()`.
@@ -264,12 +238,7 @@ impl Shutdown {
     fn pending_items(&self) -> Vec<(String, Duration)> {
         lock(&self.queue)
             .iter()
-            .map(|(label, since)| {
-                (
-                    label.clone(),
-                    since.map_or(Duration::ZERO, |since| since.elapsed()),
-                )
-            })
+            .map(|(label, since)| (label.clone(), since.map_or(Duration::ZERO, |since| since.elapsed())))
             .collect()
     }
 
@@ -284,10 +253,7 @@ pub fn report(reason: &str, pending: &[(String, Duration)]) -> String {
     let lines = if pending.is_empty() {
         vec!["  nothing tracked; the stuck work is not a registered teardown step".to_owned()]
     } else {
-        pending
-            .iter()
-            .map(|(label, elapsed)| format!("  {:.1}s  {label}", elapsed.as_secs_f64()))
-            .collect()
+        pending.iter().map(|(label, elapsed)| format!("  {:.1}s  {label}", elapsed.as_secs_f64())).collect()
     };
     format!("{reason}; exiting. Still pending:\n{}\n", lines.join("\n"))
 }
@@ -302,9 +268,7 @@ fn format_duration(duration: Duration) -> String {
 }
 
 fn lock<T: ?Sized>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    mutex.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]
@@ -332,11 +296,7 @@ mod tests {
             }),
             stderr.clone(),
         );
-        Probe {
-            shutdown,
-            exits,
-            stderr,
-        }
+        Probe { shutdown, exits, stderr }
     }
 
     fn text(probe: &Probe) -> String {
@@ -381,21 +341,13 @@ mod tests {
         assert_eq!(probe.exits.recv_timeout(Duration::from_secs(5)), Ok(1));
         let report = text(&probe);
         let lines: Vec<&str> = report.lines().collect();
-        assert_eq!(
-            lines[0],
-            "shutdown did not finish within 100ms; exiting. Still pending:"
-        );
+        assert_eq!(lines[0], "shutdown did not finish within 100ms; exiting. Still pending:");
         assert!(lines[1].starts_with("  0.1s  stuck flush"), "{report}");
         assert_eq!(lines[2], "  0.0s  standalone server");
         assert_eq!(lines.len(), 3);
         drop(release);
         // The teardown finishing after the deadline does not exit a second time.
-        assert!(
-            probe
-                .exits
-                .recv_timeout(Duration::from_millis(200))
-                .is_err()
-        );
+        assert!(probe.exits.recv_timeout(Duration::from_millis(200)).is_err());
     }
 
     #[test]
@@ -413,11 +365,9 @@ mod tests {
         assert_eq!(probe.exits.recv_timeout(Duration::from_secs(5)), Ok(1));
         let report = text(&probe);
         assert!(
-            report.starts_with(
-                "received SIGINT again during shutdown; exiting. Still pending:\n  0.0s  stuck\n"
-            ) || report.starts_with(
-                "received SIGINT again during shutdown; exiting. Still pending:\n  0.1s  stuck\n"
-            ),
+            report.starts_with("received SIGINT again during shutdown; exiting. Still pending:\n  0.0s  stuck\n")
+                || report
+                    .starts_with("received SIGINT again during shutdown; exiting. Still pending:\n  0.1s  stuck\n"),
             "{report}"
         );
     }

@@ -22,17 +22,8 @@ impl Question {
     pub fn new(cx: &Context<'_>) -> Self {
         let inline = InlineTool::new(cx);
         let block = BlockTool::new(cx);
-        let root = View::new(cx.app)
-            .column()
-            .shrink(0.0)
-            .child(inline.root())
-            .child(block.root());
-        Self {
-            root,
-            inline,
-            block,
-            shown: RefCell::default(),
-        }
+        let root = View::new(cx.app).column().shrink(0.0).child(inline.root()).child(block.root());
+        Self { root, inline, block, shown: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -47,10 +38,7 @@ impl Question {
         let Some(answers) = answers else {
             let count = questions.len();
             self.inline.set(Inline {
-                text: format!(
-                    "Asked {count} question{}",
-                    if count == 1 { "" } else { "s" }
-                ),
+                text: format!("Asked {count} question{}", if count == 1 { "" } else { "s" }),
                 ..Inline::new(props, "→", "Asking questions…", count > 0)
             });
             return;
@@ -113,13 +101,7 @@ fn answers(value: Option<&Value>) -> Option<Vec<Vec<String>>> {
             .as_array()?
             .iter()
             .map(|answer| {
-                answer
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect()
+                answer.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect()
             })
             .collect(),
     )

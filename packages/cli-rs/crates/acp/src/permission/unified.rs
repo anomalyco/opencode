@@ -34,19 +34,17 @@ fn parse_index(lines: &[&str], start: usize) -> Option<(Vec<Hunk>, usize)> {
     let mut index = start;
     while index < lines.len() {
         let line = lines[index];
-        if ["--- ", "+++ ", "@@ "]
-            .iter()
-            .any(|prefix| starts_with_header(line, prefix))
-        {
+        if ["--- ", "+++ ", "@@ "].iter().any(|prefix| starts_with_header(line, prefix)) {
             break;
         }
         index += 1;
     }
     // `parseFileHeader` runs twice and takes `---` or `+++` each time.
     for _ in 0..2 {
-        if lines.get(index).is_some_and(|line| {
-            (line.starts_with("---") || line.starts_with("+++")) && header_space(&line[3..])
-        }) {
+        if lines
+            .get(index)
+            .is_some_and(|line| (line.starts_with("---") || line.starts_with("+++")) && header_space(&line[3..]))
+        {
             index += 1;
         }
     }
@@ -57,8 +55,7 @@ fn parse_index(lines: &[&str], start: usize) -> Option<(Vec<Hunk>, usize)> {
             || line.starts_with("diff") && header_space(&line[4..])
             || line.starts_with("---") && header_space(&line[3..])
             || line.starts_with("+++") && header_space(&line[3..])
-            || line
-                .starts_with("===================================================================")
+            || line.starts_with("===================================================================")
         {
             break;
         }
@@ -97,15 +94,10 @@ fn parse_hunk(lines: &[&str], start: usize) -> Option<(Hunk, usize)> {
     };
     let (mut added, mut removed) = (0, 0);
     let mut index = start + 1;
-    while index < lines.len()
-        && (removed < hunk.old_lines || added < hunk.new_lines || lines[index].starts_with('\\'))
+    while index < lines.len() && (removed < hunk.old_lines || added < hunk.new_lines || lines[index].starts_with('\\'))
     {
         let line = lines[index];
-        let operation = if line.is_empty() && index != lines.len() - 1 {
-            Some(' ')
-        } else {
-            line.chars().next()
-        };
+        let operation = if line.is_empty() && index != lines.len() - 1 { Some(' ') } else { line.chars().next() };
         match operation {
             Some('+') => added += 1,
             Some('-') => removed += 1,
@@ -144,15 +136,11 @@ fn parse_range_at(text: &str) -> Option<(i64, i64, i64, i64)> {
     let (old_start, old_count, rest) = numbers(text)?;
     let rest = rest.strip_prefix(" +")?;
     let (new_start, new_count, rest) = numbers(rest)?;
-    rest.starts_with(" @@")
-        .then_some((old_start, old_count, new_start, new_count))
+    rest.starts_with(" @@").then_some((old_start, old_count, new_start, new_count))
 }
 
 fn numbers(text: &str) -> Option<(i64, i64, &str)> {
-    let digits = |text: &str| {
-        text.find(|c: char| !c.is_ascii_digit())
-            .unwrap_or(text.len())
-    };
+    let digits = |text: &str| text.find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len());
     let first = digits(text);
     let start = text[..first].parse().ok()?;
     let rest = &text[first..];
@@ -269,11 +257,7 @@ pub fn apply(source: &str, hunks: &[Hunk]) -> Option<String> {
     Some(result.join("\n"))
 }
 
-fn apply_hunk<'a>(
-    lines: &[&'a str],
-    hunk_lines: &'a [String],
-    mut to_pos: i64,
-) -> Option<(Vec<&'a str>, i64)> {
+fn apply_hunk<'a>(lines: &[&'a str], hunk_lines: &'a [String], mut to_pos: i64) -> Option<(Vec<&'a str>, i64)> {
     let line_at = |position: i64| usize::try_from(position).ok().and_then(|i| lines.get(i));
     let mut patched = Vec::new();
     let mut trailing_context = 0;
@@ -320,15 +304,7 @@ struct DistanceIterator {
 
 impl DistanceIterator {
     fn new(start: i64, min: i64, max: i64) -> Self {
-        Self {
-            start,
-            min,
-            max,
-            want_forward: true,
-            backward_exhausted: false,
-            forward_exhausted: false,
-            offset: 1,
-        }
+        Self { start, min, max, want_forward: true, backward_exhausted: false, forward_exhausted: false, offset: 1 }
     }
 }
 
@@ -367,10 +343,7 @@ impl Iterator for DistanceIterator {
 fn has_only_win_line_endings(text: &str) -> bool {
     text.contains("\r\n")
         && !text.starts_with('\n')
-        && !text
-            .as_bytes()
-            .windows(2)
-            .any(|pair| pair[1] == b'\n' && pair[0] != b'\r')
+        && !text.as_bytes().windows(2).any(|pair| pair[1] == b'\n' && pair[0] != b'\r')
 }
 
 fn has_only_unix_line_endings(text: &str) -> bool {
@@ -378,31 +351,18 @@ fn has_only_unix_line_endings(text: &str) -> bool {
 }
 
 fn is_unix(hunks: &[Hunk]) -> bool {
-    !hunks
-        .iter()
-        .flat_map(|hunk| &hunk.lines)
-        .any(|line| !line.starts_with('\\') && line.ends_with('\r'))
+    !hunks.iter().flat_map(|hunk| &hunk.lines).any(|line| !line.starts_with('\\') && line.ends_with('\r'))
 }
 
 fn is_win(hunks: &[Hunk]) -> bool {
-    hunks
-        .iter()
-        .flat_map(|hunk| &hunk.lines)
-        .any(|line| line.ends_with('\r'))
-        && hunks.iter().all(|hunk| {
-            hunk.lines
-                .iter()
-                .enumerate()
-                .all(|(index, line)| keeps_ending(&hunk.lines, index, line))
-        })
+    hunks.iter().flat_map(|hunk| &hunk.lines).any(|line| line.ends_with('\r'))
+        && hunks
+            .iter()
+            .all(|hunk| hunk.lines.iter().enumerate().all(|(index, line)| keeps_ending(&hunk.lines, index, line)))
 }
 
 fn keeps_ending(lines: &[String], index: usize, line: &str) -> bool {
-    line.starts_with('\\')
-        || line.ends_with('\r')
-        || lines
-            .get(index + 1)
-            .is_some_and(|next| next.starts_with('\\'))
+    line.starts_with('\\') || line.ends_with('\r') || lines.get(index + 1).is_some_and(|next| next.starts_with('\\'))
 }
 
 fn unix_to_win(hunks: &[Hunk]) -> Vec<Hunk> {
@@ -413,13 +373,11 @@ fn unix_to_win(hunks: &[Hunk]) -> Vec<Hunk> {
                 .lines
                 .iter()
                 .enumerate()
-                .map(|(index, line)| {
-                    if keeps_ending(&hunk.lines, index, line) {
-                        line.clone()
-                    } else {
-                        format!("{line}\r")
-                    }
-                })
+                .map(
+                    |(index, line)| {
+                        if keeps_ending(&hunk.lines, index, line) { line.clone() } else { format!("{line}\r") }
+                    },
+                )
                 .collect(),
             ..hunk.clone()
         })
@@ -430,11 +388,7 @@ fn win_to_unix(hunks: &[Hunk]) -> Vec<Hunk> {
     hunks
         .iter()
         .map(|hunk| Hunk {
-            lines: hunk
-                .lines
-                .iter()
-                .map(|line| line.strip_suffix('\r').unwrap_or(line).to_owned())
-                .collect(),
+            lines: hunk.lines.iter().map(|line| line.strip_suffix('\r').unwrap_or(line).to_owned()).collect(),
             ..hunk.clone()
         })
         .collect()
@@ -444,36 +398,21 @@ fn win_to_unix(hunks: &[Hunk]) -> Vec<Hunk> {
 pub fn ranges(hunks: &[Hunk]) -> String {
     hunks
         .iter()
-        .map(|hunk| {
-            format!(
-                "{},{},{},{}",
-                hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
-            )
-        })
+        .map(|hunk| format!("{},{},{},{}", hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines))
         .collect::<Vec<_>>()
         .join(" ")
 }
 
 /// The hunk ranges `structuredPatch(old, new)` reports, with its default four lines of context.
 pub fn structured_ranges(old: &str, new: &str) -> String {
-    let diff = TextDiff::configure()
-        .algorithm(Algorithm::Myers)
-        .diff_lines(old, new);
+    let diff = TextDiff::configure().algorithm(Algorithm::Myers).diff_lines(old, new);
     diff.grouped_ops(4)
         .iter()
         .filter_map(|group| {
             let (first, last) = (group.first()?, group.last()?);
-            let (old_range, new_range) = (
-                first.old_range().start..last.old_range().end,
-                first.new_range().start..last.new_range().end,
-            );
-            Some(format!(
-                "{},{},{},{}",
-                old_range.start + 1,
-                old_range.len(),
-                new_range.start + 1,
-                new_range.len()
-            ))
+            let (old_range, new_range) =
+                (first.old_range().start..last.old_range().end, first.new_range().start..last.new_range().end);
+            Some(format!("{},{},{},{}", old_range.start + 1, old_range.len(), new_range.start + 1, new_range.len()))
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -489,25 +428,13 @@ mod tests {
     fn parses_applies_and_reverses() {
         let hunks = parse_first(PATCH).unwrap();
         assert_eq!(ranges(&hunks), "1,3,1,3");
-        assert_eq!(
-            apply("one\ntwo\nfour\n", &hunks).as_deref(),
-            Some("one\nthree\nfour\n")
-        );
-        assert_eq!(
-            apply("one\nthree\nfour\n", &reverse(&hunks)).as_deref(),
-            Some("one\ntwo\nfour\n")
-        );
+        assert_eq!(apply("one\ntwo\nfour\n", &hunks).as_deref(), Some("one\nthree\nfour\n"));
+        assert_eq!(apply("one\nthree\nfour\n", &reverse(&hunks)).as_deref(), Some("one\ntwo\nfour\n"));
         assert_eq!(apply("x\ny\n", &hunks), None);
         // Line endings follow the source.
-        assert_eq!(
-            apply("one\r\ntwo\r\nfour\r\n", &hunks).as_deref(),
-            Some("one\r\nthree\r\nfour\r\n")
-        );
+        assert_eq!(apply("one\r\ntwo\r\nfour\r\n", &hunks).as_deref(), Some("one\r\nthree\r\nfour\r\n"));
         // A shifted hunk still fits.
-        assert_eq!(
-            apply("zero\none\ntwo\nfour\n", &hunks).as_deref(),
-            Some("zero\none\nthree\nfour\n")
-        );
+        assert_eq!(apply("zero\none\ntwo\nfour\n", &hunks).as_deref(), Some("zero\none\nthree\nfour\n"));
     }
 
     #[test]

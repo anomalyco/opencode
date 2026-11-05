@@ -50,11 +50,7 @@ impl<T: Decode> Decode for Vec<T> {
 
 impl<T: Decode> Decode for IndexMap<String, T> {
     fn decode(value: &Value) -> Option<Self> {
-        value
-            .as_object()?
-            .iter()
-            .map(|(key, value)| Some((key.clone(), T::decode(value)?)))
-            .collect()
+        value.as_object()?.iter().map(|(key, value)| Some((key.clone(), T::decode(value)?))).collect()
     }
 }
 
@@ -143,8 +139,7 @@ pub struct PositiveInt(pub u64);
 impl Decode for PositiveInt {
     fn decode(value: &Value) -> Option<Self> {
         let number = value.as_f64()?;
-        (number.fract() == 0.0 && number > 0.0 && number <= 9_007_199_254_740_991.0)
-            .then_some(Self(number as u64))
+        (number.fract() == 0.0 && number > 0.0 && number <= 9_007_199_254_740_991.0).then_some(Self(number as u64))
     }
 }
 
@@ -156,8 +151,7 @@ pub struct Bounded<const MIN_MILLI: i64, const MAX_MILLI: i64>(pub f64);
 impl<const MIN_MILLI: i64, const MAX_MILLI: i64> Decode for Bounded<MIN_MILLI, MAX_MILLI> {
     fn decode(value: &Value) -> Option<Self> {
         let number = value.as_f64()?;
-        (number >= MIN_MILLI as f64 / 1000.0 && number <= MAX_MILLI as f64 / 1000.0)
-            .then_some(Self(number))
+        (number >= MIN_MILLI as f64 / 1000.0 && number <= MAX_MILLI as f64 / 1000.0).then_some(Self(number))
     }
 }
 
@@ -210,17 +204,9 @@ literals!(MiniWorkSpinner {
 });
 literals!(CursorStyle { Block = "block", Underline = "underline", Line = "line", Default = "default" });
 
-section!(Theme {
-    name: String,
-    mode: ThemeMode
-});
-section!(Leader {
-    timeout: PositiveInt
-});
-section!(Scroll {
-    speed: ScrollSpeed,
-    acceleration: bool
-});
+section!(Theme { name: String, mode: ThemeMode });
+section!(Leader { timeout: PositiveInt });
+section!(Scroll { speed: ScrollSpeed, acceleration: bool });
 section!(AttentionSounds {
     default: String,
     question: String,
@@ -229,30 +215,10 @@ section!(AttentionSounds {
     done: String,
     subagent_done: String,
 });
-section!(Attention {
-    notifications: bool,
-    sound: bool,
-    volume: Volume,
-    sound_pack: String,
-    sounds: AttentionSounds,
-});
-section!(Diffs {
-    source: DiffSource,
-    wrap: DiffWrap,
-    tree: bool,
-    single: bool,
-    fullscreen: bool,
-    view: DiffView,
-});
-section!(Terminal {
-    title: bool,
-    copy: TerminalCopy
-});
-section!(Prompt {
-    editor: bool,
-    paste: PromptPaste,
-    image_preview: bool
-});
+section!(Attention { notifications: bool, sound: bool, volume: Volume, sound_pack: String, sounds: AttentionSounds });
+section!(Diffs { source: DiffSource, wrap: DiffWrap, tree: bool, single: bool, fullscreen: bool, view: DiffView });
+section!(Terminal { title: bool, copy: TerminalCopy });
+section!(Prompt { editor: bool, paste: PromptPaste, image_preview: bool });
 section!(Session {
     sidebar: Sidebar,
     scrollbar: bool,
@@ -266,13 +232,7 @@ section!(Session {
     new_location: NewLocation,
     permissions: Permissions,
 });
-section!(Tabs {
-    mode: TabsMode,
-    enabled: bool,
-    scope: TabsScope,
-    layout: TabsLayout,
-    indicators: TabsIndicators,
-});
+section!(Tabs { mode: TabsMode, enabled: bool, scope: TabsScope, layout: TabsLayout, indicators: TabsIndicators });
 section!(Mini {
     thinking: Visibility,
     tools: Visibility,
@@ -285,15 +245,8 @@ section!(Mini {
     replay: bool,
     replay_limit: PositiveInt,
 });
-section!(Debug {
-    devtools: bool,
-    timing: bool,
-    turn_tokens: TurnTokens
-});
-section!(Cursor {
-    style: CursorStyle,
-    blinking: bool
-});
+section!(Debug { devtools: bool, timing: bool, turn_tokens: TurnTokens });
+section!(Cursor { style: CursorStyle, blinking: bool });
 
 section!(
     /// The decoded `cli.json` (`Config.Info`).
@@ -324,11 +277,7 @@ section!(
 impl Info {
     /// Whether an `experimental` flag is on (`useNewDesigns`, `useClientMcpExperiment`).
     pub fn experiment(&self, name: &str) -> bool {
-        self.experimental
-            .as_ref()
-            .and_then(|flags| flags.get(name))
-            .copied()
-            .unwrap_or(false)
+        self.experimental.as_ref().and_then(|flags| flags.get(name)).copied().unwrap_or(false)
     }
 
     pub fn to_value(&self) -> Value {
@@ -380,10 +329,7 @@ impl Decode for Plugin {
             return Some(Self::Name(name.to_string()));
         }
         let map = value.as_object()?;
-        Some(Self::Package {
-            package: String::decode(map.get("package")?)?,
-            options: field(map, "options")?,
-        })
+        Some(Self::Package { package: String::decode(map.get("package")?)?, options: field(map, "options")? })
     }
 }
 
@@ -419,11 +365,7 @@ pub(crate) fn decode_bindings(value: &Value, names: &[&str]) -> Option<Map<Strin
 fn binding_value(value: &Value) -> Option<Value> {
     match value {
         Value::Bool(false) => Some(value.clone()),
-        Value::Array(items) => items
-            .iter()
-            .map(binding_item)
-            .collect::<Option<_>>()
-            .map(Value::Array),
+        Value::Array(items) => items.iter().map(binding_item).collect::<Option<_>>().map(Value::Array),
         _ => binding_item(value),
     }
 }
@@ -439,10 +381,7 @@ fn binding_item(value: &Value) -> Option<Value> {
 fn keystroke(value: &Value) -> Option<Value> {
     let map = value.as_object()?;
     let mut out = Map::new();
-    out.insert(
-        "name".into(),
-        Value::String(String::decode(map.get("name")?)?),
-    );
+    out.insert("name".into(), Value::String(String::decode(map.get("name")?)?));
     for key in ["ctrl", "shift", "meta", "super", "hyper"] {
         if let Some(flag) = field::<bool>(map, key)? {
             out.insert(key.into(), Value::Bool(flag));
@@ -457,14 +396,7 @@ fn binding_object(value: &Value) -> Option<Value> {
     let map = value.as_object()?;
     let key = map.get("key")?;
     let mut out = Map::new();
-    out.insert(
-        "key".into(),
-        if key.is_string() {
-            key.clone()
-        } else {
-            keystroke(key)?
-        },
-    );
+    out.insert("key".into(), if key.is_string() { key.clone() } else { keystroke(key)? });
     if let Some(event) = map.get("event") {
         if !matches!(event.as_str(), Some("press" | "release")) {
             return None;
@@ -495,11 +427,9 @@ pub fn decode_text(text: &str) -> Option<Info> {
 /// `merge(...values)`: normalizes legacy `tabs.enabled`, deep-merges plain objects left to right, and
 /// decodes the result, which is `{}` when it does not decode.
 pub fn merge(values: &[Option<Value>]) -> Info {
-    let merged = values.iter().flatten().fold(Map::new(), |result, value| {
-        match normalize_legacy_tabs(value) {
-            Value::Object(overlay) => merge_records(result, &overlay),
-            _ => result,
-        }
+    let merged = values.iter().flatten().fold(Map::new(), |result, value| match normalize_legacy_tabs(value) {
+        Value::Object(overlay) => merge_records(result, &overlay),
+        _ => result,
     });
     Info::decode(&Value::Object(merged)).unwrap_or_default()
 }
@@ -546,12 +476,7 @@ fn merge_records(mut base: Map<String, Value>, overlay: &Map<String, Value>) -> 
 type Edit = (Vec<Segment>, Option<Value>);
 
 // `changes(before, after)`: per-key edits for plain objects, a replacement for anything else.
-fn changes(
-    before: Option<&Value>,
-    after: Option<&Value>,
-    path: &mut Vec<Segment>,
-    out: &mut Vec<Edit>,
-) {
+fn changes(before: Option<&Value>, after: Option<&Value>, path: &mut Vec<Segment>, out: &mut Vec<Edit>) {
     match (before, after) {
         (Some(a), Some(b)) if jsonc::same(a, b) => {}
         (Some(Value::Object(a)), Some(Value::Object(b))) => {
@@ -592,10 +517,7 @@ pub struct CliConfig {
 impl CliConfig {
     /// The config of `paths`, with the overlay from the process environment.
     pub fn new(paths: &Paths) -> Self {
-        Self::with_content(
-            paths,
-            std::env::var("OPENCODE_CLI_CONFIG_CONTENT").ok().as_deref(),
-        )
+        Self::with_content(paths, std::env::var("OPENCODE_CLI_CONFIG_CONTENT").ok().as_deref())
     }
 
     /// The config of `paths`, with `content` as the overlay. An empty or invalid overlay is ignored.
@@ -604,10 +526,7 @@ impl CliConfig {
             file: paths.config.join("cli.json"),
             config: paths.config.clone(),
             state: paths.state.clone(),
-            content: content
-                .filter(|text| !text.is_empty())
-                .and_then(decode_text)
-                .map(|info| info.to_value()),
+            content: content.filter(|text| !text.is_empty()).and_then(decode_text).map(|info| info.to_value()),
             lock: lock::Options::default(),
         }
     }
@@ -656,21 +575,15 @@ impl CliConfig {
             if edits.is_empty() {
                 return Ok(Info::decode(&current).unwrap_or_default());
             }
-            let text = fs::read_to_string(&self.file).unwrap_or_else(|_| {
-                jsonc::stringify_pretty(&serde_json::json!({ "$schema": SCHEMA_URL }))
-            });
+            let text = fs::read_to_string(&self.file)
+                .unwrap_or_else(|_| jsonc::stringify_pretty(&serde_json::json!({ "$schema": SCHEMA_URL })));
             let updated = edits.iter().try_fold(text, |text, (path, value)| {
-                jsonc::modify(&text, path, value.as_ref())
-                    .map_err(|error| Error::Update(error.to_string()))
+                jsonc::modify(&text, path, value.as_ref()).map_err(|error| Error::Update(error.to_string()))
             })?;
             let Some(config) = decode_text(&updated) else {
                 return Err(Error::Update("Invalid CLI config update".into()));
             };
-            let body = if updated.ends_with('\n') {
-                updated
-            } else {
-                updated + "\n"
-            };
+            let body = if updated.ends_with('\n') { updated } else { updated + "\n" };
             write_private(&self.file, &self.file.with_extension("json.tmp"), &body)
                 .map_err(|error| Error::Update(error.to_string()))?;
             Ok(merge(&[Some(config.to_value()), self.content.clone()]))
@@ -693,12 +606,7 @@ impl CliConfig {
 
     fn locked<T>(&self, f: impl FnOnce() -> T) -> Result<T, Error> {
         let key = self.file.to_string_lossy();
-        Ok(lock::with_lock(
-            &self.state.join("locks"),
-            &key,
-            &self.lock,
-            f,
-        )?)
+        Ok(lock::with_lock(&self.state.join("locks"), &key, &self.lock, f)?)
     }
 }
 
@@ -769,17 +677,10 @@ impl Resolved {
                 notifications: attention.notifications.unwrap_or(false),
                 sound: attention.sound.unwrap_or(false),
                 volume: attention.volume.map_or(0.4, |v| v.0),
-                sound_pack: attention
-                    .sound_pack
-                    .unwrap_or_else(|| "opencode.default".into()),
+                sound_pack: attention.sound_pack.unwrap_or_else(|| "opencode.default".into()),
                 sounds: attention.sounds.unwrap_or_default(),
             },
-            leader_timeout: Duration::from_millis(
-                info.leader
-                    .as_ref()
-                    .and_then(|l| l.timeout)
-                    .map_or(2000, |t| t.0),
-            ),
+            leader_timeout: Duration::from_millis(info.leader.as_ref().and_then(|l| l.timeout).map_or(2000, |t| t.0)),
             mouse: info.mouse.unwrap_or(true),
             cursor_style: cursor.style.unwrap_or(CursorStyle::Block),
             cursor_blinking: cursor.blinking.unwrap_or(true),
@@ -800,9 +701,7 @@ impl Resolved {
 
     /// `info` resolved in the environment this config was resolved in, for a live update.
     pub fn with_info(&self, info: Info) -> Self {
-        Self::new(info, |name| {
-            (name == "HERDR_ENV" && self.herdr).then(|| "1".to_owned())
-        })
+        Self::new(info, |name| (name == "HERDR_ENV" && self.herdr).then(|| "1".to_owned()))
     }
 
     /// The `keybinds` overrides for `Keybinds::resolve`.
@@ -856,9 +755,7 @@ mod tests {
             decode(
                 json!({"leader": {"timeout": 2000.0}, "attention": {"sounds": {"done": "x", "other": "y", "default": "z"}}})
             ),
-            Some(
-                json!({"leader": {"timeout": 2000}, "attention": {"sounds": {"default": "z", "done": "x"}}})
-            )
+            Some(json!({"leader": {"timeout": 2000}, "attention": {"sounds": {"default": "z", "done": "x"}}}))
         );
     }
 
@@ -869,9 +766,7 @@ mod tests {
     #[test]
     fn merge_overlays_and_normalizes_tabs() {
         let merged = merge(&[
-            Some(
-                json!({"tabs": {"enabled": true, "scope": "global"}, "theme": {"name": "a", "mode": "dark"}}),
-            ),
+            Some(json!({"tabs": {"enabled": true, "scope": "global"}, "theme": {"name": "a", "mode": "dark"}})),
             Some(json!({"theme": {"name": "b"}})),
         ]);
         assert_eq!(
@@ -907,9 +802,7 @@ mod tests {
         assert_eq!(resolved.leader_timeout, Duration::from_millis(2000));
         assert_eq!(resolved.attention.volume, 0.4);
         assert!(resolved.tabs.enabled && resolved.mouse && resolved.tps);
-        let herdr = Resolved::new(Info::default(), |name| {
-            (name == "HERDR_ENV").then(|| "1".to_string())
-        });
+        let herdr = Resolved::new(Info::default(), |name| (name == "HERDR_ENV").then(|| "1".to_string()));
         assert!(!herdr.tabs.enabled);
         // A reload keeps the environment of the first resolve.
         assert!(!herdr.with_info(Info::default()).tabs.enabled);

@@ -45,16 +45,9 @@ pub struct Missing {
 }
 
 /// Discovers a ready, compatible service. `env_channel` is `OPENCODE_CHANNEL`.
-pub async fn discover(
-    transport: &dyn Transport,
-    paths: &Paths,
-    env_channel: Option<&str>,
-) -> Result<Found, Missing> {
+pub async fn discover(transport: &dyn Transport, paths: &Paths, env_channel: Option<&str>) -> Result<Found, Missing> {
     let preferred = preferred(paths, env_channel);
-    let mut missing = Missing {
-        reason: None,
-        pending: None,
-    };
+    let mut missing = Missing { reason: None, pending: None };
     for file in &preferred {
         match usable(transport, file).await {
             Ok(found) => return Ok(found),
@@ -123,14 +116,8 @@ pub fn scan(state: &Path, skip: &[PathBuf]) -> Vec<PathBuf> {
 
 /// The channel a registration file name stands for.
 pub fn channel_of(file: &Path) -> String {
-    let name = file
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    match name
-        .strip_prefix("service-")
-        .and_then(|rest| rest.strip_suffix(".json"))
-    {
+    let name = file.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    match name.strip_prefix("service-").and_then(|rest| rest.strip_suffix(".json")) {
         Some(channel) => channel.to_owned(),
         None => channel::DEFAULT.to_owned(),
     }
@@ -151,22 +138,14 @@ async fn usable(transport: &dyn Transport, file: &Path) -> Result<Found, Unusabl
     let registration = registration::read(file).ok_or(Unusable::Gone)?;
     let probe = probe::probe(transport, &registration, REQUEST_TIMEOUT).await;
     if probe.timed_out {
-        return Err(Unusable::Pending(format!(
-            "Background service at {} is not responding",
-            registration.url
-        )));
+        return Err(Unusable::Pending(format!("Background service at {} is not responding", registration.url)));
     }
     let service = probe.service.ok_or(Unusable::Gone)?;
     match probe::decide(&service, None) {
-        Decision::Reuse => Ok(Found {
-            service,
-            file: file.to_owned(),
-            channel: channel_of(file),
-        }),
-        Decision::Wait => Err(Unusable::Pending(format!(
-            "Background service at {} is still starting",
-            service.endpoint.url
-        ))),
+        Decision::Reuse => Ok(Found { service, file: file.to_owned(), channel: channel_of(file) }),
+        Decision::Wait => {
+            Err(Unusable::Pending(format!("Background service at {} is still starting", service.endpoint.url)))
+        }
         Decision::Fail(reason) => Err(Unusable::Failed(reason)),
         Decision::Replace { .. } => unreachable!("no version requirement"),
     }
@@ -194,40 +173,22 @@ mod tests {
     // Writes a registration for `port` with pid `port`, `age` seconds old.
     fn register(paths: &Paths, name: &str, port: u16, age: u64) {
         let file = paths.state.join(name);
-        std::fs::write(
-            &file,
-            format!(r#"{{"url":"http://127.0.0.1:{port}","pid":{port},"password":"p"}}"#),
-        )
-        .unwrap();
+        std::fs::write(&file, format!(r#"{{"url":"http://127.0.0.1:{port}","pid":{port},"password":"p"}}"#)).unwrap();
         let time = SystemTime::now() - Duration::from_secs(age);
-        std::fs::File::options()
-            .write(true)
-            .open(&file)
-            .unwrap()
-            .set_modified(time)
-            .unwrap();
+        std::fs::File::options().write(true).open(&file).unwrap().set_modified(time).unwrap();
     }
 
     fn ready(port: u16) -> (String, Reply) {
         let body = format!(r#"{{"version":"1.0.0","pid":{port}}}"#).leak();
-        (
-            format!("http://127.0.0.1:{port}/api/info"),
-            Reply::json(200, body),
-        )
+        (format!("http://127.0.0.1:{port}/api/info"), Reply::json(200, body))
     }
 
     fn server(replies: impl IntoIterator<Item = (String, Reply)>) -> Server {
-        replies
-            .into_iter()
-            .fold(Server::default(), |server, (url, reply)| {
-                server.reply(&url, reply)
-            })
+        replies.into_iter().fold(Server::default(), |server, (url, reply)| server.reply(&url, reply))
     }
 
     async fn found(server: &Server, paths: &Paths, env: Option<&str>) -> Result<String, Missing> {
-        discover(server, paths, env)
-            .await
-            .map(|found| found.channel)
+        discover(server, paths, env).await.map(|found| found.channel)
     }
 
     #[tokio::test]
@@ -255,10 +216,7 @@ mod tests {
         std::fs::write(paths.state.join("service.json.identity"), "{}").unwrap();
         std::fs::write(paths.state.join("service-oc-bad.json"), "{").unwrap();
         let live = server([ready(1002), ready(1004)]);
-        assert_eq!(
-            found(&live, &paths, Some("oc-gone")).await.unwrap(),
-            "oc-mid"
-        );
+        assert_eq!(found(&live, &paths, Some("oc-gone")).await.unwrap(), "oc-mid");
         // The scan probes the dead and newer registration too, but takes the newest that answered.
         let probed: Vec<String> = live.requests().into_iter().map(|(url, _)| url).collect();
         assert!(probed.contains(&"http://127.0.0.1:1003/api/info".to_owned()));
@@ -268,13 +226,7 @@ mod tests {
     async fn reports_why_an_answering_service_was_not_used() {
         let dir = tempfile::tempdir().unwrap();
         let paths = paths(dir.path());
-        assert_eq!(
-            found(&Server::default(), &paths, None).await,
-            Err(Missing {
-                reason: None,
-                pending: None
-            })
-        );
+        assert_eq!(found(&Server::default(), &paths, None).await, Err(Missing { reason: None, pending: None }));
         register(&paths, "service.json", 1001, 0);
         let failed = server([(
             "http://127.0.0.1:1001/api/info".to_owned(),
@@ -282,10 +234,7 @@ mod tests {
         )]);
         assert_eq!(
             found(&failed, &paths, None).await,
-            Err(Missing {
-                reason: Some("Background service failed to start".to_owned()),
-                pending: None
-            })
+            Err(Missing { reason: Some("Background service failed to start".to_owned()), pending: None })
         );
     }
 
@@ -302,9 +251,7 @@ mod tests {
         assert_eq!(
             found(&starting, &paths, None).await,
             Err(Missing {
-                reason: Some(
-                    "Background service at http://127.0.0.1:1002 is still starting".to_owned()
-                ),
+                reason: Some("Background service at http://127.0.0.1:1002 is still starting".to_owned()),
                 pending: Some(paths.state.join("service-oc-x.json"))
             })
         );
@@ -312,23 +259,15 @@ mod tests {
         assert_eq!(
             found(&hanging, &paths, None).await,
             Err(Missing {
-                reason: Some(
-                    "Background service at http://127.0.0.1:1002 is not responding".to_owned()
-                ),
+                reason: Some("Background service at http://127.0.0.1:1002 is not responding".to_owned()),
                 pending: Some(paths.state.join("service-oc-x.json"))
             })
         );
         // A starting service anywhere wins over a failed one in a preferred registration.
         register(&paths, "service.json", 1001, 0);
         let both = server([
-            (
-                "http://127.0.0.1:1001/api/info".to_owned(),
-                Reply::json(500, r#"{"version":"1.0.0","pid":1001}"#),
-            ),
-            (
-                "http://127.0.0.1:1002/api/info".to_owned(),
-                Reply::json(503, r#"{"version":"1.0.0","pid":1002}"#),
-            ),
+            ("http://127.0.0.1:1001/api/info".to_owned(), Reply::json(500, r#"{"version":"1.0.0","pid":1001}"#)),
+            ("http://127.0.0.1:1002/api/info".to_owned(), Reply::json(503, r#"{"version":"1.0.0","pid":1002}"#)),
         ]);
         let missing = found(&both, &paths, None).await.unwrap_err();
         assert_eq!(missing.pending, Some(paths.state.join("service-oc-x.json")));

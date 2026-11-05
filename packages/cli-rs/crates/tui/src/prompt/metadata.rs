@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef,
-    ProviderID, ProviderInfo, SessionInfo,
+    AgentInfo, AgentInfoMode, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
+    SessionInfo,
 };
 use opencode_local::model_pref::{Model, ModelPreferences, Preference, normalize_variant};
 use opencode_store::location::{Catalog as Read, Location};
@@ -21,14 +21,7 @@ use unicode_width::UnicodeWidthStr;
 use super::editor::Mode;
 
 /// The store catalogs the prompt reads.
-const READS: [Read; 6] = [
-    Read::Agent,
-    Read::Model,
-    Read::Provider,
-    Read::Config,
-    Read::Command,
-    Read::Vcs,
-];
+const READS: [Read; 6] = [Read::Agent, Read::Model, Read::Provider, Read::Config, Read::Command, Read::Vcs];
 
 /// What the prompt needs to know about a location.
 #[derive(Debug, Default)]
@@ -72,10 +65,7 @@ pub struct Selection {
 
 /// Asks the store for the catalogs the prompt reads; each task ends when its read is published.
 pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
-    READS
-        .iter()
-        .map(|read| data.catalog_sync(*read, Some(location)))
-        .collect()
+    READS.iter().map(|read| data.catalog_sync(*read, Some(location))).collect()
 }
 
 /// `model.json`, read once on a blocking thread and shared by every prompt.
@@ -98,11 +88,7 @@ impl Preferences {
     }
 
     fn get(&self) -> Preference {
-        self.0
-            .lock()
-            .ok()
-            .and_then(|slot| slot.clone())
-            .unwrap_or_default()
+        self.0.lock().ok().and_then(|slot| slot.clone()).unwrap_or_default()
     }
 }
 
@@ -116,12 +102,7 @@ impl Catalog {
             models: data.model.clone()?,
             providers: data.provider.clone().unwrap_or_default(),
             configured: data.config.as_deref().and_then(configured),
-            commands: data
-                .command
-                .iter()
-                .flatten()
-                .map(|command| command.name.clone())
-                .collect(),
+            commands: data.command.iter().flatten().map(|command| command.name.clone()).collect(),
             branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
             preference: preferences.get(),
         })
@@ -129,17 +110,13 @@ impl Catalog {
 
     /// Primary, visible agents (`agent.list()`).
     fn primary(&self) -> impl Iterator<Item = &AgentInfo> {
-        self.agents
-            .iter()
-            .filter(|agent| agent.mode != AgentInfoMode::Subagent && !agent.hidden)
+        self.agents.iter().filter(|agent| agent.mode != AgentInfoMode::Subagent && !agent.hidden)
     }
 
     /// `agent.current()`: the session's agent when it is listed, else the first.
     pub fn agent(&self, session: Option<&SessionInfo>) -> Option<&AgentInfo> {
         let selected = session.and_then(|session| session.agent.as_ref());
-        self.primary()
-            .find(|agent| Some(&agent.id) == selected)
-            .or_else(|| self.primary().next())
+        self.primary().find(|agent| Some(&agent.id) == selected).or_else(|| self.primary().next())
     }
 
     /// `model.selection()` for `agent`: a session's durable model when its agent matches, else
@@ -155,9 +132,8 @@ impl Catalog {
                 Choice {
                     provider_id: model.provider_id.0.clone(),
                     model_id: model.id.clone(),
-                    variant: variant.filter(|variant| {
-                        info.is_none_or(|info| info.variants.iter().any(|item| item.id == *variant))
-                    }),
+                    variant: variant
+                        .filter(|variant| info.is_none_or(|info| info.variants.iter().any(|item| item.id == *variant))),
                 }
             });
         let model = durable.or_else(|| {
@@ -181,29 +157,15 @@ impl Catalog {
             .map(|model| Model::new(model.provider_id.as_str(), &model.id))
             .filter(valid)
             .or_else(|| {
-                self.configured
-                    .as_ref()
-                    .map(|choice| Model::new(&choice.provider_id, &choice.model_id))
-                    .filter(valid)
+                self.configured.as_ref().map(|choice| Model::new(&choice.provider_id, &choice.model_id)).filter(valid)
             })
-            .or_else(|| {
-                self.preference
-                    .recent
-                    .iter()
-                    .find(|model| valid(model))
-                    .cloned()
-            })
-            .or_else(|| {
-                self.models
-                    .first()
-                    .map(|model| Model::new(model.provider_id.as_str(), &model.id))
-            })
+            .or_else(|| self.preference.recent.iter().find(|model| valid(model)).cloned())
+            .or_else(|| self.models.first().map(|model| Model::new(model.provider_id.as_str(), &model.id)))
     }
 
     /// `preferredSelection`: the saved variant, else the agent's or the config's, if the model has it.
     fn preferred(&self, agent: &AgentInfo, model: Model) -> Choice {
-        let matches =
-            |provider: &str, id: &str| provider == model.provider_id && id == model.model_id;
+        let matches = |provider: &str, id: &str| provider == model.provider_id && id == model.model_id;
         let variant = self
             .preference
             .variant
@@ -225,9 +187,7 @@ impl Catalog {
         let info = self.info(&model.provider_id, &model.model_id);
         Choice {
             variant: normalize_variant(variant.as_deref())
-                .filter(|variant| {
-                    info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant))
-                })
+                .filter(|variant| info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant)))
                 .map(str::to_owned),
             provider_id: model.provider_id,
             model_id: model.model_id,
@@ -235,9 +195,7 @@ impl Catalog {
     }
 
     fn info(&self, provider: &str, model: &str) -> Option<&ModelInfo> {
-        self.models
-            .iter()
-            .find(|info| info.provider_id.as_str() == provider && info.id == model)
+        self.models.iter().find(|info| info.provider_id.as_str() == provider && info.id == model)
     }
 
     /// `model.parsed()`: the model and provider labels.
@@ -249,16 +207,10 @@ impl Catalog {
             .providers
             .iter()
             .find(|provider| provider.id.as_str() == choice.provider_id)
-            .map_or_else(
-                || choice.provider_id.clone(),
-                |provider| provider.name.clone(),
-            );
+            .map_or_else(|| choice.provider_id.clone(), |provider| provider.name.clone());
         let model = self
             .info(&choice.provider_id, &choice.model_id)
-            .map_or_else(
-                || format!("{} (unavailable)", choice.model_id),
-                |info| info.name.clone(),
-            );
+            .map_or_else(|| format!("{} (unavailable)", choice.model_id), |info| info.name.clone());
         (model, provider)
     }
 
@@ -267,9 +219,8 @@ impl Catalog {
     pub fn color(&self, theme: &Theme, id: &str) -> Option<Color> {
         let visible: Vec<_> = self.agents.iter().filter(|agent| !agent.hidden).collect();
         let index = visible.iter().position(|agent| agent.id.as_str() == id);
-        if let Some(color) = index
-            .and_then(|index| visible[index].color.as_ref())
-            .and_then(|color| Color::parse(color.as_str()))
+        if let Some(color) =
+            index.and_then(|index| visible[index].color.as_ref()).and_then(|color| Color::parse(color.as_str()))
         {
             return Some(color);
         }
@@ -292,11 +243,7 @@ pub(crate) fn configured(entries: &[ConfigEntry]) -> Option<Choice> {
         ConfigEntry::Document(document) => match document.info.model.as_ref()? {
             ConfigEntryDocumentInfoModel::String(value) => {
                 let (provider, model) = value.split_once('/')?;
-                Some(Choice {
-                    provider_id: provider.to_owned(),
-                    model_id: model.to_owned(),
-                    variant: None,
-                })
+                Some(Choice { provider_id: provider.to_owned(), model_id: model.to_owned(), variant: None })
             }
             ConfigEntryDocumentInfoModel::Object(value) => Some(Choice {
                 provider_id: value.provider_id.clone(),
@@ -332,10 +279,7 @@ impl Row {
     pub fn new(app: &App) -> Self {
         Self {
             // An empty row keeps its line, as `<box height={1} />` does.
-            text: Text::new(app, "")
-                .truncate(true)
-                .wrap(WrapMode::None)
-                .min_height(1),
+            text: Text::new(app, "").truncate(true).wrap(WrapMode::None).min_height(1),
         }
     }
 
@@ -344,59 +288,40 @@ impl Row {
     }
 
     /// Lays the row out for `terminal_width` columns.
-    pub fn set(
-        &self,
-        theme: &Theme,
-        mode: Mode,
-        display: &Display,
-        highlight: Color,
-        terminal_width: u16,
-    ) {
-        let spans: Vec<Span> =
-            match mode {
-                Mode::Shell => vec![
-                    display
-                        .agent
-                        .clone()
-                        .unwrap_or_else(|| "Shell".into())
-                        .fg(highlight),
-                ],
-                Mode::Normal if display.agent.is_none() => Vec::new(),
-                Mode::Normal => {
-                    let width = usize::from(terminal_width)
-                        .saturating_sub(if terminal_width < 44 { 9 } else { 13 });
-                    let layout = layout(width, terminal_width, display);
-                    let mut spans = Vec::new();
-                    if let Some(agent) = &layout.agent {
-                        spans.push(agent.clone().fg(highlight));
-                    }
-                    if layout.auto {
-                        spans.push(" auto".fg(theme.text.muted));
-                    }
-                    if !layout.model.is_empty() {
-                        if layout.agent.is_some() {
-                            spans.push(" · ".fg(theme.text.muted));
-                        }
-                        spans.push(layout.model.clone().fg(theme.text.base));
-                        if !layout.provider.is_empty() {
-                            spans.push(format!(" {}", layout.provider).fg(theme.text.muted));
-                        }
-                        if let Some(variant) = layout.variant {
-                            spans.push(" · ".fg(theme.text.muted));
-                            spans.push(variant.fg(theme.text.feedback.warning.base).bold());
-                        }
-                        if let Some((limit, danger)) = layout.limit {
-                            let color = if danger {
-                                theme.text.feedback.error.base
-                            } else {
-                                theme.text.muted
-                            };
-                            spans.push(format!("  {limit}").fg(color));
-                        }
-                    }
-                    spans
+    pub fn set(&self, theme: &Theme, mode: Mode, display: &Display, highlight: Color, terminal_width: u16) {
+        let spans: Vec<Span> = match mode {
+            Mode::Shell => vec![display.agent.clone().unwrap_or_else(|| "Shell".into()).fg(highlight)],
+            Mode::Normal if display.agent.is_none() => Vec::new(),
+            Mode::Normal => {
+                let width = usize::from(terminal_width).saturating_sub(if terminal_width < 44 { 9 } else { 13 });
+                let layout = layout(width, terminal_width, display);
+                let mut spans = Vec::new();
+                if let Some(agent) = &layout.agent {
+                    spans.push(agent.clone().fg(highlight));
                 }
-            };
+                if layout.auto {
+                    spans.push(" auto".fg(theme.text.muted));
+                }
+                if !layout.model.is_empty() {
+                    if layout.agent.is_some() {
+                        spans.push(" · ".fg(theme.text.muted));
+                    }
+                    spans.push(layout.model.clone().fg(theme.text.base));
+                    if !layout.provider.is_empty() {
+                        spans.push(format!(" {}", layout.provider).fg(theme.text.muted));
+                    }
+                    if let Some(variant) = layout.variant {
+                        spans.push(" · ".fg(theme.text.muted));
+                        spans.push(variant.fg(theme.text.feedback.warning.base).bold());
+                    }
+                    if let Some((limit, danger)) = layout.limit {
+                        let color = if danger { theme.text.feedback.error.base } else { theme.text.muted };
+                        spans.push(format!("  {limit}").fg(color));
+                    }
+                }
+                spans
+            }
+        };
         self.text.set_text(spans);
     }
 }
@@ -405,16 +330,8 @@ impl Row {
 fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let narrow = terminal_width < 44;
     let agent = if narrow { None } else { display.agent.clone() };
-    let provider = if narrow {
-        String::new()
-    } else {
-        display.provider.clone()
-    };
-    let short = provider
-        .rsplit(" / ")
-        .next()
-        .unwrap_or(&provider)
-        .to_owned();
+    let provider = if narrow { String::new() } else { display.provider.clone() };
+    let short = provider.rsplit(" / ").next().unwrap_or(&provider).to_owned();
     let candidates = [
         Display {
             agent: agent.clone(),
@@ -449,23 +366,12 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
             limit: display.limit.clone(),
         },
     ];
-    if let Some(fit) = candidates
-        .into_iter()
-        .find(|candidate| flat(candidate).width() <= width)
-    {
+    if let Some(fit) = candidates.into_iter().find(|candidate| flat(candidate).width() <= width) {
         return fit;
     }
-    let prefix = agent
-        .as_ref()
-        .map_or(0, |agent| format!("{agent} · ").width());
-    let suffix = display
-        .variant
-        .as_ref()
-        .map_or(0, |variant| format!(" · {variant}").width())
-        + display
-            .limit
-            .as_ref()
-            .map_or(0, |(limit, _)| format!("  {limit}").width());
+    let prefix = agent.as_ref().map_or(0, |agent| format!("{agent} · ").width());
+    let suffix = display.variant.as_ref().map_or(0, |variant| format!(" · {variant}").width())
+        + display.limit.as_ref().map_or(0, |(limit, _)| format!("  {limit}").width());
     Display {
         agent,
         auto: false,
@@ -525,9 +431,7 @@ pub fn titlecase(text: &str) -> String {
     text.split(' ')
         .map(|word| {
             let mut chars = word.chars();
-            chars.next().map_or_else(String::new, |first| {
-                first.to_uppercase().chain(chars).collect()
-            })
+            chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -572,10 +476,7 @@ mod tests {
             limit: Some(("$5 left".into(), false)),
             ..display("Claude Sonnet", "OpenCode / Anthropic", Some("high"))
         };
-        assert_eq!(
-            flat(&full),
-            "Build · Claude Sonnet OpenCode / Anthropic · high  $5 left"
-        );
+        assert_eq!(flat(&full), "Build · Claude Sonnet OpenCode / Anthropic · high  $5 left");
         // The provider goes before the limit does, and the model truncates around it.
         assert_eq!(layout(50, 100, &full).provider, "Anthropic");
         assert_eq!(layout(40, 100, &full).provider, "");

@@ -20,12 +20,7 @@ impl WebFetch {
         let url = props.input_str("url");
         self.0.set(Inline {
             text: format!("WebFetch {}", url.unwrap_or_default()),
-            ..Inline::new(
-                props,
-                "%",
-                "Fetching from the web…",
-                url.is_some_and(|url| !url.is_empty()),
-            )
+            ..Inline::new(props, "%", "Fetching from the web…", url.is_some_and(|url| !url.is_empty()))
         });
     }
 }

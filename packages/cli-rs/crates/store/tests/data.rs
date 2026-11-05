@@ -33,13 +33,7 @@ fn info(value: Value) -> SessionInfo {
 }
 
 fn ids(data: &Data, session: &str) -> Vec<String> {
-    data.read(|state| {
-        state
-            .messages(&id(session))
-            .iter()
-            .map(|item| item.id().to_owned())
-            .collect()
-    })
+    data.read(|state| state.messages(&id(session)).iter().map(|item| item.id().to_owned()).collect())
 }
 
 fn message(data: &Data, session: &str, message: &str) -> Value {
@@ -69,24 +63,13 @@ async fn uses_the_configured_initial_window_and_retains_normal_cursor_page_sizes
                 }))
             }
         }),
-        Options {
-            initial_message_limit: Some(40),
-            ..Default::default()
-        },
+        Options { initial_message_limit: Some(40), ..Default::default() },
     );
     data.message_sync(&id(SESSION)).await.unwrap();
     data.message_sync(&id(SESSION)).await.unwrap();
     assert_eq!(requests.get(), [(Some("40".into()), None)]);
-    data.message_load_more(&id(SESSION), LoadMore::default())
-        .await
-        .unwrap();
-    assert_eq!(
-        requests.get(),
-        [
-            (Some("40".into()), None),
-            (Some("20".into()), Some("older".into()))
-        ]
-    );
+    data.message_load_more(&id(SESSION), LoadMore::default()).await.unwrap();
+    assert_eq!(requests.get(), [(Some("40".into()), None), (Some("20".into()), Some("older".into()))]);
     assert_eq!(ids(&data, SESSION), ["msg_1", "msg_2"]);
 }
 
@@ -103,11 +86,7 @@ async fn counts_every_subagent_page_in_a_root_sessions_cost() {
     let log = requests.clone();
     let data = data(
         handler(move |req: Req| {
-            let query: Vec<String> = req
-                .query
-                .iter()
-                .map(|(key, value)| format!("{key}={value}"))
-                .collect();
+            let query: Vec<String> = req.query.iter().map(|(key, value)| format!("{key}={value}")).collect();
             log.push(format!("{}?{}", req.path, query.join("&")));
             async move {
                 if req.path == "/api/session/ses_root" {
@@ -146,12 +125,10 @@ async fn keeps_the_previous_model_in_a_live_variant_notice_until_the_projected_m
     let projected = Slot::<()>::default();
     let previous = json!({ "providerID": "provider", "id": "model", "variant": "high" });
     let model = json!({ "providerID": "provider", "id": "model" });
-    let (gate, (previous_value, model_value)) =
-        (projected.clone(), (previous.clone(), model.clone()));
+    let (gate, (previous_value, model_value)) = (projected.clone(), (previous.clone(), model.clone()));
     let data = data(
         handler(move |req: Req| {
-            let (gate, previous, model) =
-                (gate.clone(), previous_value.clone(), model_value.clone());
+            let (gate, previous, model) = (gate.clone(), previous_value.clone(), model_value.clone());
             async move {
                 match req.path.as_str() {
                     "/api/session/ses_refresh/message" => ok(json!({ "data": [], "cursor": {} })),
@@ -230,10 +207,7 @@ async fn reconciles_a_stale_running_tool_when_execution_settles() {
             json!({ "sessionID": SESSION, "reason": "user" }),
         ),
     );
-    wait(|| {
-        message(&data, SESSION, "msg_assistant")["content"][0]["state"]["status"] == "completed"
-    })
-    .await;
+    wait(|| message(&data, SESSION, "msg_assistant")["content"][0]["state"]["status"] == "completed").await;
     assert_eq!(requests.load(Ordering::SeqCst), 2);
 }
 
@@ -263,10 +237,7 @@ async fn omits_inline_tool_result_file_payloads_from_read_and_live_tool_results_
                 }))
             }
         }),
-        Options {
-            omit_tool_file_data: true,
-            ..Default::default()
-        },
+        Options { omit_tool_file_data: true, ..Default::default() },
     );
     data.message_sync(&id(SESSION)).await.unwrap();
     emit(
@@ -301,11 +272,7 @@ async fn omits_inline_tool_result_file_payloads_from_read_and_live_tool_results_
 async fn refreshes_a_loaded_sessions_execution_start_when_it_starts_running() {
     let data = data(
         handler(|req: Req| async move {
-            assert!(
-                req.path.ends_with("/api/session/ses_refresh"),
-                "unexpected request: {}",
-                req.path
-            );
+            assert!(req.path.ends_with("/api/session/ses_refresh"), "unexpected request: {}", req.path);
             let mut value = session(2);
             value["time"]["busy"] = 3.into();
             ok(json!({ "data": value }))
@@ -313,23 +280,9 @@ async fn refreshes_a_loaded_sessions_execution_start_when_it_starts_running() {
         Options::default(),
     );
     data.remember(info(session(2)));
-    emit(
-        &data,
-        durable(
-            "session.execution.started",
-            "evt_started",
-            3,
-            json!({ "sessionID": SESSION }),
-        ),
-    );
-    assert_eq!(
-        data.read(|state| state.status(&id(SESSION))),
-        SessionStatus::Running
-    );
-    wait(|| {
-        data.read(|state| state.session(&id(SESSION)).and_then(|info| info.time.busy)) == Some(3.0)
-    })
-    .await;
+    emit(&data, durable("session.execution.started", "evt_started", 3, json!({ "sessionID": SESSION })));
+    assert_eq!(data.read(|state| state.status(&id(SESSION))), SessionStatus::Running);
+    wait(|| data.read(|state| state.session(&id(SESSION)).and_then(|info| info.time.busy)) == Some(3.0)).await;
 }
 
 #[tokio::test]
@@ -339,11 +292,7 @@ async fn revalidates_after_an_event_overtakes_an_active_session_read() {
     let (release, count) = (gate.clone(), requests.clone());
     let data = data(
         handler(move |req: Req| {
-            assert!(
-                req.path.ends_with("/api/session/ses_refresh"),
-                "unexpected request: {}",
-                req.path
-            );
+            assert!(req.path.ends_with("/api/session/ses_refresh"), "unexpected request: {}", req.path);
             let n = count.fetch_add(1, Ordering::SeqCst) + 1;
             let release = release.clone();
             async move {
@@ -360,25 +309,13 @@ async fn revalidates_after_an_event_overtakes_an_active_session_read() {
     data.session_invalidate(&id(SESSION));
     let initial = data.session_sync(&id(SESSION), false);
     wait(|| requests.load(Ordering::SeqCst) == 1).await;
-    emit(
-        &data,
-        durable(
-            "session.viewed",
-            "evt_viewed",
-            2,
-            json!({ "sessionID": SESSION, "idle": 2 }),
-        ),
-    );
+    emit(&data, durable("session.viewed", "evt_viewed", 2, json!({ "sessionID": SESSION, "idle": 2 })));
     settle().await;
     gate.resolve(());
     initial.await.unwrap();
     wait(|| {
         requests.load(Ordering::SeqCst) == 2
-            && data.read(|state| {
-                state
-                    .session(&id(SESSION))
-                    .and_then(|info| info.time.viewed)
-            }) == Some(2.0)
+            && data.read(|state| state.session(&id(SESSION)).and_then(|info| info.time.viewed)) == Some(2.0)
     })
     .await;
 }
@@ -392,16 +329,8 @@ async fn preserves_a_live_session_rename_across_concurrent_session_and_family_re
     let data = data(
         handler(move |req: Req| {
             let read = req.path == format!("/api/session/{SESSION}");
-            let n = if read {
-                count.fetch_add(1, Ordering::SeqCst) + 1
-            } else {
-                0
-            };
-            let gate = if n == 1 {
-                first.clone()
-            } else {
-                second.clone()
-            };
+            let n = if read { count.fetch_add(1, Ordering::SeqCst) + 1 } else { 0 };
+            let gate = if n == 1 { first.clone() } else { second.clone() };
             async move {
                 if !read {
                     return ok(json!({ "data": [], "cursor": {} }));
@@ -416,12 +345,7 @@ async fn preserves_a_live_session_rename_across_concurrent_session_and_family_re
     wait(|| requests.load(Ordering::SeqCst) == 1).await;
     emit(
         &data,
-        durable(
-            "session.renamed",
-            "evt_renamed",
-            1,
-            json!({ "sessionID": SESSION, "title": "Generated title" }),
-        ),
+        durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": SESSION, "title": "Generated title" })),
     );
     wait(|| requests.load(Ordering::SeqCst) == 2).await;
     renamed.resolve(());
@@ -430,9 +354,7 @@ async fn preserves_a_live_session_rename_across_concurrent_session_and_family_re
     initial.await.unwrap();
     settle().await;
     assert_eq!(
-        data.read(|state| state
-            .session(&id(SESSION))
-            .and_then(|info| info.title.clone())),
+        data.read(|state| state.session(&id(SESSION)).and_then(|info| info.title.clone())),
         Some("Generated title".into())
     );
 }
@@ -443,11 +365,7 @@ async fn reports_optimistic_sessions_as_creating_until_the_request_settles() {
     let gate = release.clone();
     let data = data(
         handler(move |req: Req| {
-            assert!(
-                req.path.ends_with("/api/session"),
-                "unexpected request: {}",
-                req.path
-            );
+            assert!(req.path.ends_with("/api/session"), "unexpected request: {}", req.path);
             let gate = gate.clone();
             async move {
                 gate.wait().await;
@@ -458,9 +376,7 @@ async fn reports_optimistic_sessions_as_creating_until_the_request_settles() {
     );
     let (created, request) = data.session_create(CreateSession {
         id: Some(id(SESSION)),
-        location: Some(LocationPublicRef {
-            directory: AbsolutePath("/project".into()),
-        }),
+        location: Some(LocationPublicRef { directory: AbsolutePath("/project".into()) }),
         ..Default::default()
     });
     assert!(data.read(|state| state.is_creating(&created)));
@@ -477,18 +393,12 @@ async fn loads_bounded_message_pages() {
         handler(move |req: Req| {
             log.push(req.query.clone());
             let first = log.len() == 1;
-            async move {
-                ok(
-                    json!({ "data": [], "cursor": if first { json!({ "next": "next" }) } else { json!({}) } }),
-                )
-            }
+            async move { ok(json!({ "data": [], "cursor": if first { json!({ "next": "next" }) } else { json!({}) } })) }
         }),
         Options::default(),
     );
     data.message_sync(&id(SESSION)).await.unwrap();
-    data.message_load_more(&id(SESSION), LoadMore::default())
-        .await
-        .unwrap();
+    data.message_load_more(&id(SESSION), LoadMore::default()).await.unwrap();
     let mut seen = requests.get();
     for query in &mut seen {
         query.sort();
@@ -496,14 +406,8 @@ async fn loads_bounded_message_pages() {
     assert_eq!(
         seen,
         [
-            vec![
-                ("limit".into(), "20".into()),
-                ("order".into(), "desc".into())
-            ],
-            vec![
-                ("cursor".into(), "next".into()),
-                ("limit".into(), "20".into())
-            ],
+            vec![("limit".into(), "20".into()), ("order".into(), "desc".into())],
+            vec![("cursor".into(), "next".into()), ("limit".into(), "20".into())],
         ]
     );
 }
@@ -533,13 +437,9 @@ async fn bulk_history(mode: &str) {
                         if fail == "join-failure" {
                             return Reply::Json(503, json!({ "message": "offline" }));
                         }
-                        ok(
-                            json!({ "data": [messages[2], messages[1]], "cursor": { "next": "oldest" } }),
-                        )
+                        ok(json!({ "data": [messages[2], messages[1]], "cursor": { "next": "oldest" } }))
                     }
-                    Some("oldest") => {
-                        ok(json!({ "data": [messages[0]], "cursor": { "next": "empty" } }))
-                    }
+                    Some("oldest") => ok(json!({ "data": [messages[0]], "cursor": { "next": "empty" } })),
                     Some(_) => {
                         gate.wait().await;
                         if fail == "failure" {
@@ -557,36 +457,18 @@ async fn bulk_history(mode: &str) {
     data.message_sync(&session).await.unwrap();
     let load = {
         let (data, session) = (data.clone(), session.clone());
-        let options = if join {
-            LoadMore::default()
-        } else {
-            LoadMore {
-                all: true,
-                cancel: Some(cancel.clone()),
-            }
-        };
+        let options = if join { LoadMore::default() } else { LoadMore { all: true, cancel: Some(cancel.clone()) } };
         tokio::spawn(async move { data.message_load_more(&session, options).await })
     };
     tokio::task::yield_now().await;
     let joined = {
         let (data, session, cancel) = (data.clone(), session.clone(), cancel.clone());
-        tokio::spawn(async move {
-            data.message_load_more(
-                &session,
-                LoadMore {
-                    all: true,
-                    cancel: Some(cancel),
-                },
-            )
-            .await
-        })
+        tokio::spawn(
+            async move { data.message_load_more(&session, LoadMore { all: true, cancel: Some(cancel) }).await },
+        )
     };
-    let limit = |query: &Vec<(String, String)>| {
-        query
-            .iter()
-            .find(|(key, _)| key == "limit")
-            .map(|(_, value)| value.clone())
-    };
+    let limit =
+        |query: &Vec<(String, String)>| query.iter().find(|(key, _)| key == "limit").map(|(_, value)| value.clone());
     if join {
         wait(|| requests.len() == 2).await;
         cancel.cancel();
@@ -599,11 +481,7 @@ async fn bulk_history(mode: &str) {
         assert_eq!(requests.len(), 2);
         assert_eq!(limit(&requests.get()[1]).as_deref(), Some("20"));
         assert!(data.read(|state| state.has_more_messages(&session)));
-        let expected: &[&str] = if mode == "join-failure" {
-            &["msg_3"]
-        } else {
-            &["msg_2", "msg_3"]
-        };
+        let expected: &[&str] = if mode == "join-failure" { &["msg_3"] } else { &["msg_2", "msg_3"] };
         assert_eq!(ids(&data, SESSION), expected);
         return;
     }
@@ -611,10 +489,7 @@ async fn bulk_history(mode: &str) {
     assert!(data.read(|state| state.messages_loading(&session)));
     assert_eq!(ids(&data, SESSION), ["msg_3"]);
     let limits: Vec<_> = requests.get()[1..].iter().map(&limit).collect();
-    assert_eq!(
-        limits,
-        [Some("200".into()), Some("200".into()), Some("200".into())]
-    );
+    assert_eq!(limits, [Some("200".into()), Some("200".into()), Some("200".into())]);
     if mode.starts_with("cancel") {
         cancel.cancel();
     }
@@ -622,10 +497,7 @@ async fn bulk_history(mode: &str) {
         "cancel-retry" | "cancel-page" => {
             let (data, session) = (data.clone(), session.clone());
             let all = mode == "cancel-retry";
-            Some(tokio::spawn(async move {
-                data.message_load_more(&session, LoadMore { all, cancel: None })
-                    .await
-            }))
+            Some(tokio::spawn(async move { data.message_load_more(&session, LoadMore { all, cancel: None }).await }))
         }
         _ => None,
     };
@@ -638,10 +510,7 @@ async fn bulk_history(mode: &str) {
     }
     let success = mode == "success" || mode == "cancel-retry";
     assert!(!data.read(|state| state.messages_loading(&session)));
-    assert_eq!(
-        data.read(|state| state.has_more_messages(&session)),
-        !success
-    );
+    assert_eq!(data.read(|state| state.has_more_messages(&session)), !success);
     let expected: &[&str] = if success {
         &["msg_1", "msg_2", "msg_3"]
     } else if mode == "cancel-page" {
@@ -724,10 +593,7 @@ fn activity(
 }
 
 fn connected(data: &Data) {
-    emit(
-        data,
-        json!({ "id": "evt_connected", "type": "server.connected", "data": {} }),
-    );
+    emit(data, json!({ "id": "evt_connected", "type": "server.connected", "data": {} }));
 }
 
 async fn preserves_activity(kind: &str) {
@@ -762,11 +628,7 @@ async fn preserves_activity(kind: &str) {
     let mut event = durable(kind, "evt_activity", 2, payload);
     event["durable"]["seq"] = 2.into();
     emit(&data, event);
-    let expected = if started {
-        SessionStatus::Running
-    } else {
-        SessionStatus::Idle
-    };
+    let expected = if started { SessionStatus::Running } else { SessionStatus::Idle };
     assert_eq!(data.read(|state| state.status(&id(SESSION))), expected);
     if kind == "session.execution.failed" {
         let last = data.read(|state| state.messages(&id(SESSION)).last().cloned());
@@ -815,17 +677,12 @@ async fn adds_running_sessions_created_while_disconnected_to_their_family() {
     let mut child = session(0);
     child["id"] = "ses_child".into();
     child["parentID"] = "ses_root".into();
-    let data = activity(
-        || Box::pin(async { ok(json!({ "data": { "ses_child": { "type": "running" } } })) }),
-        vec![child],
-    );
+    let data =
+        activity(|| Box::pin(async { ok(json!({ "data": { "ses_child": { "type": "running" } } })) }), vec![child]);
     data.remember(info(root));
     connected(&data);
     wait(|| data.read(|state| state.family(&id("ses_root")).contains(&id("ses_child")))).await;
-    assert_eq!(
-        data.read(|state| state.status(&id("ses_child"))),
-        SessionStatus::Running
-    );
+    assert_eq!(data.read(|state| state.status(&id("ses_child"))), SessionStatus::Running);
 }
 
 #[tokio::test]
@@ -848,14 +705,8 @@ async fn ignores_activity_snapshots_from_an_older_connection() {
     wait(|| data.read(|state| state.status(&id("ses_new"))) == SessionStatus::Running).await;
     reads.get()[0].resolve(ok(json!({ "data": { "ses_old": { "type": "running" } } })));
     settle().await;
-    assert_eq!(
-        data.read(|state| state.status(&id("ses_new"))),
-        SessionStatus::Running
-    );
-    assert_eq!(
-        data.read(|state| state.status(&id("ses_old"))),
-        SessionStatus::Idle
-    );
+    assert_eq!(data.read(|state| state.status(&id("ses_new"))), SessionStatus::Running);
+    assert_eq!(data.read(|state| state.status(&id("ses_old"))), SessionStatus::Idle);
 }
 
 #[tokio::test]
@@ -906,10 +757,7 @@ fn messages_decode_by_their_type_tag() {
     }))
     .unwrap();
     assert_eq!(compaction.tag(), "compaction");
-    assert!(matches!(
-        compaction,
-        SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))
-    ));
+    assert!(matches!(compaction, SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))));
 }
 
 #[test]
@@ -943,10 +791,7 @@ fn adjacent_deltas_of_one_part_merge() {
 
 #[tokio::test]
 async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
-    let data = data(
-        handler(|_req: Req| async { ok(json!({ "data": [] })) }),
-        Options::default(),
-    );
+    let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
     let notified = data.subscribe();
     data.remember(info(session(0)));
     let session = id(SESSION);
@@ -987,10 +832,7 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
         ),
     );
     let (third, changes) = data.changes_since(second);
-    assert!(
-        !changes.messages(&session),
-        "a delta does not change the list"
-    );
+    assert!(!changes.messages(&session), "a delta does not change the list");
     assert!(changes.message(&session, &SessionMessageID("msg_a".into())));
     assert!(!changes.message(&session, &SessionMessageID("msg_b".into())));
     assert_eq!(message(&data, SESSION, "msg_a")["content"][0]["text"], "Hi");

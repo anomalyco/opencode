@@ -31,24 +31,10 @@ async fn requests_match_the_typescript_client() {
     let record = Arc::new(Record::default());
     let client = Client::with_transport("http://127.0.0.1:4096/prefix", record.clone())
         .unwrap()
-        .auth(Auth::Basic {
-            username: "opencode".to_owned(),
-            password: "secret".to_owned(),
-        });
+        .auth(Auth::Basic { username: "opencode".to_owned(), password: "secret".to_owned() });
     let none = RequestOptions::default();
-    let location = |directory: &str| {
-        Some(LocationQueryInput {
-            directory: Some(directory.to_owned()),
-        })
-    };
-    let _ = client
-        .config_get(
-            &ConfigGetInput {
-                location: location("/tmp/a b&c=d"),
-            },
-            &none,
-        )
-        .await;
+    let location = |directory: &str| Some(LocationQueryInput { directory: Some(directory.to_owned()) });
+    let _ = client.config_get(&ConfigGetInput { location: location("/tmp/a b&c=d") }, &none).await;
     let _ = client
         .session_list(
             &SessionListInput {
@@ -64,21 +50,12 @@ async fn requests_match_the_typescript_client() {
         .await;
     let _ = client
         .session_get(
-            &SessionGetInput {
-                session_id: "ses_1 /?#%".into(),
-            },
+            &SessionGetInput { session_id: "ses_1 /?#%".into() },
             &RequestOptions::default().header("X-Opencode-Directory", "/override"),
         )
         .await;
-    let _ = client
-        .file_read(
-            &FileReadInput {
-                location: location("/w"),
-                path: "dir/a b/c#?.txt".to_owned(),
-            },
-            &none,
-        )
-        .await;
+    let _ =
+        client.file_read(&FileReadInput { location: location("/w"), path: "dir/a b/c#?.txt".to_owned() }, &none).await;
     let _ = client
         .session_prompt(
             &SessionPromptInput {
@@ -107,39 +84,20 @@ async fn requests_match_the_typescript_client() {
         .await;
     let _ = client
         .event_subscribe(
-            &EventSubscribeInput {
-                types: Some(vec!["session.created".to_owned(), "rpc.x".to_owned()]),
-            },
+            &EventSubscribeInput { types: Some(vec!["session.created".to_owned(), "rpc.x".to_owned()]) },
             &none,
         )
         .await;
-    let _ = client
-        .session_remove(
-            &SessionRemoveInput {
-                session_id: "ses_2".into(),
-            },
-            &none,
-        )
-        .await;
-    let mention = |start: f64, end: f64, text: &str| PromptMention {
-        start,
-        end,
-        text: text.to_owned(),
-    };
+    let _ = client.session_remove(&SessionRemoveInput { session_id: "ses_2".into() }, &none).await;
+    let mention = |start: f64, end: f64, text: &str| PromptMention { start, end, text: text.to_owned() };
     let _ = client
         .session_prompt(
             &SessionPromptInput {
                 session_id: "ses_1".into(),
                 text: "@build x".to_owned(),
                 agents: Some(vec![
-                    PromptAgentAttachment {
-                        name: "build".to_owned(),
-                        mention: Some(mention(0.0, 6.0, "@build")),
-                    },
-                    PromptAgentAttachment {
-                        name: "plan".to_owned(),
-                        mention: Some(mention(1.5, -0.0, "@plan")),
-                    },
+                    PromptAgentAttachment { name: "build".to_owned(), mention: Some(mention(0.0, 6.0, "@build")) },
+                    PromptAgentAttachment { name: "plan".to_owned(), mention: Some(mention(1.5, -0.0, "@plan")) },
                 ]),
                 ..Default::default()
             },
@@ -171,23 +129,19 @@ async fn requests_match_the_typescript_client() {
         assert_eq!(request.method, expected["method"], "{name}: method");
         assert_eq!(request.url.as_str(), expected["url"], "{name}: url");
         let headers: BTreeMap<_, _> = request.headers.iter().cloned().collect();
-        let wanted: BTreeMap<String, String> =
-            serde_json::from_value(expected["headers"].clone()).unwrap();
+        let wanted: BTreeMap<String, String> = serde_json::from_value(expected["headers"].clone()).unwrap();
         assert_eq!(headers, wanted, "{name}: headers");
         let body = request.body.as_ref();
         match (&expected["body"], &expected["bodyBase64"]) {
             (Value::String(text), _) => {
                 assert_eq!(
-                    body.map(|body| String::from_utf8_lossy(body).into_owned())
-                        .as_deref(),
+                    body.map(|body| String::from_utf8_lossy(body).into_owned()).as_deref(),
                     Some(text.as_str()),
                     "{name}: body"
                 )
             }
             (_, Value::String(encoded)) => {
-                let bytes = base64::engine::general_purpose::STANDARD
-                    .decode(encoded)
-                    .unwrap();
+                let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
                 assert_eq!(body.map(|body| body.to_vec()), Some(bytes), "{name}: body")
             }
             _ => assert!(body.is_none(), "{name}: no body"),
@@ -200,11 +154,6 @@ fn query_values_match_append_query() {
     for case in fixture()["query"].as_array().unwrap() {
         let mut pairs = Vec::new();
         query::append(&mut pairs, "location", &case["value"]);
-        assert_eq!(
-            query::encode(&pairs),
-            case["search"].as_str().unwrap(),
-            "{}",
-            case["value"]
-        );
+        assert_eq!(query::encode(&pairs), case["search"].as_str().unwrap(), "{}", case["value"]);
     }
 }

@@ -59,11 +59,10 @@ pub fn home(tui: &Tui) {
 
 /// The session route's location, once the session is known; and its environment upload.
 pub fn session(tui: &Tui, id: &SessionID) {
-    let Some((location, creating)) = tui.data.read(|state| {
-        state
-            .session(id)
-            .map(|session| (Location::from(&session.location), state.is_creating(id)))
-    }) else {
+    let Some((location, creating)) = tui
+        .data
+        .read(|state| state.session(id).map(|session| (Location::from(&session.location), state.is_creating(id))))
+    else {
         return;
     };
     if current(tui).as_ref() != Some(&location) {
@@ -102,9 +101,7 @@ fn sync(tui: &Tui, location: Option<Location>) {
     let Some(location) = location else { return };
     let attempt = tui.location.generation.get() + 1;
     tui.location.generation.set(attempt);
-    let target = tui
-        .data
-        .read(|state| (*state.default_location() != location).then(|| location.clone()));
+    let target = tui.data.read(|state| (*state.default_location() != location).then(|| location.clone()));
     tui.location.error.borrow_mut().take();
     let data = tui.data.clone();
     let weak = tui.weak();
@@ -126,10 +123,7 @@ fn sync(tui: &Tui, location: Option<Location>) {
             let Some(tui) = weak.upgrade() else { return };
             let Err(error) = result else { return };
             let current = tui.location.reference.borrow().clone();
-            if !not_found(&error)
-                || tui.location.generation.get() != attempt
-                || current.as_ref() != Some(&location)
-            {
+            if !not_found(&error) || tui.location.generation.get() != attempt || current.as_ref() != Some(&location) {
                 return;
             }
             *tui.location.error.borrow_mut() = Some(location);
@@ -139,9 +133,7 @@ fn sync(tui: &Tui, location: Option<Location>) {
 }
 
 fn not_found(error: &Error) -> bool {
-    error
-        .declared()
-        .is_some_and(|declared| declared.tag.as_deref() == Some("LocationNotFoundError"))
+    error.declared().is_some_and(|declared| declared.tag.as_deref() == Some("LocationNotFoundError"))
 }
 
 /// `session.environment` with the terminal's variables, once per session and connection.

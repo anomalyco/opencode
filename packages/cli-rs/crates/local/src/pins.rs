@@ -25,30 +25,22 @@ pub fn load(state: &Path) -> Vec<String> {
 /// Adds `id` at the end, or with `pinned: false` removes it, and returns the list written.
 pub fn set(state: &Path, id: &str, pinned: bool) -> Result<Vec<String>, lock::Error> {
     let file = file(state);
-    lock::with_lock(
-        &state.join("locks"),
-        &file.to_string_lossy(),
-        &lock::Options::default(),
-        || {
-            let mut document = read(&file);
-            let mut list = self::pinned(&document);
-            let present = list.iter().any(|pin| pin == id);
-            if present == pinned {
-                return Ok(list);
-            }
-            if pinned {
-                list.push(id.to_owned());
-            } else {
-                list.retain(|pin| pin != id);
-            }
-            document.insert(
-                "pinned".into(),
-                Value::Array(list.iter().cloned().map(Value::String).collect()),
-            );
-            write_json_atomic(&file, &Value::Object(document))?;
-            Ok(list)
-        },
-    )?
+    lock::with_lock(&state.join("locks"), &file.to_string_lossy(), &lock::Options::default(), || {
+        let mut document = read(&file);
+        let mut list = self::pinned(&document);
+        let present = list.iter().any(|pin| pin == id);
+        if present == pinned {
+            return Ok(list);
+        }
+        if pinned {
+            list.push(id.to_owned());
+        } else {
+            list.retain(|pin| pin != id);
+        }
+        document.insert("pinned".into(), Value::Array(list.iter().cloned().map(Value::String).collect()));
+        write_json_atomic(&file, &Value::Object(document))?;
+        Ok(list)
+    })?
     .map_err(lock::Error::Io)
 }
 
@@ -67,13 +59,7 @@ fn pinned(document: &Map<String, Value>) -> Vec<String> {
     document
         .get("pinned")
         .and_then(Value::as_array)
-        .map(|pinned| {
-            pinned
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect()
-        })
+        .map(|pinned| pinned.iter().filter_map(Value::as_str).map(str::to_owned).collect())
         .unwrap_or_default()
 }
 
@@ -90,10 +76,7 @@ mod tests {
         assert_eq!(set(state.path(), "c", true).unwrap(), ["a", "b", "c"]);
         assert_eq!(set(state.path(), "a", false).unwrap(), ["b", "c"]);
         assert_eq!(set(state.path(), "a", false).unwrap(), ["b", "c"]);
-        assert_eq!(
-            fs::read_to_string(file(state.path())).unwrap(),
-            r#"{"pinned":["b","c"],"other":1}"#
-        );
+        assert_eq!(fs::read_to_string(file(state.path())).unwrap(), r#"{"pinned":["b","c"],"other":1}"#);
         assert_eq!(load(state.path()), ["b", "c"]);
         let leftovers: Vec<_> = fs::read_dir(state.path())
             .unwrap()

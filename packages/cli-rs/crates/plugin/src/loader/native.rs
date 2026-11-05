@@ -27,8 +27,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use opencode_plugin_abi::{
-    self as abi, ABI_MAJOR, ABI_MINOR, Bytes, HostApi, HostRequest, Line, Manifest, Owned,
-    PluginApi, PluginApiV1_0, Request,
+    self as abi, ABI_MAJOR, ABI_MINOR, Bytes, HostApi, HostRequest, Line, Manifest, Owned, PluginApi, PluginApiV1_0,
+    Request,
 };
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
@@ -59,26 +59,15 @@ impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
         let library = Library::open(library)?;
-        Ok(Inspected {
-            major: ABI_MAJOR,
-            minor: library.minor,
-            version: library.version(),
-        })
+        Ok(Inspected { major: ABI_MAJOR, minor: library.minor, version: library.version() })
     }
 }
 
 impl<H: Host> Backend<H> for Native {
-    fn load(
-        &self,
-        library: &[u8],
-        options: Option<&str>,
-    ) -> Result<(Definition<H>, ErrorFn), String> {
+    fn load(&self, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
         let library = Rc::new(Library::open(library)?);
         if let Some(version) = library.version() {
-            log::info!(
-                "plugin library version {version}, ABI {ABI_MAJOR}.{}",
-                library.minor
-            );
+            log::info!("plugin library version {version}, ABI {ABI_MAJOR}.{}", library.minor);
         }
         let options = options.map(str::to_owned);
         // Setup runs once now, to check the build and learn its ID; the first activation takes this instance.
@@ -136,11 +125,7 @@ impl Library {
         static OPENED: AtomicUsize = AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!("opencode-rs-plugins-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-        let file = dir.join(format!(
-            "{}.{}",
-            OPENED.fetch_add(1, Ordering::Relaxed),
-            std::env::consts::DLL_EXTENSION
-        ));
+        let file = dir.join(format!("{}.{}", OPENED.fetch_add(1, Ordering::Relaxed), std::env::consts::DLL_EXTENSION));
         std::fs::write(&file, bytes).map_err(|error| format!("{}: {error}", file.display()))?;
         // SAFETY: loading runs the library's initializers; a plugin is code the user chose to run.
         let library = unsafe { libloading::Library::new(&file) };
@@ -170,9 +155,7 @@ impl Library {
             ));
         }
         if size < size_of::<PluginApiV1_0>() {
-            return Err(format!(
-                "plugin table is {size} bytes, shorter than the ABI {ABI_MAJOR}.0 core"
-            ));
+            return Err(format!("plugin table is {size} bytes, shorter than the ABI {ABI_MAJOR}.0 core"));
         }
         // SAFETY: the 1.0 core is within `size`.
         let core = unsafe { &*api.cast::<PluginApiV1_0>() };
@@ -183,21 +166,12 @@ impl Library {
                 core.requires_minor
             ));
         }
-        let describe = has::<Option<unsafe extern "C" fn(*mut Owned) -> i32>>(
-            size,
-            offset_of!(PluginApi, describe),
-        )
-        // SAFETY: `size` covers the entry.
-        .then(|| unsafe { std::ptr::addr_of!((*api).describe).read() })
-        .flatten();
-        let opened = Self {
-            minor,
-            create: core.create,
-            call: core.call,
-            destroy: core.destroy,
-            free: core.free,
-            describe,
-        };
+        let describe = has::<Option<unsafe extern "C" fn(*mut Owned) -> i32>>(size, offset_of!(PluginApi, describe))
+            // SAFETY: `size` covers the entry.
+            .then(|| unsafe { std::ptr::addr_of!((*api).describe).read() })
+            .flatten();
+        let opened =
+            Self { minor, create: core.create, call: core.call, destroy: core.destroy, free: core.free, describe };
         std::mem::forget(library);
         Ok(opened)
     }
@@ -249,24 +223,13 @@ struct Instance<H: Host> {
 }
 
 impl<H: Host> Instance<H> {
-    fn create(
-        library: &Rc<Library>,
-        host: Weak<H>,
-        options: Option<&str>,
-    ) -> Result<(Self, Manifest), String> {
-        let ctx = Box::new(RefCell::new(Ctx {
-            host,
-            id: String::new(),
-            keys: Vec::new(),
-            effects: Vec::new(),
-        }));
+    fn create(library: &Rc<Library>, host: Weak<H>, options: Option<&str>) -> Result<(Self, Manifest), String> {
+        let ctx = Box::new(RefCell::new(Ctx { host, id: String::new(), keys: Vec::new(), effects: Vec::new() }));
         let api = Box::new(HostApi {
             size: size_of::<HostApi>(),
             major: ABI_MAJOR,
             minor: HOST_MINOR,
-            ctx: std::ptr::from_ref::<RefCell<Ctx<H>>>(&ctx)
-                .cast_mut()
-                .cast(),
+            ctx: std::ptr::from_ref::<RefCell<Ctx<H>>>(&ctx).cast_mut().cast(),
             call: host_call::<H>,
             free: host_free,
         });
@@ -275,8 +238,7 @@ impl<H: Host> Instance<H> {
         let options = options.unwrap_or_default();
         // SAFETY: the pointers are valid for the call, and `api` and `ctx` outlive the instance.
         let (status, bytes) = unsafe {
-            let status =
-                (library.create)(&*api, Bytes::new(options.as_bytes()), &mut handle, &mut out);
+            let status = (library.create)(&*api, Bytes::new(options.as_bytes()), &mut handle, &mut out);
             let bytes = out.to_vec();
             (library.free)(out);
             (status, bytes)
@@ -287,14 +249,9 @@ impl<H: Host> Instance<H> {
             abi::PANIC => return Err(format!("setup panicked: {}", text())),
             _ => return Err(text()),
         }
-        let instance = Self {
-            library: library.clone(),
-            handle,
-            _api: api,
-            ctx,
-        };
-        let manifest: Manifest = serde_json::from_slice(&bytes)
-            .map_err(|error| format!("setup returned a bad manifest: {error}"))?;
+        let instance = Self { library: library.clone(), handle, _api: api, ctx };
+        let manifest: Manifest =
+            serde_json::from_slice(&bytes).map_err(|error| format!("setup returned a bad manifest: {error}"))?;
         if manifest.id.is_empty() {
             return Err("setup returned an empty plugin ID".to_owned());
         }
@@ -341,12 +298,9 @@ unsafe extern "C" fn host_call<H: Host>(ctx: *mut c_void, request: Bytes, out: *
     // SAFETY: `ctx` is the `RefCell<Ctx<H>>` this instance was created with; `request` is valid for the call.
     let (ctx, request) = unsafe { (&*ctx.cast::<RefCell<Ctx<H>>>(), request.as_slice()) };
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let request: HostRequest = serde_json::from_slice(request).map_err(|error| {
-            format!("unsupported host request (host ABI {ABI_MAJOR}.{HOST_MINOR}): {error}")
-        })?;
-        let mut ctx = ctx
-            .try_borrow_mut()
-            .map_err(|_| "the host is busy".to_owned())?;
+        let request: HostRequest = serde_json::from_slice(request)
+            .map_err(|error| format!("unsupported host request (host ABI {ABI_MAJOR}.{HOST_MINOR}): {error}"))?;
+        let mut ctx = ctx.try_borrow_mut().map_err(|_| "the host is busy".to_owned())?;
         handle(&mut ctx, request)
     }));
     let (status, bytes) = match result {
@@ -393,10 +347,7 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
         }
         HostRequest::StorageGet { key: name } => {
             let stored = key(ctx, &name)?;
-            let value = ctx
-                .host
-                .upgrade()
-                .and_then(|host| host.storage_read(&stored));
+            let value = ctx.host.upgrade().and_then(|host| host.storage_read(&stored));
             return Ok(serde_json::to_value(value).unwrap_or_default());
         }
         HostRequest::StorageSet { key: name, value } => {
@@ -445,11 +396,7 @@ impl<H: Host> Guest<H> {
         *self.failure.borrow_mut() = Some(error);
         let id = self.id.clone();
         self.defer(move |host| {
-            host.toast(
-                Toast::Error,
-                Some(&format!("Plugin failed: {id}")),
-                "Run /plugins to view details.",
-            );
+            host.toast(Toast::Error, Some(&format!("Plugin failed: {id}")), "Run /plugins to view details.");
         });
         None
     }
@@ -492,10 +439,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
             let guest = guest.clone();
             let name = command.name.clone();
             let mut entry = TuiCommand::new(command.name.clone(), move |input, _| {
-                let request = Request::Command {
-                    name: name.clone(),
-                    input: input.map(str::to_owned),
-                };
+                let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
                 guest.request::<serde_json::Value>("run-command", &request);
             })
             .title(command.title.clone())
@@ -507,21 +451,13 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
                 entry = entry.group(group.clone());
             }
             if let Some(slash) = &command.slash {
-                entry = entry.slash(Slash {
-                    name: slash.clone(),
-                    aliases: Vec::new(),
-                    arguments: false,
-                });
+                entry = entry.slash(Slash { name: slash.clone(), aliases: Vec::new(), arguments: false });
             }
             entry
         })
         .collect();
     if !commands.is_empty() {
-        setup.layer(KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands,
-            ..KeymapLayer::default()
-        });
+        setup.layer(KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() });
     }
     for language in &manifest.fences {
         let guest = guest.clone();
@@ -532,9 +468,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
                 code: block.code.to_owned(),
                 streaming: block.streaming && !block.closed,
             });
-            let lines = guest
-                .request::<Option<Vec<Line>>>("render-fence", &request)
-                .flatten()?;
+            let lines = guest.request::<Option<Vec<Line>>>("render-fence", &request).flatten()?;
             Some(lines_widget(block.app, theme, &lines, true))
         });
     }
@@ -547,27 +481,17 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
             abi::SlotKind::After => Kind::After,
             abi::SlotKind::Replace => Kind::Replace,
         };
-        setup.slot(
-            Placement::new(kind, slot.path.clone()),
-            move |host, input| {
-                let request = Request::Slot {
-                    claim,
-                    session_id: input.session_id.clone(),
-                };
-                let lines = guest
-                    .request::<Vec<Line>>("render-slot", &request)
-                    .unwrap_or_default();
-                Box::new(lines_view(host.app(), &host.theme(), &lines))
-            },
-        );
+        setup.slot(Placement::new(kind, slot.path.clone()), move |host, input| {
+            let request = Request::Slot { claim, session_id: input.session_id.clone() };
+            let lines = guest.request::<Vec<Line>>("render-slot", &request).unwrap_or_default();
+            Box::new(lines_view(host.app(), &host.theme(), &lines))
+        });
     }
     for name in &manifest.routes {
         let guest = guest.clone();
         let request = Request::Route { name: name.clone() };
         setup.route(name.clone(), move |host| {
-            let lines = guest
-                .request::<Vec<Line>>("render-route", &request)
-                .unwrap_or_default();
+            let lines = guest.request::<Vec<Line>>("render-route", &request).unwrap_or_default();
             Box::new(lines_view(host.app(), &host.theme(), &lines))
         });
     }
@@ -577,11 +501,7 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
 fn lines_widget(app: &App, theme: &Theme, lines: &[Line], scroll: bool) -> AnyWidget {
     let width = lines
         .iter()
-        .map(|line| {
-            line.iter()
-                .map(|span| unicode_width::UnicodeWidthStr::width(span.text.as_str()))
-                .sum::<usize>()
-        })
+        .map(|line| line.iter().map(|span| unicode_width::UnicodeWidthStr::width(span.text.as_str())).sum::<usize>())
         .max()
         .unwrap_or(0);
     let height = lines.len().max(1) as f32;
@@ -607,13 +527,7 @@ fn lines_widget(app: &App, theme: &Theme, lines: &[Line], scroll: bool) -> AnyWi
             if let Some(bg) = color(theme, span.bg.as_deref()) {
                 style = style.bg(bg);
             }
-            Span::styled(
-                span.text.clone(),
-                Style {
-                    attributes,
-                    ..style
-                },
-            )
+            Span::styled(span.text.clone(), Style { attributes, ..style })
         }));
     }
     let text = Text::new(app, spans)

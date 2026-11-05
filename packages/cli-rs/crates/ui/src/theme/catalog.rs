@@ -24,8 +24,7 @@ struct Builtins {
 }
 
 static BUILTINS: LazyLock<Builtins> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("generated/themes.json"))
-        .expect("generated/themes.json is valid")
+    serde_json::from_str(include_str!("generated/themes.json")).expect("generated/themes.json is valid")
 });
 
 /// Where a theme comes from.
@@ -55,10 +54,7 @@ pub struct Catalog {
 impl Catalog {
     /// Replaces the custom themes; values that are not theme documents are dropped (`setCustomThemes`).
     pub fn set_custom(&mut self, themes: IndexMap<String, Value>) {
-        self.custom = themes
-            .into_iter()
-            .filter(|(_, source)| is_theme_source(source))
-            .collect();
+        self.custom = themes.into_iter().filter(|(_, source)| is_theme_source(source)).collect();
     }
 
     /// The generated `system` theme, or `None` to fall back to a custom `system` theme or `opencode`.
@@ -83,32 +79,20 @@ impl Catalog {
     pub fn source(&self, name: &str) -> Option<ThemeSource<'_>> {
         if name == "system" {
             let system = self.system.as_ref().or_else(|| self.custom.get("system"));
-            return system
-                .map(ThemeSource::Custom)
-                .or_else(|| self.source("opencode"));
+            return system.map(ThemeSource::Custom).or_else(|| self.source("opencode"));
         }
         if let Some(custom) = self.custom.get(name) {
             return Some(ThemeSource::Custom(custom));
         }
-        BUILTINS
-            .themes
-            .iter()
-            .find(|theme| theme.name == name)
-            .map(|theme| ThemeSource::Builtin(&theme.document))
+        BUILTINS.themes.iter().find(|theme| theme.name == name).map(|theme| ThemeSource::Builtin(&theme.document))
     }
 
     /// `loadTheme`: the theme `name` in `mode`, or in its first mode when it lacks `mode`.
     pub fn load(&self, name: &str, mode: ThemeMode) -> Result<Loaded, String> {
-        let source = self
-            .source(name)
-            .ok_or_else(|| format!("Theme \"{name}\" was not found"))?;
+        let source = self.source(name).ok_or_else(|| format!("Theme \"{name}\" was not found"))?;
         let document = parse(source, name)?;
         let modes = modes(&document);
-        let requested = if modes.contains(&mode) {
-            mode
-        } else {
-            modes.first().copied().unwrap_or(mode)
-        };
+        let requested = if modes.contains(&mode) { mode } else { modes.first().copied().unwrap_or(mode) };
         let (theme, mode) = resolve(&document, requested)?;
         Ok(Loaded { modes, mode, theme })
     }
@@ -116,9 +100,7 @@ impl Catalog {
 
 /// `isThemeSource`: an object with `theme` (V1) or `base` (V2).
 fn is_theme_source(source: &Value) -> bool {
-    source
-        .as_object()
-        .is_some_and(|object| object.contains_key("theme") || object.contains_key("base"))
+    source.as_object().is_some_and(|object| object.contains_key("theme") || object.contains_key("base"))
 }
 
 /// `parseTheme`: V1 sources migrate, V2 sources pass the schema and must resolve in every mode they define.

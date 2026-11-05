@@ -26,27 +26,15 @@ fn theme(name: &str, mode: ThemeMode) -> Theme {
 #[test]
 fn syntax_theme_matches_generate_syntax() {
     let views: Vec<serde_json::Value> = serde_json::from_str(SYNTAX).unwrap();
-    let pack = |color: Option<Color>| {
-        color.map(|c| format!("{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a))
-    };
+    let pack = |color: Option<Color>| color.map(|c| format!("{:02x}{:02x}{:02x}{:02x}", c.r, c.g, c.b, c.a));
     for view in views {
-        let mode = if view["mode"] == "light" {
-            ThemeMode::Light
-        } else {
-            ThemeMode::Dark
-        };
+        let mode = if view["mode"] == "light" { ThemeMode::Light } else { ThemeMode::Dark };
         let name = view["name"].as_str().unwrap();
         let syntax = code::syntax_theme(&theme(name, mode));
         let styles = view["styles"].as_object().unwrap();
-        assert_eq!(
-            syntax.names().count(),
-            styles.len(),
-            "{name} {mode:?}: scope count"
-        );
+        assert_eq!(syntax.names().count(), styles.len(), "{name} {mode:?}: scope count");
         for (scope, expected) in styles {
-            let style = syntax
-                .get(scope)
-                .unwrap_or_else(|| panic!("{name}: no style for {scope}"));
+            let style = syntax.get(scope).unwrap_or_else(|| panic!("{name}: no style for {scope}"));
             let flag = |attribute| style.attributes.contains(attribute);
             let actual = serde_json::json!([
                 pack(style.fg),
@@ -67,15 +55,10 @@ fn assert_parity(capture: &Capture, name: &str) {
     let actual = Fixture::from_capture(capture);
     let comparison = compare(&expected, &actual);
     if !comparison.is_equal() {
-        let path = std::env::temp_dir()
-            .join("opencode-parity")
-            .join(format!("{name}.json"));
+        let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, actual.to_json()).unwrap();
-        panic!(
-            "P-COMP {name}: {comparison}\nactual cells: {}",
-            path.display()
-        );
+        panic!("P-COMP {name}: {comparison}\nactual cells: {}", path.display());
     }
 }
 
@@ -100,40 +83,25 @@ fn markdown_app(text: &str, conceal: bool) -> TestApp {
     let (app, theme) = app(60, 24);
     let syntax = code::syntax_theme(&theme);
     let renderers = markdown::CodeBlockRenderers::default();
-    let text =
-        markdown::view(&app, &theme, &syntax, &renderers, conceal, false).set_markdown(text.trim());
-    app.root().add(
-        &View::new(&app)
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&text),
-    );
+    let text = markdown::view(&app, &theme, &syntax, &renderers, conceal, false).set_markdown(text.trim());
+    app.root().add(&View::new(&app).padding_edge(Edge::Left, 3).shrink(0.0).child(&text));
     app
 }
 
 #[test]
 fn markdown_prose_matches_typescript() {
-    assert_parity(
-        &markdown_app(&corpus("prose"), true).render(),
-        "U.4a/markdown-prose",
-    );
+    assert_parity(&markdown_app(&corpus("prose"), true).render(), "U.4a/markdown-prose");
 }
 
 #[test]
 fn markdown_fences_match_typescript() {
-    assert_parity(
-        &markdown_app(&corpus("fences"), true).render(),
-        "U.4a/markdown-fences",
-    );
+    assert_parity(&markdown_app(&corpus("fences"), true).render(), "U.4a/markdown-fences");
 }
 
 /// U.4c: `session.markdown = "raw"`, markers shown.
 #[test]
 fn raw_markdown_matches_typescript() {
-    assert_parity(
-        &markdown_app(&corpus("prose"), false).render(),
-        "U.4c/markdown-raw",
-    );
+    assert_parity(&markdown_app(&corpus("prose"), false).render(), "U.4c/markdown-raw");
 }
 
 /// U.4c: grid tables with one column of cell padding.
@@ -141,10 +109,7 @@ fn raw_markdown_matches_typescript() {
 fn markdown_table_matches_typescript() {
     let corpus: serde_json::Value =
         serde_json::from_str(include_str!("../../../../parity/fixtures/U.4c/corpus.json")).unwrap();
-    assert_parity(
-        &markdown_app(corpus["table"].as_str().unwrap(), true).render(),
-        "U.4c/markdown-table",
-    );
+    assert_parity(&markdown_app(corpus["table"].as_str().unwrap(), true).render(), "U.4c/markdown-table");
 }
 
 /// U.4c: a registered code-block renderer draws its fences, and streamed text ends as one parse of the whole text.
@@ -172,9 +137,7 @@ fn markdown_renders_fences_and_streams() {
     assert!(!frame.contains("```"), "{frame}");
 
     let (whole, _) = self::app(40, 8);
-    whole
-        .root()
-        .add(&markdown::view(&whole, &theme, &syntax, &renderers, true, false).set_markdown(text));
+    whole.root().add(&markdown::view(&whole, &theme, &syntax, &renderers, true, false).set_markdown(text));
     assert_eq!(frame, whole.render().text());
 }
 
@@ -191,13 +154,7 @@ fn numbered_code_matches_typescript() {
 fn code_wraps_at_a_word_as_core_does() {
     let (app, theme) = app(20, 3);
     let syntax = code::syntax_theme(&theme);
-    app.root().add(&code::view(
-        &app,
-        &theme,
-        &syntax,
-        None,
-        "const alpha = betagamma",
-    ));
+    app.root().add(&code::view(&app, &theme, &syntax, None, "const alpha = betagamma"));
     let frame = app.render().text();
     let rows: Vec<_> = frame.lines().map(str::trim_end).collect();
     assert_eq!(rows[..2], ["const alpha =", "betagamma"], "{frame}");
@@ -207,21 +164,8 @@ fn code_wraps_at_a_word_as_core_does() {
 fn patch_matches_typescript() {
     let (app, theme) = app(60, 14);
     let syntax = code::syntax_theme(&theme);
-    let patch = diff::view(
-        &app,
-        &theme,
-        &syntax,
-        &corpus("diff"),
-        DiffView::Unified,
-        Some("typescript"),
-        WrapMode::Word,
-        0,
-    );
-    app.root().add(
-        &View::new(&app)
-            .padding_edge(Edge::Left, 1)
-            .padding_edge(Edge::Right, 3)
-            .child(&patch),
-    );
+    let patch =
+        diff::view(&app, &theme, &syntax, &corpus("diff"), DiffView::Unified, Some("typescript"), WrapMode::Word, 0);
+    app.root().add(&View::new(&app).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 3).child(&patch));
     assert_parity(&app.render(), "U.4a/diff");
 }

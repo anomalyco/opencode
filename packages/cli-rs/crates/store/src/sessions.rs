@@ -74,10 +74,7 @@ impl State {
 
     /// Every known session of the family of `id`.
     pub fn family(&self, id: &SessionID) -> &[SessionID] {
-        self.family
-            .get(&self.root(id))
-            .map(Vec::as_slice)
-            .unwrap_or_default()
+        self.family.get(&self.root(id)).map(Vec::as_slice).unwrap_or_default()
     }
 
     /// A child's own cost, or a root's cost with every known descendant.
@@ -89,10 +86,7 @@ impl State {
             return session.cost;
         }
         match self.family.get(id) {
-            Some(family) => family
-                .iter()
-                .map(|member| self.info.get(member).map_or(0.0, |info| info.cost))
-                .sum(),
+            Some(family) => family.iter().map(|member| self.info.get(member).map_or(0.0, |info| info.cost)).sum(),
             None => session.cost,
         }
     }
@@ -103,11 +97,7 @@ impl State {
 
     /// Running sessions.
     pub fn active_sessions(&self) -> Vec<&SessionID> {
-        self.active
-            .iter()
-            .filter(|(_, status)| **status == SessionStatus::Running)
-            .map(|(id, _)| id)
-            .collect()
+        self.active.iter().filter(|(_, status)| **status == SessionStatus::Running).map(|(id, _)| id).collect()
     }
 
     pub(crate) fn set_status(&mut self, id: &SessionID, status: SessionStatus) {
@@ -161,17 +151,10 @@ impl State {
         for item in self.pending.get(id).into_iter().flatten() {
             self.outbox.remove(item.id());
         }
-        for key in [
-            "session",
-            "session.family",
-            "session.pending",
-            "session.message",
-            "session.permission",
-        ] {
+        for key in ["session", "session.family", "session.pending", "session.message", "session.permission"] {
             self.syncs.invalidate(&format!("{key}:{}", id.0));
         }
-        self.syncs
-            .invalidate_prefix(&format!("session.form:{}:", id.0));
+        self.syncs.invalidate_prefix(&format!("session.form:{}:", id.0));
         self.info.remove(id);
         self.active.remove(id);
         self.messages.remove(id);
@@ -179,12 +162,8 @@ impl State {
         self.loading.remove(id);
         self.pending.remove(id);
         self.permission.remove(id);
-        let roots: Vec<SessionID> = self
-            .family
-            .iter()
-            .filter(|(_, family)| family.contains(id))
-            .map(|(root, _)| root.clone())
-            .collect();
+        let roots: Vec<SessionID> =
+            self.family.iter().filter(|(_, family)| family.contains(id)).map(|(root, _)| root.clone()).collect();
         for root in &roots {
             self.log.session(root);
         }
@@ -208,25 +187,15 @@ impl State {
         self.syncs.invalidate(&format!("session.pending:{}", id.0));
         self.syncs.invalidate(&format!("session.message:{}", id.0));
         self.message_loads.remove(id);
-        let pending: Vec<_> = self
-            .pending(id)
-            .iter()
-            .filter(|item| self.outbox.contains(item.id()))
-            .cloned()
-            .collect();
-        let messages: Vec<_> = self
-            .messages(id)
-            .iter()
-            .filter(|item| self.outbox.contains(item.id()))
-            .cloned()
-            .collect();
+        let pending: Vec<_> = self.pending(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
+        let messages: Vec<_> =
+            self.messages(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
         self.messages.remove(id);
         self.cursor.remove(id);
         self.loading.remove(id);
         self.pending.remove(id);
         if !messages.is_empty() {
-            self.messages
-                .insert(id.clone(), crate::messages::Transcript::new(messages));
+            self.messages.insert(id.clone(), crate::messages::Transcript::new(messages));
         }
         if !pending.is_empty() {
             self.pending.insert(id.clone(), pending);
@@ -292,36 +261,24 @@ impl State {
 
     pub(crate) fn on_agent_selected(&mut self, event: &SessionAgentSelected) {
         let data = &event.data;
-        let previous = self
-            .info
-            .get(&data.session_id)
-            .and_then(|info| info.agent.clone());
-        self.edit_info(&data.session_id, |info| {
-            info.agent = Some(data.agent.clone())
-        });
+        let previous = self.info.get(&data.session_id).and_then(|info| info.agent.clone());
+        self.edit_info(&data.session_id, |info| info.agent = Some(data.agent.clone()));
         let row = SessionMessageAgentSelected {
             id: from_event(&event.id),
             r#type: "agent-switched".into(),
             agent: data.agent.clone(),
             previous,
             metadata: None,
-            time: SessionInboxUserTime {
-                created: event.created,
-            },
+            time: SessionInboxUserTime { created: event.created },
         };
         self.insert_message(&data.session_id, SessionMessageInfo::AgentSwitched(row));
     }
 
     pub(crate) fn on_model_selected(&mut self, event: &SessionModelSelected) -> Vec<Follow> {
         let data = &event.data;
-        let previous = data.previous.clone().or_else(|| {
-            self.info
-                .get(&data.session_id)
-                .and_then(|info| info.model.clone())
-        });
-        self.edit_info(&data.session_id, |info| {
-            info.model = Some(data.model.clone())
-        });
+        let previous =
+            data.previous.clone().or_else(|| self.info.get(&data.session_id).and_then(|info| info.model.clone()));
+        self.edit_info(&data.session_id, |info| info.model = Some(data.model.clone()));
         if !self.messages.contains_key(&data.session_id) {
             return Vec::new();
         }
@@ -332,9 +289,7 @@ impl State {
             model: data.model.clone(),
             previous,
             metadata: None,
-            time: SessionInboxUserTime {
-                created: event.created,
-            },
+            time: SessionInboxUserTime { created: event.created },
         };
         self.insert_message(&data.session_id, SessionMessageInfo::ModelSwitched(row));
         vec![Follow::Message(data.session_id.clone(), id)]
@@ -350,9 +305,7 @@ impl State {
             project_id: Some(current.project_id.clone()),
             subpath: current.subpath.clone(),
         };
-        let location = LocationPublicRef {
-            directory: data.location.directory.clone(),
-        };
+        let location = LocationPublicRef { directory: data.location.directory.clone() };
         self.edit_info(&data.session_id, |info| {
             info.location = location.clone();
             info.project_id = data.project_id.clone();
@@ -366,24 +319,18 @@ impl State {
             location,
             previous: Some(Some(previous)),
             metadata: None,
-            time: SessionInboxUserTime {
-                created: event.created,
-            },
+            time: SessionInboxUserTime { created: event.created },
         };
         self.insert_message(&data.session_id, SessionMessageInfo::LocationSwitched(row));
     }
 
     pub(crate) fn on_permissions(&mut self, data: &SessionPermissionsData) {
-        self.edit_info(&data.session_id, |info| {
-            info.permissions = Some(data.permissions.clone())
-        });
+        self.edit_info(&data.session_id, |info| info.permissions = Some(data.permissions.clone()));
     }
 
     pub(crate) fn on_metadata(&mut self, data: &SessionMetadataUpdatedData) {
         // The event carries the whole record, so keys it drops go too.
-        self.edit_info(&data.session_id, |info| {
-            info.metadata = Some(data.metadata.clone())
-        });
+        self.edit_info(&data.session_id, |info| info.metadata = Some(data.metadata.clone()));
     }
 
     pub(crate) fn on_archived(&mut self, id: &SessionID, archived: Option<f64>) {
@@ -391,9 +338,7 @@ impl State {
     }
 
     pub(crate) fn on_revert_staged(&mut self, data: &SessionRevertStagedData) {
-        self.edit_info(&data.session_id, |info| {
-            info.revert = Some(data.revert.clone())
-        });
+        self.edit_info(&data.session_id, |info| info.revert = Some(data.revert.clone()));
     }
 
     pub(crate) fn on_revert_cleared(&mut self, id: &SessionID) {
@@ -464,11 +409,7 @@ impl Data {
     /// Reads a session once per invalidation (`session.sync`); with `children`, also every direct
     /// child, under its own key.
     pub fn session_sync(&self, id: &SessionID, children: bool) -> Task<()> {
-        let key = if children {
-            "session.family"
-        } else {
-            "session"
-        };
+        let key = if children { "session.family" } else { "session" };
         let id = id.clone();
         let key = format!("{key}:{}", id.0);
         self.sync_start(
@@ -477,12 +418,7 @@ impl Data {
             move |data, started| async move {
                 let info = async {
                     data.client()
-                        .session_get(
-                            &SessionGetInput {
-                                session_id: id.clone(),
-                            },
-                            &RequestOptions::default(),
-                        )
+                        .session_get(&SessionGetInput { session_id: id.clone() }, &RequestOptions::default())
                         .await
                         .map_err(|error| evict_missing(&data, error))
                 };
@@ -533,10 +469,7 @@ impl Data {
     /// open at once, then creates the session. Prompts to it wait for the request; a failure
     /// removes the record unless the server acknowledged it.
     pub fn session_create(&self, input: CreateSession) -> (SessionID, Task<SessionInfo>) {
-        let id = input
-            .id
-            .clone()
-            .unwrap_or_else(|| SessionID(opencode_api::id::session()));
+        let id = input.id.clone().unwrap_or_else(|| SessionID(opencode_api::id::session()));
         let mut state = self.lock();
         let location = input.location.clone().unwrap_or_else(|| LocationPublicRef {
             directory: AbsolutePath(state.default_location().directory.clone()),
@@ -563,11 +496,7 @@ impl Data {
                 model: input.model.clone(),
                 cost: 0.0,
                 tokens: TokenUsageInfo::default(),
-                time: SessionInfoTime {
-                    created,
-                    updated: created,
-                    ..Default::default()
-                },
+                time: SessionInfoTime { created, updated: created, ..Default::default() },
                 title: input.title.clone(),
                 location: location.clone(),
                 ..Default::default()
@@ -590,11 +519,7 @@ impl Data {
         let data = self.clone();
         let session = id.clone();
         let task = self.spawn(async move {
-            let result = data
-                .client()
-                .session_create(&request, &RequestOptions::default())
-                .await
-                .map_err(Error::new);
+            let result = data.client().session_create(&request, &RequestOptions::default()).await.map_err(Error::new);
             data.write(|state| {
                 match &result {
                     Ok(info) => {
@@ -609,11 +534,7 @@ impl Data {
                         }
                     }
                 }
-                if state
-                    .creating
-                    .get(&session)
-                    .is_some_and(|(current, _)| *current == token)
-                {
+                if state.creating.get(&session).is_some_and(|(current, _)| *current == token) {
                     state.creating.remove(&session);
                     // `is_creating` is part of the session's view.
                     state.log.session(&session);
@@ -622,11 +543,7 @@ impl Data {
             result
         });
         if fresh {
-            let gate = task
-                .clone()
-                .map(|result| result.map(|_| ()))
-                .boxed()
-                .shared();
+            let gate = task.clone().map(|result| result.map(|_| ())).boxed().shared();
             state.creating.insert(id.clone(), (token, gate));
         }
         self.flush(&mut state);
@@ -644,22 +561,14 @@ async fn list_children(data: &Data, parent: &SessionID) -> Result<Vec<SessionInf
     };
     let mut children = Vec::new();
     loop {
-        let page = data
-            .client()
-            .session_list(&input, &RequestOptions::default())
-            .await
-            .map_err(Error::new)?;
+        let page = data.client().session_list(&input, &RequestOptions::default()).await.map_err(Error::new)?;
         let full = page.data.len() as i64 >= CHILD_PAGE;
         children.extend(page.data);
         let Some(next) = page.cursor.next.flatten().filter(|_| full) else {
             return Ok(children);
         };
         // Later pages carry only the cursor and the size, as in TS.
-        input = SessionListInput {
-            cursor: Some(next),
-            limit: Some(CHILD_PAGE),
-            ..Default::default()
-        };
+        input = SessionListInput { cursor: Some(next), limit: Some(CHILD_PAGE), ..Default::default() };
     }
 }
 
@@ -670,10 +579,7 @@ impl Data {
             let item = data
                 .client()
                 .session_message_get(
-                    &SessionMessageGetInput {
-                        session_id: session.clone(),
-                        message_id: message,
-                    },
+                    &SessionMessageGetInput { session_id: session.clone(), message_id: message },
                     &RequestOptions::default(),
                 )
                 .await
@@ -689,11 +595,7 @@ impl Data {
     /// Applies a live title after the session's reads, so a racing read cannot overwrite it.
     pub(crate) fn renamed(&self, session: SessionID, title: String) {
         self.refresh(|data| async move {
-            let family = data.read(|state| {
-                state
-                    .syncs
-                    .pending(&format!("session.family:{}", session.0))
-            });
+            let family = data.read(|state| state.syncs.pending(&format!("session.family:{}", session.0)));
             let own = data.session_sync(&session, false);
             if family {
                 futures_util::future::try_join(own, data.session_sync(&session, true)).await?;

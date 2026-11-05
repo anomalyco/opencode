@@ -18,9 +18,7 @@ pub const ID: &str = "opencode.merman";
 pub fn plugin<H: Host>() -> Definition<H> {
     Definition::new(ID, |setup| {
         let renderer = Rc::new(Renderer::default());
-        setup.code_block("mermaid", move |block, theme| {
-            renderer.render(block, &Palette::from_theme(theme))
-        });
+        setup.code_block("mermaid", move |block, theme| renderer.render(block, &Palette::from_theme(theme)));
     })
 }
 
@@ -33,9 +31,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn render(&self, block: &CodeBlock<'_>, palette: &Palette) -> Option<AnyWidget> {
-        let previous = block
-            .previous
-            .map(|widget| (widget.clone(), self.kinds.borrow_mut().remove(&widget.id())));
+        let previous = block.previous.map(|widget| (widget.clone(), self.kinds.borrow_mut().remove(&widget.id())));
         let diagram = match render(block.code, block.app.size().0, palette) {
             Rendered::Diagram(diagram) => diagram,
             Rendered::Code => return None,
@@ -78,11 +74,7 @@ pub fn widget(app: &App, diagram: &Diagram) -> Text {
     let content_width = diagram
         .lines
         .iter()
-        .map(|line| {
-            line.iter()
-                .map(|run| UnicodeWidthStr::width(run.text.as_str()))
-                .sum::<usize>()
-        })
+        .map(|line| line.iter().map(|run| UnicodeWidthStr::width(run.text.as_str())).sum::<usize>())
         .max()
         .unwrap_or(0) as f64;
     let text = Text::new(app, Content(spans))

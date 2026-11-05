@@ -52,16 +52,13 @@ fn pattern(source: &str) -> Regex {
 }
 
 static HEADER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^gantt$"));
-static DIRECTIVE: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(r"(?i)^(title|dateFormat|axisFormat|tickInterval|excludes|todayMarker)\s+(.+)$")
-});
+static DIRECTIVE: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^(title|dateFormat|axisFormat|tickInterval|excludes|todayMarker)\s+(.+)$"));
 static SECTION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^section(?:\s+(.+))?$"));
-static ACCESSIBILITY: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^acc(?:Title|Descr)(?::|\s|$)"));
+static ACCESSIBILITY: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^acc(?:Title|Descr)(?::|\s|$)"));
 static ACC_BLOCK: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^accDescr\s*\{$"));
 static AFTER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^after\s+"));
-static DURATION: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)$"));
+static DURATION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)$"));
 static CALENDAR: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$"));
 
@@ -82,12 +79,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut header = false;
     let mut in_description = false;
     for source in meaningful_lines(content) {
-        let line = js_trim(
-            source
-                .text
-                .find("%%")
-                .map_or(source.text, |index| &source.text[..index]),
-        );
+        let line = js_trim(source.text.find("%%").map_or(source.text, |index| &source.text[..index]));
         let n = source.number;
         if in_description {
             if line == "}" {
@@ -126,11 +118,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
                 "dateformat" => date_format = value.to_string(),
                 "axisformat" => axis_format = value.to_string(),
                 _ => {
-                    return Err(error(
-                        n,
-                        line,
-                        &format!("{} is not supported", &captures[1]),
-                    ));
+                    return Err(error(n, line, &format!("{} is not supported", &captures[1])));
                 }
             }
             continue;
@@ -140,39 +128,25 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             return Err(SyntaxError::unsupported(Kind::Gantt, n, line));
         };
         let label = strip_quotes(&line[..separator]);
-        let mut fields: Vec<&str> = line[separator + 1..]
-            .split(',')
-            .map(js_trim)
-            .filter(|field| !field.is_empty())
-            .collect();
+        let mut fields: Vec<&str> =
+            line[separator + 1..].split(',').map(js_trim).filter(|field| !field.is_empty()).collect();
         let mut flags: HashSet<String> = HashSet::new();
         while let Some(first) = fields.first()
-            && ["active", "done", "crit", "milestone", "vert"]
-                .contains(&first.to_lowercase().as_str())
+            && ["active", "done", "crit", "milestone", "vert"].contains(&first.to_lowercase().as_str())
         {
             flags.insert(fields.remove(0).to_lowercase());
         }
         if fields.len() < 2 || fields.len() > 3 {
-            return Err(error(
-                n,
-                line,
-                "Gantt tasks require a start and end or duration",
-            ));
+            return Err(error(n, line, "Gantt tasks require a start and end or duration"));
         }
-        let id = if fields.len() == 3 {
-            Some(fields.remove(0).to_string())
-        } else {
-            None
-        };
+        let id = if fields.len() == 3 { Some(fields.remove(0).to_string()) } else { None };
         if let Some(id) = &id
             && by_id.contains_key(id)
         {
             return Err(error(n, line, &format!("Duplicate task id \"{id}\"")));
         }
-        let start = parse_start(fields[0], &date_format, &by_id)
-            .map_err(|reason| error(n, line, &reason))?;
-        let end =
-            parse_end(fields[1], start, &date_format).map_err(|reason| error(n, line, &reason))?;
+        let start = parse_start(fields[0], &date_format, &by_id).map_err(|reason| error(n, line, &reason))?;
+        let end = parse_end(fields[1], start, &date_format).map_err(|reason| error(n, line, &reason))?;
         if end < start {
             return Err(error(n, line, "Gantt task cannot end before it starts"));
         }
@@ -190,21 +164,12 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         if let Some(id) = id {
             by_id.insert(id, end);
         }
-        entries.push(Entry::Task(Task {
-            label,
-            start,
-            end,
-            state,
-        }));
+        entries.push(Entry::Task(Task { label, start, end, state }));
     }
     if !header {
         return Err(error(1, "", "Gantt header is required"));
     }
-    Ok(Diagram {
-        title,
-        axis_format,
-        entries,
-    })
+    Ok(Diagram { title, axis_format, entries })
 }
 
 fn parse_start(value: &str, format: &str, by_id: &HashMap<String, f64>) -> Result<f64, String> {
@@ -247,33 +212,16 @@ fn parse_date(value: &str, format: &str) -> Result<f64, String> {
     if let Some(captures) = CALENDAR.captures(value)
         && ["YYYY-MM-DD", "YYYY-MM-DD HH:mm", "YYYY-MM-DD HH:mm:ss"].contains(&format)
     {
-        let part = |index: usize| {
-            captures
-                .get(index)
-                .map_or(0, |m| m.as_str().parse::<i64>().unwrap_or(0))
-        };
-        return Ok(date_utc(
-            part(1),
-            part(2) - 1,
-            part(3),
-            part(4),
-            part(5),
-            part(6),
-        ));
+        let part = |index: usize| captures.get(index).map_or(0, |m| m.as_str().parse::<i64>().unwrap_or(0));
+        return Ok(date_utc(part(1), part(2) - 1, part(3), part(4), part(5), part(6)));
     }
-    Err(format!(
-        "Unsupported date \"{value}\" for dateFormat {format}"
-    ))
+    Err(format!("Unsupported date \"{value}\" for dateFormat {format}"))
 }
 
 /// JavaScript's `Number(value)` for decimal text; `None` for NaN and infinities.
 fn js_number(value: &str) -> Option<f64> {
     let trimmed = js_trim(value);
-    let number = if trimmed.is_empty() {
-        0.0
-    } else {
-        trimmed.parse::<f64>().ok()?
-    };
+    let number = if trimmed.is_empty() { 0.0 } else { trimmed.parse::<f64>().ok()? };
     number.is_finite().then_some(number)
 }
 
@@ -320,11 +268,7 @@ fn format_time(value: f64, format: &str) -> String {
         ("%M", format!("{:02}", rest / 60 % 60)),
         ("%S", format!("{:02}", rest % 60)),
     ];
-    parts
-        .iter()
-        .fold(format.to_string(), |result, (token, replacement)| {
-            result.replace(token, replacement)
-        })
+    parts.iter().fold(format.to_string(), |result, (token, replacement)| result.replace(token, replacement))
 }
 
 const LABEL_GAP: i32 = 2;
@@ -369,39 +313,16 @@ pub fn draw(diagram: &Diagram, max_width: i32) -> Result<Grid, SizeError> {
         return Ok(grid);
     }
     let chart_width = MIN_CHART_WIDTH.max(MAX_CHART_WIDTH.min(max_width - label_width - LABEL_GAP));
-    let minimum = tasks
-        .iter()
-        .map(|task| task.start)
-        .fold(f64::INFINITY, f64::min);
-    let maximum = tasks
-        .iter()
-        .map(|task| task.end)
-        .fold(f64::NEG_INFINITY, f64::max);
+    let minimum = tasks.iter().map(|task| task.start).fold(f64::INFINITY, f64::min);
+    let maximum = tasks.iter().map(|task| task.end).fold(f64::NEG_INFINITY, f64::max);
     let span = (maximum - minimum).max(1.0);
     let title_height = if diagram.title.is_some() { 2 } else { 0 };
-    let mut grid = Grid::new(
-        label_width + LABEL_GAP + chart_width,
-        title_height + 2 + body,
-        None,
-    )?;
+    let mut grid = Grid::new(label_width + LABEL_GAP + chart_width, title_height + 2 + body, None)?;
     let chart_x = label_width + LABEL_GAP;
     if let Some(title) = &diagram.title {
-        grid.text(
-            0.max(chart_x + (chart_width - width(title)).div_euclid(2)),
-            0,
-            title,
-            Some(Style::Title),
-        );
+        grid.text(0.max(chart_x + (chart_width - width(title)).div_euclid(2)), 0, title, Some(Style::Title));
     }
-    draw_axis(
-        &mut grid,
-        chart_x,
-        title_height,
-        chart_width,
-        minimum,
-        span,
-        &diagram.axis_format,
-    );
+    draw_axis(&mut grid, chart_x, title_height, chart_width, minimum, span, &diagram.axis_format);
     let offset = |value: f64| js_round((value - minimum) / span * f64::from(chart_width - 1));
     for (index, entry) in diagram.entries.iter().enumerate() {
         let y = title_height + 2 + rows[index];
@@ -425,15 +346,7 @@ pub fn draw(diagram: &Diagram, max_width: i32) -> Result<Grid, SizeError> {
     Ok(grid)
 }
 
-fn draw_axis(
-    grid: &mut Grid,
-    x: i32,
-    y: i32,
-    chart_width: i32,
-    minimum: f64,
-    span: f64,
-    format: &str,
-) {
+fn draw_axis(grid: &mut Grid, x: i32, y: i32, chart_width: i32, minimum: f64, span: f64, format: &str) {
     for offset in 0..chart_width {
         grid.set(x + offset, y + 1, "─", Some(Style::Axis));
     }
@@ -454,11 +367,7 @@ fn draw_axis(
         2_592_000_000.0,
         31_536_000_000.0,
     ];
-    let step = STEPS
-        .iter()
-        .copied()
-        .find(|&step| step >= span / 4.0)
-        .unwrap_or(STEPS[14]);
+    let step = STEPS.iter().copied().find(|&step| step >= span / 4.0).unwrap_or(STEPS[14]);
     let mut ticks = Vec::new();
     let mut value = (minimum / step).ceil() * step;
     while value <= minimum + span {
@@ -472,8 +381,7 @@ fn draw_axis(
         let offset = js_round((value - minimum) / span * f64::from(chart_width - 1));
         let label = format_time(value, format);
         let label_width = width(&label);
-        let label_x =
-            x.max((x + chart_width - label_width).min(x + offset - label_width.div_euclid(2)));
+        let label_x = x.max((x + chart_width - label_width).min(x + offset - label_width.div_euclid(2)));
         grid.text(label_x, y, &label, Some(Style::Axis));
         grid.set(x + offset, y + 1, "┬", Some(Style::Axis));
     }

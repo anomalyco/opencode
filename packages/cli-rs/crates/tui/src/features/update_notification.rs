@@ -54,11 +54,7 @@ pub trait Source {
     /// The TUI talks to a server on another machine (`--server`), whose updates this client cannot install.
     fn remote(&self) -> bool;
     /// Checks for an update. `installing` reports an install a background check started meanwhile.
-    fn check(
-        &self,
-        installing: Box<dyn Fn(String)>,
-        done: Box<dyn FnOnce(Result<Option<Check>, String>)>,
-    );
+    fn check(&self, installing: Box<dyn Fn(String)>, done: Box<dyn FnOnce(Result<Option<Check>, String>)>);
     /// Installs `version`.
     fn apply(&self, version: &str, done: Box<dyn FnOnce(Result<(), String>)>);
 }
@@ -77,11 +73,7 @@ impl Notice {
     }
 
     fn key(&self) -> String {
-        let source = if self.server.is_some() {
-            "server"
-        } else {
-            "client"
-        };
+        let source = if self.server.is_some() { "server" } else { "client" };
         format!("{source}:{}", self.version)
     }
 }
@@ -114,22 +106,11 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
     .title("Update OpenCode")
     .group("System")
     .palette()
-    .slash(Slash {
-        name: "update".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    });
+    .slash(Slash { name: "update".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: the configured keybind (`none` by default).
-        KeymapLayer {
-            bindings: vec!["opencode.update".to_owned()],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { bindings: vec!["opencode.update".to_owned()], ..KeymapLayer::default() },
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
@@ -147,12 +128,8 @@ fn listen(tui: &Tui, mut signals: tokio::sync::broadcast::Receiver<V2Event>) {
         async move {
             loop {
                 let notice = match signals.recv().await {
-                    Ok(V2Event::InstallationUpdateAvailable(event)) => {
-                        (Kind::Available, event.data.version)
-                    }
-                    Ok(V2Event::InstallationUpdated(event)) => {
-                        (Kind::Installed, event.data.version)
-                    }
+                    Ok(V2Event::InstallationUpdateAvailable(event)) => (Kind::Available, event.data.version),
+                    Ok(V2Event::InstallationUpdated(event)) => (Kind::Installed, event.data.version),
                     Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
                 };
@@ -164,14 +141,7 @@ fn listen(tui: &Tui, mut signals: tokio::sync::broadcast::Receiver<V2Event>) {
                 return;
             };
             let remote = tui.updates.source().is_some_and(|source| source.remote());
-            notify(
-                &tui,
-                Notice {
-                    kind,
-                    version,
-                    server: Some(remote),
-                },
-            );
+            notify(&tui, Notice { kind, version, server: Some(remote) });
             listen(&tui, signals);
         },
     );
@@ -197,14 +167,7 @@ impl Updates {
 
 /// The updater's own result (TS `updater.subscribe`).
 pub fn client_notice(tui: &Tui, notice: ClientNotice) {
-    notify(
-        tui,
-        Notice {
-            kind: notice.kind,
-            version: notice.version,
-            server: None,
-        },
-    );
+    notify(tui, Notice { kind: notice.kind, version: notice.version, server: None });
 }
 
 fn notify(tui: &Tui, notice: Notice) {
@@ -216,17 +179,12 @@ fn notify(tui: &Tui, notice: Notice) {
         tui.epilogue.updated_version(notice.version.clone());
     }
     let dismissed = dismissed(tui);
-    if dismissed.contains(&notice.key())
-        || (notice.server.is_none() && dismissed.contains(&notice.version))
-    {
+    if dismissed.contains(&notice.key()) || (notice.server.is_none() && dismissed.contains(&notice.version)) {
         return;
     }
     {
         let mut current = tui.updates.notification.borrow_mut();
-        let keep = notice.server.is_some()
-            && current
-                .as_ref()
-                .is_some_and(|current| current.server.is_none());
+        let keep = notice.server.is_some() && current.as_ref().is_some_and(|current| current.server.is_none());
         if !keep {
             *current = Some(notice);
         }
@@ -237,18 +195,12 @@ fn notify(tui: &Tui, notice: Notice) {
 
 fn dismissed(tui: &Tui) -> Vec<String> {
     tui.storage()
-        .and_then(|storage| {
-            storage
-                .load("update-notifications", &json!({ "versions": [] }))
-                .ok()
-        })
+        .and_then(|storage| storage.load("update-notifications", &json!({ "versions": [] })).ok())
         .and_then(|value| {
-            value.get("versions")?.as_array().map(|versions| {
-                versions
-                    .iter()
-                    .filter_map(|version| version.as_str().map(str::to_owned))
-                    .collect()
-            })
+            value
+                .get("versions")?
+                .as_array()
+                .map(|versions| versions.iter().filter_map(|version| version.as_str().map(str::to_owned)).collect())
         })
         .unwrap_or_default()
 }
@@ -262,20 +214,12 @@ pub fn dismiss(tui: &Tui) {
     let Some(storage) = tui.storage() else { return };
     let key = current.key();
     tui.app.runtime().spawn_blocking(move || {
-        let result = storage.update(
-            "update-notifications",
-            &json!({ "versions": [] }),
-            |draft| {
-                let mut versions: Vec<Value> = draft
-                    .get("versions")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                versions.push(Value::from(key));
-                let start = versions.len().saturating_sub(100);
-                draft["versions"] = Value::Array(versions.split_off(start));
-            },
-        );
+        let result = storage.update("update-notifications", &json!({ "versions": [] }), |draft| {
+            let mut versions: Vec<Value> = draft.get("versions").and_then(Value::as_array).cloned().unwrap_or_default();
+            versions.push(Value::from(key));
+            let start = versions.len().saturating_sub(100);
+            draft["versions"] = Value::Array(versions.split_off(start));
+        });
         if let Err(error) = result {
             log::error!("failed to persist update notification: {error}");
         }
@@ -313,19 +257,13 @@ pub(crate) fn check(tui: &Tui, done: Box<dyn FnOnce(Result<Option<String>, Strin
     let Some(source) = tui.updates.source() else {
         return done(Ok(None));
     };
-    if matches!(
-        *tui.updates.state.borrow(),
-        Some(UpdateState::Installing(_))
-    ) {
+    if matches!(*tui.updates.state.borrow(), Some(UpdateState::Installing(_))) {
         return done(Ok(None));
     }
     let generation = tui.updates.generation.get();
     let current = {
         let weak = tui.weak();
-        move || {
-            weak.upgrade()
-                .filter(|tui| tui.updates.generation.get() == generation)
-        }
+        move || weak.upgrade().filter(|tui| tui.updates.generation.get() == generation)
     };
     let installing = {
         let current = current.clone();
@@ -340,10 +278,7 @@ pub(crate) fn check(tui: &Tui, done: Box<dyn FnOnce(Result<Option<String>, Strin
         installing,
         Box::new(move |result| {
             let Some(tui) = weak.upgrade() else { return };
-            if matches!(
-                *tui.updates.state.borrow(),
-                Some(UpdateState::Installing(_))
-            ) {
+            if matches!(*tui.updates.state.borrow(), Some(UpdateState::Installing(_))) {
                 set_state(&tui, None);
             }
             if current().is_none() {
@@ -353,16 +288,11 @@ pub(crate) fn check(tui: &Tui, done: Box<dyn FnOnce(Result<Option<String>, Strin
                 Ok(Some(Check::Unavailable(message))) => done(Ok(Some(message))),
                 Ok(notice) => {
                     let state = notice.map(|check| match check {
-                        Check::Notice(ClientNotice {
-                            kind: Kind::Installed,
-                            version,
-                        }) => {
+                        Check::Notice(ClientNotice { kind: Kind::Installed, version }) => {
                             tui.epilogue.updated_version(version.clone());
                             UpdateState::Installed(version)
                         }
-                        Check::Notice(ClientNotice { version, .. }) => {
-                            UpdateState::Available(version)
-                        }
+                        Check::Notice(ClientNotice { version, .. }) => UpdateState::Available(version),
                         Check::Unavailable(message) => UpdateState::Failed(message),
                     });
                     set_state(&tui, state);
@@ -397,12 +327,7 @@ pub fn open(tui: &Tui, origin: Origin) {
     if tui.updates.source().is_none() {
         return;
     }
-    let known = tui
-        .updates
-        .notification
-        .borrow()
-        .clone()
-        .filter(|notice| !notice.remote());
+    let known = tui.updates.notification.borrow().clone().filter(|notice| !notice.remote());
     if origin == Origin::Notification && known.is_none() {
         return;
     }
@@ -418,10 +343,7 @@ pub fn open(tui: &Tui, origin: Origin) {
             });
         }
     }
-    let checks = matches!(
-        *tui.updates.state.borrow(),
-        None | Some(UpdateState::Failed(_))
-    );
+    let checks = matches!(*tui.updates.state.borrow(), None | Some(UpdateState::Failed(_)));
     crate::dialogs::update::show(tui, checks);
 }
 
@@ -447,16 +369,8 @@ fn render(tui: &Tui) {
     let app = &tui.app;
     let theme = tui.page();
     let hovered = tui.updates.hovered.get();
-    let backdrop = if hovered {
-        theme.background.action.primary.hovered
-    } else {
-        theme.background.base
-    };
-    let command = if notice.kind == Kind::Installed {
-        "/exit"
-    } else {
-        "/update"
-    };
+    let backdrop = if hovered { theme.background.action.primary.hovered } else { theme.background.base };
+    let command = if notice.kind == Kind::Installed { "/exit" } else { "/update" };
     let rest = if remote {
         "remote server update available".to_owned()
     } else if notice.kind == Kind::Installed {
@@ -479,11 +393,7 @@ fn render(tui: &Tui) {
     let text = View::new(app).row();
     let mut parts = Vec::new();
     if !remote {
-        parts.push(
-            FadeInText::new(app, command)
-                .fg(theme.text.action.primary.selected)
-                .sweep(0.0, Some(total)),
-        );
+        parts.push(FadeInText::new(app, command).fg(theme.text.action.primary.selected).sweep(0.0, Some(total)));
     }
     parts.push(
         FadeInText::new(app, rest)
@@ -503,8 +413,7 @@ fn render(tui: &Tui) {
         let hovered = theme.background.action.primary.hovered;
         styled.bg(if over { hovered } else { Color::TRANSPARENT });
         for part in &parts {
-            part.clone()
-                .backdrop(if over { hovered } else { theme.background.base });
+            part.clone().backdrop(if over { hovered } else { theme.background.base });
         }
         tui.app.request_redraw();
     });

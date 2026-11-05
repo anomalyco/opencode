@@ -27,10 +27,8 @@ pub fn osc(theme: &Theme, mode: ThemeMode, background: Color) -> Vec<u8> {
         .chain([theme.text.muted])
         .chain(normal[..6].iter().map(|color| theme.decrease(color, 1)))
         .chain([*bright_white]);
-    let mut text: String = colors
-        .enumerate()
-        .map(|(index, color)| format!("\x1b]4;{index};{}\x1b\\", hex(color)))
-        .collect();
+    let mut text: String =
+        colors.enumerate().map(|(index, color)| format!("\x1b]4;{index};{}\x1b\\", hex(color))).collect();
     text.push_str(&format!("\x1b]10;{}\x1b\\", hex(theme.text.base)));
     text.push_str(&format!("\x1b]11;{}\x1b\\", hex(background)));
     text.into_bytes()
@@ -77,11 +75,7 @@ fn oklch(color: Color) -> (f64, f64) {
 /// Chroma and hue of an sRGB color, as `rgbToOklch` computes them. `opencode-ui` keeps its copy crate-private.
 fn oklch_of(red: f64, green: f64, blue: f64) -> (f64, f64) {
     let linear = |value: f64| {
-        if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        }
+        if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) }
     };
     let (red, green, blue) = (linear(red), linear(green), linear(blue));
     let l = (0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue).cbrt();
@@ -90,8 +84,5 @@ fn oklch_of(red: f64, green: f64, blue: f64) -> (f64, f64) {
     let a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
     let b = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
     let angle = b.atan2(a).to_degrees();
-    (
-        (a * a + b * b).sqrt(),
-        if angle < 0.0 { angle + 360.0 } else { angle },
-    )
+    ((a * a + b * b).sqrt(), if angle < 0.0 { angle + 360.0 } else { angle })
 }

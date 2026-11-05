@@ -13,20 +13,14 @@ const TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// The port when the process runs as the askpass helper.
 pub fn port() -> Option<String> {
-    std::env::var("OPENCODE_SSH_ASKPASS_PORT")
-        .ok()
-        .filter(|port| !port.is_empty())
+    std::env::var("OPENCODE_SSH_ASKPASS_PORT").ok().filter(|port| !port.is_empty())
 }
 
 /// Runs the helper from the process environment and returns its exit code.
 pub fn run(port: &str) -> u8 {
     let request = Request {
         token: std::env::var("OPENCODE_SSH_ASKPASS_TOKEN").ok(),
-        text: std::env::args_os()
-            .skip(1)
-            .map(|arg| arg.to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join(" "),
+        text: std::env::args_os().skip(1).map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>().join(" "),
         confirm: std::env::var("SSH_ASKPASS_PROMPT").as_deref() == Ok("confirm"),
     };
     ask(port, &request, TIMEOUT, &mut std::io::stdout().lock())
@@ -43,17 +37,13 @@ pub struct Request {
 pub fn ask(port: &str, request: &Request, timeout: Duration, out: &mut impl Write) -> u8 {
     let answer = parse_port(port).and_then(|port| exchange(port, request, timeout));
     let Some(value) = answer else { return 1 };
-    let written = out
-        .write_all(value.as_bytes())
-        .and_then(|()| out.write_all(b"\n"))
-        .and_then(|()| out.flush());
+    let written = out.write_all(value.as_bytes()).and_then(|()| out.write_all(b"\n")).and_then(|()| out.flush());
     u8::from(written.is_err())
 }
 
 fn exchange(port: u16, request: &Request, timeout: Duration) -> Option<String> {
     let deadline = Instant::now() + timeout;
-    let mut socket =
-        TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, port)), timeout).ok()?;
+    let mut socket = TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, port)), timeout).ok()?;
     // Keys in TS's order; `JSON.stringify` drops an undefined token.
     let mut body = serde_json::Map::new();
     if let Some(token) = &request.token {
@@ -74,20 +64,14 @@ fn exchange(port: u16, request: &Request, timeout: Duration) -> Option<String> {
             Ok(0) => break,
             Ok(read) => response.extend_from_slice(&chunk[..read]),
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) =>
-            {
+            Err(error) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
                 return None;
             }
             Err(_) => break,
         }
     }
     // The response is decoded as a whole, so a character split across reads stays intact.
-    let value: serde_json::Value =
-        serde_json::from_str(&String::from_utf8_lossy(&response)).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&response)).ok()?;
     match value.as_object()?.get("value")? {
         serde_json::Value::String(value) => Some(value.clone()),
         _ => None,
@@ -95,25 +79,16 @@ fn exchange(port: u16, request: &Request, timeout: Duration) -> Option<String> {
 }
 
 fn remaining(deadline: Instant) -> Option<Duration> {
-    deadline
-        .checked_duration_since(Instant::now())
-        .filter(|left| !left.is_zero())
+    deadline.checked_duration_since(Instant::now()).filter(|left| !left.is_zero())
 }
 
 /// `Schema.NumberFromString` with an integer in 1..=65535: JavaScript's `Number(text)`, which trims
 /// whitespace and accepts `0x`, `0o`, `0b`, exponents, and fractions that are whole.
 fn parse_port(text: &str) -> Option<u16> {
     let text = text.trim();
-    let radix = [
-        ("0x", 16),
-        ("0X", 16),
-        ("0o", 8),
-        ("0O", 8),
-        ("0b", 2),
-        ("0B", 2),
-    ]
-    .into_iter()
-    .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|digits| (digits, radix)));
+    let radix = [("0x", 16), ("0X", 16), ("0o", 8), ("0O", 8), ("0b", 2), ("0B", 2)]
+        .into_iter()
+        .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|digits| (digits, radix)));
     let number = match radix {
         Some((digits, radix)) => u32::from_str_radix(digits, radix).ok().map(f64::from)?,
         // Rust also reads "inf" and "nan", which fail the integer check below like JS's Infinity.
@@ -155,29 +130,17 @@ mod tests {
     }
 
     fn request(token: Option<&str>, confirm: bool) -> Request {
-        Request {
-            token: token.map(str::to_owned),
-            text: "Enter passphrase:".into(),
-            confirm,
-        }
+        Request { token: token.map(str::to_owned), text: "Enter passphrase:".into(), confirm }
     }
 
     #[test]
     fn returns_only_the_response_and_sends_the_prompt() {
         let (port, desktop) = desktop(vec![br#"{"value":"passphrase\"with spaces"}"#.to_vec()]);
         let mut out = Vec::new();
-        let code = ask(
-            &port,
-            &request(Some("fixture"), true),
-            Duration::from_secs(10),
-            &mut out,
-        );
+        let code = ask(&port, &request(Some("fixture"), true), Duration::from_secs(10), &mut out);
         assert_eq!(code, 0);
         assert_eq!(String::from_utf8(out).unwrap(), "passphrase\"with spaces\n");
-        assert_eq!(
-            desktop.join().unwrap(),
-            r#"{"token":"fixture","text":"Enter passphrase:","confirm":true}"#
-        );
+        assert_eq!(desktop.join().unwrap(), r#"{"token":"fixture","text":"Enter passphrase:","confirm":true}"#);
     }
 
     #[test]
@@ -186,62 +149,27 @@ mod tests {
         let split = response.iter().position(|byte| *byte == 0xc3).unwrap() + 1;
         let (port, desktop) = desktop(vec![response[..split].to_vec(), response[split..].to_vec()]);
         let mut out = Vec::new();
-        let code = ask(
-            &port,
-            &request(Some("fixture"), false),
-            Duration::from_secs(10),
-            &mut out,
-        );
+        let code = ask(&port, &request(Some("fixture"), false), Duration::from_secs(10), &mut out);
         assert_eq!(code, 0);
         assert_eq!(String::from_utf8(out).unwrap(), "pässwörd\n");
-        assert_eq!(
-            desktop.join().unwrap(),
-            r#"{"token":"fixture","text":"Enter passphrase:","confirm":false}"#
-        );
+        assert_eq!(desktop.join().unwrap(), r#"{"token":"fixture","text":"Enter passphrase:","confirm":false}"#);
     }
 
     #[test]
     fn a_missing_token_is_left_out_of_the_request() {
         let (port, desktop) = desktop(vec![br#"{"value":"x","extra":1}"#.to_vec()]);
         let mut out = Vec::new();
-        assert_eq!(
-            ask(
-                &port,
-                &request(None, false),
-                Duration::from_secs(10),
-                &mut out
-            ),
-            0
-        );
-        assert_eq!(
-            desktop.join().unwrap(),
-            r#"{"text":"Enter passphrase:","confirm":false}"#
-        );
+        assert_eq!(ask(&port, &request(None, false), Duration::from_secs(10), &mut out), 0);
+        assert_eq!(desktop.join().unwrap(), r#"{"text":"Enter passphrase:","confirm":false}"#);
     }
 
     #[test]
     fn a_refusal_or_a_bad_answer_exits_1_without_output() {
-        for response in [
-            &br#"{"value":null}"#[..],
-            br#"{"value":3}"#,
-            br#"{}"#,
-            br#"not json"#,
-            b"",
-        ] {
+        for response in [&br#"{"value":null}"#[..], br#"{"value":3}"#, br#"{}"#, br#"not json"#, b""] {
             let (port, desktop) = desktop(vec![response.to_vec()]);
             let mut out = Vec::new();
-            let code = ask(
-                &port,
-                &request(None, false),
-                Duration::from_secs(10),
-                &mut out,
-            );
-            assert_eq!(
-                (code, out.len()),
-                (1, 0),
-                "{}",
-                String::from_utf8_lossy(response)
-            );
+            let code = ask(&port, &request(None, false), Duration::from_secs(10), &mut out);
+            assert_eq!((code, out.len()), (1, 0), "{}", String::from_utf8_lossy(response));
             desktop.join().unwrap();
         }
     }
@@ -251,12 +179,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port().to_string();
         let mut out = Vec::new();
-        let code = ask(
-            &port,
-            &request(None, false),
-            Duration::from_millis(200),
-            &mut out,
-        );
+        let code = ask(&port, &request(None, false), Duration::from_millis(200), &mut out);
         assert_eq!(code, 1);
         drop(listener);
     }

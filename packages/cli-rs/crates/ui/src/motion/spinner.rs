@@ -81,10 +81,7 @@ impl Spinner {
             still: "⋯".to_owned(),
             clock: Clock::default(),
         };
-        let spinner = Self {
-            widget: Custom::measured(app, view).shrink(0.0),
-            app: app.clone(),
-        };
+        let spinner = Self { widget: Custom::measured(app, view).shrink(0.0), app: app.clone() };
         spinner.restart();
         spinner
     }
@@ -98,9 +95,7 @@ impl Spinner {
         let color = match clip.levels.clone() {
             Some(levels) => {
                 let [r, g, b, a] = channels(color);
-                SpinnerColor::Each(Rc::new(move |frame, _, _, _| {
-                    rgba(r, g, b, a * levels[frame])
-                }))
+                SpinnerColor::Each(Rc::new(move |frame, _, _, _| rgba(r, g, b, a * levels[frame])))
             }
             None => SpinnerColor::Solid(color),
         };
@@ -189,11 +184,7 @@ impl Spinner {
         let (clock, interval, every_frame) = self.widget.update(|view| {
             view.clock = Rc::new(Cell::new(view.clock.get()));
             let moving = view.animations && (view.glyphs.len() > 1 || view.shimmer.is_some());
-            (
-                moving.then(|| Rc::clone(&view.clock)),
-                view.interval,
-                view.shimmer.is_some(),
-            )
+            (moving.then(|| Rc::clone(&view.clock)), view.interval, view.shimmer.is_some())
         });
         let Some(clock) = clock else { return };
         if every_frame {
@@ -212,11 +203,7 @@ impl SpinnerView {
     }
 
     fn line(&self) -> String {
-        let glyph = if self.animations {
-            self.glyphs.get(self.frame()).map(|glyphs| glyphs.concat())
-        } else {
-            None
-        };
+        let glyph = if self.animations { self.glyphs.get(self.frame()).map(|glyphs| glyphs.concat()) } else { None };
         let glyph = glyph.unwrap_or_else(|| self.still.clone());
         match &self.label {
             Some(label) => format!("{glyph} {label}"),
@@ -229,19 +216,12 @@ impl Component for SpinnerView {
     fn paint(&self, painter: &mut Painter<'_>) {
         let base = self.color.base();
         if !self.animations {
-            painter.text(
-                0,
-                0,
-                &self.line(),
-                Style::new().fg(base).bg(Color::TRANSPARENT),
-            );
+            painter.text(0, 0, &self.line(), Style::new().fg(base).bg(Color::TRANSPARENT));
             return;
         }
         if let Some(shimmer) = self.shimmer {
             let elapsed = millis(self.clock.get());
-            paint_shaded(painter, &self.line(), base, shimmer, |column, end| {
-                shimmer_strength_at(elapsed, column, end)
-            });
+            paint_shaded(painter, &self.line(), base, shimmer, |column, end| shimmer_strength_at(elapsed, column, end));
             return;
         }
         let index = self.frame();
@@ -273,10 +253,7 @@ impl Component for SpinnerView {
     fn measure(&self, width: Constraint, height: Constraint) -> (f32, f32) {
         let text = |text: &str| unicode_width::UnicodeWidthStr::width(text) as f32;
         let glyph = if self.animations {
-            self.glyphs
-                .iter()
-                .map(|glyphs| text(&glyphs.concat()))
-                .fold(0.0, f32::max)
+            self.glyphs.iter().map(|glyphs| text(&glyphs.concat())).fold(0.0, f32::max)
         } else {
             text(&self.still)
         };
@@ -286,19 +263,12 @@ impl Component for SpinnerView {
 }
 
 fn frame_width(painter: &Painter<'_>, glyphs: &[Vec<String>]) -> u32 {
-    glyphs
-        .iter()
-        .map(|glyphs| glyphs.iter().map(|glyph| painter.text_width(glyph)).sum())
-        .max()
-        .unwrap_or(0)
+    glyphs.iter().map(|glyphs| glyphs.iter().map(|glyph| painter.text_width(glyph)).sum()).max().unwrap_or(0)
 }
 
 /// Each frame as its characters. Spinner frames are single code points or simple sequences of them.
 fn split<S: AsRef<str>>(frames: &[S]) -> Vec<Vec<String>> {
-    frames
-        .iter()
-        .map(|frame| frame.as_ref().chars().map(String::from).collect())
-        .collect()
+    frames.iter().map(|frame| frame.as_ref().chars().map(String::from).collect()).collect()
 }
 
 impl Widget for Spinner {

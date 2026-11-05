@@ -7,9 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use opencode_ui::dialog::{
-    DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header,
-};
+use opencode_ui::dialog::{DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opentui::keymap::Disposer;
@@ -38,10 +36,7 @@ struct Check {
 
 /// `DialogUpdate`, centered, in place of any open dialog.
 pub fn show(tui: &Tui, checks: bool) {
-    let check = Rc::new(RefCell::new(Check {
-        loading: checks,
-        ..Check::default()
-    }));
+    let check = Rc::new(RefCell::new(Check { loading: checks, ..Check::default() }));
     let weak = tui.weak();
     tui.dialogs.replace(
         {
@@ -53,8 +48,7 @@ pub fn show(tui: &Tui, checks: bool) {
                 };
                 let root = View::new(&cx.app);
                 let draw: Rc<dyn Fn()> = Rc::new({
-                    let (weak, cx, root, check) =
-                        (tui.weak(), Rc::downgrade(cx), root.clone(), check.clone());
+                    let (weak, cx, root, check) = (tui.weak(), Rc::downgrade(cx), root.clone(), check.clone());
                     move || {
                         let (Some(tui), Some(cx)) = (weak.upgrade(), cx.upgrade()) else {
                             return;
@@ -75,11 +69,7 @@ pub fn show(tui: &Tui, checks: bool) {
                     }
                 };
                 cx.layer(KeymapLayer {
-                    commands: vec![
-                        TuiCommand::inline("return", enter)
-                            .title("Confirm update action")
-                            .group("Dialog"),
-                    ],
+                    commands: vec![TuiCommand::inline("return", enter).title("Confirm update action").group("Dialog")],
                     ..KeymapLayer::default()
                 });
                 // The dialog owns the drawing; a check that ends after it closed is dropped.
@@ -164,12 +154,8 @@ fn buttons(tui: &Tui, shown: &Shown) -> Vec<Button> {
         }),
     )];
     match shown {
-        Shown::Update(UpdateState::Available(_)) => {
-            buttons.push(("Update", action(updates::install)))
-        }
-        Shown::Update(UpdateState::Installed(_)) => {
-            buttons.push(("Restart", action(updates::restart)))
-        }
+        Shown::Update(UpdateState::Available(_)) => buttons.push(("Update", action(updates::install))),
+        Shown::Update(UpdateState::Installed(_)) => buttons.push(("Restart", action(updates::restart))),
         _ => {}
     }
     buttons
@@ -194,29 +180,20 @@ fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) {
             .animations(animations)
             .as_any()
     };
-    let muted = |text: &str| {
-        Text::new(app, text.to_owned())
-            .fg(theme.text.muted)
-            .wrap(WrapMode::Word)
-            .as_any()
-    };
+    let muted = |text: &str| Text::new(app, text.to_owned()).fg(theme.text.muted).wrap(WrapMode::Word).as_any();
     let body = match &shown {
         Shown::Checking => spinner("Checking for updates…".to_owned()),
-        Shown::Update(UpdateState::Available(_)) => muted(
-            "An update is available. After installing, you'll be prompted to restart OpenCode.",
-        ),
-        Shown::Update(UpdateState::Installing(version)) => {
-            spinner(format!("Installing OpenCode {version}…"))
+        Shown::Update(UpdateState::Available(_)) => {
+            muted("An update is available. After installing, you'll be prompted to restart OpenCode.")
         }
-        Shown::Update(UpdateState::Installed(_)) => muted(
-            "Update successful! Restart closes OpenCode, then run opencode to use the new version.",
-        ),
+        Shown::Update(UpdateState::Installing(version)) => spinner(format!("Installing OpenCode {version}…")),
+        Shown::Update(UpdateState::Installed(_)) => {
+            muted("Update successful! Restart closes OpenCode, then run opencode to use the new version.")
+        }
         Shown::Current => muted("OpenCode is already up to date."),
         Shown::Unavailable(message) => muted(message),
         Shown::Update(UpdateState::Failed(message)) | Shown::CheckFailed(message) => {
-            Text::new(app, message.clone())
-                .fg(theme.text.feedback.error.base)
-                .as_any()
+            Text::new(app, message.clone()).fg(theme.text.feedback.error.base).as_any()
         }
     };
     let buttons = buttons(tui, &shown);
@@ -241,21 +218,9 @@ fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) {
     root.clear();
     root.add(&opencode_ui::dialog::layout_view(
         cx,
-        &header(
-            cx,
-            HeaderProps {
-                title: title.to_owned(),
-                ..HeaderProps::default()
-            },
-        ),
+        &header(cx, HeaderProps { title: title.to_owned(), ..HeaderProps::default() }),
         &View::new(app).child(&body),
-        Some(&footer(
-            cx,
-            FooterProps {
-                primary,
-                ..FooterProps::default()
-            },
-        )),
+        Some(&footer(cx, FooterProps { primary, ..FooterProps::default() })),
         opencode_ui::dialog::DIALOG_INSET,
         1,
     ));

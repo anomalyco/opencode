@@ -10,16 +10,12 @@ use serde_json::json;
 #[test]
 fn session_log_routes_log_synced_and_durable_events() {
     let synced: SessionLogItem =
-        serde_json::from_value(json!({ "type": "log.synced", "aggregateID": "ses_1", "seq": 4 }))
-            .unwrap();
-    let SessionLogItem::LogSynced(item) = &synced else {
-        panic!("{synced:?}")
-    };
+        serde_json::from_value(json!({ "type": "log.synced", "aggregateID": "ses_1", "seq": 4 })).unwrap();
+    let SessionLogItem::LogSynced(item) = &synced else { panic!("{synced:?}") };
     assert_eq!(item.aggregate_id, "ses_1");
     assert_eq!(synced.tag(), "log.synced");
 
-    let unknown: SessionLogItem =
-        serde_json::from_value(json!({ "type": "session.future" })).unwrap();
+    let unknown: SessionLogItem = serde_json::from_value(json!({ "type": "session.future" })).unwrap();
     assert!(matches!(unknown, SessionLogItem::Unknown(_)), "{unknown:?}");
 }
 
@@ -31,9 +27,7 @@ fn non_empty_arrays_keep_their_item_type() {
         "fields": [{ "key": "env", "type": "string", "title": "Environment" }]
     }))
     .unwrap();
-    let FormField::String(field) = &form.fields[0] else {
-        panic!("{:?}", form.fields)
-    };
+    let FormField::String(field) = &form.fields[0] else { panic!("{:?}", form.fields) };
     assert_eq!(field.key, "env");
 
     let content: Vec<ToolContent> = serde_json::from_value(json!([
@@ -68,22 +62,15 @@ fn event_and_rest_twins_share_one_type() {
 /// carbon-4: an LSP server entry that sets `disabled` decodes as a server, with its command.
 #[test]
 fn lsp_server_entry_with_disabled_keeps_its_command() {
-    let entry: ConfigEntryDocumentInfoLspObjectValue = serde_json::from_value(
-        json!({ "command": ["rust-analyzer"], "disabled": false, "extensions": [".rs"] }),
-    )
-    .unwrap();
-    let ConfigEntryDocumentInfoLspObjectValue::Object2(server) = &entry else {
-        panic!("{entry:?}")
-    };
+    let entry: ConfigEntryDocumentInfoLspObjectValue =
+        serde_json::from_value(json!({ "command": ["rust-analyzer"], "disabled": false, "extensions": [".rs"] }))
+            .unwrap();
+    let ConfigEntryDocumentInfoLspObjectValue::Object2(server) = &entry else { panic!("{entry:?}") };
     assert_eq!(server.command, ["rust-analyzer"]);
     assert_eq!(server.disabled, Some(false));
 
-    let disabled: ConfigEntryDocumentInfoLspObjectValue =
-        serde_json::from_value(json!({ "disabled": true })).unwrap();
-    assert!(
-        matches!(disabled, ConfigEntryDocumentInfoLspObjectValue::Object(_)),
-        "{disabled:?}"
-    );
+    let disabled: ConfigEntryDocumentInfoLspObjectValue = serde_json::from_value(json!({ "disabled": true })).unwrap();
+    assert!(matches!(disabled, ConfigEntryDocumentInfoLspObjectValue::Object(_)), "{disabled:?}");
 }
 
 /// carbon-5: `DeclaredError::decode` checks the tag, as the TypeScript `is<Error>` guards do.

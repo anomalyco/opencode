@@ -25,10 +25,7 @@ pub struct Location {
 
 impl Location {
     pub fn new(directory: impl Into<String>) -> Self {
-        Self {
-            directory: directory.into(),
-            workspace_id: None,
-        }
+        Self { directory: directory.into(), workspace_id: None }
     }
 
     /// `locationKey`, the spelling of the TS sync keys.
@@ -38,18 +35,13 @@ impl Location {
 
     /// The request query names the directory only (`locationQuery`).
     pub(crate) fn query(&self) -> Option<LocationQueryInput> {
-        Some(LocationQueryInput {
-            directory: Some(self.directory.clone()),
-        })
+        Some(LocationQueryInput { directory: Some(self.directory.clone()) })
     }
 }
 
 impl From<&LocationRef> for Location {
     fn from(value: &LocationRef) -> Self {
-        Self {
-            directory: value.directory.0.clone(),
-            workspace_id: value.workspace_id.as_ref().map(|id| id.0.clone()),
-        }
+        Self { directory: value.directory.0.clone(), workspace_id: value.workspace_id.as_ref().map(|id| id.0.clone()) }
     }
 }
 
@@ -197,8 +189,7 @@ impl State {
 
     /// Everything known about a location (the default one for `None`).
     pub fn location(&self, location: Option<&Location>) -> Option<&LocationData> {
-        self.locations
-            .get(location.unwrap_or(&self.default_location))
+        self.locations.get(location.unwrap_or(&self.default_location))
     }
 
     /// Every location the store holds data for.
@@ -208,10 +199,7 @@ impl State {
 
     /// `hasLocation`: read, or being read.
     pub(crate) fn has_catalog(&self, catalog: Catalog, location: &Location) -> bool {
-        self.locations
-            .get(location)
-            .is_some_and(|data| data.has(catalog))
-            || self.syncs.has(&catalog.key(location))
+        self.locations.get(location).is_some_and(|data| data.has(catalog)) || self.syncs.has(&catalog.key(location))
     }
 
     pub(crate) fn location_mut(&mut self, location: &Location) -> &mut LocationData {
@@ -231,15 +219,8 @@ impl State {
     }
 
     /// Invalidates `catalogs` and reads them again together when any of `watched` was read.
-    fn refresh_together(
-        &mut self,
-        watched: &[Catalog],
-        catalogs: Vec<Catalog>,
-        location: &Location,
-    ) -> Vec<Follow> {
-        let active = watched
-            .iter()
-            .any(|catalog| self.has_catalog(*catalog, location));
+    fn refresh_together(&mut self, watched: &[Catalog], catalogs: Vec<Catalog>, location: &Location) -> Vec<Follow> {
+        let active = watched.iter().any(|catalog| self.has_catalog(*catalog, location));
         for catalog in &catalogs {
             self.syncs.invalidate(&catalog.key(location));
         }
@@ -335,23 +316,15 @@ impl State {
                 if !active {
                     return Vec::new();
                 }
-                vec![Follow::Settle(
-                    format!("mcp.status:{}", location.key()),
-                    Catalog::McpServer,
-                    location,
-                )]
+                vec![Follow::Settle(format!("mcp.status:{}", location.key()), Catalog::McpServer, location)]
             }
-            V2Event::McpResourcesChanged(_) => {
-                self.refresh_catalog(Catalog::McpResource, &location)
-            }
+            V2Event::McpResourcesChanged(_) => self.refresh_catalog(Catalog::McpResource, &location),
             _ => Vec::new(),
         }
     }
 
     fn has_websearch(&self, location: &Location) -> bool {
-        self.locations
-            .get(location)
-            .is_some_and(|data| data.websearch.is_some())
+        self.locations.get(location).is_some_and(|data| data.websearch.is_some())
     }
 
     /// `credential.switched`: the switched credential becomes the integration's first connection.
@@ -359,21 +332,14 @@ impl State {
         let Some(credential) = &data.credential_id else {
             return;
         };
-        let Some(integrations) = self
-            .locations
-            .get_mut(location)
-            .and_then(|data| data.integration.as_mut())
-        else {
+        let Some(integrations) = self.locations.get_mut(location).and_then(|data| data.integration.as_mut()) else {
             return;
         };
         let mut changed = false;
-        for integration in integrations
-            .iter_mut()
-            .filter(|integration| integration.id == data.integration_id)
-        {
-            let Some(at) = integration.connections.iter().position(|connection| {
-                matches!(connection, ConnectionInfo::Credential(info) if info.id == *credential)
-            }) else {
+        for integration in integrations.iter_mut().filter(|integration| integration.id == data.integration_id) {
+            let Some(at) = integration.connections.iter().position(
+                |connection| matches!(connection, ConnectionInfo::Credential(info) if info.id == *credential),
+            ) else {
                 continue;
             };
             let active = integration.connections.remove(at);
@@ -419,9 +385,7 @@ fn located(event: &V2Event) -> Option<&LocationRef> {
 
 impl Data {
     fn resolve(&self, location: Option<&Location>) -> Location {
-        location
-            .cloned()
-            .unwrap_or_else(|| self.read(|state| state.default_location.clone()))
+        location.cloned().unwrap_or_else(|| self.read(|state| state.default_location.clone()))
     }
 
     /// Reads a catalog once per invalidation. It publishes under the location the server
@@ -429,9 +393,7 @@ impl Data {
     pub fn catalog_sync(&self, catalog: Catalog, location: Option<&Location>) -> Task<()> {
         let location = self.resolve(location);
         self.sync_run(catalog.key(&location), move |data| async move {
-            let (at, loaded) = load(data.client(), catalog, &location)
-                .await
-                .map_err(Error::new)?;
+            let (at, loaded) = load(data.client(), catalog, &location).await.map_err(Error::new)?;
             data.write(|state| {
                 if catalog.alias() && at != location {
                     state.publish(&location, loaded.clone());
@@ -452,29 +414,21 @@ impl Data {
     pub fn location_sync_info(&self, location: Option<&Location>) -> Task<()> {
         let default = location.is_none();
         let current = self.resolve(location);
-        self.sync_run(
-            format!("location:{}", current.key()),
-            move |data| async move {
-                let info = data
-                    .client()
-                    .location_get(
-                        &LocationGetInput {
-                            location: current.query(),
-                        },
-                        &RequestOptions::default(),
-                    )
-                    .await
-                    .map_err(Error::new)?;
-                data.write(|state| {
-                    let at = Location::new(info.directory.0.clone());
-                    if default {
-                        state.default_location = at.clone();
-                    }
-                    state.location_mut(&at).info = Some(info);
-                });
-                Ok(())
-            },
-        )
+        self.sync_run(format!("location:{}", current.key()), move |data| async move {
+            let info = data
+                .client()
+                .location_get(&LocationGetInput { location: current.query() }, &RequestOptions::default())
+                .await
+                .map_err(Error::new)?;
+            data.write(|state| {
+                let at = Location::new(info.directory.0.clone());
+                if default {
+                    state.default_location = at.clone();
+                }
+                state.location_mut(&at).info = Some(info);
+            });
+            Ok(())
+        })
     }
 
     /// Reads location info, then every catalog a session view shows (`location.sync`).
@@ -510,9 +464,7 @@ impl Data {
     pub fn location_invalidate(&self, location: Option<&Location>) {
         let location = self.resolve(location);
         self.write(|state| {
-            state
-                .syncs
-                .invalidate(&format!("location:{}", location.key()));
+            state.syncs.invalidate(&format!("location:{}", location.key()));
             for catalog in [
                 Catalog::Vcs,
                 Catalog::Agent,
@@ -529,9 +481,7 @@ impl Data {
             ] {
                 state.syncs.invalidate(&catalog.key(&location));
             }
-            state
-                .syncs
-                .invalidate(&crate::forms::sync_key(crate::forms::GLOBAL, &location));
+            state.syncs.invalidate(&crate::forms::sync_key(crate::forms::GLOBAL, &location));
         });
     }
 
@@ -543,17 +493,13 @@ impl Data {
             let providers = data
                 .client()
                 .websearch_providers(
-                    &WebsearchProvidersInput {
-                        location: location.query(),
-                    },
+                    &WebsearchProvidersInput { location: location.query() },
                     &RequestOptions::default(),
                 )
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {
-                state
-                    .location_mut(&Location::from(&providers.location))
-                    .websearch = Some(providers.data);
+                state.location_mut(&Location::from(&providers.location)).websearch = Some(providers.data);
             });
             Ok(())
         })
@@ -565,12 +511,7 @@ impl Data {
         self.refresh(|data| async move {
             let info = data
                 .client()
-                .location_get(
-                    &LocationGetInput {
-                        location: location.query(),
-                    },
-                    &RequestOptions::default(),
-                )
+                .location_get(&LocationGetInput { location: location.query() }, &RequestOptions::default())
                 .await
                 .map_err(Error::new)?;
             let at = Location::new(info.directory.0.clone());
@@ -581,10 +522,8 @@ impl Data {
 
     pub(crate) fn refresh_catalogs(&self, catalogs: Vec<Catalog>, location: Location) {
         self.refresh(|data| {
-            let reads: Vec<Task<()>> = catalogs
-                .into_iter()
-                .map(|catalog| data.catalog_sync(catalog, Some(&location)))
-                .collect();
+            let reads: Vec<Task<()>> =
+                catalogs.into_iter().map(|catalog| data.catalog_sync(catalog, Some(&location))).collect();
             async move { try_join_all(reads).await.map(|_| ()) }
         });
     }
@@ -600,10 +539,7 @@ impl Data {
             tokio::time::sleep(SETTLE).await;
             let current = {
                 let mut state = data.lock();
-                let current = state
-                    .settling
-                    .get(&timer)
-                    .is_some_and(|(owner, _)| *owner == token);
+                let current = state.settling.get(&timer).is_some_and(|(owner, _)| *owner == token);
                 if current {
                     state.settling.remove(&timer);
                 }
@@ -628,122 +564,64 @@ async fn load(
     let options = RequestOptions::default();
     Ok(match catalog {
         Catalog::Vcs => {
-            let response = client
-                .vcs_get(&VcsGetInput { location: query }, &options)
-                .await?;
+            let response = client.vcs_get(&VcsGetInput { location: query }, &options).await?;
             ((&response.location).into(), Loaded::Vcs(response.data))
         }
         Catalog::UsageLimits => {
-            let response = client
-                .experimental_usage_limits(
-                    &ExperimentalUsageLimitsInput { location: query },
-                    &options,
-                )
-                .await?;
-            (
-                (&response.location).into(),
-                Loaded::UsageLimits(response.data),
-            )
+            let response =
+                client.experimental_usage_limits(&ExperimentalUsageLimitsInput { location: query }, &options).await?;
+            ((&response.location).into(), Loaded::UsageLimits(response.data))
         }
         Catalog::Agent => {
-            let response = client
-                .agent_list(&AgentListInput { location: query }, &options)
-                .await?;
+            let response = client.agent_list(&AgentListInput { location: query }, &options).await?;
             ((&response.location).into(), Loaded::Agent(response.data))
         }
         Catalog::Command => {
-            let response = client
-                .command_list(&CommandListInput { location: query }, &options)
-                .await?;
+            let response = client.command_list(&CommandListInput { location: query }, &options).await?;
             ((&response.location).into(), Loaded::Command(response.data))
         }
         // Config answers without a location; it publishes under the requested directory.
         Catalog::Config => {
-            let entries = client
-                .config_get(&ConfigGetInput { location: query }, &options)
-                .await?;
-            (
-                Location::new(location.directory.clone()),
-                Loaded::Config(entries),
-            )
+            let entries = client.config_get(&ConfigGetInput { location: query }, &options).await?;
+            (Location::new(location.directory.clone()), Loaded::Config(entries))
         }
         Catalog::Integration => {
-            let response = client
-                .integration_list(&IntegrationListInput { location: query }, &options)
-                .await?;
-            (
-                (&response.location).into(),
-                Loaded::Integration(response.data),
-            )
+            let response = client.integration_list(&IntegrationListInput { location: query }, &options).await?;
+            ((&response.location).into(), Loaded::Integration(response.data))
         }
         Catalog::McpServer => {
-            let response = client
-                .mcp_list(&McpListInput { location: query }, &options)
-                .await?;
-            (
-                (&response.location).into(),
-                Loaded::McpServer(response.data),
-            )
+            let response = client.mcp_list(&McpListInput { location: query }, &options).await?;
+            ((&response.location).into(), Loaded::McpServer(response.data))
         }
         Catalog::McpResource => {
-            let response = client
-                .mcp_resource_catalog(&McpResourceCatalogInput { location: query }, &options)
-                .await?;
-            (
-                (&response.location).into(),
-                Loaded::McpResource(response.data.resources),
-            )
+            let response = client.mcp_resource_catalog(&McpResourceCatalogInput { location: query }, &options).await?;
+            ((&response.location).into(), Loaded::McpResource(response.data.resources))
         }
         Catalog::Model => {
-            let response = client
-                .model_list(
-                    &ModelListInput {
-                        location: query,
-                        types: None,
-                    },
-                    &options,
-                )
-                .await?;
+            let response = client.model_list(&ModelListInput { location: query, types: None }, &options).await?;
             ((&response.location).into(), Loaded::Model(response.data))
         }
         Catalog::Provider => {
-            let response = client
-                .provider_list(&ProviderListInput { location: query }, &options)
-                .await?;
+            let response = client.provider_list(&ProviderListInput { location: query }, &options).await?;
             ((&response.location).into(), Loaded::Provider(response.data))
         }
         Catalog::Reference => {
-            let response = client
-                .reference_list(&ReferenceListInput { location: query }, &options)
-                .await?;
-            (
-                (&response.location).into(),
-                Loaded::Reference(response.data),
-            )
+            let response = client.reference_list(&ReferenceListInput { location: query }, &options).await?;
+            ((&response.location).into(), Loaded::Reference(response.data))
         }
         Catalog::Skill => {
-            let response = client
-                .skill_list(&SkillListInput { location: query }, &options)
-                .await?;
+            let response = client.skill_list(&SkillListInput { location: query }, &options).await?;
             ((&response.location).into(), Loaded::Skill(response.data))
         }
         Catalog::Shell => {
-            let response = client
-                .shell_list(&ShellListInput { location: query }, &options)
-                .await?;
+            let response = client.shell_list(&ShellListInput { location: query }, &options).await?;
             let at = Location::from(&response.location);
             let shells = response
                 .data
                 .into_iter()
                 .map(|info| {
                     let info = crate::shells::from_list(info);
-                    (
-                        info.id.clone(),
-                        Shell {
-                            info,
-                            location: at.clone(),
-                        },
-                    )
+                    (info.id.clone(), Shell { info, location: at.clone() })
                 })
                 .collect();
             (at, Loaded::Shell(shells))

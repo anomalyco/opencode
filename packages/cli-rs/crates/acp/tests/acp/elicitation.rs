@@ -8,8 +8,8 @@ use opencode_acp::elicitation::requested_schema;
 use serde_json::{Value, json};
 
 use crate::wire::{
-    Reply, WireOptions, assert_matches, delivered, ephemeral_event, events, lock, start_session,
-    succeeded, text_delta, tool_started, tool_succeeded,
+    Reply, WireOptions, assert_matches, delivered, ephemeral_event, events, lock, start_session, succeeded, text_delta,
+    tool_started, tool_succeeded,
 };
 
 fn questions(session: &str, id: &str) -> Value {
@@ -37,11 +37,7 @@ fn questions(session: &str, id: &str) -> Value {
     )
 }
 
-const CAPABLE: Capabilities = Capabilities {
-    child_session_updates: false,
-    form_elicitation: true,
-    compaction: false,
-};
+const CAPABLE: Capabilities = Capabilities { child_session_updates: false, form_elicitation: true, compaction: false };
 
 fn form(fields: Value, metadata: Value) -> Value {
     json!({ "id": "frm_test", "sessionID": "ses_test", "title": "Test", "metadata": metadata, "fields": fields })
@@ -51,26 +47,11 @@ fn form(fields: Value, metadata: Value) -> Value {
 fn cancels_forms_from_unsupported_clients_unknown_flows_and_credential_looking_fields() {
     let fields = json!([{ "key": "name", "type": "string" }]);
     let question = json!({ "kind": "question" });
-    let unsupported = Capabilities {
-        form_elicitation: false,
-        ..CAPABLE
-    };
+    let unsupported = Capabilities { form_elicitation: false, ..CAPABLE };
     assert!(requested_schema(&form(fields.clone(), question.clone()), &unsupported).is_none());
-    assert!(
-        requested_schema(
-            &form(fields.clone(), json!({ "kind": "mcp-elicitation" })),
-            &CAPABLE
-        )
-        .is_none()
-    );
+    assert!(requested_schema(&form(fields.clone(), json!({ "kind": "mcp-elicitation" })), &CAPABLE).is_none());
     assert!(requested_schema(&form(fields.clone(), json!({})), &CAPABLE).is_none());
-    assert!(
-        requested_schema(
-            &form(fields, json!({ "kind": "websearch.provider" })),
-            &CAPABLE
-        )
-        .is_some()
-    );
+    assert!(requested_schema(&form(fields, json!({ "kind": "websearch.provider" })), &CAPABLE).is_some());
     let credentials = [
         json!([{ "key": "api_key", "type": "string" }]),
         json!([{ "key": "q0", "title": "GitHub token", "type": "string" }]),
@@ -79,10 +60,7 @@ fn cancels_forms_from_unsupported_clients_unknown_flows_and_credential_looking_f
         json!([{ "key": "q0", "title": "Setup", "type": "string", "options": [{ "value": "a", "label": "Use my access token" }] }]),
     ];
     for fields in credentials {
-        assert!(
-            requested_schema(&form(fields.clone(), question.clone()), &CAPABLE).is_none(),
-            "{fields}"
-        );
+        assert!(requested_schema(&form(fields.clone(), question.clone()), &CAPABLE).is_none(), "{fields}");
     }
 }
 
@@ -165,10 +143,7 @@ async fn answers_a_question_form_through_elicitation_and_continues_the_turn() {
     )
     .await;
 
-    assert_eq!(
-        acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"], "end_turn");
     assert_matches(
         &json!(lock(&acp.elicitations).clone()),
         &json!([{ "mode": "form", "sessionId": acp.session_id, "toolCallId": "call_question", "message": "Questions" }]),
@@ -181,11 +156,7 @@ async fn answers_a_question_form_through_elicitation_and_continues_the_turn() {
         })]
     );
     assert!(acp.server.state().cancelled_forms.is_empty());
-    assert!(
-        acp.updates()
-            .iter()
-            .any(|item| item["update"]["sessionUpdate"] == "agent_message_chunk")
-    );
+    assert!(acp.updates().iter().any(|item| item["update"]["sessionUpdate"] == "agent_message_chunk"));
 }
 
 #[tokio::test]
@@ -200,27 +171,17 @@ async fn cancels_the_form_when_the_client_declines_cancels_fails_or_sends_a_wron
                 events.extend(IDS.iter().map(|id| questions(session, id)));
                 events
             })),
-            elicitation: Some(Arc::new(move |_| {
-                match answered.fetch_add(1, Ordering::SeqCst) {
-                    0 => Reply::Result(json!({ "action": "decline" })),
-                    1 => Reply::Result(json!({ "action": "cancel" })),
-                    2 => Reply::Error("elicitation UI failed".to_owned()),
-                    _ => Reply::Result(
-                        json!({ "action": "accept", "content": { "q0": { "nested": true } } }),
-                    ),
-                }
+            elicitation: Some(Arc::new(move |_| match answered.fetch_add(1, Ordering::SeqCst) {
+                0 => Reply::Result(json!({ "action": "decline" })),
+                1 => Reply::Result(json!({ "action": "cancel" })),
+                2 => Reply::Error("elicitation UI failed".to_owned()),
+                _ => Reply::Result(json!({ "action": "accept", "content": { "q0": { "nested": true } } })),
             })),
             on_form_cancel: Some(Arc::new({
                 let cancelled = Arc::new(AtomicUsize::new(0));
                 move |(session, _): (String, String)| {
                     let done = cancelled.fetch_add(1, Ordering::SeqCst) + 1 == IDS.len();
-                    Box::pin(async move {
-                        if done {
-                            vec![succeeded(&session)]
-                        } else {
-                            Vec::new()
-                        }
-                    })
+                    Box::pin(async move { if done { vec![succeeded(&session)] } else { Vec::new() } })
                 }
             })),
             ..WireOptions::default()
@@ -229,24 +190,12 @@ async fn cancels_the_form_when_the_client_declines_cancels_fails_or_sends_a_wron
     )
     .await;
 
-    assert_eq!(
-        acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"], "end_turn");
     assert_eq!(lock(&acp.elicitations).len(), IDS.len());
     let state = acp.server.state();
-    let forms: Vec<Value> = state
-        .cancelled_forms
-        .iter()
-        .map(|form| form["formID"].clone())
-        .collect();
+    let forms: Vec<Value> = state.cancelled_forms.iter().map(|form| form["formID"].clone()).collect();
     assert_eq!(forms, IDS.map(|id| json!(id)).to_vec());
-    assert!(
-        state
-            .cancelled_forms
-            .iter()
-            .all(|form| form.get("message").is_none())
-    );
+    assert!(state.cancelled_forms.iter().all(|form| form.get("message").is_none()));
     assert!(state.replied_forms.is_empty());
     assert!(state.interrupts.is_empty());
 }

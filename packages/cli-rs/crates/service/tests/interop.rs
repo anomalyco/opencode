@@ -23,8 +23,7 @@ fn ts_root() -> Option<PathBuf> {
     let root = std::env::var_os("OPENCODE_TS_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let ready =
-        root.join("node_modules").is_dir() && root.join("packages/cli/src/index.ts").is_file();
+    let ready = root.join("node_modules").is_dir() && root.join("packages/cli/src/index.ts").is_file();
     if !ready {
         eprintln!("skipped: no TypeScript checkout with node_modules; set OPENCODE_TS_ROOT");
     }
@@ -76,9 +75,7 @@ impl Drop for Isolation {
                 let pid = entry.file_name().to_str()?.parse().ok()?;
                 let cmdline = std::fs::read(entry.path().join("cmdline")).ok()?;
                 let cwd = std::fs::read_link(entry.path().join("cwd")).ok()?;
-                let named = cmdline
-                    .windows(needle.len())
-                    .any(|window| window == needle.as_slice());
+                let named = cmdline.windows(needle.len()).any(|window| window == needle.as_slice());
                 (named || cwd.starts_with(self.root.path())).then_some(pid)
             })
             .collect();
@@ -107,43 +104,21 @@ async fn typescript_service_status_sees_a_service_rust_started() {
     let Some(ts_root) = ts_root() else {
         return;
     };
-    let isolation = Isolation {
-        root: tempfile::tempdir().unwrap(),
-    };
+    let isolation = Isolation { root: tempfile::tempdir().unwrap() };
     for dir in ["home", "state/opencode", "config/opencode", "data", "cache"] {
         std::fs::create_dir_all(isolation.path(dir)).unwrap();
     }
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     // A source build is channel `local`: its service config is `service-local.json`.
-    std::fs::write(
-        isolation.path("config/opencode/service-local.json"),
-        format!("{{\"port\":{port}}}\n"),
-    )
-    .unwrap();
+    std::fs::write(isolation.path("config/opencode/service-local.json"), format!("{{\"port\":{port}}}\n")).unwrap();
     let wrapper = isolation.wrapper(&ts_root);
     let state = isolation.path("state/opencode");
-    let mut options = Options::new(
-        state.join("service.json"),
-        state.clone(),
-        &TsCommand::new(&wrapper),
-    );
-    options.timing = Timing {
-        deadline: Duration::from_secs(60),
-        ..Timing::default()
-    };
+    let mut options = Options::new(state.join("service.json"), state.clone(), &TsCommand::new(&wrapper));
+    options.timing = Timing { deadline: Duration::from_secs(60), ..Timing::default() };
     let mut started = 0;
-    let ensured = ensure::ensure(Arc::new(Reqwest::default()), &options, &mut || started += 1)
-        .await
-        .unwrap();
+    let ensured = ensure::ensure(Arc::new(Reqwest::default()), &options, &mut || started += 1).await.unwrap();
     let pid = ensured.service.registration.pid;
-    let status = Command::new(&wrapper)
-        .args(["service", "status"])
-        .output()
-        .unwrap();
+    let status = Command::new(&wrapper).args(["service", "status"]).output().unwrap();
     let printed = String::from_utf8_lossy(&status.stdout).trim().to_owned();
     eprintln!(
         "rust started: url={} pid={pid} file={} version={:?}",
@@ -155,9 +130,6 @@ async fn typescript_service_status_sees_a_service_rust_started() {
     stop(pid);
     assert_eq!(started, 1);
     assert_eq!(ensured.file, state.join("service-local.json"));
-    assert_eq!(
-        ensured.service.endpoint.url,
-        format!("http://127.0.0.1:{port}")
-    );
+    assert_eq!(ensured.service.endpoint.url, format!("http://127.0.0.1:{port}"));
     assert_eq!(printed, ensured.service.endpoint.url);
 }

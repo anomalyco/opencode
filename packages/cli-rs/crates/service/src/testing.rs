@@ -32,10 +32,7 @@ impl Server {
 
     /// Replies to `url` in order; the last one repeats.
     pub fn replies(self, url: &str, replies: impl IntoIterator<Item = Reply>) -> Self {
-        self.replies
-            .lock()
-            .unwrap()
-            .insert(url.to_owned(), replies.into_iter().collect());
+        self.replies.lock().unwrap().insert(url.to_owned(), replies.into_iter().collect());
         self
     }
 
@@ -47,15 +44,9 @@ impl Server {
 
 impl Transport for Server {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let authorization = request
-            .headers
-            .iter()
-            .find(|(name, _)| name == "authorization")
-            .map(|(_, value)| value.clone());
-        self.requests
-            .lock()
-            .unwrap()
-            .push((request.url.to_string(), authorization));
+        let authorization =
+            request.headers.iter().find(|(name, _)| name == "authorization").map(|(_, value)| value.clone());
+        self.requests.lock().unwrap().push((request.url.to_string(), authorization));
         let reply = match self.replies.lock().unwrap().get_mut(request.url.as_str()) {
             Some(replies) if replies.len() > 1 => replies.remove(0),
             Some(replies) => replies[0].clone(),
@@ -68,9 +59,7 @@ impl Transport for Server {
                 Reply::Status(status, body) => Ok(Response {
                     status,
                     headers: vec![("content-type".to_owned(), "application/json".to_owned())],
-                    body: Box::pin(futures_util::stream::iter([Ok(Bytes::from_static(
-                        body.as_bytes(),
-                    ))])),
+                    body: Box::pin(futures_util::stream::iter([Ok(Bytes::from_static(body.as_bytes()))])),
                 }),
             }
         })

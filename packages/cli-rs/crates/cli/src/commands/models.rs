@@ -10,10 +10,8 @@ pub fn run(context: &Context) -> anyhow::Result<()> {
         let server = connect(context).await?;
         get_located(&server.client, "/api/model", &[400, 401, 404, 503]).await
     })??;
-    let mut models: Vec<String> = data(&response)
-        .iter()
-        .map(|model| format!("{}/{}", text(&model["providerID"]), text(&model["id"])))
-        .collect();
+    let mut models: Vec<String> =
+        data(&response).iter().map(|model| format!("{}/{}", text(&model["providerID"]), text(&model["id"]))).collect();
     models.sort_by(|a, b| locale_compare(a, b));
     if models.is_empty() {
         return Ok(());

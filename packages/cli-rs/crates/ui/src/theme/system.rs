@@ -25,8 +25,7 @@ pub struct TerminalColors {
 impl TerminalColors {
     /// The colors opentui reports, with hex strings as Core writes them.
     pub fn from_palette(palette: &opentui::term::TerminalPalette) -> Self {
-        let text =
-            |color: Option<Color>| color.map(|color| hex(Color::rgb(color.r, color.g, color.b)));
+        let text = |color: Option<Color>| color.map(|color| hex(Color::rgb(color.r, color.g, color.b)));
         let mut other = Map::new();
         other.insert("cursorColor".to_owned(), json!(text(palette.cursor)));
         Self {
@@ -52,34 +51,19 @@ impl TerminalColors {
     }
 
     fn default_or<'a>(&'a self, default: Option<&'a str>, index: usize) -> Option<&'a str> {
-        default
-            .or_else(|| self.palette.get(index).and_then(Option::as_deref))
-            .filter(|hex| !hex.is_empty())
+        default.or_else(|| self.palette.get(index).and_then(Option::as_deref)).filter(|hex| !hex.is_empty())
     }
 
     fn slot(&self, index: usize) -> Option<&str> {
-        self.palette
-            .get(index)
-            .and_then(Option::as_deref)
-            .filter(|hex| !hex.is_empty())
+        self.palette.get(index).and_then(Option::as_deref).filter(|hex| !hex.is_empty())
     }
 }
 
 /// `terminalMode`: light when the default background is bright.
 pub fn terminal_mode(colors: &TerminalColors) -> Option<ThemeMode> {
-    let background = from_hex(
-        colors
-            .default_background
-            .as_deref()
-            .filter(|hex| !hex.is_empty())?,
-    );
-    let brightness =
-        0.299 * unit(background.r) + 0.587 * unit(background.g) + 0.114 * unit(background.b);
-    Some(if brightness > 0.5 {
-        ThemeMode::Light
-    } else {
-        ThemeMode::Dark
-    })
+    let background = from_hex(colors.default_background.as_deref().filter(|hex| !hex.is_empty())?);
+    let brightness = 0.299 * unit(background.r) + 0.587 * unit(background.g) + 0.114 * unit(background.b);
+    Some(if brightness > 0.5 { ThemeMode::Light } else { ThemeMode::Dark })
 }
 
 /// `generateSystem`: a V1 theme built from the palette for `mode`.
@@ -88,15 +72,10 @@ pub fn generate_system(colors: &TerminalColors, mode: ThemeMode) -> Value {
     let foreground = from_hex(colors.foreground().unwrap_or_default());
     let transparent = Color::rgba(background.r, background.g, background.b, 0);
     let dark = mode == ThemeMode::Dark;
-    let slot = |index: usize| {
-        colors
-            .slot(index)
-            .map_or_else(|| ansi(index as f64), from_hex)
-    };
+    let slot = |index: usize| colors.slot(index).map_or_else(|| ansi(index as f64), from_hex);
     let grays = gray_scale(background, dark);
     let muted = muted_text(background, dark);
-    let (red, green, yellow, blue, magenta, cyan) =
-        (slot(1), slot(2), slot(3), slot(4), slot(5), slot(6));
+    let (red, green, yellow, blue, magenta, cyan) = (slot(1), slot(2), slot(3), slot(4), slot(5), slot(6));
     let (red_bright, green_bright) = (slot(9), slot(10));
     let alpha = if dark { 0.22 } else { 0.14 };
     let context = grays[2];
@@ -167,11 +146,7 @@ pub fn generate_system(colors: &TerminalColors, mode: ThemeMode) -> Value {
 /// Twelve grays stepping away from the background; index 0 is unused, as in TypeScript.
 fn gray_scale(background: Color, dark: bool) -> [Color; 13] {
     // Channels as TypeScript computes them, `bg.r * 255`, which is not always the exact byte.
-    let (r, g, b) = (
-        unit(background.r) * 255.0,
-        unit(background.g) * 255.0,
-        unit(background.b) * 255.0,
-    );
+    let (r, g, b) = (unit(background.r) * 255.0, unit(background.g) * 255.0, unit(background.b) * 255.0);
     let luminance = 0.299 * r + 0.587 * g + 0.114 * b;
     let mut grays = [Color::TRANSPARENT; 13];
     for (i, gray) in grays.iter_mut().enumerate().skip(1) {
@@ -186,11 +161,7 @@ fn gray_scale(background: Color, dark: bool) -> [Color; 13] {
             *gray = from_floats(value, value, value);
             continue;
         }
-        let next = if dark {
-            luminance + (255.0 - luminance) * factor * 0.4
-        } else {
-            luminance * (1.0 - factor * 0.4)
-        };
+        let next = if dark { luminance + (255.0 - luminance) * factor * 0.4 } else { luminance * (1.0 - factor * 0.4) };
         let ratio = next / luminance;
         let channel = |value: f64| (value * ratio).clamp(0.0, 255.0).floor();
         *gray = from_floats(channel(r), channel(g), channel(b));
@@ -199,15 +170,10 @@ fn gray_scale(background: Color, dark: bool) -> [Color; 13] {
 }
 
 fn muted_text(background: Color, dark: bool) -> Color {
-    let luminance = 0.299 * unit(background.r) * 255.0
-        + 0.587 * unit(background.g) * 255.0
-        + 0.114 * unit(background.b) * 255.0;
+    let luminance =
+        0.299 * unit(background.r) * 255.0 + 0.587 * unit(background.g) * 255.0 + 0.114 * unit(background.b) * 255.0;
     let gray = if dark {
-        if luminance < 10.0 {
-            180.0
-        } else {
-            (160.0 + luminance * 0.3).floor().min(200.0)
-        }
+        if luminance < 10.0 { 180.0 } else { (160.0 + luminance * 0.3).floor().min(200.0) }
     } else if luminance > 245.0 {
         75.0
     } else {

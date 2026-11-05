@@ -56,11 +56,7 @@ pub fn project(mut update: Value, child: &Session) -> Value {
     let Some(object) = update.as_object_mut() else {
         return update;
     };
-    let mut merged = object
-        .get("_meta")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
+    let mut merged = object.get("_meta").and_then(Value::as_object).cloned().unwrap_or_default();
     if let Value::Object(own) = meta(child) {
         merged.extend(own);
     }
@@ -71,11 +67,7 @@ pub fn project(mut update: Value, child: &Session) -> Value {
             let id = tool_call_id(Some(child), id);
             object.insert("toolCallId".to_owned(), json!(id));
         }
-        if let Some(title) = object
-            .get("title")
-            .and_then(Value::as_str)
-            .filter(|title| !title.is_empty())
-        {
+        if let Some(title) = object.get("title").and_then(Value::as_str).filter(|title| !title.is_empty()) {
             let title = prefix_title(Some(child), title);
             object.insert("title".to_owned(), json!(title));
         }

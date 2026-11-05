@@ -18,19 +18,14 @@ fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("flowchart pattern")
 }
 
-static HEADER: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^(flowchart|graph)(?:\s+(TB|TD|BT|LR|RL))?$"));
+static HEADER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^(flowchart|graph)(?:\s+(TB|TD|BT|LR|RL))?$"));
 static SUBGRAPH: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^subgraph\s+(.+)$"));
-static SUBGRAPH_WITH_LABEL: LazyLock<Regex> =
-    LazyLock::new(|| pattern(&format!(r"^({ID})\s*\[(.+)\]$")));
-static SUBGRAPH_DIRECTION: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^direction\s+(TB|TD|BT|LR|RL)$"));
-static IGNORED: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"(?i)^(?:classDef|class|style|linkStyle)\b"));
+static SUBGRAPH_WITH_LABEL: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\s*\[(.+)\]$")));
+static SUBGRAPH_DIRECTION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^direction\s+(TB|TD|BT|LR|RL)$"));
+static IGNORED: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^(?:classDef|class|style|linkStyle)\b"));
 static DATABASE: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\[\((.+)\)\]$")));
 static SUBROUTINE: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\[\[(.+)\]\]$")));
-static ROUNDED_BRACKET: LazyLock<Regex> =
-    LazyLock::new(|| pattern(&format!(r"^({ID})\(\[(.+)\]\)$")));
+static ROUNDED_BRACKET: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\(\[(.+)\]\)$")));
 static ROUNDED: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\((.+)\)$")));
 static DECISION: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\{{(.+)\}}$")));
 static BOX: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^({ID})\[(.+)\]$")));
@@ -67,11 +62,7 @@ fn parse_subgraph_token(token: &str, index: usize) -> (String, String) {
     }
     let label = strip_quotes(trimmed);
     let stripped = strip_quotes(trimmed);
-    let id = if ID_ONLY.is_match(&stripped) {
-        stripped
-    } else {
-        format!("subgraph_{}", index + 1)
-    };
+    let id = if ID_ONLY.is_match(&stripped) { stripped } else { format!("subgraph_{}", index + 1) };
     (id, label)
 }
 
@@ -87,18 +78,10 @@ fn parse_node_token(token: &str) -> Node {
     ];
     for (regex, shape) in shapes {
         if let Some(captures) = regex.captures(trimmed) {
-            return Node {
-                id: captures[1].to_string(),
-                label: strip_quotes(&captures[2]),
-                shape,
-            };
+            return Node { id: captures[1].to_string(), label: strip_quotes(&captures[2]), shape };
         }
     }
-    Node {
-        id: trimmed.to_string(),
-        label: trimmed.to_string(),
-        shape: Shape::Box,
-    }
+    Node { id: trimmed.to_string(), label: trimmed.to_string(), shape: Shape::Box }
 }
 
 fn strip_node_token(token: &str) -> String {
@@ -111,17 +94,9 @@ fn is_supported_node_token(token: &str) -> bool {
     if CIRCLE.is_match(&trimmed) {
         return false;
     }
-    [
-        &*ID_ONLY,
-        &DATABASE,
-        &SUBROUTINE,
-        &ROUNDED_BRACKET,
-        &ROUNDED,
-        &DECISION,
-        &BOX,
-    ]
-    .iter()
-    .any(|regex| regex.is_match(&trimmed))
+    [&*ID_ONLY, &DATABASE, &SUBROUTINE, &ROUNDED_BRACKET, &ROUNDED, &DECISION, &BOX]
+        .iter()
+        .any(|regex| regex.is_match(&trimmed))
 }
 
 fn has_explicit_shape(token: &str) -> bool {
@@ -153,10 +128,7 @@ enum Scan {
 
 impl Scanner {
     fn new() -> Self {
-        Self {
-            stack: Vec::new(),
-            quoted: false,
-        }
+        Self { stack: Vec::new(), quoted: false }
     }
 
     fn step(&mut self, ch: char, previous: Option<char>) -> Scan {
@@ -224,11 +196,7 @@ fn mask_node_label_operators(line: &str) -> String {
 fn has_internal_statement_separator(line: &str) -> bool {
     let mut scanner = Scanner::new();
     let mut edge_label = false;
-    let final_index = line
-        .trim_end()
-        .char_indices()
-        .last()
-        .map_or(-1, |(index, _)| index as i64);
+    let final_index = line.trim_end().char_indices().last().map_or(-1, |(index, _)| index as i64);
     let mut previous = None;
     for (index, ch) in line.char_indices() {
         let scan = scanner.step(ch, previous);
@@ -278,12 +246,9 @@ fn parse_edge_operators(line: &str) -> Vec<Operator> {
             let group = |index: usize| captures.get(index).map(|m| m.as_str());
             let start_arrow = inline.or(group(3)).or(group(6)).unwrap_or("");
             let end_arrow = inline.or(group(5)).or(group(6)).unwrap_or("");
-            let label_range = [2, 4, 7].into_iter().find_map(|index| {
-                captures
-                    .get(index)
-                    .filter(|m| !m.as_str().is_empty())
-                    .map(|m| m.range())
-            });
+            let label_range = [2, 4, 7]
+                .into_iter()
+                .find_map(|index| captures.get(index).filter(|m| !m.as_str().is_empty()).map(|m| m.range()));
             Operator {
                 index: whole.start(),
                 end: whole.end(),
@@ -304,24 +269,13 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     for source in meaningful_lines(content) {
         let line = source.text;
         if line.len() > MAX_LINE_LENGTH {
-            return Err(syntax(
-                source.number,
-                line,
-                "Flowchart statement is too long",
-            ));
+            return Err(syntax(source.number, line, "Flowchart statement is too long"));
         }
         if has_internal_statement_separator(line) {
-            return Err(SyntaxError::unsupported(
-                Kind::Flowchart,
-                source.number,
-                line,
-            ));
+            return Err(SyntaxError::unsupported(Kind::Flowchart, source.number, line));
         }
         if let Some(header) = HEADER.captures(line) {
-            direction = header
-                .get(2)
-                .and_then(|m| FlowDirection::parse(m.as_str()))
-                .unwrap_or(FlowDirection::TD);
+            direction = header.get(2).and_then(|m| FlowDirection::parse(m.as_str())).unwrap_or(FlowDirection::TD);
             continue;
         }
         // Mermaid CSS styling does not apply to terminal theme rendering.
@@ -330,40 +284,21 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
         }
         if let Some(captures) = SUBGRAPH.captures(line) {
             let (id, label) = parse_subgraph_token(&captures[1], parser.subgraphs.len());
-            let parent_id = parser
-                .stack
-                .last()
-                .map(|open| parser.subgraphs[open.0].id.clone());
-            parser.subgraphs.push(Subgraph {
-                id,
-                label,
-                node_ids: Vec::new(),
-                parent_id,
-                direction: None,
-            });
-            parser
-                .stack
-                .push((parser.subgraphs.len() - 1, source.number, line.to_string()));
+            let parent_id = parser.stack.last().map(|open| parser.subgraphs[open.0].id.clone());
+            parser.subgraphs.push(Subgraph { id, label, node_ids: Vec::new(), parent_id, direction: None });
+            parser.stack.push((parser.subgraphs.len() - 1, source.number, line.to_string()));
             continue;
         }
         if END.is_match(line) {
             if parser.stack.pop().is_none() {
-                return Err(syntax(
-                    source.number,
-                    line,
-                    "Unexpected \"end\" without an open subgraph",
-                ));
+                return Err(syntax(source.number, line, "Unexpected \"end\" without an open subgraph"));
             }
             continue;
         }
         let current = parser.stack.last().map(|open| open.0);
         if let Some(captures) = SUBGRAPH_DIRECTION.captures(line) {
             let Some(current) = current else {
-                return Err(syntax(
-                    source.number,
-                    line,
-                    "A \"direction\" statement requires an open subgraph",
-                ));
+                return Err(syntax(source.number, line, "A \"direction\" statement requires an open subgraph"));
             };
             parser.subgraphs[current].direction = FlowDirection::parse(&captures[1]);
             continue;
@@ -374,38 +309,19 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             // Each chain position may be an `&` group (`A & B --> C`), so endpoints are lists of node tokens.
             let mut slices = vec![&line[..operators[0].index]];
             for (index, operator) in operators.iter().enumerate() {
-                let end = operators
-                    .get(index + 1)
-                    .map_or(line.len(), |next| next.index);
+                let end = operators.get(index + 1).map_or(line.len(), |next| next.index);
                 slices.push(&line[operator.end.min(end)..end]);
             }
             let groups: Vec<Vec<String>> = slices
                 .iter()
-                .map(|group| {
-                    split_node_group(group)
-                        .into_iter()
-                        .map(strip_node_token)
-                        .collect()
-                })
+                .map(|group| split_node_group(group).into_iter().map(strip_node_token).collect())
                 .collect();
-            if groups
-                .iter()
-                .all(|group| group.iter().all(|token| !token.is_empty()))
-            {
-                if groups
-                    .iter()
-                    .any(|group| group.iter().any(|token| !is_supported_node_token(token)))
-                {
-                    return Err(SyntaxError::unsupported(
-                        Kind::Flowchart,
-                        source.number,
-                        line,
-                    ));
+            if groups.iter().all(|group| group.iter().all(|token| !token.is_empty())) {
+                if groups.iter().any(|group| group.iter().any(|token| !is_supported_node_token(token))) {
+                    return Err(SyntaxError::unsupported(Kind::Flowchart, source.number, line));
                 }
-                let chain: Vec<Vec<String>> = groups
-                    .iter()
-                    .map(|group| group.iter().map(|token| parser.track(token)).collect())
-                    .collect();
+                let chain: Vec<Vec<String>> =
+                    groups.iter().map(|group| group.iter().map(|token| parser.track(token)).collect()).collect();
                 for id in chain.iter().flatten() {
                     if parser.nodes.contains_key(id) {
                         parser.add_to_subgraph(current, id);
@@ -440,11 +356,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             }
             continue;
         }
-        return Err(SyntaxError::unsupported(
-            Kind::Flowchart,
-            source.number,
-            line,
-        ));
+        return Err(SyntaxError::unsupported(Kind::Flowchart, source.number, line));
     }
 
     if let Some((_, number, line)) = parser.stack.last() {
@@ -483,10 +395,7 @@ impl Parser {
             self.explicit_shape_ids.insert(id.clone());
         }
         for open in &self.stack {
-            self.referenced_in_open
-                .entry(id.clone())
-                .or_default()
-                .insert(self.subgraphs[open.0].id.clone());
+            self.referenced_in_open.entry(id.clone()).or_default().insert(self.subgraphs[open.0].id.clone());
         }
         id
     }
@@ -514,9 +423,7 @@ impl Parser {
     fn resolve_subgraph_endpoints(&mut self) {
         let mut resolved: HashSet<String> = HashSet::new();
         for index in (0..self.subgraphs.len()).rev() {
-            self.subgraphs[index]
-                .node_ids
-                .retain(|id| !resolved.contains(id));
+            self.subgraphs[index].node_ids.retain(|id| !resolved.contains(id));
             let subgraph = &self.subgraphs[index];
             let descendants = descendants_of(&self.subgraphs, &subgraph.id);
             let mut members: HashSet<&str> = HashSet::new();
@@ -533,17 +440,12 @@ impl Parser {
             }
             let links_self_or_descendant = self.edges.iter().any(|edge| {
                 (edge.from == subgraph.id
-                    && (edge.to == subgraph.id
-                        || members.contains(edge.to.as_str())
-                        || descendants.contains(&edge.to)))
+                    && (edge.to == subgraph.id || members.contains(edge.to.as_str()) || descendants.contains(&edge.to)))
                     || (edge.to == subgraph.id
-                        && (members.contains(edge.from.as_str())
-                            || descendants.contains(&edge.from)))
+                        && (members.contains(edge.from.as_str()) || descendants.contains(&edge.from)))
             });
-            let self_referenced = self
-                .referenced_in_open
-                .get(&subgraph.id)
-                .is_some_and(|open| open.contains(&subgraph.id));
+            let self_referenced =
+                self.referenced_in_open.get(&subgraph.id).is_some_and(|open| open.contains(&subgraph.id));
             if self.explicit_shape_ids.contains(&subgraph.id)
                 || self_referenced
                 || members.is_empty()

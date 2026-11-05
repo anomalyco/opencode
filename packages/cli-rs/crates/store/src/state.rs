@@ -14,8 +14,8 @@ use futures_util::future::{BoxFuture, Shared};
 use indexmap::IndexMap;
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    PermissionRequest, PermissionSavedInfo, Project, ProjectID, SessionID, SessionInboxCompaction,
-    SessionInboxInfo, SessionInfo, SessionMessageID,
+    PermissionRequest, PermissionSavedInfo, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo,
+    SessionInfo, SessionMessageID,
 };
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
@@ -204,11 +204,7 @@ impl Syncs {
             Some(Entry::Done) => {
                 self.entries.remove(key);
             }
-            Some(Entry::Pending {
-                invalidated,
-                started,
-                ..
-            }) if started.load(Ordering::SeqCst) => *invalidated = true,
+            Some(Entry::Pending { invalidated, started, .. }) if started.load(Ordering::SeqCst) => *invalidated = true,
             _ => {}
         }
     }
@@ -221,11 +217,7 @@ impl Syncs {
             }
             match entry {
                 Entry::Done => false,
-                Entry::Pending {
-                    invalidated,
-                    started,
-                    ..
-                } => {
+                Entry::Pending { invalidated, started, .. } => {
                     if started.load(Ordering::SeqCst) {
                         *invalidated = true;
                     }
@@ -237,12 +229,7 @@ impl Syncs {
 
     /// Settles the load `token` of `key`: done when it succeeded and was not invalidated.
     fn settle(&mut self, key: &str, token: u64, ok: bool) {
-        let Some(Entry::Pending {
-            token: current,
-            invalidated,
-            ..
-        }) = self.entries.get(key)
-        else {
+        let Some(Entry::Pending { token: current, invalidated, .. }) = self.entries.get(key) else {
             return;
         };
         if *current != token {
@@ -360,10 +347,7 @@ impl Data {
         #[cfg(debug_assertions)]
         let key = Arc::as_ptr(&self.inner) as usize;
         #[cfg(debug_assertions)]
-        assert!(
-            !HELD.with_borrow(|held| held.contains(&key)),
-            "reentrant store lock: this thread already holds it"
-        );
+        assert!(!HELD.with_borrow(|held| held.contains(&key)), "reentrant store lock: this thread already holds it");
         let guard = lock(&self.inner.state);
         #[cfg(debug_assertions)]
         HELD.with_borrow_mut(|held| held.push(key));
@@ -399,9 +383,7 @@ impl Data {
         let handle = self.inner.runtime.spawn(future);
         async move {
             handle.await.unwrap_or_else(|error| {
-                Err(Arc::new(opencode_api::error::Error::Transport(format!(
-                    "store task failed: {error}"
-                ))))
+                Err(Arc::new(opencode_api::error::Error::Transport(format!("store task failed: {error}"))))
             })
         }
         .boxed()
@@ -445,11 +427,7 @@ impl Data {
     }
 
     /// Runs `load` once per key until invalidated (`sync.run`).
-    pub(crate) fn sync_run<F>(
-        &self,
-        key: String,
-        load: impl FnOnce(Data) -> F + Send + 'static,
-    ) -> Task<()>
+    pub(crate) fn sync_run<F>(&self, key: String, load: impl FnOnce(Data) -> F + Send + 'static) -> Task<()>
     where
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
@@ -474,9 +452,7 @@ impl Data {
         let mut state = self.lock();
         let wait = match state.syncs.entries.get(&key) {
             Some(Entry::Done) => return futures_util::future::ready(Ok(())).boxed().shared(),
-            Some(Entry::Pending {
-                task, invalidated, ..
-            }) => {
+            Some(Entry::Pending { task, invalidated, .. }) => {
                 if !*invalidated {
                     return task.clone();
                 }
@@ -509,15 +485,7 @@ impl Data {
             data.write(|state| state.syncs.settle(&settle, token, result.is_ok()));
             result
         });
-        state.syncs.entries.insert(
-            key,
-            Entry::Pending {
-                token,
-                task: task.clone(),
-                invalidated: false,
-                started,
-            },
-        );
+        state.syncs.entries.insert(key, Entry::Pending { token, task: task.clone(), invalidated: false, started });
         task
     }
 }
@@ -567,15 +535,11 @@ impl Drop for Locked<'_> {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub(crate) fn is_tag(error: &Error, tag: &str) -> bool {
-    error
-        .declared()
-        .is_some_and(|declared| declared.tag.as_deref() == Some(tag))
+    error.declared().is_some_and(|declared| declared.tag.as_deref() == Some(tag))
 }
 
 /// The session of a `SessionNotFoundError`.
@@ -584,11 +548,7 @@ pub(crate) fn session_not_found(error: &Error) -> Option<SessionID> {
     if declared.tag.as_deref() != Some("SessionNotFoundError") {
         return None;
     }
-    declared
-        .body
-        .get("sessionID")
-        .and_then(serde_json::Value::as_str)
-        .map(|id| SessionID(id.to_owned()))
+    declared.body.get("sessionID").and_then(serde_json::Value::as_str).map(|id| SessionID(id.to_owned()))
 }
 
 /// Marks a missing session deleted and passes the error on (`evictMissing`).

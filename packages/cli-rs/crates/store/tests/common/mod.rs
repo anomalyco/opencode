@@ -28,17 +28,11 @@ pub struct Req {
 
 impl Req {
     pub fn param(&self, name: &str) -> Option<&str> {
-        self.query
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value.as_str())
+        self.query.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
     }
 
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value.as_str())
+        self.headers.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
     }
 
     /// The last path segment (the TS tests' `rpc`).
@@ -47,12 +41,7 @@ impl Req {
     }
 
     pub fn id(&self) -> String {
-        self.body
-            .as_ref()
-            .and_then(|body| body.get("id"))
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned()
+        self.body.as_ref().and_then(|body| body.get("id")).and_then(Value::as_str).unwrap_or_default().to_owned()
     }
 }
 
@@ -75,32 +64,18 @@ struct Fake {
 }
 
 impl Transport for Fake {
-    fn send(
-        &self,
-        request: Request,
-    ) -> opencode_api::transport::BoxFuture<'_, Result<Response, String>> {
+    fn send(&self, request: Request) -> opencode_api::transport::BoxFuture<'_, Result<Response, String>> {
         let req = Req {
             method: request.method.to_owned(),
             path: request.url.path().to_owned(),
-            query: request
-                .url
-                .query_pairs()
-                .map(|(key, value)| (key.into_owned(), value.into_owned()))
-                .collect(),
+            query: request.url.query_pairs().map(|(key, value)| (key.into_owned(), value.into_owned())).collect(),
             headers: request.headers.clone(),
-            body: request
-                .body
-                .as_ref()
-                .and_then(|body| serde_json::from_slice(body).ok()),
+            body: request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()),
         };
         let reply = (self.handler)(req);
         Box::pin(async move {
             let (status, content_type, body) = match reply.await {
-                Reply::Json(status, value) => (
-                    status,
-                    "application/json",
-                    serde_json::to_vec(&value).unwrap(),
-                ),
+                Reply::Json(status, value) => (status, "application/json", serde_json::to_vec(&value).unwrap()),
                 Reply::Text(status, text) => (status, "text/plain", text.into_bytes()),
                 Reply::Fail(message) => return Err(message),
             };
@@ -130,13 +105,7 @@ pub fn data(handler: Handler, options: Options) -> Data {
         "" => "/project".to_owned(),
         directory => directory.to_owned(),
     };
-    Data::new(
-        client,
-        Options {
-            directory,
-            ..options
-        },
-    )
+    Data::new(client, Options { directory, ..options })
 }
 
 pub fn event(value: Value) -> V2Event {
@@ -152,10 +121,7 @@ pub fn emit(data: &Data, value: Value) {
 pub async fn wait(mut check: impl FnMut() -> bool) {
     let started = Instant::now();
     while !check() {
-        assert!(
-            started.elapsed() < Duration::from_secs(2),
-            "timed out waiting for condition"
-        );
+        assert!(started.elapsed() < Duration::from_secs(2), "timed out waiting for condition");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
 }
@@ -173,9 +139,7 @@ pub struct Slot<T: Clone> {
 
 impl<T: Clone + Send + Sync + 'static> Default for Slot<T> {
     fn default() -> Self {
-        Self {
-            sender: Arc::new(watch::channel(None).0),
-        }
+        Self { sender: Arc::new(watch::channel(None).0) }
     }
 }
 

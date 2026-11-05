@@ -7,14 +7,10 @@ use std::rc::Rc;
 use indexmap::{IndexMap, IndexSet};
 
 use super::labels::{
-    edge_label_layout, horizontal_label_rank_gap, label_width, route_label_layout,
-    vertical_branch_label_gap,
+    edge_label_layout, horizontal_label_rank_gap, label_width, route_label_layout, vertical_branch_label_gap,
 };
 use super::routing::{self, Frames, Nodes};
-use super::types::{
-    Diagram, Edge, FlowDirection, LabelSide, Node, NodeBounds, Route, Shape, Subgraph,
-    SubgraphBounds,
-};
+use super::types::{Diagram, Edge, FlowDirection, LabelSide, Node, NodeBounds, Route, Shape, Subgraph, SubgraphBounds};
 use crate::core::geometry::{
     Axis, Bounds, Point, bounds_from_bounds, bounds_from_points, segment_between, segment_span,
 };
@@ -70,11 +66,7 @@ pub fn layout(source: &Diagram, options: &Options) -> Result<Layout, LayoutError
     if !direction.horizontal() || result.width <= max_width.max(1) {
         return Ok(result);
     }
-    let fallback = if direction == FlowDirection::RL {
-        FlowDirection::BT
-    } else {
-        FlowDirection::TD
-    };
+    let fallback = if direction == FlowDirection::RL { FlowDirection::BT } else { FlowDirection::TD };
     layout_with_direction(source, options, fallback, true)
 }
 
@@ -95,59 +87,35 @@ fn layout_with_direction(
         (false, true) => DEFAULT_MIN_RANK_GAP,
         (false, false) => DEFAULT_MIN_VERTICAL_RANK_GAP,
     };
-    let sizes: HashMap<String, NodeSize> = diagram
-        .nodes
-        .iter()
-        .map(|node| (node.id.clone(), node_size(node)))
-        .collect();
-    let target_width = if horizontal {
-        None
-    } else {
-        options.layout_max_width.map(|width| width.max(1))
-    };
-    let ranked = layout_ranked_nodes(
-        &diagram,
-        direction,
-        &sizes,
-        min_node_gap,
-        min_rank_gap,
-        target_width,
-    );
+    let sizes: HashMap<String, NodeSize> =
+        diagram.nodes.iter().map(|node| (node.id.clone(), node_size(node))).collect();
+    let target_width = if horizontal { None } else { options.layout_max_width.map(|width| width.max(1)) };
+    let ranked = layout_ranked_nodes(&diagram, direction, &sizes, min_node_gap, min_rank_gap, target_width);
     let mut bounds = ranked.0;
-    let responsive = layout_local_subgraph_directions(
-        &diagram,
-        &mut bounds,
-        min_node_gap,
-        min_rank_gap,
-        target_width,
-    )?;
+    let responsive = layout_local_subgraph_directions(&diagram, &mut bounds, min_node_gap, min_rank_gap, target_width)?;
     let direction_aligned = responsive_fallback || responsive || ranked.1;
     let node_ids: HashSet<&str> = diagram.nodes.iter().map(|node| node.id.as_str()).collect();
     let has_subgraph_endpoints = diagram.edges.iter().any(|edge| {
-        !edge.order_only
-            && (!node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str()))
+        !edge.order_only && (!node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str()))
     });
     let member_diagram = if has_subgraph_endpoints {
         let mut member = diagram.clone();
-        member.edges.retain(|edge| {
-            node_ids.contains(edge.from.as_str()) && node_ids.contains(edge.to.as_str())
-        });
+        member.edges.retain(|edge| node_ids.contains(edge.from.as_str()) && node_ids.contains(edge.to.as_str()));
         member
     } else {
         diagram.clone()
     };
-    let route =
-        |bounds: &Nodes, frames: Option<&Frames>, target: &Diagram, locked: Option<&[Route]>| {
-            routing::route_edges(
-                target,
-                bounds,
-                &|edge: &Edge| edge_direction(&diagram, edge),
-                frames,
-                target_width,
-                direction_aligned,
-                locked,
-            )
-        };
+    let route = |bounds: &Nodes, frames: Option<&Frames>, target: &Diagram, locked: Option<&[Route]>| {
+        routing::route_edges(
+            target,
+            bounds,
+            &|edge: &Edge| edge_direction(&diagram, edge),
+            frames,
+            target_width,
+            direction_aligned,
+            locked,
+        )
+    };
 
     let mut subgraph_bounds = Frames::new();
     let mut routes;
@@ -157,13 +125,7 @@ fn layout_with_direction(
         let gap = 1.max(min_rank_gap.div_euclid(2));
         routes = route(&bounds, None, &member_diagram, None);
         subgraph_bounds = layout_subgraphs(&diagram, &bounds, &routes);
-        if separate_top_level_items(
-            &diagram,
-            &mut bounds,
-            &mut subgraph_bounds,
-            gap,
-            target_width,
-        ) {
+        if separate_top_level_items(&diagram, &mut bounds, &mut subgraph_bounds, gap, target_width) {
             routes = route(&bounds, None, &member_diagram, None);
             subgraph_bounds = layout_subgraphs(&diagram, &bounds, &routes);
         }
@@ -171,13 +133,7 @@ fn layout_with_direction(
         subgraph_bounds = layout_subgraphs(&diagram, &bounds, &routes);
         // Frame-aware routes can expand a group after initial separation. Move the expanded frame rigidly
         // before rerouting so external edges cannot grow it back across neighboring top-level items.
-        if separate_top_level_items(
-            &diagram,
-            &mut bounds,
-            &mut subgraph_bounds,
-            gap,
-            target_width,
-        ) {
+        if separate_top_level_items(&diagram, &mut bounds, &mut subgraph_bounds, gap, target_width) {
             routes = route(&bounds, Some(&subgraph_bounds), &member_diagram, None);
         }
         if has_subgraph_endpoints {
@@ -199,13 +155,9 @@ fn layout_with_direction(
                 if source_frame.label_side != LabelSide::Top {
                     continue;
                 }
-                if !edge_direction(&diagram, edge).horizontal()
-                    && target.center_y < source_frame.bounds.center_y
-                {
+                if !edge_direction(&diagram, edge).horizontal() && target.center_y < source_frame.bounds.center_y {
                     let bottom = label_slot(&source_frame, LabelSide::Bottom);
-                    if !routes
-                        .iter()
-                        .any(|route| route_overlaps_slot(route, &source_frame, &bottom, &node_ids))
+                    if !routes.iter().any(|route| route_overlaps_slot(route, &source_frame, &bottom, &node_ids))
                         && let Some(frame) = subgraph_bounds.get_mut(&edge.from)
                     {
                         frame.label_side = LabelSide::Bottom;
@@ -214,10 +166,8 @@ fn layout_with_direction(
             }
             routes = route(&bounds, Some(&subgraph_bounds), &diagram, Some(&locked));
             let mut changed = false;
-            let sides: Vec<LabelSide> = subgraph_bounds
-                .values()
-                .map(|frame| choose_subgraph_label_side(frame, &routes, &node_ids))
-                .collect();
+            let sides: Vec<LabelSide> =
+                subgraph_bounds.values().map(|frame| choose_subgraph_label_side(frame, &routes, &node_ids)).collect();
             for (frame, side) in subgraph_bounds.values_mut().zip(sides) {
                 if side != frame.label_side {
                     frame.label_side = side;
@@ -234,8 +184,7 @@ fn layout_with_direction(
         if route.edge.label.is_empty() || route.label_point.is_some() {
             continue;
         }
-        route.label_point =
-            Some(edge_label_layout(&route.points, &route.edge.label, route.label_axis, None).point);
+        route.label_point = Some(edge_label_layout(&route.points, &route.edge.label, route.label_axis, None).point);
     }
     let mut extra = route_render_bounds(&routes);
     let all = || {
@@ -276,26 +225,9 @@ fn layout_with_direction(
         .chain(subgraph_bounds.values().map(|frame| frame.bounds))
         .chain(extra.iter().copied())
         .collect::<Vec<_>>();
-    let max_x = all
-        .iter()
-        .map(|b| b.left + b.width)
-        .max()
-        .unwrap_or(0)
-        .max(0);
-    let max_y = all
-        .iter()
-        .map(|b| b.top + b.height)
-        .max()
-        .unwrap_or(0)
-        .max(0);
-    Ok(Layout {
-        diagram,
-        bounds,
-        routes,
-        subgraph_bounds,
-        width: max_x + 4,
-        height: max_y + 4,
-    })
+    let max_x = all.iter().map(|b| b.left + b.width).max().unwrap_or(0).max(0);
+    let max_y = all.iter().map(|b| b.top + b.height).max().unwrap_or(0).max(0);
+    Ok(Layout { diagram, bounds, routes, subgraph_bounds, width: max_x + 4, height: max_y + 4 })
 }
 
 fn node_size(node: &Node) -> NodeSize {
@@ -306,27 +238,11 @@ fn node_size(node: &Node) -> NodeSize {
     match node.shape {
         Shape::Decision => {
             let width = inner + 6;
-            NodeSize {
-                width: if width % 2 == 0 { width + 1 } else { width },
-                height: 5.max(count + 4),
-                lines,
-            }
+            NodeSize { width: if width % 2 == 0 { width + 1 } else { width }, height: 5.max(count + 4), lines }
         }
-        Shape::Database => NodeSize {
-            width: inner + 4,
-            height: count + 4,
-            lines,
-        },
-        Shape::Subroutine => NodeSize {
-            width: inner + 6,
-            height: count + 2,
-            lines,
-        },
-        Shape::Box | Shape::Rounded => NodeSize {
-            width: inner + 4,
-            height: count + 2,
-            lines,
-        },
+        Shape::Database => NodeSize { width: inner + 4, height: count + 4, lines },
+        Shape::Subroutine => NodeSize { width: inner + 6, height: count + 2, lines },
+        Shape::Box | Shape::Rounded => NodeSize { width: inner + 4, height: count + 2, lines },
     }
 }
 
@@ -386,12 +302,7 @@ struct RankSpan {
     unshared: Vec<usize>,
 }
 
-fn endpoint_ranks(
-    diagram: &Diagram,
-    id: &str,
-    ranks: &IndexMap<String, i32>,
-    node_ids: &HashSet<&str>,
-) -> Vec<i32> {
+fn endpoint_ranks(diagram: &Diagram, id: &str, ranks: &IndexMap<String, i32>, node_ids: &HashSet<&str>) -> Vec<i32> {
     let ids: Vec<String> = if node_ids.contains(id) {
         vec![id.to_string()]
     } else {
@@ -420,18 +331,15 @@ fn endpoint_rank_span(
     } else {
         return None;
     };
-    let has_subgraph_endpoint =
-        !node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str());
+    let has_subgraph_endpoint = !node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str());
     let unshared = if has_subgraph_endpoint {
         diagram
             .subgraphs
             .iter()
             .enumerate()
             .filter(|(_, subgraph)| {
-                let from = subgraph.id == edge.from
-                    || subgraph_contains_endpoint(diagram, subgraph, &edge.from);
-                let to = subgraph.id == edge.to
-                    || subgraph_contains_endpoint(diagram, subgraph, &edge.to);
+                let from = subgraph.id == edge.from || subgraph_contains_endpoint(diagram, subgraph, &edge.from);
+                let to = subgraph.id == edge.to || subgraph_contains_endpoint(diagram, subgraph, &edge.to);
                 from != to
             })
             .map(|(index, _)| index)
@@ -439,11 +347,7 @@ fn endpoint_rank_span(
     } else {
         Vec::new()
     };
-    Some(RankSpan {
-        start,
-        end,
-        unshared,
-    })
+    Some(RankSpan { start, end, unshared })
 }
 
 fn ensure_rank_span_gap(gaps: &mut [i32], start: usize, end: usize, required: i32) {
@@ -470,18 +374,13 @@ fn rank_gaps(
     horizontal: bool,
 ) -> Vec<i32> {
     let mut gaps = vec![fallback; rank_keys.len().saturating_sub(1)];
-    let indexes: HashMap<i32, usize> = rank_keys
-        .iter()
-        .enumerate()
-        .map(|(index, &rank)| (rank, index))
-        .collect();
+    let indexes: HashMap<i32, usize> = rank_keys.iter().enumerate().map(|(index, &rank)| (rank, index)).collect();
     let node_ids: HashSet<&str> = diagram.nodes.iter().map(|node| node.id.as_str()).collect();
     for edge in &diagram.edges {
         if edge.order_only {
             continue;
         }
-        let has_subgraph_endpoint =
-            !node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str());
+        let has_subgraph_endpoint = !node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str());
         if edge.label.is_empty() && !has_subgraph_endpoint {
             continue;
         }
@@ -514,18 +413,14 @@ fn rank_gaps(
             let clearance = if edge.label.is_empty() {
                 MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP
             } else {
-                MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP
-                    .max(horizontal_label_rank_gap(label_width(&edge.label)))
+                MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP.max(horizontal_label_rank_gap(label_width(&edge.label)))
             };
             (padding, clearance)
         } else {
             let padding = span
                 .unshared
                 .iter()
-                .map(|&index| {
-                    SUBGRAPH_PADDING_TOP
-                        .max(split_lines(&diagram.subgraphs[index].label).len() as i32)
-                })
+                .map(|&index| SUBGRAPH_PADDING_TOP.max(split_lines(&diagram.subgraphs[index].label).len() as i32))
                 .sum();
             let clearance = if edge.label.is_empty() {
                 MIN_SUBGRAPH_VERTICAL_EDGE_GAP
@@ -543,16 +438,11 @@ fn rank_nodes(diagram: &Diagram) -> IndexMap<String, i32> {
     let mut ranks: IndexMap<String, i32> = IndexMap::new();
     let mut outgoing: IndexMap<String, Vec<String>> = IndexMap::new();
     let mut incoming: HashSet<String> = HashSet::new();
-    let mut incoming_counts: IndexMap<String, i32> = diagram
-        .nodes
-        .iter()
-        .map(|node| (node.id.clone(), 0))
-        .collect();
+    let mut incoming_counts: IndexMap<String, i32> = diagram.nodes.iter().map(|node| (node.id.clone(), 0)).collect();
     let node_ids: HashSet<&str> = diagram.nodes.iter().map(|node| node.id.as_str()).collect();
     let subgraph = |id: &str| diagram.subgraphs.iter().find(|subgraph| subgraph.id == id);
     let inside = |endpoint: &str, subgraph_id: &str| {
-        subgraph(subgraph_id)
-            .is_some_and(|subgraph| subgraph_contains_endpoint(diagram, subgraph, endpoint))
+        subgraph(subgraph_id).is_some_and(|subgraph| subgraph_contains_endpoint(diagram, subgraph, endpoint))
     };
     let members_of = |id: &str| -> Vec<String> {
         if node_ids.contains(id) {
@@ -566,24 +456,13 @@ fn rank_nodes(diagram: &Diagram) -> IndexMap<String, i32> {
         let members = collect_subgraph_node_ids(diagram, subgraph_id);
         let mut internal: HashSet<String> = HashSet::new();
         for edge in &diagram.edges {
-            if edge.from == edge.to
-                || !inside(&edge.from, subgraph_id)
-                || !inside(&edge.to, subgraph_id)
-            {
+            if edge.from == edge.to || !inside(&edge.from, subgraph_id) || !inside(&edge.to, subgraph_id) {
                 continue;
             }
             internal.extend(members_of(if exits { &edge.from } else { &edge.to }));
         }
-        let boundary: Vec<String> = members
-            .iter()
-            .filter(|id| !internal.contains(*id))
-            .cloned()
-            .collect();
-        if boundary.is_empty() {
-            members.into_iter().collect()
-        } else {
-            boundary
-        }
+        let boundary: Vec<String> = members.iter().filter(|id| !internal.contains(*id)).cloned().collect();
+        if boundary.is_empty() { members.into_iter().collect() } else { boundary }
     };
     let mut rank_edges: Vec<(String, String)> = Vec::new();
     for edge in &diagram.edges {
@@ -596,11 +475,8 @@ fn rank_nodes(diagram: &Diagram) -> IndexMap<String, i32> {
         } else {
             boundary_nodes(&edge.from, true)
         };
-        let to_ids = if node_ids.contains(edge.to.as_str()) {
-            vec![edge.to.clone()]
-        } else {
-            boundary_nodes(&edge.to, false)
-        };
+        let to_ids =
+            if node_ids.contains(edge.to.as_str()) { vec![edge.to.clone()] } else { boundary_nodes(&edge.to, false) };
         for from in &from_ids {
             for to in &to_ids {
                 rank_edges.push((from.clone(), to.clone()));
@@ -613,12 +489,8 @@ fn rank_nodes(diagram: &Diagram) -> IndexMap<String, i32> {
         *incoming_counts.entry(to.clone()).or_insert(0) += 1;
     }
 
-    let mut starts: Vec<&str> = diagram
-        .nodes
-        .iter()
-        .filter(|node| !incoming.contains(&node.id))
-        .map(|node| node.id.as_str())
-        .collect();
+    let mut starts: Vec<&str> =
+        diagram.nodes.iter().filter(|node| !incoming.contains(&node.id)).map(|node| node.id.as_str()).collect();
     if starts.is_empty()
         && let Some(first) = diagram.nodes.first()
     {
@@ -695,11 +567,7 @@ fn layout_ranked_nodes(
     let mut normalized: IndexMap<String, i32> = IndexMap::new();
     for node in &diagram.nodes {
         let rank = ranks.get(&node.id).copied().unwrap_or(0);
-        let rank = if direction.reversed() {
-            max_rank - rank
-        } else {
-            rank
-        };
+        let rank = if direction.reversed() { max_rank - rank } else { rank };
         normalized.insert(node.id.clone(), rank);
         by_rank.entry(rank).or_default().push(node);
     }
@@ -710,16 +578,13 @@ fn layout_ranked_nodes(
     let widest_unlabeled = by_rank
         .values()
         .map(|nodes| {
-            nodes.iter().map(|node| size(node).width).sum::<i32>()
-                + 0.max(nodes.len() as i32 - 1) * spacious_gap
+            nodes.iter().map(|node| size(node).width).sum::<i32>() + 0.max(nodes.len() as i32 - 1) * spacious_gap
         })
         .max()
         .unwrap_or(0)
         .max(0);
     let touches = |edge: &Edge, rank: i32| {
-        !edge.label.is_empty()
-            && (normalized.get(&edge.from) == Some(&rank)
-                || normalized.get(&edge.to) == Some(&rank))
+        !edge.label.is_empty() && (normalized.get(&edge.from) == Some(&rank) || normalized.get(&edge.to) == Some(&rank))
     };
     let vertical_node_gap = |rank: i32| {
         let widest = diagram
@@ -733,11 +598,7 @@ fn layout_ranked_nodes(
         if widest > 0 {
             return spacious_gap.max(vertical_branch_label_gap(widest));
         }
-        if widest_unlabeled > DEFAULT_MAX_UNLABELED_RANK_WIDTH {
-            min_node_gap
-        } else {
-            spacious_gap
-        }
+        if widest_unlabeled > DEFAULT_MAX_UNLABELED_RANK_WIDTH { min_node_gap } else { spacious_gap }
     };
 
     let mut rank_keys: Vec<i32> = by_rank.keys().copied().collect();
@@ -758,22 +619,13 @@ fn layout_ranked_nodes(
     };
 
     if horizontal {
-        let column_widths: Vec<i32> = rank_keys
-            .iter()
-            .map(|rank| {
-                by_rank[rank]
-                    .iter()
-                    .map(|node| size(node).width)
-                    .max()
-                    .unwrap_or(0)
-            })
-            .collect();
+        let column_widths: Vec<i32> =
+            rank_keys.iter().map(|rank| by_rank[rank].iter().map(|node| size(node).width).max().unwrap_or(0)).collect();
         let column_heights: Vec<i32> = rank_keys
             .iter()
             .map(|rank| {
                 let nodes = &by_rank[rank];
-                nodes.iter().map(|node| size(node).height).sum::<i32>()
-                    + 0.max(nodes.len() as i32 - 1) * min_node_gap
+                nodes.iter().map(|node| size(node).height).sum::<i32>() + 0.max(nodes.len() as i32 - 1) * min_node_gap
             })
             .collect();
         let canvas_height = column_heights.iter().copied().max().unwrap_or(1).max(1);
@@ -802,46 +654,30 @@ fn layout_ranked_nodes(
         .map(|&rank| {
             let nodes = &by_rank[&rank];
             let roomy = vertical_node_gap(rank);
-            let natural = nodes.iter().map(|node| size(node).width).sum::<i32>()
-                + 0.max(nodes.len() as i32 - 1) * roomy;
-            let labeled: Vec<&Rc<Edge>> = diagram
-                .edges
-                .iter()
-                .filter(|edge| touches(edge, rank))
-                .collect();
+            let natural =
+                nodes.iter().map(|node| size(node).width).sum::<i32>() + 0.max(nodes.len() as i32 - 1) * roomy;
+            let labeled: Vec<&Rc<Edge>> = diagram.edges.iter().filter(|edge| touches(edge, rank)).collect();
             let grouped = |ids: &[&str]| {
                 diagram.subgraphs.is_empty()
-                    || diagram.subgraphs.iter().any(|subgraph| {
-                        ids.iter()
-                            .all(|id| subgraph.node_ids.iter().any(|member| member == id))
-                    })
+                    || diagram
+                        .subgraphs
+                        .iter()
+                        .any(|subgraph| ids.iter().all(|id| subgraph.node_ids.iter().any(|member| member == id)))
             };
             let needs_label_lanes = labeled.len() > 1
                 && labeled.iter().any(|edge| {
-                    let targets: IndexSet<&str> = labeled
-                        .iter()
-                        .filter(|c| c.from == edge.from)
-                        .map(|c| c.to.as_str())
-                        .collect();
-                    let sources: IndexSet<&str> = labeled
-                        .iter()
-                        .filter(|c| c.to == edge.to)
-                        .map(|c| c.from.as_str())
-                        .collect();
+                    let targets: IndexSet<&str> =
+                        labeled.iter().filter(|c| c.from == edge.from).map(|c| c.to.as_str()).collect();
+                    let sources: IndexSet<&str> =
+                        labeled.iter().filter(|c| c.to == edge.to).map(|c| c.from.as_str()).collect();
                     let grouped_with = |first: &str, rest: &IndexSet<&str>| {
-                        grouped(
-                            &std::iter::once(first)
-                                .chain(rest.iter().copied())
-                                .collect::<Vec<_>>(),
-                        )
+                        grouped(&std::iter::once(first).chain(rest.iter().copied()).collect::<Vec<_>>())
                     };
                     (targets.len() > 1 && grouped_with(&edge.from, &targets))
                         || (sources.len() > 1 && grouped_with(&edge.to, &sources))
                 });
             let node_gap = match target_width {
-                Some(target)
-                    if natural > target && (!needs_label_lanes || diagram.subgraphs.is_empty()) =>
-                {
+                Some(target) if natural > target && (!needs_label_lanes || diagram.subgraphs.is_empty()) => {
                     min_node_gap
                 }
                 _ => roomy,
@@ -850,21 +686,13 @@ fn layout_ranked_nodes(
             for node in nodes {
                 let node_size = size(node);
                 let Some(current) = bands.last_mut() else {
-                    bands.push(Band {
-                        nodes: vec![node],
-                        width: node_size.width,
-                        height: node_size.height,
-                    });
+                    bands.push(Band { nodes: vec![node], width: node_size.width, height: node_size.height });
                     continue;
                 };
                 let width = current.width + node_gap + node_size.width;
                 if target_width.is_some_and(|target| width > target) {
                     wrapped = true;
-                    bands.push(Band {
-                        nodes: vec![node],
-                        width: node_size.width,
-                        height: node_size.height,
-                    });
+                    bands.push(Band { nodes: vec![node], width: node_size.width, height: node_size.height });
                     continue;
                 }
                 current.nodes.push(node);
@@ -874,12 +702,8 @@ fn layout_ranked_nodes(
             (bands, node_gap)
         })
         .collect();
-    let canvas_width = rank_bands
-        .iter()
-        .flat_map(|(bands, _)| bands.iter().map(|band| band.width))
-        .max()
-        .unwrap_or(1)
-        .max(1);
+    let canvas_width =
+        rank_bands.iter().flat_map(|(bands, _)| bands.iter().map(|band| band.width)).max().unwrap_or(1).max(1);
     let mut y = 0;
     for (index, (bands, node_gap)) in rank_bands.iter().enumerate() {
         for (band_index, band) in bands.iter().enumerate() {
@@ -889,12 +713,7 @@ fn layout_ranked_nodes(
                 place(node, x, y + (band.height - node_size.height).div_euclid(2));
                 x += node_size.width + node_gap;
             }
-            y += band.height
-                + if band_index < bands.len() - 1 {
-                    min_node_gap
-                } else {
-                    0
-                };
+            y += band.height + if band_index < bands.len() - 1 { min_node_gap } else { 0 };
         }
         y += gaps.get(index).copied().unwrap_or(0);
     }
@@ -921,11 +740,7 @@ fn reduce_rank_crossings(
     }
     let mut rank_keys: Vec<i32> = by_rank.keys().copied().collect();
     rank_keys.sort_unstable();
-    let layer_of: HashMap<i32, usize> = rank_keys
-        .iter()
-        .enumerate()
-        .map(|(index, &rank)| (rank, index))
-        .collect();
+    let layer_of: HashMap<i32, usize> = rank_keys.iter().enumerate().map(|(index, &rank)| (rank, index)).collect();
     // Feedback edges route around the diagram, so only forward edges between adjacent ranks can cross.
     let links: Vec<Link> = diagram
         .edges
@@ -942,24 +757,14 @@ fn reduce_rank_crossings(
                 return None;
             }
             Some(if from < to {
-                Link {
-                    layer: layer_of[&from],
-                    upper: edge.from.clone(),
-                    lower: edge.to.clone(),
-                }
+                Link { layer: layer_of[&from], upper: edge.from.clone(), lower: edge.to.clone() }
             } else {
-                Link {
-                    layer: layer_of[&to],
-                    upper: edge.to.clone(),
-                    lower: edge.from.clone(),
-                }
+                Link { layer: layer_of[&to], upper: edge.to.clone(), lower: edge.from.clone() }
             })
         })
         .collect();
-    let original: Vec<Vec<String>> = rank_keys
-        .iter()
-        .map(|rank| by_rank[rank].iter().map(|node| node.id.clone()).collect())
-        .collect();
+    let original: Vec<Vec<String>> =
+        rank_keys.iter().map(|rank| by_rank[rank].iter().map(|node| node.id.clone()).collect()).collect();
     let initial = layer_crossings(&original, &links);
     if initial == 0 {
         return;
@@ -978,11 +783,7 @@ fn reduce_rank_crossings(
     let Some(best) = best else {
         return;
     };
-    let node_of: HashMap<&str, &Node> = by_rank
-        .values()
-        .flatten()
-        .map(|node| (node.id.as_str(), *node))
-        .collect();
+    let node_of: HashMap<&str, &Node> = by_rank.values().flatten().map(|node| (node.id.as_str(), *node)).collect();
     let reordered: Vec<(i32, Vec<&Node>)> = rank_keys
         .iter()
         .zip(&best)
@@ -995,19 +796,11 @@ fn reduce_rank_crossings(
 
 fn sweep_layers(layers: &[Vec<String>], links: &[Link], down: bool) -> Vec<Vec<String>> {
     let mut next: Vec<Vec<String>> = layers.to_vec();
-    let indices: Vec<usize> = if down {
-        (1..next.len()).collect()
-    } else {
-        (0..next.len().saturating_sub(1)).rev().collect()
-    };
+    let indices: Vec<usize> =
+        if down { (1..next.len()).collect() } else { (0..next.len().saturating_sub(1)).rev().collect() };
     for index in indices {
         let fixed = next[if down { index - 1 } else { index + 1 }].clone();
-        let position = |id: &str| {
-            fixed
-                .iter()
-                .position(|candidate| candidate == id)
-                .map_or(-1.0, |p| p as f64)
-        };
+        let position = |id: &str| fixed.iter().position(|candidate| candidate == id).map_or(-1.0, |p| p as f64);
         let keys: HashMap<String, f64> = next[index]
             .iter()
             .enumerate()
@@ -1032,11 +825,7 @@ fn sweep_layers(layers: &[Vec<String>], links: &[Link], down: bool) -> Vec<Vec<S
                 (id.clone(), key)
             })
             .collect();
-        next[index].sort_by(|a, b| {
-            keys[a]
-                .partial_cmp(&keys[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        next[index].sort_by(|a, b| keys[a].partial_cmp(&keys[b]).unwrap_or(std::cmp::Ordering::Equal));
     }
     next
 }
@@ -1044,12 +833,7 @@ fn sweep_layers(layers: &[Vec<String>], links: &[Link], down: bool) -> Vec<Vec<S
 fn layer_crossings(layers: &[Vec<String>], links: &[Link]) -> usize {
     let position: HashMap<&str, i64> = layers
         .iter()
-        .flat_map(|layer| {
-            layer
-                .iter()
-                .enumerate()
-                .map(|(index, id)| (id.as_str(), index as i64))
-        })
+        .flat_map(|layer| layer.iter().enumerate().map(|(index, id)| (id.as_str(), index as i64)))
         .collect();
     let at = |id: &str| position.get(id).copied().unwrap_or(0);
     links
@@ -1060,9 +844,7 @@ fn layer_crossings(layers: &[Vec<String>], links: &[Link]) -> usize {
                 .iter()
                 .filter(|other| {
                     other.layer == link.layer
-                        && (at(&link.upper) - at(&other.upper))
-                            * (at(&link.lower) - at(&other.lower))
-                            < 0
+                        && (at(&link.upper) - at(&other.upper)) * (at(&link.lower) - at(&other.lower)) < 0
                 })
                 .count()
         })
@@ -1096,10 +878,7 @@ fn layout_local_subgraph_directions(
             parent = current.parent_id.as_deref().and_then(by_id);
         }
         let inherited = parent.and_then(|parent| {
-            let siblings = subgraphs
-                .iter()
-                .filter(|child| child.parent_id.as_deref() == Some(&parent.id))
-                .count();
+            let siblings = subgraphs.iter().filter(|child| child.parent_id.as_deref() == Some(&parent.id)).count();
             if siblings > 1 { parent.direction } else { None }
         });
         let Some(direction) = subgraph.direction.or(inherited) else {
@@ -1108,23 +887,14 @@ fn layout_local_subgraph_directions(
         if direction == diagram.direction {
             continue;
         }
-        let children: Vec<&Subgraph> = subgraphs
-            .iter()
-            .filter(|child| child.parent_id.as_deref() == Some(&subgraph.id))
-            .collect();
-        let covered: HashSet<String> = children
-            .iter()
-            .flat_map(|child| collect_subgraph_node_ids(diagram, &child.id))
-            .collect();
+        let children: Vec<&Subgraph> =
+            subgraphs.iter().filter(|child| child.parent_id.as_deref() == Some(&subgraph.id)).collect();
+        let covered: HashSet<String> =
+            children.iter().flat_map(|child| collect_subgraph_node_ids(diagram, &child.id)).collect();
         let mut items: Vec<LocalItem> = Vec::new();
         for child in &children {
-            let node_ids: Vec<String> = collect_subgraph_node_ids(diagram, &child.id)
-                .into_iter()
-                .collect();
-            let content: Vec<Bounds> = node_ids
-                .iter()
-                .filter_map(|id| nodes.get(id).map(|node| node.bounds))
-                .collect();
+            let node_ids: Vec<String> = collect_subgraph_node_ids(diagram, &child.id).into_iter().collect();
+            let content: Vec<Bounds> = node_ids.iter().filter_map(|id| nodes.get(id).map(|node| node.bounds)).collect();
             if let Some(content) = bounds_from_bounds(&content) {
                 items.push(LocalItem {
                     id: format!("subgraph:{}", child.id),
@@ -1150,9 +920,7 @@ fn layout_local_subgraph_directions(
         if items.is_empty() {
             continue;
         }
-        let Some(current) =
-            bounds_from_bounds(&items.iter().map(|item| item.bounds).collect::<Vec<_>>())
-        else {
+        let Some(current) = bounds_from_bounds(&items.iter().map(|item| item.bounds).collect::<Vec<_>>()) else {
             continue;
         };
         let mut item_of: HashMap<String, String> = HashMap::new();
@@ -1171,11 +939,7 @@ fn layout_local_subgraph_directions(
             direction,
             nodes: items
                 .iter()
-                .map(|item| Node {
-                    id: item.id.clone(),
-                    label: item.id.clone(),
-                    shape: Shape::Box,
-                })
+                .map(|item| Node { id: item.id.clone(), label: item.id.clone(), shape: Shape::Box })
                 .collect(),
             edges: diagram
                 .edges
@@ -1183,13 +947,7 @@ fn layout_local_subgraph_directions(
                 .filter_map(|edge| {
                     let from = item_of.get(&edge.from)?;
                     let to = item_of.get(&edge.to)?;
-                    (from != to).then(|| {
-                        Rc::new(Edge {
-                            from: from.clone(),
-                            to: to.clone(),
-                            ..(**edge).clone()
-                        })
-                    })
+                    (from != to).then(|| Rc::new(Edge { from: from.clone(), to: to.clone(), ..(**edge).clone() }))
                 })
                 .collect(),
             subgraphs: Vec::new(),
@@ -1199,11 +957,7 @@ fn layout_local_subgraph_directions(
             .map(|item| {
                 (
                     item.id.clone(),
-                    NodeSize {
-                        width: item.bounds.width,
-                        height: item.bounds.height,
-                        lines: vec![item.id.clone()],
-                    },
+                    NodeSize { width: item.bounds.width, height: item.bounds.height, lines: vec![item.id.clone()] },
                 )
             })
             .collect();
@@ -1216,12 +970,8 @@ fn layout_local_subgraph_directions(
             target_width,
         );
         wrapped |= local_wrapped;
-        let Some(extent) = bounds_from_bounds(
-            &local_bounds
-                .values()
-                .map(|node| node.bounds)
-                .collect::<Vec<_>>(),
-        ) else {
+        let Some(extent) = bounds_from_bounds(&local_bounds.values().map(|node| node.bounds).collect::<Vec<_>>())
+        else {
             continue;
         };
         let target_left = current.left + (current.width - extent.width).div_euclid(2);
@@ -1232,10 +982,7 @@ fn layout_local_subgraph_directions(
         let mut translations: IndexMap<String, (i32, i32)> = IndexMap::new();
         for item in &items {
             let bound = local_bounds[&item.id].bounds;
-            let shift = (
-                bound.left + dx - item.bounds.left,
-                bound.top + dy - item.bounds.top,
-            );
+            let shift = (bound.left + dx - item.bounds.left, bound.top + dy - item.bounds.top);
             for id in &item.node_ids {
                 translations.insert(id.clone(), shift);
             }
@@ -1243,11 +990,8 @@ fn layout_local_subgraph_directions(
 
         let mut offset = (0, 0);
         if target_width.is_some() {
-            let external: Vec<Bounds> = nodes
-                .iter()
-                .filter(|(id, _)| !translations.contains_key(*id))
-                .map(|(_, node)| node.bounds)
-                .collect();
+            let external: Vec<Bounds> =
+                nodes.iter().filter(|(id, _)| !translations.contains_key(*id)).map(|(_, node)| node.bounds).collect();
             let overlaps = |offset: (i32, i32)| {
                 translations.iter().any(|(id, translation)| {
                     let Some(bound) = nodes.get(id).map(|node| node.bounds) else {
@@ -1268,23 +1012,11 @@ fn layout_local_subgraph_directions(
                 let sign = if diagram.direction.reversed() { -1 } else { 1 };
                 let found = (1..1_000).find_map(|distance| {
                     let candidates = if vertical {
-                        [
-                            (0, sign * distance),
-                            (0, -sign * distance),
-                            (distance, 0),
-                            (-distance, 0),
-                        ]
+                        [(0, sign * distance), (0, -sign * distance), (distance, 0), (-distance, 0)]
                     } else {
-                        [
-                            (sign * distance, 0),
-                            (-sign * distance, 0),
-                            (0, distance),
-                            (0, -distance),
-                        ]
+                        [(sign * distance, 0), (-sign * distance, 0), (0, distance), (0, -distance)]
                     };
-                    candidates
-                        .into_iter()
-                        .find(|&candidate| !overlaps(candidate))
+                    candidates.into_iter().find(|&candidate| !overlaps(candidate))
                 });
                 let Some(found) = found else {
                     return Err(LayoutError(format!(
@@ -1297,8 +1029,7 @@ fn layout_local_subgraph_directions(
         }
         for (id, translation) in &translations {
             if let Some(node) = nodes.get_mut(id) {
-                node.bounds
-                    .translate(translation.0 + offset.0, translation.1 + offset.1);
+                node.bounds.translate(translation.0 + offset.0, translation.1 + offset.1);
             }
         }
     }
@@ -1311,12 +1042,10 @@ fn frame_from_children(id: &str, label: &str, children: &[Bounds]) -> SubgraphBo
     let lines = split_lines(label);
     let label_height = lines.len() as i32;
     let mut left = children.iter().map(|b| b.left).min().unwrap_or(0) - SUBGRAPH_PADDING_X;
-    let top =
-        children.iter().map(|b| b.top).min().unwrap_or(0) - SUBGRAPH_PADDING_TOP.max(label_height);
-    let mut right =
-        children.iter().map(|b| b.left + b.width).max().unwrap_or(0) + SUBGRAPH_PADDING_X;
-    let bottom = children.iter().map(|b| b.top + b.height).max().unwrap_or(0)
-        + SUBGRAPH_PADDING_BOTTOM.max(label_height);
+    let top = children.iter().map(|b| b.top).min().unwrap_or(0) - SUBGRAPH_PADDING_TOP.max(label_height);
+    let mut right = children.iter().map(|b| b.left + b.width).max().unwrap_or(0) + SUBGRAPH_PADDING_X;
+    let bottom =
+        children.iter().map(|b| b.top + b.height).max().unwrap_or(0) + SUBGRAPH_PADDING_BOTTOM.max(label_height);
     let min_width = lines.iter().map(|line| width(line)).max().unwrap_or(0) + 5;
     if right - left < min_width {
         let extra = min_width - (right - left);
@@ -1339,16 +1068,8 @@ pub(crate) fn label_slot(frame: &SubgraphBounds, side: LabelSide) -> Bounds {
     let lines = split_lines(&frame.label);
     let left = frame.bounds.left + 2;
     let height = lines.len() as i32;
-    let top = if side == LabelSide::Top {
-        frame.bounds.top
-    } else {
-        frame.bounds.top + frame.bounds.height - height
-    };
-    let slot_width = lines
-        .iter()
-        .map(|line| width(&format!(" {line} ")))
-        .max()
-        .unwrap_or(0);
+    let top = if side == LabelSide::Top { frame.bounds.top } else { frame.bounds.top + frame.bounds.height - height };
+    let slot_width = lines.iter().map(|line| width(&format!(" {line} "))).max().unwrap_or(0);
     Bounds::rect(left, top, slot_width, height)
 }
 
@@ -1364,9 +1085,7 @@ fn segment_overlaps_slot(from: Point, to: Point, slot: &Bounds) -> bool {
             && segment.from.y <= bottom
             && spans_overlap(span.start, span.end, slot.left, right);
     }
-    segment.from.x >= slot.left
-        && segment.from.x <= right
-        && spans_overlap(span.start, span.end, slot.top, bottom)
+    segment.from.x >= slot.left && segment.from.x <= right && spans_overlap(span.start, span.end, slot.top, bottom)
 }
 
 pub(crate) fn route_overlaps_slot(
@@ -1388,49 +1107,25 @@ pub(crate) fn route_overlaps_slot(
             return true;
         }
     }
-    if route
-        .points
-        .windows(2)
-        .any(|pair| segment_overlaps_slot(pair[0], pair[1], slot))
-    {
+    if route.points.windows(2).any(|pair| segment_overlaps_slot(pair[0], pair[1], slot)) {
         return true;
     }
     let Some(label) = label_bounds(route) else {
         return false;
     };
-    if !spans_overlap(
-        label.top,
-        label.top + label.height - 1,
-        slot.top,
-        slot.top + slot.height - 1,
-    ) {
+    if !spans_overlap(label.top, label.top + label.height - 1, slot.top, slot.top + slot.height - 1) {
         return false;
     }
-    spans_overlap(
-        label.left,
-        label.left + label.width - 1,
-        slot.left,
-        slot.left + slot.width - 1,
-    )
+    spans_overlap(label.left, label.left + label.width - 1, slot.left, slot.left + slot.width - 1)
 }
 
-fn choose_subgraph_label_side(
-    frame: &SubgraphBounds,
-    routes: &[Route],
-    node_ids: &HashSet<&str>,
-) -> LabelSide {
+fn choose_subgraph_label_side(frame: &SubgraphBounds, routes: &[Route], node_ids: &HashSet<&str>) -> LabelSide {
     let top = label_slot(frame, LabelSide::Top);
-    if !routes
-        .iter()
-        .any(|route| route_overlaps_slot(route, frame, &top, node_ids))
-    {
+    if !routes.iter().any(|route| route_overlaps_slot(route, frame, &top, node_ids)) {
         return LabelSide::Top;
     }
     let bottom = label_slot(frame, LabelSide::Bottom);
-    if routes
-        .iter()
-        .any(|route| route_overlaps_slot(route, frame, &bottom, node_ids))
-    {
+    if routes.iter().any(|route| route_overlaps_slot(route, frame, &bottom, node_ids)) {
         LabelSide::Top
     } else {
         LabelSide::Bottom
@@ -1442,12 +1137,7 @@ fn label_bounds(route: &Route) -> Option<Bounds> {
         return None;
     }
     let label = route_label_layout(route);
-    Some(Bounds::rect(
-        label.point.x,
-        label.point.y,
-        label.width,
-        label.height,
-    ))
+    Some(Bounds::rect(label.point.x, label.point.y, label.width, label.height))
 }
 
 fn route_render_bounds<'a>(routes: impl IntoIterator<Item = &'a Route>) -> Vec<Bounds> {
@@ -1463,15 +1153,14 @@ fn layout_subgraphs(diagram: &Diagram, nodes: &Nodes, routes: &[Route]) -> Frame
     let mut frames = Frames::new();
     let node_ids: HashSet<&str> = diagram.nodes.iter().map(|node| node.id.as_str()).collect();
     for subgraph in diagram.subgraphs.iter().rev() {
-        let mut children: Vec<Bounds> = subgraph
-            .node_ids
-            .iter()
-            .filter_map(|id| nodes.get(id).map(|node| node.bounds))
-            .collect();
+        let mut children: Vec<Bounds> =
+            subgraph.node_ids.iter().filter_map(|id| nodes.get(id).map(|node| node.bounds)).collect();
         let members: HashSet<&str> = subgraph.node_ids.iter().map(String::as_str).collect();
-        children.extend(route_render_bounds(routes.iter().filter(|route| {
-            members.contains(route.edge.from.as_str()) && members.contains(route.edge.to.as_str())
-        })));
+        children.extend(route_render_bounds(
+            routes
+                .iter()
+                .filter(|route| members.contains(route.edge.from.as_str()) && members.contains(route.edge.to.as_str())),
+        ));
         for child in &diagram.subgraphs {
             if child.parent_id.as_deref() != Some(&subgraph.id) {
                 continue;
@@ -1491,10 +1180,7 @@ fn layout_subgraphs(diagram: &Diagram, nodes: &Nodes, routes: &[Route]) -> Frame
 
 // Separation of top-level subgraphs and nodes.
 
-fn rank_graph_components(
-    ids: &[String],
-    outgoing: &IndexMap<String, IndexSet<String>>,
-) -> HashMap<String, i32> {
+fn rank_graph_components(ids: &[String], outgoing: &IndexMap<String, IndexSet<String>>) -> HashMap<String, i32> {
     let mut reachable: HashMap<&str, HashSet<String>> = HashMap::new();
     for id in ids {
         let mut seen: HashSet<String> = HashSet::new();
@@ -1547,9 +1233,7 @@ fn rank_graph_components(
         }
     }
     let mut component_ranks: HashMap<usize, i32> = HashMap::new();
-    let mut queue: Vec<usize> = (0..components.len())
-        .filter(|&index| incoming[index] == 0)
-        .collect();
+    let mut queue: Vec<usize> = (0..components.len()).filter(|&index| incoming[index] == 0).collect();
     for &component in &queue {
         component_ranks.insert(component, 0);
     }
@@ -1558,11 +1242,7 @@ fn rank_graph_components(
         let component = queue[index];
         index += 1;
         for &to in &component_outgoing[component] {
-            let rank = component_ranks
-                .get(&to)
-                .copied()
-                .unwrap_or(0)
-                .max(component_ranks[&component] + 1);
+            let rank = component_ranks.get(&to).copied().unwrap_or(0).max(component_ranks[&component] + 1);
             component_ranks.insert(to, rank);
             incoming[to] -= 1;
             if incoming[to] == 0 {
@@ -1570,17 +1250,7 @@ fn rank_graph_components(
             }
         }
     }
-    ids.iter()
-        .map(|id| {
-            (
-                id.clone(),
-                component_ranks
-                    .get(&component_of[id.as_str()])
-                    .copied()
-                    .unwrap_or(0),
-            )
-        })
-        .collect()
+    ids.iter().map(|id| (id.clone(), component_ranks.get(&component_of[id.as_str()]).copied().unwrap_or(0))).collect()
 }
 
 #[derive(Clone)]
@@ -1599,11 +1269,10 @@ fn separate_top_level_items(
     gap: i32,
     target_width: Option<i32>,
 ) -> bool {
-    let has_local_direction = diagram.subgraphs.iter().any(|subgraph| {
-        subgraph
-            .direction
-            .is_some_and(|direction| direction != diagram.direction)
-    });
+    let has_local_direction = diagram
+        .subgraphs
+        .iter()
+        .any(|subgraph| subgraph.direction.is_some_and(|direction| direction != diagram.direction));
     let by_id = |id: &str| diagram.subgraphs.iter().find(|subgraph| subgraph.id == id);
     let top_level_of = |id: &str| -> String {
         let mut current = by_id(id);
@@ -1617,12 +1286,8 @@ fn separate_top_level_items(
     let mut covered: HashSet<String> = HashSet::new();
     let mut items: Vec<Item> = Vec::new();
     let mut item_of: HashMap<String, String> = HashMap::new();
-    let top_level_ids: HashSet<&str> = diagram
-        .subgraphs
-        .iter()
-        .filter(|s| s.parent_id.is_none())
-        .map(|s| s.id.as_str())
-        .collect();
+    let top_level_ids: HashSet<&str> =
+        diagram.subgraphs.iter().filter(|s| s.parent_id.is_none()).map(|s| s.id.as_str()).collect();
     for subgraph in &diagram.subgraphs {
         if subgraph.parent_id.is_some() {
             continue;
@@ -1636,12 +1301,7 @@ fn separate_top_level_items(
             covered.insert(id.clone());
             item_of.insert(id.clone(), subgraph.id.clone());
         }
-        items.push(Item {
-            id: subgraph.id.clone(),
-            frame: true,
-            node_ids,
-            rank: 0,
-        });
+        items.push(Item { id: subgraph.id.clone(), frame: true, node_ids, rank: 0 });
     }
     for subgraph in &diagram.subgraphs {
         item_of.insert(subgraph.id.clone(), top_level_of(&subgraph.id));
@@ -1650,12 +1310,7 @@ fn separate_top_level_items(
         if covered.contains(&node.id) || !nodes.contains_key(&node.id) {
             continue;
         }
-        items.push(Item {
-            id: node.id.clone(),
-            frame: false,
-            node_ids: IndexSet::from([node.id.clone()]),
-            rank: 0,
-        });
+        items.push(Item { id: node.id.clone(), frame: false, node_ids: IndexSet::from([node.id.clone()]), rank: 0 });
         item_of.insert(node.id.clone(), node.id.clone());
     }
     if items.len() < 2 {
@@ -1666,11 +1321,7 @@ fn separate_top_level_items(
     let reversed = diagram.direction.reversed();
     let node_ids: HashSet<&str> = diagram.nodes.iter().map(|node| node.id.as_str()).collect();
     let bounds_of = |item: &Item, nodes: &Nodes, frames: &Frames| -> Bounds {
-        if item.frame {
-            frames[&item.id].bounds
-        } else {
-            nodes[&item.id].bounds
-        }
+        if item.frame { frames[&item.id].bounds } else { nodes[&item.id].bounds }
     };
     let move_item = |item: &Item, dx: i32, dy: i32, nodes: &mut Nodes, frames: &mut Frames| {
         for id in &item.node_ids {
@@ -1696,8 +1347,7 @@ fn separate_top_level_items(
             .iter()
             .filter(|edge| {
                 !edge.order_only
-                    && (!node_ids.contains(edge.from.as_str())
-                        || !node_ids.contains(edge.to.as_str()))
+                    && (!node_ids.contains(edge.from.as_str()) || !node_ids.contains(edge.to.as_str()))
                     && item_of.get(&edge.from).map(String::as_str) == Some(from_item)
                     && item_of.get(&edge.to).map(String::as_str) == Some(to_item)
             })
@@ -1705,11 +1355,7 @@ fn separate_top_level_items(
         if matching.is_empty() {
             return gap;
         }
-        let minimum = if horizontal {
-            MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP
-        } else {
-            MIN_SUBGRAPH_VERTICAL_EDGE_GAP
-        };
+        let minimum = if horizontal { MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP } else { MIN_SUBGRAPH_VERTICAL_EDGE_GAP };
         matching
             .iter()
             .map(|edge| {
@@ -1725,10 +1371,8 @@ fn separate_top_level_items(
     };
 
     if has_local_direction {
-        let mut outgoing: IndexMap<String, IndexSet<String>> = items
-            .iter()
-            .map(|item| (item.id.clone(), IndexSet::new()))
-            .collect();
+        let mut outgoing: IndexMap<String, IndexSet<String>> =
+            items.iter().map(|item| (item.id.clone(), IndexSet::new())).collect();
         for edge in &diagram.edges {
             if let (Some(from), Some(to)) = (item_of.get(&edge.from), item_of.get(&edge.to))
                 && from != to
@@ -1742,16 +1386,9 @@ fn separate_top_level_items(
         {
             let (nodes_ref, frames_ref) = (&*nodes, &*frames);
             items.sort_by(|a, b| {
-                let (ab, bb) = (
-                    bounds_of(a, nodes_ref, frames_ref),
-                    bounds_of(b, nodes_ref, frames_ref),
-                );
+                let (ab, bb) = (bounds_of(a, nodes_ref, frames_ref), bounds_of(b, nodes_ref, frames_ref));
                 ranks[&a.id].cmp(&ranks[&b.id]).then_with(|| {
-                    if horizontal {
-                        ab.center_x.cmp(&bb.center_x)
-                    } else {
-                        ab.center_y.cmp(&bb.center_y)
-                    }
+                    if horizontal { ab.center_x.cmp(&bb.center_x) } else { ab.center_y.cmp(&bb.center_y) }
                 })
             });
         }
@@ -1761,31 +1398,19 @@ fn separate_top_level_items(
         for item in &items {
             let bounds = bounds_of(item, nodes, frames);
             let start = if horizontal { bounds.left } else { bounds.top };
-            let size = if horizontal {
-                bounds.width
-            } else {
-                bounds.height
-            };
+            let size = if horizontal { bounds.width } else { bounds.height };
             let Some(at) = cursor else {
                 cursor = Some(start + size);
                 previous = Some(item.id.clone());
                 continue;
             };
             let pair_gap = match &previous {
-                Some(previous) => {
-                    min_edge_gap(previous, &item.id).max(min_edge_gap(&item.id, previous))
-                }
+                Some(previous) => min_edge_gap(previous, &item.id).max(min_edge_gap(&item.id, previous)),
                 None => gap,
             };
             let shift = at + pair_gap - start;
             moved |= shift != 0;
-            move_item(
-                item,
-                if horizontal { shift } else { 0 },
-                if horizontal { 0 } else { shift },
-                nodes,
-                frames,
-            );
+            move_item(item, if horizontal { shift } else { 0 }, if horizontal { 0 } else { shift }, nodes, frames);
             cursor = Some(start + shift + size);
             previous = Some(item.id.clone());
         }
@@ -1794,50 +1419,29 @@ fn separate_top_level_items(
 
     let primary_start = |bound: &Bounds| {
         let start = if horizontal { bound.left } else { bound.top };
-        let size = if horizontal {
-            bound.width
-        } else {
-            bound.height
-        };
+        let size = if horizontal { bound.width } else { bound.height };
         if reversed { -(start + size) } else { start }
     };
-    let primary_end = |bound: &Bounds| {
-        primary_start(bound)
-            + if horizontal {
-                bound.width
-            } else {
-                bound.height
-            }
-    };
+    let primary_end = |bound: &Bounds| primary_start(bound) + if horizontal { bound.width } else { bound.height };
     let ensure_clearance = |items: &[Item], nodes: &mut Nodes, frames: &mut Frames| -> bool {
         let mut adjusted = false;
         let endpoint = |id: &str, nodes: &Nodes, frames: &Frames| {
-            nodes
-                .get(id)
-                .map(|node| node.bounds)
-                .or_else(|| frames.get(id).map(|frame| frame.bounds))
+            nodes.get(id).map(|node| node.bounds).or_else(|| frames.get(id).map(|frame| frame.bounds))
         };
         for edge in &diagram.edges {
-            if edge.order_only
-                || (node_ids.contains(edge.from.as_str()) && node_ids.contains(edge.to.as_str()))
-            {
+            if edge.order_only || (node_ids.contains(edge.from.as_str()) && node_ids.contains(edge.to.as_str())) {
                 continue;
             }
-            let find = |id: Option<&String>| {
-                id.and_then(|id| items.iter().position(|item| item.id == *id))
-            };
-            let (Some(from_item), Some(to_item)) =
-                (find(item_of.get(&edge.from)), find(item_of.get(&edge.to)))
-            else {
+            let find = |id: Option<&String>| id.and_then(|id| items.iter().position(|item| item.id == *id));
+            let (Some(from_item), Some(to_item)) = (find(item_of.get(&edge.from)), find(item_of.get(&edge.to))) else {
                 continue;
             };
             if from_item == to_item {
                 continue;
             }
-            let (Some(from_bound), Some(to_bound)) = (
-                endpoint(&edge.from, nodes, frames),
-                endpoint(&edge.to, nodes, frames),
-            ) else {
+            let (Some(from_bound), Some(to_bound)) =
+                (endpoint(&edge.from, nodes, frames), endpoint(&edge.to, nodes, frames))
+            else {
                 continue;
             };
             if primary_start(&to_bound) <= primary_start(&from_bound) {
@@ -1852,9 +1456,7 @@ fn separate_top_level_items(
             let to_start = primary_start(&bounds_of(&items[to_item], nodes, frames));
             let offset = if reversed { -deficit } else { deficit };
             for (index, candidate) in items.iter().enumerate() {
-                if index != to_item
-                    && primary_start(&bounds_of(candidate, nodes, frames)) < to_start
-                {
+                if index != to_item && primary_start(&bounds_of(candidate, nodes, frames)) < to_start {
                     continue;
                 }
                 if index == from_item {
@@ -1872,19 +1474,13 @@ fn separate_top_level_items(
         adjusted
     };
 
-    let mut ranked: Vec<Item> = items
-        .iter()
-        .filter(|item| top_level_ids.contains(item.id.as_str()))
-        .cloned()
-        .collect();
+    let mut ranked: Vec<Item> = items.iter().filter(|item| top_level_ids.contains(item.id.as_str())).cloned().collect();
     if ranked.len() < 2 {
         return ensure_clearance(&items, nodes, frames);
     }
     let ranked_ids: HashSet<String> = ranked.iter().map(|item| item.id.clone()).collect();
-    let mut outgoing: IndexMap<String, IndexSet<String>> = ranked
-        .iter()
-        .map(|item| (item.id.clone(), IndexSet::new()))
-        .collect();
+    let mut outgoing: IndexMap<String, IndexSet<String>> =
+        ranked.iter().map(|item| (item.id.clone(), IndexSet::new())).collect();
     for edge in &diagram.edges {
         let (Some(from), Some(to)) = (item_of.get(&edge.from), item_of.get(&edge.to)) else {
             continue;
@@ -1910,16 +1506,8 @@ fn separate_top_level_items(
     let mut moved = false;
     for rank in &rank_keys {
         let rank_items = &by_rank[rank];
-        let start = rank_items
-            .iter()
-            .map(|item| primary_start(&bounds_of(item, nodes, frames)))
-            .min()
-            .unwrap_or(0);
-        let end = rank_items
-            .iter()
-            .map(|item| primary_end(&bounds_of(item, nodes, frames)))
-            .max()
-            .unwrap_or(0);
+        let start = rank_items.iter().map(|item| primary_start(&bounds_of(item, nodes, frames))).min().unwrap_or(0);
+        let end = rank_items.iter().map(|item| primary_end(&bounds_of(item, nodes, frames))).max().unwrap_or(0);
         let Some(previous) = previous_end else {
             previous_end = Some(end);
             previous_items = rank_items.clone();
@@ -1927,11 +1515,7 @@ fn separate_top_level_items(
         };
         let rank_gap = previous_items
             .iter()
-            .flat_map(|prev| {
-                rank_items
-                    .iter()
-                    .map(move |curr| (prev.id.clone(), curr.id.clone()))
-            })
+            .flat_map(|prev| rank_items.iter().map(move |curr| (prev.id.clone(), curr.id.clone())))
             .map(|(prev, curr)| min_edge_gap(&prev, &curr))
             .fold(gap, i32::max);
         let shift = 0.max(previous + rank_gap - start);
@@ -1961,11 +1545,7 @@ fn separate_top_level_items(
         for item in &rank_items {
             let bounds = bounds_of(item, nodes, frames);
             let start = if horizontal { bounds.top } else { bounds.left };
-            let size = if horizontal {
-                bounds.height
-            } else {
-                bounds.width
-            };
+            let size = if horizontal { bounds.height } else { bounds.width };
             let Some(at) = cross else {
                 cross = Some(start + size + gap);
                 continue;
@@ -1973,23 +1553,14 @@ fn separate_top_level_items(
             let shift = 0.max(at - start);
             if shift > 0 {
                 moved = true;
-                move_item(
-                    item,
-                    if horizontal { 0 } else { shift },
-                    if horizontal { shift } else { 0 },
-                    nodes,
-                    frames,
-                );
+                move_item(item, if horizontal { 0 } else { shift }, if horizontal { shift } else { 0 }, nodes, frames);
             }
             cross = Some(start + shift + size + gap);
         }
     }
     if target_width.is_some() && !horizontal {
         let member_bounds = |item: &Item, nodes: &Nodes| -> Vec<Bounds> {
-            item.node_ids
-                .iter()
-                .filter_map(|id| nodes.get(id).map(|node| node.bounds))
-                .collect()
+            item.node_ids.iter().filter_map(|id| nodes.get(id).map(|node| node.bounds)).collect()
         };
         let intersects = |left: &Item, right: &Item, nodes: &Nodes| {
             member_bounds(left, nodes).iter().any(|a| {

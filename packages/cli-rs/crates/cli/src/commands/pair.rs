@@ -27,9 +27,7 @@ pub fn run(_context: &Context, args: &PairArgs) -> anyhow::Result<()> {
     let local = Local::from_env()?;
     let config = local.config().read()?;
     if config.disabled == Some(true) {
-        anyhow::bail!(
-            "Pairing requires the background service; run `opencode service unset disabled` first"
-        );
+        anyhow::bail!("Pairing requires the background service; run `opencode service unset disabled` first");
     }
     if args.remote && args.url.is_some() {
         anyhow::bail!("--remote cannot be combined with --url");
@@ -40,11 +38,7 @@ pub fn run(_context: &Context, args: &PairArgs) -> anyhow::Result<()> {
         }
         // Changing the setting restarts the service, and the ensure below starts it again with the tunnel.
         let child = delegate::enable_remote(&TsCommand::from_env())?;
-        match delegate::exit_code(crate::signals::wait_child(
-            "enable remote access",
-            child,
-            false,
-        )?) {
+        match delegate::exit_code(crate::signals::wait_child("enable remote access", child, false)?) {
             0 => {}
             code => return Err(Exit(u8::try_from(code).unwrap_or(1)).into()),
         }
@@ -78,9 +72,7 @@ fn links(urls: &[String], code: &str, expires_in: i64) -> String {
     // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
     let remote: Vec<&String> = urls
         .iter()
-        .filter(|url| {
-            !url::Url::parse(url).is_ok_and(|url| is_loopback(url.host_str().unwrap_or("")))
-        })
+        .filter(|url| !url::Url::parse(url).is_ok_and(|url| is_loopback(url.host_str().unwrap_or(""))))
         .collect();
     let mut lines = vec![
         String::new(),
@@ -128,9 +120,7 @@ fn ssh_hint(endpoint: &str) -> Option<String> {
         [
             "  Over SSH? Forward the port, then open the link on your machine:".to_string(),
             format!("  ssh -L {port}:{host}:{port} <host>"),
-            format!(
-                "  If port {port} is busy locally, forward another port and use it in the link."
-            ),
+            format!("  If port {port} is busy locally, forward another port and use it in the link."),
             String::new(),
             "  To connect from other devices, run `opencode service set hostname 0.0.0.0`.".into(),
             String::new(),
@@ -141,10 +131,7 @@ fn ssh_hint(endpoint: &str) -> Option<String> {
 }
 
 fn is_loopback(hostname: &str) -> bool {
-    hostname == "localhost"
-        || hostname.ends_with(".localhost")
-        || hostname.starts_with("127.")
-        || hostname == "[::1]"
+    hostname == "localhost" || hostname.ends_with(".localhost") || hostname.starts_with("127.") || hostname == "[::1]"
 }
 
 // `Math.round`: halves round up.
@@ -164,10 +151,7 @@ fn consent(local: &Local, config: &Info, yes: bool) -> anyhow::Result<bool> {
     }
     prompt::log::warn(REMOTE_WARNING);
     if !yes {
-        match prompt::confirm("Expose your server to the internet?")
-            .initial_value(true)
-            .prompt()
-        {
+        match prompt::confirm("Expose your server to the internet?").initial_value(true).prompt() {
             Err(prompt::Cancelled) => {
                 prompt::cancel(NOT_ENABLED);
                 return Err(Exit(130).into());
@@ -191,9 +175,9 @@ async fn remote_url(local: &Local, client: &Client) -> anyhow::Result<String> {
         let route = local.config().read().ok()?.remote?.route;
         let hostname = delegate::tunnel_hostname(&local.paths, &route).ok()??;
         let info = client.server_info(&RequestOptions::default()).await.ok()?;
-        info.urls.into_iter().find(|candidate| {
-            url::Url::parse(candidate).is_ok_and(|url| url.host_str() == Some(hostname.as_str()))
-        })
+        info.urls
+            .into_iter()
+            .find(|candidate| url::Url::parse(candidate).is_ok_and(|url| url.host_str() == Some(hostname.as_str())))
     };
     let poll = async {
         loop {
@@ -218,11 +202,7 @@ mod tests {
 
     #[test]
     fn links_follow_the_server_urls() {
-        let text = links(
-            &["http://127.0.0.1:4096".into(), "http://[::1]:4096/".into()],
-            "abc",
-            600,
-        );
+        let text = links(&["http://127.0.0.1:4096".into(), "http://[::1]:4096/".into()], "abc", 600);
         assert_eq!(
             text,
             "\n  Open a link to connect. Links work once and expire in 10 minutes.\n\n  http://127.0.0.1:4096/auth/connect/abc\n  http://[::1]:4096/auth/connect/abc\n\n"
@@ -245,13 +225,7 @@ mod tests {
 
     #[test]
     fn loopback_hosts() {
-        for host in [
-            "localhost",
-            "a.localhost",
-            "127.0.0.1",
-            "127.9.9.9",
-            "[::1]",
-        ] {
+        for host in ["localhost", "a.localhost", "127.0.0.1", "127.9.9.9", "[::1]"] {
             assert!(is_loopback(host), "{host}");
         }
         for host in ["0.0.0.0", "10.0.0.1", "example.com", "[::2]"] {

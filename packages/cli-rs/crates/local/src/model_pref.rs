@@ -22,10 +22,7 @@ pub struct Model {
 
 impl Model {
     pub fn new(provider_id: impl Into<String>, model_id: impl Into<String>) -> Self {
-        Self {
-            provider_id: provider_id.into(),
-            model_id: model_id.into(),
-        }
+        Self { provider_id: provider_id.into(), model_id: model_id.into() }
     }
 
     /// `modelPreferenceKey`: `<providerID>/<modelID>`.
@@ -75,10 +72,7 @@ fn variants(value: Option<&Value>) -> IndexMap<String, String> {
 
 /// `decodeModelPreference`: the document with sanitized `recent`, `favorite`, and `variant`.
 pub fn decode(value: Option<&Value>) -> Map<String, Value> {
-    let mut document = value
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
+    let mut document = value.and_then(Value::as_object).cloned().unwrap_or_default();
     let preference = preference(&document);
     put(&mut document, &preference, true, true, true);
     document
@@ -92,13 +86,7 @@ fn preference(document: &Map<String, Value>) -> Preference {
     }
 }
 
-fn put(
-    document: &mut Map<String, Value>,
-    value: &Preference,
-    recent: bool,
-    favorite: bool,
-    variant: bool,
-) {
+fn put(document: &mut Map<String, Value>, value: &Preference, recent: bool, favorite: bool, variant: bool) {
     let list = |models: &[Model]| Value::Array(models.iter().map(Model::to_value).collect());
     if recent {
         document.insert("recent".into(), list(&value.recent));
@@ -107,11 +95,7 @@ fn put(
         document.insert("favorite".into(), list(&value.favorite));
     }
     if variant {
-        let map = value
-            .variant
-            .iter()
-            .map(|(key, item)| (key.clone(), Value::String(item.clone())))
-            .collect();
+        let map = value.variant.iter().map(|(key, item)| (key.clone(), Value::String(item.clone()))).collect();
         document.insert("variant".into(), Value::Object(map));
     }
 }
@@ -124,34 +108,18 @@ pub fn normalize_variant(value: Option<&str>) -> Option<&str> {
 /// `recentModels`: `model` first, without repeats, at most 10.
 pub fn recent_models(model: &Model, recent: &[Model]) -> Vec<Model> {
     let mut seen = std::collections::HashSet::new();
-    std::iter::once(model)
-        .chain(recent)
-        .filter(|item| seen.insert(item.key()))
-        .take(10)
-        .cloned()
-        .collect()
+    std::iter::once(model).chain(recent).filter(|item| seen.insert(item.key())).take(10).cloned().collect()
 }
 
 /// `favoriteModels`.
 pub fn favorite_models(model: &Model, favorite: &[Model], enabled: bool) -> Vec<Model> {
-    let rest = favorite
-        .iter()
-        .filter(|item| item.key() != model.key())
-        .cloned();
-    if enabled {
-        std::iter::once(model.clone()).chain(rest).collect()
-    } else {
-        rest.collect()
-    }
+    let rest = favorite.iter().filter(|item| item.key() != model.key()).cloned();
+    if enabled { std::iter::once(model.clone()).chain(rest).collect() } else { rest.collect() }
 }
 
 /// `cycleModelVariant`: the next named variant, or `None` after the last.
 pub fn cycle_variant(current: Option<&str>, variants: &[&str]) -> Option<String> {
-    let named: Vec<&str> = variants
-        .iter()
-        .copied()
-        .filter(|v| *v != "default")
-        .collect();
+    let named: Vec<&str> = variants.iter().copied().filter(|v| *v != "default").collect();
     let first = *named.first()?;
     let Some(value) = normalize_variant(current) else {
         return Some(first.to_string());
@@ -170,11 +138,7 @@ pub struct ModelPreferences {
 
 impl ModelPreferences {
     pub fn new(state: &Path) -> Self {
-        Self {
-            file: state.join("model.json"),
-            locks: state.join("locks"),
-            lock: lock::Options::default(),
-        }
+        Self { file: state.join("model.json"), locks: state.join("locks"), lock: lock::Options::default() }
     }
 
     pub fn path(&self) -> &Path {
@@ -188,26 +152,14 @@ impl ModelPreferences {
     pub fn add_recent(&self, model: &Model) -> Result<(), lock::Error> {
         self.update(|current| {
             let recent = recent_models(model, &current.recent);
-            (
-                Preference {
-                    recent,
-                    ..Preference::default()
-                },
-                (true, false, false),
-            )
+            (Preference { recent, ..Preference::default() }, (true, false, false))
         })
     }
 
     pub fn set_favorite(&self, model: &Model, enabled: bool) -> Result<(), lock::Error> {
         self.update(|current| {
             let favorite = favorite_models(model, &current.favorite, enabled);
-            (
-                Preference {
-                    favorite,
-                    ..Preference::default()
-                },
-                (false, true, false),
-            )
+            (Preference { favorite, ..Preference::default() }, (false, true, false))
         })
     }
 
@@ -223,13 +175,7 @@ impl ModelPreferences {
             let mut variant = current.variant.clone();
             let next = normalize_variant(value).unwrap_or("default");
             variant.insert(model.key(), next.to_string());
-            (
-                Preference {
-                    variant,
-                    ..Preference::default()
-                },
-                (false, false, true),
-            )
+            (Preference { variant, ..Preference::default() }, (false, false, true))
         })
     }
 
@@ -245,28 +191,18 @@ impl ModelPreferences {
     }
 
     fn read(&self) -> Map<String, Value> {
-        let value = fs::read_to_string(&self.file)
-            .ok()
-            .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+        let value = fs::read_to_string(&self.file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
         decode(value.as_ref())
     }
 
     // `update(change)`: the patch replaces only the lists it names, sanitized again.
-    fn update(
-        &self,
-        change: impl FnOnce(&Preference) -> (Preference, (bool, bool, bool)),
-    ) -> Result<(), lock::Error> {
-        lock::with_lock(
-            &self.locks,
-            &self.file.to_string_lossy(),
-            &self.lock,
-            || {
-                let mut document = self.read();
-                let (patch, (recent, favorite, variant)) = change(&preference(&document));
-                put(&mut document, &patch, recent, favorite, variant);
-                write_json_atomic(&self.file, &Value::Object(document))
-            },
-        )?
+    fn update(&self, change: impl FnOnce(&Preference) -> (Preference, (bool, bool, bool))) -> Result<(), lock::Error> {
+        lock::with_lock(&self.locks, &self.file.to_string_lossy(), &self.lock, || {
+            let mut document = self.read();
+            let (patch, (recent, favorite, variant)) = change(&preference(&document));
+            put(&mut document, &patch, recent, favorite, variant);
+            write_json_atomic(&self.file, &Value::Object(document))
+        })?
         .map_err(lock::Error::Io)
     }
 }
@@ -296,10 +232,7 @@ mod tests {
         prefs.save_variant(&model, None).unwrap();
         let loaded = prefs.load();
         assert_eq!(loaded.favorite, vec![model.clone()]);
-        assert_eq!(
-            loaded.variant.get("p/m").map(String::as_str),
-            Some("default")
-        );
+        assert_eq!(loaded.variant.get("p/m").map(String::as_str), Some("default"));
         assert_eq!(prefs.resolve_variant(&model), None);
         assert_eq!(decode(Some(&json!([1]))), decode(None));
     }
@@ -308,10 +241,7 @@ mod tests {
     fn cycles_variants_like_typescript() {
         let variants = ["default", "low", "high"];
         assert_eq!(cycle_variant(None, &variants).as_deref(), Some("low"));
-        assert_eq!(
-            cycle_variant(Some("low"), &variants).as_deref(),
-            Some("high")
-        );
+        assert_eq!(cycle_variant(Some("low"), &variants).as_deref(), Some("high"));
         assert_eq!(cycle_variant(Some("high"), &variants), None);
         assert_eq!(cycle_variant(Some("gone"), &variants), None);
         assert_eq!(cycle_variant(None, &["default"]), None);
