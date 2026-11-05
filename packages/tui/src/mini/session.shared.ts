@@ -23,8 +23,7 @@ export type RunSession = {
 }
 
 export function messagePrompt(message: Pick<SessionMessageUser, "text" | "files" | "agents" | "skills">): RunPrompt {
-  // Mini sends files back as the server stored them, so a server's `file:` source stays the source.
-  const input = projectedPromptInput(message, true)
+  const input = projectedPromptInput(message)
   return {
     text: input.text,
     parts: [

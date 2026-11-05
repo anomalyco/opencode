@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { measureEditText } from "@opentui/core"
-import { mkdir, readdir, rm, utimes } from "node:fs/promises"
+import { mkdir, readdir, rm, stat, utimes } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { readKeptAttachments } from "../../src/component/prompt/local-attachment"
 import {
   appendPrompt,
   isDuplicateEntry,
+  keepPromptMedia,
   MAX_HISTORY_ENTRIES,
   parsePromptHistory,
   persistablePrompt,
@@ -75,6 +76,18 @@ describe("prompt history", () => {
     expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
   })
 
+  test("marks a file uri read back without a path or an @ mention as recalled", () => {
+    const restored = { uri: "file:///srv/shot.png", mention: { start: 0, end: 9, text: "[Image 1]" } }
+    const others = [
+      { uri: "file:///srv/a.ts", mention: { start: 10, end: 15, text: "@a.ts" } },
+      { uri: "file:///tmp/clip.mp4", path: "/tmp/clip.mp4" },
+      { uri: "data:image/png;base64,AAA" },
+    ]
+    expect(parsePromptHistory(JSON.stringify(entry("[Image 1] @a.ts", [restored, ...others])))).toEqual([
+      entry("[Image 1] @a.ts", [{ ...restored, recalled: true }, ...others]),
+    ])
+  })
+
   test("keeps a video's local file instead of its bytes, and gives a video of any type without one a file", async () => {
     await using tmp = await tmpdir()
     const image = { uri: "data:image/png;base64,AAAA", path: "/tmp/shot.png" }
@@ -140,6 +153,26 @@ describe("prompt history", () => {
     await mkdir(path.join(tmp.path, "prompt-stash.jsonl"))
     await prunePromptMedia(tmp.path)
     expect((await readdir(promptMediaDirectory(tmp.path))).toSorted()).toEqual(names([history!, stash!, fresh!]))
+  })
+
+  test("restarts the grace window of only the kept videos a prompt names", async () => {
+    await using tmp = await tmpdir()
+    const kept = path.join(promptMediaDirectory(tmp.path), "0d".repeat(32) + ".mp4")
+    const own = path.join(tmp.path, "clip.mp4")
+    const day = new Date(Date.now() - 25 * 60 * 60 * 1000)
+    for (const file of [kept, own]) {
+      await Bun.write(file, "")
+      await utimes(file, day, day)
+    }
+    keepPromptMedia(
+      entry(
+        "clips",
+        [kept, own].map((file) => ({ uri: pathToFileURL(file).href, path: file })),
+      ),
+      tmp.path,
+    )
+    expect(Date.now() - (await stat(kept)).mtimeMs).toBeLessThan(60_000)
+    expect((await stat(own)).mtimeMs).toBe(day.getTime())
   })
 
   test.each(["wcwidth", "unicode"] as const)("appends a prompt and shifts ranges by the %s offset", (widthMethod) => {

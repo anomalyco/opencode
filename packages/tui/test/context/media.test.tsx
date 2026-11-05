@@ -141,18 +141,50 @@ test("players go to the four tiles showing the most of themselves, and stay two 
   expect(keys.filter(media.posterShown)).toEqual([])
   expect(scroll!.verticalScrollBar.listenerCount("change")).toBe(0)
   expect(scroll!.content.listenerCount("resize")).toBe(0)
+  expect(host.app.renderer.listenerCount(CliRenderEvents.FRAME)).toBe(0)
+})
+
+test("eight tiles arriving one by one in a transcript stuck to its bottom settle on four players, with nothing moving", async () => {
+  const clock = new ManualClock()
+  const [count, setCount] = createSignal(0)
+  const boxes: BoxRenderable[] = []
+  // A 9-row transcript: at its bottom, tiles 4 to 7 show whole and tile 3 shows a row.
+  await using host = await renderMedia(
+    () => (
+      <scrollbox height={9} stickyScroll stickyStart="bottom">
+        <For each={Array.from({ length: count() })}>
+          {() => <box ref={(element: BoxRenderable) => boxes.push(element)} height={2} flexShrink={0} />}
+        </For>
+      </scrollbox>
+    ),
+    false,
+    clock,
+  )
+  const media = host.media()
+  const open = () => boxes.map((_, index) => String(index)).filter(media.posterOpen)
+  for (let index = 0; index < 8; index++) {
+    setCount(index + 1)
+    media.trackPoster(String(index), boxes[index]!)
+    clock.advance(500)
+    await host.app.renderOnce()
+  }
+  // Each tile that scrolled out keeps its player through the grace period. Only the grace timer asks for the frame
+  // that closes them.
+  expect(open()).toHaveLength(8)
+  clock.advance(2_000)
+  await host.app.renderOnce()
+  expect(open().join()).toBe("4,5,6,7")
 })
 
 test("a tile under a hidden ancestor drops its player, and gets it back when the ancestor shows again", async () => {
   const clock = new ManualClock()
   const [visible, setVisible] = createSignal(true)
-  let scroll: ScrollBoxRenderable | undefined
   let tile: BoxRenderable | undefined
   // Like the session pane under a fullscreen panel, the box keeps its width while hidden, so nothing resizes.
   await using host = await renderMedia(
     () => (
       <box position="absolute" width={40} height={20} visible={visible()}>
-        <scrollbox ref={(element: ScrollBoxRenderable) => (scroll = element)} height={9}>
+        <scrollbox height={9}>
           <box ref={(element: BoxRenderable) => (tile = element)} height={2} flexShrink={0} />
           <box height={20} flexShrink={0} />
         </scrollbox>
@@ -170,17 +202,16 @@ test("a tile under a hidden ancestor drops its player, and gets it back when the
   }
   expect(await state()).toEqual({ shown: true, open: true })
 
-  // The transcript moves while hidden; the tile keeps its player only the usual two seconds.
+  // Nothing moves; the tile keeps its player only the usual two seconds.
   setVisible(false)
-  scroll!.scrollTo(1)
   expect(await state()).toEqual({ shown: false, open: true })
   clock.advance(2_000)
   expect(await state()).toEqual({ shown: false, open: false })
-  expect(renderer.listenerCount(CliRenderEvents.FRAME)).toBe(1)
 
   setVisible(true)
   expect(await state()).toEqual({ shown: true, open: true })
-  expect(renderer.listenerCount(CliRenderEvents.FRAME)).toBe(0)
+  // Only the visibility check follows frames, not another measurement each frame.
+  expect(renderer.listenerCount(CliRenderEvents.FRAME)).toBe(1)
 })
 
 // Each change brings the tile from beyond half a scroll box or screen away to within it, through one event alone.

@@ -100,16 +100,16 @@ export async function oversizedPastedVideo(text: string, platform: string) {
   }
 }
 
-type KeptFile = { uri: string; path?: string; name?: string; mention?: { text: string } }
+type KeptFile = { uri: string; path?: string; name?: string; recalled?: boolean }
 
 /**
  * Whether sending reads `file` here: a `file://` file with a local path, which a draft, history, or the stash kept. A
- * remote server never gets this machine's `file://` uri, so there an unmentioned one without a path is left out. Only
- * an `@` mention names a file the server reads itself.
+ * remote server never gets a `file://` uri history or the stash recalled without a path, which may name a file on
+ * another machine, so there that file is left out.
  */
 export function isKeptAttachment(file: KeptFile, localServer: boolean) {
   if (!file.uri.startsWith("file:")) return false
-  return !!file.path || (!localServer && !file.mention?.text.startsWith("@"))
+  return !!file.path || (!localServer && !!file.recalled)
 }
 
 // Reads again the files a draft, history, or the stash kept as local paths. `unreadable` names the ones left out.
@@ -136,12 +136,12 @@ export async function readKeptAttachments<T extends KeptFile>(files: readonly T[
 
 // Keep the captured bytes: a local server may not have the terminal's access to the source file. A file under
 // `keptDirectory` is the TUI's own copy of a restored video, not a source, so it goes without one.
-export function promptFilesForServer<T extends { uri: string; path?: string }>(
+export function promptFilesForServer<T extends { uri: string; path?: string; recalled?: boolean }>(
   files: readonly T[] | undefined,
   localServer: boolean,
   keptDirectory: string,
 ) {
-  return files?.map(({ path: file, ...rest }) =>
+  return files?.map(({ path: file, recalled: _, ...rest }) =>
     file && localServer && path.dirname(file) !== keptDirectory
       ? { ...rest, source: { type: "uri" as const, uri: pathToFileURL(file).href } }
       : rest,

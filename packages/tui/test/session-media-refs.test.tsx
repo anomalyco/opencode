@@ -188,17 +188,22 @@ test("reads transcripts with media refs and loads a ref's bytes before /undo rew
   expect(app.calls).toEqual([`${MEDIA} 200`, `${REVERT} 200`])
 }, 20000)
 
-test("/undo against a remote server sends the stored copy of an image the server read from its own disk", async () => {
-  const shot = {
-    uri: `media:${hash}`,
-    mime: "image/png",
-    source: { type: "uri", uri: "file:///home/devbox/screenshot.png" },
-    name: "shot.png",
-    mention: { start: 11, end: 20, text: "[Image 1]" },
-  }
+// A pasted image, a directory, and a line range the server read from its own disk, for it to read again.
+test("/undo against a remote server sends the files the server read from its own disk as their sources", async () => {
+  const source = (uri: string) => ({ uri: `media:${hash}`, source: { type: "uri", uri } })
+  const files = [
+    {
+      ...source("file:///home/devbox/screenshot.png"),
+      mime: "image/png",
+      name: "shot.png",
+      mention: { start: 11, end: 20, text: "[Image 1]" },
+    },
+    { ...source("file:///home/devbox/src"), mime: "application/x-directory", name: "src" },
+    { ...source("file:///home/devbox/src/a.ts?start=2&end=4"), mime: "text/plain", name: "a.ts" },
+  ]
   const sent = Promise.withResolvers<{ files?: { uri: string }[] }>()
   await using app = await openSession({
-    messages: [messages[0], { ...messages[1], files: [shot] }],
+    messages: [messages[0], { ...messages[1], files }],
     respond: {
       [PROMPT]: async (request) => {
         const body = await request.json()
@@ -211,7 +216,8 @@ test("/undo against a remote server sends the stored copy of an image the server
   await app.waitForFrame((frame) => shown(frame) === 2)
   app.mockInput.pressEnter()
 
-  expect((await sent.promise).files?.map((file) => file.uri)).toEqual([pngURI])
+  expect((await sent.promise).files?.map((file) => file.uri)).toEqual(files.map((file) => file.source.uri))
+  expect(app.calls.filter((call) => call.startsWith(MEDIA))).toEqual([])
 }, 20000)
 
 // Starts an undo, leaves the session while its media read waits, then lets the read finish.

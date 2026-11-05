@@ -237,7 +237,7 @@ describe("prompt local attachments", () => {
     expect(result.unreadable).toEqual(["big clip.mp4"])
   })
 
-  test("never sends a remote server this machine's file uri unless an @ mention names the server's file", async () => {
+  test("never sends a remote server a file uri history or the stash recalled without a path", async () => {
     await using tmp = await tmpdir()
     const clip = path.join(tmp.path, "clip.webm")
     await Bun.write(clip, new Uint8Array([1, 2, 3]))
@@ -246,17 +246,18 @@ describe("prompt local attachments", () => {
       name: "clip.webm",
       mention: { start: 0, end: 9, text: "[Video 1]" },
     }
-    const mentioned = { uri: pathToFileURL(clip).href, mention: { start: 10, end: 20, text: "@clip.webm" } }
+    const recalled = { ...restored, recalled: true }
 
-    // A local server reads a restored file itself.
-    expect(await readKeptAttachments([restored, mentioned], true)).toEqual({
-      files: [restored, mentioned],
+    // A local server reads a recalled file itself; any server reads the file its own restore names.
+    expect(await readKeptAttachments([recalled, restored], true)).toEqual({
+      files: [recalled, restored],
       unreadable: [],
     })
-    expect(await readKeptAttachments([restored, mentioned], false)).toEqual({
-      files: [mentioned],
+    expect(await readKeptAttachments([recalled, restored], false)).toEqual({
+      files: [restored],
       unreadable: ["clip.webm"],
     })
+    expect(promptFilesForServer([recalled], false, tmp.path)).toEqual([restored])
     // With its path, the file is sent as the bytes read here, to either server.
     const localized = { ...restored, path: clip }
     for (const localServer of [true, false])
