@@ -252,6 +252,7 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
+    const daemon = yield* Shell.Daemon
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
@@ -294,11 +295,10 @@ export const Plugin = {
     })
 
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
-      (sessionID: SessionSchema.ID, id: string, shellID: string, command: string, settled: Deferred.Deferred<Output>) =>
-        notify(sessions, jobs, { sessionID, id, shellID, command, settled }),
       // Not in this Location's scope: a daemon command outlives a Location that closes while the server runs, and
-      // its session must still hear how it ended. The watch ends with the job, or when the job registry closes.
-      Effect.forkDetach({ startImmediately: true }),
+      // its session must still hear how it ended.
+      (sessionID: SessionSchema.ID, id: string, shellID: string, command: string, settled: Deferred.Deferred<Output>) =>
+        daemon.watch(notify(sessions, jobs, { sessionID, id, shellID, command, settled })),
     )
 
     // Foreground commands this tool is blocked on. A planned shutdown moves them to the background, so it records

@@ -144,6 +144,7 @@ const shellPluginSupervisor = makeLocationNode({
     Detaching.node,
     Job.node,
     Shell.node,
+    Shell.daemonNode,
     ShellSelect.node,
     Tool.node,
   ],
@@ -151,6 +152,7 @@ const shellPluginSupervisor = makeLocationNode({
 
 const nodes = LayerNode.group([
   PersistentPty.node,
+  Shell.daemonNode,
   Database.node,
   Bus.node,
   Detaching.node,
@@ -239,6 +241,7 @@ const detachableShellSupervisor = makeLocationNode({
     Detaching.node,
     Job.node,
     Shell.node,
+    Shell.daemonNode,
     ShellSelect.node,
     Tool.node,
   ],
@@ -1261,6 +1264,7 @@ describe("ShellTool", () => {
             Detaching.node,
             Job.node,
             Shell.node,
+            Shell.daemonNode,
             ShellSelect.node,
             Tool.node,
           ],

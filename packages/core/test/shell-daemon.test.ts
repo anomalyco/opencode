@@ -306,42 +306,43 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  timed("a closed Location and its replacement share a command's timeout and stop through the daemon", () =>
+  timed("a closed Location and its replacement see the same commands, with one timer and one report each", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       const closing = yield* env.openLocation(env.directory)
       const backgrounded = yield* closing.shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 100 })
       const stopped = yield* closing.shell.create({ shell: "/bin/sh", command: "sleep 60" })
+      const removed = yield* closing.shell.create({ shell: "/bin/sh", command: "sleep 60" })
       yield* closing.close
-      const exits = { closed: 0, replacement: 0 }
-      yield* closing.bus.listen((event) =>
+      let exits = 0
+      yield* env.serverBus.listen((event) =>
         Effect.sync(() => {
-          if (event.type === "shell.exited") exits.closed++
+          if (event.type === "shell.exited") exits++
         }),
       )
       const replacement = yield* env.openLocation(env.directory)
-      yield* replacement.bus.listen((event) =>
-        Effect.sync(() => {
-          if (event.type === "shell.exited") exits.replacement++
-        }),
-      )
-      expect((yield* replacement.shell.list()).map((item) => item.id)).toEqual([backgrounded.id, stopped.id])
+      expect((yield* replacement.shell.list()).map((item) => item.id)).toEqual([
+        backgrounded.id,
+        stopped.id,
+        removed.id,
+      ])
 
       // The call that started it, still in the closed Location, moves it to the background and clears its timeout.
       yield* closing.shell.timeout(backgrounded.id, 0)
-      const gets = () => env.daemon.ops.filter((op) => op === "get").length
-      const before = gets()
       yield* TestClock.adjust("100 millis")
-      // The replacement's timer checked the daemon and left the command alone.
-      yield* until(() => gets() > before)
       expect(env.signals(1)).toEqual([])
 
-      // Cancelling its job in the closed Location stops it; the replacement reports why it ended.
+      // Cancelling its job in the closed Location stops it; both see why it ended, and it is reported once.
       yield* closing.shell.stop(stopped.id, "killed")
       expect(yield* replacement.shell.wait(stopped.id)).toMatchObject({ status: "killed" })
       expect(yield* closing.shell.wait(stopped.id)).toMatchObject({ status: "killed" })
-      yield* until(() => exits.replacement === 1)
-      expect(exits.closed).toBe(0)
+      yield* until(() => exits === 1)
+
+      // Removed through one, it is gone from both.
+      yield* replacement.shell.remove(removed.id)
+      expect(yield* closing.shell.get(removed.id).pipe(Effect.flip)).toBeInstanceOf(Shell.NotFoundError)
+      // The server watched them all along: the replacement took nothing back and waited on nothing more.
+      expect(env.daemon.ops.filter((op) => op === "wait")).toHaveLength(3)
       yield* replacement.close
     }),
   )

@@ -20,6 +20,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { Shell } from "@opencode/core/shell"
 import { Detaching } from "@opencode/core/detaching"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
@@ -77,6 +78,8 @@ const applicationServiceNodes = [
   PermissionSaved.node,
   PtyTicket.node,
   PersistentPty.node,
+  // Daemon-run shell commands belong to the server, so a Location closing never takes them down.
+  Shell.daemonNode,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,

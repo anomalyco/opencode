@@ -40,8 +40,10 @@ export const daemonShells = Effect.fn(function* () {
       })
     }),
   ).pipe(Layer.provide(hostEnvironmentLayer))
-  const shellLayer = (directory: string) =>
+  // `server` shares one server's daemon commands between Locations; without it the Location gets a server of its own.
+  const shellLayer = (directory: string, server?: Shell.DaemonInterface) =>
     AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node, Detaching.node]), [
+      ...(server ? [Shell.daemonNode.replace(Layer.succeed(Shell.Daemon, server))] : []),
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -53,7 +55,15 @@ export const daemonShells = Effect.fn(function* () {
       Environment.node.replace(environment),
       PersistentPty.node.replace(Layer.succeed(PersistentPty.Service, pty)),
     ])
-  // A Location's Shell that stays open for the rest of the test.
+  // The server that `openLocation` Locations share, as long as the test runs.
+  const serverContext = yield* Layer.build(
+    AppNodeBuilder.build(LayerNode.group([Shell.daemonNode, Bus.node]), [
+      Global.node.replace(global),
+      PersistentPty.node.replace(Layer.succeed(PersistentPty.Service, pty)),
+    ]),
+  )
+  const server = Context.get(serverContext, Shell.Daemon)
+  // A Location's Shell, on a server of its own, that stays open for the rest of the test.
   const openShell = (directory: string) =>
     Effect.gen(function* () {
       const context = yield* Layer.build(shellLayer(directory))
@@ -63,7 +73,7 @@ export const daemonShells = Effect.fn(function* () {
   const openLocation = (directory: string) =>
     Effect.gen(function* () {
       const scope = yield* Scope.make()
-      const context = yield* Layer.buildWithScope(shellLayer(directory), scope)
+      const context = yield* Layer.buildWithScope(shellLayer(directory, server), scope)
       return {
         shell: Context.get(context, Shell.Service),
         bus: Context.get(context, Bus.Service),
@@ -96,6 +106,8 @@ export const daemonShells = Effect.fn(function* () {
     withShell,
     openShell,
     openLocation,
+    // Where the server's daemon commands report.
+    serverBus: Context.get(serverContext, Bus.Service),
     spawned: () => spawned,
     created: () => daemon.requests.filter((request) => request.op === "create_pipe"),
     signals: (id: number) =>
