@@ -192,10 +192,7 @@ export interface DaemonTransport {
   readonly wait: (id: number) => Effect.Effect<Exited, DaemonError>
   readonly shutdown: Effect.Effect<WireResponse | undefined, DaemonError>
   readonly handoff: Effect.Effect<Handoff | null, DaemonError>
-  readonly subscribe: (
-    id: number,
-    input: SubscribeInput,
-  ) => Effect.Effect<DaemonAttachment, DaemonError>
+  readonly subscribe: (id: number, input: SubscribeInput) => Effect.Effect<DaemonAttachment, DaemonError>
 }
 
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
@@ -210,6 +207,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   let registration: Registration | undefined
   let owner: Awaited<ReturnType<typeof openOwner>> | undefined
   let closed = false
+  // Set once a daemon we spawned turned out to speak another protocol.
+  let incompatible: DaemonError | undefined
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       closed = true
@@ -273,11 +272,11 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     const child = yield* Effect.tryPromise({
       try: () =>
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
-          const child = spawn(
-            executable,
-            ["daemon", "--runtime-dir", root, "--name", id],
-            { detached: true, windowsHide: true, stdio: "ignore" },
-          )
+          const child = spawn(executable, ["daemon", "--runtime-dir", root, "--name", id], {
+            detached: true,
+            windowsHide: true,
+            stdio: "ignore",
+          })
           child.once("spawn", () => {
             child.unref()
             resolve(child)
@@ -293,6 +292,11 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         const found = yield* discover().pipe(
           Effect.map((value) => ({ value })),
           Effect.catch((error) => {
+            // The binary we just started speaks another protocol: waiting longer cannot help.
+            if (error.kind === "protocol" && error.pid !== undefined && error.pid === child.pid) {
+              incompatible = error
+              return Effect.fail(error)
+            }
             last = error
             return Effect.succeed(undefined)
           }),
@@ -315,11 +319,13 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
   })
 
-  // An unreachable daemon can still hold this directory's lock, so retry once in a fresh directory.
+  // An unreachable daemon, or one left by another release, can still hold this directory's lock, so retry once in a
+  // fresh directory. A binary that cannot be spawned, or that speaks another protocol, fails the same way again.
   const start = () =>
     spawnDaemon().pipe(
       Effect.catch((error) =>
         Effect.gen(function* () {
+          if (error.kind === "spawn" || error === incompatible) return yield* Effect.fail(error)
           yield* Effect.logWarning("Starting opencode-pty in a fresh runtime directory", { cause: error.message })
           abandon()
           return yield* spawnDaemon()
@@ -342,7 +348,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         if (registration) return registration
         const found = yield* discover().pipe(
           Effect.catch((error) => {
-            if (shouldStart && error.kind === "connect") return start()
+            // Starting the same incompatible binary again would only fail again.
+            if (shouldStart && error.kind === "connect") return incompatible ? Effect.fail(incompatible) : start()
             return Effect.fail(error)
           }),
         )
@@ -438,10 +445,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     }),
   )
 
-  const subscribe = Effect.fn("PersistentPty.daemon.subscribe")(function* (
-    terminalID: number,
-    input: SubscribeInput,
-  ) {
+  const subscribe = Effect.fn("PersistentPty.daemon.subscribe")(function* (terminalID: number, input: SubscribeInput) {
     const attempt = withRegistration(false, (current) =>
       Effect.tryPromise({
         try: () => subscribePromise(current, terminalID, input),

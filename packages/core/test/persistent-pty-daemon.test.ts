@@ -301,3 +301,36 @@ function temporaryRuntime() {
     return { root, directory }
   })
 }
+
+if (process.platform !== "win32")
+  it.live("gives up at once on a daemon binary that speaks another protocol, and never starts it again", () =>
+    Effect.gen(function* () {
+      const root = yield* temporaryDirectory()
+      const runtime = path.join(root, "runtime")
+      const spawns = path.join(root, "spawns")
+      const binary = path.join(root, "old-opencode-pty")
+      // Registers like an older release would, then idles.
+      yield* Effect.promise(() =>
+        writeFile(
+          binary,
+          [
+            "#!/bin/sh",
+            `echo spawn >> ${JSON.stringify(spawns)}`,
+            'mkdir -p "$3/$5"',
+            `printf '{"instance_id":"old","pid":%s,"protocol":7,"socket":"none","token":"t","features":[]}' $$ > "$3/$5/service.json"`,
+            "exec sleep 30",
+          ].join("\n"),
+          { mode: 0o755 },
+        ),
+      )
+      const daemon = yield* makeDaemonTransport(runtime, "daemon", () => Promise.resolve(binary))
+      const started = Date.now()
+      const first = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
+      expect(first.kind).toBe("protocol")
+      const second = yield* daemon.request({ op: "list", mode: "pipe" }, true).pipe(Effect.flip)
+      expect(second.kind).toBe("protocol")
+      expect(Date.now() - started).toBeLessThan(2_000)
+      const count = yield* Effect.promise(() => Bun.file(spawns).text())
+      expect(count.trim().split("\n")).toHaveLength(1)
+    }),
+  )
