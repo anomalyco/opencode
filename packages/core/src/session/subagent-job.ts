@@ -1,6 +1,6 @@
 export * as SubagentJob from "./subagent-job.js"
 
-import { Context, Effect, Fiber, Layer, Scope, Stream } from "effect"
+import { Context, Effect, Layer, Option, Queue, Scope, Stream } from "effect"
 import { Node } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "../bus.js"
@@ -60,22 +60,42 @@ const make: Effect.Effect<
 
   // Waits until the child stops for good: idle, with no background work or undelivered input left
   // to wake it. It only waits and never resumes, since resuming an idle child runs a model step.
-  const settle = Effect.fnUntraced(function* (
-    sessionID: SessionSchema.ID,
-  ): Effect.fn.Return<void, Session.NotFoundError, Scope.Scope> {
-    // Listen before waiting and checking, so a settlement in between still ends the wait below.
-    const settled = yield* bus
-      .subscribe([SessionEvent.Execution.Succeeded, SessionEvent.Execution.Failed, SessionEvent.Execution.Interrupted])
-      .pipe(
-        Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.runHead,
-        Effect.forkScoped({ startImmediately: true }),
-      )
-    yield* sessions.wait(sessionID)
-    if (!(yield* sessions.active).has(sessionID) && !(yield* SessionBackground.unsettled(jobs, store, db, sessionID)))
-      return
-    yield* Fiber.join(settled)
-    return yield* settle(sessionID)
+  const settle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+    const outcomes = [
+      SessionEvent.Execution.Succeeded,
+      SessionEvent.Execution.Failed,
+      SessionEvent.Execution.Interrupted,
+    ] as const
+    const settled = yield* Queue.make<Bus.SubscribePayload<typeof outcomes>>()
+    // Keep one subscription across all busy periods, including the initial resume. wait() ignores
+    // failures, so retain terminal outcomes rather than mistaking a failed follow-up for success.
+    yield* bus.subscribe(outcomes).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runForEach((event) => Queue.offer(settled, event)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const terminal = Effect.fnUntraced(function* (event: Bus.SubscribePayload<typeof outcomes>) {
+      if (event.type === SessionEvent.Execution.Failed.type)
+        return yield* Effect.fail(new Error(event.data.error.message))
+      if (event.type !== SessionEvent.Execution.Interrupted.type) return
+      // Shutdown leaves the job's recovery marker to restart; it must not notify the parent.
+      if (event.data.reason === "shutdown") return yield* Effect.never
+      return yield* Effect.interrupt
+    })
+    yield* sessions.resume(sessionID)
+    while (true) {
+      yield* sessions.wait(sessionID)
+      // Read active last: input may have been promoted while the pending-work queries ran.
+      const pending = yield* SessionBackground.unsettled(jobs, store, db, sessionID)
+      const active = (yield* sessions.active).has(sessionID)
+      const event = yield* Queue.poll(settled)
+      if (Option.isSome(event)) {
+        yield* terminal(event.value)
+        continue
+      }
+      if (!pending && !active) return
+      yield* terminal(yield* Queue.take(settled))
+    }
   }, Effect.scoped)
 
   const notify = Effect.fn("SubagentJob.notify")(function* (recovery: Recovery, startedAt: number) {
@@ -115,7 +135,6 @@ const make: Effect.Effect<
           metadata: {},
           recovery: input.recovery,
           run: Effect.gen(function* () {
-            yield* sessions.resume(input.recovery.childSessionID)
             yield* settle(input.recovery.childSessionID)
             const messages = yield* sessions.messages({
               sessionID: input.recovery.childSessionID,

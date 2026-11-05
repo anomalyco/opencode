@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Layer, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -143,9 +143,8 @@ describe("subagent observer lifetime", () => {
     )
   }
 
-  it.live(
-    "child that starts a background shell and goes idle reports only after the shell exits",
-    () =>
+  for (const phase of ["running", "notice", "descendant", "failure"] as const) {
+    it.live(`child waits for background work and its completion input (${phase})`, () =>
       Effect.gen(function* () {
         const dir = yield* tmpdirScoped()
         yield* Effect.promise(() =>
@@ -171,17 +170,26 @@ describe("subagent observer lifetime", () => {
           Effect.provide(locations.get(parent.location)),
         )
         const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-        // The child's background shell, which keeps running after the child's turn ends.
+        const owner =
+          phase === "descendant"
+            ? yield* sessions.create({ parentID: child.id, agent: Agent.ID.make("reviewer") })
+            : child
+        // Background shell work can belong to the child or a deeper descendant.
         const exit = yield* Deferred.make<void>()
         yield* jobs.start({
           id: "shell-dev",
           type: "shell",
           title: "dev server",
-          recovery: { kind: "shell", sessionID: child.id, shellID: "shell-dev", command: "bun dev" },
+          recovery: { kind: "shell", sessionID: owner.id, shellID: "shell-dev", command: "bun dev" },
           run: Deferred.await(exit).pipe(Effect.as("exited")),
         })
         yield* jobs.background("shell-dev")
-        yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("final", "final"))
+        yield* llm.push(
+          TestLLM.text("first", "first"),
+          ...(phase === "descendant" ? [TestLLM.text("descendant done", "descendant")] : []),
+          phase === "failure" ? Stream.die(new Error("follow-up failed")) : TestLLM.text("final", "final"),
+        )
+        const gate = yield* llm.gate()
 
         const result = yield* executeTool(registry, {
           sessionID: parent.id,
@@ -200,10 +208,32 @@ describe("subagent observer lifetime", () => {
           },
         })
         expect(result.status).toBe("completed")
-        yield* llm.wait(1).pipe(Effect.timeout("2 seconds"))
+        yield* gate.started
+        // Finish the shell before the child goes idle, but hold its completion input. The
+        // durable marker must bridge this gap even though runningBackground is now empty.
+        if (phase === "notice") {
+          yield* Deferred.succeed(exit, undefined)
+          yield* jobs.wait({ id: "shell-dev" })
+        }
+        yield* gate.release
         yield* sessions.wait(child.id)
         expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
         expect((yield* jobs.get(child.id))?.status).toBe("running")
+
+        if (phase === "failure") {
+          // A failed follow-up must release the job waiter even while the shell is still running.
+          yield* sessions.synthetic({ sessionID: child.id, text: "Check the work again" })
+          yield* jobs.wait({ id: child.id })
+          yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
+          yield* sessions.wait(parent.id)
+          const notices = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
+          expect(notices).toHaveLength(1)
+          expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: child.id, state: "error" } })
+          expect(notices[0]?.text).toContain("follow-up failed")
+          expect((yield* jobs.get(child.id))?.status).not.toBe("running")
+          expect((yield* jobs.get("shell-dev"))?.status).toBe("running")
+          return
+        }
 
         // Mirrors the shell tool's notifyWhenDone: admit the exit notice to the child, which wakes
         // it, then clear the durable marker.
@@ -212,21 +242,22 @@ describe("subagent observer lifetime", () => {
         expect(shell?.notificationID).toBeDefined()
         yield* sessions.synthetic({
           ...(shell?.notificationID ? { id: shell.notificationID } : {}),
-          sessionID: child.id,
+          sessionID: owner.id,
           text: "Background shell exited",
         })
         if (shell?.notificationID) yield* jobs.completeBackground(shell.notificationID)
 
         yield* jobs.wait({ id: child.id })
-        yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
+        yield* llm.wait(phase === "descendant" ? 4 : 3).pipe(Effect.timeout("2 seconds"))
         yield* sessions.wait(parent.id)
         const notices = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
         expect(notices).toHaveLength(1)
         expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: child.id, state: "completed" } })
         expect(notices[0]?.text).toContain("final")
         expect(notices[0]?.text).not.toContain("first")
+        expect(yield* llm.requests()).toHaveLength(phase === "descendant" ? 4 : 3)
         expect(yield* jobs.pendingBackground).toEqual([])
       }),
-    20_000,
-  )
+    )
+  }
 })
