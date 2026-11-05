@@ -854,6 +854,167 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("names a foreground subagent that was moved to the background before the fork", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Review the diff", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      const child = Session.ID.create()
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+        started: 0,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_backgrounded",
+        name: "subagent",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_backgrounded",
+        text: JSON.stringify({ description: "review the diff" }),
+      })
+      // No `background: true`: the foreground call was moved to the background while it blocked.
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_backgrounded",
+        input: { description: "review the diff" },
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_backgrounded",
+        content: [
+          {
+            type: "text",
+            text: `The subagent is working in the background (sessionID: ${child}). You will be notified automatically when it finishes.`,
+          },
+        ],
+        metadata: { sessionID: child, status: "running" },
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        finish: "stop",
+        cost: Money.USD.make(0),
+        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      const forked = yield* session.fork({ sessionID: parent.id })
+      yield* SessionInbox.promote(db, bus, forked.id, "steer")
+      const notice = (yield* session.context(forked.id)).at(-1)
+
+      expect(notice).toMatchObject({ type: "synthetic" })
+      const text = notice?.type === "synthetic" ? notice.text : ""
+      expect(text).toContain(`- ${child} "review the diff" (unreported)`)
+    }),
+  )
+
+  it.effect("does not name a launch whose report is in the copied history", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "Launch a subagent", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      const child = Session.ID.create()
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+        started: 0,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_launch",
+        name: "subagent",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_launch",
+        text: JSON.stringify({ background: true, description: "review the diff" }),
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_launch",
+        input: { background: true, description: "review the diff" },
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_launch",
+        content: [{ type: "text", text: "started" }],
+        metadata: { sessionID: child, status: "running" },
+        executed: true,
+      })
+      // The child reported back through a foreground follow-up before the fork.
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_followup",
+        name: "subagent",
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_followup",
+        text: JSON.stringify({ sessionID: child, description: "review the diff" }),
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_followup",
+        input: { sessionID: child, description: "review the diff" },
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID: parent.id,
+        assistantMessageID,
+        id: "call_followup",
+        content: [{ type: "text", text: `<subagent sessionID="${child}" state="completed">\ndone\n</subagent>` }],
+        metadata: { sessionID: child, status: "completed" },
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID: parent.id,
+        assistantMessageID,
+        finish: "stop",
+        cost: Money.USD.make(0),
+        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      const forked = yield* session.fork({ sessionID: parent.id })
+      yield* SessionInbox.promote(db, bus, forked.id, "steer")
+      const notice = (yield* session.context(forked.id)).at(-1)
+
+      expect(notice).toMatchObject({ type: "synthetic" })
+      const text = notice?.type === "synthetic" ? notice.text : ""
+      expect(text).not.toContain(child)
+      expect(text).not.toContain("Don't wait for these")
+    }),
+  )
+
   it.effect("keeps a fork untitled when its parent is untitled", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

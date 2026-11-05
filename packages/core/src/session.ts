@@ -384,9 +384,8 @@ const layer = Layer.effect(
         // Append-only: the notice is a new admission after the copied rows, so the
         // copied prompt-cache prefix stays byte-identical. It waits in the inbox as a
         // steer and never wakes this fork's runner on creation.
-        const copied = yield* store.messages({ sessionID, order: "asc" }).pipe(Effect.orDie)
         const children = yield* store.list({ parentID: parent.id }).pipe(Effect.orDie)
-        const subagents = yield* ForkNotice.collect({ messages: copied, children, jobs })
+        const subagents = yield* ForkNotice.collect({ db, sessionID, children, jobs })
         yield* result
           .synthetic({
             sessionID,
