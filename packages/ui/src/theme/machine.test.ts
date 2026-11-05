@@ -109,7 +109,10 @@ test("a previewed system scheme follows the system even when the saved scheme is
     { type: "system.mode.changed", mode: "light" },
   )
 
-  expect(applied(result.effects)).toEqual([{ id: "oc-2", mode: "light", scheme: "system" }])
+  expect(applied(result.effects)).toEqual([
+    { id: "oc-2", mode: "dark", scheme: "system" },
+    { id: "oc-2", mode: "light", scheme: "system" },
+  ])
 })
 
 test("registrations, settling and a finished load keep a preview on screen", () => {
