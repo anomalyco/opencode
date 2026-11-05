@@ -17,8 +17,19 @@ import {
 } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import {
+  IDLE_TURN_PHASE,
+  isInterruptedError,
+  sameTurnPhase,
+  transitionTurnPhase,
+  viewTurnPhase,
+  type TurnErrorInfo,
+  type TurnPhase,
+  type TurnPhaseEvent,
+  type TurnThinkingPlacement,
+} from "./turn-phase-machine"
 
-export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
+export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap, type TurnPhase }
 
 export type ReasoningMode = "hidden" | "compact" | "full"
 
@@ -121,6 +132,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
 
   return {
     activeMessageID: projection.activeMessageID,
+    turnPhaseByID: projection.turnPhaseByID,
     assistantMessagesByParent: indexAssistantMessages(input.sessionMessages),
     lastAssistantGroupKey,
     messageByID: sessionMessageByID,
@@ -199,6 +211,17 @@ export function createReactiveTimelineProjection(input: {
 
   const activeMessageID = createMemo(() => projection().activeMessageID)
 
+  // Rows read their turn's phase, so a recomputed projection that leaves every phase as it was notifies none of them.
+  const turnPhaseByID = createMemo(() => projection().turnPhaseByID, undefined, {
+    equals: (previous, next) =>
+      previous.size === next.size &&
+      [...next].every(([id, phase]) => {
+        const prior = previous.get(id)
+
+        return !!prior && sameTurnPhase(prior, phase)
+      }),
+  })
+
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) =>
     reuseTimelineRows(previous, withNewMessages(projection().rows, input.newMessages?.(), input.newMessagesRead?.())),
   )
@@ -233,6 +256,7 @@ export function createReactiveTimelineProjection(input: {
 
   return {
     activeMessageID,
+    turnPhaseByID,
     assistantMessagesByParent,
     lastAssistantGroupKey,
     messageByID: sessionMessageByID,
@@ -376,13 +400,14 @@ export namespace Timeline {
         last?.type === "notice" &&
         last.message.type === "compaction" &&
         last.message.status === "failed" &&
-        !isInterrupted(last.message.error)
+        !isInterruptedError(last.message.error)
       )
         return
 
       const lastStep = current?.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
 
-      if (lastStep?.type === "assistant" && lastStep.message.error && !isInterrupted(lastStep.message.error)) return
+      if (lastStep?.type === "assistant" && lastStep.message.error && !isInterruptedError(lastStep.message.error))
+        return
 
       if (current && !current.shell) {
         current.entries.push({ type: "idle", message })
@@ -399,10 +424,18 @@ export namespace Timeline {
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
 
+    const placement = detail ? detail.thinking.placement : showReasoning ? "separate" : "hidden"
+
+    const turnPhaseByID = new Map(
+      turns.map((turn) => [turn.id, turnPhase(turn.entries, turn.id === activeMessageID, status, placement)] as const),
+    )
+
+    const phaseOf = (turn: Turn) => turnPhaseByID.get(turn.id) ?? IDLE_TURN_PHASE
+
     const commentary = new Set(
       detail && detail.commentary.placement !== "separate"
         ? turns.flatMap((turn) =>
-            turnCommentary(turn.entries, turn.id !== activeMessageID || status.type === "idle", (content) =>
+            turnCommentary(turn.entries, viewTurnPhase(phaseOf(turn)).settled, (content) =>
               isRenderable(content, showReasoning, detail),
             ),
           )
@@ -459,8 +492,7 @@ export namespace Timeline {
           turn.entries,
           index,
           showReasoning,
-          status,
-          turn.id === activeMessageID,
+          phaseOf(turn),
           shellToolDefaultOpen,
           editToolDefaultOpen,
           visible,
@@ -492,6 +524,7 @@ export namespace Timeline {
 
     return {
       activeMessageID,
+      turnPhaseByID,
       rows: detail
         ? groupMessages(
             rows,
@@ -517,8 +550,7 @@ export namespace Timeline {
     entries: Entry[],
     index: number,
     showReasoning: boolean,
-    status: SessionStatus,
-    isActive: boolean,
+    phase: TurnPhase,
     shellToolDefaultOpen = false,
     editToolDefaultOpen = false,
     isRenderable = renderable,
@@ -531,21 +563,8 @@ export namespace Timeline {
     const lastStep = entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
-    const lastContent = lastAssistant?.content.at(-1)
-
-    const working =
-      isActive &&
-      status.type === "busy" &&
-      lastStep?.type === "assistant" &&
-      lastAssistant?.time.completed === undefined &&
-      !lastAssistant?.error &&
-      !lastAssistant?.retry
-
-    const thinking =
-      working &&
-      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
-      lastContent?.type === "reasoning" &&
-      lastContent.time?.completed === undefined
+    const view = viewTurnPhase(phase)
+    const thinking = view.separateThinkingRef
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
 
@@ -561,12 +580,13 @@ export namespace Timeline {
         contentEntries(message)
           .filter(
             (entry) =>
-              isRenderable(entry.content, showReasoning, detail) && !(thinking && entry.content === lastContent),
+              isRenderable(entry.content, showReasoning, detail) &&
+              !(thinking?.messageID === message.id && thinking.partID === entry.id),
           )
           .map((entry) => ({ messageID: message.id, messageIndex, partID: entry.id, content: entry.content })),
       )
 
-      const interruptedAt = messages.findIndex((message) => isInterrupted(message.error))
+      const interruptedAt = messages.findIndex((message) => isInterruptedError(message.error))
       const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
       const after = interruptedAt < 0 ? [] : refs.filter((ref) => ref.messageIndex > interruptedAt)
 
@@ -599,26 +619,21 @@ export namespace Timeline {
       if (messages.at(-1) !== lastAssistant) return
 
       // The live reasoning row closes its own step, so notices that arrive meanwhile follow it.
-      if (thinking && lastAssistant)
-        rows.push(
-          new TimelineRow.Thinking({
-            userMessageID: turnID,
-            ref: { messageID: lastAssistant.id, partID: contentEntries(lastAssistant).at(-1)!.id },
-          }),
-        )
+      if (thinking) rows.push(new TimelineRow.Thinking({ userMessageID: turnID, ref: thinking }))
 
       if (lastStep?.type !== "assistant") return
 
-      if (isActive && lastAssistant?.retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
-      else if (lastAssistant?.error && !isInterrupted(lastAssistant.error))
+      if (view.retry)
         rows.push(
-          new TimelineRow.Error({
+          new TimelineRow.Retry({
             userMessageID: turnID,
-            text: unwrapErrorMessage(lastAssistant.error.message),
-            ...usageLimit(lastAssistant),
-            ...budgetLimit(lastAssistant),
+            attempt: view.retry.attempt,
+            message: view.retry.message,
+            next: view.retry.next,
           }),
         )
+
+      if (view.error) rows.push(new TimelineRow.Error({ userMessageID: turnID, ...view.error }))
     }
 
     let assistantSegment: SessionMessageAssistant[] = []
@@ -632,15 +647,8 @@ export namespace Timeline {
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
 
-          if (entry === lastStep)
-            rows.push(
-              new TimelineRow.Error({
-                userMessageID: turnID,
-                text: unwrapErrorMessage(entry.message.error.message),
-                ...usageLimit(entry.message),
-                ...budgetLimit(entry.message),
-              }),
-            )
+          if (entry === lastStep && view.error)
+            rows.push(new TimelineRow.Error({ userMessageID: turnID, ...view.error }))
 
           return
         case "diff":
@@ -728,8 +736,56 @@ function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
   return { kind, resetAt: at }
 }
 
-function isInterrupted(error: SessionMessageAssistant["error"]) {
-  return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
+// Each step replaces the phase the steps before it left, so the turn ends in the phase of its last step.
+function turnPhase(entries: Entry[], active: boolean, status: SessionStatus, placement: TurnThinkingPlacement) {
+  return entries.reduce(
+    (phase, entry) => {
+      if (entry.type === "idle")
+        return transitionTurnPhase(phase, { type: "idle.failed", error: errorInfo(entry.message) })
+
+      if (entry.type !== "assistant") return phase
+
+      return transitionTurnPhase(phase, stepEvent(entry.message, active, status, placement))
+    },
+    transitionTurnPhase(IDLE_TURN_PHASE, { type: "started", live: active && status.type !== "idle" }),
+  )
+}
+
+function stepEvent(
+  message: SessionMessageAssistant,
+  active: boolean,
+  status: SessionStatus,
+  placement: TurnThinkingPlacement,
+): TurnPhaseEvent {
+  const completed = message.time.completed !== undefined
+  const last = !completed && active ? Timeline.contentEntries(message).at(-1) : undefined
+
+  return {
+    type: "step",
+    active,
+    session: status.type,
+    completed,
+    reasoning:
+      last?.content.type === "reasoning" && last.content.time?.completed === undefined
+        ? { ref: { messageID: message.id, partID: last.id }, placement }
+        : undefined,
+    retry: message.retry
+      ? { attempt: message.retry.attempt, message: message.retry.error.message, next: message.retry.at }
+      : undefined,
+    error: !message.error
+      ? undefined
+      : isInterruptedError(message.error)
+        ? { interrupted: true }
+        : { interrupted: false, info: errorInfo(message) },
+  }
+}
+
+function errorInfo(message: Parameters<typeof usageLimit>[0]): TurnErrorInfo {
+  return {
+    text: unwrapErrorMessage(message.error?.message ?? ""),
+    ...usageLimit(message),
+    ...budgetLimit(message),
+  }
 }
 
 function isFailedIdle(message: SessionMessageInfo): message is FailedIdle {
