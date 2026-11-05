@@ -15,7 +15,7 @@ use opencode_local::cli_config::Sidebar as SidebarSetting;
 use opencode_plugin::{SlotInput, SlotMount, Slotted, slot};
 use opencode_store::Changes;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use serde_json::json;
@@ -268,22 +268,15 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
         })
     };
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![
-                TuiCommand::new("session.sidebar.toggle", toggle)
-                    .title("Toggle sidebar")
-                    .group("Session")
-                    .palette()
-                    .bind(Bind::Default),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: overlay,
-            commands: vec![TuiCommand::inline("escape,ctrl+c", close).title("Close sidebar").group("Session")],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer::global(vec![
+            TuiCommand::new("session.sidebar.toggle", toggle)
+                .title("Toggle sidebar")
+                .group("Session")
+                .palette()
+                .bind(Bind::Default),
+        ]),
+        KeymapLayer::new(vec![TuiCommand::inline("escape,ctrl+c", close).title("Close sidebar").group("Session")])
+            .enabled(overlay),
     ];
     for layer in layers {
         match tui.keymap.layer(layer) {

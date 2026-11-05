@@ -201,12 +201,7 @@ fn install_escape(tui: &Rc<Tui>, bar: &Rc<Bar>) {
             }),
         )
     };
-    let layer = KeymapLayer {
-        enabled: open,
-        priority: 10,
-        commands: vec![close("escape"), close("ctrl+c")],
-        ..KeymapLayer::default()
-    };
+    let layer = KeymapLayer::new(vec![close("escape"), close("ctrl+c")]).enabled(open).priority(10);
     match tui.keymap.layer(layer) {
         Ok(disposer) => *bar._layer.borrow_mut() = Some(disposer),
         Err(error) => log::error!("devtools keymap layer: {error}"),

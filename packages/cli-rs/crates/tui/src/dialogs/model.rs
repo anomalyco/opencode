@@ -27,7 +27,7 @@ use opencode_store::location::{Catalog, Location};
 use opencode_store::{Changes, Data};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, Dialogs};
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps, fuzzy};
 use opencode_ui::toast::{ToastOptions, Toasts, Variant};
 use opentui::keymap::Disposer;
@@ -1397,11 +1397,7 @@ pub fn install(tui: &Rc<Tui>) {
     let command = |id: &str, run: fn(&Rc<Local>)| {
         TuiCommand::new(id, bind!(local, |local, _, _| run(&local))).bind(Bind::Off).group("Agent")
     };
-    let slash = |name: &str, aliases: &[&str]| Slash {
-        name: name.to_owned(),
-        aliases: aliases.iter().map(|alias| (*alias).to_owned()).collect(),
-        arguments: false,
-    };
+    let slash = |name: &str, aliases: &[&str]| Slash::new(name).aliases(aliases.iter().copied());
     let commands = vec![
         command("model.list", |local| show(local, None))
             .title("Switch model")
@@ -1432,10 +1428,7 @@ pub fn install(tui: &Rc<Tui>) {
         command("agent.cycle.reverse", |local| local.move_agent(-1)).title("Agent cycle reverse"),
     ];
     let names: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
-        KeymapLayer { bindings: names, ..KeymapLayer::default() },
-    ];
+    let layers = [KeymapLayer::global(commands), KeymapLayer::default().bindings(names)];
     for layer in layers {
         match tui.keymap.layer(layer) {
             Ok(disposer) => local.layers.borrow_mut().push(disposer),

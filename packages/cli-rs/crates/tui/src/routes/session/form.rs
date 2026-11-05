@@ -874,12 +874,8 @@ impl Inner {
         let textual = self.is_textual();
         let editing = self.draft.borrow().editing;
         let mut layers = Vec::new();
-        let layer = |priority: i32, commands: Vec<TuiCommand>| KeymapLayer {
-            mode: Some(FORM_MODE.to_owned()),
-            priority,
-            commands,
-            ..KeymapLayer::default()
-        };
+        let layer =
+            |priority: i32, commands: Vec<TuiCommand>| KeymapLayer::new(commands).mode(FORM_MODE).priority(priority);
         if !confirm && self.answer_field().is_some() {
             layers.push(layer(
                 0,

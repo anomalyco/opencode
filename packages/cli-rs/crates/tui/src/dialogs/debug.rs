@@ -90,18 +90,15 @@ pub fn show(tui: &Tui) {
             *hook.borrow_mut() = Some(Rc::downgrade(&draw));
             {
                 let (weak, copied, text) = (weak.clone(), copied.clone(), text);
-                cx.layer(KeymapLayer {
-                    commands: vec![
-                        TuiCommand::inline("c", move |_, _| {
-                            copy(&weak, &copied, &text);
-                            // The layer owns the footer drawing.
-                            draw();
-                        })
-                        .title("Copy debug info")
-                        .group("Dialog"),
-                    ],
-                    ..KeymapLayer::default()
-                });
+                cx.layer(KeymapLayer::new(vec![
+                    TuiCommand::inline("c", move |_, _| {
+                        copy(&weak, &copied, &text);
+                        // The layer owns the footer drawing.
+                        draw();
+                    })
+                    .title("Copy debug info")
+                    .group("Dialog"),
+                ]));
             }
             layout_view(
                 cx,
@@ -120,7 +117,7 @@ pub fn show(tui: &Tui) {
             )
         },
         None,
-        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+        DialogOptions::new(DialogSize::Large),
     );
 }
 

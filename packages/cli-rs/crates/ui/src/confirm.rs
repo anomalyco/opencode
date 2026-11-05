@@ -30,17 +30,14 @@ pub fn confirm(cx: &Rc<DialogCx>, props: ConfirmProps) -> View {
         }
     };
     let (yes, no) = (choose(true), choose(false));
-    cx.layer(KeymapLayer {
-        commands: vec![
-            TuiCommand::inline("return", move |_, _| yes()).title("Confirm").group("Dialog"),
-            TuiCommand::inline("escape", move |_, _| no()).title("Cancel").group("Dialog"),
-        ],
-        ..KeymapLayer::default()
-    });
+    cx.layer(KeymapLayer::new(vec![
+        TuiCommand::inline("return", move |_, _| yes()).title("Confirm").group("Dialog"),
+        TuiCommand::inline("escape", move |_, _| no()).title("Cancel").group("Dialog"),
+    ]));
     let label = |label: &Option<String>, fallback: &str| label.as_deref().unwrap_or(fallback).to_lowercase();
     layout(
         cx,
-        &header(cx, HeaderProps { title: props.title.clone(), ..HeaderProps::default() }),
+        &header(cx, HeaderProps::new(props.title.clone())),
         &Text::new(&cx.app, props.message.as_str()).fg(cx.theme.text.muted),
         Some(FooterProps {
             // Footer labels are lowercase.

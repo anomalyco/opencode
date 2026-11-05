@@ -100,13 +100,13 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
                 .title("Scroll to bottom")
                 .group("Dialog"),
             ]);
-            cx.layer(KeymapLayer { commands, ..KeymapLayer::default() });
+            cx.layer(KeymapLayer::new(commands));
 
             let mut ok = FooterAction::new("ok").key("enter");
             ok.on_trigger = Some(Rc::new(close));
             layout(
                 cx,
-                &header(cx, HeaderProps { title: title.clone(), ..HeaderProps::default() }),
+                &header(cx, HeaderProps::new(title.clone())),
                 &band,
                 Some(FooterProps { primary: vec![ok], ..FooterProps::default() }),
             )

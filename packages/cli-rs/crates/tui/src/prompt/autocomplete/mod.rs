@@ -1017,23 +1017,20 @@ fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
         let weak = weak.clone();
         Condition::when(move || weak.upgrade().is_some_and(|state| state.visible.get().is_some()))
     };
-    let layer = KeymapLayer {
-        mode: Some(MODE.to_owned()),
-        target: Some(target),
-        enabled: visible,
-        bindings: vec!["prompt.queue".to_owned()],
-        commands: vec![
-            command("prompt.autocomplete.prev", "Previous autocomplete item", |state| state.move_by(-1)),
-            command("prompt.autocomplete.next", "Next autocomplete item", |state| state.move_by(1)),
-            command("prompt.autocomplete.hide", "Hide autocomplete", |state| state.hide(false)),
-            command("prompt.clear", "Dismiss autocomplete", |state| state.hide(true)),
-            command("prompt.autocomplete.select", "Select autocomplete item", State::select),
-            command("prompt.autocomplete.complete", "Complete autocomplete item", State::complete),
-            command("prompt.autocomplete.destructive", "Confirm autocomplete action", State::destructive)
-                .bind(Bind::Key("ctrl+d".to_owned())),
-        ],
-        ..KeymapLayer::default()
-    };
+    let layer = KeymapLayer::new(vec![
+        command("prompt.autocomplete.prev", "Previous autocomplete item", |state| state.move_by(-1)),
+        command("prompt.autocomplete.next", "Next autocomplete item", |state| state.move_by(1)),
+        command("prompt.autocomplete.hide", "Hide autocomplete", |state| state.hide(false)),
+        command("prompt.clear", "Dismiss autocomplete", |state| state.hide(true)),
+        command("prompt.autocomplete.select", "Select autocomplete item", State::select),
+        command("prompt.autocomplete.complete", "Complete autocomplete item", State::complete),
+        command("prompt.autocomplete.destructive", "Confirm autocomplete action", State::destructive)
+            .bind(Bind::Key("ctrl+d".to_owned())),
+    ])
+    .mode(MODE)
+    .enabled(visible)
+    .target(target)
+    .bindings(["prompt.queue"]);
     match tui.keymap.layer(layer) {
         Ok(disposer) => {
             let _ = state.layer.set(disposer);

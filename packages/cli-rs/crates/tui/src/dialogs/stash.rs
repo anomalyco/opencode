@@ -61,7 +61,7 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
             view
         },
         None,
-        DialogOptions { size: DialogSize::Medium, key: None },
+        DialogOptions::new(DialogSize::Medium),
     );
 }
 

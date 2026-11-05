@@ -347,7 +347,7 @@ fn options(local: &Local, active: &Option<String>, error: Color) -> Vec<SelectOp
 
 /// A dialog with a header and one muted line, as the loading and signed-out states of `DialogUsage`.
 pub(crate) fn message(cx: &DialogCx, title: &str, text: &str, wrap: bool) -> View {
-    let head = header(cx, HeaderProps { title: title.to_owned(), ..HeaderProps::default() });
+    let head = header(cx, HeaderProps::new(title));
     let body = Text::new(&cx.app, text).fg(cx.theme.text.muted);
     if wrap {
         body.wrap(WrapMode::Word);
