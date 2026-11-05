@@ -851,6 +851,7 @@ const EndpointExperimentalSessionSpawn = (raw: RawClient["server.session"]) => (
     raw["session.spawn"]({
       params: { sessionID: input["sessionID"] },
       payload: {
+        id: input["id"],
         notify: input["notify"],
         agent: input["agent"],
         model: input["model"],

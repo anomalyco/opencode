@@ -475,6 +475,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.spawn", "/api/experimental/session/:sessionID/spawn", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
+          id: Schema.optional(Session.ID).annotate({
+            description:
+              "Client-chosen child id. A retry with the same id under the same parent returns the recorded child without admitting its prompt again. An id recorded under another parent, on a root session, or equal to the parent fails with 409.",
+          }),
           notify: Schema.Boolean.pipe(Schema.optional),
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
@@ -492,7 +496,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "experimental.session.spawn",
             summary: "Spawn subagent session",
             description:
-              "Experimental: may change without compatibility guarantees. Create a child session under this session and optionally admit its first prompt.",
+              "Experimental: may change without compatibility guarantees. Create a child session under this session and optionally admit its first prompt. Pass an optional `id` to make the call retry-safe; reusing an id owned by another session fails with 409.",
           }),
         ),
     )

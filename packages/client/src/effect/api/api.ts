@@ -586,6 +586,7 @@ export type ExperimentalSessionWaitOperation<E = never> = (
 
 export type ExperimentalSessionSpawnInput = {
   readonly sessionID: Session.ID
+  readonly id?: Session.ID | undefined
   readonly notify?: boolean | undefined
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined

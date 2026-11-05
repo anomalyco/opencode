@@ -3875,6 +3875,7 @@ export type ExperimentalSessionWaitOutput = SessionWaitResponse["data"]
 
 export type ExperimentalSessionSpawnInput = {
   readonly sessionID: string
+  readonly id?: string | null | undefined
   readonly notify?: boolean | null | undefined
   readonly agent?: string | null | undefined
   readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null | undefined

@@ -329,6 +329,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           return {
             data: yield* session
               .spawn({
+                id: ctx.payload.id,
                 parent: { id: ctx.params.sessionID, notify: ctx.payload.notify },
                 agent: ctx.payload.agent,
                 model: ctx.payload.model,

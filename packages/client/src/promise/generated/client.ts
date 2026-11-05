@@ -1127,6 +1127,7 @@ export function make(options: ClientOptions) {
               method: "POST",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/spawn`,
               body: {
+                id: input["id"],
                 notify: input["notify"],
                 agent: input["agent"],
                 model: input["model"],
