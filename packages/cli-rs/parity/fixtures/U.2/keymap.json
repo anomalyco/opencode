@@ -22574,6 +22574,8164 @@
    ]
   },
   {
+   "name": "user cli.json",
+   "keybinds": {
+    "leader": "ctrl+\\",
+    "session.tab.next": "tab",
+    "session.tab.previous": "shift+tab",
+    "session.tab.close": "ctrl+w",
+    "session.new": "ctrl+n",
+    "agent.cycle": "none",
+    "input.delete.word.backward": "ctrl+backspace,alt+backspace"
+   },
+   "terminalSuspend": true,
+   "layout": "all",
+   "textarea": false,
+   "extra": [
+    [
+     "\u001c",
+     "l"
+    ],
+    [
+     "\u001c",
+     "m"
+    ],
+    [
+     "\u001c",
+     "1"
+    ],
+    [
+     "\u001c",
+     "w"
+    ],
+    [
+     "\u001c",
+     "n"
+    ],
+    [
+     "\u001c",
+     "\u001b[27u",
+     "l"
+    ],
+    [
+     "\u0018",
+     "l"
+    ],
+    [
+     "a",
+     "\u001c",
+     "l"
+    ],
+    [
+     "\t"
+    ],
+    [
+     "\u001b[Z"
+    ],
+    [
+     "\u0017"
+    ],
+    [
+     "\u000e"
+    ]
+   ],
+   "cases": [
+    {
+     "keys": [
+      "\u001b[99;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0003"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "q"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[108;5u"
+     ],
+     "commands": [
+      "app.clear"
+     ]
+    },
+    {
+     "keys": [
+      "\f"
+     ],
+     "commands": [
+      "app.clear"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;5u"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u0010"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[27u"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "q"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "j"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "k"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6~"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5~"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "g",
+      "g"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[103;2u"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "G"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "]"
+     ],
+     "commands": [
+      "diff.next_hunk"
+     ]
+    },
+    {
+     "keys": [
+      "["
+     ],
+     "commands": [
+      "diff.previous_hunk"
+     ]
+    },
+    {
+     "keys": [
+      "n"
+     ],
+     "commands": [
+      "diff.next_file"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3B"
+     ],
+     "commands": [
+      "diff.next_file"
+     ]
+    },
+    {
+     "keys": [
+      "p"
+     ],
+     "commands": [
+      "diff.previous_file"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3A"
+     ],
+     "commands": [
+      "diff.previous_file"
+     ]
+    },
+    {
+     "keys": [
+      "b"
+     ],
+     "commands": [
+      "diff.toggle_file_tree"
+     ]
+    },
+    {
+     "keys": [
+      "s"
+     ],
+     "commands": [
+      "diff.single_patch"
+     ]
+    },
+    {
+     "keys": [
+      "d"
+     ],
+     "commands": [
+      "diff.switch_source"
+     ]
+    },
+    {
+     "keys": [
+      "v"
+     ],
+     "commands": [
+      "diff.toggle_view"
+     ]
+    },
+    {
+     "keys": [
+      "f"
+     ],
+     "commands": [
+      "diff.toggle_fullscreen"
+     ]
+    },
+    {
+     "keys": [
+      "m"
+     ],
+     "commands": [
+      "diff.mark_reviewed"
+     ]
+    },
+    {
+     "keys": [
+      "?"
+     ],
+     "commands": [
+      "diff.help"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[63;2u"
+     ],
+     "commands": [
+      "diff.help"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[47;2u"
+     ],
+     "commands": [
+      "diff.help"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "e"
+     ],
+     "commands": [
+      "prompt.editor"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "b"
+     ],
+     "commands": [
+      "session.sidebar.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[D"
+     ],
+     "commands": [
+      "pane.focus.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[C"
+     ],
+     "commands": [
+      "pane.focus.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[B"
+     ],
+     "commands": [
+      "terminal.select"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "t"
+     ],
+     "commands": [
+      "terminal.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[A"
+     ],
+     "commands": [
+      "terminal.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "s"
+     ],
+     "commands": [
+      "opencode.status"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "x"
+     ],
+     "commands": [
+      "session.export"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;5u"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "l"
+     ],
+     "commands": [
+      "session.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[111;5u"
+     ],
+     "commands": [
+      "open.menu"
+     ]
+    },
+    {
+     "keys": [
+      "\u000f"
+     ],
+     "commands": [
+      "open.menu"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9;2u"
+     ],
+     "commands": [
+      "session.tab.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[Z"
+     ],
+     "commands": [
+      "session.tab.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[105;5u"
+     ],
+     "commands": [
+      "session.tab.history.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4B"
+     ],
+     "commands": [
+      "session.tab.next_unread"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4A"
+     ],
+     "commands": [
+      "session.tab.previous_unread"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[119;5u"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u0017"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[116;6u"
+     ],
+     "commands": [
+      "session.tab.reopen"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "g"
+     ],
+     "commands": [
+      "session.timeline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[27u"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "c"
+     ],
+     "commands": [
+      "session.compact"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "q"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "1"
+     ],
+     "commands": [
+      "session.quick_switch.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "2"
+     ],
+     "commands": [
+      "session.quick_switch.2"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "3"
+     ],
+     "commands": [
+      "session.quick_switch.3"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "4"
+     ],
+     "commands": [
+      "session.quick_switch.4"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "5"
+     ],
+     "commands": [
+      "session.quick_switch.5"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "6"
+     ],
+     "commands": [
+      "session.quick_switch.6"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "7"
+     ],
+     "commands": [
+      "session.quick_switch.7"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "8"
+     ],
+     "commands": [
+      "session.quick_switch.8"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "9"
+     ],
+     "commands": [
+      "session.quick_switch.9"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "1"
+     ],
+     "commands": [
+      "session.quick_switch.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[49;5u"
+     ],
+     "commands": [
+      "session.tab.select.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "2"
+     ],
+     "commands": [
+      "session.quick_switch.2"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[50;5u"
+     ],
+     "commands": [
+      "session.tab.select.2"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "3"
+     ],
+     "commands": [
+      "session.quick_switch.3"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[51;5u"
+     ],
+     "commands": [
+      "session.tab.select.3"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "4"
+     ],
+     "commands": [
+      "session.quick_switch.4"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[52;5u"
+     ],
+     "commands": [
+      "session.tab.select.4"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "5"
+     ],
+     "commands": [
+      "session.quick_switch.5"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[53;5u"
+     ],
+     "commands": [
+      "session.tab.select.5"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "6"
+     ],
+     "commands": [
+      "session.quick_switch.6"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[54;5u"
+     ],
+     "commands": [
+      "session.tab.select.6"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "7"
+     ],
+     "commands": [
+      "session.quick_switch.7"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[55;5u"
+     ],
+     "commands": [
+      "session.tab.select.7"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "8"
+     ],
+     "commands": [
+      "session.quick_switch.8"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[56;5u"
+     ],
+     "commands": [
+      "session.tab.select.8"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "9"
+     ],
+     "commands": [
+      "session.quick_switch.9"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[57;5u"
+     ],
+     "commands": [
+      "session.tab.select.9"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "0"
+     ],
+     "commands": [
+      "session.tab.select.10"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[48;5u"
+     ],
+     "commands": [
+      "session.tab.select.10"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "m"
+     ],
+     "commands": [
+      "model.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bOQ"
+     ],
+     "commands": [
+      "model.cycle_recent"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2Q"
+     ],
+     "commands": [
+      "model.cycle_recent_reverse"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "a"
+     ],
+     "commands": [
+      "agent.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[116;5u"
+     ],
+     "commands": [
+      "variant.cycle"
+     ]
+    },
+    {
+     "keys": [
+      "\u0014"
+     ],
+     "commands": [
+      "variant.cycle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5~"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;7u"
+     ],
+     "commands": [
+      "session.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0002"
+     ],
+     "commands": [
+      "session.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6~"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;7u"
+     ],
+     "commands": [
+      "session.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0006"
+     ],
+     "commands": [
+      "session.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[121;7u"
+     ],
+     "commands": [
+      "session.line.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0019"
+     ],
+     "commands": [
+      "session.line.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;7u"
+     ],
+     "commands": [
+      "session.line.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0005"
+     ],
+     "commands": [
+      "session.line.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;7u"
+     ],
+     "commands": [
+      "session.half.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0015"
+     ],
+     "commands": [
+      "session.half.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;7u"
+     ],
+     "commands": [
+      "session.half.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0004"
+     ],
+     "commands": [
+      "session.half.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[103;5u"
+     ],
+     "commands": [
+      "session.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u0007"
+     ],
+     "commands": [
+      "session.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3H"
+     ],
+     "commands": [
+      "session.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[103;7u"
+     ],
+     "commands": [
+      "session.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0007"
+     ],
+     "commands": [
+      "session.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3F"
+     ],
+     "commands": [
+      "session.messages_last_user"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "y"
+     ],
+     "commands": [
+      "messages.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "u"
+     ],
+     "commands": [
+      "session.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "r"
+     ],
+     "commands": [
+      "session.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[13u"
+     ],
+     "commands": [
+      "prompt.queue"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "i"
+     ],
+     "commands": [
+      "prompt.images.view"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[99;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0003"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[118;5u"
+     ],
+     "commands": [
+      "prompt.paste"
+     ]
+    },
+    {
+     "keys": [
+      "\u0016"
+     ],
+     "commands": [
+      "prompt.paste"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;3u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\r"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[57414;3u"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;2u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;3u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\r"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[106;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\n"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[57414u"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\n"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[13;2u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;3u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\r"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[106;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\n"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2D"
+     ],
+     "commands": [
+      "input.select.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2D"
+     ],
+     "commands": [
+      "input.select.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2D"
+     ],
+     "commands": [
+      "input.select.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2C"
+     ],
+     "commands": [
+      "input.select.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2C"
+     ],
+     "commands": [
+      "input.select.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2C"
+     ],
+     "commands": [
+      "input.select.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2A"
+     ],
+     "commands": [
+      "input.select.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2A"
+     ],
+     "commands": [
+      "input.select.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2A"
+     ],
+     "commands": [
+      "input.select.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2B"
+     ],
+     "commands": [
+      "input.select.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2B"
+     ],
+     "commands": [
+      "input.select.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2B"
+     ],
+     "commands": [
+      "input.select.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;5u"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u0005"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;5u"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u0005"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;5u"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u0005"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;6u"
+     ],
+     "commands": [
+      "input.select.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;6u"
+     ],
+     "commands": [
+      "input.select.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;6u"
+     ],
+     "commands": [
+      "input.select.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;6u"
+     ],
+     "commands": [
+      "input.select.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;6u"
+     ],
+     "commands": [
+      "input.select.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;6u"
+     ],
+     "commands": [
+      "input.select.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;3u"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001ba"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;3u"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001ba"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9D"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[97;3u"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001ba"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;3u"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001be"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;3u"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001be"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9C"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[101;3u"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001be"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bA"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bA"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10D"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[97;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bA"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bE"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bE"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10C"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[101;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bE"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9A"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9B"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[1;2H"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2H"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10A"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[1;2H"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2F"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2F"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10B"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001b[1;2F"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;6u"
+     ],
+     "commands": [
+      "input.delete.line"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;6u"
+     ],
+     "commands": [
+      "input.delete.line"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;6u"
+     ],
+     "commands": [
+      "input.delete.line"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;5u"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u000b"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;5u"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u000b"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;5u"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u000b"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      ""
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;2u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      ""
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;2u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      ""
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;2u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;2~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;2~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;2~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[45;5u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;9u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[45;5u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;9u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[45;5u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;9u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[46;5u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;10u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[46;5u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;10u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[46;5u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;10u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;3u"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bf"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;3u"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bf"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;3u"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bf"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;3u"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bb"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;3u"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bb"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;3u"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bb"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;4u"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bF"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4C"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;4u"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bF"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4C"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;4u"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bF"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4C"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;4u"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bB"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4D"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;4u"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bB"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4D"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;4u"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bB"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4D"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;3u"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bd"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;3~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;5~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;3u"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bd"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;3~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;5~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;3u"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bd"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;3~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;5~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;5u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;3u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[119;5u"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u0017"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;5u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;3u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;5u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;3u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;9u"
+     ],
+     "commands": [
+      "input.select.all"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;9u"
+     ],
+     "commands": [
+      "input.select.all"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;9u"
+     ],
+     "commands": [
+      "input.select.all"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "k"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "j"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;5u"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u0010"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;5u"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5~"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6~"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[109;5u"
+     ],
+     "commands": [
+      "dialog.move_session.move"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;5u"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u0010"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;5u"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[27u"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      " "
+     ],
+     "commands": [
+      "dialog.mcp.toggle"
+     ]
+    },
+    {
+     "keys": [
+      " "
+     ],
+     "commands": [
+      "dialog.mcp.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;5u"
+     ],
+     "commands": [
+      "terminal.suspend"
+     ]
+    },
+    {
+     "keys": [
+      "\u001a"
+     ],
+     "commands": [
+      "terminal.suspend"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;7u"
+     ],
+     "commands": [
+      "which-key.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u000b"
+     ],
+     "commands": [
+      "which-key.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;8u"
+     ],
+     "commands": [
+      "which-key.layout.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;8u"
+     ],
+     "commands": [
+      "which-key.pending.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7D"
+     ],
+     "commands": [
+      "which-key.group.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[91;7u"
+     ],
+     "commands": [
+      "which-key.group.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7C"
+     ],
+     "commands": [
+      "which-key.group.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[93;7u"
+     ],
+     "commands": [
+      "which-key.group.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7A"
+     ],
+     "commands": [
+      "which-key.scroll.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;7u"
+     ],
+     "commands": [
+      "which-key.scroll.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0010"
+     ],
+     "commands": [
+      "which-key.scroll.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7B"
+     ],
+     "commands": [
+      "which-key.scroll.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;7u"
+     ],
+     "commands": [
+      "which-key.scroll.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u000e"
+     ],
+     "commands": [
+      "which-key.scroll.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5;7~"
+     ],
+     "commands": [
+      "which-key.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6;7~"
+     ],
+     "commands": [
+      "which-key.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7H"
+     ],
+     "commands": [
+      "which-key.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7F"
+     ],
+     "commands": [
+      "which-key.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "l"
+     ],
+     "commands": [
+      "session.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "m"
+     ],
+     "commands": [
+      "model.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "1"
+     ],
+     "commands": [
+      "session.quick_switch.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "w"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001c",
+      "n"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001c",
+      "\u001b[27u",
+      "l"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u0018",
+      "l"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "a",
+      "\u001c",
+      "l"
+     ],
+     "commands": [
+      "session.list"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[Z"
+     ],
+     "commands": [
+      "session.tab.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u0017"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "user cli.json with a focused textarea",
+   "keybinds": {
+    "leader": "ctrl+\\",
+    "session.tab.next": "tab",
+    "session.tab.previous": "shift+tab",
+    "session.tab.close": "ctrl+w",
+    "session.new": "ctrl+n",
+    "agent.cycle": "none",
+    "input.delete.word.backward": "ctrl+backspace,alt+backspace"
+   },
+   "terminalSuspend": true,
+   "layout": "all",
+   "textarea": true,
+   "extra": [
+    [
+     "\u001c",
+     "l"
+    ],
+    [
+     "\u001c",
+     "m"
+    ],
+    [
+     "\u001c",
+     "1"
+    ],
+    [
+     "\u001c",
+     "w"
+    ],
+    [
+     "\u001c",
+     "n"
+    ],
+    [
+     "\u001c",
+     "\u001b[27u",
+     "l"
+    ],
+    [
+     "\u0018",
+     "l"
+    ],
+    [
+     "a",
+     "\u001c",
+     "l"
+    ],
+    [
+     "\t"
+    ],
+    [
+     "\u001b[Z"
+    ],
+    [
+     "\u0017"
+    ],
+    [
+     "\u000e"
+    ]
+   ],
+   "cases": [
+    {
+     "keys": [
+      "\u001b[99;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0003"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "q"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[108;5u"
+     ],
+     "commands": [
+      "app.clear"
+     ]
+    },
+    {
+     "keys": [
+      "\f"
+     ],
+     "commands": [
+      "app.clear"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;5u"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u0010"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[27u"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "q"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "j"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "k"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6~"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5~"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "g",
+      "g"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[103;2u"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "G"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "]"
+     ],
+     "commands": [
+      "diff.next_hunk"
+     ]
+    },
+    {
+     "keys": [
+      "["
+     ],
+     "commands": [
+      "diff.previous_hunk"
+     ]
+    },
+    {
+     "keys": [
+      "n"
+     ],
+     "commands": [
+      "diff.next_file"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3B"
+     ],
+     "commands": [
+      "diff.next_file"
+     ]
+    },
+    {
+     "keys": [
+      "p"
+     ],
+     "commands": [
+      "diff.previous_file"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3A"
+     ],
+     "commands": [
+      "diff.previous_file"
+     ]
+    },
+    {
+     "keys": [
+      "b"
+     ],
+     "commands": [
+      "diff.toggle_file_tree"
+     ]
+    },
+    {
+     "keys": [
+      "s"
+     ],
+     "commands": [
+      "diff.single_patch"
+     ]
+    },
+    {
+     "keys": [
+      "d"
+     ],
+     "commands": [
+      "diff.switch_source"
+     ]
+    },
+    {
+     "keys": [
+      "v"
+     ],
+     "commands": [
+      "diff.toggle_view"
+     ]
+    },
+    {
+     "keys": [
+      "f"
+     ],
+     "commands": [
+      "diff.toggle_fullscreen"
+     ]
+    },
+    {
+     "keys": [
+      "m"
+     ],
+     "commands": [
+      "diff.mark_reviewed"
+     ]
+    },
+    {
+     "keys": [
+      "?"
+     ],
+     "commands": [
+      "diff.help"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[63;2u"
+     ],
+     "commands": [
+      "diff.help"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[47;2u"
+     ],
+     "commands": [
+      "diff.help"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "e"
+     ],
+     "commands": [
+      "prompt.editor"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "b"
+     ],
+     "commands": [
+      "session.sidebar.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[D"
+     ],
+     "commands": [
+      "pane.focus.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[C"
+     ],
+     "commands": [
+      "pane.focus.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[B"
+     ],
+     "commands": [
+      "terminal.select"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "t"
+     ],
+     "commands": [
+      "terminal.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[A"
+     ],
+     "commands": [
+      "terminal.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "s"
+     ],
+     "commands": [
+      "opencode.status"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "x"
+     ],
+     "commands": [
+      "session.export"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;5u"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "l"
+     ],
+     "commands": [
+      "session.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[111;5u"
+     ],
+     "commands": [
+      "open.menu"
+     ]
+    },
+    {
+     "keys": [
+      "\u000f"
+     ],
+     "commands": [
+      "open.menu"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9;2u"
+     ],
+     "commands": [
+      "session.tab.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[Z"
+     ],
+     "commands": [
+      "session.tab.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[105;5u"
+     ],
+     "commands": [
+      "session.tab.history.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4B"
+     ],
+     "commands": [
+      "session.tab.next_unread"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4A"
+     ],
+     "commands": [
+      "session.tab.previous_unread"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[119;5u"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u0017"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[116;6u"
+     ],
+     "commands": [
+      "session.tab.reopen"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "g"
+     ],
+     "commands": [
+      "session.timeline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[27u"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "c"
+     ],
+     "commands": [
+      "session.compact"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "q"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "1"
+     ],
+     "commands": [
+      "session.quick_switch.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "2"
+     ],
+     "commands": [
+      "session.quick_switch.2"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "3"
+     ],
+     "commands": [
+      "session.quick_switch.3"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "4"
+     ],
+     "commands": [
+      "session.quick_switch.4"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "5"
+     ],
+     "commands": [
+      "session.quick_switch.5"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "6"
+     ],
+     "commands": [
+      "session.quick_switch.6"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "7"
+     ],
+     "commands": [
+      "session.quick_switch.7"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "8"
+     ],
+     "commands": [
+      "session.quick_switch.8"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "9"
+     ],
+     "commands": [
+      "session.quick_switch.9"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "1"
+     ],
+     "commands": [
+      "session.quick_switch.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[49;5u"
+     ],
+     "commands": [
+      "session.tab.select.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "2"
+     ],
+     "commands": [
+      "session.quick_switch.2"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[50;5u"
+     ],
+     "commands": [
+      "session.tab.select.2"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "3"
+     ],
+     "commands": [
+      "session.quick_switch.3"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[51;5u"
+     ],
+     "commands": [
+      "session.tab.select.3"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "4"
+     ],
+     "commands": [
+      "session.quick_switch.4"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[52;5u"
+     ],
+     "commands": [
+      "session.tab.select.4"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "5"
+     ],
+     "commands": [
+      "session.quick_switch.5"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[53;5u"
+     ],
+     "commands": [
+      "session.tab.select.5"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "6"
+     ],
+     "commands": [
+      "session.quick_switch.6"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[54;5u"
+     ],
+     "commands": [
+      "session.tab.select.6"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "7"
+     ],
+     "commands": [
+      "session.quick_switch.7"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[55;5u"
+     ],
+     "commands": [
+      "session.tab.select.7"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "8"
+     ],
+     "commands": [
+      "session.quick_switch.8"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[56;5u"
+     ],
+     "commands": [
+      "session.tab.select.8"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "9"
+     ],
+     "commands": [
+      "session.quick_switch.9"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[57;5u"
+     ],
+     "commands": [
+      "session.tab.select.9"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "0"
+     ],
+     "commands": [
+      "session.tab.select.10"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[48;5u"
+     ],
+     "commands": [
+      "session.tab.select.10"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "m"
+     ],
+     "commands": [
+      "model.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bOQ"
+     ],
+     "commands": [
+      "model.cycle_recent"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2Q"
+     ],
+     "commands": [
+      "model.cycle_recent_reverse"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "a"
+     ],
+     "commands": [
+      "agent.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[116;5u"
+     ],
+     "commands": [
+      "variant.cycle"
+     ]
+    },
+    {
+     "keys": [
+      "\u0014"
+     ],
+     "commands": [
+      "variant.cycle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5~"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;7u"
+     ],
+     "commands": [
+      "session.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0002"
+     ],
+     "commands": [
+      "session.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6~"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;7u"
+     ],
+     "commands": [
+      "session.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0006"
+     ],
+     "commands": [
+      "session.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[121;7u"
+     ],
+     "commands": [
+      "session.line.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0019"
+     ],
+     "commands": [
+      "session.line.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;7u"
+     ],
+     "commands": [
+      "session.line.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0005"
+     ],
+     "commands": [
+      "session.line.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;7u"
+     ],
+     "commands": [
+      "session.half.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0015"
+     ],
+     "commands": [
+      "session.half.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;7u"
+     ],
+     "commands": [
+      "session.half.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0004"
+     ],
+     "commands": [
+      "session.half.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[103;5u"
+     ],
+     "commands": [
+      "session.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u0007"
+     ],
+     "commands": [
+      "session.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3H"
+     ],
+     "commands": [
+      "session.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[103;7u"
+     ],
+     "commands": [
+      "session.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0007"
+     ],
+     "commands": [
+      "session.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3F"
+     ],
+     "commands": [
+      "session.messages_last_user"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "y"
+     ],
+     "commands": [
+      "messages.copy"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "u"
+     ],
+     "commands": [
+      "session.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "r"
+     ],
+     "commands": [
+      "session.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "\u001b[13u"
+     ],
+     "commands": [
+      "prompt.queue"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[92;5u",
+      "i"
+     ],
+     "commands": [
+      "prompt.images.view"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[99;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0003"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[118;5u"
+     ],
+     "commands": [
+      "prompt.paste"
+     ]
+    },
+    {
+     "keys": [
+      "\u0016"
+     ],
+     "commands": [
+      "prompt.paste"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;3u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\r"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[57414;3u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;2u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;3u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\r"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[106;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\n"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[57414u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\n"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;2u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13;3u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\r"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[106;5u"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\n"
+     ],
+     "commands": [
+      "input.newline"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[D"
+     ],
+     "commands": [
+      "session.child.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;5u"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0002"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[C"
+     ],
+     "commands": [
+      "session.child.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2D"
+     ],
+     "commands": [
+      "input.select.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2D"
+     ],
+     "commands": [
+      "input.select.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2D"
+     ],
+     "commands": [
+      "input.select.left"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2C"
+     ],
+     "commands": [
+      "input.select.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2C"
+     ],
+     "commands": [
+      "input.select.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2C"
+     ],
+     "commands": [
+      "input.select.right"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2A"
+     ],
+     "commands": [
+      "input.select.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2A"
+     ],
+     "commands": [
+      "input.select.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2A"
+     ],
+     "commands": [
+      "input.select.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2B"
+     ],
+     "commands": [
+      "input.select.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2B"
+     ],
+     "commands": [
+      "input.select.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2B"
+     ],
+     "commands": [
+      "input.select.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;5u"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u0005"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;5u"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u0005"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;5u"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u0005"
+     ],
+     "commands": [
+      "input.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;6u"
+     ],
+     "commands": [
+      "input.select.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;6u"
+     ],
+     "commands": [
+      "input.select.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;6u"
+     ],
+     "commands": [
+      "input.select.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;6u"
+     ],
+     "commands": [
+      "input.select.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;6u"
+     ],
+     "commands": [
+      "input.select.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;6u"
+     ],
+     "commands": [
+      "input.select.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;3u"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001ba"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;3u"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001ba"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9D"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;3u"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001ba"
+     ],
+     "commands": [
+      "input.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;3u"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001be"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;3u"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001be"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9C"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;3u"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001be"
+     ],
+     "commands": [
+      "input.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bA"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bA"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10D"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bA"
+     ],
+     "commands": [
+      "input.select.visual.line.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bE"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bE"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10C"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[101;4u"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bE"
+     ],
+     "commands": [
+      "input.select.visual.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9A"
+     ],
+     "commands": [
+      "input.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;9B"
+     ],
+     "commands": [
+      "input.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2H"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2H"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10A"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2H"
+     ],
+     "commands": [
+      "input.select.buffer.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2F"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2F"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;10B"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;2F"
+     ],
+     "commands": [
+      "input.select.buffer.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;6u"
+     ],
+     "commands": [
+      "input.delete.line"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;6u"
+     ],
+     "commands": [
+      "input.delete.line"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;6u"
+     ],
+     "commands": [
+      "input.delete.line"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;5u"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u000b"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;5u"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u000b"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;5u"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u000b"
+     ],
+     "commands": [
+      "input.delete.to.line.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      ""
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;2u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      ""
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;2u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      ""
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;2u"
+     ],
+     "commands": [
+      "input.backspace"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;2~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;2~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;2~"
+     ],
+     "commands": [
+      "input.delete"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[45;5u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;9u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[45;5u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;9u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[45;5u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;9u"
+     ],
+     "commands": [
+      "input.undo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[46;5u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;10u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[46;5u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;10u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[46;5u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;10u"
+     ],
+     "commands": [
+      "input.redo"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;3u"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bf"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;3u"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bf"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;3u"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bf"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5C"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;3u"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bb"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;3u"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bb"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;3u"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bb"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;3D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;5D"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;4u"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bF"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4C"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;4u"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bF"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4C"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;4u"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bF"
+     ],
+     "commands": [
+      "input.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4C"
+     ],
+     "commands": [
+      "input.select.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;4u"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bB"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4D"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;4u"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bB"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4D"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[98;4u"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bB"
+     ],
+     "commands": [
+      "input.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;4D"
+     ],
+     "commands": [
+      "input.select.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;3u"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bd"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;3~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;5~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;3u"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bd"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;3~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;5~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;3u"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001bd"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;3~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[3;5~"
+     ],
+     "commands": [
+      "input.delete.word.forward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;5u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;3u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[119;5u"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u0017"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;5u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;3u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;5u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[127;3u"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b"
+     ],
+     "commands": [
+      "input.delete.word.backward"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;9u"
+     ],
+     "commands": [
+      "input.select.all"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;9u"
+     ],
+     "commands": [
+      "input.select.all"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;9u"
+     ],
+     "commands": [
+      "input.select.all"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "k"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "j"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;5u"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u0010"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;5u"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5~"
+     ],
+     "commands": [
+      "diff.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6~"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[H"
+     ],
+     "commands": [
+      "diff.first"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[F"
+     ],
+     "commands": [
+      "diff.last"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[97;5u"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u0001"
+     ],
+     "commands": [
+      "model.dialog.provider"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[109;5u"
+     ],
+     "commands": [
+      "dialog.move_session.move"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[100;5u"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u0004"
+     ],
+     "commands": [
+      "app.exit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[A"
+     ],
+     "commands": [
+      "diff.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;5u"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u0010"
+     ],
+     "commands": [
+      "command.palette.show"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[B"
+     ],
+     "commands": [
+      "diff.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;5u"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[27u"
+     ],
+     "commands": [
+      "diff.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[9u"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[102;5u"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u0006"
+     ],
+     "commands": [
+      "diff.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[13u"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      "\r"
+     ],
+     "commands": [
+      "input.submit"
+     ]
+    },
+    {
+     "keys": [
+      " "
+     ],
+     "commands": [
+      "dialog.mcp.toggle"
+     ]
+    },
+    {
+     "keys": [
+      " "
+     ],
+     "commands": [
+      "dialog.mcp.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[117;5u"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u0015"
+     ],
+     "commands": [
+      "diff.half_page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[114;5u"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u0012"
+     ],
+     "commands": [
+      "session.rename"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[122;5u"
+     ],
+     "commands": [
+      "terminal.suspend"
+     ]
+    },
+    {
+     "keys": [
+      "\u001a"
+     ],
+     "commands": [
+      "terminal.suspend"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;7u"
+     ],
+     "commands": [
+      "which-key.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u000b"
+     ],
+     "commands": [
+      "which-key.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[107;8u"
+     ],
+     "commands": [
+      "which-key.layout.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;8u"
+     ],
+     "commands": [
+      "which-key.pending.toggle"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7D"
+     ],
+     "commands": [
+      "which-key.group.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[91;7u"
+     ],
+     "commands": [
+      "which-key.group.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7C"
+     ],
+     "commands": [
+      "which-key.group.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[93;7u"
+     ],
+     "commands": [
+      "which-key.group.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7A"
+     ],
+     "commands": [
+      "which-key.scroll.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[112;7u"
+     ],
+     "commands": [
+      "which-key.scroll.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u0010"
+     ],
+     "commands": [
+      "which-key.scroll.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7B"
+     ],
+     "commands": [
+      "which-key.scroll.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[110;7u"
+     ],
+     "commands": [
+      "which-key.scroll.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b\u000e"
+     ],
+     "commands": [
+      "which-key.scroll.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[5;7~"
+     ],
+     "commands": [
+      "which-key.page.up"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[6;7~"
+     ],
+     "commands": [
+      "which-key.page.down"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7H"
+     ],
+     "commands": [
+      "which-key.home"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[1;7F"
+     ],
+     "commands": [
+      "which-key.end"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "l"
+     ],
+     "commands": [
+      "session.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "m"
+     ],
+     "commands": [
+      "model.list"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "1"
+     ],
+     "commands": [
+      "session.quick_switch.1"
+     ]
+    },
+    {
+     "keys": [
+      "\u001c",
+      "w"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001c",
+      "n"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u001c",
+      "\u001b[27u",
+      "l"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "\u0018",
+      "l"
+     ],
+     "commands": []
+    },
+    {
+     "keys": [
+      "a",
+      "\u001c",
+      "l"
+     ],
+     "commands": [
+      "session.list"
+     ]
+    },
+    {
+     "keys": [
+      "\t"
+     ],
+     "commands": [
+      "session.tab.next"
+     ]
+    },
+    {
+     "keys": [
+      "\u001b[Z"
+     ],
+     "commands": [
+      "session.tab.previous"
+     ]
+    },
+    {
+     "keys": [
+      "\u0017"
+     ],
+     "commands": [
+      "session.tab.close"
+     ]
+    },
+    {
+     "keys": [
+      "\u000e"
+     ],
+     "commands": [
+      "session.new"
+     ]
+    }
+   ]
+  },
+  {
    "name": "custom leader",
    "keybinds": {
     "leader": "alt+x"
