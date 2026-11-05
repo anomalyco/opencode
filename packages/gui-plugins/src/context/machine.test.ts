@@ -170,7 +170,10 @@ describe("transitionContextScroll", () => {
     const applied = scrollAfter(showA, { type: "restore.applied", attempt: 1, applied: { x: 0, y: 200 } })
     const echoed = transitionContextScroll(applied, { type: "scrolled", position: { x: 0, y: 200 } })
 
-    expect(echoed).toEqual({ state: { ...applied, applied: undefined }, effects: [] })
+    expect(echoed).toEqual({
+      state: { status: "restoring", sessionKey: "a", attempt: 1, frame: false, applied: undefined },
+      effects: [],
+    })
     expect(transitionContextScroll(echoed.state, { type: "content.changed" }).effects).toEqual([
       { type: "frame.schedule", kind: "restore", attempt: 2 },
     ])
