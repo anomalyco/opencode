@@ -127,11 +127,9 @@ const markdownKey = "opencode-markdown-view"
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
-// Pages of this site that render client-side; everything else keeps a full page load.
-// Of the docs, only the Intro (/docs) is a page of this app; the other docs pages are served
-// separately, so links to them take a full page load.
-const clientPages =
-  /^\/(?:desktop|mobile|terminal|sdk|download|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?|docs)?\/?$/
+// Pages of this site that render client-side; everything else keeps a full page load. The docs
+// (/docs and /v2/docs) are served separately, and /download redirects on the server.
+const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
@@ -606,7 +604,7 @@ export function Site(props: {
     // Once the page is idle, load the code for the main pages so the first click is instant too.
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     idle(() =>
-      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/docs", "/changelog"].forEach((path) =>
+      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/changelog"].forEach((path) =>
         preloadRoute(language.route(path), { preloadData: false }),
       ),
     )
