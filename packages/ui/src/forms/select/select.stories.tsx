@@ -27,6 +27,7 @@ Single-select built on Kobalte with current menu styling. The trigger is inline 
 - \`groupBy\`: groups options; section headers use menu group label styling.
 - \`placement\`, \`gutter\`, \`sameWidth\`, \`flip\`, \`slide\`, \`fitViewport\`: forwarded to Kobalte popper.
 - \`invalid\`, \`disabled\`, \`numeric\`: match text input conventions.
+- \`selectOnNavigate\`: arrow keys and typeahead select the option they move to while the menu stays open; hover only highlights.
 `
 
 export default {
@@ -94,6 +95,19 @@ export const Grouped = {
         label={(x) => x.city}
         groupBy={(x) => x.region}
       />
+    )
+  },
+}
+
+export const SelectOnNavigate = {
+  render: () => {
+    const [current, setCurrent] = createSignal("Banana")
+
+    return (
+      <div style={{ display: "grid", gap: "12px" }}>
+        <Select options={fruits} current={current()} onSelect={(v) => v !== null && setCurrent(v)} selectOnNavigate />
+        <span data-testid="select-on-navigate-current">Selected: {current()}</span>
+      </div>
     )
   },
 }

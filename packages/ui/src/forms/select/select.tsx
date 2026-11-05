@@ -69,6 +69,8 @@ export type SelectProps<T> = Omit<
   groupBy?: (x: T) => string
   onSelect?: (value: T | null) => void
   onHighlight?: (value: T | undefined) => void | (() => void)
+  /** Arrow keys and typeahead select the option they move to and keep the menu open. Pointer hover only highlights. */
+  selectOnNavigate?: boolean
   invalid?: boolean
   numeric?: boolean
   /** `inline` is the borderless settings trigger; `small`, `base` and `large` are 24px, 28px and 32px input fields. */
@@ -94,6 +96,7 @@ export function Select<T>(props: SelectProps<T>) {
     "groupBy",
     "onSelect",
     "onHighlight",
+    "selectOnNavigate",
     "onOpenChange",
     "children",
     "invalid",
@@ -112,6 +115,8 @@ export function Select<T>(props: SelectProps<T>) {
   ])
 
   const state: HighlightState = {}
+  // Kobalte focuses an item for both keyboard navigation and mouse hover; only the former selects.
+  let navigating = false
 
   let scroller: HTMLDivElement | undefined
 
@@ -138,6 +143,14 @@ export function Select<T>(props: SelectProps<T>) {
     state.cleanup?.()
     state.cleanup = local.onHighlight(item)
     state.key = key
+  }
+
+  const navigate = (item: T) => {
+    if (!local.selectOnNavigate || !navigating) return
+
+    if (local.current !== undefined && keyFor(local.current) === keyFor(item)) return
+
+    local.onSelect?.(item)
   }
 
   onCleanup(stop)
@@ -175,8 +188,14 @@ export function Select<T>(props: SelectProps<T>) {
           {...itemProps}
           data-component="menu-v2-item"
           onPointerEnter={() => move(itemProps.item.rawValue)}
-          onPointerMove={() => move(itemProps.item.rawValue)}
-          onFocus={() => move(itemProps.item.rawValue)}
+          onPointerMove={() => {
+            navigating = false
+            move(itemProps.item.rawValue)
+          }}
+          onFocus={() => {
+            move(itemProps.item.rawValue)
+            navigate(itemProps.item.rawValue)
+          }}
         >
           <ItemLabel data-slot="menu-v2-item-content" as="span">
             {local.children
@@ -197,6 +216,7 @@ export function Select<T>(props: SelectProps<T>) {
       }}
       onOpenChange={(open) => {
         local.onOpenChange?.(open)
+        navigating = false
 
         if (!open) stop()
       }}
@@ -235,7 +255,7 @@ export function Select<T>(props: SelectProps<T>) {
       <Portal>
         <Content class={local.contentClass} data-component="menu-v2-content" data-slot="select-v2-content">
           <MenuScroll viewportRef={(element) => (scroller = element)}>
-            <Listbox data-slot="select-v2-listbox" scrollRef={() => scroller} />
+            <Listbox data-slot="select-v2-listbox" scrollRef={() => scroller} onKeyDown={() => (navigating = true)} />
           </MenuScroll>
         </Content>
       </Portal>
