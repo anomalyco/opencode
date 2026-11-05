@@ -168,7 +168,8 @@ async fn execute(
                 },
                 &RequestOptions::default(),
             )
-            .await?;
+            .await
+            .map_err(|error| error.error_message())?;
     }
     prompt::run(prompt::Input {
         client: client.clone(),
