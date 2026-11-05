@@ -46,6 +46,11 @@ export function Sidebar(props: { sessionID: string }) {
           >
             {withTimestampedFallback(session())}
           </title_shimmer>
+          <Show when={config.session.sidebar_id}>
+            <text fg={theme.text.muted} wrapMode="none" truncate>
+              {props.sessionID}
+            </text>
+          </Show>
         </box>
         <scrollbox
           flexGrow={1}
