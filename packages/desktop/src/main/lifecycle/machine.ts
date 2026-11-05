@@ -38,6 +38,8 @@ export type Event =
   | { readonly type: "plugins.resumed"; readonly attempt: number }
   /** A relaunch from the app, or a quit signal from the OS. */
   | { readonly type: "exit.requested"; readonly mode: ExitMode }
+  /** Windows logoff or shutdown (`session-end` on each window); Electron emits no `before-quit` for it. */
+  | { readonly type: "session.ending" }
   | { readonly type: "before.quit" }
   | { readonly type: "will.quit" }
 
@@ -64,6 +66,12 @@ export function transition(state: State, event: Event): Transition {
   if (event.type === "restart.requested") return restartRequested(state, event)
 
   if (event.type === "exit.requested") return exitRequested(state, event.mode)
+
+  // The OS ends the session whatever the app asked for, so a pending relaunch becomes a quit.
+  if (event.type === "session.ending")
+    return state.status === "stopping" && state.exit === "relaunch"
+      ? { state: { ...state, exit: "quit" }, commands: [] }
+      : exitRequested(state, "quit")
 
   // A quit that starts while the handoff runs is the handoff's own (quitAndInstall quits before its promise settles),
   // and the plugins it must not wait for are already stopped.
@@ -117,8 +125,11 @@ function exitRequested(state: State, mode: ExitMode): Transition {
   if (state.status === "quitting") return unchanged(state)
 
   // A relaunch asked for while stopping still relaunches, whatever quits it.
-  if (state.status === "stopping")
-    return { state: { ...state, exit: state.exit === "relaunch" ? "relaunch" : mode }, commands: [] }
+  if (state.status === "stopping") {
+    const exit = state.exit === "relaunch" ? "relaunch" : mode
+
+    return exit === state.exit ? unchanged(state) : { state: { ...state, exit }, commands: [] }
+  }
 
   return {
     state: { status: "stopping", attempt: state.attempt + 1, exit: mode },
@@ -203,17 +214,12 @@ export function createDriver(input: {
   /** Starts the plugins a handoff stopped again; never rejects. */
   readonly resume: () => Promise<void>
   readonly exit: (mode: ExitMode) => void
-  /** Called when `isQuitting` changes. */
-  readonly quitting: (value: boolean) => void
 }) {
   const current = { state: initialState() }
 
   const dispatch = (event: Event) => {
-    const previous = current.state
-    const next = transition(previous, event)
+    const next = transition(current.state, event)
     current.state = next.state
-
-    if (isQuitting(previous) !== isQuitting(next.state)) input.quitting(isQuitting(next.state))
     next.commands.forEach(perform)
   }
 

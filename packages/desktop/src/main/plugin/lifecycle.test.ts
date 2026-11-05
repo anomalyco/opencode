@@ -135,7 +135,6 @@ function world() {
     },
     resume: () => Promise.all([...revisions.keys()].map((id) => lifecycle.activate(id))).then(() => undefined),
     exit: () => {},
-    quitting: () => {},
   })
 
   const lifecycle = createLifecycle({
