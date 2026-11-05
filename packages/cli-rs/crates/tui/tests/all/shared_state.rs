@@ -189,7 +189,11 @@ fn acknowledged_commits_clear_the_drafts() {
         "session.model.selected",
         json!({ "sessionID": "ses_b", "model": { "providerID": "openai", "id": "gpt-5" } }),
     );
-    setup.wait("the acknowledgments", || changed.get());
+    // The rename shows once the TUI has synced the acknowledgments with it. Another notification can come
+    // first, and a switch applied before that sync would join the acknowledgments' batch.
+    setup.emit("session.renamed", json!({ "sessionID": "ses_b", "title": "Acknowledged" }));
+    setup.wait_for("Acknowledged");
+    assert!(changed.get());
     // Another client switches the model, then the agent.
     setup.emit(
         "session.model.selected",
