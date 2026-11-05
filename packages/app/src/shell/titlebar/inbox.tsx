@@ -1,14 +1,27 @@
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
-import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createUniqueId,
+  For,
+  on,
+  Show,
+  useContext,
+  type Accessor,
+  type JSX,
+} from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { ActivityRing } from "@opencode/ui/activity-ring"
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { Loader } from "@opencode/ui/loader"
 import { displayName } from "@opencode/ui/project-avatar"
 import { useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -17,14 +30,17 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
-import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type InboxStatus } from "./inbox-model"
-import { compareWorking, workingSince } from "./inbox-working"
+import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { compareWorking } from "./inbox-working"
 
 const RECENT_LIMIT = 10
 
 const InboxState = Persistence.struct({
   workingExpanded: Schema.Boolean,
+  recentExpanded: Schema.Boolean,
 })
+
+const InboxNavigation = createContext<Accessor<string | undefined>>()
 
 /** The experimental Inbox interface mode: the session inbox in place of vertical tabs. */
 export function SidebarInbox() {
@@ -35,6 +51,34 @@ export function SidebarInbox() {
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
+    recentExpanded: false,
+  })
+
+  const [announcement, setAnnouncement] = createStore({ text: "" })
+
+  createEffect((previous: Map<string, InboxStatus> | undefined) => {
+    if (inbox.loading()) return
+
+    const entries = inbox.entries()
+
+    if (previous) {
+      const text = entries
+        .flatMap((entry) => {
+          if (!previous.has(entry.key) || previous.get(entry.key) === entry.status || entry.status === "ready")
+            return []
+
+          return [
+            language.t(`sidebar.inbox.announce.${entry.status}`, {
+              title: sessionTabTitle(entry.session.title, language.t("session.tab.session")),
+            }),
+          ]
+        })
+        .join("\n")
+
+      if (text) setAnnouncement("text", text)
+    }
+
+    return new Map(entries.map((entry) => [entry.key, entry.status]))
   })
 
   const sections = createMemo(() => {
@@ -43,12 +87,17 @@ export function SidebarInbox() {
     // Archived sessions are available through the Archived search dialog, not in the sidebar list.
     const active = list.filter((entry) => !inboxArchived(entry))
 
-    const needs = active.filter((entry) => entry.status === "approval" || entry.status === "input")
+    const needs = active
+      .filter((entry) => entry.status === "approval" || entry.status === "input")
+      .toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
 
-    const recent = active
-      .filter((entry) => !inboxBusy(entry.status) && entry.session.time.idle !== undefined)
-      .toSorted((a, b) => (b.session.time.idle ?? 0) - (a.session.time.idle ?? 0))
-      .slice(0, RECENT_LIMIT)
+    const unread = active
+      .filter((entry) => entry.status === "done" || entry.status === "failed")
+      .toSorted((a, b) => (b.since ?? 0) - (a.since ?? 0))
+
+    const read = active.filter((entry) => entry.status === "ready").toSorted((a, b) => (b.since ?? 0) - (a.since ?? 0))
+
+    const recent = state.recentExpanded ? read : read.slice(0, RECENT_LIMIT)
 
     // `time.updated` moves with every message of a run, so keep Working ordered by run start.
     const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
@@ -57,9 +106,13 @@ export function SidebarInbox() {
 
     return {
       needs,
-      inbox: recent,
+      unread,
+      recent,
+      more: read.length > RECENT_LIMIT,
       current:
-        current && ![...needs, ...recent, ...working].some((entry) => entry.key === current.key) ? [current] : [],
+        current && ![...needs, ...unread, ...recent, ...working].some((entry) => entry.key === current.key)
+          ? [current]
+          : [],
       archived: list.some(inboxArchived),
       working,
     }
@@ -85,36 +138,8 @@ export function SidebarInbox() {
   createEffect(() => {
     const visible = sections()
 
-    inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.inbox])
+    inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.unread, ...visible.recent])
   })
-
-  function DeleteDialog(props: { entry: InboxEntry }) {
-    const confirm = async () => {
-      await inbox.remove(props.entry)
-      dialog.close()
-    }
-
-    return (
-      <Dialog fit>
-        <DialogHeader hideClose>
-          <DialogTitleGroup
-            title={language.t("session.delete.title")}
-            description={language.t("session.delete.confirm", {
-              name: sessionTitle(props.entry.session.title) ?? language.t("command.session.new"),
-            })}
-          />
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
-            {language.t("common.cancel")}
-          </Button>
-          <Button variant="danger" onClick={confirm}>
-            {language.t("session.delete.button")}
-          </Button>
-        </DialogFooter>
-      </Dialog>
-    )
-  }
 
   // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
   // row on any session change and resetting the list's scroll.
@@ -129,22 +154,22 @@ export function SidebarInbox() {
               title={entry().session.title}
               status={entry().status}
               server={servers.tag(entry().conn)}
-              since={
-                entry().status === "working"
-                  ? workingSince(entry().session)
-                  : inboxBusy(entry().status)
-                    ? (workingSince(entry().session) ?? entry().session.time.updated)
-                    : (entry().session.time.idle ?? entry().session.time.updated)
-              }
+              since={entry().since}
               selected={inbox.selected(entry())}
-              now={inbox.now()}
+              now={inbox.now(entry().status)}
               branch={inbox.branch(entry())}
               worktree={inbox.inWorktree(entry())}
               archived={inboxArchived(entry())}
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
               onUnarchive={() => void inbox.unarchive(entry())}
-              onDelete={() => dialog.show(() => <DeleteDialog entry={entry()} />)}
+              onDelete={() => {
+                const current = entry()
+
+                void dialog.show(() => (
+                  <DeleteDialog title={current.session.title} onConfirm={() => void inbox.remove(current)} />
+                ))
+              }}
             />
           )}
         </Show>
@@ -152,106 +177,307 @@ export function SidebarInbox() {
     </For>
   )
 
+  // Render slots inside InboxNavigation without recreating section objects on updates.
+  const groups = [
+    {
+      id: "needs",
+      get label() {
+        return language.t("sidebar.inbox.section.needsAttention")
+      },
+      get count() {
+        return sections().needs.length
+      },
+      rows: () => rows(() => sections().needs),
+    },
+    {
+      id: "unread",
+      get label() {
+        return language.t("sidebar.inbox.section.unread")
+      },
+      get count() {
+        return sections().unread.length
+      },
+      rows: () => rows(() => sections().unread),
+    },
+    {
+      id: "recent",
+      get label() {
+        return language.t("sidebar.inbox.section.recent")
+      },
+      get count() {
+        return sections().recent.length
+      },
+      rows: () => rows(() => sections().recent),
+      more: () => (
+        <Show when={sections().more}>
+          <Button
+            variant="ghost-muted"
+            size="normal"
+            class="w-full justify-start px-2"
+            aria-expanded={state.recentExpanded}
+            onClick={() => setState("recentExpanded", !state.recentExpanded)}
+          >
+            {language.t(state.recentExpanded ? "sidebar.inbox.showLess" : "sidebar.inbox.showMore")}
+          </Button>
+        </Show>
+      ),
+    },
+  ]
+
   return (
     <InboxSessionList
-      needsCount={sections().needs.length}
-      currentCount={sections().current.length}
-      recentCount={sections().inbox.length}
-      workingCount={sections().working.length}
+      loading={inbox.loading()}
+      announcement={announcement.text}
+      current={{
+        get count() {
+          return sections().current.length
+        },
+        rows: () => rows(() => sections().current),
+      }}
+      sections={groups}
+      working={{
+        get count() {
+          return sections().working.length
+        },
+        rows: () => rows(() => sections().working),
+        get expanded() {
+          return state.workingExpanded
+        },
+        onToggle: () => setState("workingExpanded", !state.workingExpanded),
+      }}
       archived={sections().archived}
-      workingExpanded={state.workingExpanded}
-      onToggleWorking={() => setState("workingExpanded", !state.workingExpanded)}
       onArchived={async () => {
         const { DialogSessionSearch } = await import("@/shell/commands/session-search")
 
         void dialog.show(() => <DialogSessionSearch archived />)
       }}
-      needs={rows(() => sections().needs)}
-      current={rows(() => sections().current)}
-      recent={rows(() => sections().inbox)}
-      working={rows(() => sections().working)}
     />
   )
 }
 
-export function InboxSessionList(props: {
-  needsCount: number
-  currentCount: number
-  recentCount: number
-  workingCount: number
-  archived: boolean
-  workingExpanded: boolean
-  onToggleWorking: () => void
-  onArchived: () => void
-  needs: JSX.Element
-  current: JSX.Element
-  recent: JSX.Element
-  working: JSX.Element
-}) {
+// The session leaves the list at once, so the dialog closes before the delete request instead of after it.
+function DeleteDialog(props: { title: string | undefined; onConfirm: () => void }) {
   const language = useLanguage()
+  const dialog = useDialog()
+  const layer = useDialogLayer()
+
+  const close = () => dialog.close(layer?.id)
+
+  const confirm = () => {
+    if (dialog.closing) return
+    close()
+    props.onConfirm()
+  }
 
   return (
-    <div data-slot="sidebar-inbox" class="flex min-h-0 flex-1 flex-col">
-      <div data-slot="sidebar-inbox-scroll" class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1">
-        <Show when={props.currentCount > 0}>
-          <div class="flex shrink-0 flex-col gap-0.5 pb-2.5">{props.current}</div>
-        </Show>
-        <Show when={props.needsCount > 0}>
-          <div class="flex shrink-0 flex-col gap-2 pb-2.5">
-            <SectionHeader label={language.t("sidebar.inbox.section.needsAttention")} />
-            <div class="flex flex-col gap-0.5">{props.needs}</div>
-          </div>
-        </Show>
+    <Dialog fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup
+          title={language.t("session.delete.title")}
+          description={language.t("session.delete.confirm", {
+            name: sessionTitle(props.title) ?? language.t("command.session.new"),
+          })}
+        />
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="ghost" autofocus disabled={dialog.closing} onClick={close}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button variant="danger" disabled={dialog.closing} onClick={confirm}>
+          {language.t("session.delete.button")}
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  )
+}
+
+export function InboxSessionList(props: {
+  loading?: boolean
+  announcement?: string
+  current: { count: number; rows: () => JSX.Element }
+  sections: { id: string; label: string; count: number; rows: () => JSX.Element; more?: () => JSX.Element }[]
+  working: { count: number; rows: () => JSX.Element; expanded: boolean; onToggle: () => void }
+  archived: boolean
+  onArchived: () => void
+}) {
+  const language = useLanguage()
+  const id = createUniqueId()
+
+  const [navigation, setNavigation] = createStore<{ focused?: string }>({})
+
+  let container: HTMLDivElement | undefined
+
+  createEffect(
+    on(
+      () => [
+        props.loading,
+        props.current.count,
+        ...props.sections.map((section) => section.count),
+        props.working.count,
+        props.working.expanded,
+      ],
+      () => {
+        if (props.loading) return
+
+        const rows = Array.from(
+          container?.querySelectorAll<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]') ?? [],
+        )
+
+        const target =
+          rows.find((row) => row.id === navigation.focused) ??
+          rows.find((row) => row.dataset.state === "active") ??
+          rows[0]
+
+        setNavigation("focused", target?.id)
+      },
+    ),
+  )
+
+  return (
+    <InboxNavigation.Provider value={() => navigation.focused}>
+      <div
+        ref={container}
+        data-slot="sidebar-inbox"
+        aria-busy={props.loading}
+        class="flex min-h-0 flex-1 flex-col"
+        onFocusIn={(event) => {
+          const row = event.target.closest<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]')
+
+          if (row) setNavigation("focused", row.id)
+        }}
+        onKeyDown={(event) => {
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+
+          const rows = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]'),
+          )
+
+          const index = rows.findIndex((row) => row === event.target)
+
+          if (index === -1) return
+
+          let next = index
+
+          switch (event.key) {
+            case "Home":
+              next = 0
+              break
+            case "End":
+              next = rows.length - 1
+              break
+            case "ArrowUp":
+              next = Math.max(0, index - 1)
+              break
+            case "ArrowDown":
+              next = Math.min(rows.length - 1, index + 1)
+              break
+            default:
+              return
+          }
+
+          event.preventDefault()
+
+          rows[next].focus({ preventScroll: true })
+          rows[next].scrollIntoView({ block: "nearest" })
+        }}
+      >
+        <span class="sr-only" role="status" aria-atomic="true">
+          {props.announcement}
+        </span>
         <Show
-          when={props.recentCount > 0}
+          when={!props.loading}
           fallback={
-            <Show when={props.needsCount === 0 && props.currentCount === 0 && props.workingCount === 0}>
+            <div class="flex justify-center p-2">
+              <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
+            </div>
+          }
+        >
+          <div
+            data-slot="sidebar-inbox-scroll"
+            data-scrollable
+            class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
+          >
+            <Show when={props.current.count > 0}>
+              <div class="flex shrink-0 flex-col gap-0.5 pb-2.5">{props.current.rows()}</div>
+            </Show>
+            <For each={props.sections}>
+              {(section) => (
+                <Show when={section.count > 0}>
+                  <div role="group" aria-labelledby={`${id}-${section.id}`} class="flex shrink-0 flex-col gap-2 pb-2.5">
+                    <SectionHeader id={`${id}-${section.id}`} label={section.label} />
+                    <div class="flex flex-col gap-0.5">{section.rows()}</div>
+                    {section.more?.()}
+                  </div>
+                </Show>
+              )}
+            </For>
+            <Show
+              when={
+                props.current.count === 0 &&
+                props.working.count === 0 &&
+                props.sections.every((section) => section.count === 0)
+              }
+            >
               <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
                 {language.t("sidebar.inbox.empty")}
               </div>
             </Show>
-          }
-        >
-          <div class="flex shrink-0 flex-col gap-2">
-            <SectionHeader label={language.t("sidebar.inbox.section.recent")} />
-            <div class="flex flex-col gap-0.5">{props.recent}</div>
+            <Show when={props.archived}>
+              <div class="shrink-0 pt-3">
+                <Button
+                  variant="ghost-muted"
+                  size="normal"
+                  class="w-full justify-start px-2"
+                  onClick={props.onArchived}
+                >
+                  {language.t("sidebar.inbox.section.archived")}
+                </Button>
+              </div>
+            </Show>
           </div>
-        </Show>
-        <Show when={props.archived}>
-          <div class="shrink-0 pt-3">
-            <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={props.onArchived}>
-              {language.t("sidebar.inbox.section.archived")}
-            </Button>
-          </div>
+          {/* Working sessions sit in a shelf pinned below the scrolling list. */}
+          <Show when={props.working.count > 0}>
+            <div
+              data-slot="sidebar-inbox-working"
+              role="group"
+              aria-labelledby={`${id}-working`}
+              class="relative flex max-h-[40%] shrink-0 flex-col gap-2 pt-[7px]"
+            >
+              <span
+                aria-hidden="true"
+                class="pointer-events-none absolute top-0 h-px bg-v2-border-border-muted"
+                style={{
+                  "inset-inline-start": "calc(1px - var(--sidebar-inset-start, 11px))",
+                  "inset-inline-end": "calc(1px - (var(--sidebar-inset-end, 3px) + var(--sidebar-divider-bleed, 0px)))",
+                }}
+              />
+              <SectionHeader
+                id={`${id}-working`}
+                label={language.t("sidebar.inbox.section.working")}
+                expanded={props.working.expanded}
+                shimmer={!props.working.expanded}
+                onToggle={props.working.onToggle}
+              />
+              <Show when={props.working.expanded}>
+                <div data-scrollable class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
+                  {props.working.rows()}
+                </div>
+              </Show>
+            </div>
+          </Show>
         </Show>
       </div>
-      {/* Working sessions sit in a shelf pinned below the scrolling list. */}
-      <Show when={props.workingCount > 0}>
-        <div data-slot="sidebar-inbox-working" class="relative flex max-h-[40%] shrink-0 flex-col gap-2 pt-[7px]">
-          <span
-            aria-hidden="true"
-            class="pointer-events-none absolute top-0 h-px bg-v2-border-border-muted"
-            style={{
-              "inset-inline-start": "calc(1px - var(--sidebar-inset-start, 11px))",
-              "inset-inline-end": "calc(1px - (var(--sidebar-inset-end, 3px) + var(--sidebar-divider-bleed, 0px)))",
-            }}
-          />
-          <SectionHeader
-            label={language.t("sidebar.inbox.section.working")}
-            expanded={props.workingExpanded}
-            shimmer={!props.workingExpanded}
-            onToggle={props.onToggleWorking}
-          />
-          <Show when={props.workingExpanded}>
-            <div class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">{props.working}</div>
-          </Show>
-        </div>
-      </Show>
-    </div>
+    </InboxNavigation.Provider>
   )
 }
 
-function SectionHeader(props: { label: string; expanded?: boolean; shimmer?: boolean; onToggle?: () => void }) {
+function SectionHeader(props: {
+  id: string
+  label: string
+  expanded?: boolean
+  shimmer?: boolean
+  onToggle?: () => void
+}) {
   const content = (): JSX.Element => (
     <>
       <span class="min-w-0 truncate">
@@ -274,13 +500,17 @@ function SectionHeader(props: { label: string; expanded?: boolean; shimmer?: boo
     <Show
       when={props.onToggle}
       fallback={
-        <div class="flex h-6 shrink-0 items-center gap-1.5 px-2 text-[13px] leading-4 font-medium text-v2-text-text-muted">
+        <div
+          id={props.id}
+          class="flex h-6 shrink-0 items-center gap-1.5 px-2 text-[13px] leading-4 font-medium text-v2-text-text-muted"
+        >
           {content()}
         </div>
       }
     >
       {(toggle) => (
         <button
+          id={props.id}
           type="button"
           aria-expanded={props.expanded}
           class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
@@ -311,6 +541,9 @@ export function InboxSessionCard(props: {
   onDelete: () => void
 }) {
   const language = useLanguage()
+  const navigation = useContext(InboxNavigation)
+  const id = createUniqueId()
+
   const status = () => props.status
 
   const compact = (seconds: number) => {
@@ -339,13 +572,15 @@ export function InboxSessionCard(props: {
       <Menu.Context.Trigger
         as="button"
         type="button"
+        id={id}
+        tabIndex={navigation ? (navigation() === id ? 0 : -1) : 0}
+        aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
         data-status={status()}
         data-state={props.selected ? "active" : undefined}
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         classList={{
           "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
-          "opacity-70": status() === "working" && !props.selected,
           "opacity-50": props.archived && !props.selected,
         }}
         onClick={props.onOpen}
@@ -386,10 +621,7 @@ export function InboxSessionCard(props: {
               )}
             </Show>
           </span>
-          <span
-            class="ms-auto flex shrink-0 items-center gap-1.5 text-[12px] tabular-nums"
-            role={status() === "ready" ? undefined : "status"}
-          >
+          <span class="ms-auto flex shrink-0 items-center gap-1.5 text-[12px] tabular-nums">
             <Show when={status() !== "ready"}>
               <span class="sr-only">{statusLabel(status())}</span>
               <Show

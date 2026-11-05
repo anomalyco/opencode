@@ -1,0 +1,325 @@
+[data-site] {
+  /* The page stays mounted under the Markdown view, so its state survives a round trip. */
+  [data-component="content"] > [data-slot="page"] {
+    display: contents;
+  }
+
+  &[data-markdown] [data-component="content"] > [data-slot="page"],
+  &[data-markdown-boot] [data-component="content"] > [data-slot="page"] {
+    display: none;
+  }
+
+  [data-component="markdown-view"] {
+    --line: 1.7;
+    min-width: 0;
+    padding-bottom: 6rem;
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    font-weight: 400;
+    line-height: var(--line);
+    color: var(--text);
+
+    /* The file name and Copy sit up in the logo row, where the product pages put the breadcrumb,
+       and stay there while the doc scrolls. Copy ends on the doc's right edge
+       (see actions). A negative margin rather than absolute positioning, so the
+       page-change animation (a transform on this view) never moves the bar's containing block. */
+    [data-slot="bar"] {
+      position: sticky;
+      top: var(--top);
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      height: var(--logo-height);
+      margin-top: calc(var(--top) - var(--content-top));
+      margin-bottom: calc(var(--content-top) - var(--top) - var(--logo-height));
+
+      /* The doc scrolls behind the whole logo row: from past the window's top down to the content
+         line, across the gutter to the page edge, so code blocks are covered too. */
+      &::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset-inline-start: calc(-1 * var(--gutter));
+        inset-inline-end: calc(-1 * var(--edge));
+        bottom: calc(var(--top) + var(--logo-height) - var(--content-top));
+        height: calc(var(--content-top) + 100vh);
+        background: var(--bg);
+      }
+    }
+
+    /* "Home / index.md", set like the product page breadcrumb. */
+    [data-slot="crumbs"] {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      min-width: 0;
+      line-height: 1.2;
+
+      [aria-current="page"] {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    /* Copy ends where the doc's text column does (92ch, below), not at the window's edge. The bar
+       itself stays full width for the cover behind it. */
+    [data-slot="actions"] {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      margin-inline-end: max(0px, calc(100% - 92ch));
+    }
+
+    /* Plain text, like the breadcrumb links, sitting at the right edge. */
+    [data-slot="copy"] {
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      line-height: 1.2;
+      color: var(--text-weak);
+      cursor: pointer;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+    }
+
+    [data-slot="doc"] {
+      max-width: 92ch;
+      overflow-wrap: anywhere;
+
+      > * {
+        min-height: calc(var(--line) * 1em);
+      }
+    }
+
+    [data-slot="marker"] {
+      color: var(--text-weaker);
+      font-weight: 400;
+    }
+
+    [data-slot="heading"] {
+      font: inherit;
+      color: var(--text-strong);
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    strong {
+      color: var(--text-strong);
+      font-weight: 600;
+    }
+
+    /* Wrapped list lines hang under the text, not under the dash. */
+    [data-slot="item"] {
+      padding-inline-start: 2ch;
+      text-indent: -2ch;
+    }
+
+    /* The site's inline link style (see site.css) on the label only, so the "[" and "](url)"
+       markers stay plain. */
+    [data-slot="link"] {
+      [data-slot="label"] {
+        color: var(--text-strong);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.15em;
+        transition: color 150ms ease;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover [data-slot="label"] {
+          color: var(--link);
+        }
+      }
+
+      &:focus-visible [data-slot="label"],
+      &:active [data-slot="label"] {
+        color: var(--link);
+      }
+
+      &:focus-visible {
+        outline: 1px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+
+    code {
+      font: inherit;
+    }
+
+    [data-slot="code"] {
+      font: inherit;
+      overflow-x: auto;
+      white-space: pre;
+      overflow-wrap: normal;
+      padding: 0.75rem 1rem;
+      margin-inline: -1rem;
+      background: var(--bg-weak);
+
+      code {
+        color: var(--text-strong);
+      }
+    }
+  }
+
+  /* A swap blurs the new content in. Only after a toggle, never on the first page load. */
+  @media (prefers-reduced-motion: no-preference) {
+    &[data-swapped] [data-component="markdown-view"],
+    &[data-swapped]:not([data-markdown]) [data-component="content"] > [data-slot="page"] > * {
+      animation: markdown-swap 180ms var(--ease-out);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &[data-swapped] [data-component="markdown-view"],
+    &[data-swapped]:not([data-markdown]) [data-component="content"] > [data-slot="page"] > * {
+      animation: markdown-fade 120ms ease;
+    }
+  }
+
+  /* The footer's controls (theme, View as agent, language, status, copyright) stay pinned at the
+     bottom of the empty sidebar column while the long Markdown doc scrolls, so the view is one
+     click from being switched back. At the end of the doc this is where the footer puts them
+     anyway. Short windows and phones keep them at the bottom of the doc. */
+  @media (min-width: 60.0625rem) and (min-height: 42rem) {
+    /* The footer lays these out in its own grid (the group is display: contents there), so here it
+       becomes its own column with the footer's 36px row gap, ending the footer's padding above the
+       window's bottom: where the end of the normal page leaves them. */
+    &[data-markdown] [data-component="site-footer"][data-layout="list"] [data-slot="secondary"] {
+      position: fixed;
+      /* The footer's bottom padding plus the 1px the footer's group sits above it at the page's end. */
+      bottom: calc(var(--edge) + 1px);
+      inset-inline-start: var(--page-offset);
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      row-gap: 2.25rem;
+      width: var(--sidebar-width);
+      padding: 0;
+
+      > * {
+        align-self: flex-start;
+      }
+    }
+
+    &[data-markdown] [data-component="site-footer"][data-layout="columns"] {
+      /* A size container is the containing block for fixed children, so it would hold the bar in
+         the footer. */
+      [data-slot="main"] {
+        container-type: normal;
+      }
+
+      [data-slot="bar-controls"],
+      [data-slot="copyright"] {
+        position: fixed;
+        inset-inline-start: calc(var(--page-offset) + var(--edge));
+        z-index: 2;
+      }
+
+      [data-slot="bar-controls"] {
+        bottom: var(--switcher-bottom);
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      [data-slot="copyright"] {
+        bottom: var(--edge);
+      }
+    }
+  }
+
+  @media (max-width: 60rem) {
+    [data-component="markdown-view"] {
+      font-size: var(--fs-meta);
+
+      /* Sticks right under the phone's top bar. The top bar's hairline moves to this bar's foot,
+         so the line still marks where the doc scrolls under. */
+      [data-slot="bar"] {
+        top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+        z-index: 9;
+        height: 2.75rem;
+        margin-top: -0.75rem;
+        margin-bottom: 0.75rem;
+
+        &::before {
+          inset-inline-start: calc(-1 * var(--edge));
+          inset-inline-end: calc(-1 * var(--edge));
+          bottom: 0;
+          height: calc(100% + var(--content-top));
+        }
+
+        &::after {
+          content: "";
+          position: absolute;
+          inset-inline-start: calc(-1 * var(--edge));
+          inset-inline-end: calc(-1 * var(--edge));
+          bottom: 0;
+          height: 1px;
+          background: var(--border);
+          opacity: 0;
+        }
+      }
+
+      /* A 44px tall target that still ends on the content edge. */
+      [data-slot="copy"] {
+        align-self: stretch;
+        padding-inline-start: 0.75rem;
+      }
+
+      [data-slot="actions"] {
+        align-self: stretch;
+        gap: 1rem;
+      }
+    }
+
+    &[data-markdown] [data-component="topbar"]::after {
+      display: none;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (animation-timeline: scroll()) {
+        [data-component="markdown-view"] [data-slot="bar"]::after {
+          animation: topbar-edge linear both;
+          animation-timeline: scroll(root);
+          animation-range: 0 1.5rem;
+        }
+      }
+    }
+  }
+}
+
+@keyframes markdown-swap {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@keyframes markdown-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Beside the sidebar on pages without a right-hand aside, the doc can run out to the content edge,
+   under the fixed GitHub mark in the logo row's corner (github-link.css); Copy then stops clear of
+   it. */
+@media (min-width: 60.0625rem) {
+  [data-site]:not(:has([data-component="aside"])) [data-component="markdown-view"] [data-slot="actions"] {
+    margin-inline-end: max(calc(var(--github-clear) - var(--edge)), calc(100% - 92ch));
+  }
+}

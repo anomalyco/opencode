@@ -108,6 +108,9 @@ export type MockPersistentPty = {
   // Read by `/api/info`; tests may change both mid-test.
   capability: boolean | undefined
   renameSupported: boolean
+  // Whether listing a session's terminals answers 500, an error other than the daemon's 503. Starts false; tests may
+  // change it mid-test.
+  listFails: boolean
   // Live terminals in creation order.
   terminals: MockPersistentPtyInfo[]
   created: MockPersistentPtyInfo[]
@@ -336,6 +339,7 @@ export function createPersistentPty(
   const pty: MockPersistentPty = {
     capability: input.config?.capability,
     renameSupported: input.config?.renameSupported ?? true,
+    listFails: false,
     terminals: [],
     created: [],
     removed: [],

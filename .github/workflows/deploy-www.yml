@@ -24,14 +24,16 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      # The workflow's own token, at build time only: script/github-snapshot.ts records the repo
+      # numbers and releases the site falls back to. The Worker never gets a GitHub token.
       - name: Build
         working-directory: services/www
-        run: bun run build
+        run: bun script/build.ts --mode ${{ github.ref_name }}
         env:
-          CLOUDFLARE_ENV: ${{ github.ref_name == 'production' && 'production' || 'dev' }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Deploy
         working-directory: services/www
-        run: bun run deploy
+        run: bunx cf deploy --prebuilt --mode ${{ github.ref_name }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

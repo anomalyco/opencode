@@ -24,6 +24,35 @@ story("keeps the ring on a menu trigger after a keyboard open", async ({ mount, 
   await expect(trigger).toHaveCSS("outline-style", "solid")
 })
 
+story("keeps the ring on a menu trigger opened from code after a pointer open", async ({ mount, page }) => {
+  await mount("ui-menu--programmatic-and-non-modal")
+  const trigger = page.getByRole("button", { name: "Controlled" })
+
+  await trigger.click()
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toHaveCount(0)
+  await page.getByRole("button", { name: "Open from code" }).click()
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(trigger).toBeFocused()
+  await expect(trigger).toHaveCSS("outline-style", "solid")
+})
+
+story("leaves focus where an outside click put it when a non-modal menu closes", async ({ mount, page }) => {
+  await mount("ui-menu--programmatic-and-non-modal")
+  const trigger = page.getByRole("button", { name: "Non-modal" })
+
+  await trigger.click()
+  await expect(page.getByRole("menuitem", { name: "Pin" })).toBeVisible()
+  await page.mouse.click(4, 300)
+  await expect(page.getByRole("menuitem", { name: "Pin" })).toHaveCount(0)
+  // The close focus restore has run once the story counts it; the click on empty space left focus on the body.
+  await expect(page.getByLabel("Non-modal focus restores")).toHaveText("1")
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true)
+  await expect(trigger).not.toBeFocused()
+})
+
 story("returns focus to a dialog's trigger without a ring after a pointer open", async ({ mount, page }) => {
   await mount("ui-dialog--opened-from-button")
   const trigger = page.getByRole("button", { name: "Choose model" })

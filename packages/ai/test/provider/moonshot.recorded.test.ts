@@ -24,7 +24,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
             })[api]("kimi-k3"),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
           })
           const compiled = yield* compileRequest(request)
           expect(compiled.body.thinking).toBeUndefined()
@@ -69,7 +69,7 @@ for (const item of [
           ai.request({
             model: Moonshot.configure({ apiKey, providerOptions: { thinking: item.thinking } }).chat(item.model),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
           }),
         )
         expect(response.text.replaceAll(",", "")).toContain("37887")
@@ -111,7 +111,7 @@ for (const item of [
           prompt:
             "Use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",
           tools: [weather],
-          generation: { maxTokens: 4096 },
+          maxTokens: 4096,
         })
         const first = yield* LLMClient.generate(request)
         expect(first.finishReason.normalized).toBe("tool-calls")

@@ -2,15 +2,17 @@ import {
   batch,
   createEffect,
   createMemo,
+  createRenderEffect,
+  createSignal,
   For,
   mergeProps,
   on,
   onCleanup,
   Show,
+  untrack,
   type Accessor,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import { Schema } from "effect"
 import { createMediaQuery } from "@solid-primitives/media"
 import {
@@ -30,6 +32,13 @@ import { Contribution } from "./render"
 import { usePluginAttachment } from "./attachment"
 import { legacyKeys, panelKey } from "./panel-keys"
 import { closedEntry, createSideFocus, type ClosedTabs } from "./closed-tabs"
+import {
+  createNewTabsState,
+  selectPaneNewTabs,
+  selectShownNewTab,
+  transitionNewTabs,
+  type NewTabsEvent,
+} from "./new-tab-machine"
 
 type Tabs = Accessor<{
   tabs(): SessionTabs
@@ -223,6 +232,12 @@ export function createRegion(input: {
     return sibling ? sessionTabPane(tabs, sibling) : "side"
   }
 
+  const paneOfKey = (key: string) => {
+    const entry = byKey().get(key)
+
+    return entry ? paneOf(entry) : sessionTabPane(input.tabs().tabs(), key)
+  }
+
   // Narrow screens never select a transient tab: a stored one falls back like a missing tab.
   const desktop = createMediaQuery("(min-width: 768px)")
 
@@ -314,30 +329,6 @@ export function createRegion(input: {
     return entry ? paneOf(entry) : "side"
   })
 
-  // The host's new tab views: each shows in a pane, over the session and selection it opened over, so a tab that opens
-  // and selects itself replaces it. A view stops being live once the selection moves off what it opened over.
-  type NewTab = { id: string; pane: SessionPane; session: string; over: string | undefined }
-
-  const [state, setState] = createStore<{
-    adding: NewTab[]
-    chosen: Partial<Record<SessionPane, string>>
-  }>({ adding: [], chosen: {} })
-
-  let serial = 0
-
-  const live = (value: NewTab) => value.session === input.view().key && value.over === panes[value.pane].active()
-  const newTabs = (pane: SessionPane) => state.adding.filter((value) => value.pane === pane && live(value))
-
-  const shownNewTab = (pane: SessionPane) => {
-    const list = newTabs(pane)
-
-    return list.find((value) => value.id === state.chosen[pane]) ?? list.at(-1)
-  }
-
-  createEffect(() => {
-    if (state.adding.some((value) => !live(value))) setState("adding", (list) => list.filter(live))
-  })
-
   const empty = createMemo(() => strip().length === 0)
 
   // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
@@ -355,13 +346,43 @@ export function createRegion(input: {
     input.onEmptied?.()
   }
 
-  // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
-  const dismissNewTab = (id: string) =>
-    batch(() => {
-      setState("adding", (list) => list.filter((value) => value.id !== id))
+  // The host's New tab views (`new-tab-machine.ts`). The side region reports whether it is open on screen.
+  const [newTabsState, setNewTabsState] = createSignal(createNewTabsState())
+  const [sideOpen, setSideOpen] = createSignal(false)
 
-      if (empty() && !state.adding.some(live)) emptied()
-    })
+  const dispatchNewTabs = (event: NewTabsEvent) => {
+    const next = transitionNewTabs(untrack(newTabsState), event)
+
+    setNewTabsState(next.state)
+
+    if (next.effects.length > 0) emptied()
+  }
+
+  // Feeds the machine the region's tabs each time they change: a tab that selects itself replaces the New tab its pane
+  // shows, a split or bottom pane takes its New tabs when it closes, and an open, empty side region opens one.
+  createRenderEffect(() =>
+    dispatchNewTabs({
+      type: "sync",
+      snapshot: {
+        session: input.view().key,
+        empty: empty(),
+        regionActive: active(),
+        sideOpen: sideOpen(),
+        panes: {
+          side: { active: panes.side.active(), keys: panes.side.keys() },
+          split: { active: panes.split.active(), keys: panes.split.keys() },
+          bottom: { active: panes.bottom.active(), keys: panes.bottom.keys() },
+        },
+      },
+    }),
+  )
+
+  const newTabs = (pane: SessionPane) => selectPaneNewTabs(newTabsState(), pane)
+
+  const shownNewTab = (pane: SessionPane) => selectShownNewTab(newTabsState(), pane, panes[pane].active())
+
+  // Closing the last New tab of a strip with no tabs closes the region, as closing its last tab does.
+  const dismissNewTab = (id: string) => batch(() => dispatchNewTabs({ type: "dismiss", id, empty: untrack(empty) }))
 
   return {
     /** Whether a key event belongs to the side region rather than the session around it. */
@@ -379,45 +400,42 @@ export function createRegion(input: {
       return key ? byKey().get(key) : undefined
     }),
     pane: (pane: SessionPane) => panes[pane],
-    paneOf: (key: string): SessionPane => {
-      const entry = byKey().get(key)
-
-      return entry ? paneOf(entry) : sessionTabPane(input.tabs().tabs(), key)
-    },
+    paneOf: paneOfKey,
     wide: createMemo(() => providers().some((item) => item.value.wide)),
     /** A plugin's tab ids in the stored strip. */
     openFor: (plugin: string) =>
       stored().flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
+    /** Selects a tab and shows it over the New tab its pane showed, which stays in the strip. */
     select(key: string) {
-      input.tabs().setActive(key)
+      batch(() => {
+        dispatchNewTabs({ type: "select.tab", pane: paneOfKey(key) })
+        input.tabs().setActive(key)
+      })
     },
-    /** The live new tab views of a pane, in strip order. */
+    /** The new tab views of a pane, by id in strip order. */
     newTabs,
-    /** The new tab view a pane shows: the selected one, else the newest. */
+    /** The id of the new tab view a pane shows: the chosen one, else the newest while the pane selects no tab. */
     shownNewTab,
     newTab: (pane: SessionPane) => shownNewTab(pane) !== undefined,
     selectNewTab(pane: SessionPane, id: string) {
-      setState("chosen", pane, id)
+      dispatchNewTabs({ type: "select.new", pane, id })
     },
     /** Adds a new tab view in a pane, by default the one holding the selected tab, and shows it. */
     openNewTab(pane: SessionPane = activePane()) {
-      const id = `new:${++serial}`
-
-      batch(() => {
-        setState("adding", (list) => [...list, { id, pane, session: input.view().key, over: panes[pane].active() }])
-        setState("chosen", pane, id)
-      })
+      dispatchNewTabs({ type: "open", pane })
     },
     dismissNewTab,
     /** Closes the shown new tab view in the given or active pane; returns whether one was showing. */
     closeNewTab(pane: SessionPane = activePane()) {
-      const value = shownNewTab(pane)
+      const id = shownNewTab(pane)
 
-      if (!value) return false
-      dismissNewTab(value.id)
+      if (!id) return false
+      dismissNewTab(id)
 
       return true
     },
+    /** The side region reports whether it is open on screen, which opens a New tab in an empty one. */
+    syncSideOpen: (open: boolean) => void setSideOpen(open),
     /** Opens or closes the side region for the user. Opening moves focus into it once it lands; closing gives focus back. */
     toggle() {
       const side = input.side()
@@ -451,10 +469,12 @@ export function createRegion(input: {
       const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, input.screen, { tab: entry.tab }))
 
       if (closed) input.closed.push(input.view(), closed)
+      // New tabs left in the strip keep the region open.
       batch(() => {
         input.tabs().close(key)
 
-        if (last) emptied()
+        // The strip is empty now, so a split or bottom pane closed and only the side pane's New tabs remain.
+        if (last && selectPaneNewTabs(untrack(newTabsState), "side").length === 0) emptied()
       })
 
       if (entry)
@@ -494,7 +514,10 @@ export function createRegion(input: {
 
 export type Region = ReturnType<typeof createRegion>
 
-/** Grouped content stays mounted while any member is listed; other tabs mount only while selected. */
+/**
+ * Grouped content stays mounted while any member is listed; other tabs mount only while selected, and the last one
+ * stays mounted, hidden, while the pane selects nothing.
+ */
 export function RegionContent(props: {
   pane: RegionPane
   view: MountedSession
@@ -505,11 +528,21 @@ export function RegionContent(props: {
     Array.from(new Set(props.pane.entries().flatMap((entry) => (entry.tab.group ? [groupKey(entry)] : [])))),
   )
 
-  const single = createMemo(() => {
+  // A switch to a session with nothing open in this pane keeps the last tab, so switching back shows it again instead of
+  // tearing down and building a panel such as the review, its file tree and diffs, on every switch. Closing a tab in
+  // the same session still unmounts it.
+  const kept = createMemo<{ key: string | undefined; session: string }>((previous) => {
     const entry = props.pane.selected()
+    const session = props.view.key
 
-    return entry && !entry.tab.group ? entry.key : undefined
+    if (!entry && previous?.key && previous.session !== session) return previous
+
+    return { key: entry && !entry.tab.group ? entry.key : undefined, session }
   })
+
+  const single = () => kept().key
+
+  const shown = () => props.pane.selected()?.key === single()
 
   return (
     <>
@@ -582,9 +615,18 @@ export function RegionContent(props: {
                   tabIndex={entry()?.tab.tabbable ? 0 : undefined}
                   data-slot="tabs-content"
                   class="flex flex-col h-full overflow-hidden contain-strict"
+                  // Out of the pane's flow and skipped while hidden, so showing it again reuses its style and layout.
+                  // Skipped content takes neither focus nor the pointer, and unlike `inert`, flipping it restyles
+                  // nothing inside.
+                  classList={{ "absolute inset-0 [content-visibility:hidden]": !shown() }}
+                  aria-hidden={!shown() || undefined}
                 >
                   <PanelContext.Provider
-                    value={{ ...props.frame, visible: props.frame.shown, open: () => props.pane.openFor(plugin) }}
+                    value={{
+                      ...props.frame,
+                      visible: () => props.frame.shown() && shown(),
+                      open: () => props.pane.openFor(plugin),
+                    }}
                   >
                     <Contribution plugin={plugin}>
                       {() =>

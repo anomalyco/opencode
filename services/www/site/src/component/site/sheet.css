@@ -1,0 +1,161 @@
+/* The bottom sheet (sheet.tsx). The popover is a full-screen layer in the top layer: a backdrop and
+   the panel at the bottom, a drag handle over a scrolling body. Without JavaScript the panel rests at
+   the medium detent; with it, the code moves the panel (transform) and fades the backdrop (opacity). */
+[data-component="sheet"] {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text-strong);
+  -webkit-tap-highlight-color: transparent;
+
+  [data-slot="backdrop"] {
+    position: absolute;
+    inset: 0;
+    background: light-dark(rgb(0 0 0 / 0.32), rgb(0 0 0 / 0.6));
+    touch-action: none;
+  }
+
+  [data-slot="panel"] {
+    position: absolute;
+    inset: auto 0 0;
+    display: flex;
+    flex-direction: column;
+    max-width: 36rem;
+    max-height: calc(100% - env(safe-area-inset-top, 0px) - 0.75rem);
+    margin-inline: auto;
+    background: var(--popover-bg);
+    box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1)),
+      0 -6px 24px -12px light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.6));
+    transform: translate3d(0, max(0px, calc(100% - 60dvh)), 0);
+    will-change: transform;
+  }
+
+  [data-slot="head"] {
+    flex: none;
+    touch-action: none;
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  [data-slot="grabber"] {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    /* The whole strip above the list is the handle: a 44px target. */
+    height: 2.75rem;
+    cursor: inherit;
+
+    &::before {
+      content: "";
+      width: 2.25rem;
+      height: 5px;
+      border-radius: 3px;
+      background: var(--border-strong);
+    }
+  }
+
+  [data-slot="body"] {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    padding: 0 0 calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-top: 1px solid var(--border);
+  }
+
+  /* The body's lists: plain, edge to edge. */
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* One row per option, at least 52px tall, at the body size. */
+  [data-slot="row"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 3.25rem;
+    font-size: var(--body-size);
+    text-align: start;
+    padding-inline: calc(1.25rem + env(safe-area-inset-left, 0px)) calc(1.25rem + env(safe-area-inset-right, 0px));
+    color: var(--text-strong);
+    text-decoration: none;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+
+    /* A hairline between rows, inset from the start edge like the text. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset-block: auto 0;
+      inset-inline: 1.25rem 0;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* The corner arrow of a link that opens a new tab, just after its label. */
+    [data-slot="external"] {
+      display: inline-block;
+      margin-inline-start: 0.375rem;
+      vertical-align: 0.25em;
+    }
+
+    /* The menus' active bar on the current row. */
+    &::before {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: 0;
+      width: 2px;
+      background: var(--menu-bar);
+      opacity: 0;
+    }
+
+    &[aria-current="true"]::before {
+      opacity: 1;
+    }
+
+    &:active {
+      background: var(--menu-press);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--menu-hover);
+      }
+    }
+
+    &:focus-visible {
+      outline: none;
+      background: var(--menu-hover);
+
+      &::before {
+        opacity: 1;
+      }
+    }
+  }
+}
+
+/* The page behind stays put while a sheet is open. */
+html:has([data-component="sheet"]:popover-open) {
+  overflow: hidden;
+}

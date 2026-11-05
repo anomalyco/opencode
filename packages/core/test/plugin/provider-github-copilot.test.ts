@@ -220,14 +220,20 @@ describe("GithubCopilotPlugin", () => {
         kind: "primary",
         request: new Request("https://api.githubcopilot.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": "token" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": "token",
+            "anthropic-beta": "interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01",
+          },
           body: JSON.stringify({ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
         }),
       })
       expect(event.request.headers.get("authorization")).toBe("Bearer token")
       expect(event.request.headers.has("x-api-key")).toBe(false)
       expect(event.request.headers.get("x-initiator")).toBe("user")
-      expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
+      expect(event.request.headers.get("anthropic-beta")).toBe(
+        "interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01",
+      )
       expect(event.request.headers.get("x-github-api-version")).toBe("2026-08-01")
     }),
   )

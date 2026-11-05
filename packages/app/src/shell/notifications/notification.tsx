@@ -1,5 +1,4 @@
-import { createEffect, createMemo, onCleanup, untrack } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { Schema } from "effect"
 import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
 import type { ServerSDK } from "@/runtime/server/client"
@@ -15,6 +14,19 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
 import { createRequestRecovery } from "@/shell/notifications/request-recovery"
+import {
+  INITIAL_LEGACY_MIGRATION_STATE,
+  INITIAL_VIEW_REPORT_STATE,
+  isSessionUnread,
+  selectLegacyHiddenReports,
+  selectSessionUnread,
+  transitionLegacyMigration,
+  transitionViewReport,
+  type LegacyMigrationEvent,
+  type LegacyViewReport,
+  type ViewReportEvent,
+  type ViewReportState,
+} from "@/shell/notifications/machine"
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
 
@@ -46,13 +58,6 @@ function hasRunningChild(data: Data, sessionID: string) {
     )
 }
 
-/** A session is unread when its latest terminal execution is newer than the last one any client viewed. */
-function isSessionUnread(session?: Pick<SessionInfo, "time">) {
-  const time = session?.time
-
-  return time?.idle !== undefined && (time.viewed === undefined || time.idle > time.viewed)
-}
-
 // The list Desktop kept before unread state moved to the server. Until its viewed state reaches the server, unread
 // state still honours it, so sessions read here don't light up while the server catches up.
 const LegacyNotificationStore = Persistence.struct({
@@ -63,16 +68,9 @@ const LegacyNotificationStore = Persistence.struct({
   started: Schema.optional(Schema.Finite),
 })
 
-// The carry-over waits this long after connecting so it doesn't compete with startup requests.
-const LEGACY_MIGRATION_DELAY = 5_000
-
 const LEGACY_MIGRATION_PAGE = 200
 
 const LEGACY_MIGRATION_CONCURRENCY = 4
-
-const VIEW_RETRY_DELAY = 250
-
-const VIEW_RETRY_MAX_DELAY = 5_000
 
 export function createServerNotificationState(input: {
   sdk: ServerSDK
@@ -85,50 +83,100 @@ export function createServerNotificationState(input: {
   const language = useLanguage()
   const tabs = useTabs()
   const disposed = { value: false }
-  // Idle watermarks already reported per root session, so reactive re-runs don't re-post them.
-  const acknowledged = new Map<string, number>()
-  // A failed view report re-runs the tracking caller with backoff, like the TUI.
-  const [state, setState] = createStore({ viewRetry: 0, legacyMigrated: false })
-  let viewRetryTimer: ReturnType<typeof setTimeout> | undefined
-  let viewRetryAttempt = 0
-  onCleanup(() => clearTimeout(viewRetryTimer))
+  const connected = createMemo(() => input.sdk.connection.status() === "connected")
+
+  // Per root session, so a failed report retries on its own whether or not a reactive caller is still viewing it.
+  const reports = new Map<string, ViewReportState>()
+  const reportTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  const dispatchView = (root: string, event: ViewReportEvent) => {
+    const result = transitionViewReport(reports.get(root) ?? INITIAL_VIEW_REPORT_STATE, event)
+
+    reports.set(root, result.state)
+    result.effects.forEach((effect) => {
+      if (effect.type === "forget") {
+        input.data.session.forget(root)
+
+        return
+      }
+
+      clearTimeout(reportTimers.get(root))
+      reportTimers.delete(root)
+
+      if (effect.type === "send.cancel") return
+
+      if (effect.delayMs === 0) {
+        sendView(root, effect)
+
+        return
+      }
+
+      reportTimers.set(
+        root,
+        setTimeout(() => {
+          reportTimers.delete(root)
+          sendView(root, effect)
+        }, effect.delayMs),
+      )
+    })
+  }
+
+  const sendView = (root: string, effect: { idle: number; attempt: number }) =>
+    void input.sdk.api.session.view({ sessionID: root, idle: effect.idle }).then(
+      () => dispatchView(root, { type: "report.succeeded", attempt: effect.attempt }),
+      (error) =>
+        dispatchView(root, { type: "report.failed", attempt: effect.attempt, notFound: isSessionNotFoundError(error) }),
+    )
 
   const legacyTarget = Persist.serverGlobal(input.sdk.scope, "notification")
   const [legacy, setLegacy, , legacyReady] = persisted(legacyTarget, LegacyNotificationStore, {}, platform)
-  const started = Date.now()
-  const legacyStarted = () => legacy.started ?? started
+  const [legacyState, setLegacyState] = createSignal(INITIAL_LEGACY_MIGRATION_STATE)
+  const discovered = Date.now()
+  let legacyRun: AbortController | undefined
 
-  // Sessions the old list still had unread, while its viewed state hasn't reached the server yet.
-  const legacyUnseen = createMemo(() => {
-    const list = legacy.list
+  const dispatchLegacy = (event: LegacyMigrationEvent) => {
+    const previous = untrack(legacyState)
+    const result = transitionLegacyMigration(previous, event)
 
-    if (!list || state.legacyMigrated) return
+    if (result.state !== previous) setLegacyState(result.state)
+    result.effects.forEach((effect) => {
+      if (effect.type === "persist.started") {
+        setLegacy("started", effect.started)
 
-    return new Set(list.flatMap((item) => (!item.viewed && item.session ? [item.session] : [])))
-  })
+        return
+      }
 
-  // Idle watermarks the carry-over reported, so rows drawn from an older fetched copy of a session stay read.
-  const legacyReported = new Map<string, number>()
+      if (effect.type === "persist.remove") {
+        removePersisted(legacyTarget, platform)
 
-  const unread = (session?: Pick<SessionInfo, "id" | "time">) => {
-    const idle = session?.time.idle
+        return
+      }
 
-    // Until the old list is read, a session it had read could flash unread.
-    if (!legacyReady() || !session || idle === undefined || !isSessionUnread(session)) return false
+      legacyRun?.abort()
+      legacyRun = undefined
 
-    if (idle <= (legacyReported.get(session.id) ?? -Infinity)) return false
-    const unseen = legacyUnseen()
+      if (effect.type === "run.cancel") return
 
-    return !unseen || unseen.has(session.id) || idle > legacyStarted()
+      const controller = new AbortController()
+
+      const timer = setTimeout(
+        () =>
+          void migrateLegacy(controller.signal).then(
+            () => dispatchLegacy({ type: "run.succeeded", attempt: effect.attempt }),
+            () => dispatchLegacy({ type: "run.failed", attempt: effect.attempt }),
+          ),
+        effect.delayMs,
+      )
+
+      controller.signal.addEventListener("abort", () => clearTimeout(timer))
+      legacyRun = controller
+    })
   }
 
   // Carry the old list's viewed state to the server in the background: page through every root session and report
-  // the ones the server has unread but this client shows read. Then delete the list. A failure keeps it, and the
-  // next connection retries; reports already made are skipped because the server then has them read.
-  let legacyMigration: "idle" | "scheduled" | "running" = "idle"
-
-  const migrateLegacy = async () => {
-    legacyMigration = "running"
+  // the ones the server has unread but this client shows read. Then delete the list. Reports already made are
+  // skipped on a retry because the server then has them read.
+  const migrateLegacy = async (signal: AbortSignal) => {
     let cursor: string | undefined
 
     for (;;) {
@@ -139,53 +187,62 @@ export function createServerNotificationState(input: {
         cursor,
       })
 
-      const hidden = page.data.flatMap((session) =>
-        session.time.idle !== undefined && isSessionUnread(session) && !unread(session)
-          ? [{ sessionID: session.id, idle: session.time.idle }]
-          : [],
-      )
+      const hidden = selectLegacyHiddenReports(untrack(legacyState), page.data)
+      const settled: PromiseSettledResult<LegacyViewReport>[] = []
 
       for (let index = 0; index < hidden.length; index += LEGACY_MIGRATION_CONCURRENCY) {
-        if (disposed.value) return
+        if (signal.aborted || settled.some((result) => result.status === "rejected")) break
 
-        await Promise.all(
-          hidden.slice(index, index + LEGACY_MIGRATION_CONCURRENCY).map(async (report) => {
-            await input.sdk.api.session.view(report)
-            legacyReported.set(report.sessionID, report.idle)
-          }),
+        settled.push(
+          ...(await Promise.allSettled(
+            hidden
+              .slice(index, index + LEGACY_MIGRATION_CONCURRENCY)
+              .map((report) => input.sdk.api.session.view(report).then(() => report)),
+          )),
         )
       }
 
-      if (page.data.length === 0 || !page.cursor.next) break
+      dispatchLegacy({
+        type: "sessions.reported",
+        reports: settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
+      })
+
+      const failure = settled.find((result): result is PromiseRejectedResult => result.status === "rejected")
+
+      if (failure) throw failure.reason
+
+      if (signal.aborted || page.data.length === 0 || !page.cursor.next) return
       cursor = page.cursor.next
     }
-
-    removePersisted(legacyTarget, platform)
-    setState("legacyMigrated", true)
   }
 
-  createEffect(() => {
-    if (!legacyReady() || !legacyUnseen()) return
-
-    if (untrack(() => legacy.started) === undefined) setLegacy("started", started)
-
-    if (input.sdk.connection.status() !== "connected" || legacyMigration !== "idle") return
-    legacyMigration = "scheduled"
-
-    const timer = setTimeout(
-      () =>
-        void migrateLegacy().catch(() => {
-          legacyMigration = "idle"
-        }),
-      LEGACY_MIGRATION_DELAY,
+  const hydrateLegacy = () =>
+    untrack(() =>
+      dispatchLegacy({
+        type: "hydrated",
+        list: legacy.list,
+        started: legacy.started,
+        now: discovered,
+        connected: connected(),
+      }),
     )
 
-    onCleanup(() => {
-      clearTimeout(timer)
+  // localStorage reads the old list at once; hydrate now so unread state is right before the first effect runs.
+  if (untrack(legacyReady)) hydrateLegacy()
 
-      if (legacyMigration === "scheduled") legacyMigration = "idle"
-    })
+  createEffect(() => {
+    if (legacyReady()) hydrateLegacy()
   })
+
+  createEffect(() => {
+    const online = connected()
+
+    dispatchLegacy({ type: "connection.changed", connected: online })
+
+    if (online) reports.forEach((_, root) => dispatchView(root, { type: "connected" }))
+  })
+
+  const unread = (session?: Pick<SessionInfo, "id" | "time">) => selectSessionUnread(legacyState(), session)
 
   const roots = (directory: string) =>
     input.data.session
@@ -196,40 +253,12 @@ export function createServerNotificationState(input: {
       )
 
   const view = (sessionID: string) => {
-    void state.viewRetry
     const root = input.data.session.root(sessionID)
     const session = input.data.session.get(root)
     const idle = session?.time.idle
 
-    if (idle === undefined || !isSessionUnread(session) || acknowledged.get(root) === idle) return
-    acknowledged.set(root, idle)
-    void input.sdk.api.session.view({ sessionID: root, idle }).then(
-      () => {
-        clearTimeout(viewRetryTimer)
-        viewRetryTimer = undefined
-        viewRetryAttempt = 0
-      },
-      (error) => {
-        if (isSessionNotFoundError(error)) {
-          acknowledged.delete(root)
-          input.data.session.forget(root)
-
-          return
-        }
-
-        if (acknowledged.get(root) !== idle) return
-        acknowledged.delete(root)
-
-        if (viewRetryTimer) return
-
-        const delay = Math.min(VIEW_RETRY_DELAY * 2 ** viewRetryAttempt, VIEW_RETRY_MAX_DELAY)
-        viewRetryAttempt++
-        viewRetryTimer = setTimeout(() => {
-          viewRetryTimer = undefined
-          setState("viewRetry", (value) => value + 1)
-        }, delay)
-      },
-    )
+    if (idle === undefined || !isSessionUnread(session)) return
+    dispatchView(root, { type: "view", idle })
   }
 
   // Loading the session keeps a background completion visible in the server-derived unread state.
@@ -375,6 +404,8 @@ export function createServerNotificationState(input: {
   onCleanup(() => {
     disposed.value = true
     unsub()
+    dispatchLegacy({ type: "disposed" })
+    reports.forEach((_, root) => dispatchView(root, { type: "disposed" }))
   })
 
   return {
