@@ -24,6 +24,7 @@ const TEXT = "#eeeeee"
 const BACKDROP = "#0a0a0a"
 const ACCENT = "#fab283"
 const PAGE = "#1a1b26"
+const FAINT = "#e4e4e45e"
 const range = (end: number, step: number) => Array.from({ length: Math.floor(end / step) + 1 }, (_, i) => i * step)
 
 const scanner = { color: RGBA.fromHex(ACCENT), style: "blocks" as const, inactiveFactor: 0.6, minAlpha: 0.3 }
@@ -56,6 +57,20 @@ const cases: { name: string; width: number; instants: number[]; element: () => J
     element: () => (
       <box backgroundColor={PAGE}>
         <spinner frames={createFrames(scanner)} color={createColors(scanner)} interval={40} />
+      </box>
+    ),
+  },
+  {
+    // A muted token with alpha, as in the `cursor` theme, over the page.
+    name: "spinner-page",
+    width: 12,
+    instants: range(160, 80),
+    element: () => (
+      <box backgroundColor={PAGE} flexDirection="row" gap={1}>
+        <box flexShrink={0}>
+          <spinner frames={SPINNER_FRAMES} interval={80} color={FAINT} />
+        </box>
+        <text fg={FAINT}>Working</text>
       </box>
     ),
   },
