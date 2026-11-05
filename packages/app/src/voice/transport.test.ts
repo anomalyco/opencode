@@ -144,24 +144,18 @@ afterEach(() => {
   Object.defineProperty(navigator, "mediaDevices", savedMediaDevices ?? missing)
 })
 
-const live = { model: "gpt-live-1", available: true, transports: ["webrtc"] }
+type Voice = OpenCodeClient["experimental"]["voice"]
 
-type Models = () => Promise<{ models: (typeof live)[] }>
+const live = { model: "gpt-live-1", provider: "openai", available: true, transports: ["webrtc" as const] }
 
-const api = (models: Models = () => Promise.resolve({ models: [live] })) =>
-  // SAFETY: the transport only calls these two voice endpoints.
-  ({
-    experimental: {
-      voice: {
-        models,
-        session: () => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }),
-      },
-    },
-  }) as unknown as OpenCodeClient
+function open(models: Voice["models"] = () => Promise.resolve({ models: [live] })) {
+  const voice: Voice = {
+    models,
+    session: () => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }),
+  }
 
-function open(models?: Models) {
   const dropped = jest.fn()
-  const transport = new VoiceTransport({ api: api(models), event: () => {}, levels: () => {}, dropped })
+  const transport = new VoiceTransport({ voice, event: () => {}, levels: () => {}, dropped })
 
   return { transport, dropped, peer: FakePeer.last }
 }

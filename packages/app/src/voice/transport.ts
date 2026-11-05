@@ -50,7 +50,7 @@ export class VoiceTransport {
 
   constructor(
     private readonly inputOptions: {
-      api: OpenCodeClient
+      voice: OpenCodeClient["experimental"]["voice"]
       event: (event: VoiceEvent) => void
       levels: (input: number, output: number) => void
       dropped: () => void
@@ -234,7 +234,7 @@ export class VoiceTransport {
 
   private async prepareOffer() {
     await this.context.resume()
-    const offered = await this.inputOptions.api.experimental.voice.models({ signal: this.abort.signal })
+    const offered = await this.inputOptions.voice.models({ signal: this.abort.signal })
 
     if (
       !offered.models.some(
@@ -248,7 +248,7 @@ export class VoiceTransport {
   }
 
   private async negotiate(viewing: VoiceJoinTarget, tail: string) {
-    const response = await this.inputOptions.api.experimental.voice.session(
+    const response = await this.inputOptions.voice.session(
       {
         model: "gpt-live-1",
         session: {
