@@ -369,11 +369,16 @@ test("an uncached session that never resolves shows as unreachable, and unmounti
     setConnection("connected", true)
     expect(current().status).toBe("resolving")
     expect(fixture.resolves).toEqual(["ses_a"])
-    expect(jest.getTimerCount()).toBe(1)
+    jest.advanceTimersByTime(SESSION_RESOLUTION_TIMEOUT_MS - 1)
+    expect(current().status).toBe("resolving")
+    jest.advanceTimersByTime(1)
+    expect(current().status).toBe("unreachable")
 
+    setConnection("connected", false)
+    setConnection("connected", true)
     dispose()
+    jest.advanceTimersByTime(SESSION_RESOLUTION_TIMEOUT_MS)
     expect(current().status).toBe("idle")
-    expect(jest.getTimerCount()).toBe(0)
   })
 
   jest.useRealTimers()

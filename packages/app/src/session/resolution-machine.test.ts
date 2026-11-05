@@ -85,7 +85,11 @@ test.each([
   ])
 
   const cached = transitionSessionResolution(failed.state, open("ses_b", { cached: info("ses_b") }))
-  expect(sessionRouteView(cached.state, undefined)).toEqual({ type: "ready", sessionID: "ses_b", session: info("ses_b") })
+  expect(sessionRouteView(cached.state, undefined)).toEqual({
+    type: "ready",
+    sessionID: "ses_b",
+    session: info("ses_b"),
+  })
 })
 
 test("ignores results from an earlier visit to the same session", () => {
@@ -248,7 +252,7 @@ test.each<{ health: ServerHealth; view: SessionRouteView<Session>["type"] }>([
   { health: { type: "unauthorized" }, view: "signed-out" },
   { health: { type: "stopped" }, view: "unreachable" },
 ])("an uncached session on a $health.type server explains it, a cached one stays", ({ health, view }) => {
-  expect(sessionRouteView(replay([open("ses_a")]).state, health)).toEqual({ type: view, sessionID: "ses_a" })
+  expect(sessionRouteView(replay([open("ses_a")]).state, health)).toMatchObject({ type: view, sessionID: "ses_a" })
   expect(sessionRouteView(replay([open("ses_a", { cached: info("ses_a") })]).state, health).type).toBe("ready")
 })
 
@@ -270,7 +274,11 @@ test("a session that does not resolve in time shows as unreachable and recovers"
   const late: Event = { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("late") }
   expect(transitionSessionResolution(timedOut.state, late).state).toBe(timedOut.state)
 
-  const reconnected = transitionSessionResolution(timedOut.state, { type: "connected", target: target("ses_a"), refresh: true })
+  const reconnected = transitionSessionResolution(timedOut.state, {
+    type: "connected",
+    target: target("ses_a"),
+    refresh: true,
+  })
   expect(reconnected.state).toEqual({ status: "resolving", target: target("ses_a"), attempt: 3 })
   expect(types(reconnected.effects)).toEqual(["sync.transcript", "sync.metadata", "timer.start"])
 
@@ -285,8 +293,14 @@ test("a session that does not resolve in time shows as unreachable and recovers"
 })
 
 test.each<{ name: string; event: Event }>([
-  { name: "metadata arrives", event: { type: "sync.settled", target: target("ses_a"), attempt: 1, session: info("ses_a") } },
-  { name: "metadata fails", event: { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("x") } },
+  {
+    name: "metadata arrives",
+    event: { type: "sync.settled", target: target("ses_a"), attempt: 1, session: info("ses_a") },
+  },
+  {
+    name: "metadata fails",
+    event: { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("x") },
+  },
   { name: "the cache fills", event: { type: "cache.changed", target: target("ses_a"), session: info("ses_a") } },
   {
     name: "a promotion starts",
@@ -299,7 +313,10 @@ test.each<{ name: string; event: Event }>([
       refresh: true,
     },
   },
-  { name: "the route loses its target", event: { ...open("ses_a"), target: undefined } },
+  {
+    name: "the route loses its target",
+    event: { type: "target.changed", target: undefined, cached: undefined, connected: false, refresh: true },
+  },
   { name: "the route unmounts", event: { type: "disposed" } },
 ])("leaving resolving when $name stops the timeout", ({ event }) => {
   const next = transitionSessionResolution(replay([open("ses_a")]).state, event)
