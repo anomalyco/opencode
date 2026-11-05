@@ -13,7 +13,6 @@ import { TruncatedText } from "@opencode/ui/truncated-text"
 import {
   children,
   createMemo,
-  createResource,
   createSignal,
   createUniqueId,
   For,
@@ -22,6 +21,7 @@ import {
   onMount,
   Show,
   untrack,
+  type Accessor,
   type Component,
   type JSX,
 } from "solid-js"
@@ -60,6 +60,15 @@ import {
   type McpServerStatus,
   type McpState,
 } from "./mcp-machine"
+import {
+  initialServiceLoadState,
+  serviceLoadView,
+  transitionServiceLoad,
+  type ServiceLoadEffect,
+  type ServiceLoadEvent,
+  type ServiceLoadState,
+  type ServiceLoadView,
+} from "./service-load-machine"
 
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
@@ -77,11 +86,11 @@ type ServiceProps = {
 
 /** One service's list: its load state, what its row summarises, and the list itself. */
 type ServiceSource = {
-  readonly loading: boolean
-  readonly ready: boolean
-  readonly error: boolean
+  readonly view: ServiceLoadView<unknown>
   readonly count: number
   readonly failed: boolean
+  /** Loads the list again when it opens; joins a load that runs. */
+  refresh: () => void
   retry: () => void
   Body: Component
   /** The actions under the list, outside its scroll box so they stay in view. */
@@ -146,8 +155,8 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp
 
   const sources: Record<Service, ServiceSource> = {
     mcp: useMcp(props, props.mcp, () => dispatch({ type: "close", focusRow: false })),
-    plugins: useCatalog(props, "plugins"),
-    skills: useCatalog(props, "skills"),
+    plugins: usePlugins(props),
+    skills: useSkills(props),
   }
 
   // Memos, so a pointer aiming across rows, which replaces the state on each new target, rewrites nothing on screen.
@@ -222,7 +231,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp
 
       if (effect.type === "cancel-aim") clearTimeout(aimTimer)
 
-      if (effect.type === "refresh" && !sources[effect.service].loading) sources[effect.service].retry()
+      if (effect.type === "refresh") sources[effect.service].refresh()
 
       if (effect.type === "focus-pane") {
         const element = panes[effect.service]
@@ -399,7 +408,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp
               // In a narrow-screen drawer the service list replaces the drawer's view.
 
               const content = children(() => (
-                <div class="session-summary-card session-service-drawer" aria-busy={source.loading}>
+                <div class="session-summary-card session-service-drawer" aria-busy={source.view.busy}>
                   <ServiceBody source={source}>
                     <source.Body />
                   </ServiceBody>
@@ -412,7 +421,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp
                   type="button"
                   class="session-summary-row"
                   onClick={(event) => {
-                    if (!source.loading) source.retry()
+                    source.refresh()
                     drawer.open({ title: ctx.t(service.label), content: content(), trigger: event.currentTarget })
                   }}
                 >
@@ -470,7 +479,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp
                 >
                   <Icon name={service.icon} class="shrink-0 text-v2-icon-icon-muted" />
                   <span class="session-summary-label">{ctx.t(service.label)}</span>
-                  <Show when={source.ready && !source.error}>
+                  <Show when={source.view.status === "ready"}>
                     <Show when={source.failed}>
                       <span class="session-service-dot" data-status="failed" aria-hidden="true" />
                     </Show>
@@ -517,7 +526,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string; mcp
                     role="group"
                     tabIndex={-1}
                     aria-label={ctx.t(service.label)}
-                    aria-busy={source.loading}
+                    aria-busy={source.view.busy}
                     data-service={service.type}
                     data-active={pane() === service.type || undefined}
                     data-overflow={sizes.overflow[service.type] || undefined}
@@ -551,31 +560,28 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
   const data = () => props.session.server.data
   const mcp = useMcpController(controllers, props.session.server, props.directory)
 
-  const [load, { refetch }] = createResource(
-    () => props.shown && data(),
-    async (current) => {
+  const list = () => data().location.mcp.server.list({ directory: props.directory })
+
+  // The list lives in the server's data store; the machine tracks only whether it loaded.
+  const load = useServiceLoad(props, {
+    cached: () => (list() === undefined ? undefined : true),
+    retain: false,
+    task: async () => {
+      const current = data()
       const directory = props.directory
 
       current.location.mcp.server.invalidate({ directory })
       await current.location.mcp.server.sync({ directory })
-    },
-  )
 
-  const servers = createMemo(() =>
-    (data().location.mcp.server.list({ directory: props.directory }) ?? []).toSorted((a, b) =>
-      a.name.localeCompare(b.name),
-    ),
-  )
+      return true
+    },
+  })
+
+  const servers = createMemo(() => (list() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
   return {
-    get loading() {
-      return load.loading
-    },
-    get ready() {
-      return data().location.mcp.server.list({ directory: props.directory }) !== undefined
-    },
-    get error() {
-      return !!load.error
+    get view() {
+      return load.view()
     },
     get count() {
       return servers().length
@@ -583,7 +589,8 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
     get failed() {
       return servers().some((server) => server.status.status === "failed")
     },
-    retry: () => void refetch(),
+    refresh: load.refresh,
+    retry: load.retry,
     Body: () => (
       <Show when={servers().length} fallback={<ServiceEmpty title={ctx.t("mcp.empty")} />}>
         <Index each={servers()}>
@@ -707,79 +714,97 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
   }
 }
 
-function useCatalog(props: ServiceProps, service: "plugins" | "skills"): ServiceSource {
-  const ctx = usePlugin()
-  const data = () => props.session.server.data
+type CatalogItem = {
+  readonly name: string
+  readonly status: string | undefined
+  readonly error: string | undefined
+  readonly path: string | undefined
+}
 
-  const [items, { refetch }] = createResource(
-    () => props.shown && data(),
-    async (current) => {
-      const directory = props.directory
+function usePlugins(props: ServiceProps): ServiceSource {
+  const load = useServiceLoad(props, {
+    cached: () => undefined,
+    // Only the machine holds the list, so a new data store keeps it on show while it loads again.
+    retain: true,
+    task: async (signal) => {
+      const result = await props.session.server.client.plugin.list(
+        { location: { directory: props.directory } },
+        { signal },
+      )
 
-      if (service === "plugins") {
-        const result = await props.session.server.client.plugin.list({ location: { directory } })
-
-        return result.data
-          .filter((plugin) => plugin.source.type !== "builtin")
-          .map((plugin) => ({
+      return result.data
+        .filter((plugin) => plugin.source.type !== "builtin")
+        .map(
+          (plugin): CatalogItem => ({
             name: pluginLabel(plugin),
             status: plugin.state.status,
             error: plugin.state.status === "failed" ? plugin.state.error : undefined,
             path: undefined,
-          }))
-      }
+          }),
+        )
+    },
+  })
+
+  return useCatalog(props, "plugins", load, () => load.view().value ?? [])
+}
+
+function useSkills(props: ServiceProps): ServiceSource {
+  const data = () => props.session.server.data
+  const list = () => data().location.skill.list({ directory: props.directory })
+
+  // The list lives in the server's data store; the machine tracks only whether it loaded.
+  const load = useServiceLoad(props, {
+    cached: () => (list() === undefined ? undefined : true),
+    retain: false,
+    task: async () => {
+      const current = data()
+      const directory = props.directory
 
       current.location.skill.invalidate({ directory })
       await current.location.skill.sync({ directory })
 
-      return undefined
+      return true
     },
-  )
-
-  const loaded = () => items.state === "ready" || items.state === "refreshing"
-
-  const list = createMemo(() => {
-    const entries =
-      service === "plugins"
-        ? loaded()
-          ? (items.latest ?? [])
-          : []
-        : (data().location.skill.list({ directory: props.directory }) ?? []).map((skill) => ({
-            name: skill.name,
-            status: undefined,
-            error: undefined,
-            path: skill.path,
-          }))
-
-    return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  createKeyed(data, (current) =>
-    onCleanup(
-      current.on(service === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
-        if (event.location?.directory !== props.directory) return
-        void refetch()
-      }),
+  return useCatalog(props, "skills", load, () =>
+    (list() ?? []).map(
+      (skill): CatalogItem => ({ name: skill.name, status: undefined, error: undefined, path: skill.path }),
     ),
+  )
+}
+
+function useCatalog(
+  props: ServiceProps,
+  service: "plugins" | "skills",
+  load: ServiceLoad<unknown>,
+  items: () => readonly CatalogItem[],
+): ServiceSource {
+  const ctx = usePlugin()
+  const list = createMemo(() => items().toSorted((a, b) => a.name.localeCompare(b.name)))
+
+  createKeyed(
+    () => props.session.server.data,
+    (current) =>
+      onCleanup(
+        current.on(service === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
+          if (event.location?.directory === props.directory) load.invalidate()
+        }),
+      ),
   )
 
   return {
-    get loading() {
-      return items.loading
+    get view() {
+      return load.view()
     },
-    get ready() {
-      return service === "plugins" ? loaded() : data().location.skill.list({ directory: props.directory }) !== undefined
-    },
-    get error() {
-      return !!items.error
-    },
+    refresh: load.refresh,
+    retry: load.retry,
     get count() {
       return list().length
     },
     get failed() {
       return list().some((item) => item.status === "failed")
     },
-    retry: () => void refetch(),
     Body: () => (
       <Show
         when={list().length}
@@ -877,7 +902,7 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
 
   return (
     <Show
-      when={props.source.ready || !props.source.loading}
+      when={props.source.view.status !== "loading"}
       fallback={
         <div class="session-service-message" role="status">
           {ctx.t("common.loading")}
@@ -885,7 +910,7 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
       }
     >
       <Show
-        when={!props.source.error}
+        when={props.source.view.status === "ready"}
         fallback={
           <div class="session-service-message" role="alert">
             <p>{ctx.t("common.requestFailed")}</p>
@@ -904,7 +929,7 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
 // Shown once the list is, as ServiceBody shows it.
 function ServiceFooter(props: { source: ServiceSource }) {
   return (
-    <Show when={(props.source.ready || !props.source.loading) && !props.source.error}>
+    <Show when={props.source.view.status === "ready"}>
       <props.source.Footer />
     </Show>
   )
@@ -998,6 +1023,87 @@ function ServiceSetup(props: { owner: ServiceProps; service: Service }) {
       <span class="session-summary-label">{ctx.t(`setup.${props.service}`)}</span>
     </button>
   )
+}
+
+type ServiceLoad<T> = {
+  readonly view: Accessor<ServiceLoadView<T>>
+  refresh: () => void
+  retry: () => void
+  /** The server announced a change to the list. */
+  invalidate: () => void
+}
+
+// Loads a service's list through its machine while the popover or drawer shows it: one load at a time, bounded by a
+// timeout, and ended when the list hides, the server's data store changes, or the list unmounts.
+function useServiceLoad<T>(
+  owner: ServiceProps,
+  input: {
+    /** The list the server's data store already holds, for a list that lives there. */
+    cached: () => T | undefined
+    /** Keeps the loaded list across a new data store, for a list that lives only in the machine. */
+    retain: boolean
+    task: (signal: AbortSignal) => Promise<T>
+  },
+): ServiceLoad<T> {
+  const ctx = usePlugin()
+  const [loadState, setLoadState] = createSignal<ServiceLoadState<T>>(initialServiceLoadState())
+  const runs = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+
+  const dispatch = (event: ServiceLoadEvent<T>) => {
+    const previous = untrack(loadState)
+    const next = transitionServiceLoad(previous, event)
+
+    if (next.state !== previous) setLoadState(() => next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: ServiceLoadEffect) => {
+    if (effect.type === "run") {
+      const attempt = effect.attempt
+      const controller = new AbortController()
+
+      runs.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatch({ type: "load.timed-out", attempt }), effect.timeoutMs),
+      })
+      void Promise.try(() => input.task(AbortSignal.any([ctx.signal, controller.signal]))).then(
+        (value) => dispatch({ type: "load.succeeded", attempt, value }),
+        () => dispatch({ type: "load.failed", attempt }),
+      )
+
+      return
+    }
+
+    const handle = runs.get(effect.attempt)
+    runs.delete(effect.attempt)
+    clearTimeout(handle?.timer)
+    handle?.controller.abort()
+  }
+
+  // Follows whether the list shows, the server's data store, and whether that store already holds the list.
+  createKeyed(
+    () => ({ shown: owner.shown, source: owner.session.server.data, cached: input.cached() }),
+    (current) =>
+      dispatch({
+        type: "context.changed",
+        shown: current.shown,
+        source: current.source,
+        cached: current.cached,
+        retain: input.retain,
+      }),
+    {
+      equals: (previous, next) =>
+        previous.shown === next.shown && previous.source === next.source && previous.cached === next.cached,
+    },
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return {
+    view: createMemo(() => serviceLoadView(loadState())),
+    refresh: () => dispatch({ type: "refresh.requested" }),
+    retry: () => dispatch({ type: "retry.requested" }),
+    invalidate: () => dispatch({ type: "invalidated" }),
+  }
 }
 
 type ConfigActionResult = { readonly type: "opened"; readonly close: boolean } | { readonly type: "copied" }
