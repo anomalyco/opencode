@@ -17,6 +17,7 @@ use opencode_service::connect::{self, Connection, Env};
 use opencode_service::contender::Delays;
 use opencode_service::ensure::{self, Ensured, Options, Timing};
 use opencode_service::stop::{self, Poll, Pty};
+use opencode_service::ts_command::TsCommand;
 use opencode_service::{follow, handoff, standalone};
 use rustix::process::{Pid, Signal, kill_process, test_kill_process};
 
@@ -761,6 +762,72 @@ async fn finds_a_started_service_registered_under_another_channel() {
         status(&ensured.service.endpoint.url).await["pid"],
         ensured.service.registration.pid
     );
+}
+
+// A fake `OPENCODE_TS_BIN` of the channel `oc-y`: it logs its pid to `spawns` and serves `mode`
+// under `service-oc-y.json`, beside the client's `service.json` (review carbon-2).
+fn channel_build(fixture: &Fixture, mode: &str) -> (Options, PathBuf, PathBuf) {
+    let root = fixture.dir.path();
+    let other = root.join("service-oc-y.json");
+    let spawns = root.join("spawns");
+    let program = root.join("opencode-ts");
+    std::fs::write(
+        &program,
+        format!(
+            "#!/bin/sh\necho $$ >> {}\nexec bun {} {} {mode}\n",
+            spawns.display(),
+            fixture_script().display(),
+            other.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(
+        &program,
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
+    let ts = TsCommand::from_vars(|name| (name == TsCommand::VAR).then(|| program.clone().into()));
+    let mut options = Options::new(fixture.registration.clone(), root.to_owned(), &ts);
+    options.timing = fast();
+    (options, other, spawns)
+}
+
+fn spawned(spawns: &Path) -> usize {
+    std::fs::read_to_string(spawns)
+        .unwrap_or_default()
+        .lines()
+        .count()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn waits_for_its_starting_service_registered_under_another_channel() {
+    needs_bun!();
+    let fixture = Fixture::new();
+    let (options, other, spawns) = channel_build(&fixture, "starting");
+    let pending = tokio::spawn(async move { run(&options).await });
+    let status = PathBuf::from(format!("{}.status-request", other.display()));
+    fixture.wait_for_file(&status).await;
+    // Past several spawn delays while the service answers 503.
+    tokio::time::sleep(fast().delays.spawn * 4).await;
+    std::fs::write(format!("{}.release", other.display()), "").unwrap();
+    let ensured = pending.await.unwrap().unwrap();
+    assert_eq!(ensured.file, other);
+    assert_eq!(spawned(&spawns), 1, "a second contender was started");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn reports_its_failed_service_registered_under_another_channel_at_once() {
+    needs_bun!();
+    let fixture = Fixture::new();
+    let (options, other, spawns) = channel_build(&fixture, "failed-owner");
+    let started = Instant::now();
+    let error = run(&options).await.unwrap_err().to_string();
+    assert_eq!(error, "Background service failed to start");
+    assert!(started.elapsed() < fast().deadline, "{:?}", started.elapsed());
+    assert_eq!(spawned(&spawns), 1, "a second contender was started");
+    let pid: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&other).unwrap()).unwrap();
+    assert!(alive(pid["pid"].as_u64().unwrap() as u32));
 }
 
 #[tokio::test(flavor = "multi_thread")]
