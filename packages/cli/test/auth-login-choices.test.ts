@@ -66,6 +66,18 @@ test("reports the config file that disables a provider", () => {
       "opencode-go",
     ),
   ).toBeUndefined()
+  // Wildcards cross "/" as in core, so a URL-shaped ID is still covered by a later allow.
+  expect(
+    disabledBy(
+      [
+        document("/d", [
+          { resource: "https://llm.example.com/v1", effect: "deny" },
+          { resource: "https://*", effect: "allow" },
+        ]),
+      ],
+      "https://llm.example.com/v1",
+    ),
+  ).toBeUndefined()
   // enabled_providers' wildcard deny also covers integrations that supply no provider.
   expect(disabledBy([document("/b", [{ resource: "*", effect: "deny" }])], "opencode-go")).toBeUndefined()
 })

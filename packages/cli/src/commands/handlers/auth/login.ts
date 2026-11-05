@@ -72,8 +72,19 @@ export function disabledBy(entries: ConfigEntry[], providerID: string) {
     .filter((entry) => entry.type === "document")
     .toReversed()
     .flatMap((entry) => (entry.info.policies ?? []).map((policy) => ({ ...policy, path: entry.path })))
-    .findLast((policy) => policy.action === "provider.use" && new Bun.Glob(policy.resource).match(providerID))
+    .findLast((policy) => policy.action === "provider.use" && matches(providerID, policy.resource))
   return policy?.effect === "deny" && policy.resource === providerID ? policy : undefined
+}
+
+// Core's Wildcard.match, which the CLI cannot import; patterns must match the same resources core matches.
+function matches(input: string, pattern: string) {
+  const escaped = pattern
+    .replaceAll("\\", "/")
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
+  const tail = escaped.endsWith(" .*") ? escaped.slice(0, -3) + "( .*)?" : escaped
+  return new RegExp("^" + tail + "$", process.platform === "win32" ? "si" : "s").test(input.replaceAll("\\", "/"))
 }
 
 const findIntegration = Effect.fn("cli.auth.login.integration")(function* (client: OpenCodeClient, target?: string) {
