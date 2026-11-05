@@ -207,6 +207,9 @@ impl Harness {
             self.wait(|harness| !harness.remotes.lock().unwrap().is_empty()),
             "no socket opened"
         );
+        // A replay that ends before the pane is laid out has no size to send pending input at (as in TS, where the
+        // server is never that fast). The pane mounted before its socket opened, so one frame lays it out.
+        self.app.render();
         let deliver = self.remotes.lock().unwrap()[0].deliver.clone();
         for text in [
             r#"{"type":"attached","inputProtocol":1,"info":{"size":{"cols":80,"rows":24}},"role":"controller"}"#,
@@ -266,6 +269,8 @@ fn input_written_before_the_pane_mounts_waits_for_the_replay_and_replaces_the_cl
     }));
     harness.run("terminal.toggle");
     harness.attach();
+    // The replay's end is handled before the next frame, the order a loaded machine gave once.
+    harness.app.wait_until(Duration::from_millis(200), || false);
     // `processStream`: pending input goes out instead of the size-only claim.
     assert_eq!(
         harness.frames(1),
