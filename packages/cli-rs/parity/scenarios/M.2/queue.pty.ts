@@ -1,0 +1,37 @@
+// While a turn runs, Enter steers the next prompt into the inbox and `prompt.queue` (Ctrl+X Enter) queues one;
+// a shell command cannot be queued; Ctrl+L clears the screen.
+import { definePty } from "../../pty/run"
+import { config, event, leave, opened, server, statusMask } from "./fixture"
+
+export default definePty({
+  args: ["mini", "-s", "ses_mini"],
+  cols: 60,
+  rows: 20,
+  server: server({
+    wait: 4000,
+    // The first prompt starts a turn that stays open while `session.wait` holds.
+    events: (id, requests) =>
+      requests.filter((entry) => entry.path.endsWith("/prompt")).length === 1
+        ? [event("session.inbox.delivered", { inboxID: id }), event("session.execution.started", {})]
+        : [],
+  }),
+  setup: (root) => config(root),
+  steps: [
+    opened,
+    { keys: "first", settle: 200 },
+    { keys: "\r", settle: 600, checkpoint: "running" },
+    { keys: "steer this", settle: 200 },
+    { keys: "\r", settle: 600 },
+    { keys: "queue this", settle: 200 },
+    { keys: "\x18\r", settle: 600, checkpoint: "queued" },
+    { keys: "!", settle: 100 },
+    { keys: "ls", settle: 100 },
+    { keys: "\x18\r", settle: 400, checkpoint: "refused" },
+    { keys: "\x1b", settle: 100 },
+    { keys: "\x0c", settle: 600, checkpoint: "cleared" },
+    ...leave,
+  ],
+  exits: true,
+  masks: [statusMask],
+  requests: "writes",
+})

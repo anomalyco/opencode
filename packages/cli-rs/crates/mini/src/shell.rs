@@ -19,7 +19,8 @@ use opentui::split::{Scrollback, SplitFooter};
 use serde_json::{Value, json};
 
 use crate::footers::Footers;
-use crate::prompt::{Prompt, RunPrompt};
+use crate::prompt::queue::{Queue, Submitted, Work};
+use crate::prompt::{Delivery, Hooks, PROMPT_MAX_ROWS, Prompt, RunPrompt};
 use crate::replay::{self, Envelope, Incoming, Output, Transcript};
 use crate::scrollback::{Commit, Flags, Writer};
 use crate::settings::MiniSettings;
@@ -30,10 +31,10 @@ use crate::{Input, InputError};
 
 /// `FOOTER_HEIGHT`: the footer's rows before the prompt measures itself.
 const FOOTER_HEIGHT: u16 = 4;
-/// `PROMPT_MAX_ROWS`: a terminal at least this plus four rows tall pads the prompt.
-const PROMPT_MAX_ROWS: u16 = 14;
 /// How long the second Ctrl+C or Esc of a two-press gesture may wait.
 const TWO_PRESS: Duration = Duration::from_secs(5);
+/// `NOTICE_DURATION`.
+const NOTICE: Duration = Duration::from_secs(3);
 
 pub fn run(input: Input) -> anyhow::Result<()> {
     let settings = MiniSettings::resolve(input.config.mini.as_ref());
@@ -43,14 +44,8 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         palette_size: 256,
         ..AppOptions::default()
     };
-    // The footer starts at the composer's height: a height set before the first frame does not resize the
-    // renderer, so `FOOTER_HEIGHT` would leave the status row below the screen.
-    let rows = opentui::term::size().map_or(0, |(_, rows)| rows);
-    options.host.split_footer = Some(if rows == 0 {
-        FOOTER_HEIGHT
-    } else {
-        prompt_height(rows, crate::prompt::MIN_ROWS)
-    });
+    // `applyHeight` below sizes the footer to the composer before the first frame.
+    options.host.split_footer = Some(FOOTER_HEIGHT);
     options.host.terminal.mouse = MouseTracking::Off;
     if settings.mono {
         options.host.terminal.kitty_keyboard = KittyKeyboard::OFF;
@@ -86,16 +81,16 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         settings.mono,
         true,
     );
-    let prompt = Prompt::new(&app, &theme, settings.mono);
+    let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
     let status = Text::new(&app, "")
         .wrap(WrapMode::None)
         .truncate(true)
         .height(1)
         .shrink(0.0);
-    let body = View::new(&app).child(prompt.root());
     app.root()
         .direction(FlexDirection::Column)
-        .child(&body)
+        .child(prompt.root())
+        .child(prompt.menu_root())
         .child(&status);
     let mini = Rc::new(Mini {
         app: app.clone(),
@@ -106,8 +101,8 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         footers: RefCell::new(Footers::default()),
         session: RefCell::new(None),
         prompt,
-        body,
         status,
+        queue: RefCell::new(Queue::default()),
         state: RefCell::new(State::default()),
         theme_input,
         settings,
@@ -182,6 +177,7 @@ struct State {
     running: bool,
     status: String,
     notice: String,
+    notice_timer: Option<TimerId>,
     model: String,
     agent: String,
     exit: u8,
@@ -202,8 +198,8 @@ struct Mini {
     footers: RefCell<Footers>,
     session: RefCell<Option<Session>>,
     prompt: Prompt,
-    body: View,
     status: Text,
+    queue: RefCell<Queue>,
     state: RefCell<State>,
     theme_input: ThemeInput,
     settings: MiniSettings,
@@ -227,30 +223,52 @@ impl Mini {
                 mini.incoming(cx, incoming);
             }
         });
-        let mini = self.clone();
-        self.prompt
-            .on_submit(move |cx, prompt| mini.submit(cx, prompt));
-        let mini = self.clone();
-        self.app.on_key(move |cx, key| {
-            if key.matches("ctrl+c") {
-                cx.stop_propagation();
-                if mini.prompt.value().is_empty() {
-                    mini.request_exit(cx);
-                } else {
-                    mini.prompt.clear();
-                    mini.patch(|state| {
-                        state.exit = 0;
-                        state.interrupt = 0;
-                    });
+        let weak = Rc::downgrade(self);
+        let with = move |run: fn(&Rc<Mini>)| {
+            let weak = weak.clone();
+            move || {
+                if let Some(mini) = weak.upgrade() {
+                    run(&mini);
                 }
-            } else if key.matches("ctrl+d") && mini.prompt.value().is_empty() {
-                cx.stop_propagation();
-                mini.close(cx);
-            } else if key.matches("escape") {
-                cx.stop_propagation();
-                mini.request_interrupt(cx);
             }
+        };
+        let weak = Rc::downgrade(self);
+        let submit = weak.clone();
+        let interrupt = weak.clone();
+        let status = weak.clone();
+        self.prompt.set_hooks(Hooks {
+            submit: Some(Box::new(move |prompt| {
+                submit.upgrade().is_some_and(|mini| mini.submit(prompt))
+            })),
+            exit_request: Some(Box::new(with(|mini| {
+                let mini = mini.clone();
+                mini.app.clone().defer(move |cx| mini.request_exit(cx));
+            }))),
+            exit: Some(Box::new(with(|mini| {
+                let mini = mini.clone();
+                mini.app.clone().defer(move |cx| mini.close(cx));
+            }))),
+            interrupt: Some(Box::new(move || {
+                interrupt
+                    .upgrade()
+                    .is_some_and(|mini| mini.request_interrupt())
+            })),
+            input_clear: Some(Box::new(with(|mini| mini.input_clear()))),
+            status: Some(Box::new(move |text| {
+                if let Some(mini) = status.upgrade() {
+                    mini.set_notice(text);
+                }
+            })),
+            layout: Some(Box::new(with(|mini| {
+                mini.apply_height();
+                mini.paint_status();
+            }))),
+            clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
+            // `/settings` opens M.4's settings view.
+            settings: None,
         });
+        drop(weak);
+        self.prompt.install();
         let mini = self.clone();
         self.app.on_resize(move |cx, _, _| mini.resized(cx));
     }
@@ -335,8 +353,11 @@ impl Mini {
             self.input.replay_limit,
         ));
         *self.session.borrow_mut() = Some(session.clone());
+        self.prompt
+            .set_agent(session.agent.as_deref().unwrap_or_default());
+        self.prompt
+            .open(&self.client, &session.id, &session.directory, target.resume);
         if target.resume {
-            self.prompt.set_first(false);
             self.reset_for_replay(cx);
         }
         if target.model.is_none() {
@@ -463,6 +484,12 @@ impl Mini {
     /// Writes a transcript output: footer events, commits, then the status.
     fn output(&self, cx: &mut Cx<'_>, output: Output) {
         for event in &output.footer {
+            if event["type"]
+                .as_str()
+                .is_some_and(|kind| kind.starts_with("session.inbox."))
+            {
+                self.prompt.inbox_event(event);
+            }
             self.footers.borrow_mut().event(event);
         }
         if let Some(title) = &output.title {
@@ -487,6 +514,7 @@ impl Mini {
                     state.interrupt = 0;
                 }
             });
+            self.prompt.set_running(self.state.borrow().running);
             if idle && !self.state.borrow().running {
                 self.complete(cx);
             }
@@ -516,11 +544,10 @@ impl Mini {
         }
     }
 
-    /// A submitted prompt: an exit word closes mini; anything else is sent, or waits for the session.
-    fn submit(self: &Rc<Self>, cx: &mut Cx<'_>, prompt: RunPrompt) {
-        if crate::prompt::is_exit(&prompt.text) {
-            self.close(cx);
-            return;
+    /// `footer.handlePrompt`: a prompt from the composer goes to the queue, or waits for the session.
+    fn submit(self: &Rc<Self>, prompt: RunPrompt) -> bool {
+        if self.state.borrow().closed {
+            return false;
         }
         let ready = self
             .transcript
@@ -529,71 +556,173 @@ impl Mini {
             .is_some_and(|transcript| transcript.connected);
         if !ready {
             self.waiting.borrow_mut().push(prompt);
-            return;
+            return true;
         }
-        self.send(cx, prompt);
+        self.enqueue(prompt);
+        true
     }
 
-    fn send_waiting(self: &Rc<Self>, cx: &mut Cx<'_>) {
+    fn send_waiting(self: &Rc<Self>, _cx: &mut Cx<'_>) {
         let initial = self.initial.borrow_mut().take();
         if let Some(text) = initial.filter(|text| !text.trim().is_empty()) {
-            self.send(
-                cx,
-                RunPrompt {
-                    message_id: Some(opencode_api::id::message()),
-                    text,
-                    ..RunPrompt::default()
-                },
-            );
+            self.prompt.push_history(&RunPrompt::text(text.clone()));
+            self.enqueue(RunPrompt::text(text));
         }
         let waiting = std::mem::take(&mut *self.waiting.borrow_mut());
         for prompt in waiting {
-            self.send(cx, prompt);
+            self.enqueue(prompt);
         }
     }
 
-    /// `runPromptTurn`: switch the agent and model, admit the prompt with `delivery: "steer"`, wait for the
-    /// session to settle, then print what the live stream missed.
-    fn send(self: &Rc<Self>, _cx: &mut Cx<'_>, prompt: RunPrompt) {
+    /// `runPromptQueue`'s `submit`.
+    fn enqueue(self: &Rc<Self>, prompt: RunPrompt) {
+        let submitted = self.queue.borrow_mut().submit(prompt);
+        match submitted {
+            Submitted::Ignored => {}
+            Submitted::Exit => {
+                let mini = self.clone();
+                self.app.defer(move |cx| mini.close(cx));
+            }
+            Submitted::Admit(prompt, delivery) => self.admit(prompt, delivery),
+            Submitted::Queued { first } => {
+                if first {
+                    self.prompt.set_first(false);
+                }
+                self.pump();
+            }
+        }
+    }
+
+    /// Starts the next queued work when nothing runs (`drain`).
+    fn pump(self: &Rc<Self>) {
+        let work = self.queue.borrow_mut().pump();
+        match work {
+            None => {}
+            Some(Work::New) => self.new_session(),
+            Some(Work::Compact) => self.compact(),
+            Some(Work::Run(prompt)) => self.send(prompt),
+        }
+    }
+
+    /// The active work ended: the next starts, or the footer goes idle (`turn.idle`).
+    fn finish(self: &Rc<Self>, cx: &mut Cx<'_>) {
+        if self.queue.borrow_mut().done() {
+            self.pump();
+            return;
+        }
+        self.patch(|state| state.turn = false);
+        self.output(
+            cx,
+            Output {
+                patch: Some(replay::Patch {
+                    running: Some(false),
+                    status: Some(String::new()),
+                    usage: None,
+                }),
+                ..Output::default()
+            },
+        );
+    }
+
+    /// `turn.send`.
+    fn sending(&self, status: &str) {
+        self.patch(|state| {
+            state.running = true;
+            state.turn = true;
+            state.status = status.into();
+            state.notice.clear();
+            state.interrupt = 0;
+            state.exit = 0;
+        });
+        self.prompt.set_running(true);
+    }
+
+    /// `renderPromptError`.
+    fn prompt_error(self: &Rc<Self>, cx: &mut Cx<'_>, id: &str, error: String) {
+        self.append(
+            cx,
+            Commit {
+                text: error,
+                ..Commit::error("").message(id)
+            },
+        );
+    }
+
+    /// `run`: a shell command waits for its answer; a server command is admitted; an ordinary prompt switches
+    /// the agent and model, is admitted with its delivery (`steer` by default), and waits for the session to
+    /// settle, then prints what the live stream missed (`runPromptTurn`).
+    fn send(self: &Rc<Self>, prompt: RunPrompt) {
         let Some(session) = self.session.borrow().clone() else {
             return;
         };
+        let client = self.client.clone();
+        let mini = self.clone();
+        if prompt.shell {
+            let id = opencode_api::id::message();
+            self.sending("running shell");
+            self.trace(
+                "send.shell",
+                json!({ "sessionID": session.id, "id": id, "command": prompt.text }),
+            );
+            let command = prompt.text.clone();
+            self.app.spawn(
+                {
+                    let id = id.clone();
+                    async move { crate::prompt::api::shell(&client, &session.id, &id, &command).await }
+                },
+                move |cx, result| {
+                    if let Err(error) = result {
+                        mini.prompt_error(cx, &id, error);
+                    }
+                    mini.finish(cx);
+                },
+            );
+            return;
+        }
         let id = prompt
             .message_id
             .clone()
             .unwrap_or_else(opencode_api::id::message);
-        self.patch(|state| {
-            state.running = true;
-            state.turn = true;
-            state.status = "sending prompt".into();
-            state.interrupt = 0;
-            state.exit = 0;
-        });
-        self.trace(
-            "send.prompt",
-            json!({ "sessionID": session.id, "messageID": id, "delivery": "steer" }),
-        );
-        let client = self.client.clone();
-        let mini = self.clone();
-        let text = prompt.text.clone();
-        let failed = Commit::error("").message(&id);
+        let delivery = prompt.delivery.unwrap_or(Delivery::Steer);
+        self.sending("sending prompt");
         let started = std::time::Instant::now();
+        match &prompt.command {
+            Some(command) => self.trace(
+                "send.command",
+                json!({ "sessionID": session.id, "messageID": id, "command": command.name, "delivery": delivery.as_str() }),
+            ),
+            None => self.trace(
+                "send.prompt",
+                json!({ "sessionID": session.id, "messageID": id, "delivery": delivery.as_str() }),
+            ),
+        }
+        let command = prompt.command.is_some();
+        let text = prompt.text.clone();
         self.app.spawn(
             {
-                let (session, id, text) = (session.clone(), id.clone(), text.clone());
+                let (session, id) = (session.clone(), id.clone());
                 async move {
-                    replay::prompt(
-                        &client,
-                        &session.id,
-                        &id,
-                        &text,
-                        session.agent.as_deref(),
-                        session.model.as_ref(),
-                    )
-                    .await
+                    if !command {
+                        crate::prompt::api::select(
+                            &client,
+                            &session.id,
+                            session.agent.as_deref(),
+                            session.model.as_ref(),
+                        )
+                        .await?;
+                    }
+                    let prompt = RunPrompt {
+                        message_id: Some(id),
+                        ..prompt
+                    };
+                    crate::prompt::api::admit(&client, &session.id, &prompt, delivery).await
                 }
             },
             move |cx, result| match result {
+                Ok(()) if command => {
+                    mini.turn_summary(cx, started);
+                    mini.finish(cx);
+                }
                 Ok(()) => {
                     let output = mini
                         .transcript
@@ -605,31 +734,132 @@ impl Mini {
                     mini.settle(&session.id, started);
                 }
                 Err(error) => {
-                    mini.patch(|state| state.turn = false);
-                    mini.append(
-                        cx,
-                        Commit {
-                            text: error,
-                            ..failed
-                        },
-                    );
-                    mini.output(
-                        cx,
-                        Output {
-                            patch: Some(replay::Patch {
-                                running: Some(false),
-                                status: Some(String::new()),
-                                usage: None,
-                            }),
-                            ..Output::default()
-                        },
-                    );
+                    mini.prompt_error(cx, &id, error);
+                    mini.finish(cx);
                 }
             },
         );
     }
 
-    /// `settleSession`: waits until the session is idle, then lists its messages.
+    /// A prompt submitted while an ordinary turn runs goes to the inbox at once (`input.admit`).
+    fn admit(self: &Rc<Self>, prompt: RunPrompt, delivery: Delivery) {
+        let Some(session) = self.session.borrow().clone() else {
+            return;
+        };
+        let id = prompt.message_id.clone().unwrap_or_default();
+        self.trace(
+            "send.prompt",
+            json!({ "sessionID": session.id, "messageID": id, "delivery": delivery.as_str() }),
+        );
+        let client = self.client.clone();
+        let mini = self.clone();
+        let command = prompt.command.is_some();
+        let text = prompt.text.clone();
+        self.app.spawn(
+            async move {
+                if !command {
+                    crate::prompt::api::select(
+                        &client,
+                        &session.id,
+                        session.agent.as_deref(),
+                        session.model.as_ref(),
+                    )
+                    .await?;
+                }
+                crate::prompt::api::admit(&client, &session.id, &prompt, delivery).await
+            },
+            move |cx, result| match result {
+                Ok(()) => {
+                    mini.prompt.admitted(&id, delivery);
+                    let output = mini
+                        .transcript
+                        .borrow_mut()
+                        .as_mut()
+                        .map(|transcript| transcript.admitted(&id, &text))
+                        .unwrap_or_default();
+                    mini.output(cx, output);
+                }
+                Err(error) => mini.prompt_error(cx, &id, error),
+            },
+        );
+    }
+
+    /// `/compact`: `session.compact`.
+    fn compact(self: &Rc<Self>) {
+        let Some(session) = self.session.borrow().clone() else {
+            return;
+        };
+        self.sending("compacting session");
+        let client = self.client.clone();
+        let mini = self.clone();
+        self.app.spawn(
+            async move { crate::prompt::api::compact(&client, &session.id).await },
+            move |cx, result| {
+                if let Err(error) = result {
+                    let id = opencode_api::id::message();
+                    mini.prompt_error(cx, &id, error);
+                }
+                mini.finish(cx);
+            },
+        );
+    }
+
+    /// `/new`: a new session at the launch directory, with the current agent and model (`onNewSession`).
+    fn new_session(self: &Rc<Self>) {
+        let Some(session) = self.session.borrow().clone() else {
+            return;
+        };
+        self.sending("starting new session");
+        let client = self.client.clone();
+        let mini = self.clone();
+        let model = session.model.as_ref().and_then(|model| {
+            Some(opencode_api::generated::ModelRef {
+                provider_id: opencode_api::generated::ProviderID(model["providerID"].as_str()?.to_owned()),
+                id: model["id"].as_str()?.to_owned(),
+                variant: model["variant"].as_str().map(str::to_owned),
+            })
+        });
+        let input = target::TargetInput {
+            directory: Some(self.input.directory.clone()),
+            agent: session.agent.clone(),
+            model,
+            ..target::TargetInput::default()
+        };
+        let agent = session.agent.clone();
+        self.app.spawn(
+            async move {
+                target::resolve_session_target(&client, input, |next| async move {
+                    Ok(Prepared {
+                        model: next.model,
+                        agent: agent.or(next.agent),
+                    })
+                })
+                .await
+            },
+            move |cx, result| {
+                match result {
+                    Ok(next) => {
+                        mini.stop();
+                        mini.complete(cx);
+                        let id = next.session.id.0.clone();
+                        mini.opened(cx, next);
+                        mini.prompt.set_first(true);
+                        mini.trace("session.new", json!({ "sessionID": id }));
+                        mini.write(cx, Commit::system(format!("new session {id}")));
+                    }
+                    Err(error) => {
+                        mini.patch(|state| state.status = "failed to start new session".into());
+                        let id = opencode_api::id::message();
+                        mini.prompt_error(cx, &id, error.to_string());
+                    }
+                }
+                mini.finish(cx);
+            },
+        );
+    }
+
+    /// `settleSession`: waits until the session is idle, then lists its messages. Prompts admitted meanwhile
+    /// settle once more.
     fn settle(self: &Rc<Self>, session: &str, started: std::time::Instant) {
         let client = self.client.clone();
         let session = session.to_owned();
@@ -639,12 +869,14 @@ impl Mini {
             .unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let mini = self.clone();
         self.app.spawn(
-            async move {
-                replay::wait(&client, &session).await?;
-                replay::messages(&client, &session, limit).await
+            {
+                let session = session.clone();
+                async move {
+                    replay::wait(&client, &session).await?;
+                    replay::messages(&client, &session, limit).await
+                }
             },
             move |cx, result| {
-                mini.patch(|state| state.turn = false);
                 let mut output = Output::default();
                 match result {
                     Ok(messages) => {
@@ -656,13 +888,13 @@ impl Mini {
                     }
                     Err(error) => log::warn!("mini settle failed: {error}"),
                 }
-                output.patch = Some(replay::Patch {
-                    running: Some(false),
-                    status: Some(String::new()),
-                    usage: None,
-                });
                 mini.output(cx, output);
+                if mini.queue.borrow_mut().take_admissions() {
+                    mini.settle(&session, started);
+                    return;
+                }
                 mini.turn_summary(cx, started);
+                mini.finish(cx);
             },
         );
     }
@@ -679,7 +911,7 @@ impl Mini {
             .and_then(|session| session.model.as_ref()?["id"].as_str().map(str::to_owned))
             .unwrap_or_else(|| self.state.borrow().model.clone());
         let summary = crate::scrollback::TurnSummary {
-            agent: capitalize(&self.state.borrow().agent),
+            agent: self.agent_label(&self.state.borrow().agent),
             model,
             duration: duration(started.elapsed().as_millis() as u64),
         };
@@ -717,11 +949,11 @@ impl Mini {
     }
 
     /// Two presses of Esc while the session runs interrupt it (`handleInterrupt`).
-    fn request_interrupt(self: &Rc<Self>, _cx: &mut Cx<'_>) {
+    fn request_interrupt(self: &Rc<Self>) -> bool {
         let interrupt = {
             let mut state = self.state.borrow_mut();
             if state.closed || !state.running {
-                return;
+                return false;
             }
             state.interrupt += 1;
             state.interrupt
@@ -735,14 +967,12 @@ impl Mini {
                 self.app.cancel_timer(previous);
             }
             self.paint_status();
-            return;
+            return true;
         }
-        self.patch(|state| {
-            state.interrupt = 0;
-            state.notice = "interrupting".into();
-        });
+        self.patch(|state| state.interrupt = 0);
+        self.set_notice("interrupting");
         let Some(session) = self.session.borrow().clone() else {
-            return;
+            return true;
         };
         self.trace("send.interrupt", json!({ "sessionID": session.id }));
         let client = self.client.clone();
@@ -754,6 +984,57 @@ impl Mini {
                 }
             },
         );
+        true
+    }
+
+    /// `setStatus`: a notice in the status row for three seconds.
+    fn set_notice(self: &Rc<Self>, text: &str) {
+        let previous = self.state.borrow_mut().notice_timer.take();
+        if let Some(previous) = previous {
+            self.app.cancel_timer(previous);
+        }
+        self.patch(|state| state.notice = text.to_owned());
+        if text.is_empty() {
+            return;
+        }
+        let weak = Rc::downgrade(self);
+        let timer = self.app.set_timeout(NOTICE, move |_| {
+            if let Some(mini) = weak.upgrade() {
+                mini.patch(|state| {
+                    state.notice.clear();
+                    state.notice_timer = None;
+                });
+            }
+        });
+        self.state.borrow_mut().notice_timer = Some(timer);
+    }
+
+    /// `handleInputClear`: typing disarms the two-press gestures.
+    fn input_clear(&self) {
+        let timers = {
+            let mut state = self.state.borrow_mut();
+            if state.interrupt == 0 && state.exit == 0 {
+                return;
+            }
+            state.interrupt = 0;
+            state.exit = 0;
+            [state.interrupt_timer.take(), state.exit_timer.take()]
+        };
+        for timer in timers.into_iter().flatten() {
+            self.app.cancel_timer(timer);
+        }
+        self.paint_status();
+    }
+
+    /// `app.clear` (`clearScreen`): homes and clears the visible screen, keeps the terminal's scrollback, and
+    /// repaints the footer.
+    fn clear_screen(&self) {
+        if self.state.borrow().closed || !self.footer.is_split() {
+            return;
+        }
+        if let Err(error) = self.footer.reset_for_replay(false) {
+            log::warn!("mini could not clear the screen: {error}");
+        }
     }
 
     /// `close`: finish the streaming entry, leave split mode, and quit. The newline follows `app.run()`.
@@ -884,13 +1165,15 @@ impl Mini {
         self.paint_status();
     }
 
-    /// `applyHeight` for the composer: the prompt's rows, padded in a tall terminal, plus the status row.
+    /// `applyHeight` for the composer: the prompt's rows, padded in a tall terminal, plus the status row unless
+    /// the autocomplete menu replaces it.
     fn apply_height(&self) {
-        let terminal = self.footer.terminal_size().1;
-        let height = prompt_height(terminal, self.prompt.rows());
-        let padding = u16::from(terminal >= PROMPT_MAX_ROWS + 4);
-        self.body.padding_y(u32::from(padding));
-        if let Err(error) = self.footer.set_footer_height(height) {
+        let terminal = self.footer.terminal_size();
+        let height = prompt_height(terminal.1, self.prompt.rows(terminal));
+        self.status.visible(!self.prompt.menu_visible());
+        let r = self.footer.set_footer_height(height);
+        { use std::io::Write; let mut f = std::fs::OpenOptions::new().create(true).append(true).open("/home/simon/.cache/tmp/opencode/mini-debug.log").unwrap(); writeln!(f, "set {height} -> {:?} now {}", r.as_ref().err(), self.footer.footer_height()).ok(); }
+        if let Err(error) = r {
             log::warn!("mini could not set the footer height: {error}");
         }
     }
@@ -917,11 +1200,20 @@ impl Mini {
                     .to_owned()
                     .fg(theme.footer.warning),
             ]
+        } else if !state.notice.is_empty() {
+            vec![state.notice.clone().fg(theme.footer.text)]
+        } else if self.prompt.shell() && !state.running && state.status.is_empty() {
+            vec![
+                "Shell".fg(theme.footer.muted),
+                separator.fg(theme.footer.muted),
+                "esc".fg(theme.footer.text),
+                " normal".fg(theme.footer.muted),
+            ]
         } else {
-            let agent = capitalize(&state.agent);
+            let agent = self.agent_label(&state.agent);
             let mut spans = Vec::new();
             if !agent.is_empty() {
-                spans.push(agent.fg(theme.footer.text));
+                spans.push(agent.fg(self.prompt.agent_color()));
             }
             if !state.model.is_empty() {
                 let lead = if spans.is_empty() { "" } else { separator };
@@ -932,17 +1224,19 @@ impl Mini {
                 };
                 spans.push(format!("{lead}{model}").fg(theme.footer.muted));
             }
-            let note = if state.notice.is_empty() {
-                &state.status
-            } else {
-                &state.notice
-            };
-            if !note.is_empty() {
-                spans.push(format!("{separator}{note}").fg(theme.footer.muted));
+            if !state.status.is_empty() {
+                spans.push(format!("{separator}{}", state.status).fg(theme.footer.muted));
             }
             spans
         };
         self.status.set_text(content);
+    }
+
+    /// `currentAgent`: the catalog's name for the agent, else its ID in title case.
+    fn agent_label(&self, agent: &str) -> String {
+        self.prompt
+            .agent_name(agent)
+            .unwrap_or_else(|| capitalize(agent))
     }
 
     /// The terminal title on Linux (`setTitle`): `OC | <title>`, or `OpenCode` without a real title.
