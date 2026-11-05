@@ -262,7 +262,12 @@ function perform(effect: MarkdownCacheEffect) {
 }
 
 // Sanitizing runs inside the worker's settle callback, where a throw would leave every consumer waiting.
-function parsed(jobId: number, raw: string, src: string, html: string): MarkdownCacheEvent {
+function parsed(
+  jobId: number,
+  raw: string,
+  src: string,
+  html: string,
+): Extract<MarkdownCacheEvent, { type: "parse.succeeded" | "parse.failed" }> {
   try {
     const hash = checksum(src)
 
