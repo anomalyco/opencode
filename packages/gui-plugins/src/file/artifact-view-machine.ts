@@ -55,7 +55,9 @@ export function transitionArtifactViewer(
   if (event.type === "mode.changed") {
     if (selectArtifactMode(base, content) === event.mode) return base
 
-    return base.status === "undecodable" ? { ...base, mode: event.mode } : { status: event.mode, content, info: base.info }
+    return base.status === "undecodable"
+      ? { ...base, mode: event.mode }
+      : { status: event.mode, content, info: base.info }
   }
 
   if (event.content !== content) return base
@@ -319,7 +321,9 @@ export function transitionVideoOverlay(state: VideoOverlayState, event: VideoOve
 
   if (event.type === "playback.changed") {
     if (state.status === "loading" || state.status === "expanded") {
-      return state.paused === event.paused ? { state, effects: [] } : { state: { ...state, paused: event.paused }, effects: [] }
+      return state.paused === event.paused
+        ? { state, effects: [] }
+        : { state: { ...state, paused: event.paused }, effects: [] }
     }
 
     if (event.paused === (state.status === "paused")) return { state, effects: [] }

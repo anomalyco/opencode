@@ -92,7 +92,11 @@ export default function ArtifactView(props: {
 
   const dispatchViewer = (event: ArtifactViewerEvent) => {
     const prev = untrack(viewerState)
-    const next = transitionArtifactViewer(prev, untrack(() => props.content), event)
+    const next = transitionArtifactViewer(
+      prev,
+      untrack(() => props.content),
+      event,
+    )
 
     if (next !== prev) setViewerState(next)
   }
@@ -210,9 +214,7 @@ export default function ArtifactView(props: {
                 path={props.path}
                 size={size()}
                 content={props.content}
-                onDetails={(content, details) =>
-                  dispatchViewer({ type: "info.reported", content, info: { details } })
-                }
+                onDetails={(content, details) => dispatchViewer({ type: "info.reported", content, info: { details } })}
                 onError={(content, reason) => dispatchViewer({ type: "decode.failed", content, reason })}
               />
             )}

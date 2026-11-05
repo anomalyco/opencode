@@ -52,7 +52,8 @@ export function transitionSelectHighlight(
   if (event.type === "disposed") return { state: DISPOSED, effects: previewing ? REVERT : NONE }
 
   if (event.type === "open.changed") {
-    if (event.open) return { state: state.status === "closed" || state.status === "committed" ? IDLE : state, effects: NONE }
+    if (event.open)
+      return { state: state.status === "closed" || state.status === "committed" ? IDLE : state, effects: NONE }
 
     return { state: CLOSED, effects: previewing ? REVERT : NONE }
   }
