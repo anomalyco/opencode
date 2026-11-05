@@ -26,6 +26,7 @@ import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
+import { LocationLifecycle } from "./location-lifecycle.js"
 import { Global } from "@opencode/util/global"
 import { PersistentPty } from "./persistent-pty.js"
 import { ShellSelect } from "./shell/select.js"
@@ -221,6 +222,7 @@ const layer = () =>
       const environments = yield* SessionEnvironment.Service
       const config = yield* Config.Service
       const pty = yield* PersistentPty.Service
+      const lifecycle = yield* LocationLifecycle.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const commands = new Map<Shell.ID, Active>()
@@ -250,6 +252,25 @@ const layer = () =>
         }),
       )
 
+      // A reload boots the Location's replacement while calls may still hold this one, and the replacement takes
+      // the daemon's commands back. Once closed, this one leaves their timers, stops and reporting to it, and only
+      // still answers its own waiters.
+      let closed = false
+      yield* lifecycle.awaitShutdown.pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            closed = true
+            for (const command of commands.values()) {
+              if (!command.daemon) continue
+              if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+              command.timeoutFiber = undefined
+              if (command.daemon.kill) yield* Fiber.interrupt(command.daemon.kill)
+            }
+          }),
+        ),
+        Effect.forkScoped,
+      )
+
       const require = Effect.fnUntraced(function* (id: Shell.ID) {
         const command = commands.get(id)
         if (!command) return yield* new NotFoundError({ id })
@@ -265,7 +286,10 @@ const layer = () =>
         if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
         if (command.daemon) {
           if (command.daemon.kill) yield* Fiber.interrupt(command.daemon.kill)
-          // Forget the process before deleting its file; its pending `wait` then ends as terminated.
+          // Stop waiting first, so forgetting the process is not mistaken for losing it. Removal never runs on the
+          // wait's own fiber: it settles the command through `finish`, which only evicts other commands.
+          if (command.daemon.wait) yield* Fiber.interrupt(command.daemon.wait)
+          // Forget the process before deleting its file.
           yield* pty.terminatePipe(command.daemon.id).pipe(Effect.ignore)
           yield* Effect.promise(() => unlink(command.file).catch(() => {}))
           yield* Deferred.fail(command.done, new NotFoundError({ id }))
@@ -299,6 +323,11 @@ const layer = () =>
           if (outcome.signal !== undefined) draft.signal = outcome.signal
           draft.time.completed = outcome.completed
         })
+        // The Location's replacement reports it and applies retention.
+        if (closed && command.daemon) {
+          yield* Deferred.succeed(command.done, command.info)
+          return
+        }
         // Resolve waiters before retention eviction, so an evicted command still reports its
         // terminal Info rather than the removal NotFoundError.
         yield* Deferred.succeed(command.done, command.info)
@@ -498,16 +527,14 @@ const layer = () =>
       // Cleared fields are left out of the JSON.
       const store = (daemon: Daemon, patch: Partial<Stored>) => {
         daemon.stored = { ...daemon.stored, ...patch }
-        return pty
-          .setPipeMetadata(daemon.id, daemon.stored)
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("failed to update shell command metadata", {
-                id: daemon.stored.id,
-                error: error.message,
-              }),
-            ),
-          )
+        return pty.setPipeMetadata(daemon.id, daemon.stored).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("failed to update shell command metadata", {
+              id: daemon.stored.id,
+              error: error.message,
+            }),
+          ),
+        )
       }
 
       // Watches a command the daemon runs: its exit, timeout (in ms from now, none if undefined) and graceful
@@ -526,7 +553,7 @@ const layer = () =>
         // recorded stop. Only removal and teardown interrupt it.
         const stop = (reason: StopReason) =>
           Effect.sync(() => {
-            if (daemon.stored.stopReason !== undefined) return
+            if (closed || daemon.stored.stopReason !== undefined) return
             daemon.stored = { ...daemon.stored, stopReason: reason }
             daemon.kill = runFork(stopping(reason))
           })
@@ -613,7 +640,7 @@ const layer = () =>
         const created = yield* pty.createPipe({
           program: invocation.shell,
           args,
-          cwd: path.resolve(location.directory, invocation.cwd),
+          cwd: invocation.cwd,
           // The daemon replaces the environment, so variables removed by hooks stay removed, like the spawner.
           env: Object.fromEntries(
             Object.entries(invocation.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
@@ -722,6 +749,8 @@ const layer = () =>
         }
         yield* hooks.trigger("shell", "create.before", invocation)
         if (before) yield* before(invocation)
+        // Absolute for local commands, so the command reports the same cwd after a restart, wherever it runs.
+        if (location.workspaceID === undefined) invocation.cwd = path.resolve(location.directory, invocation.cwd)
 
         const id = Shell.ID.ascending()
         const args = ShellSelect.args(invocation.shell, invocation.command)
@@ -913,6 +942,7 @@ export const node = makeLocationNode({
     SessionEnvironment.node,
     Config.node,
     PersistentPty.node,
+    LocationLifecycle.node,
     cleanupNode,
   ],
 })
