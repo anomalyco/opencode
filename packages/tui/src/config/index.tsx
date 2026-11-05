@@ -154,6 +154,10 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
+      mcp_list: Schema.optional(Schema.Literals(["descriptive", "compact"])).annotate({
+        description:
+          "Sidebar MCP server rows: 'descriptive' shows the status dot, name and status text, 'compact' the dot and name only",
+      }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       submit_scroll: Schema.optional(Schema.Literals(["bottom", "keep"])).annotate({
         description: "Jump to the latest message when sending a prompt, or keep the current transcript position",
