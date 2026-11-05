@@ -3,8 +3,8 @@
 //! with fuzzysort, except the files, which the server ranks.
 
 use opencode_api::js::locale_compare;
+use opencode_ui::fuzzy;
 use opencode_ui::prompt_input::parse::{self, LineRange};
-use opencode_ui::select::fuzzy;
 use unicode_width::UnicodeWidthStr;
 
 use super::menu::Item;
