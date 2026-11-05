@@ -3,6 +3,7 @@
 //! ```text
 //! transcript    messages::list (E.6a), sticky to the bottom; a running reply shows its own progress there
 //! queued        queued::Queued (E.10b), the queued prompts dock; it hides while the composer shows
+//! composer top  the `session.composer.top` plugin slot (P.1)
 //! composer      composer::Composer (E.13b); while it shows, it replaces everything below it
 //! permission    permission::Permission (E.9a); the prompt hides while it shows
 //! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
@@ -38,6 +39,8 @@ pub struct Session {
     _scroll: scroll::Controls,
     _actions: actions::Actions,
     queued: queued::Queued,
+    /// The `session.composer.top` slot's plugin claims (P.1).
+    slot: opencode_plugin::SlotMount<Tui>,
     composer: crate::composer::Composer,
     permission: permission::Permission,
     form: form::SessionForms,
@@ -83,6 +86,15 @@ impl Session {
                 }
             })
         });
+        // `<Slot path="session.composer.top">` between the dock and the composer (`routes/session/index.tsx:1597`).
+        let composer_top = View::new(app).column().shrink(0.0);
+        let slot = crate::plugins::host::slot(
+            tui,
+            &composer_top,
+            opencode_plugin::slot::SESSION_COMPOSER_TOP,
+            &opencode_plugin::slot::SlotInput { session_id: Some(id.0.clone()), ..Default::default() },
+            |_| {},
+        );
         let column = View::new(app)
             .column()
             .grow(1.0)
@@ -94,6 +106,7 @@ impl Session {
             .padding_edge(Edge::Bottom, 1)
             .child(transcript.root())
             .child(queued.root())
+            .child(&composer_top)
             .child(composer.root())
             .child(&rest);
         let frame = crate::frame::SessionFrame::new(tui, &id, &column);
@@ -122,6 +135,7 @@ impl Session {
             _scroll: scroll,
             _actions: actions,
             queued,
+            slot,
             composer,
             permission,
             form,
@@ -148,6 +162,7 @@ impl RouteView for Session {
         self.composer.sync(tui, self.form.active(), !self.frame.session_active());
         let blocked = self.permission.active() || self.form.active() || self.composer.open();
         self.queued.sync(tui, changes, blocked);
+        self.slot.sync(tui, changes);
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
             // An open dialog keeps the keys; the prompt takes them when it closes.
