@@ -288,6 +288,7 @@ test("a session that does not resolve in time shows as unreachable and recovers"
     target: target("ses_a"),
     session: info("ses_a"),
   })
+
   expect(cached.state).toEqual({ status: "ready", target: target("ses_a"), session: info("ses_a"), attempt: 2 })
   expect(cached.effects).toEqual([])
 })
