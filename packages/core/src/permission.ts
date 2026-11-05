@@ -150,11 +150,6 @@ const layer = Layer.effect(
             if (pending.get(id) !== item || settling.has(id)) return false
             settling.add(id)
             yield* Effect.gen(function* () {
-              yield* bus.publish(Permission.Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: id,
-                reply: input.reply,
-              })
               if (input.save && input.reply === "always" && item.request.save?.length) {
                 yield* saved.add({
                   projectID: location.project.id,
@@ -162,6 +157,11 @@ const layer = Layer.effect(
                   resources: item.request.save,
                 })
               }
+              yield* bus.publish(Permission.Event.Replied, {
+                sessionID: item.request.sessionID,
+                requestID: id,
+                reply: input.reply,
+              })
               if (pending.get(id) === item) pending.delete(id)
               if (input.reply === "reject") {
                 yield* Deferred.fail(

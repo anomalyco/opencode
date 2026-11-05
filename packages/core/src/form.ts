@@ -144,7 +144,7 @@ export const layer = Layer.effect(
           }
           yield* Cache.set(forms, id, entry)
           yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
-          if (closed) yield* cancel(id).pipe(Effect.orDie)
+          if (closed) yield* settle(id, cancelEntry, true).pipe(Effect.orDie)
           return form
         }),
       ),
@@ -188,7 +188,7 @@ export const layer = Layer.effect(
       yield* Deferred.succeed(entry.deferred, next)
     })
 
-    const settle = <E>(id: ID, action: (entry: Entry) => Effect.Effect<void, E>) =>
+    const settle = <E>(id: ID, action: (entry: Entry) => Effect.Effect<void, E>, closing = false) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           // Inline listeners can settle the same form, so contenders must never wait on the publisher.
@@ -201,11 +201,11 @@ export const layer = Layer.effect(
           }).pipe(
             Effect.ensuring(
               Effect.suspend(() => {
-                if (!closed) {
+                if (!closed || closing) {
                   settling.delete(id)
                   return Effect.void
                 }
-                // close skips the owner; a failed publication still needs its cancellation.
+                // close skips active owners; finish their cancellation, but never retry shutdown's own cancel.
                 return Cache.getSuccess(forms, id).pipe(
                   Effect.flatMap((entry) =>
                     Option.isSome(entry) && entry.value.state.status === "pending"
@@ -248,7 +248,7 @@ export const layer = Layer.effect(
       Effect.flatMap((entries) =>
         Effect.forEach(
           Array.from(entries).filter((entry) => entry.state.status === "pending"),
-          (entry) => cancel(entry.form.id).pipe(Effect.ignore),
+          (entry) => settle(entry.form.id, cancelEntry, true).pipe(Effect.ignore),
           { discard: true },
         ),
       ),

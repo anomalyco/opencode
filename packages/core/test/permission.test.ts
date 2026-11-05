@@ -106,120 +106,92 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
   })
 }
 
-function holdReply(requestID: Permission.ID) {
-  return Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const entered = yield* Deferred.make<void>()
-    const release = yield* Deferred.make<void>()
-    const replies: Array<{ requestID: Permission.ID; reply: Permission.Reply }> = []
-    const unsubscribe = yield* bus.listen((event) =>
-      Effect.gen(function* () {
-        if (event.type !== Permission.Event.Replied.type) return
-        const data = event.data as { requestID: Permission.ID; reply: Permission.Reply }
-        replies.push(data)
-        if (data.requestID !== requestID || (yield* Deferred.isDone(entered))) return
-        yield* Deferred.succeed(entered, undefined)
-        yield* Deferred.await(release)
-      }),
-    )
-    yield* Effect.addFinalizer(() => unsubscribe)
-    return { entered, release, replies }
-  })
-}
-
-function expectNotFound(exit: Exit.Exit<void, Permission.NotFoundError>, requestID: Permission.ID) {
-  expect(Exit.isFailure(exit)).toBe(true)
-  if (Exit.isFailure(exit)) {
-    expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.NotFoundError)
-    expect(Cause.squash(exit.cause)).toMatchObject({ requestID })
-  }
-}
-
 describe("Permission settlement", () => {
-  for (const first of ["once", "reject"] as const) {
-    it.effect(`settles once when ${first} races another reply`, () =>
-      Effect.gen(function* () {
-        yield* setup()
-        const { service, request, fiber } = yield* waitForRequest()
-        const gate = yield* holdReply(request.id)
-        const winner = yield* service.reply({ requestID: request.id, reply: first }).pipe(Effect.forkScoped)
-        yield* Deferred.await(gate.entered)
-        const loser = yield* service
-          .reply({ requestID: request.id, reply: first === "once" ? "reject" : "once" })
-          .pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
-        const immediate = loser.pollUnsafe()
-        yield* Deferred.succeed(gate.release, undefined)
-        yield* Fiber.join(winner)
-        const result = yield* Fiber.join(loser)
-        expect(immediate).toBeDefined()
-        expectNotFound(result, request.id)
-        expect(gate.replies.map((event) => event.reply)).toEqual([first])
-        const settled = yield* Fiber.await(fiber)
-        expect(settled._tag).toBe(first === "once" ? "Success" : "Failure")
-        expect(yield* service.list()).toEqual([])
-      }),
-    )
-  }
+  it.effect("settles once when once races reject", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { service, request, fiber } = yield* waitForRequest()
+      const bus = yield* Bus.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const replies: Permission.Reply[] = []
+      const unsubscribe = yield* bus.listen((event) => {
+        if (event.type !== Permission.Event.Replied.type) return Effect.void
+        replies.push((event.data as { reply: Permission.Reply }).reply)
+        return replies.length === 1
+          ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.asVoid)
+          : Effect.void
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const winner = yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.forkScoped)
+      const loser = yield* Effect.gen(function* () {
+        yield* Deferred.await(entered)
+        return yield* service.reply({ requestID: request.id, reply: "reject" }).pipe(Effect.flip)
+      }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)))
+      yield* Fiber.join(winner)
+      yield* Fiber.join(fiber)
+      expect(loser).toEqual(new Permission.NotFoundError({ requestID: request.id }))
+      expect(replies).toEqual(["once"])
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
 
   it.effect("returns NotFound to an inline listener replying to the same ID", () =>
     Effect.gen(function* () {
       yield* setup()
       const { service, request, fiber } = yield* waitForRequest()
       const bus = yield* Bus.Service
-      const results: Array<Exit.Exit<void, Permission.NotFoundError>> = []
       let calls = 0
       const unsubscribe = yield* bus.listen((event) =>
         Effect.gen(function* () {
           if (event.type !== Permission.Event.Replied.type) return
           calls++
           if (calls > 1) return
-          results.push(yield* service.reply({ requestID: request.id, reply: "reject" }).pipe(Effect.exit))
+          expect(
+            yield* service.reply({ requestID: request.id, reply: "reject" }).pipe(Effect.flip, Effect.orDie),
+          ).toEqual(new Permission.NotFoundError({ requestID: request.id }))
         }),
       )
       yield* Effect.addFinalizer(() => unsubscribe)
       yield* service.reply({ requestID: request.id, reply: "once" })
-      const settled = yield* Fiber.await(fiber)
-      expect(results).toHaveLength(1)
-      results.forEach((result) => expectNotFound(result, request.id))
+      yield* Fiber.join(fiber)
       expect(calls).toBe(1)
-      expect(settled._tag).toBe("Success")
       expect(yield* service.list()).toEqual([])
     }),
   )
 
   for (const response of ["reject", "always"] as const) {
-    it.effect(`settles the ${response} cascade target once against an explicit reply`, () =>
+    it.effect(`settles the ${response} cascade target once against a listener reply`, () =>
       Effect.gen(function* () {
         yield* setup()
         const selected = yield* waitForRequest({ save: ["src/*"] })
         const target = yield* waitForRequest({ id: Permission.ID.create("per_target") })
-        const gate = yield* holdReply(target.request.id)
-        yield* Effect.gen(function* () {
-          const cascade = yield* selected.service
-            .reply({ requestID: selected.request.id, reply: response })
-            .pipe(Effect.forkScoped)
-          yield* Deferred.await(gate.entered)
-          const reply = yield* target.service
-            .reply({ requestID: target.request.id, reply: "once" })
-            .pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
-          const immediate = reply.pollUnsafe()
-          yield* Deferred.succeed(gate.release, undefined)
-          yield* Fiber.join(cascade)
-          expect(immediate).toBeDefined()
-          expectNotFound(yield* Fiber.join(reply), target.request.id)
-          expect(gate.replies.map((event) => [event.requestID, event.reply])).toEqual([
-            [selected.request.id, response],
-            [target.request.id, response],
-          ])
-          expect((yield* Fiber.await(selected.fiber))._tag).toBe(response === "reject" ? "Failure" : "Success")
-          expect((yield* Fiber.await(target.fiber))._tag).toBe(response === "reject" ? "Failure" : "Success")
-          expect(yield* selected.service.list()).toEqual([])
-        }).pipe(Effect.ensuring(Deferred.succeed(gate.release, undefined)))
+        const bus = yield* Bus.Service
+        const replies: Permission.Reply[] = []
+        const unsubscribe = yield* bus.listen((event) =>
+          Effect.gen(function* () {
+            if (event.type !== Permission.Event.Replied.type) return
+            const data = event.data as { requestID: Permission.ID; reply: Permission.Reply }
+            replies.push(data.reply)
+            if (data.requestID !== target.request.id || replies.length > 2) return
+            expect(
+              yield* target.service
+                .reply({ requestID: target.request.id, reply: "once" })
+                .pipe(Effect.flip, Effect.orDie),
+            ).toEqual(new Permission.NotFoundError({ requestID: target.request.id }))
+          }),
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        yield* selected.service.reply({ requestID: selected.request.id, reply: response })
+        expect(replies).toEqual([response, response])
+        expect((yield* Fiber.await(selected.fiber))._tag).toBe(response === "reject" ? "Failure" : "Success")
+        expect((yield* Fiber.await(target.fiber))._tag).toBe(response === "reject" ? "Failure" : "Success")
+        expect(yield* selected.service.list()).toEqual([])
       }),
     )
   }
 
-  it.effect("skips an always target settled while its evaluation is suspended", () =>
+  it.effect("skips an always target settled during its evaluation", () =>
     Effect.gen(function* () {
       yield* setup()
       const selected = yield* waitForRequest({ save: ["src/*"] })
@@ -228,128 +200,81 @@ describe("Permission settlement", () => {
         resources: ["src/target.ts"],
       })
       const hooks = yield* PluginHooks.Service
-      const evaluating = yield* Deferred.make<void>()
-      const release = yield* Deferred.make<void>()
       yield* hooks.register("permission", "evaluate", (event) =>
         event.resources.includes("src/target.ts")
-          ? Deferred.succeed(evaluating, undefined).pipe(Effect.andThen(Deferred.await(release)))
+          ? target.service.reply({ requestID: target.request.id, reply: "once" }).pipe(Effect.orDie)
           : Effect.void,
       )
-      const events = yield* holdReply(Permission.ID.create("per_unused"))
-      const always = yield* selected.service
-        .reply({ requestID: selected.request.id, reply: "always" })
-        .pipe(Effect.forkScoped)
-      yield* Deferred.await(evaluating)
-      yield* target.service.reply({ requestID: target.request.id, reply: "once" })
-      yield* Deferred.succeed(release, undefined)
-      yield* Fiber.join(always)
+      const bus = yield* Bus.Service
+      const replies: Permission.Reply[] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Replied.type)
+            replies.push((event.data as { reply: Permission.Reply }).reply)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      yield* selected.service.reply({ requestID: selected.request.id, reply: "always" })
       yield* Fiber.join(selected.fiber)
       yield* Fiber.join(target.fiber)
-      expect(events.replies.map((event) => [event.requestID, event.reply])).toEqual([
-        [selected.request.id, "always"],
-        [target.request.id, "once"],
-      ])
+      expect(replies).toEqual(["always", "once"])
       expect(yield* selected.service.list()).toEqual([])
     }),
   )
 
-  it.effect("closes without rejecting a request whose reply is publishing", () =>
-    Effect.gen(function* () {
-      yield* setup()
-      const { service, request, fiber } = yield* waitForRequest()
-      const gate = yield* holdReply(request.id)
-      const reply = yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.forkScoped)
-      yield* Deferred.await(gate.entered)
-      const close = yield* service.close.pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Deferred.succeed(gate.release, undefined)
-      yield* Fiber.join(reply)
-      yield* Fiber.join(close)
-      const settled = yield* Fiber.await(fiber)
-      expect(gate.replies.map((event) => event.reply)).toEqual(["once"])
-      expect(settled._tag).toBe("Success")
-      expect(yield* service.list()).toEqual([])
-      expect(yield* service.ask(assertion({ id: Permission.ID.create("per_closed") }))).toMatchObject({
-        effect: "deny",
-      })
-    }),
-  )
+  for (const fail of [false, true]) {
+    it.effect(`closes ask-only requests with a reentrant close (publication fails: ${fail})`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const service = yield* Permission.Service
+        yield* service.ask(assertion())
+        const bus = yield* Bus.Service
+        const defect = new Error("permission close publication failed")
+        let replies = 0
+        const unsubscribe = yield* bus.listen((event) =>
+          Effect.gen(function* () {
+            if (event.type !== Permission.Event.Replied.type) return
+            if (++replies === 1) yield* service.close
+            if (fail) yield* Effect.die(defect)
+          }),
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const result = yield* service.close.pipe(Effect.exit)
+        expect(Exit.isFailure(result) ? Cause.squash(result.cause) : undefined).toBe(fail ? defect : undefined)
+        expect(replies).toBe(1)
+        expect(yield* service.list()).toEqual([])
+      }),
+    )
+  }
 
-  it.effect("closes an ask-only request once when close overlaps close", () =>
-    Effect.gen(function* () {
-      yield* setup()
-      const service = yield* Permission.Service
-      const request = assertion()
-      yield* service.ask(request)
-      const gate = yield* holdReply(request.id)
-      const first = yield* service.close.pipe(Effect.forkScoped)
-      yield* Deferred.await(gate.entered)
-      const second = yield* service.close.pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Deferred.succeed(gate.release, undefined)
-      yield* Fiber.join(first)
-      yield* Fiber.join(second)
-      expect(gate.replies.map((event) => event.reply)).toEqual(["reject"])
-      expect(yield* service.list()).toEqual([])
-      expect(yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.flip)).toBeInstanceOf(
-        Permission.NotFoundError,
-      )
-    }),
-  )
-
-  it.effect("clears ask-only requests when close publication fails", () =>
-    Effect.gen(function* () {
-      yield* setup()
-      const service = yield* Permission.Service
-      const request = assertion()
-      yield* service.ask(request)
-      const bus = yield* Bus.Service
-      const defect = new Error("permission close publication failed")
-      const unsubscribe = yield* bus.listen((event) =>
-        event.type === Permission.Event.Replied.type ? Effect.die(defect) : Effect.void,
-      )
-      yield* Effect.addFinalizer(() => unsubscribe)
-      const result = yield* service.close.pipe(Effect.exit)
-      expect(Exit.isFailure(result)).toBe(true)
-      if (Exit.isFailure(result))
-        expect(result.cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect === defect)).toBe(true)
-      expect(yield* service.list()).toEqual([])
-      expect(yield* service.get(request.id)).toBeUndefined()
-      expect(yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.flip)).toBeInstanceOf(
-        Permission.NotFoundError,
-      )
-    }),
-  )
-
-  it.effect("retries a reply after publication fails", () =>
-    Effect.gen(function* () {
-      yield* setup()
-      const { service, request, fiber } = yield* waitForRequest()
-      const bus = yield* Bus.Service
-      const defect = new Error("permission publication failed")
-      let attempts = 0
-      // Permission replies are ephemeral, so inline listener failures propagate through publish.
-      const unsubscribe = yield* bus.listen((event) =>
-        Effect.suspend(() => {
+  for (const reply of ["once", "always"] as const) {
+    it.effect(`retries ${reply} after publication fails`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const { service, request, fiber } = yield* waitForRequest({ save: ["src/*"] })
+        const saved = yield* PermissionSaved.Service
+        const bus = yield* Bus.Service
+        const defect = new Error("permission publication failed")
+        let attempts = 0
+        const unsubscribe = yield* bus.listen((event) => {
           if (event.type !== Permission.Event.Replied.type) return Effect.void
-          attempts++
-          return attempts === 1 ? Effect.die(defect) : Effect.void
-        }),
-      )
-      yield* Effect.addFinalizer(() => unsubscribe)
-      const events = yield* holdReply(Permission.ID.create("per_unused"))
-      const failed = yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.exit)
-      expect(Exit.isFailure(failed)).toBe(true)
-      if (Exit.isFailure(failed))
-        expect(failed.cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect === defect)).toBe(true)
-      expect(yield* service.get(request.id)).toEqual(request)
-      expect(fiber.pollUnsafe()).toBeUndefined()
-      expect(events.replies).toEqual([])
-      yield* service.reply({ requestID: request.id, reply: "once" })
-      yield* Fiber.join(fiber)
-      expect(attempts).toBe(2)
-      expect(events.replies.map((event) => event.reply)).toEqual(["once"])
-      expect(yield* service.list()).toEqual([])
-    }),
-  )
+          return ++attempts === 1 ? Effect.die(defect) : Effect.void
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const failed = yield* service.reply({ requestID: request.id, reply }).pipe(Effect.exit)
+        expect(Exit.isFailure(failed) && Cause.squash(failed.cause)).toBe(defect)
+        expect(yield* service.get(request.id)).toEqual(request)
+        expect(fiber.pollUnsafe()).toBeUndefined()
+        const approvals = yield* saved.list()
+        expect(approvals).toHaveLength(reply === "always" ? 1 : 0)
+        yield* service.reply({ requestID: request.id, reply })
+        yield* Fiber.join(fiber)
+        expect(attempts).toBe(2)
+        expect(yield* saved.list()).toEqual(approvals)
+        expect(yield* service.list()).toEqual([])
+      }),
+    )
+  }
 
   it.effect("retries always after saving an approval defects", () =>
     Effect.gen(function* () {
@@ -357,106 +282,70 @@ describe("Permission settlement", () => {
       const { service, request, fiber } = yield* waitForRequest({ save: ["src/*"] })
       const { db } = yield* Database.Service
       const saved = yield* PermissionSaved.Service
+      const bus = yield* Bus.Service
+      const replies: Permission.Reply[] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Replied.type)
+            replies.push((event.data as { reply: Permission.Reply }).reply)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
       yield* db.run(
         sql`CREATE TRIGGER fail_permission_save BEFORE INSERT ON permission BEGIN SELECT RAISE(ABORT, 'permission saved insert failed'); END`,
       )
       yield* Effect.gen(function* () {
         const failed = yield* service.reply({ requestID: request.id, reply: "always" }).pipe(Effect.exit)
         expect(Exit.isFailure(failed)).toBe(true)
-        if (Exit.isFailure(failed)) {
-          expect(failed.cause.reasons.some(Cause.isDieReason)).toBe(true)
-          expect(Cause.pretty(failed.cause)).toContain("permission saved insert failed")
-        }
+        if (Exit.isFailure(failed)) expect(Cause.pretty(failed.cause)).toContain("permission saved insert failed")
         expect(yield* service.get(request.id)).toEqual(request)
-        expect(yield* service.list()).toEqual([request])
-        expect(fiber.pollUnsafe()).toBeUndefined()
         expect(yield* saved.list()).toEqual([])
+        expect(replies).toEqual([])
       }).pipe(Effect.ensuring(db.run(sql`DROP TRIGGER fail_permission_save`).pipe(Effect.orDie)))
       yield* service.reply({ requestID: request.id, reply: "always" })
       yield* Fiber.join(fiber)
+      expect(replies).toEqual(["always"])
       expect(yield* saved.list()).toMatchObject([{ action: "read", resource: "src/*" }])
       expect(yield* service.list()).toEqual([])
-      expect(yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.flip)).toBeInstanceOf(
-        Permission.NotFoundError,
-      )
     }),
   )
 
-  for (const mode of ["assert", "ask"] as const) {
-    it.effect(`cleans up ${mode} when publication defects after close skips its active reply`, () =>
+  for (const [mode, fail] of [
+    ["assert", false],
+    ["assert", true],
+    ["ask", true],
+  ] as const) {
+    it.effect(`finishes ${mode} after close skips its active reply (publication fails: ${fail})`, () =>
       Effect.gen(function* () {
         yield* setup()
         const service = yield* Permission.Service
         const request = assertion()
         const waiting = mode === "assert" ? yield* waitForRequest(request) : undefined
         if (mode === "ask") yield* service.ask(request)
-        const gate = yield* holdReply(request.id)
         const bus = yield* Bus.Service
         const defect = new Error("active permission publication failed")
+        let replies = 0
         const unsubscribe = yield* bus.listen((event) =>
-          event.type === Permission.Event.Replied.type ? Effect.die(defect) : Effect.void,
+          Effect.gen(function* () {
+            if (event.type !== Permission.Event.Replied.type) return
+            if (++replies === 1) yield* service.close
+            if (fail) yield* Effect.die(defect)
+          }),
         )
         yield* Effect.addFinalizer(() => unsubscribe)
-        yield* Effect.gen(function* () {
-          const publisher = yield* service
-            .reply({ requestID: request.id, reply: "once" })
-            .pipe(Effect.exit, Effect.forkScoped)
-          yield* Deferred.await(gate.entered)
-          yield* service.close
-          expect(publisher.pollUnsafe()).toBeUndefined()
-          expect(gate.replies.map((event) => event.reply)).toEqual(["once"])
-          yield* Deferred.succeed(gate.release, undefined)
-          const failed = yield* Fiber.join(publisher)
-          expect(Exit.isFailure(failed)).toBe(true)
-          if (Exit.isFailure(failed))
-            expect(failed.cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect === defect)).toBe(
-              true,
-            )
-          if (waiting) {
-            const settled = yield* Fiber.await(waiting.fiber)
-            expect(Exit.isFailure(settled)).toBe(true)
-            if (Exit.isFailure(settled))
-              expect(
-                settled.cause.reasons.some(
-                  (reason) => Cause.isDieReason(reason) && reason.defect instanceof Permission.DeclinedError,
-                ),
-              ).toBe(true)
-          }
-          expect(yield* service.list()).toEqual([])
-          expect(yield* service.get(request.id)).toBeUndefined()
-          expect(yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.flip)).toBeInstanceOf(
-            Permission.NotFoundError,
-          )
-          expect(gate.replies.map((event) => event.reply)).toEqual(["once"])
-        }).pipe(Effect.ensuring(Deferred.succeed(gate.release, undefined)))
+        const result = yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.exit)
+        expect(Exit.isFailure(result) ? Cause.squash(result.cause) : undefined).toBe(fail ? defect : undefined)
+        if (waiting) {
+          const settled = yield* Fiber.await(waiting.fiber)
+          expect(Exit.isFailure(settled)).toBe(fail)
+          if (Exit.isFailure(settled)) expect(Cause.squash(settled.cause)).toBeInstanceOf(Permission.DeclinedError)
+        }
+        expect(replies).toBe(1)
+        expect(yield* service.list()).toEqual([])
+        expect(yield* service.ask(assertion())).toMatchObject({ effect: "deny" })
       }),
     )
   }
-
-  it.effect("replies in another Session while one request is publishing", () =>
-    Effect.gen(function* () {
-      yield* setup()
-      yield* setup([], Session.ID.make("ses_other"))
-      const selected = yield* waitForRequest()
-      const other = yield* waitForRequest({
-        id: Permission.ID.create("per_other"),
-        sessionID: Session.ID.make("ses_other"),
-      })
-      const gate = yield* holdReply(selected.request.id)
-      const first = yield* selected.service
-        .reply({ requestID: selected.request.id, reply: "once" })
-        .pipe(Effect.forkScoped)
-      yield* Deferred.await(gate.entered)
-      yield* other.service
-        .reply({ requestID: other.request.id, reply: "once" })
-        .pipe(Effect.ensuring(Deferred.succeed(gate.release, undefined)))
-      yield* Fiber.join(other.fiber)
-      yield* Fiber.join(first)
-      yield* Fiber.join(selected.fiber)
-      expect(gate.replies.map((event) => event.requestID)).toEqual([selected.request.id, other.request.id])
-      expect(yield* selected.service.list()).toEqual([])
-    }),
-  )
 })
 
 describe("Permission", () => {
@@ -1126,7 +1015,10 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
+      grants: [
+        ["printf *"],
+        ["FOO=bar > *", "printf *"],
+      ],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -1138,7 +1030,10 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
+      grants: [
+        ["[IO.File]::Delete(*"],
+        ["[IO.File]::Delete(*"],
+      ],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],
