@@ -1,0 +1,59 @@
+{
+  "requestTimeoutMs": 45000,
+  "maxRequestBytes": 1048576,
+  "cooldownBaseMs": 15000,
+  "cooldownMaxMs": 300000,
+  "providers": [
+    {
+      "id": "local-ollama",
+      "name": "Local Ollama",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "apiKeyEnv": "",
+      "priority": 10,
+      "enabled": true,
+      "models": [
+        {
+          "alias": "ocu/local",
+          "upstreamModel": "qwen2.5-coder:7b"
+        }
+      ]
+    },
+    {
+      "id": "cloud-primary",
+      "name": "Cloud Provider Primary",
+      "baseURL": "https://api.example.com/v1",
+      "apiKeyEnv": "OCU_CLOUD_PRIMARY_KEY",
+      "priority": 20,
+      "enabled": true,
+      "models": [
+        {
+          "alias": "ocu/cloud",
+          "upstreamModel": "provider-model-id"
+        },
+        {
+          "alias": "ocu/auto",
+          "upstreamModel": "provider-model-id"
+        }
+      ]
+    },
+    {
+      "id": "cloud-secondary",
+      "name": "Cloud Provider Secondary",
+      "baseURL": "https://secondary.example.com/v1",
+      "apiKeyEnv": "OCU_CLOUD_SECONDARY_KEY",
+      "priority": 30,
+      "enabled": false,
+      "models": [
+        {
+          "alias": "ocu/auto",
+          "upstreamModel": "secondary-model-id"
+        }
+      ]
+    }
+  ],
+  "routing": {
+    "mode": "adaptive",
+    "latencyWeight": 1,
+    "failurePenaltyMs": 5000
+  }
+}

@@ -1,0 +1,5 @@
+# Local OCU configuration and secrets
+ocu/gateway/config.json
+.env
+.env.*
+!.env.example
