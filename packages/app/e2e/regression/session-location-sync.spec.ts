@@ -125,6 +125,7 @@ test("replaces the composer when the location is not found and recovers by movin
     (response) =>
       new URL(response.url()).searchParams.get("location[directory]") === directory && response.status() === 404,
   )
+
   await transport.close()
   await transport.waitForConnection({ after: connection.id })
   await rechecked

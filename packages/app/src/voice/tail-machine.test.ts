@@ -16,8 +16,11 @@ const said = (role: TranscriptRole, delta: string, at: number): TranscriptTailEv
   delta,
   at,
 })
+
 const captured = (id: string): TranscriptTailEvent => ({ type: "delegation.captured", id })
+
 const accepted = (id: string): TranscriptTailEvent => ({ type: "delegation.accepted", id })
+
 const released = (id: string): TranscriptTailEvent => ({ type: "delegation.released", id })
 
 function replay(events: TranscriptTailEvent[], start = createTranscriptTailState()) {
@@ -84,6 +87,7 @@ test("clearing reservations offers their words to the next delegation", () => {
     said("assistant", "Opening it", 3_000),
     captured("del_2"),
   ])
+
   expect(capture(reserved, "del_3").lines).toEqual([])
 
   const cleared = transitionTranscriptTail(reserved, { type: "reservations.cleared" })
@@ -105,6 +109,7 @@ test("a role switch or a 1.5 s pause starts a new utterance", () => {
     said("assistant", " more", 2_599),
     said("assistant", "Three", 4_099),
   ])
+
   expect(state.entries.map((entry) => entry.text)).toEqual(["One", "Two more", "Three"])
 })
 
@@ -112,6 +117,7 @@ test("the transcript keeps the newest utterances", () => {
   const state = replay(
     Array.from({ length: MAX_UTTERANCES + 2 }, (_, index) => said("user", `Line ${index}`, index * 2_000)),
   )
+
   expect(state.entries).toHaveLength(MAX_UTTERANCES)
   expect(state.entries[0]?.text).toBe("Line 2")
   expect(state.nextID).toBe(MAX_UTTERANCES + 2)

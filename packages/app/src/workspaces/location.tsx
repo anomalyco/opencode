@@ -70,7 +70,10 @@ const context = createSimpleContext({
         .then(
           () => dispatch({ type: "sync.succeeded", attempt: effect.attempt }),
           (error) =>
-            dispatch({ type: isLocationNotFoundError(error) ? "sync.missing" : "sync.failed", attempt: effect.attempt }),
+            dispatch({
+              type: isLocationNotFoundError(error) ? "sync.missing" : "sync.failed",
+              attempt: effect.attempt,
+            }),
         )
     }
 

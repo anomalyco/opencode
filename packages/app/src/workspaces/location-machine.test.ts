@@ -10,6 +10,7 @@ import {
 } from "./location-machine"
 
 const deleted = { directory: "/projects/deleted-worktree" }
+
 const other = { directory: "/projects/existing-worktree" }
 
 const target = (location: { directory: string }, connected = true): LocationSyncEvent => ({
@@ -51,6 +52,7 @@ test("a missing folder stays missing while offline and while reconnecting checks
     attempt: 3,
     location: deleted,
   })
+
   const exhausted = replay(
     [
       { type: "sync.failed", attempt: 2 },
@@ -61,6 +63,7 @@ test("a missing folder stays missing while offline and while reconnecting checks
     ],
     checking.state,
   )
+
   expect(exhausted.state.status).toBe("missing")
   expect(missingLocation(exhausted.state, deleted)).toBe(deleted)
 })
@@ -93,6 +96,7 @@ test("generic failures back off twice and then fail without reporting a missing 
     { type: "retry.due", attempt: 3 },
     { type: "sync.failed", attempt: 3 },
   ])
+
   expect(result.effects.filter((effect) => effect.type !== "sync")).toEqual([
     { type: "retry", attempt: 2, delay: 500 },
     { type: "retry", attempt: 3, delay: 1_000 },

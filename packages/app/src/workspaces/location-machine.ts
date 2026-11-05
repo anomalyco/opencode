@@ -1,7 +1,9 @@
 import type { LocationRef } from "@opencode/client/promise"
 
 export const LOCATION_SYNC_RETRIES = 2
+
 export const LOCATION_SYNC_RETRY_DELAY = 500
+
 export const LOCATION_SYNC_TIMEOUT = 30_000
 
 /** `missing` on an attempt: the folder was missing before, so the missing view stays while the server checks again. */
@@ -71,7 +73,8 @@ export function transitionLocationSync(state: LocationSyncState, event: Location
 
   if (state.status !== "syncing") return unchanged(state)
 
-  if (event.type === "info.resolved") return state.missing ? { state: { ...state, missing: false }, effects: [] } : unchanged(state)
+  if (event.type === "info.resolved")
+    return state.missing ? { state: { ...state, missing: false }, effects: [] } : unchanged(state)
 
   if (event.type === "sync.succeeded") return settle(state, "synced")
 

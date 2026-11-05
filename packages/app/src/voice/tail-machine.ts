@@ -1,4 +1,5 @@
 export const UTTERANCE_MERGE_WINDOW = 1_500
+
 export const MAX_UTTERANCES = 60
 
 export type TranscriptRole = "user" | "assistant"
@@ -62,7 +63,8 @@ export function transitionTranscriptTail(state: TranscriptTailState, event: Tran
     }
   }
 
-  if (event.type === "reservations.cleared") return state.reservations.size ? { ...state, reservations: new Map() } : state
+  if (event.type === "reservations.cleared")
+    return state.reservations.size ? { ...state, reservations: new Map() } : state
   const reservation = state.reservations.get(event.id)
 
   if (!reservation) return state
