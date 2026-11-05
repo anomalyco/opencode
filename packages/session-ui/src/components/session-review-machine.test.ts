@@ -89,6 +89,7 @@ describe("transitionSessionReview", () => {
       measured("a.ts", "b.ts"),
       { type: "force.requested", file: "a.ts" },
     ])
+
     const collapsed = transitionSessionReview(shown, { type: "open.changed", files: ["b.ts"] }).state
     const reopened = transitionSessionReview(collapsed, { type: "open.changed", files }).state
 

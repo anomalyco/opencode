@@ -211,9 +211,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     "mention",
   ])
 
-  const refs = {
-    textarea: undefined as HTMLTextAreaElement | undefined,
-  }
+  let textareaRef: HTMLTextAreaElement | undefined
 
   let mentionTimer: ReturnType<typeof setTimeout> | undefined
   let focusFrame: number | undefined
@@ -230,8 +228,8 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   const view = createMemo(() => viewLineCommentEditor(editorState(), readConfig()))
 
   const currentToken = () =>
-    split.mention && refs.textarea
-      ? parseMentionToken(refs.textarea.value, refs.textarea.selectionStart, refs.textarea.selectionEnd)
+    split.mention && textareaRef
+      ? parseMentionToken(textareaRef.value, textareaRef.selectionStart, textareaRef.selectionEnd)
       : null
 
   const dispatch = (event: LineCommentEditorEvent) => {
@@ -261,7 +259,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     }
 
     if (effect.type === "mention.insert") {
-      const textarea = refs.textarea
+      const textarea = textareaRef
 
       if (!textarea) return
       const value = `${textarea.value.slice(0, effect.token.start)}@${effect.path} ${textarea.value.slice(effect.token.end)}`
@@ -273,7 +271,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
 
     if (effect.type === "submit") return split.onSubmit(effect.value)
 
-    if (effect.blur) refs.textarea?.blur()
+    if (effect.blur) textareaRef?.blur()
     split.onCancel()
   }
 
@@ -283,15 +281,15 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       focusFrame = undefined
 
       if (untrack(editorState).status === "disposed") return
-      refs.textarea?.focus()
+      textareaRef?.focus()
 
-      if (cursor !== undefined) refs.textarea?.setSelectionRange(cursor, cursor)
+      if (cursor !== undefined) textareaRef?.setSelectionRange(cursor, cursor)
     })
   }
 
   const syncMention = () => dispatch({ type: "mention.synced", token: currentToken() })
 
-  const focus = () => refs.textarea?.focus()
+  const focus = () => textareaRef?.focus()
 
   const hold: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent> = (e) => {
     e.preventDefault()
@@ -340,7 +338,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       <div data-slot="line-comment-editor">
         <textarea
           ref={(el) => {
-            refs.textarea = el
+            textareaRef = el
           }}
           data-slot="line-comment-textarea"
           // Escape here closes the mention list or cancels the comment, not a dialog or popover around the editor.
@@ -350,16 +348,13 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
           value={split.value}
           style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
-          on:input={(e) => {
-            const value = (e.currentTarget as HTMLTextAreaElement).value
-            split.onInput(value)
+          on:input={(event) => {
+            split.onInput(event.currentTarget.value)
             syncMention()
           }}
           on:click={() => syncMention()}
           on:select={() => syncMention()}
-          on:keydown={(e) => {
-            const event = e as KeyboardEvent
-
+          on:keydown={(event) => {
             if (event.isComposing || event.keyCode === 229) return
             event.stopPropagation()
 

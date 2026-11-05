@@ -196,6 +196,7 @@ function read(
   target: Extract<AttachmentMediaTarget, { kind: "remote" }>,
 ): AttachmentMediaTransition {
   const attempt = state.attempt + 1
+
   const effect: AttachmentMediaEffect = {
     type: "read",
     attempt,

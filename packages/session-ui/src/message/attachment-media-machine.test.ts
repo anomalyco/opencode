@@ -12,6 +12,7 @@ import {
 } from "./attachment-media-machine"
 
 const hashA = `media:${"a".repeat(64)}`
+
 const hashB = `media:${"b".repeat(64)}`
 
 function media(uri: string, mime = "image/png"): PromptAttachment {
@@ -19,7 +20,9 @@ function media(uri: string, mime = "image/png"): PromptAttachment {
 }
 
 const reader = { hasReader: true }
+
 const targetA = resolveAttachmentMediaTarget(media(hashA), reader)
+
 const targetB = resolveAttachmentMediaTarget(media(hashB), reader)
 
 function replay(events: AttachmentMediaEvent[], state = INITIAL_ATTACHMENT_MEDIA_STATE) {
@@ -71,6 +74,7 @@ describe("transitionAttachmentMedia", () => {
       type: "target.synced",
       target: targetA,
     }).state
+
     const switched = transitionAttachmentMedia(loadingA, { type: "target.synced", target: targetB })
 
     expect(switched.effects[0]).toEqual({ type: "cancel" })
@@ -132,6 +136,7 @@ describe("transitionAttachmentMedia", () => {
       type: "target.synced",
       target: targetA,
     }).state
+
     const failed = transitionAttachmentMedia(loading, { type: "read.failed", attempt: 1 }).state
 
     for (const state of [loading, readyA, failed]) {
@@ -169,6 +174,7 @@ describe("transitionAttachmentMedia", () => {
       type: "target.synced",
       target: targetA,
     }).state
+
     const direct = transitionAttachmentMedia(loading, {
       type: "target.synced",
       target: { kind: "direct", src: "blob:x" },

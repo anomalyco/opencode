@@ -1,4 +1,9 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import type {
+  PromptAttachment,
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  SessionMessageUser,
+} from "@opencode/client/promise"
 import { createMemo, For, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
@@ -882,6 +887,11 @@ const storyChart = `data:image/svg+xml,${encodeURIComponent(
 
 const flakyMedia = `media:${"a".repeat(64)}`
 
+const mediaFiles: PromptAttachment[] = [
+  { mime: "image/svg+xml", name: "flaky.svg", source: { type: "inline" }, uri: flakyMedia },
+  { mime: "image/svg+xml", name: "ready.svg", source: { type: "inline" }, uri: `media:${"b".repeat(64)}` },
+]
+
 const MediaAttachmentRetry = {
   render: () => {
     // The first read of `flakyMedia` fails, as an offline server would; a retry reads it.
@@ -907,10 +917,7 @@ const MediaAttachmentRetry = {
               text: "Compare these charts",
               agents: [],
               // SAFETY: stored files reach the timeline as `media:` refs, a variant the generated message type does not list.
-              files: [
-                { mime: "image/svg+xml", name: "flaky.svg", source: { type: "inline" }, uri: flakyMedia },
-                { mime: "image/svg+xml", name: "ready.svg", source: { type: "inline" }, uri: `media:${"b".repeat(64)}` },
-              ] as unknown as SessionMessageUserFiles,
+              files: mediaFiles as SessionMessageUser["files"],
               time: { created: 1_735_689_633_000 },
             },
           ],
@@ -920,8 +927,6 @@ const MediaAttachmentRetry = {
     )
   },
 }
-
-type SessionMessageUserFiles = Extract<SessionMessageInfo, { type: "user" }>["files"]
 
 const conversationScenarios = {
   reasoning: AgentReasoning,

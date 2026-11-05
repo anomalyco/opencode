@@ -101,6 +101,7 @@ export function transitionSessionReview(state: SessionReviewState, event: Sessio
     if (state.mode === "controlled") return { state, effects: [{ type: "notify-open", files: next }] }
 
     const fileSet = new Set(state.files)
+
     const step = reopen(state, {
       mode: state.mode,
       files: state.files,

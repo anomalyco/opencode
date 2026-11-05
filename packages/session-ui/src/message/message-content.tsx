@@ -509,6 +509,7 @@ export function CurrentUserMessageDisplay(props: {
             const mediaTarget = createMemo(() =>
               resolveAttachmentMediaTarget(file(), { peekMedia: data.peekMedia, hasReader: !!data.readMedia }),
             )
+
             const [mediaState, setMediaState] = createSignal(INITIAL_ATTACHMENT_MEDIA_STATE)
             let mediaController: AbortController | undefined
             let mediaTimer: ReturnType<typeof setTimeout> | undefined
