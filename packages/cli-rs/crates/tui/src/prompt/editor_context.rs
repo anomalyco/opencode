@@ -711,13 +711,12 @@ fn server_info(result: &Value) -> bool {
         })
 }
 
-/// Reading Zed's workspace database (`editor-zed.ts`).
+/// Reading Zed's workspace database (`editor-zed.ts`) through the system SQLite, loaded at run time. Without the
+/// library there is no Zed context (deviation P08-zed-system-sqlite).
 pub mod zed {
     use std::path::Path;
 
-    use rusqlite::types::Value as Sql;
-    use rusqlite::{Connection, OpenFlags, params};
-
+    use super::sqlite::{Connection, READ_ONLY, READ_WRITE_CREATE, Sqlite, Value as Sql};
     use super::{Position, Range, Selection, SourceKind, Span};
 
     struct Editor {
@@ -731,9 +730,20 @@ pub mod zed {
 
     /// The selection of the active editor in the Zed workspace that contains `cwd`: `Some(Some(_))` for a
     /// selection, `Some(None)` when Zed shows no editor there, and `None` when the database cannot tell
-    /// (`resolveZedSelection`'s `unavailable`, which keeps the last selection).
+    /// (`resolveZedSelection`'s `unavailable`, which keeps the last selection), as when SQLite does not load.
     pub fn resolve(db: &Path, cwd: &Path) -> Option<Option<Selection>> {
-        let db = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+        resolve_with(Sqlite::system(), db, cwd)
+    }
+
+    /// Runs the statements in `sql` on the database at `db`, creating it. For test fixtures.
+    #[doc(hidden)]
+    pub fn exec(db: &Path, sql: &str) -> Result<(), String> {
+        let sqlite = Sqlite::system().ok_or("the system SQLite library is not available")?;
+        Connection::open(sqlite, db, READ_WRITE_CREATE).ok_or("cannot open the database")?.exec(sql)
+    }
+
+    pub(super) fn resolve_with(sqlite: Option<&Sqlite>, db: &Path, cwd: &Path) -> Option<Option<Selection>> {
+        let db = Connection::open(sqlite?, db, READ_ONLY)?;
         let Some(editor) = active_editor(&db, cwd)? else {
             return Some(None);
         };
@@ -765,29 +775,24 @@ pub mod zed {
 
     /// `None` when unavailable; `Some(None)` when no workspace contains `cwd` or its active item is no editor.
     fn active_editor(db: &Connection, cwd: &Path) -> Option<Option<Editor>> {
-        let mut query = db
-            .prepare(
-                "select
-                  i.kind as item_kind,
-                  e.item_id as editor_id,
-                  i.workspace_id as workspace_id,
-                  w.paths as workspace_paths,
-                  w.timestamp as timestamp,
-                  e.buffer_path as buffer_path
-                from items i
-                join panes p on p.pane_id = i.pane_id and p.workspace_id = i.workspace_id
-                join workspaces w on w.workspace_id = i.workspace_id
-                left join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
-                where i.active = 1 and p.active = 1
-                order by w.timestamp desc",
-            )
-            .ok()?;
-        let raw: Vec<[Sql; 6]> = query
-            .query_map([], |row| Ok([row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?]))
-            .ok()?
-            .collect::<Result<_, _>>()
-            .ok()?;
-        let rows: Vec<Editor> = raw.iter().filter_map(editor_row).collect();
+        let raw = db.rows(
+            "select
+              i.kind as item_kind,
+              e.item_id as editor_id,
+              i.workspace_id as workspace_id,
+              w.paths as workspace_paths,
+              w.timestamp as timestamp,
+              e.buffer_path as buffer_path
+            from items i
+            join panes p on p.pane_id = i.pane_id and p.workspace_id = i.workspace_id
+            join workspaces w on w.workspace_id = i.workspace_id
+            left join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
+            where i.active = 1 and p.active = 1
+            order by w.timestamp desc",
+            &[],
+            6,
+        )?;
+        let rows: Vec<Editor> = raw.iter().filter_map(|row| editor_row(row)).collect();
         if !raw.is_empty() && rows.is_empty() {
             return None;
         }
@@ -808,7 +813,7 @@ pub mod zed {
         Some(Some(row))
     }
 
-    fn editor_row(row: &[Sql; 6]) -> Option<Editor> {
+    fn editor_row(row: &[Sql]) -> Option<Editor> {
         let text = |value: &Sql| match value {
             Sql::Text(text) => Some(text.clone()),
             _ => None,
@@ -839,18 +844,13 @@ pub mod zed {
 
     /// Byte ranges, start before end, of the editor's selections.
     fn selections(db: &Connection, editor: i64, workspace: i64) -> Option<Vec<(usize, usize)>> {
-        let mut query = db
-            .prepare(
-                "select start as selection_start, end as selection_end
-                from editor_selections
-                where editor_id = ?1 and workspace_id = ?2",
-            )
-            .ok()?;
-        let raw: Vec<(Sql, Sql)> = query
-            .query_map(params![editor, workspace], |row| Ok((row.get(0)?, row.get(1)?)))
-            .ok()?
-            .collect::<Result<_, _>>()
-            .ok()?;
+        let raw = db.rows(
+            "select start as selection_start, end as selection_end
+            from editor_selections
+            where editor_id = ?1 and workspace_id = ?2",
+            &[editor, workspace],
+            2,
+        )?;
         let number = |value: &Sql| match value {
             Sql::Null => Some(None),
             Sql::Integer(number) => Some(Some(*number)),
@@ -858,7 +858,7 @@ pub mod zed {
             _ => None,
         };
         let decoded: Vec<(Option<i64>, Option<i64>)> =
-            raw.iter().filter_map(|(start, end)| Some((number(start)?, number(end)?))).collect();
+            raw.iter().filter_map(|row| Some((number(&row[0])?, number(&row[1])?))).collect();
         if !raw.is_empty() && decoded.is_empty() {
             return None;
         }
@@ -875,12 +875,13 @@ pub mod zed {
 
     /// `Some(None)` for a null `contents`, `None` when the row is missing or unreadable.
     fn contents(db: &Connection, editor: i64, workspace: i64) -> Option<Option<String>> {
-        db.query_row(
-            "select contents from editors where item_id = ?1 and workspace_id = ?2",
-            params![editor, workspace],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .ok()
+        let rows =
+            db.rows("select contents from editors where item_id = ?1 and workspace_id = ?2", &[editor, workspace], 1)?;
+        match rows.into_iter().next()?.into_iter().next()? {
+            Sql::Null => Some(None),
+            Sql::Text(text) => Some(Some(text)),
+            _ => None,
+        }
     }
 
     /// The longest workspace path that contains `cwd`, in UTF-16 units as TS measures it; 0 for none.
@@ -920,6 +921,222 @@ pub mod zed {
         Position {
             line: before.matches('\n').count() as i64 + 1,
             character: before[line_start..].encode_utf16().count() as i64 + 1,
+        }
+    }
+}
+
+/// The few calls of SQLite's C API that [`zed`] needs, from the system library loaded at run time, so the binary
+/// neither bundles SQLite nor needs it to start.
+#[allow(unsafe_code)]
+mod sqlite {
+    use std::ffi::{CStr, CString, c_char, c_int, c_void};
+    use std::path::Path;
+    use std::sync::OnceLock;
+
+    #[cfg(target_os = "macos")]
+    const LIBRARY: &str = "/usr/lib/libsqlite3.dylib";
+    #[cfg(not(target_os = "macos"))]
+    const LIBRARY: &str = "libsqlite3.so.0";
+
+    pub const READ_ONLY: c_int = 0x1;
+    pub const READ_WRITE_CREATE: c_int = 0x2 | 0x4;
+    const OK: c_int = 0;
+    const ROW: c_int = 100;
+    const DONE: c_int = 101;
+    const INTEGER: c_int = 1;
+    const FLOAT: c_int = 2;
+    const TEXT: c_int = 3;
+    const NULL: c_int = 5;
+    /// How long a read waits for Zed's writer (rusqlite's default, which this binding replaced).
+    const BUSY_MS: c_int = 5000;
+
+    type Db = *mut c_void;
+    type Stmt = *mut c_void;
+
+    /// A column value.
+    pub enum Value {
+        Null,
+        Integer(i64),
+        Real(f64),
+        Text(String),
+        Blob,
+    }
+
+    pub struct Sqlite {
+        open_v2: unsafe extern "C" fn(*const c_char, *mut Db, c_int, *const c_char) -> c_int,
+        close_v2: unsafe extern "C" fn(Db) -> c_int,
+        busy_timeout: unsafe extern "C" fn(Db, c_int) -> c_int,
+        errmsg: unsafe extern "C" fn(Db) -> *const c_char,
+        exec: unsafe extern "C" fn(Db, *const c_char, *const c_void, *mut c_void, *mut *mut c_char) -> c_int,
+        prepare_v2: unsafe extern "C" fn(Db, *const c_char, c_int, *mut Stmt, *mut *const c_char) -> c_int,
+        bind_int64: unsafe extern "C" fn(Stmt, c_int, i64) -> c_int,
+        step: unsafe extern "C" fn(Stmt) -> c_int,
+        column_type: unsafe extern "C" fn(Stmt, c_int) -> c_int,
+        column_int64: unsafe extern "C" fn(Stmt, c_int) -> i64,
+        column_double: unsafe extern "C" fn(Stmt, c_int) -> f64,
+        column_text: unsafe extern "C" fn(Stmt, c_int) -> *const u8,
+        column_bytes: unsafe extern "C" fn(Stmt, c_int) -> c_int,
+        finalize: unsafe extern "C" fn(Stmt) -> c_int,
+        _library: libloading::Library,
+    }
+
+    impl Sqlite {
+        /// The system library, loaded on first use; `None` when it is missing.
+        pub fn system() -> Option<&'static Sqlite> {
+            static SYSTEM: OnceLock<Option<Sqlite>> = OnceLock::new();
+            SYSTEM.get_or_init(|| Sqlite::load(LIBRARY)).as_ref()
+        }
+
+        pub fn load(name: &str) -> Option<Sqlite> {
+            // SAFETY: SQLite's initializers have no preconditions.
+            let library = unsafe { libloading::Library::new(name) }.ok()?;
+            // SAFETY: each field's type is the C signature of the symbol it names, and the library outlives the
+            // pointers because it is stored with them.
+            macro_rules! symbol {
+                ($name:literal) => {
+                    *unsafe { library.get($name) }.ok()?
+                };
+            }
+            Some(Sqlite {
+                open_v2: symbol!("sqlite3_open_v2"),
+                close_v2: symbol!("sqlite3_close_v2"),
+                busy_timeout: symbol!("sqlite3_busy_timeout"),
+                errmsg: symbol!("sqlite3_errmsg"),
+                exec: symbol!("sqlite3_exec"),
+                prepare_v2: symbol!("sqlite3_prepare_v2"),
+                bind_int64: symbol!("sqlite3_bind_int64"),
+                step: symbol!("sqlite3_step"),
+                column_type: symbol!("sqlite3_column_type"),
+                column_int64: symbol!("sqlite3_column_int64"),
+                column_double: symbol!("sqlite3_column_double"),
+                column_text: symbol!("sqlite3_column_text"),
+                column_bytes: symbol!("sqlite3_column_bytes"),
+                finalize: symbol!("sqlite3_finalize"),
+                _library: library,
+            })
+        }
+    }
+
+    pub struct Connection<'a> {
+        sqlite: &'a Sqlite,
+        db: Db,
+    }
+
+    impl<'a> Connection<'a> {
+        pub fn open(sqlite: &'a Sqlite, path: &Path, flags: c_int) -> Option<Self> {
+            let path = CString::new(path.as_os_str().as_encoded_bytes()).ok()?;
+            let mut db = std::ptr::null_mut();
+            // SAFETY: `path` is a C string and `db` receives the handle, which `drop` closes even when opening
+            // fails.
+            let code = unsafe { (sqlite.open_v2)(path.as_ptr(), &mut db, flags, std::ptr::null()) };
+            let connection = Connection { sqlite, db };
+            if code != OK {
+                return None;
+            }
+            // SAFETY: `db` is open.
+            unsafe { (sqlite.busy_timeout)(db, BUSY_MS) };
+            Some(connection)
+        }
+
+        /// Every row of `sql`, with `params` bound to `?1`, `?2`, …, as its first `columns` values; `None` on any
+        /// error, a text that is not UTF-8 included.
+        pub fn rows(&self, sql: &str, params: &[i64], columns: c_int) -> Option<Vec<Vec<Value>>> {
+            let statement = self.prepare(sql)?;
+            for (index, param) in (1..).zip(params) {
+                // SAFETY: `statement.raw` is prepared until `statement` drops.
+                if unsafe { (self.sqlite.bind_int64)(statement.raw, index, *param) } != OK {
+                    return None;
+                }
+            }
+            let mut rows = Vec::new();
+            loop {
+                // SAFETY: as above, and `value` reads the row `step` returned.
+                match unsafe { (self.sqlite.step)(statement.raw) } {
+                    ROW => {
+                        rows.push((0..columns).map(|column| unsafe { statement.value(column) }).collect::<Option<_>>()?)
+                    }
+                    DONE => return Some(rows),
+                    _ => return None,
+                }
+            }
+        }
+
+        pub fn exec(&self, sql: &str) -> Result<(), String> {
+            let sql = CString::new(sql).map_err(|error| error.to_string())?;
+            // SAFETY: `db` is open and `sql` is a C string; there is no callback and no error-message out pointer.
+            let code = unsafe {
+                (self.sqlite.exec)(self.db, sql.as_ptr(), std::ptr::null(), std::ptr::null_mut(), std::ptr::null_mut())
+            };
+            if code == OK {
+                return Ok(());
+            }
+            // SAFETY: `errmsg` returns a C string owned by the connection.
+            Err(unsafe { CStr::from_ptr((self.sqlite.errmsg)(self.db)) }.to_string_lossy().into_owned())
+        }
+
+        fn prepare(&self, sql: &str) -> Option<Statement<'a>> {
+            let mut raw = std::ptr::null_mut();
+            // SAFETY: `sql` is passed with its length, so it needs no terminator.
+            let code = unsafe {
+                (self.sqlite.prepare_v2)(
+                    self.db,
+                    sql.as_ptr().cast(),
+                    sql.len() as c_int,
+                    &mut raw,
+                    std::ptr::null_mut(),
+                )
+            };
+            let statement = Statement { sqlite: self.sqlite, raw };
+            (code == OK && !raw.is_null()).then_some(statement)
+        }
+    }
+
+    impl Drop for Connection<'_> {
+        fn drop(&mut self) {
+            // SAFETY: `db` came from `open_v2`; closing null is a no-op, and `close_v2` waits for statements that
+            // are not finalized yet.
+            unsafe { (self.sqlite.close_v2)(self.db) };
+        }
+    }
+
+    struct Statement<'a> {
+        sqlite: &'a Sqlite,
+        raw: Stmt,
+    }
+
+    impl Statement<'_> {
+        /// Column `column` of the current row; `None` for a text that is not UTF-8.
+        ///
+        /// # Safety
+        ///
+        /// The last `step` returned a row.
+        unsafe fn value(&self, column: c_int) -> Option<Value> {
+            let (sqlite, raw) = (self.sqlite, self.raw);
+            // SAFETY: `raw` is on a row, as the caller promises, and the text is copied before the next call on it.
+            unsafe {
+                Some(match (sqlite.column_type)(raw, column) {
+                    INTEGER => Value::Integer((sqlite.column_int64)(raw, column)),
+                    FLOAT => Value::Real((sqlite.column_double)(raw, column)),
+                    TEXT => {
+                        let text = (sqlite.column_text)(raw, column);
+                        let bytes = if text.is_null() {
+                            &[][..]
+                        } else {
+                            std::slice::from_raw_parts(text, (sqlite.column_bytes)(raw, column) as usize)
+                        };
+                        Value::Text(std::str::from_utf8(bytes).ok()?.to_owned())
+                    }
+                    NULL => Value::Null,
+                    _ => Value::Blob,
+                })
+            }
+        }
+    }
+
+    impl Drop for Statement<'_> {
+        fn drop(&mut self) {
+            // SAFETY: `raw` is a prepared statement or null, and finalizing null is a no-op.
+            unsafe { (self.sqlite.finalize)(self.raw) };
         }
     }
 }
@@ -1003,10 +1220,9 @@ mod tests {
     fn zed_byte_offsets_become_utf16_positions() {
         let root = tempfile::tempdir().unwrap();
         let db = root.path().join("db.sqlite");
-        let connection = rusqlite::Connection::open(&db).unwrap();
-        connection
-            .execute_batch(
-                "create table workspaces (workspace_id integer, paths text, timestamp text);
+        zed::exec(
+            &db,
+            "create table workspaces (workspace_id integer, paths text, timestamp text);
             create table panes (pane_id integer, workspace_id integer, active integer);
             create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
             create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
@@ -1016,9 +1232,8 @@ mod tests {
             insert into items values (100, 1, 10, 'Editor', 1), (200, 2, 20, 'Editor', 1);
             insert into editors values (100, 1, '/w/a.ts', 'x'), (200, 2, '/w/app/b.ts', 'héllo\n日本語 end');
             insert into editor_selections values (200, 2, 14, 1);",
-            )
-            .unwrap();
-        drop(connection);
+        )
+        .unwrap();
         let selection = zed::resolve(&db, Path::new("/w/app/src")).unwrap().unwrap();
         assert_eq!(selection.file_path, "/w/app/b.ts");
         // Bytes 1..14 end inside 語, so the range takes the whole character.
@@ -1027,6 +1242,34 @@ mod tests {
         assert_eq!(zed::resolve(&db, Path::new("/w/lib")), None);
         assert_eq!(zed::resolve(&db, Path::new("/elsewhere")), Some(None));
         assert_eq!(zed::resolve(&root.path().join("missing"), Path::new("/w")), None);
+        // Text that is not UTF-8 makes the read unavailable.
+        zed::exec(&db, "update editors set contents = cast(x'ff' as text) where item_id = 200").unwrap();
+        assert_eq!(zed::resolve(&db, Path::new("/w/app/src")), None);
+    }
+
+    #[test]
+    fn zed_without_the_sqlite_library_is_unavailable() {
+        let root = tempfile::tempdir().unwrap();
+        let db = root.path().join("db.sqlite");
+        zed::exec(
+            &db,
+            "create table workspaces (workspace_id integer, paths text, timestamp text);
+            create table panes (pane_id integer, workspace_id integer, active integer);
+            create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
+            create table editors (item_id integer, workspace_id integer, buffer_path text, contents text);
+            create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer);
+            insert into workspaces values (1, '/w', '2026-01-01');
+            insert into panes values (10, 1, 1);
+            insert into items values (100, 1, 10, 'Editor', 1);
+            insert into editors values (100, 1, '/w/a.ts', 'abc');
+            insert into editor_selections values (100, 1, 0, 2);",
+        )
+        .unwrap();
+        assert_eq!(zed::resolve(&db, Path::new("/w")).unwrap().unwrap().ranges[0].text, "ab");
+        let missing = sqlite::Sqlite::load("libsqlite3-missing.so.0");
+        assert!(missing.is_none());
+        // The caller keeps the last selection and polls again, as for a database it cannot read.
+        assert_eq!(zed::resolve_with(missing.as_ref(), &db, Path::new("/w")), None);
     }
 
     #[test]

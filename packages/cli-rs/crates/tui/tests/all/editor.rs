@@ -7,7 +7,7 @@ use crate::support::{self, DIRECTORY, Fake, Harness, Log, deref_harness, list};
 use std::path::Path;
 use std::sync::Arc;
 
-use opencode_tui::prompt::editor_context::{self, LabelState, Source};
+use opencode_tui::prompt::editor_context::{self, LabelState, Source, zed};
 use serde_json::{Value, json};
 
 use crate::support::ide;
@@ -185,9 +185,7 @@ fn zed_selection_is_read_from_its_database() {
     let directory = root.path().file_name().unwrap().to_string_lossy().into_owned();
     setup.wait_for(&format!("{directory}/index.ts#1-2"));
     // The next poll sees a new selection.
-    let connection = rusqlite::Connection::open(&db).unwrap();
-    connection.execute("update editor_selections set start = 12, end = 17", []).unwrap();
-    drop(connection);
+    zed::exec(&db, "update editor_selections set start = 12, end = 17").unwrap();
     setup.wait_for(&format!("{directory}/index.ts#2"));
     let selection = setup.tui.prompt.editor.selection().unwrap();
     assert_eq!(selection.ranges[0].text, "const");
@@ -196,9 +194,10 @@ fn zed_selection_is_read_from_its_database() {
 /// A Zed database whose only workspace is `/` with `file` active, selected from byte `start` to `end`. Zed keeps
 /// no contents for a saved file, so the file is read.
 fn zed_database(db: &Path, file: &Path, (start, end): (u32, u32)) {
-    let connection = rusqlite::Connection::open(db).unwrap();
-    connection
-        .execute_batch(
+    let file = file.to_string_lossy().replace('\'', "''");
+    zed::exec(
+        db,
+        &format!(
             "create table workspaces (workspace_id integer, paths text, timestamp text);
             create table panes (pane_id integer, workspace_id integer, active integer);
             create table items (item_id integer, workspace_id integer, pane_id integer, kind text, active integer);
@@ -206,9 +205,10 @@ fn zed_database(db: &Path, file: &Path, (start, end): (u32, u32)) {
             create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer);
             insert into workspaces values (1, '[\"/\"]', '2026-11-04 10:00:00');
             insert into panes values (1, 1, 1);
-            insert into items values (7, 1, 1, 'Editor', 1);",
-        )
-        .unwrap();
-    connection.execute("insert into editors values (7, 1, ?1, null)", [file.to_string_lossy()]).unwrap();
-    connection.execute("insert into editor_selections values (7, 1, ?1, ?2)", [start, end]).unwrap();
+            insert into items values (7, 1, 1, 'Editor', 1);
+            insert into editors values (7, 1, '{file}', null);
+            insert into editor_selections values (7, 1, {start}, {end});",
+        ),
+    )
+    .unwrap();
 }
