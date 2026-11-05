@@ -96,9 +96,15 @@ export const make = (deps: Deps) => {
     if (!child?.parentID) return
     const parentID = child.parentID
     if (!SubagentMetadata.notify(child.metadata)) {
-      // A silent descendant sends no notice, so wake a held parent to report its final state. The
-      // wake runs no model step when the parent has no input.
-      if (held.has(parentID) && (yield* deps.store.get(parentID))) yield* deps.wake(parentID)
+      // A silent descendant sends no notice, so wake the nearest held ancestor to report its final
+      // state; silent sessions between them never hold. The wake runs no model step without input.
+      const seen = new Set([child.id])
+      let ancestor = yield* deps.store.get(parentID)
+      while (ancestor && !held.has(ancestor.id) && !seen.has(ancestor.id)) {
+        seen.add(ancestor.id)
+        ancestor = ancestor.parentID ? yield* deps.store.get(ancestor.parentID) : undefined
+      }
+      if (ancestor && held.has(ancestor.id)) yield* deps.wake(ancestor.id)
       return
     }
     if (!(yield* deps.store.get(parentID))) return

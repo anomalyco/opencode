@@ -446,6 +446,37 @@ describe("subagent observer lifetime", () => {
     }),
   )
 
+  it.live("a silent chain releases the nearest held ancestor's report", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const llm = yield* TestLLM.Test
+      const f = yield* family({ "subagent.notify": false })
+      const grandchild = yield* f.sessions.create({
+        parentID: f.descendant.id,
+        agent: Agent.ID.make("reviewer"),
+        metadata: { "subagent.notify": false },
+      })
+      const exitShell = yield* backgroundShell(grandchild.id)
+      yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("grandchild done", "grandchild"))
+
+      expect((yield* f.spawn).status).toBe("completed")
+      yield* llm.wait(1).pipe(Effect.timeout("2 seconds"))
+      yield* f.sessions.wait(f.child.id)
+      expect(yield* reports(f.parent.id)).toEqual([])
+
+      // The silent descendant between them never held, so the grandchild must wake the child.
+      yield* exitShell
+      yield* jobs.wait({ id: f.child.id }).pipe(Effect.timeout("5 seconds"))
+      yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
+      yield* f.sessions.wait(f.parent.id)
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(1)
+      expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "completed" } })
+      expect(notices[0]?.text).toContain("first")
+      expect(yield* llm.requests()).toHaveLength(3)
+    }),
+  )
+
   it.live("a no-input wake after a child reported sends no second report", () =>
     Effect.gen(function* () {
       const execution = yield* SessionExecution.Service
