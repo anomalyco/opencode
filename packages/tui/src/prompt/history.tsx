@@ -1,5 +1,5 @@
 import path from "path"
-import { mkdirSync, renameSync, statSync, writeFileSync } from "node:fs"
+import { mkdirSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs"
 import { readdir, rm, stat } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
@@ -90,7 +90,10 @@ function writeVideo(directory: string, base64: string, mime: string) {
   const file = path.join(directory, Bun.SHA256.hash(bytes, "hex") + keptVideoExtension(mime))
   const temporary = `${file}.${crypto.randomUUID()}.tmp`
   try {
-    if (statSync(file, { throwIfNoEntry: false })?.isFile()) return file
+    if (statSync(file, { throwIfNoEntry: false })?.isFile()) {
+      touch(file)
+      return file
+    }
     mkdirSync(directory, { recursive: true })
     writeFileSync(temporary, bytes)
     renameSync(temporary, file)
@@ -101,8 +104,25 @@ function writeVideo(directory: string, base64: string, mime: string) {
   }
 }
 
-// Long enough for a draft in another window to reach history or the stash.
+/**
+ * Restarts the grace window of each kept video `prompt` names, for a prompt put back in the composer: the stash entry
+ * it came from may have been the last to name them.
+ */
+export function keepPromptMedia(prompt: PromptInfo, state: string) {
+  prompt.files?.forEach((file) => {
+    if (file.path && path.dirname(file.path) === promptMediaDirectory(state)) touch(file.path)
+  })
+}
+
+// Long enough for a draft in another window to reach history or the stash. Reusing a kept video restarts it.
 const PROMPT_MEDIA_GRACE_MS = 24 * 60 * 60 * 1000
+
+function touch(file: string) {
+  const now = new Date()
+  try {
+    utimesSync(file, now, now)
+  } catch {}
+}
 
 /**
  * Deletes the kept videos that no history or stash entry names. A file is named for its content, so its name in either

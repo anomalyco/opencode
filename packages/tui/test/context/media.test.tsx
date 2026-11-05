@@ -2,7 +2,7 @@
 import { CliRenderEvents, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { ManualClock, setRendererCapabilities } from "@opentui/core/testing"
 import { expect, jest, test } from "bun:test"
-import { For } from "solid-js"
+import { createSignal, For, type JSX } from "solid-js"
 import { image, renderMedia, video } from "../fixture/media"
 
 test("re-reads the protocol on capability reports and the pixel size after resizes, polling a bounded time", async () => {
@@ -141,4 +141,95 @@ test("players go to the four tiles showing the most of themselves, and stay two 
   expect(keys.filter(media.posterShown)).toEqual([])
   expect(scroll!.verticalScrollBar.listenerCount("change")).toBe(0)
   expect(scroll!.content.listenerCount("resize")).toBe(0)
+})
+
+test("a tile under a hidden ancestor drops its player, and gets it back when the ancestor shows again", async () => {
+  const clock = new ManualClock()
+  const [visible, setVisible] = createSignal(true)
+  let scroll: ScrollBoxRenderable | undefined
+  let tile: BoxRenderable | undefined
+  // Like the session pane under a fullscreen panel, the box keeps its width while hidden, so nothing resizes.
+  await using host = await renderMedia(
+    () => (
+      <box position="absolute" width={40} height={20} visible={visible()}>
+        <scrollbox ref={(element: ScrollBoxRenderable) => (scroll = element)} height={9}>
+          <box ref={(element: BoxRenderable) => (tile = element)} height={2} flexShrink={0} />
+          <box height={20} flexShrink={0} />
+        </scrollbox>
+      </box>
+    ),
+    false,
+    clock,
+  )
+  const renderer = host.app.renderer
+  const media = host.media()
+  media.trackPoster("tile", tile!)
+  const state = async () => {
+    await host.app.renderOnce()
+    return { shown: media.posterShown("tile"), open: media.posterOpen("tile") }
+  }
+  expect(await state()).toEqual({ shown: true, open: true })
+
+  // The transcript moves while hidden; the tile keeps its player only the usual two seconds.
+  setVisible(false)
+  scroll!.scrollTo(1)
+  expect(await state()).toEqual({ shown: false, open: true })
+  clock.advance(2_000)
+  expect(await state()).toEqual({ shown: false, open: false })
+  expect(renderer.listenerCount(CliRenderEvents.FRAME)).toBe(1)
+
+  setVisible(true)
+  expect(await state()).toEqual({ shown: true, open: true })
+  expect(renderer.listenerCount(CliRenderEvents.FRAME)).toBe(0)
+})
+
+// Each change brings the tile from beyond half a scroll box or screen away to within it, through one event alone.
+test.each([
+  {
+    event: "the scroll box content resizes",
+    view: (grown: () => boolean, tile: () => JSX.Element) => (
+      <scrollbox height={9}>
+        <box height={grown() ? 2 : 20} flexShrink={0} />
+        {tile()}
+        <box height={10} flexShrink={0} />
+      </scrollbox>
+    ),
+  },
+  {
+    event: "the scroll box resizes",
+    view: (grown: () => boolean, tile: () => JSX.Element) => (
+      <scrollbox height={grown() ? 9 : 4}>
+        <box height={12} flexShrink={0} />
+        {tile()}
+        <box height={10} flexShrink={0} />
+      </scrollbox>
+    ),
+  },
+  {
+    event: "the terminal resizes",
+    view: (_: () => boolean, tile: () => JSX.Element) => (
+      <box>
+        <box height={26} flexShrink={0} />
+        {tile()}
+      </box>
+    ),
+  },
+])("a tile shows and opens a player when $event", async (row) => {
+  const [grown, setGrown] = createSignal(false)
+  let tile: BoxRenderable | undefined
+  await using host = await renderMedia(() =>
+    row.view(grown, () => <box ref={(element: BoxRenderable) => (tile = element)} height={2} flexShrink={0} />),
+  )
+  const media = host.media()
+  const state = async () => {
+    await host.app.renderOnce()
+    return { shown: media.posterShown("tile"), open: media.posterOpen("tile") }
+  }
+  host.app.resize(80, 16)
+  await host.app.renderOnce()
+  media.trackPoster("tile", tile!)
+  expect(await state()).toEqual({ shown: false, open: false })
+  if (row.event === "the terminal resizes") host.app.resize(80, 30)
+  else setGrown(true)
+  expect(await state()).toEqual({ shown: true, open: true })
 })

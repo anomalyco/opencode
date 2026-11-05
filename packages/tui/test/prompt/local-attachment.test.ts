@@ -6,6 +6,7 @@ import {
   MAX_LOCAL_VIDEO_BYTES,
   parsePastedFilepaths,
   promptFilesForServer,
+  keptVideoExtension,
   readKeptAttachments,
   readLocalAttachmentWith,
   resolvePastedAttachments,
@@ -204,6 +205,19 @@ describe("prompt local attachments", () => {
       files: [image, { ...kept(clips[0]!), uri: "data:video/mp4;base64,AQID" }],
       unreadable: ["gone.mov"],
     })
+  })
+
+  // `.x-matroska` is what history names a kept `video/x-matroska` video's file.
+  test.each([
+    ["clip.mkv", "video/x-matroska"],
+    ["clip.qt", "video/quicktime"],
+    [`${"0f".repeat(32)}${keptVideoExtension("video/x-matroska")}`, "video/x-matroska"],
+  ])("sends a kept %s as %s", async (name, mime) => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, name)
+    await Bun.write(file, new Uint8Array([1, 2, 3]))
+    const result = await readKeptAttachments([{ uri: pathToFileURL(file).href, path: file }], true)
+    expect(result.files[0]?.uri).toBe(`data:${mime};base64,AQID`)
   })
 
   test("reads a kept file again up to the attachment limit, not the paste cap, and names one it leaves out", async () => {

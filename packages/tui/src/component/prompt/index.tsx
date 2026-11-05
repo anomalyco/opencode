@@ -32,6 +32,7 @@ import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
 import {
   emptyPrompt,
+  keepPromptMedia,
   promptMediaDirectory,
   usePromptHistory,
   type PromptFile,
@@ -848,6 +849,7 @@ export function Prompt(props: PromptProps) {
       }
     })
     localizeVideos(prompt)
+    keepPromptMedia(prompt, paths.state)
   }
 
   // A local server's unmentioned `file://` video, such as one an undo restored, gets its path at once, so history and the
