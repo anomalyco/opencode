@@ -21,6 +21,9 @@ export const WAIT_LIMIT = Duration.minutes(30)
 // Created on first use: Workers forbid random values while a module loads.
 let processBoot: string | undefined
 const boot = () => (processBoot ??= crypto.randomUUID())
+// The plugin runs once per Location while the boot ID and its heartbeat record are process-wide, so several
+// instances of one process share the record. The last one closing is what counts as a clean shutdown.
+let instances = 0
 
 type State = Goal.State
 const decodeState = Schema.decodeUnknownOption(Goal.State)
@@ -388,8 +391,15 @@ export const Plugin = define({
 
     // A clean shutdown removes this process's heartbeat right away, so a server that restarts inside the TTL reads
     // its predecessor as dead and sweeps its goals instead of skipping them while the record is still fresh. A
-    // crash leaves the record to go stale, which a later beat's sweep then pauses.
-    yield* Effect.addFinalizer(() => ctx.storage.remove(heartbeatKey(boot())).pipe(Effect.ignore))
+    // crash leaves the record to go stale, which a later beat's sweep then pauses. Closing one of several plugin
+    // instances keeps the record, because the other Locations of the process still drive goals.
+    instances++
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        if (--instances > 0) return
+        yield* ctx.storage.remove(heartbeatKey(boot())).pipe(Effect.ignore)
+      }),
+    )
 
     yield* ctx.command.transform((editor) => {
       editor.add({

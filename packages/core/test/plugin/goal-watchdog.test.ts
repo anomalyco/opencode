@@ -34,8 +34,12 @@ const step = (stepSessionID: Session.ID) =>
   ({ type: "session.step.started", data: { sessionID: stepSessionID } }) as unknown as SessionEvent.Step.Started
 
 /** Runs the goal plugin against stubbed domains: plugin storage in memory, and RPC that records what it publishes. */
-const run = Effect.fnUntraced(function* (seed?: Goal.State, extra?: Record<string, Schema.Json>) {
-  const stored = new Map<string, Schema.Json>([
+const run = Effect.fnUntraced(function* (
+  seed?: Goal.State,
+  extra?: Record<string, Schema.Json>,
+  shared?: Map<string, Schema.Json>,
+) {
+  const stored = shared ?? new Map<string, Schema.Json>([
     ...(seed ? ([[`session:${sessionID}`, seed]] as const) : []),
     ...Object.entries(extra ?? {}),
   ])
@@ -212,6 +216,24 @@ describe("goal plugin waiting", () => {
       // read its predecessor as alive and leave its goals running.
       const plugin = yield* Effect.scoped(run())
       expect([...plugin.stored.keys()].some((key) => key.startsWith("process:"))).toBe(false)
+    }),
+  )
+
+  it.effect("keeps the process's heartbeat while another instance is still running", () =>
+    Effect.gen(function* () {
+      // The plugin runs once per Location, but the heartbeat record is process-wide: closing one Location's
+      // instance must not drop it while another Location still drives goals. The two instances share one
+      // storage, the way two Locations of one process share the plugin's database records.
+      const shared = new Map<string, Schema.Json>()
+      yield* run(undefined, undefined, shared)
+      const key = [...shared.keys()].find((key) => key.startsWith("process:"))
+      expect(key).toBeString()
+
+      // Opening and closing a second instance leaves the record with its owner, whose beat keeps refreshing it.
+      yield* Effect.scoped(run(undefined, undefined, shared))
+      expect(shared.get(key!)).toMatchObject({ at: 0 })
+      yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
+      expect(shared.get(key!)).toMatchObject({ at: Duration.toMillis(GoalPlugin.HEARTBEAT_INTERVAL) })
     }),
   )
 
