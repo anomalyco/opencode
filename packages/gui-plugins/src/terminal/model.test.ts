@@ -591,12 +591,14 @@ describe("terminal model", () => {
   test("a terminal for a session the server is still creating waits for it, and a removal ends the wait", async () => {
     const server = fakeServer()
     const { model, session, toasts } = setup(server)
+
     const pending: SessionRef = {
       ...session,
       get pending() {
         return true
       },
     }
+
     const terminal = model.load(pending)
     await flush()
 

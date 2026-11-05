@@ -125,6 +125,7 @@ export function transitionWebUpdate(state: WebUpdateState, event: WebUpdateEvent
         effects: [{ type: "report", result: "failed", message }],
       }
     }
+
     case "worker.installing":
       if (state.status === "downloading" || state.status === "ready" || state.status === "applying")
         return unchanged(state)

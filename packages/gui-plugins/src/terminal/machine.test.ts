@@ -320,6 +320,7 @@ describe("terminal machine", () => {
   // to the first one's unconfirmed title.
   test("only the newest rename settles a terminal's title", () => {
     const alpha = transition(listed(), { type: "rename.requested", sessionID: "ses_1", ptyID: "pty_1", title: "alpha" })
+
     const beta = transition(alpha.state, {
       type: "rename.requested",
       sessionID: "ses_1",
@@ -374,6 +375,7 @@ describe("terminal machine", () => {
       ptyID: "pty_1",
       title: "alpha",
     }).state
+
     const closing = transition(renaming, { type: "close.requested", sessionID: "ses_1", ptyID: "pty_1" })
 
     expect(closing.commands).toEqual([

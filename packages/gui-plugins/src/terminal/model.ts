@@ -91,6 +91,7 @@ export function createTerminalModel(input: {
   const servers = new Map<string, { ref: ServerRef; dispatch: (event: Event) => void }>()
   const requests = new Map<string, Map<number, AbortController>>()
   // The new-terminal requests a session's create answers, and the focus request it resolves.
+
   const creates = new Map<
     string,
     { request: number; done: { promise: Promise<string | undefined>; resolve: (id: string | undefined) => void } }
@@ -141,6 +142,7 @@ export function createTerminalModel(input: {
     const timedOut = new Error(input.t("request.timedOut"))
     const timer = setTimeout(() => controller.abort(timedOut), TERMINAL_REQUEST_TIMEOUT_MS)
     const inflight = requests.get(server.id) ?? new Map<number, AbortController>()
+
     const ended = new Promise<never>((_, reject) =>
       signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
     )
@@ -318,6 +320,7 @@ export function createTerminalModel(input: {
     const known =
       command.known ??
       (await server.client.experimental.persistentPty.list({ sessionID: target.id }, { signal }).catch(() => []))
+
     const used = new Set(known.flatMap((info) => titleNumber(info.title) ?? []))
     const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
 
@@ -347,19 +350,23 @@ export function createTerminalModel(input: {
         stop()
         signal.removeEventListener("abort", abort)
       }
+
       const done = () => {
         end()
         resolve()
       }
+
       const abort = () => {
         end()
         reject(signal.reason)
       }
+
       const stop = runWithOwner(owner, () =>
         session.server.data.on("session.created", (event) => {
           if (event.data.sessionID === session.id) done()
         }),
       )!
+
       const poll = setInterval(() => {
         if (!session.pending) done()
       }, SESSION_POLL_MS)
@@ -378,6 +385,7 @@ export function createTerminalModel(input: {
       const target = sessions.get(key)
 
       if (target) selection(target).set({ id })
+
       if (waiting) dispatchFocus({ type: "pending.resolved", request: waiting.request, id })
       waiting?.done.resolve(id)
 

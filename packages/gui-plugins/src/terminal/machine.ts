@@ -464,11 +464,13 @@ function mutate(state: Active, event: Event): Transition | undefined {
   if (event.type === "create.succeeded") {
     // A create that the state stopped waiting for still made a terminal; the list shows it once it refreshes.
     if (current.creating !== event.attempt) return refresh(state, sessionID)
+
     const next = withItems(
       withMutations(state, sessionID, { closing: current.closing, renames: current.renames }),
       sessionID,
       (items) => (listed(items, event.terminal.id) ? items : [...items, event.terminal]),
     )
+
     const settle: Command = { type: "settle-create", sessionID, outcome: { ok: true, terminal: event.terminal } }
     const refreshed = refresh(next, sessionID)
 
@@ -570,6 +572,7 @@ function lost(
   next: { readonly status: "unsupported" } | { readonly status: "failed"; readonly error: string },
 ): Transition {
   const base = { connections: state.connections, issued: state.issued, sessions: Object.keys(state.sessions) }
+
   const outcome =
     next.status === "unsupported"
       ? ({ ok: false, kind: "unsupported" } as const)
@@ -616,9 +619,9 @@ function settleCreates(
   ids: readonly string[],
   outcome: { readonly ok: false; readonly kind: CreateFailure; readonly error?: string },
 ): Command[] {
-  return ids
-    .filter((id) => state.mutations[id]?.creating !== undefined)
-    .map((sessionID): Command => ({ type: "settle-create", sessionID, outcome }))
+  return ids.flatMap((sessionID): Command[] =>
+    state.mutations[sessionID]?.creating === undefined ? [] : [{ type: "settle-create", sessionID, outcome }],
+  )
 }
 
 /** Every request in flight for the sessions: their lists and this client's changes. */
