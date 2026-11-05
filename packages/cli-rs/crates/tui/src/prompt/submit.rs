@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use indexmap::IndexMap;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     AbsolutePath, AgentID, LocationPublicRef, ModelRef, SessionCommandInput, SessionID, SessionInboxDelivery,
     SessionInboxInfo, SessionPromptInput, SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput,
@@ -229,7 +229,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                             .await
                             .map_err(Error::new)?;
                     }
-                    client.session_shell(&input, &RequestOptions::default()).await.map_err(Error::new)
+                    client.session_shell(&input).await.map_err(Error::new)
                 },
                 move |_, result| failure.check("Failed to run shell command", result),
             );
@@ -252,7 +252,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                     }
                     let client = commit.client.clone();
                     commit.run().await?;
-                    client.session_command(&input, &RequestOptions::default()).await.map_err(Error::new)
+                    client.session_command(&input).await.map_err(Error::new)
                 },
                 move |_, result| failure.check("Failed to run command", result),
             );
@@ -283,7 +283,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                     if let Some(creation) = creation {
                         creation.await?;
                     }
-                    client.session_synthetic(&input, &RequestOptions::default()).await.map(drop).map_err(Error::new)
+                    client.session_synthetic(&input).await.map(drop).map_err(Error::new)
                 })
             });
             let send = move |tui: &Tui| {
@@ -301,9 +301,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
                 let input = SessionRevertCommitInput { session_id: target.clone() };
                 let weak = prompt.this.clone();
                 tui.app.spawn(
-                    async move {
-                        client.session_revert_commit(&input, &RequestOptions::default()).await.map_err(Error::new)
-                    },
+                    async move { client.session_revert_commit(&input).await.map_err(Error::new) },
                     move |_, result| {
                         let Some(tui) = weak.upgrade().and_then(|prompt| prompt.tui.upgrade()) else {
                             return;
@@ -346,16 +344,15 @@ struct Commit {
 
 impl Commit {
     async fn run(self) -> Result<(), Error> {
-        let options = RequestOptions::default();
         if let Some(variables) = self.environment {
             opencode_store::environment::upload(&self.client, &self.session, variables).await.map_err(Error::new)?;
         }
         if let Some(agent) = self.switch_agent {
             let input = SessionSwitchAgentInput { session_id: self.session.clone(), agent };
-            self.client.session_switch_agent(&input, &options).await.map_err(Error::new)?;
+            self.client.session_switch_agent(&input).await.map_err(Error::new)?;
         }
         let input = SessionSwitchModelInput { session_id: self.session, model: self.model };
-        self.client.session_switch_model(&input, &options).await.map_err(|error| {
+        self.client.session_switch_model(&input).await.map_err(|error| {
             Error::new(opencode_api::error::Error::Transport(format!("Failed to switch model: {error}")))
         })
     }

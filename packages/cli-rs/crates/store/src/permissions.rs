@@ -1,6 +1,4 @@
 //! Pending permissions (F.7).
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::*;
 
 use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
@@ -56,7 +54,7 @@ impl Data {
             move |data, started| async move {
                 let list = data
                     .client()
-                    .permission_list(&PermissionListInput { session_id: session.clone() }, &RequestOptions::default())
+                    .permission_list(&PermissionListInput { session_id: session.clone() })
                     .await
                     .map_err(|error| evict_missing(&data, error))?;
                 data.write(|state| {
@@ -77,7 +75,7 @@ impl Data {
 
     /// Replies and drops the request; an already settled request counts as replied.
     pub async fn permission_reply(&self, input: PermissionReplyInput) -> Result<(), Error> {
-        if let Err(error) = self.client().permission_reply(&input, &RequestOptions::default()).await {
+        if let Err(error) = self.client().permission_reply(&input).await {
             let error = Error::new(error);
             if !is_tag(&error, "PermissionNotFoundError") {
                 return Err(error);

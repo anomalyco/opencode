@@ -12,13 +12,6 @@ pub mod cd;
 pub use opencode_ui::prompt_input::parse;
 pub mod parts;
 
-use std::cell::{Cell, OnceCell, RefCell};
-use std::path::{Path, PathBuf};
-use std::rc::{Rc, Weak};
-use std::sync::atomic::{self, AtomicU64};
-use std::sync::{Arc, Mutex};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     AgentInfoMode, FileFindInput, FileListInput, FileSystemEntryType, LocationQueryInput, ReferenceSource,
 };
@@ -36,6 +29,11 @@ use opentui::input::{MouseButton, MouseEventKind};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use serde_json::{Value, json};
+use std::cell::{Cell, OnceCell, RefCell};
+use std::path::{Path, PathBuf};
+use std::rc::{Rc, Weak};
+use std::sync::atomic::{self, AtomicU64};
+use std::sync::{Arc, Mutex};
 use unicode_width::UnicodeWidthStr;
 
 use self::parse::{DirectorySearch, measure};
@@ -591,23 +589,20 @@ impl State {
         if mode == Mode::Directory {
             let search = parse::directory_search(&base, &directory, &home);
             let input = FileListInput { location: request_location, path: Some(search.directory.clone()) };
-            tui.app.spawn(
-                async move { client.file_list(&input, &RequestOptions::default()).await },
-                move |_, result| {
-                    finish(result.ok().map(|output| Results {
-                        items: directory_items(&base, &search, output, width),
-                        failed: false,
-                        mode: Some(Mode::Directory),
-                        query: query_for_results,
-                        resolved: true,
-                    }))
-                },
-            );
+            tui.app.spawn(async move { client.file_list(&input).await }, move |_, result| {
+                finish(result.ok().map(|output| Results {
+                    items: directory_items(&base, &search, output, width),
+                    failed: false,
+                    mode: Some(Mode::Directory),
+                    query: query_for_results,
+                    resolved: true,
+                }))
+            });
             return;
         }
         let input =
             FileFindInput { location: request_location, query: base, limit: Some(20), ..FileFindInput::default() };
-        tui.app.spawn(async move { client.file_find(&input, &RequestOptions::default()).await }, move |_, result| {
+        tui.app.spawn(async move { client.file_find(&input).await }, move |_, result| {
             finish(result.ok().map(|output| {
                 let root = output.location.directory.0.clone();
                 Results {

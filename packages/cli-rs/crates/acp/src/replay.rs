@@ -1,7 +1,7 @@
 //! `session/load` history replay (`packages/cli/src/acp/replay.ts`). Messages stay JSON, as the server
 //! sends them.
 
-use opencode_api::client::{Call, Client, RequestOptions, path_param};
+use opencode_api::client::{Call, Client, path_param};
 use serde_json::{Map, Value, json};
 
 use crate::capabilities::Capabilities;
@@ -50,7 +50,7 @@ async fn list(client: &Client, session_id: &str, cursor: Option<&str>) -> Result
         None => call.query("limit", &PAGE_SIZE).and_then(|()| call.query("order", "asc")),
     };
     query.map_err(|error| classify(&error))?;
-    client.json::<Value>(call, &RequestOptions::default()).await.map_err(|error| classify(&error))
+    client.json::<Value>(call).await.map_err(|error| classify(&error))
 }
 
 /// The updates that replay one stored message.

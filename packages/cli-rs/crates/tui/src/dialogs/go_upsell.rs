@@ -2,11 +2,6 @@
 //! OpenCode Console connect step; and when to offer it, remembered in storage `go-upsell`
 //! (`routes/session/index.tsx:633-758`, row V24).
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationAttemptStatus, IntegrationID,
     IntegrationMethod, IntegrationMethodID, IntegrationOauthCancelInput, IntegrationOauthConnectInput,
@@ -23,6 +18,9 @@ use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::Condition;
 use opentui::prelude::*;
 use serde_json::{Value, json};
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use crate::local::Local;
 
@@ -546,7 +544,7 @@ impl Connect {
         };
         let client = self.local.client.clone();
         self.local.app.spawn(
-            async move { client.integration_oauth_connect(&input, &RequestOptions::default()).await },
+            async move { client.integration_oauth_connect(&input).await },
             bind!(self, |state, _, result| {
                 match result {
                     Ok(output) if state.closed.get() => state.cancel(output.data.attempt_id),
@@ -571,7 +569,7 @@ impl Connect {
         let client = self.local.client.clone();
         let weak = Rc::downgrade(self);
         self.local.app.spawn(
-            async move { client.integration_oauth_status(&input, &RequestOptions::default()).await },
+            async move { client.integration_oauth_status(&input).await },
             bind!(weak, |state, cx, result| {
                 if state.closed.get() {
                     return;
@@ -683,9 +681,7 @@ impl Connect {
             location: self.location(),
         };
         let client = self.local.client.clone();
-        self.local
-            .app
-            .spawn(async move { client.integration_oauth_cancel(&input, &RequestOptions::default()).await }, |_, _| {});
+        self.local.app.spawn(async move { client.integration_oauth_cancel(&input).await }, |_, _| {});
     }
 
     fn close(&self) {

@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use opencode_api::client::{Auth, Client, RequestOptions};
+use opencode_api::client::{Auth, Client};
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
 use opencode_store::{Data, Options};
@@ -38,10 +38,7 @@ async fn live_store_rehydrates_and_reads() {
     let _ = tokio::time::timeout(Duration::from_secs(2), changes.changed()).await;
     let running = data.read(|state| state.active_sessions().len());
 
-    let page = client
-        .session_list(&SessionListInput { limit: Some(20), ..Default::default() }, &RequestOptions::default())
-        .await
-        .unwrap();
+    let page = client.session_list(&SessionListInput { limit: Some(20), ..Default::default() }).await.unwrap();
     for session in &page.data {
         data.session_sync(&session.id, false).await.unwrap();
     }

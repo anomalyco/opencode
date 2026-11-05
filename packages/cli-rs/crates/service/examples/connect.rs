@@ -4,12 +4,10 @@
 //! [--standalone] [--no-autostart]`. Without a running service it starts the TypeScript one
 //! (`OPENCODE_TS_BIN`, else `opencode`).
 
-use std::sync::Arc;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::transport::Reqwest;
 use opencode_local::paths::Paths;
 use opencode_service::connect::{self, Env, Options};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -26,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
     let transport = Arc::new(Reqwest::default());
     let connection = connect::resolve(transport.clone(), &Paths::from_env()?, &env, &options).await?;
     // A second, typed request through the generated client, with the endpoint's credentials.
-    let info = connection.endpoint.client(transport)?.server_info(&RequestOptions::default()).await?;
+    let info = connection.endpoint.client(transport)?.server_info().await?;
     println!("source:  {:?}", connection.source);
     println!("url:     {}", connection.endpoint.url);
     println!("version: {}", info.version);

@@ -4,11 +4,6 @@
 //! with `alt+up`/`alt+down` between them. An exact session ID finds a session outside the recent
 //! list. `right` on a Git project lists its worktrees, where `ctrl+n` creates one.
 
-use std::cell::RefCell;
-use std::collections::HashSet;
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectID, ProjectListInput, SessionGetInput,
     SessionID, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput, WorktreeListInput,
@@ -23,6 +18,9 @@ use opencode_ui::prompt::{Prompt, PromptProps, prompt};
 use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::rc::{Rc, Weak};
 use unicode_width::UnicodeWidthStr;
 
 use super::session_list::{attention, basename, dialog_theme, now_ms, project_name, running, status_gutter, title};
@@ -260,7 +258,6 @@ impl Open {
         let directory = tui.directory.clone();
         tui.app.spawn(
             async move {
-                let options = RequestOptions::default();
                 let recent = SessionListInput {
                     limit: Some(50),
                     order: Some(SessionListInputOrder::Desc),
@@ -270,9 +267,9 @@ impl Open {
                 };
                 let location = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
                 futures_util::future::join3(
-                    client.session_list(&recent, &options),
-                    client.project_list(&ProjectListInput::default(), &options),
-                    client.location_get(&location, &options),
+                    client.session_list(&recent),
+                    client.project_list(&ProjectListInput::default()),
+                    client.location_get(&location),
                 )
                 .await
             },
@@ -314,7 +311,7 @@ impl Open {
         tui.app.spawn(
             async move {
                 client
-                    .session_get(&SessionGetInput { session_id: id.clone() }, &RequestOptions::default())
+                    .session_get(&SessionGetInput { session_id: id.clone() })
                     .await
                     .ok()
                     .filter(|session| session.id == id)
@@ -332,7 +329,7 @@ impl Open {
         let client = tui.data.client().clone();
         let input = WorktreeListInput { project_id: id.clone() };
         tui.app.spawn(
-            async move { client.worktree_list(&input, &RequestOptions::default()).await },
+            async move { client.worktree_list(&input).await },
             bind!(self, |open, _, result| {
                 let Some(tui) = open.tui() else { return };
                 if open.worktree_project().as_ref() != Some(&id) {
@@ -357,7 +354,7 @@ impl Open {
                     let client = tui.data.client().clone();
                     tui.app.runtime().spawn(async move {
                         let input = WorktreeRefreshInput { project_id: id };
-                        let _ = client.worktree_refresh(&input, &RequestOptions::default()).await;
+                        let _ = client.worktree_refresh(&input).await;
                     });
                 }
                 open.refresh();
@@ -725,7 +722,7 @@ impl Open {
             ..WorktreeCreateInput::default()
         };
         tui.app.spawn(
-            async move { client.worktree_create(&input, &RequestOptions::default()).await },
+            async move { client.worktree_create(&input).await },
             bind!(self, |open, _, result| {
                 let Some(tui) = open.tui() else { return };
                 // The prompt closed or was replaced while the request ran.

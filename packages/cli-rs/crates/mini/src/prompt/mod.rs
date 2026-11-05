@@ -1678,7 +1678,7 @@ async fn inbox(client: &Client, session: &str) -> Vec<Queued> {
         &[400, 401, 404],
     );
     client
-        .json::<Value>(call, &opencode_api::client::RequestOptions::default())
+        .json::<Value>(call)
         .await
         .map(|value| {
             value["data"]

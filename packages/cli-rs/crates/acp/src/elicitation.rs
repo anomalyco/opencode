@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     FormID, FormValue, SessionFormCancelInput, SessionFormReplyInput, SessionID, SessionInterruptInput,
 };
@@ -127,19 +127,16 @@ pub async fn respond(input: &Input, outcome: Outcome) -> Result<(), Failure> {
     };
     let result = input
         .client
-        .session_form_reply(
-            &SessionFormReplyInput {
-                session_id: text(&input.form, "sessionID"),
-                form_id: FormID(text(&input.form, "id")),
-                answer: answer
-                    .as_object()
-                    .into_iter()
-                    .flatten()
-                    .map(|(key, value)| (key.clone(), FormValue::Unknown(value.clone())))
-                    .collect(),
-            },
-            &RequestOptions::default(),
-        )
+        .session_form_reply(&SessionFormReplyInput {
+            session_id: text(&input.form, "sessionID"),
+            form_id: FormID(text(&input.form, "id")),
+            answer: answer
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(key, value)| (key.clone(), FormValue::Unknown(value.clone())))
+                .collect(),
+        })
         .await;
     let Err(error) = result else { return Ok(()) };
     if is_declared(&error, "FormAlreadySettledError") || is_declared(&error, "FormNotFoundError") {
@@ -375,21 +372,18 @@ fn text(value: &Value, key: &str) -> String {
 async fn cancel(client: &Client, form: &Value, message: Option<String>) {
     let session_id = text(form, "sessionID");
     let result = client
-        .session_form_cancel(
-            &SessionFormCancelInput { session_id: session_id.clone(), form_id: FormID(text(form, "id")), message },
-            &RequestOptions::default(),
-        )
+        .session_form_cancel(&SessionFormCancelInput {
+            session_id: session_id.clone(),
+            form_id: FormID(text(form, "id")),
+            message,
+        })
         .await;
     let Err(error) = result else { return };
     if is_declared(&error, "FormAlreadySettledError") || is_declared(&error, "FormNotFoundError") {
         return;
     }
     if let Ok(session_id) = decode_session_id(&session_id) {
-        let _ = client
-            .session_interrupt(
-                &SessionInterruptInput { session_id: SessionID(session_id), resume: None },
-                &RequestOptions::default(),
-            )
-            .await;
+        let _ =
+            client.session_interrupt(&SessionInterruptInput { session_id: SessionID(session_id), resume: None }).await;
     }
 }

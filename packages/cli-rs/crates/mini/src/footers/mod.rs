@@ -18,7 +18,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::generated::{
     FormInfo, PermissionListInput, PermissionReplyInput, PermissionRequest, SessionFormCancelInput,
     SessionFormListInput, SessionFormReplyInput, SessionID,
@@ -259,10 +259,9 @@ impl Footers {
         let (client, id) = (client.clone(), session.to_owned());
         self.0.app.spawn(
             async move {
-                let options = RequestOptions::default();
                 let (permissions, forms) = futures_util::future::join(
-                    client.permission_list(&PermissionListInput { session_id: SessionID(id.clone()) }, &options),
-                    client.session_form_list(&SessionFormListInput { session_id: id.clone() }, &options),
+                    client.permission_list(&PermissionListInput { session_id: SessionID(id.clone()) }),
+                    client.session_form_list(&SessionFormListInput { session_id: id.clone() }),
                 )
                 .await;
                 let mut requests = Vec::new();
@@ -354,7 +353,7 @@ async fn source(client: &Client, session: &str, info: PermissionRequest) -> perm
         200,
         &[400, 401, 404],
     );
-    let Ok(message) = client.json::<Value>(call, &RequestOptions::default()).await else {
+    let Ok(message) = client.json::<Value>(call).await else {
         return request;
     };
     let message = message.get("data").unwrap_or(&message);
@@ -993,22 +992,19 @@ impl Inner {
         };
         let weak = Rc::downgrade(self);
         let id = request.info.id.0.clone();
-        self.app.spawn(
-            async move { target.client.permission_reply(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(inner) = weak.upgrade() else { return };
-                if let Err(error) = result {
-                    log::warn!("mini permission reply failed: {error}");
-                    let mut state = inner.state.borrow_mut();
-                    match state.permission.as_mut() {
-                        Some(current) if current.request == id => current.submitting = false,
-                        _ => return,
-                    }
-                    drop(state);
-                    inner.paint();
+        self.app.spawn(async move { target.client.permission_reply(&input).await }, move |_, result| {
+            let Some(inner) = weak.upgrade() else { return };
+            if let Err(error) = result {
+                log::warn!("mini permission reply failed: {error}");
+                let mut state = inner.state.borrow_mut();
+                match state.permission.as_mut() {
+                    Some(current) if current.request == id => current.submitting = false,
+                    _ => return,
                 }
-            },
-        );
+                drop(state);
+                inner.paint();
+            }
+        });
     }
 
     // -----------------------------------------------------------------------------------------------------------
@@ -1199,14 +1195,11 @@ impl Inner {
         let input = SessionFormReplyInput { session_id: info.session_id.clone(), form_id: info.id.clone(), answer };
         let id = info.id.0.clone();
         let weak = Rc::downgrade(self);
-        self.app.spawn(
-            async move { target.client.session_form_reply(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.form_settled(&id, result);
-                }
-            },
-        );
+        self.app.spawn(async move { target.client.session_form_reply(&input).await }, move |_, result| {
+            if let Some(inner) = weak.upgrade() {
+                inner.form_settled(&id, result);
+            }
+        });
     }
 
     /// `cancel` (`onFormCancel`).
@@ -1224,14 +1217,11 @@ impl Inner {
             SessionFormCancelInput { session_id: info.session_id.clone(), form_id: info.id.clone(), message: None };
         let id = info.id.0.clone();
         let weak = Rc::downgrade(self);
-        self.app.spawn(
-            async move { target.client.session_form_cancel(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.form_settled(&id, result);
-                }
-            },
-        );
+        self.app.spawn(async move { target.client.session_form_cancel(&input).await }, move |_, result| {
+            if let Some(inner) = weak.upgrade() {
+                inner.form_settled(&id, result);
+            }
+        });
     }
 
     /// A reply or cancel answered: the form leaves (`settleForm`), unless it failed for another reason than being

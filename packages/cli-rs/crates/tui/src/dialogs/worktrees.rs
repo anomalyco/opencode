@@ -9,10 +9,6 @@
 //! Like the open dialog, each change of the loading or deleting state builds the dialog again, restoring the
 //! filter and the selection, so the list's lock and current marker follow it (TS props are reactive).
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     AbsolutePath, LocationGetInput, LocationQueryInput, ProjectID, SessionMoveInput, V2Event, VcsStatusInput,
     WorktreeDirectory, WorktreeListInput, WorktreeRefreshInput, WorktreeRemoveInput,
@@ -25,6 +21,8 @@ use opencode_ui::path::abbreviate_home;
 use opencode_ui::select::{self, ActionRun, Select, SelectAction, SelectOption, SelectProps, Truncate};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
 use super::file_changes::{self, Choice};
 use super::session_list::dialog_theme;
@@ -168,7 +166,7 @@ impl Workspaces {
             async move {
                 let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
                 client
-                    .location_get(&input, &RequestOptions::default())
+                    .location_get(&input)
                     .await
                     .ok()
                     .filter(|result| result.project.id == project)
@@ -193,7 +191,7 @@ impl Workspaces {
         let client = tui.data.client().clone();
         let input = WorktreeListInput { project_id: self.props.project_id.clone() };
         tui.app.spawn(
-            async move { client.worktree_list(&input, &RequestOptions::default()).await },
+            async move { client.worktree_list(&input).await },
             bind!(self, |workspaces, _, result| {
                 let refresh = {
                     let mut state = workspaces.state.borrow_mut();
@@ -226,14 +224,11 @@ impl Workspaces {
         let client = tui.data.client().clone();
         let input = WorktreeRefreshInput { project_id: self.props.project_id.clone() };
         let weak = tui.weak();
-        tui.app.spawn(
-            async move { client.worktree_refresh(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                if let (Err(error), Some(tui), true) = (result, weak.upgrade(), toast) {
-                    tui.toasts.error(error_message(&error));
-                }
-            },
-        );
+        tui.app.spawn(async move { client.worktree_refresh(&input).await }, move |_, result| {
+            if let (Err(error), Some(tui), true) = (result, weak.upgrade(), toast) {
+                tui.toasts.error(error_message(&error));
+            }
+        });
     }
 
     fn show_error(&self) -> bool {
@@ -606,13 +601,7 @@ impl Workspaces {
         let input = VcsStatusInput { location: Some(LocationQueryInput { directory: Some(directory.clone()) }) };
         let workspaces = self.clone();
         tui.app.spawn(
-            async move {
-                client
-                    .vcs_status(&input, &RequestOptions::default())
-                    .await
-                    .map(|status| status.data)
-                    .unwrap_or_default()
-            },
+            async move { client.vcs_status(&input).await.map(|status| status.data).unwrap_or_default() },
             move |_, files| {
                 let Some(tui) = workspaces.tui() else { return };
                 let owner = workspaces.clone();
@@ -670,10 +659,7 @@ impl Workspaces {
             force,
         };
         let workspaces = self.clone();
-        tui.app.spawn(
-            async move { client.worktree_remove(&input, &RequestOptions::default()).await },
-            move |_, result| then(&workspaces, result),
-        );
+        tui.app.spawn(async move { client.worktree_remove(&input).await }, move |_, result| then(&workspaces, result));
     }
 
     fn failed(&self, error: &opencode_api::error::Error) {
@@ -749,14 +735,11 @@ impl Workspaces {
         let client = tui.data.client().clone();
         let input = SessionMoveInput { session_id: id, directory: AbsolutePath(directory.clone()), delivery: None };
         let weak = tui.weak();
-        tui.app.spawn(
-            async move { client.session_move(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                    tui.toasts.error(error_message(&error));
-                }
-            },
-        );
+        tui.app.spawn(async move { client.session_move(&input).await }, move |_, result| {
+            if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
+                tui.toasts.error(error_message(&error));
+            }
+        });
     }
 }
 

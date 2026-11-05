@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use futures_util::future::try_join_all;
 use indexmap::IndexMap;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
@@ -417,7 +417,7 @@ impl Data {
         self.sync_run(format!("location:{}", current.key()), move |data| async move {
             let info = data
                 .client()
-                .location_get(&LocationGetInput { location: current.query() }, &RequestOptions::default())
+                .location_get(&LocationGetInput { location: current.query() })
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {
@@ -492,10 +492,7 @@ impl Data {
         self.spawn(async move {
             let providers = data
                 .client()
-                .websearch_providers(
-                    &WebsearchProvidersInput { location: location.query() },
-                    &RequestOptions::default(),
-                )
+                .websearch_providers(&WebsearchProvidersInput { location: location.query() })
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {
@@ -511,7 +508,7 @@ impl Data {
         self.refresh(|data| async move {
             let info = data
                 .client()
-                .location_get(&LocationGetInput { location: location.query() }, &RequestOptions::default())
+                .location_get(&LocationGetInput { location: location.query() })
                 .await
                 .map_err(Error::new)?;
             let at = Location::new(info.directory.0.clone());
@@ -561,60 +558,58 @@ async fn load(
     location: &Location,
 ) -> Result<(Location, Loaded), opencode_api::error::Error> {
     let query = location.query();
-    let options = RequestOptions::default();
     Ok(match catalog {
         Catalog::Vcs => {
-            let response = client.vcs_get(&VcsGetInput { location: query }, &options).await?;
+            let response = client.vcs_get(&VcsGetInput { location: query }).await?;
             ((&response.location).into(), Loaded::Vcs(response.data))
         }
         Catalog::UsageLimits => {
-            let response =
-                client.experimental_usage_limits(&ExperimentalUsageLimitsInput { location: query }, &options).await?;
+            let response = client.experimental_usage_limits(&ExperimentalUsageLimitsInput { location: query }).await?;
             ((&response.location).into(), Loaded::UsageLimits(response.data))
         }
         Catalog::Agent => {
-            let response = client.agent_list(&AgentListInput { location: query }, &options).await?;
+            let response = client.agent_list(&AgentListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Agent(response.data))
         }
         Catalog::Command => {
-            let response = client.command_list(&CommandListInput { location: query }, &options).await?;
+            let response = client.command_list(&CommandListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Command(response.data))
         }
         // Config answers without a location; it publishes under the requested directory.
         Catalog::Config => {
-            let entries = client.config_get(&ConfigGetInput { location: query }, &options).await?;
+            let entries = client.config_get(&ConfigGetInput { location: query }).await?;
             (Location::new(location.directory.clone()), Loaded::Config(entries))
         }
         Catalog::Integration => {
-            let response = client.integration_list(&IntegrationListInput { location: query }, &options).await?;
+            let response = client.integration_list(&IntegrationListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Integration(response.data))
         }
         Catalog::McpServer => {
-            let response = client.mcp_list(&McpListInput { location: query }, &options).await?;
+            let response = client.mcp_list(&McpListInput { location: query }).await?;
             ((&response.location).into(), Loaded::McpServer(response.data))
         }
         Catalog::McpResource => {
-            let response = client.mcp_resource_catalog(&McpResourceCatalogInput { location: query }, &options).await?;
+            let response = client.mcp_resource_catalog(&McpResourceCatalogInput { location: query }).await?;
             ((&response.location).into(), Loaded::McpResource(response.data.resources))
         }
         Catalog::Model => {
-            let response = client.model_list(&ModelListInput { location: query, types: None }, &options).await?;
+            let response = client.model_list(&ModelListInput { location: query, types: None }).await?;
             ((&response.location).into(), Loaded::Model(response.data))
         }
         Catalog::Provider => {
-            let response = client.provider_list(&ProviderListInput { location: query }, &options).await?;
+            let response = client.provider_list(&ProviderListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Provider(response.data))
         }
         Catalog::Reference => {
-            let response = client.reference_list(&ReferenceListInput { location: query }, &options).await?;
+            let response = client.reference_list(&ReferenceListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Reference(response.data))
         }
         Catalog::Skill => {
-            let response = client.skill_list(&SkillListInput { location: query }, &options).await?;
+            let response = client.skill_list(&SkillListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Skill(response.data))
         }
         Catalog::Shell => {
-            let response = client.shell_list(&ShellListInput { location: query }, &options).await?;
+            let response = client.shell_list(&ShellListInput { location: query }).await?;
             let at = Location::from(&response.location);
             let shells = response
                 .data

@@ -11,10 +11,6 @@
 //! T16: [`mouse_tracking`] picks the startup mouse mode, and `mouse` changes apply while the TUI runs;
 //! [`cursor`] is the prompt's cursor shape.
 
-use std::cell::Cell;
-use std::rc::Rc;
-
-use opencode_api::client::RequestOptions;
 use opencode_local::cli_config::{CursorStyle, DiffWrap, Info, PromptPaste, Resolved};
 use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
@@ -22,6 +18,8 @@ use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
 use opentui::native::{Control, MouseTracking};
 use serde_json::Value;
+use std::cell::Cell;
+use std::rc::Rc;
 
 use crate::app::Tui;
 use crate::dialogs::settings::{set_path, update};
@@ -143,7 +141,7 @@ fn reload(tui: &Tui) {
     );
     let client = tui.data.client().clone();
     tui.app.spawn(
-        async move { client.location_reload(&RequestOptions::default()).await.map_err(|error| error.to_string()) },
+        async move { client.location_reload().await.map_err(|error| error.to_string()) },
         bind!(tui, |tui, _, result| {
             match result {
                 Ok(()) => tui.toasts.show(ToastOptions::new(Variant::Success, "Configuration reloaded")),

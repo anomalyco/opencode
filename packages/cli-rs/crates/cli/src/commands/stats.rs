@@ -6,7 +6,7 @@ use std::io::IsTerminal;
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone};
-use opencode_api::client::{Call, RequestOptions};
+use opencode_api::client::Call;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::types::{SessionStatsInfo, SessionStatsTools};
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
@@ -60,7 +60,7 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
             "summary"
         };
         call.query("tools", tools)?;
-        request(url, async { Ok(server.client.json::<Value>(call, &RequestOptions::default()).await?) }).await
+        request(url, async { Ok(server.client.json::<Value>(call).await?) }).await
     })??;
     let data = &stats["data"];
     if args.json {

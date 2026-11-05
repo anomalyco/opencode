@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     PromptInputFileAttachment, SessionCommandInput, SessionCompactInput, SessionGetInput, SessionID,
     SessionInboxDelivery, SessionInterruptInput, SessionMessageID, SessionPromptInput, SessionSyntheticInput,
@@ -174,13 +174,8 @@ impl Turns {
         let Ok(id) = decode_session_id(session_id) else {
             return Ok(());
         };
-        let result = self
-            .client
-            .session_interrupt(
-                &SessionInterruptInput { session_id: SessionID(id), resume: None },
-                &RequestOptions::default(),
-            )
-            .await;
+        let result =
+            self.client.session_interrupt(&SessionInterruptInput { session_id: SessionID(id), resume: None }).await;
         match result {
             Err(error) if crate::client::is_declared(&error, "SessionNotFoundError") => Ok(()),
             result => check(result).map(|_| ()),
@@ -315,35 +310,28 @@ impl Turns {
 
     async fn submit(&self, attached: &Attached, prepared: &Prepared) -> Result<(), Failure> {
         let session_id = || SessionID(attached.id.clone());
-        let options = RequestOptions::default();
         if !prepared.synthetic.is_empty() {
             check(
                 self.client
-                    .session_synthetic(
-                        &SessionSyntheticInput {
-                            session_id: session_id(),
-                            text: prepared.synthetic.join("\n\n"),
-                            description: Some(Some("ACP embedded context".to_owned())),
-                            delivery: Some(Some(SessionInboxDelivery::Steer)),
-                            resume: Some(Some(false)),
-                            ..SessionSyntheticInput::default()
-                        },
-                        &options,
-                    )
+                    .session_synthetic(&SessionSyntheticInput {
+                        session_id: session_id(),
+                        text: prepared.synthetic.join("\n\n"),
+                        description: Some(Some("ACP embedded context".to_owned())),
+                        delivery: Some(Some(SessionInboxDelivery::Steer)),
+                        resume: Some(Some(false)),
+                        ..SessionSyntheticInput::default()
+                    })
                     .await,
             )?;
         }
         if prepared.start.kind == StartKind::Compaction {
             check(
                 self.client
-                    .session_compact(
-                        &SessionCompactInput {
-                            session_id: session_id(),
-                            id: Some(SessionMessageID(prepared.start.id.clone())),
-                            delivery: None,
-                        },
-                        &options,
-                    )
+                    .session_compact(&SessionCompactInput {
+                        session_id: session_id(),
+                        id: Some(SessionMessageID(prepared.start.id.clone())),
+                        delivery: None,
+                    })
                     .await,
             )?;
             return Ok(());
@@ -362,33 +350,27 @@ impl Turns {
         if let Some(command) = &prepared.command {
             return check(
                 self.client
-                    .session_command(
-                        &SessionCommandInput {
-                            session_id: session_id(),
-                            name: command.name.clone(),
-                            text: prepared.slash.as_ref().map(|slash| slash.args.clone()).unwrap_or_default(),
-                            files,
-                            delivery: Some(Some(SessionInboxDelivery::Steer)),
-                            ..SessionCommandInput::default()
-                        },
-                        &options,
-                    )
+                    .session_command(&SessionCommandInput {
+                        session_id: session_id(),
+                        name: command.name.clone(),
+                        text: prepared.slash.as_ref().map(|slash| slash.args.clone()).unwrap_or_default(),
+                        files,
+                        delivery: Some(Some(SessionInboxDelivery::Steer)),
+                        ..SessionCommandInput::default()
+                    })
                     .await,
             );
         }
         check(
             self.client
-                .session_prompt(
-                    &SessionPromptInput {
-                        session_id: session_id(),
-                        id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
-                        text: prepared.text.clone(),
-                        files,
-                        delivery: Some(Some(SessionInboxDelivery::Steer)),
-                        ..SessionPromptInput::default()
-                    },
-                    &options,
-                )
+                .session_prompt(&SessionPromptInput {
+                    session_id: session_id(),
+                    id: Some(Some(SessionMessageID(prepared.start.id.clone()))),
+                    text: prepared.text.clone(),
+                    files,
+                    delivery: Some(Some(SessionInboxDelivery::Steer)),
+                    ..SessionPromptInput::default()
+                })
                 .await,
         )
         .map(|_| ())
@@ -403,10 +385,10 @@ impl Turns {
         turn.cancelled.cancel();
         if let Err(error) = self
             .client
-            .session_interrupt(
-                &SessionInterruptInput { session_id: SessionID(turn.ctx.session_id.clone()), resume: None },
-                &RequestOptions::default(),
-            )
+            .session_interrupt(&SessionInterruptInput {
+                session_id: SessionID(turn.ctx.session_id.clone()),
+                resume: None,
+            })
             .await
         {
             log::warn!(cause = error.to_string().as_str(); "ACP server interrupt failed");
@@ -488,14 +470,8 @@ impl Turns {
         let Some(size) = model.map(|model| model.limit.context).filter(|size| *size != 0) else {
             return Ok(());
         };
-        let info = check(
-            self.client
-                .session_get(
-                    &SessionGetInput { session_id: SessionID(attached.id.clone()) },
-                    &RequestOptions::default(),
-                )
-                .await,
-        )?;
+        let info =
+            check(self.client.session_get(&SessionGetInput { session_id: SessionID(attached.id.clone()) }).await)?;
         self.connection.session_update(
             &attached.id,
             json!({

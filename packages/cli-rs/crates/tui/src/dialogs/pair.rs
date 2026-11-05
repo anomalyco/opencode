@@ -4,14 +4,12 @@
 //! server URL, one for this device on `localhost`, and a QR code of the first link (`renderUnicodeCompact`).
 //! Opening the dialog creates a pairing code on the server, so tests prove it against a test transport only.
 
-use std::rc::Rc;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{PairingCode, ServerInfo};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, DialogSize, HeaderProps, header, layout};
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opentui::prelude::*;
+use std::rc::Rc;
 
 use crate::app::Tui;
 
@@ -83,9 +81,7 @@ fn load(tui: &Tui, cx: &Rc<DialogCx>, body: &View) {
     let (cx, body) = (Rc::downgrade(cx), body.clone());
     tui.app.spawn(
         async move {
-            let options = RequestOptions::default();
-            let (server, code) =
-                futures_util::future::join(client.server_info(&options), client.server_pair(&options)).await;
+            let (server, code) = futures_util::future::join(client.server_info(), client.server_pair()).await;
             Ok::<_, opencode_api::error::Error>(pairing(&server?, &code?))
         },
         bind!(cx, |cx, _, result| {

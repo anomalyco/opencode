@@ -5,13 +5,11 @@
 //! explicit `service stop`, `restart`, and `set` commands stop a service; `ensure` never stops one
 //! it did not start (plan 6.6).
 
+use opencode_api::transport::Transport;
+use opencode_local::registration::{self, Registration};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
-use opencode_api::transport::Transport;
-use opencode_local::registration::{self, Registration};
 
 use crate::handoff;
 use crate::probe::{Endpoint, REQUEST_TIMEOUT};
@@ -84,7 +82,7 @@ pub async fn shutdown_persistent_pty(
     transport: Arc<dyn Transport>,
     endpoint: &Endpoint,
 ) -> Result<(), opencode_api::error::Error> {
-    endpoint.client(transport)?.experimental_persistent_pty_shutdown(&RequestOptions::default()).await
+    endpoint.client(transport)?.experimental_persistent_pty_shutdown().await
 }
 
 #[derive(Clone, Copy)]

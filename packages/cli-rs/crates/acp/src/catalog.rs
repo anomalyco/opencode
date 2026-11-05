@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     AgentInfoMode, AgentListInput, CommandInfo, CommandListInput, LocationQueryInput, ModelDefaultInput, ModelInfo,
     ModelListInput, ModelRef, PluginListInput,
@@ -216,10 +216,9 @@ impl Catalogs {
 // A cold Location lists no plugins until activation finishes, and providers may still discover models after that.
 async fn load(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
     let location = || Some(LocationQueryInput { directory: Some(cwd.to_owned()) });
-    let options = RequestOptions::default();
     let start = Instant::now();
     loop {
-        match client.plugin_list(&PluginListInput { location: location() }, &options).await {
+        match client.plugin_list(&PluginListInput { location: location() }).await {
             Ok(plugins) if plugins.data.is_empty() && start.elapsed() < POLL_FOR => {
                 tokio::time::sleep(POLL).await;
             }
@@ -239,16 +238,15 @@ async fn load(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
 
 async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
     let location = || Some(LocationQueryInput { directory: Some(cwd.to_owned()) });
-    let options = RequestOptions::default();
     let model_input = ModelListInput { location: location(), ..ModelListInput::default() };
     let default_input = ModelDefaultInput { location: location() };
     let agent_input = AgentListInput { location: location() };
     let command_input = CommandListInput { location: location() };
     let (models, default, agents, commands) = tokio::join!(
-        client.model_list(&model_input, &options),
-        client.model_default(&default_input, &options),
-        client.agent_list(&agent_input, &options),
-        client.command_list(&command_input, &options),
+        client.model_list(&model_input),
+        client.model_default(&default_input),
+        client.agent_list(&agent_input),
+        client.command_list(&command_input),
     );
     let load = |error| Failure::CatalogLoad(Arc::new(error));
     let models: Vec<ModelInfo> = models.map_err(load)?.data.into_iter().filter(|model| model.enabled).collect();

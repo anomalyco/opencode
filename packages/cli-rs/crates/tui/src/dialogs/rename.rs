@@ -1,15 +1,13 @@
 //! Rename dialog (E.10a, row DLG17): `packages/tui/src/component/dialog-session-rename.tsx`. E.11a
 //! wrote it for the session list's rename action; E.10a binds `session.rename` to it.
 
-use std::rc::Rc;
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionID, SessionUpdateInput};
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::prompt::{PromptProps, prompt};
 use opencode_ui::toast::{ToastOptions, Variant};
+use std::rc::Rc;
+use std::time::Duration;
 
 use crate::app::Tui;
 
@@ -48,7 +46,7 @@ fn rename(tui: &Tui, session: SessionID, title: String) {
     let client = tui.data.client().clone();
     let input = SessionUpdateInput { session_id: session, title: Some(title), ..SessionUpdateInput::default() };
     tui.app.spawn(
-        async move { client.session_update(&input, &RequestOptions::default()).await },
+        async move { client.session_update(&input).await },
         bind!(tui, |tui, _, result| {
             match result {
                 Ok(()) => tui.dialogs.clear(),

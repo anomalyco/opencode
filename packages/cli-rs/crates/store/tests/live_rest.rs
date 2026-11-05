@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use opencode_api::client::{Auth, Client, RequestOptions};
+use opencode_api::client::{Auth, Client};
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
 use opencode_store::target::{Prepared, TargetInput, resolve_session_target};
@@ -81,10 +81,7 @@ async fn live_store_reads_locations_and_resolves_a_session() {
         );
     });
 
-    let page = client
-        .session_list(&SessionListInput { limit: Some(1), ..Default::default() }, &RequestOptions::default())
-        .await
-        .unwrap();
+    let page = client.session_list(&SessionListInput { limit: Some(1), ..Default::default() }).await.unwrap();
     let Some(latest) = page.data.first() else {
         println!("live: no session to resolve");
         return;

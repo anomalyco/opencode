@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use base64::Engine;
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     ExperimentalMediaGetInput, MediaHash, PromptFileAttachment, PromptFileSource, SessionMessageAssistantTool,
     SessionMessageAssistantToolState, ToolContent,
@@ -116,16 +115,13 @@ impl Images {
             let client = self.data.client().clone();
             let input = ExperimentalMediaGetInput { hash: MediaHash(hash.to_owned()) };
             let (cell, media, uri, app) = (cell.clone(), self.media.clone(), uri.to_owned(), self.app.clone());
-            self.app.spawn(
-                async move { client.experimental_media_get(&input, &RequestOptions::default()).await },
-                move |_, result| {
-                    let bytes = result.ok().map(|bytes| bytes.to_vec());
-                    place(&app, &cell, bytes.as_deref());
-                    if let Some(bytes) = bytes {
-                        media.borrow_mut().insert(uri, bytes);
-                    }
-                },
-            );
+            self.app.spawn(async move { client.experimental_media_get(&input).await }, move |_, result| {
+                let bytes = result.ok().map(|bytes| bytes.to_vec());
+                place(&app, &cell, bytes.as_deref());
+                if let Some(bytes) = bytes {
+                    media.borrow_mut().insert(uri, bytes);
+                }
+            });
             return;
         }
         place(&self.app, cell, data_uri(uri).as_deref());

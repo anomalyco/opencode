@@ -5,11 +5,6 @@
 //! (`app.tsx:497`). Escape, Ctrl+C, or a click outside closes the panel. The bar is rebuilt on every change: it
 //! is a handful of widgets.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::{Duration, Instant};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::events::{State, Status};
 use opencode_api::generated::ExperimentalSessionLogInput;
 use opencode_api::generated::ServerInfo;
@@ -21,6 +16,9 @@ use opencode_ui::theme::{Theme, ThemeMode};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use serde_json::{Value, json};
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::{Duration, Instant};
 
 use crate::app::Tui;
 use crate::dialogs::settings::{self, set_path};
@@ -293,7 +291,7 @@ impl Bar {
         let client = tui.data.client().clone();
         let weak = self.weak();
         tui.app.spawn(
-            async move { client.server_info(&RequestOptions::default()).await },
+            async move { client.server_info().await },
             bind!(weak, |bar, _, result| {
                 let Some(tui) = bar.tui.upgrade() else { return };
                 *bar.server.borrow_mut() = Some(result.map_err(|error| error.to_string()));
@@ -683,7 +681,7 @@ fn defer(tui: &Tui, run: impl FnOnce(&Tui) + 'static) {
 async fn session_events(client: &opencode_api::client::Client, id: &opencode_api::generated::SessionID) -> Vec<Value> {
     use futures_util::StreamExt;
     let input = ExperimentalSessionLogInput { session_id: id.clone(), after: None, follow: Some(false) };
-    let Ok(response) = client.experimental_session_log(&input, &RequestOptions::default()).await else {
+    let Ok(response) = client.experimental_session_log(&input).await else {
         return Vec::new();
     };
     let events: Vec<Value> = SseResponse::<Value>::new(response.response)

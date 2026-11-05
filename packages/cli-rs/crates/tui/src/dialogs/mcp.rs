@@ -5,11 +5,6 @@
 //! `mcp.status.changed` event refreshes the list through the store. Enter shows a failed server's
 //! error. A server that needs sign-in through an integration goes to the integration flow (E.17a).
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
-use std::rc::{Rc, Weak};
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
 };
@@ -21,6 +16,9 @@ use opencode_ui::select::{self, FooterHint, Group, Select, SelectAction, SelectO
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::rc::{Rc, Weak};
 
 use super::error_details;
 use super::session_list::dialog_theme;
@@ -266,13 +264,12 @@ impl Mcp {
         let toasts = tui.weak();
         tui.app.spawn(
             async move {
-                let options = RequestOptions::default();
                 if connected {
                     let input = ExperimentalMcpDisconnectInput { server, location };
-                    return client.experimental_mcp_disconnect(&input, &options).await;
+                    return client.experimental_mcp_disconnect(&input).await;
                 }
                 let input = ExperimentalMcpConnectInput { server, location };
-                client.experimental_mcp_connect(&input, &options).await
+                client.experimental_mcp_connect(&input).await
             },
             {
                 let name = name.to_owned();

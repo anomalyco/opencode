@@ -3,11 +3,6 @@
 //! output collapsed to ten lines until a click opens it, and why it failed. While the shell runs, its output is
 //! read every second.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     LocationQueryInput, SessionMessageShell, SessionMessageShellExit, SessionMessageShellStatus, ShellID,
     ShellOutputInput,
@@ -17,6 +12,9 @@ use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 use unicode_width::UnicodeWidthChar;
 
 use super::list::Context;
@@ -225,15 +223,12 @@ impl Inner {
         self.app.spawn(
             async move {
                 client
-                    .shell_output(
-                        &ShellOutputInput {
-                            id: props.shell.clone(),
-                            location: props.location.map(|directory| LocationQueryInput { directory: Some(directory) }),
-                            cursor: Some(cursor),
-                            limit: Some(LIMIT as i64),
-                        },
-                        &RequestOptions::default(),
-                    )
+                    .shell_output(&ShellOutputInput {
+                        id: props.shell.clone(),
+                        location: props.location.map(|directory| LocationQueryInput { directory: Some(directory) }),
+                        cursor: Some(cursor),
+                        limit: Some(LIMIT as i64),
+                    })
                     .await
             },
             bind!(weak, |inner, _, response| {

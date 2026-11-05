@@ -2,16 +2,14 @@
 //! newest first. A pick forks the session before that prompt (`POST /api/session/:id/fork`), opens the fork, and
 //! puts the prompt back in its composer.
 
-use std::rc::Rc;
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionForkInput, SessionID, SessionMessageID, SessionMessageInfo};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize, HeaderProps, header, layout_with};
 use opencode_ui::motion::Spinner;
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
+use std::rc::Rc;
+use std::time::Duration;
 
 use crate::app::Tui;
 use crate::dialogs::timeline::{prompts, time};
@@ -67,7 +65,7 @@ fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
     let client = tui.data.client().clone();
     let input = SessionForkInput { session_id: session, before: message.map(SessionMessageID) };
     tui.app.spawn(
-        async move { client.session_fork(&input, &RequestOptions::default()).await },
+        async move { client.session_fork(&input).await },
         bind!(tui, |tui, _, result| {
             tui.dialogs.clear();
             let info = match result {

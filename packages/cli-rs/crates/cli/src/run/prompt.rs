@@ -12,7 +12,7 @@ use std::io::IsTerminal;
 use std::rc::Rc;
 
 use futures_util::StreamExt;
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::*;
 use opencode_api::transport::SseResponse;
@@ -94,11 +94,8 @@ enum Flow {
 }
 
 pub async fn run(input: Input) -> Result<(), String> {
-    let response = input
-        .client
-        .event_subscribe(&EventSubscribeInput::default(), &RequestOptions::default())
-        .await
-        .map_err(|error| error.error_message())?;
+    let response =
+        input.client.event_subscribe(&EventSubscribeInput::default()).await.map_err(|error| error.error_message())?;
     let mut events = Box::pin(SseResponse::<Box<RawValue>>::new(response.response).events(|| {}));
     if !matches!(events.next().await, Some(Ok(_))) {
         return Err("Event stream disconnected before prompt admission".into());
@@ -154,10 +151,10 @@ impl Run {
         let session = SessionID(self.input.session_id.clone());
         if let Some(agent) = &self.input.agent {
             client
-                .session_switch_agent(
-                    &SessionSwitchAgentInput { session_id: session.clone(), agent: AgentID(agent.clone()) },
-                    &RequestOptions::default(),
-                )
+                .session_switch_agent(&SessionSwitchAgentInput {
+                    session_id: session.clone(),
+                    agent: AgentID(agent.clone()),
+                })
                 .await
                 .map_err(|error| error.error_message())?;
         }
@@ -175,7 +172,7 @@ impl Run {
                 ("variant", model.variant.clone().map(Value::from)),
             ]) }))
             .map_err(|error| error.error_message())?;
-            client.empty(call, &RequestOptions::default()).await.map_err(|error| error.error_message())?;
+            client.empty(call).await.map_err(|error| error.error_message())?;
         }
         self.flags.borrow_mut().submitted = true;
         tokio::task::spawn_local({
@@ -214,8 +211,7 @@ impl Run {
             "delivery": "steer",
         }))
         .map_err(|error| error.error_message())?;
-        let admitted =
-            client.json::<Value>(call, &RequestOptions::default()).await.map_err(|error| error.error_message());
+        let admitted = client.json::<Value>(call).await.map_err(|error| error.error_message());
         if let Err(error) = admitted {
             self.abort.send_replace(true);
             let _ = self.wait_completed().await;
@@ -279,10 +275,9 @@ impl Run {
     async fn session_wait(&self) -> Result<(), String> {
         self.input
             .client
-            .experimental_session_wait(
-                &ExperimentalSessionWaitInput { session_id: SessionID(self.input.session_id.clone()) },
-                &RequestOptions::default(),
-            )
+            .experimental_session_wait(&ExperimentalSessionWaitInput {
+                session_id: SessionID(self.input.session_id.clone()),
+            })
             .await
             .map_err(|error| error.error_message())
     }
@@ -863,12 +858,7 @@ impl Run {
                 None => call.query("order", "desc"),
             }
             .map_err(|error| error.error_message())?;
-            let page: Value = self
-                .input
-                .client
-                .json(call, &RequestOptions::default())
-                .await
-                .map_err(|error| error.error_message())?;
+            let page: Value = self.input.client.json(call).await.map_err(|error| error.error_message())?;
             for message in page["data"].as_array().into_iter().flatten() {
                 if text(&message["id"]) == self.message_id {
                     messages.reverse();
@@ -972,15 +962,12 @@ impl Run {
         let _ = self
             .input
             .client
-            .permission_reply(
-                &PermissionReplyInput {
-                    session_id: SessionID(text(&request["sessionID"]).to_owned()),
-                    request_id: PermissionID(text(&request["id"]).to_owned()),
-                    decision: if auto { PermissionReply::Once } else { PermissionReply::Reject },
-                    message: (!auto).then(|| PERMISSION_REJECTED_FEEDBACK.to_owned()),
-                },
-                &RequestOptions::default(),
-            )
+            .permission_reply(&PermissionReplyInput {
+                session_id: SessionID(text(&request["sessionID"]).to_owned()),
+                request_id: PermissionID(text(&request["id"]).to_owned()),
+                decision: if auto { PermissionReply::Once } else { PermissionReply::Reject },
+                message: (!auto).then(|| PERMISSION_REJECTED_FEEDBACK.to_owned()),
+            })
             .await;
     }
 
@@ -991,14 +978,11 @@ impl Run {
         let result = self
             .input
             .client
-            .session_form_cancel(
-                &SessionFormCancelInput {
-                    session_id: text(&form["sessionID"]).to_owned(),
-                    form_id: FormID(text(&form["id"]).to_owned()),
-                    message: continuing.then(|| QUESTION_CANCELLED_FEEDBACK.to_owned()),
-                },
-                &RequestOptions::default(),
-            )
+            .session_form_cancel(&SessionFormCancelInput {
+                session_id: text(&form["sessionID"]).to_owned(),
+                form_id: FormID(text(&form["id"]).to_owned()),
+                message: continuing.then(|| QUESTION_CANCELLED_FEEDBACK.to_owned()),
+            })
             .await;
         if let Err(error) = result {
             let settled =
@@ -1021,7 +1005,7 @@ impl Run {
         for (key, value) in query {
             call.query(key, value)?;
         }
-        let mut value: Value = self.input.client.json(call, &RequestOptions::default()).await?;
+        let mut value: Value = self.input.client.json(call).await?;
         Ok(value.get_mut("data").map(Value::take).unwrap_or(Value::Null))
     }
 

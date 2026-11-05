@@ -195,15 +195,12 @@ impl Kit {
         tui.app.spawn(
             async move {
                 client
-                    .session_list(
-                        &opencode_api::generated::SessionListInput {
-                            limit: Some(50),
-                            parent_id: Some(None),
-                            directory: Some(DIRECTORY.to_owned().into()),
-                            ..Default::default()
-                        },
-                        &opencode_api::client::RequestOptions::default(),
-                    )
+                    .session_list(&opencode_api::generated::SessionListInput {
+                        limit: Some(50),
+                        parent_id: Some(None),
+                        directory: Some(DIRECTORY.to_owned().into()),
+                        ..Default::default()
+                    })
                     .await
             },
             move |_, result| {
