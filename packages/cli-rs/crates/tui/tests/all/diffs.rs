@@ -1,18 +1,17 @@
 //! The diff viewer's lifetime (`reviews/ms3-ms4.review-carbon.md` carbon-1): a viewer goes with its panel, so its
 //! file menu and its last-turn watch end when the panel closes.
 
+use crate::support;
+
 use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
-use opencode_local::cli_config::{self, Resolved};
 use opencode_store::SessionStatus;
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::{Deps, Route};
 use opentui::prelude::{MouseButton, MouseEventKind};
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 const DIRECTORY: &str = "/project";
@@ -46,42 +45,27 @@ fn routes() -> Vec<MemoryRoute> {
     ]
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
+struct Diffs {
+    harness: support::Harness,
     memory: Memory,
     turns: Cell<i64>,
 }
 
-fn mount(route: Route) -> Harness {
+support::deref_harness!(Diffs);
+
+fn mount(route: Route) -> Diffs {
     let memory = Memory::new(routes());
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
-    let app = TestApp::new(140, 30);
     let config = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
-    let info = cli_config::decode_text(&config.to_string()).unwrap();
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route,
-            continue_: false,
-            events: true,
-        },
-    );
-    Harness { app, tui, memory, turns: Cell::new(0) }
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        route,
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    Diffs { harness: support::mount(140, 30, deps), memory, turns: Cell::new(0) }
 }
 
-impl Harness {
-    fn wait_for(&self, what: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(what));
-        let screen = self.app.text();
-        assert!(found, "{what} never showed:\n{screen}");
-        screen
-    }
-
+impl Diffs {
     /// Right-clicks the file's header, and waits for its menu.
     fn open_menu(&self) {
         let screen = self.wait_for("src/main.rs");
@@ -122,8 +106,7 @@ impl Harness {
                 "data": { "sessionID": "ses_a" },
             }));
             let id = SessionID("ses_a".into());
-            let seen =
-                self.app.wait_until(Duration::from_secs(5), || self.tui.data.read(|state| state.status(&id)) == status);
+            let seen = self.app.wait_until(support::WAIT, || self.tui.data.read(|state| state.status(&id)) == status);
             assert!(seen, "{kind} did not set the status");
         }
     }
@@ -131,14 +114,14 @@ impl Harness {
 
 #[test]
 fn closing_the_panel_ends_its_file_menu_and_turn_watch() {
-    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
+    let h = mount(support::session_route("ses_a"));
     h.wait_for("Review");
     h.tui.keymap.dispatch("diff.open", None);
     h.wait_for("src/main.rs");
     // While the panel is open, an ended turn loads the diff again.
     let reads = h.diff_reads();
     h.turn();
-    let found = h.app.wait_until(Duration::from_secs(5), || h.diff_reads() > reads);
+    let found = h.app.wait_until(support::WAIT, || h.diff_reads() > reads);
     assert!(found, "an ended turn did not load the diff again");
     h.open_menu();
     h.tui.panels.close(&h.tui);

@@ -6,111 +6,67 @@
 //!
 //! The cell-level proofs are the P-APP scenarios `E.12/tab-strip` and `E.12/rail-resize`.
 
+use crate::support::{self, Harness, WAIT, deref_harness};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::support::WAIT;
-use opencode_api::client::Client;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
-use opencode_local::cli_config::{self, Resolved};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
 use opencode_tui::panel::{Presentation, Target};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::prelude::*;
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 const CHANNEL: &str = "test";
 
-struct Harness {
-    app: TestApp,
-    tui: Rc<Tui>,
+struct Tabs {
+    harness: Harness,
     memory: Memory,
     state: PathBuf,
     _home: tempfile::TempDir,
 }
 
-fn session(id: &str, title: &str) -> Value {
-    json!({
-        "id": id, "title": title, "projectID": "proj_test", "cost": 0,
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
-}
+deref_harness!(Tabs);
 
 fn routes() -> Vec<MemoryRoute> {
-    let mut routes = Vec::new();
-    for (id, title) in [("ses_a", "Fix the parser"), ("ses_b", "Write the docs")] {
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/{id}"),
-            200,
-            &json!({ "data": session(id, title) }),
-        ));
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/{id}/message"),
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ));
-        for list in ["inbox", "permission", "form"] {
-            routes.push(MemoryRoute::json("GET", &format!("/api/session/{id}/{list}"), 200, &json!({ "data": [] })));
-        }
-    }
+    let mut routes: Vec<MemoryRoute> = [("ses_a", "Fix the parser"), ("ses_b", "Write the docs")]
+        .iter()
+        .flat_map(|(id, title)| support::session_routes(&support::test_session(id, title)))
+        .collect();
     routes.push(MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })));
     routes.push(MemoryRoute::json("GET", "/api/config", 200, &json!([])));
     routes
 }
 
-fn mount(width: u16, config: Value) -> Harness {
+fn mount(width: u16, config: Value) -> Tabs {
     let home = tempfile::tempdir().unwrap();
-    let root = home.path().to_owned();
-    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
     let state = paths.state.clone();
     let memory = Memory::new(routes());
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
-    let app = TestApp::new(width, 30);
-    let info = cli_config::decode_text(&config.to_string()).unwrap();
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: Some(Roots { paths, storage_channel: CHANNEL.into() }),
-            route: Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) },
-            continue_: false,
-            events: true,
-        },
-    );
-    let harness = Harness { app, tui, memory, state, _home: home };
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        roots: support::roots(paths, CHANNEL),
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let harness = Tabs { harness: support::mount(width, 30, deps), memory, state, _home: home };
     harness.wait_for("Fix the parser");
     harness
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
+impl Tabs {
     fn open(&self, id: &str) {
-        self.tui.navigate(Route::Session { id: opencode_api::generated::SessionID(id.into()) });
+        self.tui.navigate(support::session_route(id));
         let opened = self.app.wait_until(WAIT, || self.ids().iter().any(|tab| tab == id));
         assert!(opened, "no {id} tab: {:?}", self.ids());
     }
 
     /// Waits until the tabs are `ids` and the route is the session `route`, or home.
     fn wait_tabs(&self, ids: &[&str], route: Option<&str>) {
-        let route =
-            route.map_or(Route::Home, |id| Route::Session { id: opencode_api::generated::SessionID(id.into()) });
+        let route = route.map_or(Route::Home, support::session_route);
         let found = self.app.wait_until(WAIT, || self.ids() == ids && self.tui.route() == route);
         assert!(found, "tabs {:?}, route {:?}", self.ids(), self.tui.route());
     }
@@ -170,9 +126,7 @@ fn deleting_the_open_tab_selects_another_without_a_toast() {
         "location": { "directory": "/project" },
         "data": { "sessionID": "ses_b" },
     }));
-    let moved = h.app.wait_until(WAIT, || {
-        h.tui.route() == Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) }
-    });
+    let moved = h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_a"));
     assert!(moved, "{:?}", h.tui.route());
     assert_eq!(h.ids(), ["ses_a"]);
     assert!(!h.app.text().contains("was deleted"), "{}", h.app.text());

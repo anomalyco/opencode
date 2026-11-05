@@ -2,23 +2,19 @@
 //! transport, for the paths the P-APP scenario `E.13b/composer` does not reach: the client MCP experiment and its
 //! tools, interrupting a subagent, picking a terminal, the queued dock, and the output text.
 
-use crate::support::WAIT;
+use crate::support::{self, WAIT};
 
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use opencode_api::client::{Auth, Client};
+use opencode_api::client::Auth;
 use opencode_api::client_mcp;
-use opencode_api::generated::SessionID;
 use opencode_api::memory::{Logged, Memory, Route as MemoryRoute};
 use opencode_api::pty::{self, Incoming};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{self, Resolved};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::{Deps, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
@@ -163,29 +159,20 @@ fn mount_family() -> Harness {
 
 fn mount_routes(endpoint: Option<Endpoint>, routes: Vec<MemoryRoute>) -> Harness {
     let home = tempfile::tempdir().unwrap();
-    let root = home.path().to_owned();
-    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = support::home_paths(home.path());
     let state = paths.state.clone();
     let memory = Memory::new(routes);
     let transport: Arc<dyn Transport> = match endpoint {
         Some(endpoint) => Arc::new(Moving { memory: memory.clone(), endpoint }),
         None => Arc::new(memory.clone()),
     };
-    let client = Client::with_transport("http://opencode.local", transport).unwrap();
-    let app = TestApp::new(100, 30);
-    let info = cli_config::decode_text(r#"{"animations":false}"#).unwrap();
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: Some(Roots { paths, storage_channel: CHANNEL.into() }),
-            route: Route::Session { id: SessionID("ses_a".into()) },
-            continue_: false,
-            events: true,
-        },
-    );
+    let deps = Deps {
+        config: support::config(support::decode(r#"{"animations":false}"#)),
+        roots: support::roots(paths, CHANNEL),
+        events: true,
+        ..support::deps(transport)
+    };
+    let support::Harness { app, tui } = support::mount(100, 30, deps);
     // Terminal panes get sockets that never answer.
     tui.terminals.set_connector(Arc::new(|_| {
         let (socket, remote) = pty::pair();
