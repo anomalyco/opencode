@@ -609,7 +609,7 @@ function literalType(literal: unknown) {
 }
 
 function newtype(name: string, ref: string) {
-  return `/// \`${ref}\`\n#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]\n#[serde(transparent)]\npub struct ${name}(pub String);\n\nimpl ${name} {\n    pub fn as_str(&self) -> &str {\n        &self.0\n    }\n}\n\nimpl std::fmt::Display for ${name} {\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n        f.write_str(&self.0)\n    }\n}\n\nimpl From<String> for ${name} {\n    fn from(value: String) -> Self {\n        Self(value)\n    }\n}\n\nimpl From<&str> for ${name} {\n    fn from(value: &str) -> Self {\n        Self(value.to_owned())\n    }\n}`
+  return `/// \`${ref}\`\n#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]\n#[serde(transparent)]\npub struct ${name}(pub String);\n\nimpl ${name} {\n    pub fn as_str(&self) -> &str {\n        &self.0\n    }\n}\n\nimpl std::borrow::Borrow<str> for ${name} {\n    fn borrow(&self) -> &str {\n        &self.0\n    }\n}\n\nimpl std::fmt::Display for ${name} {\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n        f.write_str(&self.0)\n    }\n}\n\nimpl From<String> for ${name} {\n    fn from(value: String) -> Self {\n        Self(value)\n    }\n}\n\nimpl From<&str> for ${name} {\n    fn from(value: &str) -> Self {\n        Self(value.to_owned())\n    }\n}`
 }
 
 function uniqueVariants(names: Array<string>) {
