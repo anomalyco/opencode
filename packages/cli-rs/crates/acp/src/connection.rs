@@ -64,10 +64,6 @@ pub struct RequestContext {
 pub struct Responded(Option<oneshot::Receiver<bool>>);
 
 impl Responded {
-    pub fn immediate() -> Self {
-        Self(None)
-    }
-
     pub async fn wait(self) -> bool {
         match self.0 {
             None => true,
