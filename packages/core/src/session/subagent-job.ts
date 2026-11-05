@@ -77,9 +77,11 @@ const make: Effect.Effect<
     }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
   })
 
-  // Resume once for launch, then wait until the child is idle with no background work or input
-  // left. Never resume just to inspect settlement: resuming an idle child runs another model step.
-  const settle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+  // Resume once for launch, then wait until the child is idle. A backgrounded job also waits for
+  // its background work and input, so its report carries the final answer; a foreground caller
+  // takes the answer inline as soon as the child stops. Never resume just to inspect settlement:
+  // resuming an idle child runs another model step.
+  const settle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, backgrounded: Effect.Effect<boolean>) {
     if (!(yield* store.get(sessionID))) return yield* new Session.NotFoundError({ sessionID })
     const outcomes = [
       SessionEvent.Execution.Succeeded,
@@ -114,7 +116,8 @@ const make: Effect.Effect<
         yield* terminal(event.value)
         continue
       }
-      if (!pending && !active) return
+      // Backgrounding only ever turns on, so rereading it after each busy period sees a move.
+      if (!active && (!pending || !(yield* backgrounded))) return
       yield* terminal(yield* Queue.take(settled))
     }
   }, Effect.scoped)
@@ -173,8 +176,8 @@ const make: Effect.Effect<
     )
   })
 
-  const run = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-    yield* settle(sessionID)
+  const run = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, backgrounded: Effect.Effect<boolean>) {
+    yield* settle(sessionID, backgrounded)
     const messages = yield* store.messages({ sessionID, order: "desc", limit: 20 })
     return SubagentCompletion.text(
       messages.find(
@@ -193,7 +196,8 @@ const make: Effect.Effect<
           title: input.recovery.description,
           notificationID: input.notificationID,
           recovery: input.recovery,
-          run: run(input.recovery.childSessionID),
+          // Held from the first check: a recovered child is usually already idle when the run starts.
+          run: run(input.recovery.childSessionID, Effect.succeed(true)),
         })
         yield* jobs.background(input.id)
         yield* notify(input.recovery, info.started_at, input.id)
@@ -208,7 +212,7 @@ const make: Effect.Effect<
           title: input.recovery.description,
           metadata: {},
           recovery: input.recovery,
-          run: run(input.recovery.childSessionID),
+          run: run(input.recovery.childSessionID, jobs.isBackgrounded(input.recovery.childSessionID)),
         })
       }).pipe(Effect.setContext(context)),
     background: Effect.fn("SubagentJob.background")(function* (input: Input) {

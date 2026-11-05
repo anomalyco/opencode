@@ -104,23 +104,24 @@ const family = Effect.fnUntraced(function* (descendantMetadata?: SessionSchema.M
   })
   yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(Effect.provide(locations.get(parent.location)))
   const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-  const spawn = executeTool(registry, {
-    sessionID: parent.id,
-    ...toolIdentity,
-    call: {
-      type: "tool-call",
-      id: "call-review",
-      name: "subagent",
-      input: {
-        agent: "reviewer",
-        sessionID: child.id,
-        description: "Review fixture",
-        prompt: "Review the fixture",
-        background: true,
+  const spawnWith = (background: boolean) =>
+    executeTool(registry, {
+      sessionID: parent.id,
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call-review",
+        name: "subagent",
+        input: {
+          agent: "reviewer",
+          sessionID: child.id,
+          description: "Review fixture",
+          prompt: "Review the fixture",
+          background,
+        },
       },
-    },
-  })
-  return { sessions, parent, child, descendant, spawn }
+    })
+  return { sessions, parent, child, descendant, spawn: spawnWith(true), spawnWith }
 })
 
 /** Mirrors the shell tool: a backgrounded shell job whose exit notice is admitted to its owner. */
@@ -408,6 +409,60 @@ describe("subagent observer lifetime", () => {
       }),
     )
   }
+
+  it.live("a foreground child returns its answer without waiting for its background shell", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      const exitShell = yield* backgroundShell(f.child.id)
+      yield* llm.push(TestLLM.text("answer", "answer"))
+
+      const result = yield* f.spawnWith(false).pipe(Effect.timeout("5 seconds"))
+      expect(result).toMatchObject({
+        status: "completed",
+        metadata: { sessionID: f.child.id, status: "completed" },
+        content: [{ type: "text", text: expect.stringContaining("answer") }],
+      })
+      expect((yield* jobs.get("shell-dev"))?.status).toBe("running")
+      expect(yield* reports(f.parent.id)).toEqual([])
+
+      yield* exitShell
+      yield* f.sessions.wait(f.child.id)
+      yield* f.sessions.wait(f.parent.id)
+    }),
+  )
+
+  it.live("a foreground child moved to the background holds its report until its shell exits", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const llm = yield* TestLLM.Test
+      const f = yield* family()
+      const exitShell = yield* backgroundShell(f.child.id)
+      yield* llm.push(TestLLM.text("first", "first"), TestLLM.text("final", "final"))
+      const gate = yield* llm.gate()
+
+      const spawn = yield* f.spawnWith(false).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* gate.started
+      yield* jobs.background(f.child.id)
+      expect(yield* Fiber.join(spawn)).toMatchObject({ metadata: { sessionID: f.child.id, status: "running" } })
+      yield* gate.release
+      yield* f.sessions.wait(f.child.id)
+      expect(yield* reports(f.parent.id)).toEqual([])
+      expect((yield* jobs.get(f.child.id))?.status).toBe("running")
+
+      yield* exitShell
+      yield* jobs.wait({ id: f.child.id })
+      yield* llm.wait(3).pipe(Effect.timeout("2 seconds"))
+      yield* f.sessions.wait(f.parent.id)
+      const notices = yield* reports(f.parent.id)
+      expect(notices).toHaveLength(1)
+      expect(notices[0]).toMatchObject({ metadata: { source: "subagent", childID: f.child.id, state: "completed" } })
+      expect(notices[0]?.text).toContain("final")
+      expect(notices[0]?.text).not.toContain("first")
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
 
   it.live("restart recovers a directly prompted child's durable hold after cancelling its shell", () =>
     Effect.gen(function* () {

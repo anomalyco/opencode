@@ -121,6 +121,8 @@ export interface Interface {
   // True only while a foreground caller holds a block registration for this job. Settlement,
   // cancellation and backgrounding clear it, so read it before awaiting anything else.
   readonly isBlocked: (id: string) => Effect.Effect<boolean>
+  // True once this job generation has been moved to the background; it never reverts.
+  readonly isBackgrounded: (id: string) => Effect.Effect<boolean>
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly block: (input: BlockInput) => Effect.Effect<BlockResult | undefined>
@@ -289,6 +291,10 @@ export const make = Effect.gen(function* () {
   const isBlocked: Interface["isBlocked"] = Effect.fn("Job.isBlocked")(function* (id) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(id)
     return job !== undefined && job.blockingSessions.size > 0
+  })
+
+  const isBackgrounded: Interface["isBackgrounded"] = Effect.fn("Job.isBackgrounded")(function* (id) {
+    return (yield* SynchronizedRef.get(state.jobs)).get(id)?.isBackgrounded === true
   })
 
   const recovery: Interface["recovery"] = Effect.fn("Job.recovery")(function* (id) {
@@ -551,6 +557,7 @@ export const make = Effect.gen(function* () {
     get,
     recovery,
     isBlocked,
+    isBackgrounded,
     start,
     wait,
     block,
