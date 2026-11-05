@@ -68,13 +68,15 @@ describe("turn diff machine", () => {
     const loading = replay([{ type: "load.requested", key }]).state
     const loaded = replay([{ type: "load.succeeded", key, attempt: 1, diffs: [diff] }], loading).state
 
-    ;[loading, loaded].forEach((state) =>
-      expect(transitionTurnDiffCache(state, { type: "load.requested", key })).toEqual({ state, effects: [] }),
-    )
+    expect([loading, loaded].map((state) => transitionTurnDiffCache(state, { type: "load.requested", key }))).toEqual([
+      { state: loading, effects: [] },
+      { state: loaded, effects: [] },
+    ])
   })
 
   test("a result carrying another turn's attempt is ignored", () => {
     const other = "ses_a/msg_next"
+
     const both = replay([
       { type: "load.requested", key },
       { type: "load.requested", key: other },

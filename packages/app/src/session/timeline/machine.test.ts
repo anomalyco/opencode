@@ -212,6 +212,7 @@ test("losing contact keeps a pending zoomed end and probes it at once", () => {
     { type: "touch.drag", overflow: true },
     scroll(997, 900),
   ])
+
   const lost = transitionFollow(held, CONTACT_LOST_EVENT)
 
   expect(needsEndProbe(held)).toBe(false)

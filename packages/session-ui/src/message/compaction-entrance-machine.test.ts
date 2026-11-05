@@ -28,6 +28,7 @@ test("once the grace passes, finishing rolls the label in place without restarti
     createCompactionEntranceState({ ageMs: 0, running: true }).state,
     GRACE_ELAPSED_EVENT,
   )
+
   expect(selectCompactionEnter(revealed.state)).toBe("grace")
 
   const ended = transitionCompactionEntrance(revealed.state, finished)

@@ -39,6 +39,7 @@ export function createTurnDiffCache() {
 
     if (!fetch) return
     const controller = new AbortController()
+
     const settle = (event: TurnDiffCacheEvent) => {
       if (!controller.signal.aborted) dispatch(event)
     }
