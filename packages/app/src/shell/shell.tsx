@@ -11,7 +11,7 @@ import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
 import { PluginServerCover } from "@/runtime/plugin/server-shell"
-import { PluginSlot } from "@/runtime/plugin/render"
+import { PluginSlot, PluginWindowOverlay } from "@/runtime/plugin/render"
 import { COMMAND_SEARCH_ID, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -321,6 +321,7 @@ export default function Layout(props: ParentProps) {
           Last in order, so it stays below a bottom titlebar (also order-last, but earlier in the DOM). */}
       <div data-slot="composer-touch-bar-mount" class="order-last shrink-0" />
       <PluginSlot at="window.bottom" input={{}} />
+      <PluginWindowOverlay />
       <ToastRegion />
       <UploadToastHost />
     </div>

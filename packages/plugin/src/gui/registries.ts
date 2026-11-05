@@ -863,6 +863,17 @@ export interface Theme {
 export interface SlotMap {
   /** Full-width strip under the window content, above toasts. */
   readonly "window.bottom": Record<string, never>
+  /**
+   * A layer over the whole window, for boot animations, ambient effects, focus overlays and coach marks. It sits above
+   * the app's interface and below its dialogs, menus, popovers, tooltips and toasts; the native window controls and
+   * the desktop title bar's drag region stay above it. The layer takes no pointer events (`pointer-events: none`), so
+   * the app beneath keeps working: set `pointer-events: auto` on the elements of yours that take clicks. Keep those out
+   * of the title bar, whose drag region takes the pointer first on desktop, and never set `app-region`. The host adds
+   * the layer only while something contributes, and does not animate it: honor `prefers-reduced-motion` in your own
+   * animations. It renders once the window's interface first renders, after the built-in plugins start; a plugin from
+   * the config may join later, so its first frame can come after the app's.
+   */
+  readonly "window.overlay": Record<string, never>
   /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
   readonly "session.header": {
     /** The timeline's owning session screen; always present, also while the timeline is cached. */

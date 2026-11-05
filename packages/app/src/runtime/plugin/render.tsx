@@ -96,6 +96,30 @@ export function PluginSlot<At extends keyof BuiltinSlotMap>(props: {
   )
 }
 
+/**
+ * The `window.overlay` slot: a layer over the whole window that takes no pointer events, present only while a plugin
+ * contributes to it. Portalled to the body, so it covers the viewport whatever contains the shell. Its z-index puts it
+ * above the shell's chrome (the highest is 40) and below the host's portalled layers: dialogs, popovers and hover cards
+ * at 50, menus and selects at 60, tooltips and toasts at 1000. The desktop startup splash (100) stays above it too.
+ */
+export function PluginWindowOverlay() {
+  const host = usePluginHost()
+  const shown = createMemo(() => host.items(BuiltinSlot).some((item) => item.value.at === "window.overlay"))
+
+  return (
+    <Show when={shown()}>
+      <Portal>
+        <div
+          data-slot="plugin-window-overlay"
+          style={{ position: "fixed", inset: "0", "z-index": "45", "pointer-events": "none", contain: "strict" }}
+        >
+          <PluginSlot at="window.overlay" input={{}} />
+        </div>
+      </Portal>
+    </Show>
+  )
+}
+
 export function PluginStyles() {
   const host = usePluginHost()
 

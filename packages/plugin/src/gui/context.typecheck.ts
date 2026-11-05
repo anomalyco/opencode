@@ -118,6 +118,8 @@ equal<SlotMap["session.panel.end"]["screen"], SessionScreen>(true)
 
 equal<SlotMap["window.bottom"]["screen"], never>(true)
 
+equal<SlotMap["window.overlay"]["screen"], never>(true)
+
 equal<PanelTab["fallback"], boolean | undefined>(true)
 
 export const ineligible: PanelTab = { id: "details", title: "Details", fallback: false }
