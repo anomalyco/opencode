@@ -81,9 +81,7 @@ export const configure = (input: Config = {}) => {
   const chat = (modelID: string | ModelID) =>
     configured.model<OpenAIProviderOptionsInput>({
       id: modelID,
-      compatibility: {
-        supportsPromptCacheKey: true,
-      },
+      capabilities: { promptCacheKey: true },
     })
   return {
     id,

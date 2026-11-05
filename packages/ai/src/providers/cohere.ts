@@ -43,8 +43,8 @@ export const configure = (input: Config = {}) => {
         compatibility: {
           maxTokensField: "max_tokens",
           reasoningField: "reasoning_content",
-          supportsStrictMode: false,
         },
+        capabilities: { tools: { strict: false } },
       }),
     configure,
   }

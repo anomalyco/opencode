@@ -40,7 +40,8 @@ export const configure = (input: Config = {}) => {
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
         id: modelID,
-        compatibility: { maxTokensField: "max_tokens", supportsStrictMode: false },
+        compatibility: { maxTokensField: "max_tokens" },
+        capabilities: { tools: { strict: false } },
       }),
     configure,
   }

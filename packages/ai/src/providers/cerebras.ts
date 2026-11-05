@@ -43,8 +43,8 @@ export const configure = (input: Config = {}) => {
         compatibility: {
           maxTokensField: "max_tokens",
           reasoningField: "reasoning",
-          supportsPromptCacheKey: true,
         },
+        capabilities: { promptCacheKey: true },
       }),
     configure,
   }

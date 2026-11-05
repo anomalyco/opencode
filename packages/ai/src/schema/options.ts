@@ -198,22 +198,12 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
   requireFinishReason: Schema.optional(Schema.Boolean),
   requireAssistantAfterTool: Schema.optional(Schema.Boolean),
-  supportsStore: Schema.optional(Schema.Boolean),
-  /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
-  streamUsage: Schema.optional(Schema.Boolean),
-  supportsStrictMode: Schema.optional(Schema.Boolean),
-  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
-  // this is true; other protocols omit it only when this is false.
-  // Session-affinity headers still flow regardless.
-  supportsPromptCacheKey: Schema.optional(Schema.Boolean),
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
-  /** Supports per-message effort updates. Overrides model-ID detection. */
-  supportsEffortUpdates: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {
@@ -222,6 +212,64 @@ export namespace LanguageModelCompatibility {
   /** Normalize model/upstream compatibility metadata without projecting requests. */
   export const make = (input: Input) =>
     input instanceof LanguageModelCompatibility ? input : new LanguageModelCompatibility(input)
+}
+
+/**
+ * What the model accepts on its API: models.dev v2 `capabilities` in camelCase, with the API's own overrides merged in.
+ * Unset fields keep the protocol default, which may still guess from the provider, base URL or model ID.
+ */
+export interface Capabilities {
+  readonly tools?: {
+    readonly supported?: boolean
+    /** Accepts `strict` on function tools. OpenAI Chat detects it from the provider when unset. */
+    readonly strict?: boolean
+    readonly choice?: ReadonlyArray<"auto" | "none" | "required" | "tool">
+    readonly search?: boolean
+    /** Input formats accepted by custom (free-form) tools. */
+    readonly freeform?: ReadonlyArray<"text" | "lark" | "regex">
+    /** Accepts a changed tool list mid-conversation. */
+    readonly updates?: boolean
+  }
+  readonly reasoning?: {
+    readonly supported?: boolean
+    readonly default?:
+      | { readonly type: "toggle"; readonly value: boolean }
+      | { readonly type: "effort"; readonly value: ReasoningEffort }
+      | { readonly type: "budget"; readonly value: number }
+    readonly toggle?: boolean
+    readonly effort?: ReadonlyArray<ReasoningEffort>
+    readonly budget?: { readonly min?: number; readonly max?: number }
+    /** Accepts per-message effort updates. Detected from the model ID when unset. */
+    readonly updates?: boolean
+  }
+  readonly cache?:
+    | false
+    | {
+        readonly implicit?: true | { readonly ttl?: ReadonlyArray<CacheTTL>; readonly minTokens?: number }
+        readonly explicit?:
+          | true
+          | {
+              readonly ttl?: ReadonlyArray<CacheTTL>
+              readonly maxBreakpoints?: number
+              readonly targets?: ReadonlyArray<"tools" | "system" | "messages">
+              readonly minTokens?: number
+            }
+      }
+  readonly structuredOutput?: boolean
+  readonly temperature?: boolean
+  readonly topP?: boolean
+  readonly topK?: boolean
+  /** Accepts mid-conversation system messages. Anthropic Messages detects it from the model ID when unset. */
+  readonly systemUpdates?: boolean
+  /** Accepts `store`. OpenAI Chat detects it from the provider when unset. */
+  readonly store?: boolean
+  /** Accepts `stream_options.include_usage`. OpenAI Chat defaults to true. */
+  readonly streamUsage?: boolean
+  // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
+  // this is true; other protocols omit it only when this is false.
+  // Session-affinity headers still flow regardless.
+  readonly promptCacheKey?: boolean
+  readonly serviceTier?: ReadonlyArray<OpenString<"flex" | "priority" | "fast" | "ultrafast" | "standby">>
 }
 
 export class LanguageModel<
@@ -233,6 +281,7 @@ export class LanguageModel<
   readonly provider: ProviderID
   readonly route: AnyRoute<Compact>
   readonly defaults?: LanguageModelDefaults
+  readonly capabilities?: Capabilities
   readonly compatibility?: LanguageModelCompatibility
 
   constructor(input: LanguageModel.ConstructorInput<Compact>) {
@@ -240,6 +289,7 @@ export class LanguageModel<
     this.provider = input.provider
     this.route = input.route
     this.defaults = input.defaults
+    this.capabilities = input.capabilities
     this.compatibility = input.compatibility
   }
 
@@ -252,6 +302,7 @@ export class LanguageModel<
       provider: ProviderID.make(input.provider),
       route: input.route,
       defaults: input.defaults,
+      capabilities: input.capabilities,
       compatibility:
         input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
     })
@@ -265,6 +316,7 @@ export class LanguageModel<
       provider: model.provider,
       route: model.route,
       defaults: model.defaults,
+      capabilities: model.capabilities,
       compatibility: model.compatibility,
     }
   }
@@ -297,6 +349,7 @@ export namespace LanguageModel {
     readonly provider: ProviderID
     readonly route: AnyRoute<Compact>
     readonly defaults?: LanguageModelDefaults
+    readonly capabilities?: Capabilities
     readonly compatibility?: LanguageModelCompatibility
   }
 

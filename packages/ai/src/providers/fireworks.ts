@@ -38,7 +38,7 @@ export const configure = (input: Config = {}) => {
   return {
     id,
     model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+      configured.model<OpenAIProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } }),
     configure,
   }
 }

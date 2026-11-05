@@ -745,6 +745,8 @@ const requireThinkingSignature = (request: LLMRequest) => {
 
 // Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const override = request.model.capabilities?.systemUpdates
+  if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false
   if (version.family === "opus" && version.major === 4) return version.minor >= 8
@@ -913,15 +915,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   return messages
 })
 
-// TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
-// `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
-// only reads `request.model.compatibility`.
+// The model-ID checks below are fallbacks for models that leave `capabilities.reasoning.updates`,
+// `capabilities.systemUpdates` and `compatibility.supportsThinkingBlockBinding` unset.
 const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
 
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (isThinkingOff(request.providerOptions?.thinking)) return false
-  const override = request.model.compatibility?.supportsEffortUpdates
+  const override = request.model.capabilities?.reasoning?.updates
   if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false

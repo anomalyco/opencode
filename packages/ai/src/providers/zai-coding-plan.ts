@@ -61,7 +61,13 @@ export const routes = [chatRoute, messagesRoute, responsesRoute]
 export const configure = (input: Config = {}) => {
   const defaults = bearerRouteDefaults(input, "ZAI_API_KEY")
   const chat = (modelID: string | ModelID) =>
-    chatRoute.with(defaults).model<ChatOptionsInput>({ id: modelID, compatibility: ZAIChat.compatibility })
+    chatRoute
+      .with(defaults)
+      .model<ChatOptionsInput>({
+        id: modelID,
+        compatibility: ZAIChat.compatibility,
+        capabilities: ZAIChat.capabilities,
+      })
   const messages = (modelID: string | ModelID) =>
     messagesRoute
       .with(defaults)
