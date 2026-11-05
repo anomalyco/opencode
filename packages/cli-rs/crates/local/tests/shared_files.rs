@@ -1,5 +1,6 @@
-//! P-FILE under contention for the state files the TypeScript TUI shares (MS1 review, carbon-7):
-//! `session.json` and `prompt-history.jsonl`, written at the same time by this crate and by
+//! P-FILE under contention for the state files the TypeScript TUI shares (MS1 review carbon-7, MS3/MS4
+//! review carbon-3): `session.json`, `prompt-history.jsonl`, `frecency.jsonl` and `prompt-stash.jsonl`,
+//! written at the same time by this crate and by
 //! `parity/oracle/MS1-files.ts`, which writes with the TypeScript TUI's own `util/persistence`
 //! functions. A reader thread checks every state of the files meanwhile.
 //!
@@ -230,6 +231,127 @@ fn prompt_history_under_contention() {
         "prompt-history.jsonl: {below} reads below the limit, {at} past it, all whole; {} lines before the load trimmed it",
         text.lines().count()
     );
+}
+
+/// `frecency.jsonl` at the limit: the TypeScript TUI opens new files while Rust does. Every state a reader
+/// sees is whole lines, no visit either side wrote is lost, and the newest 1000 paths both TUIs read are
+/// the same.
+#[test]
+fn frecency_at_the_limit_under_contention() {
+    if !available() {
+        return;
+    }
+    let state = tempfile::tempdir().unwrap();
+    let dir = state.path().to_owned();
+    let file = dir.join("frecency.jsonl");
+    let full: String = (0..jsonl::MAX_FRECENCY_ENTRIES)
+        .map(|n| format!("{{\"path\":\"/w/old-{n}\",\"frequency\":1,\"lastOpen\":{n}}}\n"))
+        .collect();
+    std::fs::write(&file, full).unwrap();
+    let mut frecency = jsonl::Frecency::load(&dir, Path::new("/w"));
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader = watch(file.clone(), stop.clone(), whole_lines);
+    let mut ts = typescript(&["frecency", dir.to_str().unwrap(), "ts", &WRITES.to_string()]);
+    ts.go();
+    for i in 0..WRITES {
+        frecency.update(&format!("rs-{i}"), jsonl::now_ms());
+        thread::sleep(Duration::from_millis(1));
+    }
+    ts.finish();
+    // Rust reopens one of TypeScript's files: it counts from TypeScript's line.
+    frecency.update("ts-0", jsonl::now_ms());
+    stop.store(true, Ordering::SeqCst);
+    let reads = reader.join().unwrap();
+
+    let typescript_read = read(&dir)["frecency"].clone();
+    for side in ["ts", "rs"] {
+        for i in 0..WRITES {
+            let path = format!("/w/{side}-{i}");
+            assert!(typescript_read.get(&path).is_some(), "{path} was lost");
+        }
+    }
+    assert_eq!(typescript_read["/w/ts-0"], 2);
+    let lines = std::fs::read_to_string(&file).unwrap().lines().count();
+    let loaded = jsonl::Frecency::load(&dir, Path::new("/w"));
+    assert_eq!(loaded.data().len(), jsonl::MAX_FRECENCY_ENTRIES);
+    let rust_read: serde_json::Map<String, Value> = loaded
+        .data()
+        .iter()
+        .map(|(path, visit)| (path.clone(), json!(visit.frequency as i64)))
+        .collect();
+    assert_eq!(Value::Object(rust_read), typescript_read);
+    assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+    eprintln!(
+        "frecency.jsonl: {reads} reads, all whole; {lines} lines before the load trimmed it to 1000"
+    );
+}
+
+/// `prompt-stash.jsonl`: the TypeScript TUI stashes while Rust does, and then Rust pops its own entries.
+/// Every state a reader sees is whole lines, no entry either side stashed is lost, and a pop drops only
+/// its own line.
+///
+/// The pops run after TypeScript stopped: a pop rewrites the file, and TypeScript appends without the
+/// lock, so an append that opened the file just before the rename and writes just after it is lost (see
+/// `steps/rs-ms34-files.md`).
+#[test]
+fn prompt_stash_under_contention() {
+    if !available() {
+        return;
+    }
+    let state = tempfile::tempdir().unwrap();
+    let dir = state.path().to_owned();
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader = watch(dir.join("prompt-stash.jsonl"), stop.clone(), whole_lines);
+    let mut stash = jsonl::Stash::load(&dir);
+    let mut ts = typescript(&["stash", dir.to_str().unwrap(), "ts", &WRITES.to_string()]);
+    ts.go();
+    for i in 0..WRITES {
+        let prompt = json!({ "text": format!("rs-{i}"), "pasted": [] });
+        stash.push(prompt, jsonl::now_ms());
+        thread::sleep(Duration::from_millis(1));
+    }
+    ts.finish();
+    for _ in 0..WRITES / 2 {
+        stash.pop();
+    }
+    stop.store(true, Ordering::SeqCst);
+    let reads = reader.join().unwrap();
+
+    let texts: HashSet<String> = read(&dir)["stash"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|text| text.as_str().map(str::to_owned))
+        .collect();
+    for i in 0..WRITES {
+        assert!(
+            texts.contains(&format!("ts-{i}")),
+            "ts-{i} was lost: {texts:?}"
+        );
+        assert_eq!(
+            texts.contains(&format!("rs-{i}")),
+            i < WRITES / 2,
+            "rs-{i}: {texts:?}"
+        );
+    }
+    assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
+    eprintln!(
+        "prompt-stash.jsonl: {reads} reads, all whole; {} entries",
+        texts.len()
+    );
+}
+
+fn whole_lines(text: &str) -> Result<(), String> {
+    if !text.is_empty() && !text.ends_with('\n') {
+        return Err("a partial line".into());
+    }
+    match text
+        .lines()
+        .find(|line| serde_json::from_str::<Value>(line).is_err())
+    {
+        Some(line) => Err(format!("a broken line {line:?}")),
+        None => Ok(()),
+    }
 }
 
 /// TypeScript and Rust each write [`WRITES`] entries `<round>-ts-<i>` and `<round>-rs-<i>` at once.
