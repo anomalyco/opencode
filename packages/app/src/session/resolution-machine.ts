@@ -12,8 +12,8 @@ export type SessionTarget<Scope> = {
 }
 
 // `attempt` correlates a metadata sync and the resolution timeout with the target they were started for: it advances
-// whenever the target changes, a pending session starts or settles, a reconnect retries an unresolved target,
-// resolving times out, or the route unmounts, so a late result is ignored.
+// whenever the target changes, a pending session starts or settles, a reconnect retries an unresolved target, or the
+// route unmounts, so a late result is ignored. A timeout keeps the attempt: the request it gave up on may still answer.
 // `preparing` is a new session whose tab promotion still owns its creation (`pending`); nothing loads until it settles.
 export type SessionResolutionState<T, Scope, P = never> =
   | { readonly status: "idle"; readonly attempt: number }
@@ -111,7 +111,8 @@ export function transitionSessionResolution<T, Scope, P = never>(
   if (event.type === "resolve.timed-out") {
     if (state.status !== "resolving" || state.attempt !== event.attempt) return unchanged(state)
 
-    return changed(state, { status: "unreachable", target: state.target, attempt: state.attempt + 1 })
+    // Same attempt: the metadata request still in flight may answer late, and its answer still decides the outcome.
+    return changed(state, { status: "unreachable", target: state.target, attempt: state.attempt })
   }
 
   if (state.status === "idle" || !sameTarget(state.target, event.target)) return unchanged(state)
@@ -126,9 +127,11 @@ export function transitionSessionResolution<T, Scope, P = never>(
 
   if (event.type === "connected") return reconnected(state, event.refresh)
 
-  // Only the sync started for the current attempt answers a target that is still resolving: once the
-  // cache holds the session it is authoritative, and a deleted session is evicted from it.
-  if (state.status !== "resolving" || state.attempt !== event.attempt) return unchanged(state)
+  // Only the sync started for the current attempt answers a target that is still resolving, or that timed out
+  // waiting for it: once the cache holds the session it is authoritative, and a deleted session is evicted from it.
+  if ((state.status !== "resolving" && state.status !== "unreachable") || state.attempt !== event.attempt) {
+    return unchanged(state)
+  }
 
   if (event.type === "sync.settled") {
     if (event.session === undefined) {

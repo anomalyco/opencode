@@ -266,13 +266,14 @@ test("a session that does not resolve in time shows as unreachable and recovers"
   expect(mismatched.state).toBe(resolving.state)
 
   const timedOut = transitionSessionResolution(resolving.state, { type: "resolve.timed-out", attempt: 1 })
-  expect(timedOut.state).toEqual({ status: "unreachable", target: target("ses_a"), attempt: 2 })
+  expect(timedOut.state).toEqual({ status: "unreachable", target: target("ses_a"), attempt: 1 })
   expect(timedOut.effects).toEqual([{ type: "timer.clear" }])
   expect(sessionRouteView(timedOut.state, { type: "healthy" })).toEqual({ type: "unreachable", sessionID: "ses_a" })
   expect(sessionRouteView(timedOut.state, { type: "incompatible" }).type).toBe("incompatible")
 
-  const late: Event = { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("late") }
-  expect(transitionSessionResolution(timedOut.state, late).state).toBe(timedOut.state)
+  const repeated = transitionSessionResolution(timedOut.state, { type: "resolve.timed-out", attempt: 1 })
+  expect(repeated.state).toBe(timedOut.state)
+  expect(repeated.effects).toEqual([])
 
   const reconnected = transitionSessionResolution(timedOut.state, {
     type: "connected",
@@ -280,8 +281,12 @@ test("a session that does not resolve in time shows as unreachable and recovers"
     refresh: true,
   })
 
-  expect(reconnected.state).toEqual({ status: "resolving", target: target("ses_a"), attempt: 3 })
+  expect(reconnected.state).toEqual({ status: "resolving", target: target("ses_a"), attempt: 2 })
   expect(types(reconnected.effects)).toEqual(["sync.transcript", "sync.metadata", "timer.start"])
+
+  // The request the reconnect replaced no longer answers.
+  const stale: Event = { type: "sync.failed", target: target("ses_a"), attempt: 1, error: new Error("stale") }
+  expect(transitionSessionResolution(reconnected.state, stale).state).toBe(reconnected.state)
 
   // A request that hung past the timeout still fills the cache when it finally answers.
   const cached = transitionSessionResolution(timedOut.state, {
@@ -290,8 +295,40 @@ test("a session that does not resolve in time shows as unreachable and recovers"
     session: info("ses_a"),
   })
 
-  expect(cached.state).toEqual({ status: "ready", target: target("ses_a"), session: info("ses_a"), attempt: 2 })
+  expect(cached.state).toEqual({ status: "ready", target: target("ses_a"), session: info("ses_a"), attempt: 1 })
   expect(cached.effects).toEqual([])
+})
+
+// The timeout used to advance the attempt, so a hung request that finally answered 404 or failed was dropped and the
+// tab kept saying the server was unreachable although it had answered.
+test.each<{ name: string; event: Event; state: State }>([
+  {
+    name: "metadata",
+    event: { type: "sync.settled", target: target("ses_a"), attempt: 1, session: info("ses_a") },
+    state: { status: "ready", target: target("ses_a"), session: info("ses_a"), attempt: 1 },
+  },
+  {
+    name: "a missing session",
+    event: { type: "sync.settled", target: target("ses_a"), attempt: 1, session: undefined },
+    state: { status: "not-found", target: target("ses_a"), attempt: 1 },
+  },
+  {
+    name: "a not-found error",
+    event: { type: "sync.failed", target: target("ses_a"), attempt: 1, error: notFound("ses_a") },
+    state: { status: "not-found", target: target("ses_a"), attempt: 1 },
+  },
+  {
+    name: "a failure",
+    event: { type: "sync.failed", target: target("ses_a"), attempt: 1, error: "boom" },
+    state: { status: "error", target: target("ses_a"), error: "boom", attempt: 1 },
+  },
+])("a request that answers with $name after the timeout decides the outcome", ({ event, state }) => {
+  const timedOut = replay([open("ses_a"), { type: "resolve.timed-out", attempt: 1 }])
+  expect(timedOut.state.status).toBe("unreachable")
+
+  const answered = transitionSessionResolution(timedOut.state, event)
+  expect(answered.state).toEqual(state)
+  expect(answered.effects).toEqual([])
 })
 
 test.each<{ name: string; event: Event }>([
