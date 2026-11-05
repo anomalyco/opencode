@@ -2410,6 +2410,9 @@ describe("SessionRunnerLLM", () => {
     expect(arrived[0]).toContain("New tool namespaces are available:\n- beta (30 tools")
     expect(arrived[0]).not.toContain("This catalog supersedes")
     expect(listed(arrived[0]!, "alpha")).toEqual([])
+    // The next step rebuilds the catalog from the stored one and has nothing new to say.
+    yield* s.runPrompt("Again")
+    expect(codeModeUpdates(s.requests.at(-1))).toEqual(arrived)
 
     yield* Scope.close(beta, Exit.void)
     yield* s.runPrompt("Third")

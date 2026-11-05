@@ -54,7 +54,9 @@ const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 
 // Keep every namespace visible and every tool the previous catalog listed, then select full listings one per
-// namespace per round, considering shorter listings first until the inline budget is exhausted.
+// namespace per round, considering shorter listings first until the inline budget is exhausted. Kept listings are
+// never dropped while their tools exist, even when namespaces or pinned tools that arrived since push the catalog
+// over budget: dropping them would send the model another change on every turn.
 export function summarize(inventory: Inventory, options: Options = {}): Summary {
   const budget = options.budget ?? INLINE_BUDGET
   const listed = new Set(options.previous?.namespaces.flatMap((namespace) => namespace.entries.map((entry) => entry.path)))
@@ -100,7 +102,6 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
           }),
         ),
         listings,
-        pinned,
         selectionOrder: ranked.filter((candidate) => !selected.has(candidate.listing)),
         selectedListings: selected,
         selectionIndex: 0,
@@ -115,24 +116,6 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
     namespaces
       .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
       .reduce((total, listing) => total + cost(listing.line), 0)
-  // A namespace that arrived since the previous catalog is always shown, but its header does not cost the kept
-  // listings their place; only pinned tools added since can, and they drop the costliest first.
-  const known = new Set(options.previous?.namespaces.map((namespace) => namespace.name))
-  const arrived = namespaces
-    .filter((namespace) => !known.has(namespace.name))
-    .reduce((total, namespace) => total + namespace.header, 0)
-  const evictable = namespaces
-    .flatMap((namespace) =>
-      [...namespace.selectedListings]
-        .filter((listing) => !namespace.pinned.has(listing))
-        .map((listing) => ({ namespace, listing, cost: cost(listing.line) })),
-    )
-    .toSorted((left, right) => right.cost - left.cost)
-  for (const item of evictable) {
-    if (remaining + arrived >= 0) break
-    item.namespace.selectedListings.delete(item.listing)
-    remaining += item.cost
-  }
   while (active.size > 0) {
     for (const namespace of active) {
       const candidate = namespace.selectionOrder[namespace.selectionIndex]
