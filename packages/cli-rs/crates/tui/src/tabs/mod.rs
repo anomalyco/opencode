@@ -183,7 +183,11 @@ impl Tabs {
     /// The groups of `session` the reader opened or closed, by group ID (E.8, `sessionTabs.groupExpanded`). They
     /// outlive the session's view.
     pub fn expanded_groups(&self, session: &str) -> HashMap<String, bool> {
-        self.groups.borrow().get(session).cloned().unwrap_or_default()
+        self.groups
+            .borrow()
+            .get(session)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// `sessionTabs.setGroupExpanded` for every group of `session`.

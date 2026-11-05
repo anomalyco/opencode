@@ -362,15 +362,29 @@ fn slot_plugin() -> Definition<Tui> {
 fn routes(recording: &Recording) -> Vec<MemoryRoute> {
     let scenario = recording.routes.iter().map(|route| {
         let method = route.method.as_deref().unwrap_or("GET");
-        let status = route
-            .status
-            .unwrap_or(if route.json.is_some() || route.body.is_some() {
+        let status = route.status.unwrap_or(
+            if route.json.is_some() || route.body.is_some() || route.base64.is_some() {
                 200
             } else {
                 204
-            });
+            },
+        );
         match (&route.json, &route.body) {
             (Some(json), _) => MemoryRoute::json(method, &route.path, status, json),
+            (None, None) if let Some(bytes) = &route.base64 => MemoryRoute::body(
+                method,
+                &route.path,
+                status,
+                Some(
+                    route
+                        .headers
+                        .get("content-type")
+                        .map_or("application/octet-stream", String::as_str),
+                ),
+                base64::engine::general_purpose::STANDARD
+                    .decode(bytes)
+                    .expect("a base64 route body"),
+            ),
             (None, Some(body)) => MemoryRoute::body(
                 method,
                 &route.path,

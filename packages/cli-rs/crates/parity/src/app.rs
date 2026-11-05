@@ -73,6 +73,8 @@ pub struct RouteSpec {
     pub status: Option<u16>,
     pub json: Option<Value>,
     pub body: Option<String>,
+    /// Binary bytes, base64-encoded.
+    pub base64: Option<String>,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
 }

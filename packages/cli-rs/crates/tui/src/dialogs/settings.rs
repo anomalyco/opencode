@@ -594,7 +594,9 @@ fn write(
     live.done.borrow_mut().push_back(Box::new(done));
     let proxy = tui.app.proxy();
     serial.run(move || {
-        let result = config.update_value(change).map_err(|error| error.to_string());
+        let result = config
+            .update_value(change)
+            .map_err(|error| error.to_string());
         let _ = proxy.send(Loaded::Written(result));
     });
 }
