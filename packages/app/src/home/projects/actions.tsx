@@ -78,15 +78,17 @@ export function createProjectActions() {
 
       if (!platform.openAttachmentPickerDialog)
         return dispatchImport({ type: "picker.closed", attempt: effect.attempt, file: undefined })
-      void platform.openAttachmentPickerDialog(
-        { title: language.t("command.session.import"), accept: ["application/json"], extensions: ["json"] },
-        async (file) => {
-          picked = file
-        },
-      ).then(
-        () => dispatchImport({ type: "picker.closed", attempt: effect.attempt, file: picked }),
-        (cause: unknown) => dispatchImport({ type: "picker.failed", attempt: effect.attempt, cause }),
-      )
+      void platform
+        .openAttachmentPickerDialog(
+          { title: language.t("command.session.import"), accept: ["application/json"], extensions: ["json"] },
+          async (file) => {
+            picked = file
+          },
+        )
+        .then(
+          () => dispatchImport({ type: "picker.closed", attempt: effect.attempt, file: picked }),
+          (cause: unknown) => dispatchImport({ type: "picker.failed", attempt: effect.attempt, cause }),
+        )
 
       return
     }

@@ -52,7 +52,12 @@ test("a delete that fails or hangs returns to the confirmation", () => {
 
 test("a delete closes the dialog and leaves the session, even when it lands after the dialog went", () => {
   const deleting = replay([{ type: "confirm.requested", target: header }])
-  const done = transitionSessionDelete(deleting, { type: "delete.succeeded", attempt: deleting.attempt, target: header })
+
+  const done = transitionSessionDelete(deleting, {
+    type: "delete.succeeded",
+    attempt: deleting.attempt,
+    target: header,
+  })
 
   expect(done.effects).toEqual([
     { type: "timer.cancel" },

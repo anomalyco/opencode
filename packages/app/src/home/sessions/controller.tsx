@@ -437,7 +437,9 @@ export function createHomeSessionsController(home: HomeController) {
         return showToast({
           title: language.t("session.delete.failed.title"),
           description:
-            effect.cause === undefined ? undefined : errorMessage(effect.cause, language.t("session.delete.failed.title")),
+            effect.cause === undefined
+              ? undefined
+              : errorMessage(effect.cause, language.t("session.delete.failed.title")),
         })
 
       clearTimeout(timer)

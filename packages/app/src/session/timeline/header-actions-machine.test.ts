@@ -124,4 +124,3 @@ test("a save that fails or hangs returns to the edit with the draft", () => {
     transitionSessionHeaderTitle(saving, { type: "rename.succeeded", attempt: attempt(saving) }).state.status,
   ).toBe("idle")
 })
-

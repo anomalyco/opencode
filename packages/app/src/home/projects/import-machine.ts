@@ -35,7 +35,12 @@ export type ProjectImportEvent =
 
 export type ProjectImportEffect =
   | { readonly type: "picker.open"; readonly attempt: number }
-  | { readonly type: "upload.start"; readonly attempt: number; readonly target: ProjectImportTarget; readonly file: File }
+  | {
+      readonly type: "upload.start"
+      readonly attempt: number
+      readonly target: ProjectImportTarget
+      readonly file: File
+    }
   | { readonly type: "toast.pending.show" }
   | { readonly type: "toast.pending.dismiss" }
   | { readonly type: "toast.failed"; readonly cause: unknown }

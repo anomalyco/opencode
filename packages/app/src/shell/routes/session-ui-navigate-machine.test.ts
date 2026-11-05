@@ -35,7 +35,11 @@ test("clicking subagent A, then B, lands on B whenever A's sync settles", () => 
     { type: "child.synced", attempt: 1 },
   ])
 
-  const [, , earlyA, thenB] = replay([...clicks, { type: "child.synced", attempt: 1 }, { type: "child.synced", attempt: 2 }])
+  const [, , earlyA, thenB] = replay([
+    ...clicks,
+    { type: "child.synced", attempt: 1 },
+    { type: "child.synced", attempt: 2 },
+  ])
 
   // Nothing touches the tab or the route until the sync settles.
   expect(a?.effects).toEqual([{ type: "child.sync", attempt: 1, targetSessionID: "ses_a" }])
