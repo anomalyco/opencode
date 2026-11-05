@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Näytä tai piilota virheenkorjauspalkki",
+  providerAriaLabel: "Palveluntarjoajan suorituskyvyn diagnostiikka",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "Aika viimeisimmän vuoron aloittaneesta kehotteesta vastauksen valmistumiseen.",
+  "tps.label": "TPS",
+  "tps.tip": "Tuloste- ja päättelytokeneita sekunnissa viimeisimmän vuoron mallipyynnöissä, ilman työkalujen aikaa.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Pakota kohdistustyylit kaikkiin vuorovaikutteisiin elementteihin",
+  "focus.on": "KÄYTÖSSÄ",
+  "focus.off": "EI KÄYTÖSSÄ",
+  "direction.label": "DIR",
+  "direction.tip": "Pakota koko sovelluksen asettelun suunta valittua kieltä muuttamatta",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

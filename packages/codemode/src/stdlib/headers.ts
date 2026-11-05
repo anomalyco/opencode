@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import type { Eval } from "../interpreter/runner.js"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, typeError } from "../interpreter/model.js"
 import {
@@ -27,25 +27,23 @@ const attempt = <T>(run: () => T): T => {
   }
 }
 
-const constructHeaders = <R>(ctx: Interpreter<R>, init: Value, proto: Obj): Effect.Effect<HeadersObj, unknown, R> => {
+function* constructHeaders<R>(ctx: Interpreter<R>, init: Value, proto: Obj): Eval<HeadersObj> {
   const wrap = (headers: Headers) => new HeadersObj(proto, headers)
-  if (init === undefined) return Effect.succeed(wrap(new Headers()))
-  return Effect.gen(function* () {
-    const pairs = init instanceof Obj ? yield* readPairs(ctx, init, "new Headers(...)") : undefined
-    if (pairs !== undefined) return wrap(attempt(() => new Headers(pairs)))
-    if (!(init instanceof Obj) || isRuntimeReference(init)) {
-      throw typeError("new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.")
-    }
-    return wrap(
-      attempt(() => new Headers(Object.fromEntries(entries(init).map(([key, value]) => [key, coerceToString(value)])))),
-    )
-  })
+  if (init === undefined) return wrap(new Headers())
+  const pairs = init instanceof Obj ? yield* readPairs(ctx, init, "new Headers(...)") : undefined
+  if (pairs !== undefined) return wrap(attempt(() => new Headers(pairs)))
+  if (!(init instanceof Obj) || isRuntimeReference(init)) {
+    throw typeError("new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.")
+  }
+  return wrap(
+    attempt(() => new Headers(Object.fromEntries(entries(init).map(([key, value]) => [key, coerceToString(value)])))),
+  )
 }
 
 export const headersGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Headers
-  const headers = constructor<R>(builtins, proto, {
+  const headers = constructor(builtins, proto, {
     name: "Headers",
     call: requiresNew("Headers"),
     construct: (args, newTarget) => constructHeaders(ctx, args[0], prototypeFrom(newTarget, proto)),
@@ -112,14 +110,12 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "forEach",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         requireArgs("forEach", args, 1)
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Headers.forEach")
-        return Effect.gen(function* () {
-          for (const [key, value] of Array.from(target.headers.entries())) yield* apply([value, key, target], args[1])
-          return undefined
-        })
+        for (const [key, value] of Array.from(target.headers.entries())) yield* apply([value, key, target], args[1])
+        return undefined
       },
     ],
   ])

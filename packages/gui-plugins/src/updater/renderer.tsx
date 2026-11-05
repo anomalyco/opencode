@@ -1,0 +1,212 @@
+import { showToast } from "@opencode/ui/toast"
+import { lazy, onCleanup, Suspense } from "solid-js"
+import { Command, createKeyed, SettingsPage, TitlebarItem, type SetupContext, type Plugin } from "@opencode/plugin/gui"
+import { onIdle } from "@opencode/plugin/gui/builtin"
+import { Updater } from "@opencode/plugin/gui/updater"
+import { updaterAction } from "./action"
+import { webUpdates } from "./web"
+import {
+  initWhatsNew,
+  transitionWhatsNew,
+  whatsNewLoading,
+  type WhatsNewContent,
+  type WhatsNewEffect,
+  type WhatsNewEvent,
+} from "./whats-new-machine"
+import type definition from "./index"
+
+const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  whatsNew(ctx)
+  betaNotes(ctx)
+
+  if (!ctx.desktop) return webUpdates(ctx)
+  const updater = ctx.main(Updater)
+  // Undefined until main's updater is up and has sent its state, and again while it is gone.
+  const state = () => updater.state()
+
+  const act = (name: "check" | "install") => {
+    if (state()) return void import("./actions").then((module) => module[name](ctx, updater))
+
+    // Not loaded yet, or not active (failed, or not on this platform): nothing can check or install.
+    showToast({ title: ctx.t("common.requestFailed") })
+  }
+
+  const Section = lazy(() => import("./section"))
+  // Settings rows are small; load them while idle so settings opens without a blank row.
+  onCleanup(onIdle(() => void Section.preload()))
+
+  ctx.add(TitlebarItem, () => {
+    const current = state()
+    const installing = current?.status === "installing"
+    const ready = current?.status === "ready" || current?.status === "download-required"
+
+    if (!ready && !installing) return
+
+    return {
+      id: "update",
+      label: ctx.t("status.label"),
+      title: ctx.t(updaterAction(current).label),
+      busy: installing,
+      run: () => act("install"),
+    }
+  })
+
+  ctx.add(SettingsPage, {
+    id: "updates",
+    page: "general",
+    get title() {
+      return ctx.t("section.title")
+    },
+    get entries() {
+      return [
+        { id: "settings-release-notes", title: ctx.t("releaseNotes.title") },
+        { id: "settings-check-updates", title: ctx.t("check.title") },
+      ]
+    },
+    render: () => (
+      <Suspense>
+        <Section
+          action={() => updaterAction(state())}
+          run={() => {
+            const run = updaterAction(state()).run
+
+            if (run) act(run)
+          }}
+        />
+      </Suspense>
+    ),
+  })
+
+  ctx.add(Command, (): Command => ({ id: "check", title: ctx.t("menu.check"), hidden: true, run: () => act("check") }))
+
+  // Beta builds answer the app menu's Check for Updates in the focused window instead of a native dialog. The
+  // listener follows main's updater across restarts.
+  updater.on("check", () => act("check"))
+}
+
+/**
+ * What's new in beta as a settings page, to come back to after its dialog closes. Only builds that embed the notes
+ * have it: beta builds and the desktop dev server.
+ */
+function betaNotes(ctx: SetupContext<typeof definition>) {
+  if (!import.meta.env.OPENCODE_BETA_NOTES) return
+
+  const Page = lazy(() => import("./beta-page"))
+
+  ctx.add(SettingsPage, {
+    id: "whats-new",
+    icon: "outline-list-changelog",
+    group: "about",
+    get title() {
+      return ctx.t("beta.title")
+    },
+    get entries() {
+      return [{ id: "whats-new", title: ctx.t("beta.title"), keywords: "changelog release notes beta" }]
+    },
+    render: () => (
+      <Suspense>
+        <Page />
+      </Suspense>
+    ),
+  })
+}
+
+/**
+ * What's New after an update, on every platform: the release highlights since the version last seen, or on beta the
+ * features and fixes of the beta builds since then. The first run and a disabled What's New only remember the version.
+ */
+function whatsNew(ctx: SetupContext<typeof definition>) {
+  const seen = ctx.stores.seen
+  const controller = new AbortController()
+
+  const start = initWhatsNew({
+    version: ctx.app.version,
+    commit: import.meta.env.OPENCODE_COMMIT,
+    channel: ctx.app.channel === "beta" ? "beta" : "stable",
+    previousVersion: seen.value.version,
+    previousCommit: seen.value.commit,
+    enabled: ctx.stores.releaseNotes.value.enabled,
+  })
+
+  let whatsNewState = start.state
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: WhatsNewEvent) => {
+    const next = transitionWhatsNew(whatsNewState, event)
+
+    whatsNewState = next.state
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: WhatsNewEffect) => {
+    if (effect.type === "mark-seen")
+      return seen.update((draft) => {
+        draft.version = effect.version
+
+        // Beta remembers the build's commit even when nothing shows, so the next update lists what came after it.
+        if (effect.commit) draft.commit = effect.commit
+      })
+
+    if (effect.type === "abort-load") {
+      clearTimeout(timer)
+      controller.abort()
+
+      return
+    }
+
+    if (effect.type === "open") return void open(effect.content, effect.previousVersion)
+
+    timer = setTimeout(() => dispatch({ type: "load.timed-out" }), effect.timeoutMs)
+    void load(effect).then(
+      (content) => dispatch({ type: "loaded", content }),
+      () => dispatch({ type: "load.failed" }),
+    )
+  }
+
+  const load = async (effect: Extract<WhatsNewEffect, { type: "load" }>): Promise<WhatsNewContent | undefined> => {
+    if (effect.channel === "beta") {
+      const { readBetaNotes } = await import("./beta-dialog")
+      const notes = readBetaNotes(effect.previousCommit)
+
+      return notes && { channel: "beta", notes }
+    }
+
+    const { loadWhatsNewHighlights } = await import("./whats-new")
+
+    const highlights = await loadWhatsNewHighlights({
+      previous: effect.previousVersion,
+      current: effect.version,
+      signal: controller.signal,
+    })
+
+    return { channel: "stable", highlights }
+  }
+
+  // The chunk loaded with the notes, so this resolves at once.
+  const open = async (content: WhatsNewContent, previousVersion: string) => {
+    if (content.channel === "beta") {
+      const { openBetaNotes } = await import("./beta-dialog")
+
+      if (!ctx.signal.aborted) openBetaNotes(ctx, content.notes, previousVersion)
+
+      return
+    }
+
+    const { openWhatsNew } = await import("./whats-new")
+
+    if (!ctx.signal.aborted) openWhatsNew(ctx, content.highlights)
+  }
+
+  start.effects.forEach(run)
+
+  if (!whatsNewLoading(whatsNewState)) return
+
+  // Turning release notes off in Settings while the notes load means they never open.
+  createKeyed(
+    () => !ctx.stores.releaseNotes.value.enabled,
+    () => dispatch({ type: "disabled" }),
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
+}
+
+export default setup

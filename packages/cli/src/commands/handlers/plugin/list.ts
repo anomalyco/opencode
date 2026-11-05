@@ -80,9 +80,7 @@ export function format(
         !plugins.some((plugin) =>
           plugin.source.type === "package"
             ? plugin.source.target === item.target
-            : plugin.source.type === "local" &&
-              (plugin.source.path === item.target ||
-                (plugin.features.tui && path.dirname(plugin.source.path) === item.target)),
+            : plugin.source.type === "local" && plugin.source.path === item.target,
         ),
     )
     .filter((plugin, index, all) => all.findIndex((candidate) => candidate.target === plugin.target) === index)

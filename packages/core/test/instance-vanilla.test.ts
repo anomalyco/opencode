@@ -12,7 +12,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { AbsolutePath } from "@opencode/core/schema"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
@@ -70,10 +70,7 @@ const it = testEffect(
 
 describe("Instance vanilla", () => {
   it.live("boots without filesystem config discovery", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
+    tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
           const locations = yield* LocationServiceMap.Service

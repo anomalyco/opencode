@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigProvider } from "@opencode/schema/config/provider"
@@ -14,6 +15,8 @@ import { Credential } from "@opencode/core/credential"
 import { ConfigV1 } from "../fixture/v1-config/config"
 import { ConfigPermissionV1 } from "@opencode/core/v1/config/permission"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { ConfigVariable } from "@opencode/core/config/variable"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Bus } from "@opencode/core/bus"
 import { Global } from "@opencode/util/global"
@@ -24,13 +27,16 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { WellKnown } from "@opencode/core/wellknown"
 import { KV } from "@opencode/core/kv"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
+import { Wildcard } from "@opencode/core/util/wildcard"
 import { Integration } from "@opencode/schema/integration"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
+import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
-import { tmpdir } from "../fixture/tmpdir"
+import { tmpdir, withTempDir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
+const itWithPermissions = process.platform === "win32" || process.getuid?.() === 0 ? it.live.skip : it.live
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
 const decodeInfo = Schema.decodeUnknownSync(Info, { errors: "all", onExcessProperty: "ignore" })
 const encodeInfo = Schema.encodeSync(Info)
@@ -132,6 +138,51 @@ describe("Config", () => {
     ),
   )
 
+  it.live("excludes claude directories when claude is disabled", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(global, "home")
+        const project = path.join(tmp.path, "project")
+        return Effect.promise(() =>
+          Promise.all([
+            fs.mkdir(path.join(home, ".claude"), { recursive: true }),
+            fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+            fs.mkdir(path.join(project, ".claude"), { recursive: true }),
+            fs.mkdir(path.join(project, ".agents"), { recursive: true }),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            // Fixture control: both global and project claude dirs are found by default.
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const compatibility = yield* config.compatibility!()
+              expect(compatibility.claude.filter((item) => inFixture(tmp.path, item))).toEqual([
+                AbsolutePath.make(path.join(home, ".claude")),
+                AbsolutePath.make(path.join(project, ".claude")),
+              ])
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const compatibility = yield* config.compatibility!()
+              expect(compatibility.claude).toEqual([])
+              expect(compatibility.agents.filter((item) => inFixture(tmp.path, item))).toEqual([
+                AbsolutePath.make(path.join(home, ".agents")),
+                AbsolutePath.make(path.join(project, ".agents")),
+              ])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, undefined, undefined, { claude: false }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.live("excludes global config reached through the project walk when global is disabled", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {
@@ -160,6 +211,39 @@ describe("Config", () => {
               ),
             ),
           ),
+        )
+      }),
+    ),
+  )
+
+  // Filesystem sandboxes deny reads outside the project. Simulate a denied discovery root with a
+  // symlink into an unsearchable directory, which makes realpath fail with EACCES.
+  itWithPermissions("treats unreadable discovery roots as absent", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(global, "home")
+        const project = path.join(home, "project")
+        const locked = path.join(tmp.path, "locked")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(locked, "agents"), { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+          await fs.symlink(path.join(locked, "agents"), path.join(home, ".agents"))
+          await fs.symlink(path.join(locked, "agents"), path.join(project, ".opencode"))
+          await fs.chmod(locked, 0o000)
+        }).pipe(
+          Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => fs.chmod(locked, 0o755)))),
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const entries = yield* config.entries()
+              expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual([
+                "project",
+              ])
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+          Effect.scoped,
         )
       }),
     ),
@@ -238,9 +322,7 @@ describe("Config", () => {
               ])
               expect(Config.latest(entries, "shell")).toBe("system")
               expect(Config.latest(entries, "username")).toBe("system-user")
-              expect(
-                ManagedPolicy.decision(ManagedPolicy.statements(entries, { statements: [] }), "tool.use", "shell:ls"),
-              ).toBe("deny")
+              expect(ManagedPolicy.decision(ManagedPolicy.statements(entries), "tool.use", "shell:ls")).toBe("deny")
             }).pipe(
               Effect.provide(
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
@@ -333,6 +415,246 @@ describe("Config", () => {
                 testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
                   file: explicit,
                   content: JSON.stringify({ shell: "content" }),
+                }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("layers integration documents below remote and user config and reloads when they change", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const named = (name: string) => ({ providers: { remote: { name } } })
+        yield* Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify(named("global")))
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify(named("project")))
+        })
+        const integrationID = Integration.ID.make("https://example.com")
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.mock(Credential.Service)({
+            list: () =>
+              Effect.succeed([
+                new Credential.Info({
+                  id: Credential.ID.create(),
+                  integrationID,
+                  label: "default",
+                  value: Credential.Key.make({ type: "key", key: "secret" }),
+                }),
+              ]),
+          }),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = {
+          origin: "https://example.com",
+          integrationID,
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.mock(WellKnown.Service)({
+            entries: () => Effect.succeed([entry]),
+            snapshot: () => [entry],
+            resolve: () => Effect.succeed([named("wellknown")]),
+          }),
+          deps: [],
+        })
+        const names = (entries: readonly Entry[]) =>
+          entries.flatMap((entry) => (entry.type === "document" ? [entry.info.providers?.remote?.name] : []))
+
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const bus = yield* Bus.Service
+          const updated = Effect.fnUntraced(function* (change: Effect.Effect<void>) {
+            const event = yield* bus
+              .subscribe(Event.Updated)
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* change
+            expect(yield* Fiber.join(event)).toHaveLength(1)
+            return names(yield* config.entries())
+          })
+          const integration = Integration.ID.make("opencode")
+          expect(names(yield* config.entries())).toEqual(["wellknown", "global", "project"])
+          expect(
+            yield* updated(
+              config.integration!(
+                integration,
+                ConfigIntegration.make({
+                  integrationID: integration,
+                  connection: { type: "env", name: "OPENCODE_API_KEY" },
+                  info: decodeInfo(named("console")),
+                }),
+              ),
+            ),
+          ).toEqual(["console", "wellknown", "global", "project"])
+          expect(yield* updated(config.integration!(integration, undefined))).toEqual([
+            "wellknown",
+            "global",
+            "project",
+          ])
+        }).pipe(
+          Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
+        )
+      }),
+    ),
+  )
+
+  it.live("ranks integration policies below managed policies and above user and project policies", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const system = path.join(tmp.path, "system")
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const shell = (resource: string, effect: "allow" | "deny") => ({ action: "tool.use", resource, effect })
+        const write = (directory: string, policies: unknown[]) =>
+          fs
+            .mkdir(directory, { recursive: true })
+            .then(() => fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ policies })))
+        return Effect.promise(() =>
+          Promise.all([
+            write(system, [shell("shell:rm*", "deny")]),
+            write(global, [shell("shell:*", "allow")]),
+            write(project, [shell("shell:*", "allow")]),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const integration = Integration.ID.make("opencode")
+              yield* config.integration!(
+                integration,
+                ConfigIntegration.make({
+                  integrationID: integration,
+                  connection: { type: "env", name: "OPENCODE_API_KEY" },
+                  organization: "Acme",
+                  info: decodeInfo({ policies: [shell("shell:rm*", "allow"), shell("shell:*", "deny")] }),
+                }),
+              )
+              const statements = ManagedPolicy.statements(yield* config.entries())
+              const deciding = (resource: string) =>
+                statements.findLast(
+                  (policy) => policy.action === "tool.use" && Wildcard.match(resource, policy.resource),
+                )
+              expect(deciding("shell:rm -rf")).toMatchObject({
+                effect: "deny",
+                message: "Blocked by configuration policy",
+              })
+              expect(deciding("shell:ls")).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
+                  system,
+                }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps only the policies of documents from integrations managed policy denies", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const system = path.join(tmp.path, "system")
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const allowed = "org_allowed"
+        const opencode = Integration.ID.make("opencode")
+        const origin = "https://ai.acme.com"
+        const credentialID = Credential.ID.create()
+        let org = "org_personal"
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.mock(Credential.Service)({
+            list: () => Effect.succeed([]),
+            get: (id) =>
+              Effect.succeed(
+                new Credential.Info({
+                  id,
+                  integrationID: opencode,
+                  label: "Console",
+                  value: Credential.Key.make({ type: "key", key: "secret", metadata: { orgID: org } }),
+                }),
+              ),
+          }),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = { origin, integrationID: Integration.ID.make(origin), manifest: {} }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.mock(WellKnown.Service)({
+            entries: () => Effect.succeed([entry]),
+            snapshot: () => [entry],
+            cached: () =>
+              Effect.succeed([
+                {
+                  mcp: { servers: { wiki: { type: "remote", url: "https://wiki.acme.com/mcp" } } },
+                  policies: [{ action: "tool.use", resource: "shell:rm*", effect: "deny" }],
+                },
+              ]),
+          }),
+          deps: [],
+        })
+        const supplied = (entries: readonly Entry[]) =>
+          entries.flatMap((entry) =>
+            entry.type === "document" && !entry.path
+              ? [{ servers: Object.keys(entry.info.mcp?.servers ?? {}), policies: entry.info.policies?.length ?? 0 }]
+              : [],
+          )
+        return Effect.promise(() =>
+          fs.mkdir(system, { recursive: true }).then(() =>
+            fs.writeFile(
+              path.join(system, "opencode.json"),
+              JSON.stringify({
+                policies: [
+                  { action: "integration.use", resource: "*", effect: "deny" },
+                  { action: "integration.use", resource: `opencode#${allowed}`, effect: "allow" },
+                ],
+              }),
+            ),
+          ),
+        ).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const install = () =>
+                config.integration!(
+                  opencode,
+                  ConfigIntegration.make({
+                    integrationID: opencode,
+                    connection: { type: "credential", id: credentialID, label: "Console", method: "key" },
+                    organization: org,
+                    info: decodeInfo({
+                      mcp: { servers: { docs: { type: "remote", url: "https://docs.acme.com/mcp" } } },
+                      policies: [{ action: "mcp.use", resource: "github", effect: "deny" }],
+                    }),
+                  }),
+                )
+              yield* install()
+              // The personal account's servers and the denied well-known origin's config are gone; their policies stay.
+              expect(supplied(yield* config.entries())).toEqual([
+                { servers: [], policies: 1 },
+                { servers: [], policies: 1 },
+              ])
+              org = allowed
+              yield* config.integration!(opencode, undefined)
+              yield* install()
+              expect(supplied(yield* config.entries())).toEqual([
+                { servers: ["docs"], policies: 1 },
+                { servers: [], policies: 1 },
+              ])
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
+                  system,
                 }),
               ),
             ),
@@ -557,242 +879,229 @@ describe("Config", () => {
   })
 
   it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const project = path.join(tmp.path, "project")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
-            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
-          })
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ shell: "global" }))
+          await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+        })
 
-          const integrationID = Integration.ID.make("https://example.com")
-          let available = false
-          let key = "secret"
-          const credentialNode = makeGlobalNode({
-            service: Credential.Service,
-            layer: Layer.succeed(
-              Credential.Service,
-              Credential.Service.of({
-                all: () => Effect.die("unused Credential.all"),
-                list: () =>
-                  Effect.succeed([
+        const integrationID = Integration.ID.make("https://example.com")
+        let available = false
+        let key = "secret"
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.succeed(
+            Credential.Service,
+            Credential.Service.of({
+              lock: () => Effect.die("unused Credential.lock"),
+              all: () => Effect.die("unused Credential.all"),
+              list: () =>
+                Effect.succeed([
+                  new Credential.Info({
+                    id: Credential.ID.create(),
+                    integrationID,
+                    label: "default",
+                    value: Credential.Key.make({ type: "key", key }),
+                  }),
+                ]),
+              get: () => Effect.die("unused Credential.get"),
+              create: () => Effect.die("unused Credential.create"),
+              activate: () => Effect.die("unused Credential.activate"),
+              update: () => Effect.die("unused Credential.update"),
+              remove: () => Effect.die("unused Credential.remove"),
+            }),
+          ),
+          deps: [],
+        })
+        const entry: WellKnown.Entry = {
+          origin: "https://example.com",
+          integrationID,
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.succeed(
+            WellKnown.Service,
+            WellKnown.Service.of({
+              entries: () => Effect.succeed([entry]),
+              snapshot: () => [entry],
+              refresh: () => Effect.succeed(false),
+              add: () => Effect.die("unused Wellknown.add"),
+              remove: () => Effect.die("unused Wellknown.remove"),
+              resolve: (_entry, variables) =>
+                available ? Effect.succeed([{ shell: variables.TOKEN }]) : Effect.fail(new Error("expired credential")),
+              cached: () => Effect.succeed([]),
+            }),
+          ),
+          deps: [],
+        })
+
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const bus = yield* Bus.Service
+          const initial = yield* config.entries()
+          expect(Config.latest(initial, "shell")).toBe("project")
+          expect(
+            initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
+          ).toEqual(["global", "project"])
+          const updated = yield* bus.subscribe(Event.Updated).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+          yield* Effect.yieldNow
+          available = true
+          key = "next"
+          yield* bus.publish(
+            Credential.Event.Switched,
+            { credentialID: Credential.ID.create(), integrationID },
+            { global: true },
+          )
+          expect(yield* Fiber.join(updated)).toHaveLength(1)
+          const refreshed = yield* config.entries()
+          expect(Config.latest(refreshed, "shell")).toBe("project")
+          expect(
+            refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
+          ).toEqual(["next", "global", "project"])
+        }).pipe(
+          Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps the last resolved wellknown config across failures and restarts until its source is removed", () =>
+    withTempDir((tmp) => {
+      let manifestStatus = 200
+      let configStatus = 200
+      let requests = 0
+      let key: string | undefined = "secret"
+      const server = Bun.serve({
+        port: 0,
+        fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/.well-known/opencode") {
+            if (manifestStatus !== 200) return new Response("Unavailable", { status: manifestStatus })
+            return Response.json({
+              auth: { command: ["login"], env: "TOKEN" },
+              remote_config: { url: `${url.origin}/config`, headers: { authorization: "Bearer {env:TOKEN}" } },
+            })
+          }
+          requests++
+          if (configStatus !== 200) return new Response("Unavailable", { status: configStatus })
+          return Response.json({
+            config: {
+              enabled_providers: ["remote"],
+              provider: { remote: { npm: "@ai-sdk/openai-compatible", models: { chat: {} } } },
+            },
+          })
+        },
+      })
+      const origin = server.url.origin
+      const integrationID = Integration.ID.make(origin)
+      const credentialNode = makeGlobalNode({
+        service: Credential.Service,
+        layer: Layer.mock(Credential.Service)({
+          list: () =>
+            Effect.succeed(
+              key === undefined
+                ? []
+                : [
                     new Credential.Info({
                       id: Credential.ID.create(),
                       integrationID,
                       label: "default",
                       value: Credential.Key.make({ type: "key", key }),
                     }),
-                  ]),
-                get: () => Effect.die("unused Credential.get"),
-                create: () => Effect.die("unused Credential.create"),
-                activate: () => Effect.die("unused Credential.activate"),
-                update: () => Effect.die("unused Credential.update"),
-                remove: () => Effect.die("unused Credential.remove"),
-              }),
+                  ],
             ),
-            deps: [],
-          })
-          const entry: WellKnown.Entry = {
-            origin: "https://example.com",
-            integrationID,
-            manifest: { auth: { command: ["login"], env: "TOKEN" } },
-          }
-          const wellknownNode = makeGlobalNode({
-            service: WellKnown.Service,
-            layer: Layer.succeed(
-              WellKnown.Service,
-              WellKnown.Service.of({
-                entries: () => Effect.succeed([entry]),
-                snapshot: () => [entry],
-                refresh: () => Effect.succeed(false),
-                add: () => Effect.die("unused Wellknown.add"),
-                remove: () => Effect.die("unused Wellknown.remove"),
-                resolve: (_entry, variables) =>
-                  available
-                    ? Effect.succeed([{ shell: variables.TOKEN }])
-                    : Effect.fail(new Error("expired credential")),
-                cached: () => Effect.succeed([]),
-              }),
+        }),
+        deps: [],
+      })
+      const global = path.join(tmp.path, "global")
+      const project = path.join(tmp.path, "project")
+      const remote = (entries: readonly Entry[]) => ({
+        provider: Config.latest(entries, "providers")?.remote?.package,
+        policies: Config.latest(entries, "policies"),
+      })
+      const loaded = {
+        provider: "aisdk:@ai-sdk/openai-compatible",
+        policies: [
+          { action: "provider.use", resource: "*", effect: "deny" },
+          { action: "provider.use", resource: "remote", effect: "allow" },
+        ],
+      } as const
+      const removed = { provider: undefined, policies: undefined }
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+        const kv = Layer.succeedContext(yield* Layer.build(LayerNode.compile(KV.node)))
+        // Each build is a fresh process sharing one persisted KV store.
+        const instance = () =>
+          AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node, WellKnown.node]), [
+            Config.node.replace(Config.configured({ system: false })),
+            Location.node.replace(
+              Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(project) }))),
             ),
-            deps: [],
-          })
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const bus = yield* Bus.Service
-            const initial = yield* config.entries()
-            expect(Config.latest(initial, "shell")).toBe("project")
-            expect(
-              initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["global", "project"])
+            Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+            Credential.node.replace(credentialNode),
+            KV.node.replace(kv),
+            Watcher.node.replace(Watcher.testLayer),
+          ])
+        const services = Effect.gen(function* () {
+          const config = yield* Config.Service
+          const bus = yield* Bus.Service
+          // Each reload also rewrites a local file so Config publishes an update to wait on.
+          const reload = Effect.fnUntraced(function* (shell: string, trigger: Effect.Effect<unknown, Error>) {
             const updated = yield* bus
               .subscribe(Event.Updated)
-              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
-            yield* Effect.yieldNow
-            available = true
-            key = "next"
-            yield* bus.publish(
-              Credential.Event.Switched,
-              { credentialID: Credential.ID.create(), integrationID },
-              { global: true },
-            )
-            expect(yield* Fiber.join(updated)).toHaveLength(1)
-            const refreshed = yield* config.entries()
-            expect(Config.latest(refreshed, "shell")).toBe("project")
-            expect(
-              refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["next", "global", "project"])
-          }).pipe(
-            Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
-          )
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
-  )
-
-  it.live("keeps the last resolved wellknown config across failures and restarts until its source is removed", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => {
-        let manifestStatus = 200
-        let configStatus = 200
-        let requests = 0
-        let key: string | undefined = "secret"
-        const server = Bun.serve({
-          port: 0,
-          fetch(request) {
-            const url = new URL(request.url)
-            if (url.pathname === "/.well-known/opencode") {
-              if (manifestStatus !== 200) return new Response("Unavailable", { status: manifestStatus })
-              return Response.json({
-                auth: { command: ["login"], env: "TOKEN" },
-                remote_config: { url: `${url.origin}/config`, headers: { authorization: "Bearer {env:TOKEN}" } },
-              })
-            }
-            requests++
-            if (configStatus !== 200) return new Response("Unavailable", { status: configStatus })
-            return Response.json({
-              config: {
-                enabled_providers: ["remote"],
-                provider: { remote: { npm: "@ai-sdk/openai-compatible", models: { chat: {} } } },
-              },
-            })
-          },
-        })
-        const origin = server.url.origin
-        const integrationID = Integration.ID.make(origin)
-        const credentialNode = makeGlobalNode({
-          service: Credential.Service,
-          layer: Layer.mock(Credential.Service)({
-            list: () =>
-              Effect.succeed(
-                key === undefined
-                  ? []
-                  : [
-                      new Credential.Info({
-                        id: Credential.ID.create(),
-                        integrationID,
-                        label: "default",
-                        value: Credential.Key.make({ type: "key", key }),
-                      }),
-                    ],
-              ),
-          }),
-          deps: [],
-        })
-        const global = path.join(tmp.path, "global")
-        const project = path.join(tmp.path, "project")
-        const remote = (entries: readonly Entry[]) => ({
-          provider: Config.latest(entries, "providers")?.remote?.package,
-          policies: Config.latest(entries, "policies"),
-        })
-        const loaded = {
-          provider: "aisdk:@ai-sdk/openai-compatible",
-          policies: [
-            { action: "provider.use", resource: "*", effect: "deny" },
-            { action: "provider.use", resource: "remote", effect: "allow" },
-          ],
-        } as const
-        const removed = { provider: undefined, policies: undefined }
-        return Effect.gen(function* () {
-          yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
-          const kv = Layer.succeedContext(yield* Layer.build(LayerNode.compile(KV.node)))
-          // Each build is a fresh process sharing one persisted KV store.
-          const instance = () =>
-            AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node, WellKnown.node]), [
-              Config.node.replace(Config.configured({ system: false })),
-              Location.node.replace(
-                Layer.succeed(
-                  Location.Service,
-                  Location.Service.of(location({ directory: AbsolutePath.make(project) })),
-                ),
-              ),
-              Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
-              Credential.node.replace(credentialNode),
-              KV.node.replace(kv),
-              Watcher.node.replace(Watcher.testLayer),
-            ])
-          const services = Effect.gen(function* () {
-            const config = yield* Config.Service
-            const bus = yield* Bus.Service
-            // Each reload also rewrites a local file so Config publishes an update to wait on.
-            const reload = Effect.fnUntraced(function* (shell: string, trigger: Effect.Effect<unknown, Error>) {
-              const updated = yield* bus
-                .subscribe(Event.Updated)
-                .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-              yield* Effect.promise(() => fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell })))
-              yield* trigger
-              yield* Fiber.join(updated)
-              return remote(yield* config.entries())
-            })
-            const switched = bus.publish(
-              Credential.Event.Switched,
-              { credentialID: Credential.ID.create(), integrationID },
-              { global: true },
-            )
-            return { config, bus, wellknown: yield* WellKnown.Service, reload, switched }
-          })
-
-          yield* Effect.gen(function* () {
-            const warm = yield* services
-            expect(yield* warm.reload("initial", warm.wellknown.add(origin))).toEqual(loaded)
-
-            configStatus = 503
-            const before = requests
-            expect(yield* warm.reload("unavailable", warm.switched)).toEqual(loaded)
-            expect(requests).toBeGreaterThan(before)
-
-            key = undefined
-            expect(yield* warm.reload("logged-out", warm.switched)).toEqual(loaded)
-
-            manifestStatus = 503
-            const updated = yield* warm.bus
-              .subscribe(WellKnown.Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-            expect(yield* warm.wellknown.refresh()).toBe(false)
-            yield* Effect.sleep("50 millis")
-            expect(updated.pollUnsafe()).toBeUndefined()
-          }).pipe(Effect.scoped, Effect.provide(instance()))
+            yield* Effect.promise(() => fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell })))
+            yield* trigger
+            yield* Fiber.join(updated)
+            return remote(yield* config.entries())
+          })
+          const switched = bus.publish(
+            Credential.Event.Switched,
+            { credentialID: Credential.ID.create(), integrationID },
+            { global: true },
+          )
+          return { config, bus, wellknown: yield* WellKnown.Service, reload, switched }
+        })
 
-          key = "secret"
-          yield* Effect.gen(function* () {
-            const cold = yield* services
-            expect(remote(yield* cold.config.entries())).toEqual(loaded)
-            // The wellknown plugin loads these entries at startup and dies if they fail.
-            expect(yield* cold.wellknown.entries()).toHaveLength(1)
-            expect(yield* cold.reload("removed", cold.wellknown.remove(origin))).toEqual(removed)
-            manifestStatus = 200
-            expect(yield* cold.reload("re-added", cold.wellknown.add(origin))).toEqual(removed)
-          }).pipe(Effect.scoped, Effect.provide(instance()))
-        }).pipe(Effect.ensuring(Effect.promise(() => server.stop(true))))
-      },
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
+        yield* Effect.gen(function* () {
+          const warm = yield* services
+          expect(yield* warm.reload("initial", warm.wellknown.add(origin))).toEqual(loaded)
+
+          configStatus = 503
+          const before = requests
+          expect(yield* warm.reload("unavailable", warm.switched)).toEqual(loaded)
+          expect(requests).toBeGreaterThan(before)
+
+          key = undefined
+          expect(yield* warm.reload("logged-out", warm.switched)).toEqual(loaded)
+
+          manifestStatus = 503
+          const updated = yield* warm.bus
+            .subscribe(WellKnown.Event.Updated)
+            .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+          expect(yield* warm.wellknown.refresh()).toBe(false)
+          yield* Effect.sleep("50 millis")
+          expect(updated.pollUnsafe()).toBeUndefined()
+        }).pipe(Effect.scoped, Effect.provide(instance()))
+
+        key = "secret"
+        yield* Effect.gen(function* () {
+          const cold = yield* services
+          expect(remote(yield* cold.config.entries())).toEqual(loaded)
+          // The wellknown plugin loads these entries at startup and dies if they fail.
+          expect(yield* cold.wellknown.entries()).toHaveLength(1)
+          expect(yield* cold.reload("removed", cold.wellknown.remove(origin))).toEqual(removed)
+          manifestStatus = 200
+          expect(yield* cold.reload("re-added", cold.wellknown.add(origin))).toEqual(removed)
+        }).pipe(Effect.scoped, Effect.provide(instance()))
+      }).pipe(Effect.ensuring(Effect.promise(() => server.stop(true))))
+    }),
   )
 
   it.live("logs redacted source-aware diagnostics for every config source", () => {
@@ -802,89 +1111,87 @@ describe("Config", () => {
       const details = entry.message[1]
       if (typeof details === "object" && details !== null) output.push(details as Record<string, unknown>)
     })
-    return Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const project = path.join(tmp.path, "project")
-          const malformed = path.join(tmp.path, "malformed.json")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(path.join(global, "opencode.json"), "null")
-            await fs.writeFile(path.join(project, "opencode.json"), "")
-            await fs.writeFile(malformed, '{ "credential": "file-secret"')
-          })
-          const integrationID = Integration.ID.make("https://invalid.example.com")
-          const entry: WellKnown.Entry = {
-            origin: "https://invalid.example.com",
-            integrationID,
-            manifest: { auth: { command: ["login"], env: "TOKEN" } },
-          }
-          const credentialNode = makeGlobalNode({
-            service: Credential.Service,
-            layer: Layer.succeed(
-              Credential.Service,
-              Credential.Service.of({
-                all: () => Effect.die("unused Credential.all"),
-                list: () =>
-                  Effect.succeed([
-                    new Credential.Info({
-                      id: Credential.ID.create(),
-                      integrationID,
-                      label: "default",
-                      value: Credential.Key.make({ type: "key", key: "wellknown-secret" }),
-                    }),
-                  ]),
-                get: () => Effect.die("unused Credential.get"),
-                create: () => Effect.die("unused Credential.create"),
-                activate: () => Effect.die("unused Credential.activate"),
-                update: () => Effect.die("unused Credential.update"),
-                remove: () => Effect.die("unused Credential.remove"),
-              }),
-            ),
-            deps: [],
-          })
-          const wellknownNode = makeGlobalNode({
-            service: WellKnown.Service,
-            layer: Layer.succeed(
-              WellKnown.Service,
-              WellKnown.Service.of({
-                entries: () => Effect.succeed([entry]),
-                snapshot: () => [entry],
-                refresh: () => Effect.succeed(false),
-                add: () => Effect.die("unused Wellknown.add"),
-                remove: () => Effect.die("unused Wellknown.remove"),
-                // Exercise the loader boundary against a malformed implementation response.
-                resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
-                cached: () => Effect.succeed([]),
-              }),
-            ),
-            deps: [],
-          })
+    return withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const malformed = path.join(tmp.path, "malformed.json")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), "null")
+          await fs.writeFile(path.join(project, "opencode.json"), "")
+          await fs.writeFile(malformed, '{ "credential": "file-secret"')
+        })
+        const integrationID = Integration.ID.make("https://invalid.example.com")
+        const entry: WellKnown.Entry = {
+          origin: "https://invalid.example.com",
+          integrationID,
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.succeed(
+            Credential.Service,
+            Credential.Service.of({
+              lock: () => Effect.die("unused Credential.lock"),
+              all: () => Effect.die("unused Credential.all"),
+              list: () =>
+                Effect.succeed([
+                  new Credential.Info({
+                    id: Credential.ID.create(),
+                    integrationID,
+                    label: "default",
+                    value: Credential.Key.make({ type: "key", key: "wellknown-secret" }),
+                  }),
+                ]),
+              get: () => Effect.die("unused Credential.get"),
+              create: () => Effect.die("unused Credential.create"),
+              activate: () => Effect.die("unused Credential.activate"),
+              update: () => Effect.die("unused Credential.update"),
+              remove: () => Effect.die("unused Credential.remove"),
+            }),
+          ),
+          deps: [],
+        })
+        const wellknownNode = makeGlobalNode({
+          service: WellKnown.Service,
+          layer: Layer.succeed(
+            WellKnown.Service,
+            WellKnown.Service.of({
+              entries: () => Effect.succeed([entry]),
+              snapshot: () => [entry],
+              refresh: () => Effect.succeed(false),
+              add: () => Effect.die("unused Wellknown.add"),
+              remove: () => Effect.die("unused Wellknown.remove"),
+              // Exercise the loader boundary against a malformed implementation response.
+              resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
+              cached: () => Effect.succeed([]),
+            }),
+          ),
+          deps: [],
+        })
 
-          yield* Config.Service.use((config) => config.entries()).pipe(
-            Effect.provide(
-              testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
-                file: malformed,
-                content: "",
-              }),
-            ),
-          )
+        yield* Config.Service.use((config) => config.entries()).pipe(
+          Effect.provide(
+            testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
+              file: malformed,
+              content: "",
+            }),
+          ),
+        )
 
-          expect(output.map((item) => `${item.source}:${item.path}:${item.kind}`).toSorted()).toEqual(
-            [
-              `${path.join(global, "opencode.json")}:$:invalid`,
-              `${path.join(project, "opencode.json")}:$:invalid`,
-              `${malformed}:$:invalid`,
-              "https://invalid.example.com:$:invalid",
-              "OPENCODE_CONFIG_CONTENT:$:invalid",
-            ].toSorted(),
-          )
-          expect(JSON.stringify(output)).not.toContain("secret")
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        expect(output.map((item) => `${item.source}:${item.path}:${item.kind}`).toSorted()).toEqual(
+          [
+            `${path.join(global, "opencode.json")}:$:invalid`,
+            `${path.join(project, "opencode.json")}:$:invalid`,
+            `${malformed}:$:invalid`,
+            "https://invalid.example.com:$:invalid",
+            "OPENCODE_CONFIG_CONTENT:$:invalid",
+          ].toSorted(),
+        )
+        expect(JSON.stringify(output)).not.toContain("secret")
+      }),
     ).pipe(Effect.provide(Logger.layer([logger])))
   })
 
@@ -1154,6 +1461,7 @@ describe("Config", () => {
           task: "ask",
           bash: { "git status": "allow", "*": "deny" },
           write: "deny",
+          apply_patch: "deny",
           read: "allow",
         },
       }).permissions,
@@ -1161,6 +1469,7 @@ describe("Config", () => {
       { action: "subagent", resource: "*", effect: "ask" },
       { action: "shell", resource: "git status", effect: "allow" },
       { action: "shell", resource: "*", effect: "deny" },
+      { action: "edit", resource: "*", effect: "deny" },
       { action: "edit", resource: "*", effect: "deny" },
       { action: "read", resource: "*", effect: "allow" },
     ])
@@ -1225,7 +1534,7 @@ describe("Config", () => {
               {
                 type: "directory",
                 path: AbsolutePath.make(path.join(tmp.path, "global")),
-                ignore: ["**/{node_modules,.git}/**", ".git", "node_modules"],
+                ignore: FSUtil.ignoreGlobs.toSorted(),
               },
               {
                 type: "entries",
@@ -1285,29 +1594,24 @@ describe("Config", () => {
   )
 
   it.live("substitutes environment variables and relative file contents", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = {
-          token: process.env.OPENCODE_TEST_MCP_TOKEN,
-          missing: process.env.OPENCODE_TEST_MISSING,
-        }
-        process.env.OPENCODE_TEST_MCP_TOKEN = "secret"
-        delete process.env.OPENCODE_TEST_MISSING
-        return previous
-      }),
+    withEnv(
+      {
+        OPENCODE_TEST_FLAG: "false",
+        OPENCODE_TEST_MCP_TOKEN: String.raw`C:\Users\new\"secret"`,
+        OPENCODE_TEST_MISSING: undefined,
+      },
       () =>
-        Effect.acquireUseRelease(
-          Effect.promise(() => tmpdir()),
-          (tmp) =>
-            Effect.gen(function* () {
-              yield* Effect.promise(() =>
-                Promise.all([
-                  fs.writeFile(path.join(tmp.path, "token.txt"), 'file\n"token"\n'),
-                  fs.writeFile(
-                    path.join(tmp.path, "opencode.jsonc"),
-                    `{
+        withTempDir((tmp) =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() =>
+              Promise.all([
+                fs.writeFile(path.join(tmp.path, "token.txt"), 'file\n"token"\n'),
+                fs.writeFile(
+                  path.join(tmp.path, "opencode.jsonc"),
+                  `{
                       // Ignored reference: {file:.}
                       "username": "user-{env:OPENCODE_TEST_MISSING}",
+                      "snapshots": {env:OPENCODE_TEST_FLAG},
                       "mcp": {
                         "servers": {
                           "remote": {
@@ -1316,40 +1620,48 @@ describe("Config", () => {
                             "headers": {
                               "Authorization": "Bearer {env:OPENCODE_TEST_MCP_TOKEN}",
                               "X-Token": "{file:token.txt}",
-                              "X-Missing": "Bearer {file:~/.opencode-test-missing/key}"
+                              "X-Missing": "Bearer {file:~/.opencode-test-missing/key}",
+                              "X-Folder": "{file:.}"
                             }
                           }
                         }
                       }
                     }`,
-                  ),
-                ]),
-              )
+                ),
+              ]),
+            )
 
-              return yield* Effect.gen(function* () {
-                const config = yield* Config.Service
-                const document = (yield* config.entries()).find((entry) => entry.type === "document")
-                expect(document?.info.username).toBe("user-")
-                const remote = document?.info.mcp?.servers?.remote
-                expect(remote?.type).toBe("remote")
-                if (remote?.type !== "remote") return
-                expect(remote.headers).toEqual({
-                  Authorization: "Bearer secret",
-                  "X-Token": 'file\n"token"',
-                  "X-Missing": "Bearer ",
-                })
-              }).pipe(Effect.provide(testLayer(tmp.path)))
-            }),
-          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+            return yield* Effect.gen(function* () {
+              const config = yield* Config.Service
+              const document = (yield* config.entries()).find((entry) => entry.type === "document")
+              expect(document?.info.username).toBe("user-")
+              expect(document?.info.snapshots).toBe(false)
+              const remote = document?.info.mcp?.servers?.remote
+              expect(remote?.type).toBe("remote")
+              if (remote?.type !== "remote") return
+              expect(remote.headers).toEqual({
+                Authorization: String.raw`Bearer C:\Users\new\"secret"`,
+                "X-Token": 'file\n"token"',
+                "X-Missing": "Bearer ",
+                "X-Folder": "",
+              })
+            }).pipe(Effect.provide(testLayer(tmp.path)))
+          }),
         ),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous.token === undefined) delete process.env.OPENCODE_TEST_MCP_TOKEN
-          else process.env.OPENCODE_TEST_MCP_TOKEN = previous.token
-          if (previous.missing === undefined) delete process.env.OPENCODE_TEST_MISSING
-          else process.env.OPENCODE_TEST_MISSING = previous.missing
-        }),
     ),
+  )
+
+  it.effect("keeps env values unescaped when the config already parses", () =>
+    Effect.gen(function* () {
+      const text = yield* ConfigVariable.substitute({
+        type: "virtual",
+        source: "test",
+        dir: "/",
+        text: '{ "quoted": "{env:QUOTED}", "fragment": {env:FRAGMENT} }',
+        env: { QUOTED: String.raw`a\"b`, FRAGMENT: '{"k":"v"}' },
+      })
+      expect(JSON.parse(text)).toEqual({ quoted: 'a"b', fragment: { k: "v" } })
+    }).pipe(Effect.provide(AppNodeBuilder.build(FSUtil.node))),
   )
 
   it.live("does not load legacy config.json files", () =>
@@ -1778,13 +2090,13 @@ describe("Config", () => {
                   type: "local",
                   command: ["node", "server.js"],
                   disabled: true,
-                  timeout: { catalog: 10000, execution: 10000 },
+                  timeout: { startup: 10000, catalog: 10000, execution: 10000 },
                 },
                 remote: {
                   type: "remote",
                   url: "https://mcp.example.com",
                   oauth: { client_id: "client", callback_port: 19876 },
-                  timeout: { catalog: 20000, execution: 20000 },
+                  timeout: { startup: 20000, catalog: 20000, execution: 20000 },
                 },
               },
             })

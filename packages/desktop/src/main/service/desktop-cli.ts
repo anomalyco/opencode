@@ -9,9 +9,13 @@ import installer from "../../../../../install?raw"
 import { DesktopPaths } from "../paths"
 import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { parseCliVersion } from "./cli-version"
+import { parseCliVersion, stageName } from "./cli-version"
+import { DesktopCliState } from "./desktop-cli-state"
 
 const execFileAsync = promisify(execFile)
+
+// The first `--version` after an update can take several seconds while antivirus scans the executable.
+const RUN_TIMEOUT_MS = 30_000
 
 export interface Resolved {
   readonly version: string
@@ -31,7 +35,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const path = yield* Path.Path
 
-    const resolve = yield* Effect.cached(
+    // A failed lookup (for example a stage copy that antivirus held open) runs again on the next use.
+    const resolve = yield* DesktopCliState.make(
       make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
     )
 
@@ -140,7 +145,7 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   // x64 and ARM64 installers share userData on Windows ARM64, so a same-version switch must not reuse the other copy.
-  const stage = `${version}-${process.arch}`.replace(/[^a-zA-Z0-9._-]/g, "-")
+  const stage = stageName(version)
   const directory = path.join(app.getPath("userData"), "cli", stage)
   const destination = path.join(directory, executableName())
 
@@ -166,7 +171,9 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
 const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[]) {
   yield* Effect.logInfo("v2 CLI command started", { binary, args })
 
-  const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
+  const result = yield* Effect.tryPromise(() =>
+    execFileAsync(binary, args, { windowsHide: true, timeout: RUN_TIMEOUT_MS }),
+  ).pipe(
     Effect.tapError((error) => {
       const output = Option.getOrUndefined(Schema.decodeUnknownOption(ExecFailure)(error.cause))
 

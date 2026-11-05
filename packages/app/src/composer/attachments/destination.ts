@@ -2,7 +2,7 @@ import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { authTokenFromCredentials } from "@/runtime/server/api"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import type { ComposerControls } from "../adapter"
 
@@ -28,11 +28,11 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
       const info = await sdk.api.server.info({ signal })
       // One directory per upload keeps the original filename without collisions; the server
       // normalizes the separators and returns the resolved path.
-      const url = new URL("/api/experimental/fs/write", server.conn.http.url)
+      const url = new URL("/api/experimental/fs/write", sdk.http.url)
       url.searchParams.set("location[directory]", location().directory)
       url.searchParams.set("path", `${info.paths.tmp}/uploads/${uuid()}/${file.name}`)
 
-      return write(url, file, server.conn.http.password, report, signal)
+      return write(url, file, sdk.http.password, report, signal)
     },
   })
 }
@@ -40,8 +40,15 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
 // fetch cannot report upload progress and Chromium only streams request bodies over HTTP/2, so
 // the one request that needs both goes through XMLHttpRequest. The browser streams the File
 // from disk; nothing is buffered in the renderer.
-function write(url: URL, file: File, password: string | undefined, report: (loaded: number) => void, signal: AbortSignal) {
+function write(
+  url: URL,
+  file: File,
+  password: string | undefined,
+  report: (loaded: number) => void,
+  signal: AbortSignal,
+) {
   return new Promise<string>((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException("Upload aborted", "AbortError"))
     const xhr = new XMLHttpRequest()
     xhr.open("POST", url)
     xhr.responseType = "json"

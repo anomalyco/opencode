@@ -13,22 +13,6 @@ import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test("/diff opens the full-screen diff when the side panel experiment is off", async () => {
-  await using state = await tmpdir()
-  await using setup = await createSessionFixture(state.path, { panel: false })
-  await ready(setup)
-  await setup.mockInput.typeText("/diff")
-  await setup.waitForFrame((frame) => frame.includes("Open diff viewer"))
-  setup.mockInput.pressEnter()
-  await setup.waitForFrame((frame) => frame.includes("file00.txt"), { maxPasses: 120 })
-  expect(setup.renderer.root.findDescendantById("session-panel")).toBeUndefined()
-  expect(setup.renderer.root.findDescendantById("diff-footer")).toBeUndefined()
-  expect(setup.captureCharFrame()).not.toContain("Transcript item 11")
-  setup.mockInput.pressKey("q")
-  await setup.waitForFrame((frame) => frame.includes("Transcript item 11") && !frame.includes("file00.txt"))
-  expect(setup.renderer.root.findDescendantById("session-panel")).toBeUndefined()
-})
-
 test("/diff focuses the production session panel without sending typing to the prompt", async () => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path)
@@ -138,6 +122,42 @@ test("repeated fullscreen toggles retain the viewer, transcript, scroll, and rev
   expect(setup.requests.diff[0].searchParams.get("base")).toBe("refs/heads/v2")
 })
 
+test("the diff panel reopens in the presentation last chosen with the fullscreen toggle", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path)
+  await ready(setup)
+  const reopen = async () => {
+    setup.mockInput.pressKey("F6")
+    await setup.waitFor(() => setup.renderer.root.findDescendantById("session-panel") === undefined)
+    setup.mockInput.pressKey("F6")
+    await panelReady(setup)
+  }
+  setup.mockInput.pressKey("F6")
+  await panelReady(setup)
+  expect(node(setup, "session-panel").width).toBeLessThan(setup.renderer.width)
+
+  setup.mockInput.pressKey("f")
+  await setup.waitFor(() => node(setup, "session-panel").width === setup.renderer.width)
+  expect(setup.config().diffs?.fullscreen).toBe(true)
+  await reopen()
+  expect(node(setup, "session-panel").width).toBe(setup.renderer.width)
+
+  setup.mockInput.pressKey("f")
+  await setup.waitFor(() => node(setup, "session-panel").width < setup.renderer.width)
+  expect(setup.config().diffs?.fullscreen).toBe(false)
+  await reopen()
+  expect(node(setup, "session-panel").width).toBeLessThan(setup.renderer.width)
+
+  // A terminal too narrow to split forces full screen; the ignored toggle leaves the preference alone.
+  setup.resize(100, 36)
+  await setup.waitFor(() => node(setup, "session-panel").width === 100)
+  setup.mockInput.pressKey("f")
+  await setup.flush()
+  expect(setup.config().diffs?.fullscreen).toBe(false)
+  setup.resize(160, 36)
+  await setup.waitFor(() => node(setup, "session-panel").width < setup.renderer.width)
+})
+
 test("docked tree commands leave the full-screen tree preference unchanged", async () => {
   await using state = await tmpdir()
   await using setup = await createSessionFixture(state.path, { diffs: { tree: true } })
@@ -220,6 +240,69 @@ test.each([60, 80])("a panel opened at %i columns can split after growing withou
   expect(setup.renderer.currentFocusedRenderable).toBe(panel)
   expect(setup.requests.base).toHaveLength(1)
   expect(setup.requests.diff).toHaveLength(1)
+})
+
+test("narrow terminals show the panel full screen, then compact, and dock again without remounting", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, { diffs: { tree: true } })
+  await ready(setup)
+  const prompt = editor(setup)
+  const transcript = node(setup, "msg_panel_11")
+  setup.mockInput.pressKey("F6")
+  await panelReady(setup)
+  const panel = node(setup, "session-panel")
+  const patches = scroll(setup)
+  setup.mockInput.pressKey("m")
+  await setup.waitForFrame(() => text(setup, "diff-review-count") === "1/4")
+  setup.mockInput.pressKey("j")
+  await setup.waitFor(() => patches.scrollTop > 0)
+  const top = patches.scrollTop
+  const retained = () => {
+    expect(node(setup, "session-panel")).toBe(panel)
+    expect(scroll(setup)).toBe(patches)
+    expect(node(setup, "msg_panel_11")).toBe(transcript)
+    expect(prompt.isDestroyed).toBe(false)
+    expect(setup.renderer.currentFocusedRenderable).toBe(panel)
+    expect(setup.requests.diff).toHaveLength(1)
+  }
+
+  // Below the split threshold the panel takes over with the full layout, including its file tree.
+  setup.resize(107, 36)
+  await setup.waitFor(() => panel.width === 107)
+  retained()
+  expect(patches.scrollTop).toBe(top)
+  expect(setup.renderer.root.findDescendantById("diff-files")).toBeDefined()
+  expect(setup.renderer.root.findDescendantById("diff-footer")).toBeUndefined()
+  expect(text(setup, "diff-source-header")).toContain("1/4")
+  setup.mockInput.pressKey("j")
+  await setup.waitFor(() => patches.scrollTop > top)
+  expect(prompt.plainText).toBe("")
+
+  // Narrower still, the full screen keeps the compact panel rendering without a prompt to focus.
+  setup.resize(80, 36)
+  await setup.waitFor(() => panel.width === 80 && setup.renderer.root.findDescendantById("diff-footer") !== undefined)
+  retained()
+  expect(setup.renderer.root.findDescendantById("diff-files")).toBeUndefined()
+  expect(text(setup, "diff-review-count")).toBe("1/4")
+  expect(text(setup, "diff-footer")).toMatch(/^escape close\s+\? see all$/)
+  expect(text(setup, "diff-footer")).not.toContain("focus prompt")
+  focus(setup, "left")
+  await setup.flush()
+  expect(setup.renderer.currentFocusedRenderable).toBe(panel)
+
+  setup.resize(108, 36)
+  await setup.waitFor(() => panel.width < 108 && panel.x > 0)
+  retained()
+  expect(setup.renderer.root.findDescendantById("diff-files")).toBeUndefined()
+  expect(text(setup, "diff-footer")).toContain("ctrl+x ← focus prompt")
+  focus(setup, "left")
+  await setup.waitFor(() => setup.renderer.currentFocusedEditor === prompt)
+  const docked = patches.scrollTop
+  await setup.mockInput.typeText("jq")
+  await setup.flush()
+  expect(prompt.plainText).toBe("jq")
+  expect(patches.scrollTop).toBe(docked)
+  expect(node(setup, "session-panel")).toBe(panel)
 })
 
 test("split eligibility uses the columns remaining beside vertical session tabs", async () => {
@@ -474,7 +557,6 @@ async function createSessionFixture(
     keybinds?: Config.Info["keybinds"]
     permission?: boolean
     form?: boolean
-    panel?: boolean
   } = {},
 ) {
   // Drafts survive app disposal in memory, so each production app needs its own session identity.
@@ -529,7 +611,6 @@ async function createSessionFixture(
       session: { sidebar: "hide" },
       // Keep patch geometry stable while testing host presentation changes, not split/unified diff layout.
       diffs: { tree: false, view: "unified", ...input.diffs },
-      experimental: { "diff-panel": input.panel ?? true },
       keybinds: { "diff.open": "f6", ...input.keybinds },
     },
     fetch: async (url, request) => {

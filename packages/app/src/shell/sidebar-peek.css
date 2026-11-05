@@ -1,0 +1,22 @@
+/* The closed sidebar peeks in the docked sidebar's own box, over the content and without resizing its zero-width aside,
+   so docking from a peek only has to move the layout. */
+[data-slot="vertical-tabs-sidebar"][data-peek] > [data-slot="vertical-tabs-panel"] {
+  inset-inline-end: auto;
+  width: var(--sidebar-peek-width);
+  overflow: visible;
+  contain: none;
+}
+
+/* Backs the peek and lifts it off the content along its end edge. */
+[data-slot="vertical-tabs-peek-surface"] {
+  display: none;
+}
+
+[data-slot="vertical-tabs-sidebar"][data-peek] [data-slot="vertical-tabs-peek-surface"] {
+  display: block;
+}
+
+/* The collapsed toggle is the one in reach while the sidebar peeks; the docked one's spot stays empty. */
+[data-slot="vertical-tabs-sidebar"][data-peek] [data-slot="sidebar-header"] > :last-child {
+  visibility: hidden;
+}

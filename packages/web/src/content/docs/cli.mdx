@@ -72,15 +72,15 @@ opencode agent create
 
 This command will guide you through creating a new agent with a custom system prompt and permission configuration. Anything you don't allow is denied in the generated agent's frontmatter.
 
-#### Flags
+##### Flags
 
-| Flag                                        | Short | Description                                                                                                                                                                                                   |
-| ------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--path"}</code></nobr>        |       | Directory to write the agent file to (defaults to global or `.opencode/agent` based on the prompt)                                                                                                            |
-| <nobr><code>{"--description"}</code></nobr> |       | What the agent should do                                                                                                                                                                                      |
-| <nobr><code>{"--mode"}</code></nobr>        |       | Agent mode: `all`, `primary`, or `subagent`                                                                                                                                                                   |
-| <nobr><code>{"--permissions"}</code></nobr> |       | Comma-separated list of permissions to allow (default: all). Available: `bash`, `read`, `edit`, `glob`, `grep`, `webfetch`, `task`, `websearch`, `lsp`, `skill`. Anything omitted is denied. Alias: `--tools` |
-| <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use, in `provider/model` format                                                                                                                                                                      |
+| Flag                                        | Short | Description                                                                                                                                                                                                                |
+| ------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--path"}</code></nobr>        |       | Config directory whose `agents/` subdirectory receives the file (defaults to global or `.opencode` based on the prompt)                                                                                                    |
+| <nobr><code>{"--description"}</code></nobr> |       | What the agent should do                                                                                                                                                                                                   |
+| <nobr><code>{"--mode"}</code></nobr>        |       | Agent mode: `all`, `primary`, or `subagent`                                                                                                                                                                                |
+| <nobr><code>{"--permissions"}</code></nobr> |       | Comma-separated list of permissions to allow (default: all). Available: `bash`, `read`, `edit`, `glob`, `grep`, `webfetch`, `task`, `todowrite`, `websearch`, `lsp`, `skill`. Anything omitted is denied. Alias: `--tools` |
+| <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use, in `provider/model` format                                                                                                                                                                                   |
 
 Passing all of `--path`, `--description`, `--mode`, and `--permissions` runs the command non-interactively.
 
@@ -178,6 +178,16 @@ Logs you out of a provider by clearing it from the credentials file.
 
 ```bash
 opencode auth logout
+```
+
+---
+
+### completion
+
+Generate a shell completion script.
+
+```bash
+opencode completion
 ```
 
 ---
@@ -368,7 +378,6 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue the last session                                                  |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | Session ID to continue                                                     |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Fork the session when continuing (use with `--continue` or `--session`)    |
-| <nobr><code>{"--share"}</code></nobr>    |       | Share the session                                                          |
 | <nobr><code>{"--model"}</code></nobr>    | `-m`  | Model to use in the form of provider/model                                 |
 | <nobr><code>{"--agent"}</code></nobr>    |       | Agent to use                                                               |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`  | File(s) to attach to message                                               |
@@ -483,17 +492,14 @@ If you don't provide a session ID, you'll be prompted to select from available s
 
 ### import
 
-Import session data from a JSON file or OpenCode share URL.
+Import session data from a JSON file.
 
 ```bash
 opencode import <file>
 ```
 
-You can import from a local file or an OpenCode share URL.
-
 ```bash
 opencode import session.json
-opencode import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -612,6 +618,64 @@ opencode debug [command]
 
 ---
 
+#### agent
+
+Show a loaded agent's configuration. Use `opencode agent list` to list all agents.
+
+```bash
+opencode debug agent build
+```
+
+---
+
+#### config
+
+Show the resolved configuration.
+
+```bash
+opencode debug config
+```
+
+---
+
+#### paths
+
+Show global paths (data, config, cache, state).
+
+```bash
+opencode debug paths
+```
+
+This prints all global paths. To print the database path, use:
+
+```bash
+opencode db path
+```
+
+---
+
+#### Other debug commands
+
+| Command                                     | Description                                              |
+| ------------------------------------------- | -------------------------------------------------------- |
+| `opencode debug info`                       | Show the version, OS, terminal, and configured plugins   |
+| `opencode debug skill`                      | List available skills                                    |
+| `opencode debug scrap`                      | List known projects                                      |
+| `opencode debug file list <path>`           | List files in a directory                                |
+| `opencode debug file read <path>`           | Read a file as JSON with base64-encoded content          |
+| `opencode debug file search <query>`        | Search file paths                                        |
+| `opencode debug rg files`                   | List files using ripgrep; accepts `--glob` and `--limit` |
+| `opencode debug rg search <pattern>`        | Search file contents; accepts `--glob` and `--limit`     |
+| `opencode debug lsp diagnostics <file>`     | Get LSP diagnostics for a file                           |
+| `opencode debug lsp symbols <query>`        | Search workspace symbols                                 |
+| `opencode debug lsp document-symbols <uri>` | Get symbols from a document                              |
+| `opencode debug snapshot track`             | Track the current snapshot state                         |
+| `opencode debug snapshot patch <hash>`      | Show changed files for a snapshot hash                   |
+| `opencode debug snapshot diff <hash>`       | Show the diff for a snapshot hash                        |
+| `opencode debug startup`                    | Print startup timing                                     |
+
+---
+
 ### uninstall
 
 Uninstall OpenCode and remove all related files.
@@ -651,11 +715,18 @@ To upgrade to a specific version.
 opencode upgrade v0.1.48
 ```
 
+To upgrade to OpenCode 2 and remove OpenCode 1:
+
+```bash
+opencode upgrade --major
+```
+
 #### Flags
 
 | Flag                                   | Short | Description                                                       |
 | -------------------------------------- | ----- | ----------------------------------------------------------------- |
 | <nobr><code>{"--method"}</code></nobr> | `-m`  | The installation method that was used; curl, npm, pnpm, bun, brew |
+| <nobr><code>{"--major"}</code></nobr>  |       | Upgrade to OpenCode 2 and remove OpenCode 1                       |
 
 ---
 
@@ -677,34 +748,46 @@ The opencode CLI takes the following global flags.
 
 OpenCode can be configured using environment variables.
 
-| Variable                              | Type    | Description                                       |
-| ------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Automatically share sessions                      |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows            |
-| `OPENCODE_CONFIG`                     | string  | Path to config file                               |
-| `OPENCODE_TUI_CONFIG`                 | string  | Path to TUI config file                           |
-| `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                          |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                   |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                       |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
-| `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                   |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                           |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads            |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                        |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction              |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)  |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`             |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disable fetching models from remote sources       |
-| `OPENCODE_DISABLE_MOUSE`              | boolean | Disable mouse capture in the TUI                  |
-| `OPENCODE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes            |
-| `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
-| `OPENCODE_ENABLE_PARALLEL`            | boolean | Enable Parallel web search tools                  |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
-| `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
+| Variable                              | Type    | Description                                                                  |
+| ------------------------------------- | ------- | ---------------------------------------------------------------------------- |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows                                       |
+| `OPENCODE_CONFIG`                     | string  | Path to config file                                                          |
+| `OPENCODE_TUI_CONFIG`                 | string  | Path to TUI config file                                                      |
+| `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                                                     |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                                                   |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                                              |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                                                  |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates                                     |
+| `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                                              |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                                                      |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads                                       |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                                                   |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction                                         |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)                             |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`                                        |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                                             |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disable fetching models from remote sources                                  |
+| `OPENCODE_DISABLE_MOUSE`              | boolean | Disable mouse capture in the TUI                                             |
+| `OPENCODE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes                                       |
+| `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)                                        |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                                                  |
+| `OPENCODE_ENABLE_PARALLEL`            | boolean | Enable Parallel web search tools                                             |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`                                          |
+| `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`)                            |
+| `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration                                 |
+| `OPENCODE_MODELS_PATH`                | string  | Load the model catalog from a local JSON file                                |
+| `OPENCODE_DB`                         | string  | Database path; relative paths resolve under the data directory               |
+| `OPENCODE_PURE`                       | boolean | Run without external plugins, like `--pure`                                  |
+| `OPENCODE_DISABLE_PROJECT_CONFIG`     | boolean | Disable project configuration and project instruction files                  |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS`    | boolean | Disable skill discovery in `.claude` and `.agents` directories               |
+| `OPENCODE_DISABLE_EMBEDDED_WEB_UI`    | boolean | Disable the bundled web UI and use the remote UI fallback                    |
+| `OPENCODE_DISABLE_FFF`                | boolean | Use ripgrep instead of the native file finder; enabled by default on Windows |
+| `OPENCODE_ENABLE_QUESTION_TOOL`       | boolean | Enable the question tool for clients other than the CLI, app, and desktop    |
+| `OPENCODE_ALWAYS_NOTIFY_UPDATE`       | boolean | Show update notifications even without a newer version                       |
+| `OPENCODE_SHOW_TTFD`                  | boolean | Show time-to-first-delta timing                                              |
+| `OPENCODE_LOG_LEVEL`                  | string  | Log level: `DEBUG`, `INFO`, `WARN`, or `ERROR`                               |
+| `OPENCODE_PRINT_LOGS`                 | string  | Set to `1` to also print logs to stderr                                      |
+| `OPENCODE_AUTO_HEAP_SNAPSHOT`         | boolean | Capture a heap snapshot when memory usage exceeds 2 GiB                      |
 
 ---
 
@@ -725,9 +808,11 @@ These environment variables enable experimental features that may change or be r
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Disable file watcher                    |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Enable experimental Exa features        |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Enable TY LSP for python files          |
+| `OPENCODE_EXPERIMENTAL_CODE_MODE`               | boolean | Enable code-mode tool execution         |
+| `OPENCODE_EXPERIMENTAL_WEBSOCKETS`              | boolean | Use WebSockets for OpenAI requests      |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Enable plan mode                        |
+| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Enable background subagent tasks        |
 | `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Enable experimental event system        |
 | `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Enable native LLM request path          |
 | `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Enable parallel web search execution    |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Enable Scout subagent                   |
 | `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Enable workspace support                |

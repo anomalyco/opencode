@@ -223,8 +223,8 @@ opencode Desktop отображает системные уведомления 
 
 Примеры:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 Чтобы выяснить, к каким моделям у вас есть доступ, запустите `opencode models`.

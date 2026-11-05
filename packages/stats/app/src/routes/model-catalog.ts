@@ -181,8 +181,9 @@ export function isProviderlessLab(lab: string | undefined) {
 
 export function isKnownCatalogLab(lab: string | undefined, catalogLabs: readonly string[]) {
   if (!lab || isProviderlessLab(lab)) return false
+  const id = catalogLabSlug(lab)
   const key = catalogSlug(formatCatalogLabName(lab))
-  return catalogLabs.some((candidate) => catalogSlug(formatCatalogLabName(candidate)) === key)
+  return catalogLabs.some((candidate) => candidate === id || catalogSlug(formatCatalogLabName(candidate)) === key)
 }
 
 export function catalogSlug(value: string) {

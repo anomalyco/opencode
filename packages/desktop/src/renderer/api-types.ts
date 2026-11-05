@@ -1,4 +1,4 @@
-import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
+import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
@@ -14,8 +14,10 @@ import type {
 
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
-  reconnectService(): Promise<ServerReadyData>
-  consumeInitialDeepLinks(): Promise<string[]>
+  reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
+  onSidecarChanged(cb: (data: ServerReadyData) => void): () => void
+  readyDeepLinks(): void
+  acknowledgeDeepLinks(attempt: number): void
   isFirstLaunchOnboardingPending(): Promise<boolean>
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
@@ -35,7 +37,7 @@ export type ElectronAPI = {
   getWindowBootstrap(): WindowBootstrap
   themeReady(): Promise<void>
   onMenuCommand(cb: (id: string) => void): () => void
-  onDeepLink(cb: (urls: string[]) => void): () => void
+  onDeepLink(cb: (delivery: { attempt: number; urls: string[] }) => void): () => void
   openDirectoryPicker(opts?: DirectoryPickerOptions): Promise<string | string[] | null>
   openFilePicker(opts?: FilePickerOptions): Promise<PickedFiles | null>
   readPickedFile(token: string, path: string): Promise<ArrayBuffer>
@@ -50,6 +52,8 @@ export type ElectronAPI = {
   readClipboardImage(): Promise<ClipboardImage | null>
   writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
+  requestMicrophone(): Promise<boolean>
+  setVoiceCallActive(active: boolean): Promise<void>
   getWindowFullscreen(): Promise<boolean>
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>
@@ -60,12 +64,17 @@ export type ElectronAPI = {
   getPinchZoomEnabled(): Promise<boolean>
   setPinchZoomEnabled(enabled: boolean): Promise<void>
   onPinchZoomEnabledChanged(cb: (enabled: boolean) => void): () => void
-  onZoomFactorChanged(cb: (factor: number) => void): () => void
+  getZoomLevel(): Promise<DesktopZoomLevel>
+  setZoomLevel(level: DesktopZoomLevel): Promise<void>
+  onZoomChanged(cb: (zoom: { factor: number; level: DesktopZoomLevel }) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
+  setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>
   setForceFocus(enabled: boolean): Promise<void>
+  getSpellcheckEnabled(): Promise<boolean>
+  setSpellcheckEnabled(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
 }

@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "ສະຫຼັບແຖບດີບັກ",
+  providerAriaLabel: "ການວິນິດໄສປະສິດທິພາບຜູ້ໃຫ້ບໍລິການ",
+  na: "n/a",
+  "duration.label": "TIME",
+  "duration.tip": "ເວລາຕັ້ງແຕ່ຄຳສັ່ງທີ່ເລີ່ມຮອບຫຼ້າສຸດ ຈົນເຖິງການຕອບກັບສຳເລັດ.",
+  "tps.label": "TPS",
+  "tps.tip": "ໂທເຄັນຜົນລັບ ແລະ ການໃຫ້ເຫດຜົນຕໍ່ວິນາທີ ໃນຄຳຮ້ອງຂໍໂມເດວຂອງຮອບຫຼ້າສຸດ ໂດຍບໍ່ນັບເວລາຂອງເຄື່ອງມື.",
+  "focus.label": "FOCUS",
+  "focus.tip": "ບັງຄັບຮູບແບບຈຸດສຸມຢູ່ໃນອົງປະກອບການໂຕ້ຕອບທັງໝົດ",
+  "focus.on": "ON",
+  "focus.off": "OFF",
+  "direction.label": "DIR",
+  "direction.tip": "ບັງຄັບທິດທາງການຈັດວາງແອັບເຕັມໂດຍບໍ່ປ່ຽນພາສາທີ່ເລືອກ",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("requests live output only when the shell is expanded", async ({ mount }) => {
   const root = await mount("current-session-terminal-work--live-user-command", { args: { expanded: false } })
@@ -55,3 +55,37 @@ for (const [id, output] of [
     await expect(root.locator('[data-component="session-shell-message"] [data-slot="bash-result"]')).toHaveText(output)
   })
 }
+
+story("copies the shell command and its output separately", async ({ mount, page }) => {
+  const root = await mount("current-session-terminal-work--expanded-shell")
+  const shell = root.locator('[data-component="bash-output"]')
+  const command = (await shell.locator('[data-slot="bash-command"]').textContent())!
+  const output = (await shell.locator('[data-slot="bash-result"]').textContent())!
+  const clipboard = async () => (await page.evaluate(() => navigator.clipboard.readText())).replaceAll("\r\n", "\n")
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await shell.hover()
+  await shell.locator('[data-slot="bash-result"]').getByRole("button", { name: "Copy output", exact: true }).click()
+  await expect(shell.locator('[data-slot="bash-result"]').getByRole("button", { name: "Copied" })).toBeVisible()
+  expect(await clipboard()).toBe(output)
+  await shell.locator('[data-slot="bash-command"]').getByRole("button", { name: "Copy", exact: true }).click()
+  expect(await clipboard()).toBe(command)
+  expect(command).toContain("opencode2 api get /openapi.json")
+  expect(output).toContain('"name":"OpenCode"')
+})
+
+story("keeps Copied for two seconds after the latest click", async ({ mount, page }) => {
+  await page.clock.install()
+  const root = await mount("current-session-terminal-work--expanded-shell")
+  const result = root.locator('[data-component="bash-output"] [data-slot="bash-result"]')
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await result.hover()
+  await result.getByRole("button", { name: "Copy output", exact: true }).click()
+  await expect(result.getByRole("button", { name: "Copied" })).toBeVisible()
+  await page.clock.runFor(1_500)
+  await result.getByRole("button", { name: "Copied" }).click()
+  // The first click's reset falls due here, while the second click's feedback still runs.
+  await page.clock.runFor(900)
+  await expect(result.getByRole("button", { name: "Copied" })).toBeVisible()
+  await page.clock.runFor(1_200)
+  await expect(result.getByRole("button", { name: "Copy output", exact: true })).toBeVisible()
+})

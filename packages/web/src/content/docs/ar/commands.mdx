@@ -9,7 +9,7 @@ description: أنشئ أوامر مخصصة للمهام المتكررة.
 /my-command
 ```
 
-تُعدّ الأوامر المخصصة إضافةً إلى الأوامر المضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`. [اعرف المزيد](/docs/tui#commands).
+تُعدّ الأوامر المخصصة إضافةً إلى الأوامر المضمنة مثل `/init` و`/undo` و`/redo` و`/help`. [اعرف المزيد](/docs/tui#commands).
 
 ---
 
@@ -23,7 +23,7 @@ description: أنشئ أوامر مخصصة للمهام المتكررة.
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -61,7 +61,7 @@ Focus on the failing tests and suggest fixes.
       // يظهر هذا كوصف في TUI
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -86,7 +86,7 @@ Focus on the failing tests and suggest fixes.
 ---
 description: Run tests with coverage
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
+model: anthropic/claude-sonnet-5-5
 ---
 
 Run the full test suite with coverage report and show any failures.
@@ -162,7 +162,7 @@ with the following content: $3
 
 ### خرج shell
 
-استخدم _!`command`_ لحقن خرج [أمر bash](/docs/tui#bash-commands) داخل مُطالبتك.
+استخدم _!`command`_ لحقن خرج [أمر shell](/docs/tui#shell-commands) داخل مُطالبتك.
 
 على سبيل المثال، لإنشاء أمر مخصص يُحلل تغطية الاختبارات:
 
@@ -301,7 +301,7 @@ Check for performance issues and suggest improvements.
 {
   "command": {
     "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+      "model": "anthropic/claude-sonnet-5-5"
     }
   }
 }
@@ -313,7 +313,7 @@ Check for performance issues and suggest improvements.
 
 ## الأوامر المضمنة
 
-يتضمن opencode عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/share` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
+يتضمن opencode عدة أوامر مضمنة مثل `/init` و`/undo` و`/redo` و`/help`؛ [اعرف المزيد](/docs/tui#commands).
 
 :::note
 يمكن للأوامر المخصصة تجاوز الأوامر المضمنة.

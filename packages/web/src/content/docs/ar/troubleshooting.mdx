@@ -222,8 +222,8 @@ description: المشكلات الشائعة وكيفية حلها.
 
 أمثلة:
 
-- `openai/gpt-4.1`
-- `openrouter/google/gemini-2.5-flash`
+- `openai/gpt-6.1-sol`
+- `openrouter/google/gemini-3.8-flash`
 - `opencode/kimi-k2`
 
 لمعرفة النماذج التي لديك صلاحية الوصول إليها، شغّل `opencode models`

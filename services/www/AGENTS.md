@@ -6,7 +6,7 @@
 - Only `base` in `astro.config.ts` should know the deployment subpath. Use `import.meta.env.BASE_URL` everywhere else.
 - The documentation feature is self-contained under `src/docs/` and renders through the thin route in `src/pages/docs/`.
 - Do not add a documentation frontend framework; this package owns the UI directly.
-- Keep the installer route dynamic and `public/openapi.json` generated from `packages/protocol/openapi.json`.
+- Keep the installer route dynamic. The API reference imports `packages/protocol/openapi.json` directly, and `bun run generate` copies it to the gitignored `public/openapi.json`.
 
 ## Local development
 
@@ -15,5 +15,5 @@
 
 ## Validation
 
-- Run `bun typecheck`, `bun run check:generated`, and `bun run build` from this package after changes.
+- Run `bun typecheck` and `bun run build` from this package after changes.
 - Treat validation and build errors as blockers.

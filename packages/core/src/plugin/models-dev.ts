@@ -7,12 +7,13 @@ import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
-// Opus/Sonnet 4.6 support in-region calls in eu-west-2 and must remain available.
+// Opus/Sonnet 4.6 and Opus 5.5 support in-region calls in eu-west-2 and must remain available.
 const BEDROCK_PROFILE_ONLY_IDS = [
   "amazon.nova-2-lite-v1:0",
   "anthropic.claude-fable-5",
   "anthropic.claude-fable-5-1",
   "anthropic.claude-haiku-4-5-20251001-v1:0",
+  "anthropic.claude-haiku-5-5",
   "anthropic.claude-opus-4-1-20250805-v1:0",
   "anthropic.claude-opus-4-5-20251101-v1:0",
   "anthropic.claude-opus-4-7",
@@ -20,8 +21,13 @@ const BEDROCK_PROFILE_ONLY_IDS = [
   "anthropic.claude-opus-5",
   "anthropic.claude-sonnet-4-5-20250929-v1:0",
   "anthropic.claude-sonnet-5",
+  "anthropic.claude-sonnet-5-5",
   "deepseek.r1-v1:0",
+  "meta.llama4-maverick-17b-instruct-v1:0",
+  "meta.llama4-scout-17b-instruct-v1:0",
   "mistral.pixtral-large-2502-v1:0",
+  "writer.palmyra-x4-v1:0",
+  "writer.palmyra-x5-v1:0",
 ]
 
 export const ModelsDevPlugin = define({
@@ -90,7 +96,8 @@ function snapshots(data: readonly ModelsDev.Snapshot[]) {
       models: provider.models.filter(
         (model) =>
           model.status !== "deprecated" &&
-          Model.supportsText(model) &&
+          // Non-chat models are kept for lookups; the Model service never offers them for sessions.
+          ((model.type ?? "chat") !== "chat" || Model.supportsText(model)) &&
           !(
             provider.info.id === Provider.ID.amazonBedrock &&
             BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)

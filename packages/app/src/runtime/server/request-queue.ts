@@ -1,37 +1,28 @@
-type Entry = { method: string; url: string; at: number; slow: boolean }
-
-// Chromium allows six connections per origin. The event stream holds one for the life of the
-// connection and health probes use their own fetch, so the app's API calls stay below that or
-// a burst stalls probes and user actions inside the browser where nothing can observe it.
-export const requestQueueLimit = 4
-
-// Endpoints that shell out to git or walk the filesystem take seconds on a large repository. They
-// may hold at most this many slots, so a session mount's small reads never queue behind them.
-export const requestQueueSlowLimit = 2
-
-export const slowRequestPaths = ["/api/vcs", "/api/worktree"]
-
-// A mount legitimately fires a dozen requests at once; only a request that has waited this long
-// for a slot indicates the server is not keeping up.
-export const requestStallMs = 2_000
+import {
+  classifyRequest,
+  createRequestQueueState,
+  isRequestInflight,
+  REQUEST_QUEUE_LIMIT,
+  REQUEST_QUEUE_SLOW_LIMIT,
+  REQUEST_STALL_MS,
+  selectInflightCount,
+  selectQueueDisposed,
+  selectQueuedCount,
+  transitionRequestQueue,
+  type RequestQueueEffect,
+  type RequestQueueEvent,
+  type RequestStallSnapshot,
+} from "./request-queue-machine"
 
 // A socket that dies while the device sleeps can leave fetch waiting for response headers until the
 // OS gives up on TCP retransmits, which takes minutes. Bound that so a dead request frees its slot
 // instead of wedging every later API call; the body may still stream for as long as it needs.
-export const requestHeadersTimeoutMs = 60_000
+const requestHeadersTimeoutMs = 60_000
 
 // Creating a worktree runs the project's setup script (dependency installs, fetches) before the
 // server answers, so it needs a budget measured in minutes rather than seconds. Cutting it off
 // kills the script midway and leaves a registered but half-initialised worktree behind.
-export const setupRequestHeadersTimeoutMs = 10 * 60_000
-
-function isSlowRequest(pathname: string) {
-  return slowRequestPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
-}
-
-function isSetupRequest(method: string, pathname: string) {
-  return method === "POST" && pathname === "/api/worktree"
-}
+const setupRequestHeadersTimeoutMs = 10 * 60_000
 
 export function createRequestQueue(input: {
   fetch: typeof globalThis.fetch
@@ -40,110 +31,122 @@ export function createRequestQueue(input: {
   stallMs?: number
   headersTimeoutMs?: number
   setupHeadersTimeoutMs?: number
-  log?: (message: string, data: Record<string, unknown>) => void
+  log?: (message: string, data: RequestStallSnapshot) => void
   now?: () => number
 }) {
-  const limit = input.limit ?? requestQueueLimit
-  const slowLimit = input.slowLimit ?? requestQueueSlowLimit
-  const stallMs = input.stallMs ?? requestStallMs
+  const config = {
+    limit: input.limit ?? REQUEST_QUEUE_LIMIT,
+    slowLimit: input.slowLimit ?? REQUEST_QUEUE_SLOW_LIMIT,
+    stallMs: input.stallMs ?? REQUEST_STALL_MS,
+  }
+
   const headersTimeoutMs = input.headersTimeoutMs ?? requestHeadersTimeoutMs
   const setupHeadersTimeoutMs = input.setupHeadersTimeoutMs ?? setupRequestHeadersTimeoutMs
   // Call the browser fetch unbound; `input.fetch(...)` would make `this` the options object.
   const base = input.fetch
   const now = input.now ?? Date.now
   const log = input.log ?? ((message, data) => console.warn(`[server-request-queue] ${message}`, data))
-  const inflight = new Set<Entry>()
-  const waiting: Array<{ entry: Entry; start: () => void }> = []
-  let warned = -Infinity
+  let queue = createRequestQueueState()
   let watcher: ReturnType<typeof setTimeout> | undefined
+  // Callers suspended until their queued request gets a slot, and the controllers of requests in flight.
+  const waiters = new Map<number, { grant: () => void; cancel: () => void }>()
+  const controllers = new Map<number, AbortController>()
 
-  const describe = (entry: Entry) => ({ method: entry.method, url: entry.url, ms: now() - entry.at })
+  const run = (effect: RequestQueueEffect) => {
+    if (effect.type === "request.start") return waiters.get(effect.id)?.grant()
 
-  // Debug exports include the console, so list what the server is busy with while requests wait.
-  const watch = () => {
-    watcher = undefined
-    const oldest = waiting[0]?.entry
-
-    if (!oldest) return
-
-    if (now() - oldest.at >= stallMs && now() - warned >= 10_000) {
-      warned = now()
-      log("server thrashing detected", {
-        limit,
-        inflight: [...inflight].map(describe),
-        queued: waiting.map((item) => describe(item.entry)),
+    if (effect.type === "request.cancel")
+      return effect.ids.forEach((id) => {
+        waiters.get(id)?.cancel()
+        controllers.get(id)?.abort(aborted())
       })
-    }
 
-    watcher = setTimeout(watch, stallMs)
+    if (effect.type === "log.stall") return log("server thrashing detected", effect.data)
+
+    clearTimeout(watcher)
+    watcher =
+      effect.type === "watcher.start"
+        ? setTimeout(() => dispatch({ type: "watch.due", now: now() }), effect.delayMs)
+        : undefined
   }
 
-  const canStart = (entry: Entry) => {
-    if (inflight.size >= limit) return false
-
-    if (!entry.slow) return true
-
-    return [...inflight].filter((item) => item.slow).length < slowLimit
+  const dispatch = (event: RequestQueueEvent) => {
+    const result = transitionRequestQueue(queue, event, config)
+    queue = result.state
+    result.effects.forEach(run)
   }
 
-  // FIFO, except a slow request waits its turn behind faster ones while the slow slots are full.
-  const release = (entry: Entry) => {
-    inflight.delete(entry)
-    const index = waiting.findIndex((item) => canStart(item.entry))
-
-    if (index === -1) return
-    waiting.splice(index, 1)[0]?.start()
-  }
-
-  const acquire = (entry: Entry) => {
-    // A free slot must start fetch before the caller's synchronous UI work.
-    // Awaiting an already-resolved promise postpones that dispatch until after it.
-    if (canStart(entry)) {
-      inflight.add(entry)
-
-      return
-    }
-
-    return new Promise<void>((resolve) => {
-      const start = () => {
-        entry.at = now()
-        inflight.add(entry)
-        resolve()
+  const waitForSlot = (id: number, signal: AbortSignal) =>
+    new Promise<void>((resolve, reject) => {
+      const leave = () => {
+        signal.removeEventListener("abort", abort)
+        waiters.delete(id)
       }
 
-      waiting.push({ entry, start })
-      watcher ??= setTimeout(watch, stallMs)
+      // A caller that gives up while queued leaves at once instead of waiting for a slot it no longer needs.
+      const abort = () => {
+        leave()
+        dispatch({ type: "request.aborted", id, now: now() })
+        reject(reason(signal))
+      }
+
+      signal.addEventListener("abort", abort, { once: true })
+      waiters.set(id, {
+        grant: () => {
+          leave()
+          resolve()
+        },
+        cancel: () => {
+          leave()
+          reject(aborted())
+        },
+      })
     })
-  }
 
   const fetch: typeof globalThis.fetch = Object.assign(
     async (resource: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(resource, init)
-      const pathname = new URL(request.url).pathname
+      const kind = classifyRequest(request.method, new URL(request.url))
 
-      // The event stream is long-lived; never count it against the request budget.
-      if (pathname === "/api/event") return base(request)
-      const entry = { method: request.method, url: request.url, at: now(), slow: isSlowRequest(pathname) }
-      const queued = acquire(entry)
+      if (kind.bypass) return base(request)
 
-      if (queued) await queued
+      if (request.signal.aborted || queue.status === "disposed") throw reason(request.signal)
 
-      if (request.signal.aborted) {
-        release(entry)
-        throw request.signal.reason ?? new DOMException("The operation was aborted.", "AbortError")
+      const id = queue.nextId
+      dispatch({
+        type: "request.arrived",
+        method: request.method,
+        url: request.url,
+        slow: kind.slow,
+        priority: kind.priority,
+        now: now(),
+      })
+
+      // A free slot must start fetch before the caller's synchronous UI work.
+      // Awaiting an already-resolved promise postpones that dispatch until after it.
+      if (!isRequestInflight(queue, id)) await waitForSlot(id, request.signal)
+
+      // Aborted or disposed between the grant and this continuation.
+      if (request.signal.aborted || selectQueueDisposed(queue)) {
+        dispatch({ type: "request.aborted", id, now: now() })
+        throw reason(request.signal)
       }
 
       const controller = new AbortController()
-      request.signal.addEventListener("abort", () => controller.abort(request.signal.reason), { once: true })
+      controllers.set(id, controller)
+      const abort = () => controller.abort(request.signal.reason)
+      request.signal.addEventListener("abort", abort, { once: true })
 
       const timer = setTimeout(
         () => controller.abort(new DOMException("Timed out waiting for the server to respond", "TimeoutError")),
-        isSetupRequest(request.method, pathname) ? setupHeadersTimeoutMs : headersTimeoutMs,
+        kind.setup ? setupHeadersTimeoutMs : headersTimeoutMs,
       )
 
       return base(new Request(request, { signal: controller.signal })).finally(() => {
         clearTimeout(timer)
-        release(entry)
+        request.signal.removeEventListener("abort", abort)
+        controllers.delete(id)
+        dispatch({ type: "request.settled", id, now: now() })
       })
     },
     // Bun's fetch type carries preconnect; the browser never calls it.
@@ -152,7 +155,17 @@ export function createRequestQueue(input: {
 
   return {
     fetch,
-    inflight: () => inflight.size,
-    queued: () => waiting.length,
+    inflight: () => selectInflightCount(queue),
+    queued: () => selectQueuedCount(queue),
+    /** Cancels every queued and in-flight request; later requests reject at once. */
+    dispose: () => dispatch({ type: "disposed" }),
   }
+}
+
+function aborted() {
+  return new DOMException("The operation was aborted.", "AbortError")
+}
+
+function reason(signal: AbortSignal) {
+  return signal.aborted ? (signal.reason ?? aborted()) : aborted()
 }

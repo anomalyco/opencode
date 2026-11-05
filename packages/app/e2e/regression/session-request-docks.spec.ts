@@ -1,3 +1,4 @@
+import type { OpenCodeEvent } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { SERVER, sessionHref } from "../utils/app"
 import { installSseTransport } from "../utils/sse-transport"
@@ -170,6 +171,80 @@ test("replies with predefined choices and the edited custom multiselect answer",
   expect(cancellations).toEqual([])
 })
 
+test("keeps a choice when a custom answer with its value is turned off, and replies once", async ({ page }) => {
+  const form = {
+    id: "frm_question_once",
+    sessionID,
+    title: "Questions",
+    metadata: { kind: "question" },
+    fields: [
+      {
+        key: "q0",
+        type: "multiselect",
+        title: "Include",
+        description: "Which supporting surfaces should remain visible?",
+        options: [
+          { value: "files", label: "Changed files" },
+          { value: "terminal", label: "Terminal" },
+        ],
+        custom: true,
+      },
+    ],
+  }
+
+  const replies: unknown[] = []
+  const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
+  await mockServer(page, { forms: () => (replies.length > 0 ? [] : [form]) })
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_once/reply`
+    )
+      replies.push(request.postDataJSON())
+  })
+  await page.goto(sessionHref(sessionID))
+  await transport.waitForConnection()
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const files = question.getByRole("checkbox", { name: "Changed files", exact: true })
+  const custom = question.getByRole("checkbox", { name: "Type your own answer…", exact: true })
+  const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+  const submit = question.getByRole("button", { name: "Submit", exact: true })
+  const dismiss = question.getByRole("button", { name: "Dismiss", exact: true })
+
+  await files.click()
+  await input.fill("files")
+  await expect(custom).toBeChecked()
+  await custom.click()
+  await expect(custom).not.toBeChecked()
+  await expect(files).toBeChecked()
+
+  const reply = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/session/${sessionID}/form/frm_question_once/reply`,
+  )
+
+  await submit.click()
+  expect((await reply).request().postDataJSON()).toEqual({ answer: { q0: ["files"] } })
+
+  // The server has the answer but has not announced the form settled yet, so nothing can send it again.
+  await expect(submit).toBeDisabled()
+  await expect(dismiss).toBeDisabled()
+  await expect(files).toHaveAttribute("aria-disabled", "true")
+
+  await transport.send({
+    id: "evt_form_replied_once",
+    created: 1700000003000,
+    type: "form.replied",
+    location: { directory },
+    data: { sessionID, id: "frm_question_once", answer: { q0: ["files"] } },
+  })
+  await expect(question).toHaveCount(0)
+  expect(replies).toEqual([{ answer: { q0: ["files"] } }])
+})
+
 test("shows a pending permission dock", async ({ page }) => {
   const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
   await mockServer(page, {
@@ -207,6 +282,144 @@ test("shows a pending permission dock", async ({ page }) => {
   expect(replies).toEqual([{ sessionID, permissionID: "permission-request", body: { decision: "once" } }])
   await expect(permission).toHaveCount(0)
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
+})
+
+test("sends one permission reply and closes the dock when it lands, before permission.replied", async ({ page }) => {
+  await mockServer(page, {
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "shell",
+          patterns: ["git status"],
+          metadata: {},
+          always: [],
+        },
+      ],
+    },
+  })
+  const replies: unknown[] = []
+  const released = Promise.withResolvers<void>()
+  // Answers without the `permission.replied` event the server also publishes, so only the reply can close the dock.
+  await page.route(/\/api\/session\/ses_request_docks\/permission\/permission-request\/reply/, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    replies.push(route.request().postDataJSON())
+    await released.promise
+    await route.fulfill({ status: 204 })
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const actions = permission.locator('[data-slot="permission-footer-actions"]')
+  await permission.getByRole("button", { name: "Allow once" }).dblclick()
+  await expect.poll(() => replies.length).toBe(1)
+
+  for (const name of ["Deny", "Allow always", "Allow once"])
+    await expect(actions.getByRole("button", { name, exact: true })).toBeDisabled()
+
+  released.resolve()
+  await expect(permission).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toBeVisible()
+  await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+  expect(replies).toEqual([{ decision: "once" }])
+})
+
+test("names the MCP tool, the hook's message and the full input in the permission dock", async ({ page }) => {
+  const body = "x".repeat(3000)
+  await mockServer(page, {
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          action: "linear_save_comment",
+          resources: ["*"],
+          save: ["*"],
+          metadata: { input: { issueId: "ENG-1", labels: ["bug"], body } },
+          message: "Posts a comment on a Linear issue",
+        },
+      ],
+    },
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const input = permission.locator('[data-slot="permission-input"]')
+  await expect(permission.getByText("linear_save_comment")).toBeVisible()
+  await expect(permission.getByText("Posts a comment on a Linear issue")).toBeVisible()
+  await expect(input.getByText("issueId: ENG-1")).toBeVisible()
+  await expect(input.getByText('labels: ["bug"]')).toBeVisible()
+  // The user approves these arguments, so a long one stays whole and scrolls inside the dock instead of being cut
+  await expect(input.getByText(`body: ${body}`, { exact: true })).toBeVisible()
+  await expect.poll(() => input.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  // "Allow always" saves the wildcard, so its scope stays visible next to this call's input
+  await expect(permission.locator('[data-slot="permission-patterns"]').getByText("*", { exact: true })).toBeVisible()
+})
+
+test("loads a running subagent's question without polling idle subagents on every update", async ({ page }) => {
+  const runningID = "ses_request_running_subagent"
+  const idleIDs = Array.from({ length: 20 }, (_, index) => `ses_request_idle_${index}`)
+
+  const workspace = await mockWorkspace(page, {
+    name: "RequestDocks",
+    directory,
+    sessions: [
+      { id: sessionID, title },
+      { id: runningID, title: "Running subagent", parentID: sessionID },
+      ...idleIDs.map((id) => ({ id, title: id, parentID: sessionID })),
+    ],
+    seed: { tabs: [sessionID] },
+    // The mock reports a Session with a pending form as running.
+    forms: [
+      {
+        id: "frm_subagent_question",
+        sessionID: runningID,
+        title: "Questions",
+        metadata: { kind: "question" },
+        fields: [{ key: "q0", type: "string", title: "Direction", description: "Which way should the subagent go?" }],
+      },
+    ],
+  })
+
+  // Idle subagents whose worktrees were deleted; a failed read is retried on its next sync.
+  await page.route(/\/api\/session\/ses_request_idle_\d+\/form$/, (route) =>
+    route.fulfill({ status: 404, json: { message: "Location not found" } }),
+  )
+
+  const forms: string[] = []
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname
+
+    if (request.method() === "GET" && path.startsWith("/api/session/") && path.endsWith("/form")) forms.push(path)
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+  await expect(
+    page.locator('[data-component="dock-prompt"][data-kind="question"]').getByText("Which way should the subagent go?"),
+  ).toBeVisible()
+
+  // Every session update used to re-request the forms of the whole subagent tree.
+  await workspace.push(
+    [...idleIDs, sessionID].map(
+      (id, index) =>
+        // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
+        ({
+          id: `evt_request_rename_${index}`,
+          created: index + 2,
+          type: "session.renamed",
+          durable: { aggregateID: id, seq: 1, version: 1 },
+          data: { sessionID: id, title: id === sessionID ? "Renamed request docks" : `${id} renamed` },
+        }) as OpenCodeEvent,
+    ),
+  )
+  await expect(page.getByRole("heading", { name: "Renamed request docks", exact: true })).toBeVisible()
+  expect(forms.toSorted()).toEqual([`/api/session/${runningID}/form`, `/api/session/${sessionID}/form`].toSorted())
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {

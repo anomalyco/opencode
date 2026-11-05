@@ -1,29 +1,27 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/stats-server",
-  "version": "2.0.29",
+  "version": "2.2.5",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "main": "./src/stat-sync.ts",
-  "exports": {
-    ".": "./src/stat-sync.ts"
-  },
   "scripts": {
-    "start": "bun src/stat-sync.ts",
-    "typecheck": "tsgo --noEmit"
+    "sync": "bun src/sync.ts",
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "catalog:",
     "@opencode/stats-core": "workspace:*",
     "effect": "catalog:",
     "sst": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

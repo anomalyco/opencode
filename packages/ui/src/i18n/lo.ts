@@ -71,10 +71,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "ສະໝັກໃຊ້ OpenCode Go ໃນລາຄາ $10/ເດືອນ ເພື່ອເຂົ້າເຖິງຮູບແບບໂອເພນຊອດທີ່ດີທີ່ສຸດຢ່າງໜ້າເຊື່ອຖື.",
   "dialog.usageExceeded.freeTier.actionLabel": "ຈອງ",
-  "dialog.usageExceeded.accountRateLimit.title": "ໄປຮອດຂີດຈຳກັດແລ້ວ",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "ຮອດຂີດຈຳກັດການນຳໃຊ້ແລ້ວ. ເພື່ອສືບຕໍ່ນຳໃຊ້ຮູບແບບນີ້ໃນຕອນນີ້, ໃຫ້ເປີດການນຳໃຊ້ຈາກຍອດເງິນທີ່ມີຢູ່ຂອງທ່ານ",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ເປີດການຕັ້ງຄ່າ",
   "ui.sessionTurn.status.delegating": "ການມອບໝາຍວຽກງານ",
   "ui.sessionTurn.status.planning": "ການວາງແຜນຂັ້ນຕອນຕໍ່ໄປ",
   "ui.sessionTurn.status.gatheringContext": "ການສຳຫຼວດ",
@@ -195,7 +191,6 @@ export const dict = {
   "ui.question.answer.none": "(ບໍ່​ມີ​ຄໍາ​ຕອບ​)",
   "ui.question.review.notAnswered": "(ບໍ່ຕອບ)",
   "ui.question.multiHint": "ເລືອກຄຳຕອບທັງໝົດທີ່ນຳໃຊ້",
-  "ui.question.singleHint": "ເລືອກຫນຶ່ງຄໍາຕອບ",
   "ui.question.custom.placeholder": "ພິມຄຳຕອບຂອງເຈົ້າ…",
   "ui.tool.loadedFile": "ໂຫຼດ {{path}} ແລ້ວ",
   "ui.tool.loadedSkill": "ໂຫຼດທັກສະ {{name}} ແລ້ວ",

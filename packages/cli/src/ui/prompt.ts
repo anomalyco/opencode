@@ -4,7 +4,7 @@ import { errorMessage } from "../util/error"
 
 const cancelled = Symbol("cancelled")
 
-export function prompt<A>(run: () => Promise<A | symbol>) {
+export function prompt<A>(run: (signal: AbortSignal) => Promise<A | symbol>) {
   return Effect.tryPromise({ try: run, catch: (cause) => cause }).pipe(
     Effect.flatMap((value) => (isCancel(value) ? Effect.fail(cancelled) : Effect.succeed(value))),
   )
@@ -17,7 +17,8 @@ export function requireInteractive(message: string) {
 
 export const openUrl = Effect.fn("cli.prompt.open-url")(function* (url: string) {
   const browser = yield* Effect.promise(() => import("@opencode/util/open"))
-  yield* Effect.promise(() => browser.openUrl(url)).pipe(Effect.ignore)
+  // Best effort: headless environments may lack a browser opener, and the caller already printed the URL.
+  yield* Effect.tryPromise(() => browser.openUrl(url)).pipe(Effect.ignore)
 })
 
 export function handlePromptErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {

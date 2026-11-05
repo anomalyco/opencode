@@ -2,111 +2,14 @@ import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
+import { SessionTurn } from "@opencode/util/session-turn"
 import {
   cacheReuseDrop,
   messageBoundaryIDs,
   reduceSessionRows,
   sessionRowID,
-  turnDuration,
-  turnTokensPerSecond,
+  type SessionRow,
 } from "../../../src/routes/session/rows"
-
-test("measures turn duration from the user prompt across assistant steps", () => {
-  const first = assistant("assistant-1", [])
-  first.time = { created: 8_000, completed: 11_000 }
-  const final = assistant("assistant-2", [])
-  final.time = { created: 27_000, completed: 30_000 }
-  const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
-    first,
-    final,
-  ]
-
-  expect(turnDuration(final, messages)).toBe(29_000)
-})
-
-test("measures request throughput including reasoning across model changes without tool time", () => {
-  const first = assistant("assistant-1", [])
-  first.time = { created: 6_000, streamed: 10_000, completed: 20_000 }
-  first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
-  const final = assistant("assistant-2", [])
-  final.model = { id: "other-model", providerID: "other-provider", variant: "other-variant" }
-  final.time = { created: 24_000, streamed: 30_000, completed: 31_000 }
-  final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
-  const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
-    first,
-    final,
-  ]
-
-  expect(turnTokensPerSecond(final, messages)).toBe(6.5)
-  first.time.streamed = undefined
-  expect(turnTokensPerSecond(final, messages)).toBeUndefined()
-})
-
-test("omits turn throughput when a stream boundary is unavailable", () => {
-  const final = assistant("assistant-1", [])
-  final.tokens = { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
-  expect(turnTokensPerSecond(final, [final])).toBeUndefined()
-})
-
-test.each([false, true])(
-  "measures historical footers without later inputs or incomplete steps (indexed: %s)",
-  (indexed) => {
-    const step = (id: string, created: number, streamed: number, completed: number, output: number) => ({
-      ...assistant(id, []),
-      time: { created, streamed, completed },
-      tokens: { input: 1, output, reasoning: 2, cache: { read: 0, write: 0 } },
-    })
-    const messages: SessionMessageInfo[] = [
-      step("before-input", 0, 1_000, 2_000, 5),
-      { type: "user", id: "input", text: "Question", time: { created: 3_000 } },
-      step("first-step", 4_000, 5_000, 6_000, 10),
-      { type: "system", id: "system", text: "Instructions", time: { created: 6_500 } },
-      step("second-step", 7_000, 8_000, 9_000, 20),
-      { type: "synthetic", id: "synthetic", text: "Update", time: { created: 10_000 } },
-      step("after-synthetic", 11_000, 13_000, 14_000, 12),
-      { type: "user", id: "later-input", text: "Next question", time: { created: 15_000 } },
-      assistant("incomplete", []),
-    ]
-
-    expect(
-      messages.flatMap((message, index) =>
-        message.type === "assistant"
-          ? [
-              [
-                turnDuration(message, messages, indexed ? index : undefined),
-                turnTokensPerSecond(message, messages, indexed ? index : undefined),
-              ],
-            ]
-          : [],
-      ),
-    ).toEqual([
-      [2_000, 7],
-      [3_000, 12],
-      [6_000, 17],
-      [4_000, 7],
-      [0, undefined],
-    ])
-  },
-)
-
-test("preserves missing-anchor footer fallbacks without including the absent assistant's tokens", () => {
-  const absent = assistant("absent", [])
-  absent.time = { created: 8_000, streamed: 9_000, completed: 10_000 }
-  absent.tokens = { input: 1, output: 900, reasoning: 0, cache: { read: 0, write: 0 } }
-  const stored = assistant("stored", [])
-  stored.time = { created: 6_000, streamed: 8_000, completed: 9_000 }
-  stored.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
-  const input: SessionMessageInfo = { type: "user", id: "input", text: "Question", time: { created: 5_000 } }
-
-  expect(turnDuration(absent, [input, stored])).toBe(5_000)
-  expect(turnTokensPerSecond(absent, [input, stored])).toBe(10)
-  expect(turnDuration(absent, [stored])).toBe(2_000)
-  expect(turnTokensPerSecond(absent, [stored])).toBe(10)
-  expect(turnDuration(absent, [])).toBe(2_000)
-  expect(turnTokensPerSecond(absent, [])).toBeUndefined()
-})
 
 test("indexed tail footer calculations do not subscribe to an unrelated history prefix", () => {
   createRoot((dispose) => {
@@ -125,7 +28,10 @@ test("indexed tail footer calculations do not subscribe to an unrelated history 
         runs++
         const current = messages[3]
         if (current.type !== "assistant") throw new Error("Expected an assistant")
-        return [turnDuration(current, messages, 3), turnTokensPerSecond(current, messages, 3)]
+        return [
+          SessionTurn.duration(messages, current, { index: 3 }),
+          SessionTurn.tokensPerSecond(messages, current, { index: 3 }),
+        ]
       })
       expect(footer()).toEqual([4_000, 20])
       setMessages(0, { type: "user", id: "replaced-prefix", text: "Older question", time: { created: 50 } })
@@ -214,7 +120,6 @@ test("resets the cross-turn cache baseline after compaction", () => {
         status: "completed",
         reason: "auto",
         summary: "Compacted context",
-        recent: "",
         time: { created: 2 },
       },
       second,
@@ -274,30 +179,6 @@ test("closes turn usage on the idle marker so steered steps share one footer", (
       previousCache: { read: 2_000, model: { id: "model", providerID: "provider" } },
     },
   ])
-})
-
-test("measures a marker-era turn from its first prompt across steers", () => {
-  const step = (id: string, created: number, streamed: number, completed: number, output: number) => ({
-    ...assistant(id, []),
-    time: { created, streamed, completed },
-    tokens: { input: 1, output, reasoning: 0, cache: { read: 0, write: 0 } },
-  })
-  const messages: SessionMessageInfo[] = [
-    { type: "user", id: "old-input", text: "Old question", time: { created: 0 } },
-    step("old-step", 1_000, 2_000, 3_000, 5),
-    { type: "idle", id: "idle-1", outcome: "succeeded", time: { created: 3_500 } },
-    { type: "user", id: "input", text: "Question", time: { created: 4_000 } },
-    step("first-step", 5_000, 6_000, 7_000, 10),
-    { type: "user", id: "steer", text: "Also this", time: { created: 7_500 } },
-    step("second-step", 8_000, 9_000, 10_000, 20),
-  ]
-  const final = messages[6]
-  if (final.type !== "assistant") throw new Error("Expected an assistant")
-
-  expect(turnDuration(final, messages)).toBe(6_000)
-  expect(turnTokensPerSecond(final, messages)).toBe(15)
-  expect(turnDuration(final, messages, 6, true)).toBe(2_500)
-  expect(turnTokensPerSecond(final, messages, 6, true)).toBe(20)
 })
 
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {
@@ -618,7 +499,6 @@ test("places a running compaction barrier before every queued user message", () 
       status: "running",
       reason: "manual",
       summary: "",
-      recent: "",
       time: { created: 2 },
     },
     queued("user-after", "After", 3),
@@ -630,6 +510,92 @@ test("places a running compaction barrier before every queued user message", () 
     { type: "message", messageID: "user-after" },
   ])
 })
+
+test("shows an execution failure that happened before any step", () => {
+  const unavailable = { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.5" }
+
+  expect(
+    reduceSessionRows([
+      { type: "user", id: "user", text: "Are you there?", time: { created: 1 } },
+      failed("idle", unavailable),
+      { type: "user", id: "next", text: "Try again", time: { created: 3 } },
+      failed("idle-next", unavailable),
+    ]),
+  ).toEqual([
+    { type: "message", messageID: "user" },
+    { type: "message", messageID: "idle" },
+    { type: "message", messageID: "next" },
+    { type: "message", messageID: "idle-next" },
+  ])
+})
+
+test("shows an execution failure once when its last step already shows the error", () => {
+  const quota = { type: "provider.quota", message: "Insufficient account funds" }
+  const step = { ...assistant("assistant", []), error: quota }
+  const compaction: SessionMessageInfo = {
+    type: "compaction",
+    id: "compaction",
+    status: "failed",
+    reason: "auto",
+    error: quota,
+    time: { created: 2 },
+  }
+
+  expect(reduceSessionRows([step, failed("idle", quota)])).toEqual([
+    { type: "assistant-footer", messageID: "assistant" },
+  ])
+  expect(reduceSessionRows([compaction, failed("idle", quota)])).toEqual([{ type: "message", messageID: "compaction" }])
+})
+
+test("shows an execution failure that differs from the last step's error", () => {
+  const interrupted = { ...assistant("assistant", []), error: { type: "aborted", message: "Step interrupted" } }
+  const compaction: SessionMessageInfo = {
+    type: "compaction",
+    id: "compaction",
+    status: "failed",
+    reason: "manual",
+    error: { type: "provider.timeout", message: "Compaction timed out" },
+    time: { created: 2 },
+  }
+  const blocked = { type: "unknown", message: "Instructions could not be loaded" }
+
+  expect(reduceSessionRows([interrupted, failed("idle", { type: "tool.execution", message: "Tool crashed" })])).toEqual(
+    [
+      { type: "assistant-footer", messageID: "assistant" },
+      { type: "message", messageID: "idle" },
+    ],
+  )
+  expect(reduceSessionRows([compaction, failed("idle", blocked)])).toEqual([
+    { type: "message", messageID: "compaction" },
+    { type: "message", messageID: "idle" },
+  ])
+})
+
+test("keeps an execution failure in place ahead of the prompt it left pending", () => {
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "stranded", text: "Go", time: { created: 1 } },
+    failed("idle", { type: "unknown", message: "Instructions could not be loaded" }),
+    {
+      type: "model-switched",
+      id: "model",
+      model: { id: "other", providerID: "provider" },
+      time: { created: 3 },
+    },
+  ]
+  const rows: SessionRow[] = [
+    { type: "message", messageID: "idle" },
+    { type: "message", messageID: "model" },
+    { type: "message", messageID: "stranded" },
+  ]
+
+  expect(reduceSessionRows(messages, new Set(["stranded"]))).toEqual(rows)
+  // A resync loads projected messages before pending input.
+  expect(reduceSessionRows([...messages.slice(1), messages[0]], new Set(["stranded"]))).toEqual(rows)
+})
+
+function failed(id: string, error: SessionMessageAssistant["error"]): SessionMessageInfo {
+  return { type: "idle", id, outcome: "failed", error, time: { created: 2 } }
+}
 
 function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
   return {
