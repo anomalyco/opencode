@@ -85,48 +85,58 @@ describe("GithubCopilotPlugin", () => {
     expect(copilotEntitlementError({})).toBeUndefined()
   })
 
+  const copilotAPI = (requests: string[], endpoint = "https://api.business.githubcopilot.com/") =>
+    HttpClient.make((request) =>
+      Effect.sync(() => {
+        requests.push(request.url)
+        if (request.url.endsWith("/copilot_internal/user"))
+          return HttpClientResponse.fromWeb(request, Response.json({ endpoints: { api: endpoint } }))
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json({
+            data: [
+              {
+                model_picker_enabled: true,
+                id: "gpt-5",
+                name: "GPT-5",
+                version: "gpt-5",
+                capabilities: {
+                  family: "gpt-5",
+                  limits: { max_output_tokens: 1, max_prompt_tokens: 1 },
+                  supports: { tool_calls: true },
+                },
+              },
+            ],
+          }),
+        )
+      }),
+    )
+
+  const connect = Effect.fn(function* (metadata?: Record<string, string>) {
+    const credentials = yield* Credential.Service
+    const providers = yield* Provider.Service
+    yield* providers.transform((draft) => {
+      draft.update(Provider.ID.githubCopilot, () => {})
+    })
+    yield* credentials.create({
+      integrationID: Integration.ID.make("github-copilot"),
+      value: Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("device"),
+        access: "token",
+        refresh: "token",
+        expires: 0,
+        ...(metadata ? { metadata } : {}),
+      }),
+    })
+  })
+
   it.effect("reloads providers only when a refreshed model list changes", () =>
     Effect.gen(function* () {
-      const credentials = yield* Credential.Service
       const providers = yield* Provider.Service
-      const requests = { count: 0 }
-      const http = HttpClient.make((request) =>
-        Effect.sync(() => {
-          requests.count++
-          return HttpClientResponse.fromWeb(
-            request,
-            Response.json({
-              data: [
-                {
-                  model_picker_enabled: true,
-                  id: "gpt-5",
-                  name: "GPT-5",
-                  version: "gpt-5",
-                  capabilities: {
-                    family: "gpt-5",
-                    limits: { max_output_tokens: 1, max_prompt_tokens: 1 },
-                    supports: { tool_calls: true },
-                  },
-                },
-              ],
-            }),
-          )
-        }),
-      )
-      yield* providers.transform((draft) => {
-        draft.update(Provider.ID.githubCopilot, () => {})
-      })
-      yield* credentials.create({
-        integrationID: Integration.ID.make("github-copilot"),
-        value: Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("device"),
-          access: "token",
-          refresh: "token",
-          expires: 0,
-        }),
-      })
-      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+      const requests: string[] = []
+      yield* connect()
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, copilotAPI(requests)))
       yield* drain
       const folds = { count: 0 }
       yield* providers.transform(() => {
@@ -136,8 +146,45 @@ describe("GithubCopilotPlugin", () => {
 
       yield* TestClock.adjust("10 minutes")
       yield* drain
-      expect(requests.count).toBe(2)
+      expect(requests.filter((url) => url.endsWith("/models"))).toHaveLength(2)
       expect(folds.count).toBe(before)
+    }),
+  )
+
+  it.effect("refreshes the account's API endpoint instead of keeping the one stored at login", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const requests: string[] = []
+      yield* connect({ apiEndpoint: "https://api.individual.githubcopilot.com" })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, copilotAPI(requests)))
+      yield* drain
+
+      expect(requests).toEqual([
+        "https://api.github.com/copilot_internal/user",
+        "https://api.business.githubcopilot.com/models",
+      ])
+      expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5"))).settings).toMatchObject({
+        baseURL: "https://api.business.githubcopilot.com",
+      })
+    }),
+  )
+
+  it.effect("keeps the stored endpoint when the account lookup fails", () =>
+    Effect.gen(function* () {
+      const requests: string[] = []
+      yield* connect({ apiEndpoint: "https://api.individual.githubcopilot.com" })
+      const failing = HttpClient.make((request) =>
+        request.url.endsWith("/copilot_internal/user")
+          ? Effect.sync(() => {
+              requests.push(request.url)
+              return HttpClientResponse.fromWeb(request, new Response("unavailable", { status: 404 }))
+            })
+          : copilotAPI(requests).execute(request),
+      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, failing))
+      yield* drain
+
+      expect(requests.at(-1)).toBe("https://api.individual.githubcopilot.com/models")
     }),
   )
 
