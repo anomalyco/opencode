@@ -16,8 +16,6 @@ opencode-local.workspace = true
 opencode-ui.workspace = true
 opencode-store.workspace = true
 opencode-plugin.workspace = true
-opencode-latex.workspace = true
-opencode-mermaid.workspace = true
 opencode-drive.workspace = true
 base64.workspace = true
 chrono.workspace = true
@@ -37,5 +35,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+opencode-latex.workspace = true
+opencode-mermaid.workspace = true
 opencode-parity.workspace = true
 tempfile.workspace = true

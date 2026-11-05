@@ -232,8 +232,8 @@ pub fn model(provider: &str, id: &str, name: &str) -> Value {
     })
 }
 
-/// The TUI's inputs over `transport`: [`DIRECTORY`], the default config, no roots, session `ses_a`, and no
-/// event stream.
+/// The TUI's inputs over `transport`: [`DIRECTORY`], the default config, no roots, session `ses_a`, no
+/// event stream, and the Mermaid and LaTeX built-ins.
 pub fn deps(transport: Arc<dyn Transport>) -> Deps {
     Deps {
         client: Client::with_transport("http://opencode.local", transport).unwrap(),
@@ -243,6 +243,7 @@ pub fn deps(transport: Arc<dyn Transport>) -> Deps {
         route: session_route("ses_a"),
         continue_: false,
         events: false,
+        builtins: vec![opencode_mermaid::plugin(), opencode_latex::plugin()],
     }
 }
 
