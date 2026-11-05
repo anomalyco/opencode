@@ -134,11 +134,14 @@ describe("web update machine", () => {
     expect(timedOut.effects.at(-1)).toEqual({ type: "reload" })
   })
 
-  test("another window's update reloads this one, whose old files are gone", () => {
-    const result = replay([{ type: "registered", worker: "none" }, { type: "controller.changed" }])
+  test.each(["controller.changed", "reset.elsewhere"] as const)(
+    "another window's %s reloads this one, whose old files are gone",
+    (type) => {
+      const result = replay([{ type: "registered", worker: "waiting" }, { type }])
 
-    expect(result).toEqual({ state: { status: "reloading" }, effects: [{ type: "reload" }] })
-  })
+      expect(result).toEqual({ state: { status: "reloading" }, effects: [{ type: "announce" }, { type: "reload" }] })
+    },
+  )
 
   test("a reset reloads once from any state and nothing runs after it", () => {
     const result = replay([

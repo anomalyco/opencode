@@ -47,6 +47,8 @@ export type WebUpdateEvent =
   | { readonly type: "apply.requested" }
   | { readonly type: "apply.timeout" }
   | { readonly type: "reset.requested" }
+  /** Another window dropped the saved app, including the files this window still loads. */
+  | { readonly type: "reset.elsewhere" }
   | { readonly type: "controller.changed" }
 
 export type WebUpdateEffect =
@@ -55,7 +57,7 @@ export type WebUpdateEffect =
   /** Tell the waiting worker to take over now. */
   | { readonly type: "skip-waiting" }
   | { readonly type: "reload" }
-  /** Unregister the worker, delete its caches, then reload from the server. */
+  /** Unregister the worker, delete its caches, tell every other window to reload, then reload from the server. */
   | { readonly type: "reset" }
   /** A newer build is ready: offer the reload. */
   | { readonly type: "announce" }
@@ -73,8 +75,10 @@ export const initialWebUpdate: WebUpdateState = { status: "unavailable" }
 export function transitionWebUpdate(state: WebUpdateState, event: WebUpdateEvent): WebUpdateTransition {
   if (state.status === "reloading") return unchanged(state)
 
-  // Another window applied the update, or this one did: the old build's files are gone, so reload.
-  if (event.type === "controller.changed") return { state: { status: "reloading" }, effects: [{ type: "reload" }] }
+  // Another window applied the update or dropped the saved app, or this one applied it: the old build's files are
+  // gone, so reload.
+  if (event.type === "controller.changed" || event.type === "reset.elsewhere")
+    return { state: { status: "reloading" }, effects: [{ type: "reload" }] }
 
   if (event.type === "reset.requested") return { state: { status: "reloading" }, effects: [{ type: "reset" }] }
 

@@ -354,19 +354,29 @@ fixture(
   },
 )
 
-fixture("reload from server replaces a saved build that cannot update", async ({ page, site }) => {
-  await install(page, `${site.url}/?updater`)
-  site.deploy("failed")
-  await page.getByRole("button", { name: "Check for updates" }).click()
-  await expect(page.getByLabel("Update state")).toHaveText("error")
-  await page.reload()
-  await expect(page.getByRole("heading")).toHaveText("old")
+fixture(
+  "reload from server replaces a saved build that cannot update, in every open tab",
+  async ({ page, context, site }) => {
+    await install(page, `${site.url}/?updater`)
+    const second = await context.newPage()
+    await second.goto(`${site.url}/?updater`)
+    await expect(second.getByLabel("Update state")).toHaveText("idle")
+    site.deploy("failed")
+    await page.getByRole("button", { name: "Check for updates" }).click()
+    await expect(page.getByLabel("Update state")).toHaveText("error")
+    await page.reload()
+    await expect(page.getByRole("heading")).toHaveText("old")
 
-  await page.getByRole("button", { name: "Reload from server" }).click()
-  await expect(page.getByRole("heading")).toHaveText("new")
-  expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull()
-  expect(await page.evaluate(async () => (await caches.keys()).length)).toBe(0)
-})
+    await page.getByRole("button", { name: "Reload from server" }).click()
+    await expect(page.getByRole("heading")).toHaveText("new")
+    expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull()
+    expect(await page.evaluate(async () => (await caches.keys()).length)).toBe(0)
+    // The other tab's old lazy chunks went with the caches, so it reloads too instead of failing its next import.
+    await expect(second.getByRole("heading")).toHaveText("new")
+    await second.getByRole("button", { name: "Load lazy" }).click()
+    await expect(second.getByRole("status")).toHaveText("new nested lazy loaded")
+  },
+)
 
 for (const fault of ["failed", "html", "corrupt", "mixed-html"] as const) {
   fixture(`retains the old complete build when a precache download is ${fault}`, async ({ page, context, site }) => {

@@ -4,6 +4,9 @@ import type { WebUpdateEffect, WebUpdateEvent, WebUpdateState, WebWorker } from 
 /** How often an open, visible window asks the server for a newer build. */
 const CHECK_INTERVAL_MS = 10 * 60_000
 
+/** The channel the app's windows share to reload together after a reset. */
+const RESET_CHANNEL = "opencode.updater.reset"
+
 /** How long `applying` waits for the new worker to take over before reloading anyway. */
 const APPLY_TIMEOUT_MS = 10_000
 
@@ -29,6 +32,9 @@ export type WebUpdaterOptions = {
  */
 export function startWebUpdater(options: WebUpdaterOptions) {
   const container = "serviceWorker" in navigator ? navigator.serviceWorker : undefined
+
+  // The app's windows share one saved copy, so a reset in one tells the others to reload.
+  const channel = container && "BroadcastChannel" in window ? new BroadcastChannel(RESET_CHANNEL) : undefined
 
   const current: Current = { state: initialWebUpdate, disposed: false }
 
@@ -65,7 +71,7 @@ export function startWebUpdater(options: WebUpdaterOptions) {
 
     if (effect.type === "reload") return location.reload()
 
-    if (effect.type === "reset") return void reset()
+    if (effect.type === "reset") return void reset(channel)
 
     const registration = current.registration
 
@@ -137,6 +143,12 @@ export function startWebUpdater(options: WebUpdaterOptions) {
     cleanup.push(() => clearInterval(interval))
   }
 
+  if (channel) {
+    // Only reset posts here, and a channel never hears its own messages.
+    listen(channel, "message", () => dispatch({ type: "reset.elsewhere" }))
+    cleanup.push(() => channel.close())
+  }
+
   return {
     state: () => current.state,
     /** Asks the server for a newer build now and reports what it found. */
@@ -160,13 +172,16 @@ function newest(registration: ServiceWorkerRegistration): WebWorker {
   return "none"
 }
 
-// Every window of this origin loses the saved app, so each loads the server's build on its next navigation.
-async function reset() {
+// Every window of this origin loses the saved app. The others reload only once it is gone, so they load the server's
+// build instead of the old files a lazy import would now miss.
+async function reset(channel: BroadcastChannel | undefined) {
   const registrations = await navigator.serviceWorker.getRegistrations().catch(() => [])
   const names = "caches" in window ? await caches.keys().catch(() => []) : []
+
   await Promise.allSettled([
     ...registrations.map((registration) => registration.unregister()),
     ...names.map((name) => caches.delete(name)),
   ])
+  channel?.postMessage("reset")
   location.reload()
 }
