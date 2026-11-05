@@ -146,6 +146,8 @@ pub struct Inner {
     startup: RefCell<Option<String>>,
     /// The worktree staged from `/worktrees` and its progress row (E.11b).
     pub(crate) staging: super::r#move::Move,
+    /// `props.disabled`: a home form holds the keys, so a click does not focus the prompt.
+    disabled: Cell<bool>,
     pub(crate) this: Weak<Inner>,
 }
 
@@ -194,6 +196,11 @@ impl Prompt {
 
     pub fn focus(&self, tui: &Tui) {
         tui.app.focus(&self.inner.textarea);
+    }
+
+    /// `props.disabled`: while set, a click does not focus the prompt.
+    pub fn set_disabled(&self, disabled: bool) {
+        self.inner.disabled.set(disabled);
     }
 
     /// Sets what runs when a prompt with text is sent (`onSubmit`).
@@ -373,7 +380,27 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         previews,
         startup: RefCell::new(None),
         staging,
+        disabled: Cell::new(false),
         this: this.clone(),
+    });
+    // `prompt/index.tsx:1838-1844`: a left press focuses the prompt unless it is disabled. With the right pane
+    // active, the session frame takes the release instead.
+    let weak = Rc::downgrade(&inner);
+    inner.textarea.on_mouse(move |cx, event| {
+        let MouseEventKind::Down(button) = event.kind else {
+            return;
+        };
+        let Some(prompt) = weak.upgrade() else { return };
+        let Some(tui) = prompt.tui.upgrade() else {
+            return;
+        };
+        if prompt.disabled.get() || !crate::frame::session_interactive(&tui) {
+            cx.prevent_default();
+            return;
+        }
+        if button == MouseButton::Left {
+            cx.focus(&prompt.textarea);
+        }
     });
     connect(&inner);
     connect_location(&inner);
