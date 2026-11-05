@@ -92,11 +92,8 @@ export default function ArtifactView(props: {
 
   const dispatchViewer = (event: ArtifactViewerEvent) => {
     const prev = untrack(viewerState)
-    const next = transitionArtifactViewer(
-      prev,
-      untrack(() => props.content),
-      event,
-    )
+    const content = untrack(() => props.content)
+    const next = transitionArtifactViewer(prev, content, event)
 
     if (next !== prev) setViewerState(next)
   }
