@@ -139,20 +139,59 @@ const layer = Layer.effect(
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
     const pending = new Map<ID, Pending>()
+    const settling = new Set<ID>()
     let closed = false
+
+    const settle = Effect.fn("Permission.settle")(
+      (item: Pending, input: Pick<ReplyInput, "reply" | "message"> & { readonly save?: boolean }) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const id = item.request.id
+            if (pending.get(id) !== item || settling.has(id)) return false
+            settling.add(id)
+            yield* Effect.gen(function* () {
+              yield* bus.publish(Permission.Event.Replied, {
+                sessionID: item.request.sessionID,
+                requestID: id,
+                reply: input.reply,
+              })
+              if (input.save && input.reply === "always" && item.request.save?.length) {
+                yield* saved.add({
+                  projectID: location.project.id,
+                  action: item.request.action,
+                  resources: item.request.save,
+                })
+              }
+              if (pending.get(id) === item) pending.delete(id)
+              if (input.reply === "reject") {
+                yield* Deferred.fail(
+                  item.deferred,
+                  input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
+                )
+                return
+              }
+              yield* Deferred.succeed(item.deferred, undefined)
+            }).pipe(
+              Effect.ensuring(
+                Effect.suspend(() => {
+                  // close leaves in-flight settlement to its owner, including failed publications.
+                  const abandon = closed && pending.get(id) === item
+                  if (abandon) pending.delete(id)
+                  settling.delete(id)
+                  return abandon ? Deferred.fail(item.deferred, new DeclinedError()).pipe(Effect.asVoid) : Effect.void
+                }),
+              ),
+            )
+            return true
+          }),
+        ),
+    )
 
     const close = Effect.gen(function* () {
       closed = true
-      yield* Effect.forEach(Array.from(pending.values()), (item) =>
-        bus
-          .publish(Permission.Event.Replied, {
-            sessionID: item.request.sessionID,
-            requestID: item.request.id,
-            reply: "reject",
-          })
-          .pipe(Effect.ensuring(Deferred.fail(item.deferred, new DeclinedError()))),
-      )
-      pending.clear()
+      yield* Effect.forEach(Array.from(pending.values()), (item) => settle(item, { reply: "reject" }), {
+        discard: true,
+      })
     }).pipe(Effect.uninterruptible)
     yield* Effect.addFinalizer(() => close)
 
@@ -278,7 +317,7 @@ const layer = Layer.effect(
               Effect.catchTag("Permission.DeclinedError", (error) => Effect.die(error)),
               Effect.ensuring(
                 Effect.sync(() => {
-                  pending.delete(item.request.id)
+                  if (pending.get(item.request.id) === item) pending.delete(item.request.id)
                 }),
               ),
             )
@@ -307,59 +346,27 @@ const layer = Layer.effect(
       Effect.uninterruptible(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
-          if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* bus.publish(Permission.Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-            reply: input.reply,
-          })
+          if (!existing || !(yield* settle(existing, { ...input, save: true })))
+            return yield* new NotFoundError({ requestID: input.requestID })
 
           if (input.reply === "reject") {
-            yield* Deferred.fail(
-              existing.deferred,
-              input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
-            )
-            pending.delete(input.requestID)
-            for (const [id, item] of pending) {
+            for (const item of Array.from(pending.values())) {
               if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* bus.publish(Permission.Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: item.request.id,
-                reply: "reject",
-              })
               // Feedback applies to the whole batch, so parallel asks don't end the step.
-              yield* Deferred.fail(
-                item.deferred,
-                input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
-              )
-              pending.delete(id)
+              yield* settle(item, { reply: "reject", message: input.message })
             }
             return
           }
 
-          if (input.reply === "always" && existing.request.save?.length) {
-            yield* saved.add({
-              projectID: location.project.id,
-              action: existing.request.action,
-              resources: existing.request.save,
-            })
-          }
-          yield* Deferred.succeed(existing.deferred, undefined)
-          pending.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return
 
-          for (const [id, item] of pending) {
+          for (const item of Array.from(pending.values())) {
+            if (settling.has(item.request.id)) continue
             const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )
             if (result?.effect !== "allow") continue
-            yield* bus.publish(Permission.Event.Replied, {
-              sessionID: item.request.sessionID,
-              requestID: item.request.id,
-              reply: "always",
-            })
-            yield* Deferred.succeed(item.deferred, undefined)
-            pending.delete(id)
+            yield* settle(item, { reply: "always" })
           }
         }),
       ),
