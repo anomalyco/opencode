@@ -71,7 +71,7 @@ for (const model of [
       }),
     )
 
-    it.effect("merges legacy reasoning items that cannot be replayed", () =>
+    it.effect("drops legacy reasoning items that cannot be replayed", () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({
@@ -91,6 +91,15 @@ for (const model of [
                 },
                 { type: "text", text: "Answer" },
               ]),
+              Message.user("Again"),
+              Message.assistant([
+                {
+                  type: "reasoning",
+                  text: "Third legacy thought",
+                  providerMetadata: { [key]: { reasoningField: "reasoning" } },
+                },
+                { type: "text", text: "Final" },
+              ]),
               Message.user("Continue"),
             ],
           }),
@@ -99,18 +108,17 @@ for (const model of [
         expect(prepared.body.input).toEqual([
           { type: "message", role: "user", id: undefined, status: undefined, content: [{ type: "input_text", text: "Earlier" }] },
           {
-            type: "reasoning",
-            summary: [
-              { type: "summary_text", text: "First legacy thought" },
-              { type: "summary_text", text: "Second legacy thought" },
-            ],
-            encrypted_content: undefined,
-          },
-          {
             type: "message",
             role: "assistant",
             status: "completed",
             content: [{ type: "output_text", text: "Answer" }],
+          },
+          { type: "message", role: "user", id: undefined, status: undefined, content: [{ type: "input_text", text: "Again" }] },
+          {
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "Final" }],
           },
           { type: "message", role: "user", id: undefined, status: undefined, content: [{ type: "input_text", text: "Continue" }] },
         ])

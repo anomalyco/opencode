@@ -569,17 +569,13 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
       ? metadata.reasoningEncryptedContent
       : undefined
   if (part.text.length === 0 && !encryptedContent) return undefined
+  if (id === undefined && !encryptedContent) return undefined
   return {
     type: "reasoning",
     ...(id === undefined ? {} : { id }),
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
-}
-
-const mergeReasoning = (target: OpenResponsesReasoningInput, source: OpenResponsesReasoningInput) => {
-  target.summary.push(...source.summary)
-  if (typeof source.encrypted_content === "string") target.encrypted_content = source.encrypted_content
 }
 
 const decodeImageDetail = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))
@@ -686,7 +682,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
     if (message.role === "assistant") {
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
-      let idlessReasoning: OpenResponsesReasoningInput | undefined
       const hostedToolItems = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
@@ -716,7 +711,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
         content.splice(0, content.length)
       }
       for (const part of message.content) {
-        if (part.type !== "reasoning") idlessReasoning = undefined
         if (part.type === "compaction") {
           flushText()
           if (part.provider !== request.model.provider || part.encrypted === undefined)
@@ -734,22 +728,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
           flushText()
           const reasoning = lowerReasoning(part, providerMetadataKey)
           if (!reasoning) continue
-          if (reasoning.id === undefined) {
-            if (idlessReasoning) {
-              mergeReasoning(idlessReasoning, reasoning)
-              continue
-            }
-            idlessReasoning = reasoning
-            input.push(reasoning)
-            continue
-          }
-          idlessReasoning = undefined
-          const existing = reasoningItems[reasoning.id]
+          const existing = reasoning.id === undefined ? undefined : reasoningItems[reasoning.id]
           if (existing) {
-            mergeReasoning(existing, reasoning)
+            existing.summary.push(...reasoning.summary)
+            if (typeof reasoning.encrypted_content === "string")
+              existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          reasoningItems[reasoning.id] = reasoning
+          if (reasoning.id !== undefined) reasoningItems[reasoning.id] = reasoning
           input.push(reasoning)
           continue
         }

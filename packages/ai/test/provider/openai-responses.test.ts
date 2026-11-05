@@ -3925,10 +3925,7 @@ describe("OpenAI Responses route", () => {
         },
         {
           type: "reasoning",
-          summary: [
-            { type: "summary_text", text: "Missing suffix." },
-            { type: "summary_text", text: "No prefix separator." },
-          ],
+          summary: [{ type: "summary_text", text: "Missing suffix." }],
           encrypted_content: "another-state",
         },
         {
