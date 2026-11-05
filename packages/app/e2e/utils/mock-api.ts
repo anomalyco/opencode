@@ -39,6 +39,7 @@ const Query = Schema.Struct({
   query: Schema.optional(Schema.String),
   type: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
 })
 
 const SessionParams = { sessionID: Schema.String }
