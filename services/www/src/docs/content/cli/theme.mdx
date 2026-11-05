@@ -127,6 +127,11 @@ A color can be a hex value, `"transparent"`, or a reference to another theme col
 }
 ```
 
+A terminal cell holds one background color. Two rules follow from that:
+
+- `"transparent"` leaves the cell unpainted, so the terminal's own background and opacity show through.
+- A hex value with an alpha channel blends with what is already drawn in the cell. If the cell is empty, it blends with the background color, so the result is solid. Alpha cannot make a cell see-through; use `"transparent"` for that.
+
 ### Hues
 
 Hues are nine-step color scales. Every mode defines the eight base hues and three aliases:

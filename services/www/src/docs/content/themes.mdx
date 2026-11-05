@@ -137,6 +137,13 @@ Use a hex color, `transparent`, or a reference to another theme color:
 Hex values may use 3, 4, 6, or 8 digits. References begin with `$`; hue references use the form
 `$hue.<name>.<step>`.
 
+A terminal cell holds one background color. Two rules follow from that:
+
+- `transparent` leaves the cell unpainted, so the terminal's own background and opacity show through.
+- The alpha channel of an 8-digit hex color blends with what is already drawn in the cell. If the cell is
+  empty, it blends with the background color, so the result is solid. Alpha cannot make a cell
+  see-through; use `transparent` for that.
+
 ## Hues
 
 Override a hue alias to change a family of related colors at once:
