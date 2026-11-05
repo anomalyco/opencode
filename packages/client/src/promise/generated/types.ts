@@ -154,6 +154,8 @@ export type SessionStatsToolUsage = {
 
 export type SessionStatsActivity = { date: string; steps: number }
 
+export type SessionWaitResponse = { data: { outcome?: "succeeded" | "failed" | "interrupted"; text: string } }
+
 export type InstructionEntryKey = string
 
 export type EventID = string
@@ -412,6 +414,8 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+
+export type SessionSpawnResponse = { data: { id: SessionID } }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -3867,7 +3871,38 @@ export type ExperimentalSessionSkillOutput = void
 
 export type ExperimentalSessionWaitInput = { readonly sessionID: string }
 
-export type ExperimentalSessionWaitOutput = void
+export type ExperimentalSessionWaitOutput = SessionWaitResponse["data"]
+
+export type ExperimentalSessionSpawnInput = {
+  readonly sessionID: string
+  readonly notify?: boolean | null | undefined
+  readonly agent?: string | null | undefined
+  readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null | undefined
+  readonly title?: string | null | undefined
+  readonly prompt?:
+    | {
+        readonly text: string
+        readonly files?: ReadonlyArray<{
+          readonly uri: string
+          readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
+          readonly name?: string
+          readonly description?: string
+          readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+        }>
+        readonly agents?: ReadonlyArray<{
+          readonly name: string
+          readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+        }>
+        readonly skills?: ReadonlyArray<{
+          readonly id: string
+          readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+        }>
+      }
+    | null
+    | undefined
+}
+
+export type ExperimentalSessionSpawnOutput = SessionSpawnResponse["data"]
 
 export type ExperimentalSessionInstructionsEntryListInput = { readonly sessionID: string }
 
@@ -4885,6 +4920,12 @@ export type SessionWaitInput = ExperimentalSessionWaitInput
 
 /** @deprecated Use `ExperimentalSessionWaitOutput`. Removed in the next minor. */
 export type SessionWaitOutput = ExperimentalSessionWaitOutput
+
+/** @deprecated Use `ExperimentalSessionSpawnInput`. Removed in the next minor. */
+export type SessionSpawnInput = ExperimentalSessionSpawnInput
+
+/** @deprecated Use `ExperimentalSessionSpawnOutput`. Removed in the next minor. */
+export type SessionSpawnOutput = ExperimentalSessionSpawnOutput
 
 /** @deprecated Use `ExperimentalSessionInstructionsEntryListInput`. Removed in the next minor. */
 export type SessionInstructionsEntryListInput = ExperimentalSessionInstructionsEntryListInput

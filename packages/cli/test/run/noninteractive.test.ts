@@ -217,14 +217,14 @@ async function run(input: {
   renderTool?: (part: SessionMessageAssistantTool) => Promise<void>
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
   messages?: (inboxID: string) => SessionMessageInfo[]
-  wait?: () => Promise<void>
+  wait?: () => Promise<{ text: string }>
   jobs?: () => ExperimentalJobListOutput
   terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
-  const wait = Promise.withResolvers<void>()
+  const wait = Promise.withResolvers<{ text: string }>()
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {
       const value = values.shift()
@@ -236,7 +236,7 @@ async function run(input: {
       }
       if (value.type.startsWith("session.execution.")) {
         if (input.terminalDelay) await Bun.sleep(input.terminalDelay)
-        setTimeout(wait.resolve, 0)
+        setTimeout(wait.resolve, 0, { text: "" })
       }
       yield value
     }
@@ -363,7 +363,7 @@ describe("runNonInteractivePrompt", () => {
   })
 
   test("uses session.wait then reconciles projected output without a terminal event", async () => {
-    const idle = Promise.withResolvers<void>()
+    const idle = Promise.withResolvers<{ text: string }>()
     let done = false
     const task = capture({
       format: "json",
@@ -389,7 +389,7 @@ describe("runNonInteractivePrompt", () => {
     await Bun.sleep(0)
     await Bun.sleep(0)
     expect(done).toBe(false)
-    idle.resolve()
+    idle.resolve({ text: "" })
     const output = await task
     expect(
       output.stdout
@@ -419,7 +419,7 @@ describe("runNonInteractivePrompt", () => {
       { id: messageID, type: "user", text: "hello", time: { created: 1 } },
     ]
     const lines = async (turn: (messageID: string) => V2Event[]) =>
-      (await capture({ format: "json", turn, messages: assistant, wait: () => Promise.resolve() })).stdout
+      (await capture({ format: "json", turn, messages: assistant, wait: () => Promise.resolve({ text: "" }) })).stdout
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line))
@@ -474,7 +474,7 @@ describe("runNonInteractivePrompt", () => {
         ],
         messages: (messageID) =>
           promotedBeforeFailure ? [{ id: messageID, type: "user", text: "hello", time: { created: 1 } }] : [],
-        wait: () => Promise.resolve(),
+        wait: () => Promise.resolve({ text: "" }),
         terminalDelay: 10,
       })
 

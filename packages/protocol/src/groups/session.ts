@@ -456,15 +456,45 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.wait", "/api/experimental/session/:sessionID/wait", {
         params: { sessionID: Session.ID },
-        success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, ServiceUnavailableError],
+        success: Schema.Struct({
+          data: Schema.Struct({
+            outcome: Session.Info.fields.outcome,
+            text: Schema.String,
+          }),
+        }).annotate({ identifier: "SessionWaitResponse" }),
+        error: [SessionNotFoundError, ServiceUnavailableError, UnknownError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.session.wait",
           summary: "Wait for session",
-          description: "Wait for a session agent loop to become idle.",
+          description: "Wait for a session agent loop to become idle and report its outcome and final text.",
         }),
       ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.spawn", "/api/experimental/session/:sessionID/spawn", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          notify: Schema.Boolean.pipe(Schema.optional),
+          agent: Agent.ID.pipe(Schema.optional),
+          model: Model.Ref.pipe(Schema.optional),
+          title: Schema.String.pipe(Schema.optional),
+          prompt: PromptInput.Prompt.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({
+          data: Schema.Struct({ id: Session.ID }),
+        }).annotate({ identifier: "SessionSpawnResponse" }),
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, UnknownError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.spawn",
+            summary: "Spawn subagent session",
+            description:
+              "Experimental: may change without compatibility guarantees. Create a child session under this session and optionally admit its first prompt.",
+          }),
+        ),
     )
     .add(
       HttpApiEndpoint.post("session.revert.stage", "/api/session/:sessionID/revert/stage", {

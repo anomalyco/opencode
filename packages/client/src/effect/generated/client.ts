@@ -101,6 +101,8 @@ import type {
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
   ExperimentalSessionWaitOutput,
+  ExperimentalSessionSpawnInput,
+  ExperimentalSessionSpawnOutput,
   ExperimentalSessionInstructionsEntryListInput,
   ExperimentalSessionInstructionsEntryListOutput,
   ExperimentalSessionInstructionsEntryPutInput,
@@ -838,7 +840,27 @@ const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (
 
 const EndpointExperimentalSessionWait = (raw: RawClient["server.session"]) => (input: ExperimentalSessionWaitInput) =>
   preserveEffect<ExperimentalSessionWaitOutput>()(
-    raw["session.wait"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["session.wait"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalSessionSpawn = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSpawnInput) =>
+  preserveEffect<ExperimentalSessionSpawnOutput>()(
+    raw["session.spawn"]({
+      params: { sessionID: input["sessionID"] },
+      payload: {
+        notify: input["notify"],
+        agent: input["agent"],
+        model: input["model"],
+        title: input["title"],
+        prompt: input["prompt"],
+      },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
   )
 
 const EndpointExperimentalSessionInstructionsEntryList =
@@ -886,6 +908,7 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   export: EndpointExperimentalSessionExport(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
+  spawn: EndpointExperimentalSessionSpawn(raw),
   instructions: {
     entry: {
       list: EndpointExperimentalSessionInstructionsEntryList(raw),
@@ -2017,6 +2040,8 @@ const adaptClient = (raw: RawClient) => {
       skill: client.experimental.session.skill,
       /** @deprecated Use `client.experimental.session.wait`. Removed in the next minor. */
       wait: client.experimental.session.wait,
+      /** @deprecated Use `client.experimental.session.spawn`. Removed in the next minor. */
+      spawn: client.experimental.session.spawn,
       /** @deprecated Use `client.experimental.session.instructions`. Removed in the next minor. */
       instructions: {
         /** @deprecated Use `client.experimental.session.instructions.entry`. Removed in the next minor. */

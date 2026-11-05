@@ -324,6 +324,39 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.spawn",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .spawn({
+                parent: { id: ctx.params.sessionID, notify: ctx.payload.notify },
+                agent: ctx.payload.agent,
+                model: ctx.payload.model,
+                title: ctx.payload.title,
+                prompt: ctx.payload.prompt,
+              })
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.PromptConflictError", (error) =>
+                  Effect.fail(
+                    new ConflictError({
+                      message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
+                      resource: error.messageID,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("Session.AttachmentError", (error) =>
+                  Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
+                ),
+                Effect.catchTag("Session.SkillNotFoundError", (error) =>
+                  Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
+                ),
+                locationErrors,
+              ),
+          }
+        }),
+      )
+      .handle(
         "session.command",
         Effect.fn(function* (ctx) {
           yield* session
@@ -437,15 +470,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.wait",
         Effect.fn(function* (ctx) {
-          // Item sub-spawn-wait.3 surfaces a typed decode failure; today the protocol advertises only
-          // NotFound and ServiceUnavailable, so a corrupt row dies rather than failing a declared error.
-          yield* session
-            .wait(ctx.params.sessionID)
-            .pipe(
-              Effect.catchTag("Session.NotFoundError", missingSession),
-              Effect.catchTag("Session.MessageDecodeError", Effect.die),
-            )
-          return HttpApiSchema.NoContent.make()
+          return {
+            data: yield* session
+              .wait(ctx.params.sessionID)
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
+              ),
+          }
         }),
       )
       .handle(

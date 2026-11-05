@@ -107,7 +107,7 @@ async function openSession(server: { inbox?: unknown[]; plugins?: string[]; resp
       if (info && (rest === "" || rest === "/interrupt")) return json({ data: info })
       if (info && rest === "/inbox") return json({ data: id === session.id ? (server.inbox ?? []) : [] })
       if (info && rest === "/permission") return json({ data: [] })
-      if (info && rest === "/wait") return new Response(null, { status: 204 })
+      if (info && rest === "/wait") return json({ data: { text: "" } })
       const respond = logged[key]
       if (!respond) return undefined
       // Logged on arrival, so a test can act while a read is still waiting; the status is added once it answers.

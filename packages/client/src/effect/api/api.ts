@@ -457,6 +457,9 @@ export interface SessionApi<E = never> {
   /** @deprecated Use `client.experimental.session.wait`. Removed in the next minor. */
   readonly wait: ExperimentalSessionWaitOperation<E>
 
+  /** @deprecated Use `client.experimental.session.spawn`. Removed in the next minor. */
+  readonly spawn: ExperimentalSessionSpawnOperation<E>
+
   /** @deprecated Use `client.experimental.session.instructions`. Removed in the next minor. */
   readonly instructions: {
     /** @deprecated Use `client.experimental.session.instructions.entry`. Removed in the next minor. */
@@ -573,10 +576,26 @@ export type ExperimentalSessionSkillOperation<E = never> = (
 ) => Effect.Effect<ExperimentalSessionSkillOutput, E>
 
 export type ExperimentalSessionWaitInput = { readonly sessionID: Session.ID }
-export type ExperimentalSessionWaitOutput = void
+export type ExperimentalSessionWaitOutput = {
+  readonly outcome?: "succeeded" | "failed" | "interrupted" | undefined
+  readonly text: string
+}
 export type ExperimentalSessionWaitOperation<E = never> = (
   input: ExperimentalSessionWaitInput,
 ) => Effect.Effect<ExperimentalSessionWaitOutput, E>
+
+export type ExperimentalSessionSpawnInput = {
+  readonly sessionID: Session.ID
+  readonly notify?: boolean | undefined
+  readonly agent?: Agent.ID | undefined
+  readonly model?: Model.Ref | undefined
+  readonly title?: string | undefined
+  readonly prompt?: PromptInput.Prompt | undefined
+}
+export type ExperimentalSessionSpawnOutput = { readonly id: Session.ID }
+export type ExperimentalSessionSpawnOperation<E = never> = (
+  input: ExperimentalSessionSpawnInput,
+) => Effect.Effect<ExperimentalSessionSpawnOutput, E>
 
 export type ExperimentalSessionInstructionsEntryListInput = { readonly sessionID: Session.ID }
 export type ExperimentalSessionInstructionsEntryListOutput = ReadonlyArray<InstructionEntry.Info>
@@ -1426,6 +1445,7 @@ export interface ExperimentalSessionApi<E = never> {
   readonly export: ExperimentalSessionExportOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
+  readonly spawn: ExperimentalSessionSpawnOperation<E>
   readonly instructions: {
     readonly entry: {
       readonly list: ExperimentalSessionInstructionsEntryListOperation<E>
@@ -2839,6 +2859,15 @@ export type SessionWaitOutput = ExperimentalSessionWaitOutput
 
 /** @deprecated Use `ExperimentalSessionWaitOperation`. Removed in the next minor. */
 export type SessionWaitOperation<E = never> = ExperimentalSessionWaitOperation<E>
+
+/** @deprecated Use `ExperimentalSessionSpawnInput`. Removed in the next minor. */
+export type SessionSpawnInput = ExperimentalSessionSpawnInput
+
+/** @deprecated Use `ExperimentalSessionSpawnOutput`. Removed in the next minor. */
+export type SessionSpawnOutput = ExperimentalSessionSpawnOutput
+
+/** @deprecated Use `ExperimentalSessionSpawnOperation`. Removed in the next minor. */
+export type SessionSpawnOperation<E = never> = ExperimentalSessionSpawnOperation<E>
 
 /** @deprecated Use `ExperimentalSessionInstructionsEntryListInput`. Removed in the next minor. */
 export type SessionInstructionsEntryListInput = ExperimentalSessionInstructionsEntryListInput

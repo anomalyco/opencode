@@ -75,6 +75,7 @@ test("exposes every standard HTTP API group", () => {
     "export",
     "skill",
     "wait",
+    "spawn",
     "instructions",
     "log",
   ])
@@ -163,6 +164,7 @@ test("nests a method under client.experimental exactly when its route is experim
     "session.instructions.entry.remove",
     "session.log",
     "session.skill",
+    "session.spawn",
     "session.stats",
     "session.wait",
     "usage.limits",
@@ -1058,6 +1060,8 @@ test("session methods use the public HTTP contract", async () => {
       if (url.endsWith("/api/session/active")) return Response.json({ data: { ses_test: { type: "running" } } })
       if (init?.method === "POST" && url.endsWith("/api/session")) return Response.json(session)
       if (url.includes("/interrupt")) return Response.json({ interrupted: true })
+      if (url.endsWith("/wait")) return Response.json({ data: { outcome: "succeeded", text: "Done" } })
+      if (url.endsWith("/spawn")) return Response.json({ data: { id: "ses_child" } })
       if (init?.method === "POST") return new Response(null, { status: 204 })
       return Response.json({ data: [session.data], cursor: { next: "next" } })
     },
@@ -1085,7 +1089,8 @@ test("session methods use the public HTTP contract", async () => {
     resume: false,
   })
   await client.session.compact({ sessionID: "ses_test" })
-  await client.experimental.session.wait({ sessionID: "ses_test" })
+  const waited = await client.experimental.session.wait({ sessionID: "ses_test" })
+  const spawned = await client.experimental.session.spawn({ sessionID: "ses_test", title: "Child", notify: false })
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.experimental.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
@@ -1097,6 +1102,8 @@ test("session methods use the public HTTP contract", async () => {
   expect(active).toEqual({ ses_test: { type: "running" } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
+  expect(waited).toEqual({ outcome: "succeeded", text: "Done" })
+  expect(spawned.id).toBe("ses_child")
   expect(generated.text).toBe("A transient answer")
   expect(interrupted).toEqual({ interrupted: true })
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
@@ -1115,6 +1122,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
+    ["POST", "http://localhost:3000/api/experimental/session/ses_test/spawn"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt?resume=true"],
