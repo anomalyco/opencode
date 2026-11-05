@@ -17,6 +17,7 @@ opencode-store.workspace = true
 opencode-service.workspace = true
 opencode-local.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
 log.workspace = true

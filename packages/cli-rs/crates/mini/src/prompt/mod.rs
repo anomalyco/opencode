@@ -16,6 +16,7 @@
 pub mod api;
 pub mod complete;
 pub mod history;
+pub mod images;
 pub mod menu;
 pub mod parts;
 pub mod queue;
@@ -183,6 +184,9 @@ struct Inner {
     body: View,
     rail: View,
     menu: Menu,
+    previews: images::Previews,
+    /// `prompt.image_preview`.
+    image_preview: bool,
     keymap: Rc<DialogKeymap>,
     theme: RefCell<RunTheme>,
     mono: bool,
@@ -210,6 +214,7 @@ impl Prompt {
             .width(Length::percent(100.0))
             .height(u32::from(MIN_ROWS));
         let vertical = if mono { '|' } else { '┃' };
+        let previews = images::Previews::new(app);
         let rail = View::new(app)
             .column()
             .width(Length::percent(100.0))
@@ -219,6 +224,7 @@ impl Prompt {
             ]))
             .padding_edge(Edge::Left, 1)
             .padding_edge(Edge::Right, 2)
+            .child(previews.root())
             .child(&textarea);
         let body = View::new(app)
             .column()
@@ -233,6 +239,12 @@ impl Prompt {
             body,
             rail,
             menu: Menu::new(app),
+            previews,
+            image_preview: config
+                .prompt
+                .as_ref()
+                .and_then(|prompt| prompt.image_preview)
+                == Some(true),
             keymap,
             theme: RefCell::new(theme.clone()),
             mono,
@@ -660,7 +672,15 @@ impl Inner {
             .map_or(1, |(rows, _)| rows)
             .max(1);
         let options = self.options();
-        let visible = self.state.borrow().mode.is_some();
+        let (visible, uris) = {
+            let state = self.state.borrow();
+            let uris = if self.image_preview && !self.mono && !state.shell {
+                images::images(&state.parts)
+            } else {
+                Vec::new()
+            };
+            (state.mode.is_some(), uris)
+        };
         let count = if visible {
             options.len().max(1) as u16
         } else {
@@ -671,7 +691,7 @@ impl Inner {
             lines.min(u32::from(u16::MAX)) as u16,
             count,
             u16::from(!visible),
-            false,
+            !uris.is_empty(),
         );
         let selection = {
             let mut state = self.state.borrow_mut();
@@ -683,6 +703,8 @@ impl Inner {
         };
         self.textarea
             .height(u32::from(next.rows - next.menu - next.images));
+        self.previews
+            .show(&uris, next.images, self.theme.borrow().footer.muted);
         self.body.padding_y(u32::from(next.padding));
         if visible {
             let items: Vec<menu::Item> = options.iter().map(Choice::item).collect();
