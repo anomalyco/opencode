@@ -82,7 +82,7 @@ fn page(output: &str) -> anyhow::Result<()> {
     if let Some(mut stdin) = pager.stdin.take() {
         let _ = stdin.write_all(output.as_bytes());
     }
-    pager.wait()?;
+    crate::signals::wait_child("stop pager", pager, true)?;
     Ok(())
 }
 

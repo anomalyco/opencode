@@ -49,7 +49,9 @@ pub fn run(_context: &Context, args: &ServiceArgs) -> anyhow::Result<()> {
             if edit.needs_tunnel() {
                 // The TS command creates the tunnel in the foreground, then stops the service and writes
                 // the route; a tunnel that cannot be created leaves remote access off.
-                return match delegate::enable_remote(&TsCommand::from_env())? {
+                let child = delegate::enable_remote(&TsCommand::from_env())?;
+                let status = crate::signals::wait_child("enable remote access", child, false)?;
+                return match delegate::exit_code(status) {
                     0 => Ok(()),
                     code => Err(Exit(u8::try_from(code).unwrap_or(1)).into()),
                 };

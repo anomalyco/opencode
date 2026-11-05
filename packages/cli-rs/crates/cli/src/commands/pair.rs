@@ -39,7 +39,12 @@ pub fn run(_context: &Context, args: &PairArgs) -> anyhow::Result<()> {
             return Ok(());
         }
         // Changing the setting restarts the service, and the ensure below starts it again with the tunnel.
-        match delegate::enable_remote(&TsCommand::from_env())? {
+        let child = delegate::enable_remote(&TsCommand::from_env())?;
+        match delegate::exit_code(crate::signals::wait_child(
+            "enable remote access",
+            child,
+            false,
+        )?) {
             0 => {}
             code => return Err(Exit(u8::try_from(code).unwrap_or(1)).into()),
         }
