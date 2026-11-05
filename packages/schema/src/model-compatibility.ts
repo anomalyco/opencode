@@ -38,6 +38,8 @@ export const Compatibility = Schema.Struct({
   supportsPromptCacheKey: Schema.Boolean.pipe(optional),
   /** OpenAI Chat: request usage in the stream with `stream_options.include_usage`. Defaults to true. */
   streamUsage: Schema.Boolean.pipe(optional),
+  /** Omit the `tools` field when the active tool set is empty instead of sending an explicit empty array. Strict OpenAI-compatible upstreams reject `"tools": []` with 400. */
+  omitEmptyTools: Schema.Boolean.pipe(optional),
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: CacheFormat.pipe(optional),
   /** Anthropic Messages and Bedrock Converse: supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
