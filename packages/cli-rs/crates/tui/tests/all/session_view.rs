@@ -1,15 +1,14 @@
 //! The session view's follow-ups to `rs-ms34-session`, over the in-memory transport with its request log
 //! (P-REQ): `session.submit_scroll` after a send, and usage limits kept per location as TS keys them.
 
+use crate::support::{self, WAIT};
+
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
-use opencode_local::cli_config::{self, Resolved};
-use opencode_tui::{Args, Deps, Route, Tui};
+use opencode_tui::{Deps, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
@@ -140,22 +139,13 @@ struct Harness {
 
 fn mount(id: &str, config: Value) -> Harness {
     let memory = Memory::new(routes());
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
-    let app = TestApp::new(100, 30);
-    let info = cli_config::decode_text(&config.to_string()).unwrap();
-    let tui = opencode_tui::mount_with(
-        &app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID(id.into()) },
-            continue_: false,
-            events: true,
-        },
-        Args::default(),
-    );
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        route: support::session_route(id),
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let support::Harness { app, tui } = support::mount(100, 30, deps);
     let h = Harness { app, tui, memory };
     let local = h.tui.local.clone();
     h.wait("the catalog", || local.catalog_ready() && !local.agents().is_empty());
@@ -164,7 +154,7 @@ fn mount(id: &str, config: Value) -> Harness {
 
 impl Harness {
     fn wait(&self, what: &str, check: impl Fn() -> bool) {
-        let found = self.app.wait_until(Duration::from_secs(5), || {
+        let found = self.app.wait_until(WAIT, || {
             self.app.render();
             check()
         });
@@ -232,13 +222,13 @@ fn usage_limits_are_kept_per_location() {
     assert_eq!(h.limits(), [Some(DIRECTORY.to_owned())]);
 
     // The worktree's session reads its own location's limits, not the project's.
-    h.tui.navigate(Route::Session { id: SessionID("ses_wt".into()) });
+    h.tui.navigate(support::session_route("ses_wt"));
     h.wait_for("Worktree work");
     h.wait_for("$4 left");
     assert_eq!(h.limits(), [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]);
 
     // Back in the project, its limits show again without another request.
-    h.tui.navigate(Route::Session { id: SessionID("ses_a".into()) });
+    h.tui.navigate(support::session_route("ses_a"));
     h.wait_for("$5 left");
     h.settle();
     assert_eq!(h.limits().len(), 2);

@@ -1,14 +1,14 @@
 //! The root command's TUI arguments (C.13) that P-APP cannot record, because the TS app fixture passes no
 //! `environment`: the terminal's variables go to the session on a local server, and to nobody otherwise.
 
+use crate::support;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Logged, Memory, Route as MemoryRoute};
-use opencode_local::cli_config::{Info, Resolved};
 use opencode_tui::{Args, Deps, Route};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -19,16 +19,8 @@ fn routes() -> Vec<MemoryRoute> {
     let location =
         json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
-    let agent = json!({
-        "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-        "request": { "settings": {}, "headers": {}, "body": {} },
-    });
-    let model = json!({
-        "id": "model", "modelID": "model", "providerID": "demo", "name": "Demo Model",
-        "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-        "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-        "enabled": true, "limit": { "context": 1000, "output": 100 },
-    });
+    let agent = support::agent("build", "primary", false);
+    let model = support::model("demo", "model", "Demo Model");
     let inbox = |id: &str| {
         json!({ "data": {
             "id": "msg_p", "sessionID": id, "time": { "created": 3 }, "type": "user",
@@ -66,20 +58,7 @@ fn environment() -> IndexMap<String, String> {
 }
 
 fn mount(app: &TestApp, memory: &Memory, route: Route, args: Args) -> std::rc::Rc<opencode_tui::Tui> {
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
-    opencode_tui::mount_with(
-        app,
-        Deps {
-            client,
-            directory: DIRECTORY.into(),
-            config: Resolved::new(Info::default(), |_| None),
-            roots: None,
-            route,
-            continue_: false,
-            events: true,
-        },
-        args,
-    )
+    opencode_tui::mount_with(app, Deps { route, events: true, ..support::deps(Arc::new(memory.clone())) }, args)
 }
 
 /// The writes so far, as `METHOD path`.
@@ -112,9 +91,8 @@ fn a_new_session_gets_the_environment_before_its_first_prompt() {
             ..Args::default()
         },
     );
-    let sent = app.wait_until(Duration::from_secs(5), || {
-        writes(&memory).contains(&"POST /api/session/ses_new/prompt".to_owned())
-    });
+    let sent =
+        app.wait_until(support::WAIT, || writes(&memory).contains(&"POST /api/session/ses_new/prompt".to_owned()));
     assert!(sent, "no prompt: {:?}", writes(&memory));
     let writes = writes(&memory);
     let position = |write: &str| writes.iter().position(|sent| sent == write);
@@ -138,7 +116,7 @@ fn an_opened_session_gets_the_environment_only_on_a_local_server() {
         let tui = mount(
             &app,
             &memory,
-            Route::Session { id: SessionID("ses_b".into()) },
+            support::session_route("ses_b"),
             Args { local: environment.is_some(), environment, ..Args::default() },
         );
         let uploaded = app.wait_until(Duration::from_secs(if uploads { 5 } else { 1 }), || {
