@@ -652,6 +652,13 @@ fn clicks_select_rows_and_the_backdrop_closes_the_dialog() {
     let row = (0..30u16)
         .find(|&y| screen.row(y as u32).contains("Claude Opus"))
         .unwrap();
+    // A right button's release over a row does not choose it.
+    kit.app
+        .mouse(MouseEventKind::Down(MouseButton::Right), 20, row);
+    kit.app
+        .mouse(MouseEventKind::Up(MouseButton::Right), 20, row);
+    kit.app.advance(Duration::from_millis(1));
+    assert!(chosen.borrow().is_empty(), "{:?}", chosen.borrow());
     kit.app.click(20, row);
     assert_eq!(*chosen.borrow(), ["opus"]);
     assert!(kit.dialogs.is_open());
