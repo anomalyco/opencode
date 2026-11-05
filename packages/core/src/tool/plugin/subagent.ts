@@ -247,8 +247,8 @@ export const Plugin = {
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
                   ),
-                  // A prompt that never reached the child leaves the original launch owing its report.
-                  Effect.tapError(() => (claimed === undefined ? Effect.void : subagents.release(recovery, claimed))),
+                  // A prompt that failed or was interrupted leaves the original launch owing its report.
+                  Effect.onError(() => (claimed === undefined ? Effect.void : subagents.release(recovery, claimed))),
                 )
 
               const started = yield* subagents.start({ recovery, notify, claimed })
