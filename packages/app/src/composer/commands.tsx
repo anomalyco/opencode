@@ -4,7 +4,6 @@ import { DialogSelectModel } from "@/providers/models/select-dialog"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useSessionLayout } from "@/session/session-layout"
-import { createSessionOwnership } from "@/session/session-ownership"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -26,10 +25,9 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const language = useLanguage()
   const local = useLocal()
   const workspace = useWorkspaceLocation()
-  const { sessionKey, params } = useSessionLayout()
+  const { params } = useSessionLayout()
   const data = useData()
   const sdk = useServerSDK()
-  const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
@@ -86,9 +84,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   }
 
   const chooseModel = () => {
-    sessionOwnership.capture().run(() => {
-      void dialog.show(() => <DialogSelectModel model={model} />)
-    })
+    void dialog.show(() => <DialogSelectModel model={model} />)
   }
 
   const viewUsage = async () => {

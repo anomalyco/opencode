@@ -136,8 +136,9 @@ export interface MockServerConfig {
   // and return the answer; by default it creates `<directory>/<name>`. A created directory joins the project's sandboxes.
   onWorktreeCreate?: (input: Schema.Json) => void | MockAnswer | Promise<void | MockAnswer>
   onWorktreeRemove?: (input: Worktree.RemoveInput) => void | Promise<void>
-  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based).
-  onSessionCreate?: (body: Schema.JsonObject, attempt: number) => void | MockAnswer
+  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based); the
+  // hook may hold the request.
+  onSessionCreate?: (body: Schema.JsonObject, attempt: number) => void | MockAnswer | Promise<void | MockAnswer>
   // Title of created sessions (default: the request's title, else "New session").
   createdSessionTitle?: string
   // Slash commands served by `/api/command`.
@@ -723,7 +724,8 @@ function mockHandlers(
           const payload = Option.getOrElse(decodeJsonObject(input), () => ({}))
           const fields = Option.getOrUndefined(decodeSessionCreate(payload))
           state.sessionCreates += 1
-          const answer = config.onSessionCreate?.(payload, state.sessionCreates)
+          const attempt = state.sessionCreates
+          const answer = yield* Effect.promise(async () => config.onSessionCreate?.(payload, attempt))
 
           if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
 

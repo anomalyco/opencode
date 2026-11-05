@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  SESSION_DIALOG_LOAD_TIMEOUT_MS,
   createCloseTabGuardState,
   createSessionCommandsState,
   selectCloseTabSwallowed,
@@ -11,6 +12,7 @@ import {
   type SessionCommandsEvent,
   type SessionCommandsState,
   type SessionCommandsTransition,
+  type SessionDialogKind,
 } from "./machine"
 
 function replay(events: SessionCommandsEvent[], from: SessionCommandsState = createSessionCommandsState()) {
@@ -72,43 +74,107 @@ describe("transitionSessionCommands", () => {
     expect(lateCompact?.effects).toEqual([])
   })
 
-  test("a repeated /fork while the picker loads opens it once", () => {
-    const [first, repeat, loaded, again] = replay([
-      { type: "fork.requested", sessionID: "ses_1" },
-      { type: "fork.requested", sessionID: "ses_1" },
-      { type: "fork.loaded", attempt: 1 },
-      { type: "fork.loaded", attempt: 1 },
+  test.each<SessionDialogKind>(["fork", "palette", "mcp"])(
+    "a repeated request while the %s dialog loads opens it once",
+    (kind) => {
+      const [first, repeat, loaded, again] = replay([
+        { type: "dialog.requested", kind, sessionKey: "A" },
+        { type: "dialog.requested", kind, sessionKey: "A" },
+        { type: "dialog.loaded", attempt: 1 },
+        { type: "dialog.loaded", attempt: 1 },
+      ])
+
+      expect(first?.effects).toEqual([
+        { type: "dialog.load", attempt: 1, kind, timeoutMs: SESSION_DIALOG_LOAD_TIMEOUT_MS },
+      ])
+      expect(repeat?.state).toBe(first!.state)
+      expect(repeat?.effects).toEqual([])
+      expect(loaded?.effects).toEqual([{ type: "dialog.cancel" }, { type: "dialog.show", kind }])
+      expect(again?.state).toBe(loaded!.state)
+      expect(again?.effects).toEqual([])
+    },
+  )
+
+  // Before, /open and /mcp awaited the chunk with nothing to catch a failure: an unhandled rejection, and no toast.
+  test("a failed /open load toasts and the next request loads again", () => {
+    const [, failed, retried] = replay([
+      { type: "dialog.requested", kind: "palette", sessionKey: "A" },
+      { type: "dialog.load-failed", attempt: 1, cause: "ChunkLoadError" },
+      { type: "dialog.requested", kind: "palette", sessionKey: "A" },
     ])
 
-    expect(first?.effects).toEqual([{ type: "fork.load", attempt: 1 }])
-    expect(repeat?.state).toBe(first!.state)
-    expect(loaded?.effects).toEqual([{ type: "fork.show" }])
-    expect(again?.state).toBe(loaded!.state)
-    expect(again?.effects).toEqual([])
+    expect(failed?.effects).toEqual([
+      { type: "dialog.cancel" },
+      { type: "toast.request-failed", cause: "ChunkLoadError" },
+    ])
+    expect(failed?.state).toMatchObject({ dialog: { status: "closed" } })
+    expect(retried?.effects).toEqual([
+      { type: "dialog.load", attempt: 2, kind: "palette", timeoutMs: SESSION_DIALOG_LOAD_TIMEOUT_MS },
+    ])
   })
 
-  test("the picker does not open over another session, and a failed load toasts", () => {
-    const [, moved, late] = replay([
-      { type: "fork.requested", sessionID: "ses_1" },
-      { type: "session.changed", sessionID: "ses_2" },
-      { type: "fork.loaded", attempt: 1 },
+  // Before, a chunk that never arrived left the command doing nothing, for good.
+  test("a stalled /mcp load times out with a toast, and its late result opens nothing", () => {
+    const [, timedOut, late] = replay([
+      { type: "dialog.requested", kind: "mcp", sessionKey: "A" },
+      { type: "dialog.timed-out", attempt: 1 },
+      { type: "dialog.loaded", attempt: 1 },
     ])
 
-    const [, failed] = replay([
-      { type: "fork.requested", sessionID: "ses_1" },
-      { type: "fork.load-failed", attempt: 1, cause: "chunk" },
-    ])
-
-    expect(moved?.state).toMatchObject({ forkDialog: { status: "closed" } })
+    expect(timedOut?.effects).toEqual([{ type: "toast.request-failed", cause: undefined }])
+    expect(late?.state).toBe(timedOut!.state)
     expect(late?.effects).toEqual([])
-    expect(failed?.effects).toEqual([{ type: "toast.request-failed", cause: "chunk" }])
-    expect(failed?.state).toMatchObject({ forkDialog: { status: "closed" } })
+  })
+
+  test("another dialog replaces one still loading", () => {
+    const [, replaced, stale, loaded] = replay([
+      { type: "dialog.requested", kind: "palette", sessionKey: "A" },
+      { type: "dialog.requested", kind: "mcp", sessionKey: "A" },
+      { type: "dialog.loaded", attempt: 1 },
+      { type: "dialog.loaded", attempt: 2 },
+    ])
+
+    expect(replaced?.effects).toEqual([
+      { type: "dialog.cancel" },
+      { type: "dialog.load", attempt: 2, kind: "mcp", timeoutMs: SESSION_DIALOG_LOAD_TIMEOUT_MS },
+    ])
+    expect(stale?.state).toBe(replaced!.state)
+    expect(loaded?.effects).toEqual([{ type: "dialog.cancel" }, { type: "dialog.show", kind: "mcp" }])
+  })
+
+  // Moved from the retired session ownership helper: leaving the session, even to come back, drops the load.
+  test("a dialog does not open over another session, or after returning to its own", () => {
+    const [, moved, back, late] = replay([
+      { type: "dialog.requested", kind: "fork", sessionKey: "A" },
+      { type: "session.changed", sessionKey: "B" },
+      { type: "session.changed", sessionKey: "A" },
+      { type: "dialog.loaded", attempt: 1 },
+    ])
+
+    expect(moved?.state).toMatchObject({ dialog: { status: "closed" } })
+    expect(moved?.effects).toEqual([{ type: "dialog.cancel" }])
+    expect(back?.state).toBe(moved!.state)
+    expect(late?.effects).toEqual([])
+  })
+
+  test("leaving the session screen cancels a loading dialog and ignores requests after", () => {
+    const [, disposed, requested, loaded] = replay([
+      { type: "dialog.requested", kind: "palette", sessionKey: "A" },
+      { type: "disposed" },
+      { type: "dialog.requested", kind: "palette", sessionKey: "A" },
+      { type: "dialog.loaded", attempt: 1 },
+    ])
+
+    expect(disposed?.effects).toEqual([{ type: "dialog.cancel" }])
+    expect(requested?.state).toBe(disposed!.state)
+    expect(requested?.effects).toEqual([])
+    expect(loaded?.effects).toEqual([])
   })
 
   test("switching session keeps the other session's compaction running", () => {
     const [, changed] = replay([
       { type: "compact.requested", sessionID: "ses_1" },
-      { type: "session.changed", sessionID: "ses_2" },
+      { type: "session.changed", sessionKey: "B" },
     ])
 
     expect(changed?.effects).toEqual([])
