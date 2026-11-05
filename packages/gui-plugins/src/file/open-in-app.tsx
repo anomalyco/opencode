@@ -16,6 +16,7 @@ import {
 } from "@opencode/plugin/gui"
 import type { OpenApp } from "./apps"
 import { useShared } from "./context"
+import { fileTabPath, isFileTab, resolveOpenInAppPath } from "./path"
 
 const MAC_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "Visual Studio Code" },
@@ -37,14 +38,16 @@ const WINDOWS_OPEN_APPS = [
   { id: "cursor", label: "open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "open.app.zed", icon: "zed", openWith: "zed" },
   { id: "powershell", label: "open.app.powershell", icon: "powershell", openWith: "powershell" },
-  { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "Sublime Text" },
+  // The display name fails the host's app lookup: the launcher ships a command on the PATH.
+  { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "subl" },
 ] as const
 
 const LINUX_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "open.app.zed", icon: "zed", openWith: "zed" },
-  { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "Sublime Text" },
+  // The command the Sublime launcher installs, as other entries name their commands.
+  { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "subl" },
 ] as const
 
 function openAppsForOS(os: OS) {
@@ -181,12 +184,26 @@ export function OpenInAppMenuItem(props: { session: MountedSession }) {
 
 export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = usePlugin()
+  const shared = useShared()
+  const layout = ctx.layout
   const directory = () => props.screen.file.root
-  const state = useOpenInApp({ session: props.session, path: directory })
+
+  // The pane's selected file tab, so the OpenInAppButton opens the file the user is looking at.
+  const fileTab = () => layout.stored(props.session).find((item) => isFileTab(item) && shared.active(props.session, item))
+
+  const target = createMemo(() => {
+    const id = fileTab()
+
+    return id ? resolveOpenInAppPath(directory(), fileTabPath(props.screen.file, id)) : directory()
+  })
+
+  const reveal = () => fileTab() !== undefined
+
+  const state = useOpenInApp({ session: props.session, path: target })
   const [menu, setMenu] = createSignal(false)
 
   return (
-    <Show when={directory() && state.canOpen()}>
+    <Show when={target() && state.canOpen()}>
       <SplitButton class="session-review-v2-open-in-app" onPointerDown={(event) => event.stopPropagation()}>
         <Tooltip
           placement="bottom"
@@ -199,7 +216,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
               event.stopPropagation()
 
               if (state.opening()) return
-              state.openPath(state.current().id)
+              state.openPath(state.current().id, undefined, reveal())
             }}
             disabled={state.opening()}
             aria-label={ctx.t("open.ariaLabel", { app: state.current().label })}
@@ -220,7 +237,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
-              <OpenInAppMenuItemsV2 state={state} close={() => setMenu(false)} />
+              <OpenInAppMenuItemsV2 state={state} close={() => setMenu(false)} reveal={reveal()} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>
