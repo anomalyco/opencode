@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { Arbitrary, Effect, Fiber, Layer, Logger, References, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -1192,7 +1192,7 @@ describe("Config", () => {
         )
         expect(JSON.stringify(output)).not.toContain("secret")
       }),
-    ).pipe(Effect.provide(Logger.layer([logger])))
+    ).pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(References.MinimumLogLevel, "Debug"))
   })
 
   test("migrates arbitrary v1 configuration into valid v2 configuration", () => {
