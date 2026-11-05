@@ -391,9 +391,7 @@ fn console_limits_load_show_in_the_prompt_reload_after_a_turn_and_warn_once() {
         })
     };
     // Another session's turn does not reload them.
-    h.server
-        .memory
-        .emit(&succeeded("evt_other", "ses_other"));
+    h.server.memory.emit(&succeeded("evt_other", "ses_other"));
     h.settle();
     assert_eq!(h.count("GET", LIMITS), 1);
     h.server.memory.emit(&succeeded("evt_done", "ses_a"));

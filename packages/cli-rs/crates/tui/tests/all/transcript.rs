@@ -297,13 +297,19 @@ fn config_changes_reach_the_transcript_without_a_restart() {
 
     h.tui.keymap.dispatch("session.toggle.thinking", None);
     assert!(
-        h.app
-            .wait_until(Duration::from_secs(5), || !h.app.text().contains("Plan the fix.")),
+        h.app.wait_until(Duration::from_secs(5), || !h
+            .app
+            .text()
+            .contains("Plan the fix.")),
         "{}",
         h.app.text()
     );
     assert_eq!(
-        h.tui.settings.info().session.and_then(|session| session.thinking),
+        h.tui
+            .settings
+            .info()
+            .session
+            .and_then(|session| session.thinking),
         Some(Visibility::Hide)
     );
 }
