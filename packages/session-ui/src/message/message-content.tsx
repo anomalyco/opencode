@@ -4,10 +4,12 @@ import {
   createSignal,
   For,
   Index,
+  Match,
   on,
   onCleanup,
   onMount,
   Show,
+  Switch,
   untrack,
   type ComponentProps,
   type JSX,
@@ -55,6 +57,14 @@ import type { SessionUserActions, SessionUserAttachmentReference, SessionUserCom
 import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import {
+  DISPOSED_ATTACHMENT_MEDIA_EVENT,
+  INITIAL_ATTACHMENT_MEDIA_STATE,
+  resolveAttachmentMediaTarget,
+  transitionAttachmentMedia,
+  viewAttachmentMedia,
+  type AttachmentMediaEvent,
+} from "./attachment-media-machine"
 import {
   createMessageActionState,
   transitionMessageAction,
@@ -496,54 +506,52 @@ export function CurrentUserMessageDisplay(props: {
         </For>
         <Index each={attachments()}>
           {(file) => {
-            const directUrl = () => {
-              const current = file()
-              const source = current.source
+            const mediaTarget = createMemo(() =>
+              resolveAttachmentMediaTarget(file(), { peekMedia: data.peekMedia, hasReader: !!data.readMedia }),
+            )
+            const [mediaState, setMediaState] = createSignal(INITIAL_ATTACHMENT_MEDIA_STATE)
+            let mediaController: AbortController | undefined
+            let mediaTimer: ReturnType<typeof setTimeout> | undefined
 
-              if (source?.type === "uri") return source.uri
+            const dispatchMedia = (event: AttachmentMediaEvent) => {
+              const step = transitionAttachmentMedia(untrack(mediaState), event)
+              setMediaState(step.state)
+              step.effects.forEach((effect) => {
+                if (effect.type === "cancel") {
+                  clearTimeout(mediaTimer)
+                  mediaTimer = undefined
+                  mediaController?.abort()
+                  mediaController = undefined
 
-              if ("data" in current && current.data !== undefined) {
-                return `data:${current.mime};base64,${current.data}`
-              }
+                  return
+                }
 
-              if ("uri" in current && current.uri) return data.peekMedia?.(current.uri, current.mime)
-
-              return undefined
+                const controller = new AbortController()
+                const readMedia = data.readMedia
+                mediaController = controller
+                mediaTimer = setTimeout(
+                  () => dispatchMedia({ type: "read.timed-out", attempt: effect.attempt }),
+                  effect.timeoutMs,
+                )
+                // A read that resolves, rejects or throws settles its attempt.
+                void Promise.resolve()
+                  .then(() => readMedia?.(effect.uri, effect.mime, controller.signal))
+                  .then(
+                    (loaded) =>
+                      dispatchMedia(
+                        loaded
+                          ? { type: "read.succeeded", attempt: effect.attempt, src: loaded }
+                          : { type: "read.failed", attempt: effect.attempt },
+                      ),
+                    () => dispatchMedia({ type: "read.failed", attempt: effect.attempt }),
+                  )
+              })
             }
 
-            const [resolvedUrl, setResolvedUrl] = createSignal<string | undefined>(directUrl())
+            createEffect(() => dispatchMedia({ type: "target.synced", target: mediaTarget() }))
+            onCleanup(() => dispatchMedia(DISPOSED_ATTACHMENT_MEDIA_EVENT))
 
-            createEffect(() => {
-              const current = file()
-              const direct = directUrl()
-
-              if (direct !== undefined) {
-                setResolvedUrl(direct)
-
-                return
-              }
-
-              const uri = "uri" in current ? current.uri : undefined
-
-              if (!uri || !data.readMedia) {
-                setResolvedUrl(uri)
-
-                return
-              }
-
-              const controller = new AbortController()
-              onCleanup(() => controller.abort())
-              void data
-                .readMedia(uri, current.mime, controller.signal)
-                .then((loaded) => {
-                  if (!controller.signal.aborted) setResolvedUrl(loaded)
-                })
-                .catch(() => {
-                  if (!controller.signal.aborted) setResolvedUrl(undefined)
-                })
-            })
-
-            const url = () => directUrl() ?? resolvedUrl()
+            const mediaView = createMemo(() => viewAttachmentMedia(mediaState(), mediaTarget()))
             const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
             const image = () => file().mime.startsWith("image/")
 
@@ -563,7 +571,7 @@ export function CurrentUserMessageDisplay(props: {
               imageAttachmentPlaceholderStyle({
                 width: width(),
                 height: height(),
-                loaded: Boolean(url()),
+                loaded: mediaView().status === "ready",
               })
 
             return (
@@ -573,29 +581,44 @@ export function CurrentUserMessageDisplay(props: {
                   <div
                     data-slot="user-message-attachment"
                     data-type="image"
-                    data-clickable={url() ? "true" : undefined}
-                    data-placeholder={url() ? undefined : "true"}
+                    data-clickable={mediaView().clickable ? "true" : undefined}
+                    data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
                     style={placeholderStyle()}
                     onClick={(event) => {
-                      const src = url()
+                      const src = mediaView().src
                       const origin = event.currentTarget
 
-                      if (src) dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+                      if (src) return dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
+
+                      if (mediaView().canRetry) dispatchMedia({ type: "retry.requested", target: mediaTarget() })
                     }}
                   >
-                    <Show when={url()}>
-                      {(src) => (
-                        <img
-                          data-slot="user-message-attachment-image"
-                          src={src()}
-                          width={width()}
-                          height={height()}
-                          alt={name()}
-                        />
-                      )}
-                    </Show>
+                    <Switch>
+                      <Match when={mediaView().src}>
+                        {(src) => (
+                          <img
+                            data-slot="user-message-attachment-image"
+                            src={src()}
+                            width={width()}
+                            height={height()}
+                            alt={name()}
+                          />
+                        )}
+                      </Match>
+                      <Match when={mediaView().status === "failed"}>
+                        <div
+                          data-slot="user-message-attachment-icon"
+                          role="img"
+                          aria-label={i18n.t("ui.fileMedia.state.error", {
+                            kind: i18n.t("ui.fileMedia.kind.image"),
+                          })}
+                        >
+                          <Icon name="outline-photo" size="small" />
+                        </div>
+                      </Match>
+                    </Switch>
                   </div>
                 }
               >
