@@ -21,7 +21,6 @@ export type RunningKeyState = {
 
 type Counters = {
   readonly issuedJobs: number
-  readonly issuedConsumers: number
 }
 
 /**
@@ -40,8 +39,14 @@ export type MarkdownCacheState =
 export type MarkdownCacheEvent =
   /** A cached or freshly parsed entry for `key` now shows `src`. */
   | { readonly type: "cache.touched"; readonly key: string; readonly src: string }
-  /** A consumer missed the cache; it takes the next consumer id. */
-  | { readonly type: "render.requested"; readonly key: string; readonly raw: string; readonly src: string }
+  /** A consumer missed the cache. The driver allocates its id, so the waiter it registered is the one that settles. */
+  | {
+      readonly type: "render.requested"
+      readonly consumerId: number
+      readonly key: string
+      readonly raw: string
+      readonly src: string
+    }
   | { readonly type: "consumer.aborted"; readonly consumerId: number }
   | { readonly type: "parse.succeeded"; readonly jobId: number; readonly entry: MarkdownCacheEntry }
   | { readonly type: "parse.failed"; readonly jobId: number; readonly error: Error }
@@ -71,7 +76,6 @@ type Running = Extract<MarkdownCacheState, { status: "running" }>
 export const INITIAL_MARKDOWN_CACHE_STATE: MarkdownCacheState = Object.freeze({
   status: "idle",
   issuedJobs: 0,
-  issuedConsumers: 0,
 })
 
 const NO_EFFECTS: readonly MarkdownCacheEffect[] = Object.freeze([])
@@ -106,8 +110,11 @@ function render(
   state: MarkdownCacheState,
   event: Extract<MarkdownCacheEvent, { type: "render.requested" }>,
 ): MarkdownCacheTransition {
-  const consumerId = state.issuedConsumers + 1
+  const consumerId = event.consumerId
   const running = state.status === "running" ? state : undefined
+
+  if (running?.consumerJobs.has(consumerId)) return { state, effects: NO_EFFECTS }
+
   const keyState = running?.keys.get(event.key)
   const keys = running?.keys ?? EMPTY
   const jobKeys = running?.jobKeys ?? EMPTY
@@ -121,7 +128,6 @@ function render(
       state: {
         status: "running",
         issuedJobs: state.issuedJobs,
-        issuedConsumers: consumerId,
         keys: put(keys, event.key, {
           targetSrc: event.src,
           jobs: keyState.jobs.map((job) => (job === shared ? joined : job)),
@@ -140,7 +146,6 @@ function render(
     state: {
       status: "running",
       issuedJobs: jobId,
-      issuedConsumers: consumerId,
       keys: put(keys, event.key, { targetSrc: event.src, jobs: [...(keyState?.jobs ?? []), job] }),
       jobKeys: put(jobKeys, jobId, event.key),
       consumerJobs: put(consumerJobs, consumerId, jobId),
@@ -231,7 +236,7 @@ function remove(
     ? put(state.keys, found.key, { targetSrc: found.keyState.targetSrc, jobs })
     : without(state.keys, found.key)
 
-  if (keys.size === 0) return { status: "idle", issuedJobs: state.issuedJobs, issuedConsumers: state.issuedConsumers }
+  if (keys.size === 0) return { status: "idle", issuedJobs: state.issuedJobs }
 
   return { ...state, keys, jobKeys: without(state.jobKeys, found.job.jobId), consumerJobs }
 }

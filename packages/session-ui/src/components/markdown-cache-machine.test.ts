@@ -9,6 +9,14 @@ import {
 
 const entry = (src: string) => ({ raw: src, src, hash: `hash-${src}`, html: `<p>${src}</p>` })
 
+const render = (consumerId: number, src: string): MarkdownCacheEvent => ({
+  type: "render.requested",
+  consumerId,
+  key: "k",
+  raw: src,
+  src,
+})
+
 function replay(events: MarkdownCacheEvent[], state = INITIAL_MARKDOWN_CACHE_STATE) {
   return events.reduce<{ state: MarkdownCacheState; effects: MarkdownCacheEffect[] }>(
     (current, event) => {
@@ -29,14 +37,14 @@ describe("transitionMarkdownCache", () => {
     // `v1` is cached; consumer 1 asks for `v2`, then a readiness check touches `v1` before `v2` settles.
     const started = replay([
       { type: "cache.touched", key: "k", src: "v1" },
-      { type: "render.requested", key: "k", raw: "v2", src: "v2" },
+      render(1, "v2"),
       { type: "cache.touched", key: "k", src: "v1" },
     ])
 
     expect(started.effects).toEqual([{ type: "start-parse", jobId: 1, raw: "v2", src: "v2" }])
     expect(jobs(started.state, "k")?.jobs.map((job) => job.jobId)).toEqual([1])
 
-    const joined = transitionMarkdownCache(started.state, { type: "render.requested", key: "k", raw: "v2", src: "v2" })
+    const joined = transitionMarkdownCache(started.state, render(2, "v2"))
 
     expect(joined.effects).toEqual([])
     expect(jobs(joined.state, "k")).toEqual({
@@ -50,14 +58,23 @@ describe("transitionMarkdownCache", () => {
       { type: "store", key: "k", entry: entry("v2") },
       { type: "resolve-consumers", consumerIds: [1, 2], entry: entry("v2") },
     ])
-    expect(settled.state).toEqual({ status: "idle", issuedJobs: 1, issuedConsumers: 2 })
+    expect(settled.state).toEqual({ status: "idle", issuedJobs: 1 })
+  })
+
+  test("settles the consumer ids the driver allocated, in any order", () => {
+    // Two requests queued before either is handled keep the ids their waiters were registered under.
+    const state = replay([render(7, "v"), render(3, "v")]).state
+
+    expect(jobs(state, "k")?.jobs[0]?.consumers).toEqual([7, 3])
+    expect(transitionMarkdownCache(state, render(7, "v")).state).toBe(state)
+    expect(transitionMarkdownCache(state, { type: "parse.succeeded", jobId: 1, entry: entry("v") }).effects).toEqual([
+      { type: "store", key: "k", entry: entry("v") },
+      { type: "resolve-consumers", consumerIds: [7, 3], entry: entry("v") },
+    ])
   })
 
   test("a reclaimed key settles the abandoned parse without overwriting the cache", () => {
-    const state = replay([
-      { type: "render.requested", key: "k", raw: "abandoned", src: "abandoned" },
-      { type: "cache.touched", key: "k", src: "v1" },
-    ]).state
+    const state = replay([render(1, "abandoned"), { type: "cache.touched", key: "k", src: "v1" }]).state
 
     expect(
       transitionMarkdownCache(state, { type: "parse.succeeded", jobId: 1, entry: entry("abandoned") }).effects,
@@ -65,10 +82,7 @@ describe("transitionMarkdownCache", () => {
   })
 
   test("an older parse of the same key settles its consumers while the newest one fills the cache", () => {
-    const state = replay([
-      { type: "render.requested", key: "k", raw: "a", src: "a" },
-      { type: "render.requested", key: "k", raw: "ab", src: "ab" },
-    ]).state
+    const state = replay([render(1, "a"), render(2, "ab")]).state
 
     const older = transitionMarkdownCache(state, { type: "parse.succeeded", jobId: 1, entry: entry("a") })
 
@@ -81,10 +95,7 @@ describe("transitionMarkdownCache", () => {
   })
 
   test("only the last consumer's abort cancels the shared parse", () => {
-    const shared = replay([
-      { type: "render.requested", key: "k", raw: "v", src: "v" },
-      { type: "render.requested", key: "k", raw: "v", src: "v" },
-    ]).state
+    const shared = replay([render(1, "v"), render(2, "v")]).state
 
     const first = transitionMarkdownCache(shared, { type: "consumer.aborted", consumerId: 1 })
 
@@ -98,7 +109,7 @@ describe("transitionMarkdownCache", () => {
       { type: "abort-parse", jobId: 1 },
       { type: "reject-consumers", consumerIds: [2], reason: { kind: "disposed" } },
     ])
-    expect(last.state).toEqual({ status: "idle", issuedJobs: 1, issuedConsumers: 2 })
+    expect(last.state).toEqual({ status: "idle", issuedJobs: 1 })
 
     const late = transitionMarkdownCache(last.state, { type: "parse.succeeded", jobId: 1, entry: entry("v") })
 
@@ -107,10 +118,7 @@ describe("transitionMarkdownCache", () => {
   })
 
   test("a failed parse rejects every consumer and lets the key start again", () => {
-    const shared = replay([
-      { type: "render.requested", key: "k", raw: "v", src: "v" },
-      { type: "render.requested", key: "k", raw: "v", src: "v" },
-    ]).state
+    const shared = replay([render(1, "v"), render(2, "v")]).state
 
     const error = new Error("worker failed")
     const failed = transitionMarkdownCache(shared, { type: "parse.failed", jobId: 1, error })
@@ -118,13 +126,13 @@ describe("transitionMarkdownCache", () => {
     expect(failed.effects).toEqual([
       { type: "reject-consumers", consumerIds: [1, 2], reason: { kind: "error", error } },
     ])
-    expect(
-      transitionMarkdownCache(failed.state, { type: "render.requested", key: "k", raw: "v", src: "v" }).effects,
-    ).toEqual([{ type: "start-parse", jobId: 2, raw: "v", src: "v" }])
+    expect(transitionMarkdownCache(failed.state, render(3, "v")).effects).toEqual([
+      { type: "start-parse", jobId: 2, raw: "v", src: "v" },
+    ])
   })
 
   test("an entry without a hash resolves its consumers but is not cached", () => {
-    const state = replay([{ type: "render.requested", key: "k", raw: "v", src: "v" }]).state
+    const state = replay([render(1, "v")]).state
 
     const settled = transitionMarkdownCache(state, {
       type: "parse.succeeded",
@@ -141,7 +149,7 @@ describe("transitionMarkdownCache", () => {
     expect(transitionMarkdownCache(idle, { type: "cache.touched", key: "k", src: "v" }).state).toBe(idle)
     expect(transitionMarkdownCache(idle, { type: "consumer.aborted", consumerId: 1 }).state).toBe(idle)
 
-    const running = replay([{ type: "render.requested", key: "k", raw: "v", src: "v" }]).state
+    const running = replay([render(1, "v")]).state
 
     expect(transitionMarkdownCache(running, { type: "cache.touched", key: "other", src: "v" }).state).toBe(running)
     expect(transitionMarkdownCache(running, { type: "cache.touched", key: "k", src: "v" }).state).toBe(running)

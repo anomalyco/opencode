@@ -1,6 +1,6 @@
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Icon } from "@opencode/ui/icon"
-import { frameLoop, observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
+import { frameLoop, observeReducedMotion, prefersReducedMotion, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { sourcesExpand, type SiteIconMode } from "./experiment"
 import {
@@ -11,6 +11,7 @@ import {
   isSourcesStepMoving,
   isSourcesStepOpen,
   REDUCED_SOURCES_EXPAND_EVENT,
+  SOURCES_FADE_CURVE,
   transitionSourcesExpand,
   type SourcesExpandEvent,
 } from "./sources-expand-machine"
@@ -52,8 +53,8 @@ function SearchStep(props: {
   let region: HTMLDivElement | undefined
   let list: HTMLDivElement | undefined
   let stopFrame: (() => void) | undefined
-  // One event object serves every frame, so a step allocates nothing beyond the height string.
-  const frame = { type: "frame" as const, attempt: 0, dt: 0 }
+  // Height in px, or opacity while fading. The driver owns it: frames step it in place and only its rest is an event.
+  const spring = new Spring(0)
 
   const dispatch = (event: SourcesExpandEvent) => {
     const previous = current
@@ -62,7 +63,8 @@ function SearchStep(props: {
     if (next === previous) return
     current = next
 
-    if (isSourcesStepMoving(previous) && (!isSourcesStepMoving(next) || next.attempt !== previous.attempt)) {
+    // Every move out of a flight is a new attempt or a landing, so the old frame job always stops here.
+    if (isSourcesStepMoving(previous)) {
       stopFrame?.()
       stopFrame = undefined
 
@@ -83,31 +85,33 @@ function SearchStep(props: {
     if (!region?.isConnected || !list?.isConnected) return dispatch({ type: "detached", attempt: next.attempt })
 
     if (next.mode === "fade") {
+      tune(SOURCES_FADE_CURVE)
+      spring.snap(0).set(1)
       region.style.height = ""
       list.style.opacity = "0"
-      stopFrame ??= frameLoop.add(tick)
-
-      return
     }
 
     // Layout is read once per flight, never per frame: where a resting region starts, and the results' height now
-    // that they render. A reversed flight starts from its spring.
-    if (!next.measured) {
-      dispatch({
-        type: "measured",
-        attempt: next.attempt,
-        from: region.offsetHeight,
-        to: next.status === "opening" ? list.offsetHeight : 0,
-      })
+    // that they render. A reversed flight keeps its spring's position and velocity.
+    if (next.mode === "height") {
+      tune(sourcesExpand())
 
-      if (current !== next) return
+      if (!next.reversed) spring.snap(region.offsetHeight)
+      spring.set(next.status === "opening" ? list.offsetHeight : 0)
+      region.dataset.moving = ""
+      region.style.height = `${spring.value}px`
     }
 
-    region.dataset.moving = ""
-    region.style.height = `${next.value}px`
-    stopFrame ??= frameLoop.add(tick)
+    if (spring.resting) return dispatch({ type: "settled", attempt: next.attempt })
+    stopFrame = frameLoop.add(tick)
   }
 
+  const tune = (curve: DurationOptions) => {
+    spring.omega = (2 * Math.PI) / curve.duration
+    spring.zeta = 1 - curve.bounce
+  }
+
+  // Allocation-free apart from the style string: no event and no state until the spring rests.
   const tick = (dt: number) => {
     const moving = current
 
@@ -119,15 +123,17 @@ function SearchStep(props: {
       return false
     }
 
-    frame.attempt = moving.attempt
-    frame.dt = dt
-    dispatch(frame)
+    const value = spring.step(dt)
 
-    if (current !== moving) return false
+    if (spring.resting) {
+      dispatch({ type: "settled", attempt: moving.attempt })
 
-    if (moving.mode === "fade") list.style.opacity = String(moving.value)
+      return false
+    }
 
-    if (moving.mode === "height") region.style.height = `${moving.value}px`
+    if (moving.mode === "fade") list.style.opacity = String(value)
+
+    if (moving.mode === "height") region.style.height = `${Math.max(0, value)}px`
 
     return true
   }
@@ -145,7 +151,7 @@ function SearchStep(props: {
   onCleanup(() => dispatch(DISPOSED_SOURCES_EXPAND_EVENT))
 
   const toggle = () =>
-    dispatch({ type: "toggle", expandable: expandable(), reduced: prefersReducedMotion(), curve: sourcesExpand() })
+    dispatch({ type: "toggle", expandable: expandable(), reduced: prefersReducedMotion() })
 
   return (
     <div data-slot="sources-step" data-open={open() ? "" : undefined}>

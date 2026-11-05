@@ -22,6 +22,9 @@ let state = INITIAL_MARKDOWN_CACHE_STATE
 
 const queue: MarkdownCacheEvent[] = []
 
+// Consumer ids travel in `render.requested`, so a request queued behind another still settles its own waiter.
+let consumers = 0
+
 const waiters = new Map<
   number,
   {
@@ -156,12 +159,11 @@ export function renderCachedMarkdown(
   }
 
   return new Promise<MarkdownCacheEntry>((resolve, reject) => {
-    // The machine hands out consumer ids in order, so this request takes the next one.
-    const consumerId = state.issuedConsumers + 1
+    const consumerId = ++consumers
     const cancel = () => dispatch({ type: "consumer.aborted", consumerId })
     signal?.addEventListener("abort", cancel, { once: true })
     waiters.set(consumerId, { resolve, reject, signal, cancel })
-    dispatch({ type: "render.requested", key, raw: block.raw, src: block.src })
+    dispatch({ type: "render.requested", consumerId, key, raw: block.raw, src: block.src })
   })
 }
 
