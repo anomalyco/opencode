@@ -1,174 +1,95 @@
-import "./index.css"
-import { Title, Meta } from "@solidjs/meta"
-import { createAsync } from "@solidjs/router"
-import { Header } from "~/component/header"
-import { Footer } from "~/component/footer"
-import { Legal } from "~/component/legal"
-import { changelog } from "~/lib/changelog"
-import type { HighlightGroup } from "~/lib/changelog"
-import { For, Show, createSignal } from "solid-js"
+import { Link, Meta, Title } from "@solidjs/meta"
+import { createAsync, useSearchParams } from "@solidjs/router"
+import { Show, Suspense } from "solid-js"
+import { Site } from "~/component/site/site"
+import { LocaleLinks } from "~/component/locale-links"
+import { ShareMeta } from "~/component/share-meta"
+import { ogImage } from "~/lib/og"
+import { breadcrumbData, JsonLd } from "~/component/structured-data"
+import { changelogPage } from "~/lib/changelog"
+import { areaKeys, changelogQuery } from "~/lib/changelog-notes"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-
-function formatDate(dateString: string, locale: string) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString(locale, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-}
-
-function ReleaseItem(props: { item: string }) {
-  const parts = () => {
-    const match = props.item.match(/^(.+?)(\s*\(@([\w-]+)\))?$/)
-    if (match) {
-      return {
-        text: match[1],
-        username: match[3],
-      }
-    }
-    return { text: props.item, username: undefined }
-  }
-
-  return (
-    <li>
-      <span>{parts().text}</span>
-      <Show when={parts().username}>
-        <a data-slot="author" href={`https://github.com/${parts().username}`} target="_blank" rel="noopener noreferrer">
-          (@{parts().username})
-        </a>
-      </Show>
-    </li>
-  )
-}
-
-function HighlightSection(props: { group: HighlightGroup }) {
-  return (
-    <div data-component="highlight">
-      <h4>{props.group.source}</h4>
-      <hr />
-      <For each={props.group.items}>
-        {(item) => (
-          <div data-slot="highlight-item">
-            <p data-slot="title">{item.title}</p>
-            <p>{item.description}</p>
-            <Show when={item.media.type === "video"}>
-              <video src={item.media.src} controls autoplay loop muted playsinline />
-            </Show>
-            <Show when={item.media.type === "image"}>
-              <img
-                src={item.media.src}
-                alt={item.title}
-                width={(item.media as { width: string }).width}
-                height={(item.media as { height: string }).height}
-              />
-            </Show>
-          </div>
-        )}
-      </For>
-    </div>
-  )
-}
-
-function CollapsibleSection(props: { section: { title: string; items: string[] } }) {
-  const [open, setOpen] = createSignal(false)
-
-  return (
-    <div data-component="collapsible-section">
-      <button data-slot="toggle" onClick={() => setOpen(!open())}>
-        <span data-slot="icon">{open() ? "▾" : "▸"}</span>
-        <span>{props.section.title}</span>
-      </button>
-      <Show when={open()}>
-        <ul>
-          <For each={props.section.items}>{(item) => <ReleaseItem item={item} />}</For>
-        </ul>
-      </Show>
-    </div>
-  )
-}
-
-function CollapsibleSections(props: { sections: { title: string; items: string[] }[] }) {
-  return (
-    <div data-component="collapsible-sections">
-      <For each={props.sections}>{(section) => <CollapsibleSection section={section} />}</For>
-    </div>
-  )
-}
+import {
+  ChangelogPages,
+  ChangelogSettings,
+  ChangelogTimeline,
+  ChangelogToolbar,
+  ChangelogUnavailable,
+} from "~/component/site/changelog-entry"
+import { useMarkdown } from "~/component/site/use-markdown"
+import { changelogMarkdown } from "~/lib/changelog-markdown"
+import { PageTitle } from "~/component/site/sticky-title"
 
 export default function Changelog() {
   const i18n = useI18n()
   const language = useLanguage()
-  const data = createAsync(() => changelog())
-  const releases = () => data() ?? []
+  const [params] = useSearchParams()
+  // `?page=2` for older updates and `?area=desktop,terminal` to filter; both are shareable URLs.
+  const page = () => Number(params.page ?? 1) || 1
+  const filter = () => areaKeys(params.area)
+  const view = createAsync(() => changelogPage(page(), filter()))
+  const markdown = useMarkdown("/changelog", changelogMarkdown, { changelog: view })
+  const feed = () => language.route(`/changelog.xml${changelogQuery({ filter: filter() })}`)
 
   return (
-    <main data-page="changelog">
+    <Site
+      page="changelog"
+      settings={import.meta.env.DEV ? (section) => <ChangelogSettings section={section} /> : undefined}
+      markdown={markdown}
+    >
       <Title>{i18n.t("changelog.title")}</Title>
+      <ShareMeta
+        title={i18n.t("changelog.title")}
+        description={i18n.t("changelog.meta.description")}
+        image={ogImage("/changelog")}
+        englishOnly
+      />
+      {/* Filtered views point to the full changelog; older pages are their own pages. English only. */}
+      <LocaleLinks path={`/changelog${changelogQuery({ page: page() })}`} englishOnly />
       <Meta name="description" content={i18n.t("changelog.meta.description")} />
+      <Link rel="alternate" type="application/rss+xml" title={i18n.t("changelog.title")} href={feed()} />
+      <JsonLd
+        data={breadcrumbData([
+          { name: i18n.t("nav.home"), path: "/" },
+          { name: i18n.t("changelog.hero.title"), path: language.route("/changelog") },
+        ])}
+      />
 
-      <div data-component="container">
-        <Header />
+      <section data-component="hero">
+        <PageTitle title={i18n.t("changelog.hero.title")} />
+        <p>{i18n.t("changelog.hero.subtitle")}</p>
+      </section>
 
-        <div data-component="content">
-          <section data-component="changelog-hero">
-            <h1>{i18n.t("changelog.hero.title")}</h1>
-            <p>{i18n.t("changelog.hero.subtitle")}</p>
-          </section>
-
-          <section data-component="releases">
-            <Show when={releases().length === 0}>
-              <p>
-                {i18n.t("changelog.empty")}{" "}
-                <a href={language.route("/changelog.json")}>{i18n.t("changelog.viewJson")}</a>
-              </p>
+      {/* Its own boundary, as on the product pages: without it the whole page renders again on the
+          server once GitHub's releases arrive, and the head tags it adds show twice. */}
+      <Suspense>
+        <Show when={view()}>
+          {(current) => (
+            <Show
+              when={current().ok}
+              fallback={
+                <section data-component="block">
+                  <div data-slot="body">
+                    <ChangelogUnavailable />
+                  </div>
+                </section>
+              }
+            >
+              <section data-component="block" data-slot="timeline">
+                <ChangelogToolbar view={current()} />
+                <Show
+                  when={current().entries.length > 0}
+                  fallback={<p data-slot="lead">{i18n.t("changelog.filter.empty")}</p>}
+                >
+                  <ChangelogTimeline entries={current().entries} level={2} limit={6} />
+                </Show>
+                <ChangelogPages view={current()} />
+              </section>
             </Show>
-            <For each={releases()}>
-              {(release) => {
-                return (
-                  <article data-component="release">
-                    <header>
-                      <div data-slot="version">
-                        <a href={release.url} target="_blank" rel="noopener noreferrer">
-                          {release.tag}
-                        </a>
-                      </div>
-                      <time dateTime={release.date}>{formatDate(release.date, language.tag(language.locale()))}</time>
-                    </header>
-                    <div data-slot="content">
-                      <Show when={release.highlights.length > 0}>
-                        <div data-component="highlights">
-                          <For each={release.highlights}>{(group) => <HighlightSection group={group} />}</For>
-                        </div>
-                      </Show>
-                      <Show when={release.highlights.length > 0 && release.sections.length > 0}>
-                        <CollapsibleSections sections={release.sections} />
-                      </Show>
-                      <Show when={release.highlights.length === 0}>
-                        <For each={release.sections}>
-                          {(section) => (
-                            <div data-component="section">
-                              <h3>{section.title}</h3>
-                              <ul>
-                                <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
-                              </ul>
-                            </div>
-                          )}
-                        </For>
-                      </Show>
-                    </div>
-                  </article>
-                )
-              }}
-            </For>
-          </section>
-        </div>
-
-        <Footer />
-      </div>
-
-      <Legal />
-    </main>
+          )}
+        </Show>
+      </Suspense>
+    </Site>
   )
 }

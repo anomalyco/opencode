@@ -665,9 +665,6 @@ export const dict = {
   "enterprise.form.inferenceSpend.over100k": "$100K or more",
   "enterprise.form.error.invalidInferenceSpend": "Select a valid inference spend range.",
   "enterprise.form.error.captcha": "Captcha verification failed. Please try again.",
-  // Still used by dev's old changelog page until its replacement lands in a later commit.
-  "changelog.empty": "No changelog entries found.",
-  "changelog.viewJson": "View JSON",
 } as const
 
 export type Key = keyof typeof dict
