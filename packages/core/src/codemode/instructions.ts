@@ -41,10 +41,14 @@ ${render(current)}`
   )
   const parts = [
     ...block("New tool namespaces are available:", sections.added),
-    ...block(
-      "These namespaces changed; their listings supersede the previous ones:",
-      sections.changed.map((change) => change.current),
-    ),
+    ...(sections.changed.length === 0
+      ? []
+      : [
+          [
+            "These namespaces changed; a namespace shown with its whole listing replaces the previous one:",
+            ...sections.changed.map((change) => changes(change.previous, change.current)),
+          ].join("\n"),
+        ]),
     ...(sections.removed.length === 0
       ? []
       : [
@@ -56,6 +60,37 @@ ${render(current)}`
   if (parts.length === 0) return replacement
   const delta = ["The Code Mode tool catalog has changed.", ...parts].join("\n\n")
   return delta.length < replacement.length ? delta : replacement
+}
+
+// One namespace's change: the tools added, changed or gone under its new header, or its whole listing when that is
+// shorter. A namespace too large to list in full can drop a name without losing the tool, so it says "listed".
+function changes(previous: CodeModeCatalog.Section, current: CodeModeCatalog.Section) {
+  const names = Instructions.diffByKey(previous.names, current.names, toolName, (before, after) => before !== after)
+  const pinned = Instructions.diffByKey(
+    previous.pinned,
+    current.pinned,
+    (entry) => entry.path,
+    (before, after) => before.line !== after.line,
+  )
+  const gone = [
+    ...pinned.removed.map((entry) => entry.path.slice(current.name.length + 1)),
+    ...names.removed.map(toolName),
+  ]
+  const capped = current.pinned.length + current.names.length < current.count
+  const listed = [...names.added, ...names.changed.map((change) => change.current)]
+  const delta = [
+    CodeModeCatalog.namespaceLine(current),
+    ...[...pinned.added, ...pinned.changed.map((change) => change.current)].map((entry) => entry.line),
+    ...(listed.length === 0 ? [] : [`  - new or changed: ${listed.join(", ")}`]),
+    ...(gone.length === 0 ? [] : [`  - no longer ${capped ? "listed" : "available"}: ${gone.join(", ")}`]),
+  ].join("\n")
+  const whole = CodeModeCatalog.renderSection(current)
+  return delta.length < whole.length ? delta : whole
+}
+
+function toolName(listing: string) {
+  const open = listing.indexOf("(")
+  return open === -1 ? listing : listing.slice(0, open)
 }
 
 function block(heading: string, sections: ReadonlyArray<CodeModeCatalog.Section>) {

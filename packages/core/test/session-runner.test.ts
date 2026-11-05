@@ -2429,7 +2429,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
     const grown = yield* section("alpha")
     expect(updates(s.requests.at(-1)).at(-1)).toBe(
-      `The Code Mode tool catalog has changed.\n\nThese namespaces changed; their listings supersede the previous ones:\n${grown}`,
+      "The Code Mode tool catalog has changed.\n\n" +
+        "These namespaces changed; a namespace shown with its whole listing replaces the previous one:\n" +
+        "- alpha (13 tools)\n  - new or changed: alpha_12(id, …)",
     )
 
     // Compaction restates the stored catalog as the new baseline and has no update to send.

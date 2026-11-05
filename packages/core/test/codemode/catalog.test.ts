@@ -148,11 +148,32 @@ describe("CodeModeInstructions.update", () => {
     )
   })
 
-  test("restates only the sections that changed", () => {
-    const text = update([...tools("alpha", 3), ...tools("beta", 2)], [...tools("alpha", 4), ...tools("beta", 2)])
-    expect(text).toBe(
-      "The Code Mode tool catalog has changed.\n\nThese namespaces changed; their listings supersede the previous ones:\n- alpha (4 tools)\n  - tool0(id), tool1(id), tool2(id), tool3(id)",
+  test("names the tools that changed in a namespace", () => {
+    expect(update([...tools("alpha", 3), ...tools("beta", 2)], [...tools("alpha", 4), ...tools("beta", 2)])).toBe(
+      "The Code Mode tool catalog has changed.\n\n" +
+        "These namespaces changed; a namespace shown with its whole listing replaces the previous one:\n" +
+        "- alpha (4 tools)\n  - new or changed: tool3(id)",
     )
+    const changed = [entry("alpha.tool0", "x", { parameters: ["id", "…"] }), ...tools("alpha", 3).slice(1)]
+    expect(update(tools("alpha", 3), changed)).toContain("- alpha (3 tools)\n  - new or changed: tool0(id, …)")
+    expect(update(tools("alpha", 10), tools("alpha", 10).slice(1))).toContain(
+      "- alpha (9 tools)\n  - no longer available: tool0",
+    )
+  })
+
+  test("says a name is no longer listed when its namespace is too large to list in full", () => {
+    const before = summarize(tools("bulk", 400), 40)
+    const after = summarize([entry("bulk.a_first", "First", { parameters: ["id"] }), ...tools("bulk", 400)], 40)
+    const text = CodeModeInstructions.update(before, after)
+    expect(text).toContain("  - new or changed: a_first(id)")
+    expect(text).toMatch(/ {2}- no longer listed: tool\d+/)
+    expect(text).not.toContain("no longer available")
+  })
+
+  test("restates a namespace's whole listing when that is shorter than its changes", () => {
+    const text = update(tools("alpha", 2), [entry("alpha.renamed", "x", { parameters: ["id"] })])
+    expect(text).toContain("- alpha (1 tool)\n  - renamed(id)")
+    expect(text).not.toContain("new or changed")
   })
 
   test("restates a section whose description changed", () => {
