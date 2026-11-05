@@ -2,6 +2,9 @@
 //! on the wire (`promptFiles`, `promptAgents`, `promptSkills` in `stream-v2.transport.ts`), and how a listed user
 //! message becomes a prompt again for history (`messagePrompt` in `session.shared.ts`).
 
+use opencode_api::generated::{
+    PromptBase64, PromptFileAttachment, PromptFileSource, PromptFileSourceInline, PromptMention,
+};
 use opencode_ui::prompt_input::editor::Mention;
 use serde_json::{Map, Value, json};
 
@@ -85,6 +88,32 @@ pub struct RunPrompt {
 }
 
 impl RunPrompt {
+    /// The inline (`data:`) files, as the server lists them on the delivered message (`pendingPrompt`'s files).
+    pub fn inline_files(&self) -> Vec<PromptFileAttachment> {
+        self.parts
+            .iter()
+            .filter_map(|part| match part {
+                Part::File(file) => {
+                    let (meta, data) = file.url.strip_prefix("data:")?.split_once(',')?;
+                    let mime = meta.strip_suffix(";base64")?;
+                    Some(PromptFileAttachment {
+                        data: PromptBase64(data.to_owned()),
+                        mime: file.mime.clone().unwrap_or_else(|| mime.to_owned()),
+                        source: PromptFileSource::Inline(PromptFileSourceInline { r#type: "inline".into() }),
+                        name: file.filename.clone(),
+                        description: file.description.clone(),
+                        mention: file.mention.as_ref().map(|mention| PromptMention {
+                            start: f64::from(mention.start),
+                            end: f64::from(mention.end),
+                            text: mention.text.clone(),
+                        }),
+                    })
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     pub fn text(text: impl Into<String>) -> Self {
         Self { text: text.into(), ..Self::default() }
     }
