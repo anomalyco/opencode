@@ -18,7 +18,13 @@ const password = "drive-parity"
 
 // Each step: the request, the schema its result must decode with (none: an error is expected), the capture name to
 // keep, and whether to repeat a `ui.matches` until it is true.
-type Step = { method: string; params?: unknown; result?: Schema.Top; capture?: string; until?: boolean }
+type Step = {
+  method: string
+  params?: unknown
+  result?: Schema.ConstraintDecoder<unknown>
+  capture?: string
+  until?: boolean
+}
 const steps: Step[] = [
   {
     method: "simulation.handshake",
@@ -69,7 +75,7 @@ const serve = Bun.spawn(command("ts", ["serve", "--port", String(ports[0])]), {
   stdout: "ignore",
   stderr: Bun.file(path.join(box.root, "server.log")),
 })
-const children = [serve]
+const children: { kill(): void }[] = [serve]
 process.on("exit", () => children.forEach((child) => child.kill()))
 
 const report: Record<string, unknown> = {}
