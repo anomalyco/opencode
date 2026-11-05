@@ -87,6 +87,7 @@ export function transitionPaletteSearch(state: PaletteSearchState, event: Palett
 
   if (event.type === "query.changed") {
     if (state.status === "active" && state.query === event.query) return { state, effects: [] }
+
     const previous: readonly PaletteSourceState[] =
       state.status === "active"
         ? state.sources
@@ -94,6 +95,7 @@ export function transitionPaletteSearch(state: PaletteSearchState, event: Palett
             { length: state.count },
             (): PaletteSourceState => ({ status: "ready", settled: EMPTY_SETTLED, seen: [] }),
           )
+
     const issued = state.status === "active" ? state.issued : 0
 
     return {
@@ -225,6 +227,7 @@ export const INITIAL_SESSION_SOURCE_STATE: SessionSourceState = Object.freeze({
 
 export function transitionSessionSource(state: SessionSourceState, event: SessionSourceEvent): SessionSourceTransition {
   if (state.status === "disposed") return { state, effects: [] }
+
   const cancel: SessionSourceEffect[] =
     state.status === "idle" ? [] : [{ type: "attempt.cancel", attempt: state.attempt }]
 

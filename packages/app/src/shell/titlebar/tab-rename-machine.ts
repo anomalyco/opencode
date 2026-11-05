@@ -264,6 +264,7 @@ function saveFailed(
   event: Extract<TabRenameEvent, { type: "save.failed" | "save.timed-out" }>,
 ): TabRenameTransition {
   const save = state.save
+
   const abort: readonly TabRenameEffect[] =
     event.type === "save.timed-out" ? [{ type: "save.abort", attempt: event.attempt }] : NONE
 

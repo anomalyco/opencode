@@ -146,8 +146,8 @@ test("titlebar search shows one server's matches while another server's search f
       : route.fallback(),
   )
   await openPaletteWorkspace(page, true)
-  // A session only the local server's search returns, so no list the app already holds can show it. Registered after
-  // the local mock so this route answers first.
+  // The server matches more than titles, so only its answer can list this session. Registered after the local mock so
+  // this route answers first.
   await page.route(new RegExp(`^${escape(SERVER)}/api/session\\?.*search=[^&]`), (route) =>
     route.fulfill({
       json: {
@@ -156,7 +156,7 @@ test("titlebar search shows one server's matches while another server's search f
             ...paletteSession,
             id: "ses_palette_found",
             location: { directory: paletteSession.directory },
-            title: "Found by search",
+            title: "Matched on the server",
           },
         ],
       },
@@ -164,8 +164,8 @@ test("titlebar search shows one server's matches while another server's search f
   )
   await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
   const dialog = page.getByRole("dialog")
-  await dialog.getByRole("combobox").fill("found")
-  await expect(dialog.getByRole("option")).toHaveText([/Found by search/])
+  await dialog.getByRole("combobox").fill("needle")
+  await expect(dialog.getByRole("option")).toHaveText([/Matched on the server/])
   await expect(dialog.getByText("Request failed", { exact: true })).toHaveCount(0)
 })
 

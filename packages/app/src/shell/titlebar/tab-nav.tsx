@@ -73,7 +73,7 @@ export function TabNavItem(
     fallbackDirectory?: string
     /** Shows a title at once: the optimistic one, or the one to restore when its save fails. */
     onRememberTitle: (sessionID: string, title: string | undefined) => void
-    onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<unknown>
+    onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
     onDelete: () => void
     onNavigate: () => void
     active?: boolean
@@ -177,6 +177,7 @@ export function TabNavItem(
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
+
   const previewBlocked = () =>
     !!props.dragging || selectTabPreviewBlocked(renameState()) || !!props.pressed || !props.session
 

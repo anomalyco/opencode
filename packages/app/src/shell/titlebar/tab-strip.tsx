@@ -75,7 +75,7 @@ function SessionTabSlot(
     fallbackTitle?: string
     fallbackDirectory?: string
     onRememberTitle: (sessionID: string, title: string | undefined) => void
-    onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<unknown>
+    onSaveTitle: (sessionID: string, title: string, signal: AbortSignal) => Promise<void>
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
     onIntent: (hovered: boolean) => void
@@ -172,9 +172,12 @@ function SessionTabEntry(
     if (current) props.serverCtx?.data.session.remember({ ...current, title })
   }
 
-  const saveTitle = (sessionID: string, title: string, signal: AbortSignal) =>
-    props.serverCtx?.sdk.api.session.update({ sessionID, title }, { signal }) ??
-    Promise.reject(new Error(language.t("common.requestFailed")))
+  const saveTitle = async (sessionID: string, title: string, signal: AbortSignal) => {
+    const ctx = props.serverCtx
+
+    if (!ctx) throw new Error(language.t("common.requestFailed"))
+    await ctx.sdk.api.session.update({ sessionID, title }, { signal })
+  }
 
   function DeleteDialog() {
     const confirm = async () => {
@@ -533,6 +536,7 @@ export function TitlebarTabStrip(props: {
   const visibleTabs = createMemo(() =>
     props.tabs.filter((tab) => tab.type === "draft" || !!views().get(tabKey(tab))?.visible),
   )
+
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
