@@ -1149,6 +1149,33 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
 })
 
+test("an attachment pasted mid-sentence leaves the text and the caret where they were", async ({ page }) => {
+  const { editor } = await openDraft(page, {
+    name: "ComposerDraft",
+    provider: NO_PROVIDER,
+    onFileWrite: () => undefined,
+  })
+
+  await editor.click()
+  await page.keyboard.type("Hello world")
+  await editor.press("Home")
+
+  for (let count = 0; count < "Hello".length; count++) await editor.press("ArrowRight")
+
+  const text = await editor.evaluateHandle((element) => element.firstChild)
+
+  await editor.evaluate((element) => {
+    const data = new DataTransfer()
+    data.items.add(new File(["Attachment fixture"], "notes.txt", { type: "text/plain" }))
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("notes.txt")
+  // A rewrite of the editor would replace this node, even when it put the caret back in the same place.
+  expect(await editor.evaluate((element, node) => element.firstChild === node, text)).toBe(true)
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("Hello, world")
+})
+
 test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
   const editor = await draft(page)
   await page.keyboard.type("worktree off the latest dev")
