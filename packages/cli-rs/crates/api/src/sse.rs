@@ -38,11 +38,13 @@ pub enum Error {
 pub struct Decoder {
     /// Bytes of the unterminated last line.
     line: Vec<u8>,
-    /// `line` length in UTF-16 code units.
-    line_units: usize,
-    /// `data:` values of the open block.
-    data: Vec<String>,
-    /// Length of the open block's complete lines, newlines included, in UTF-16 code units.
+    /// `data:` values of the open block, joined with newlines.
+    data: String,
+    /// Whether the open block has a `data:` line, so an empty value still adds a newline.
+    has_data: bool,
+    /// Length of the open block's complete lines, newlines included, in bytes.
+    block_bytes: usize,
+    /// The same length in UTF-16 code units.
     block_units: usize,
     /// A trailing CR held back because the next chunk may start with LF.
     carriage_return: bool,
@@ -54,79 +56,93 @@ impl Decoder {
         Self::default()
     }
 
-    /// Adds a chunk and returns the payloads of the blocks it completes.
-    pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<String>, Error> {
-        // As the TypeScript reader, check the open text plus the raw chunk before normalizing it.
-        let open = self.block_units + self.line_units + usize::from(self.carriage_return);
-        if open + utf16_units(chunk) > MAX_EVENT_UNITS {
+    /// Adds a chunk and appends the payloads of the blocks it completes to `payloads`.
+    pub fn push(&mut self, chunk: &[u8], payloads: &mut VecDeque<String>) -> Result<(), Error> {
+        // As the TypeScript reader, check the open text plus the raw chunk before normalizing it. A UTF-16
+        // unit count never exceeds the byte count, so the units are counted only when the bytes pass the limit.
+        let carriage_return = usize::from(self.carriage_return);
+        if self.block_bytes + self.line.len() + carriage_return + chunk.len() > MAX_EVENT_UNITS
+            && self.block_units + utf16_units(&self.line) + carriage_return + utf16_units(chunk) > MAX_EVENT_UNITS
+        {
             return Err(Error::EventTooLarge);
         }
-        let mut payloads = Vec::new();
         let mut rest = chunk;
         if self.carriage_return && !rest.is_empty() {
             self.carriage_return = false;
             rest = rest.strip_prefix(b"\n").unwrap_or(rest);
-            self.end_line(&mut payloads);
+            self.end_line(&[], payloads);
         }
-        while let Some(index) = rest.iter().position(|byte| matches!(byte, b'\n' | b'\r')) {
-            self.extend_line(&rest[..index]);
-            let crlf = rest[index] == b'\r' && rest.get(index + 1) == Some(&b'\n');
+        while let Some(index) = memchr::memchr2(b'\n', b'\r', rest) {
             if rest[index] == b'\r' && index + 1 == rest.len() {
+                self.line.extend_from_slice(&rest[..index]);
                 self.carriage_return = true;
-                return Ok(payloads);
+                return Ok(());
             }
+            let crlf = rest[index] == b'\r' && rest[index + 1] == b'\n';
+            self.end_line(&rest[..index], payloads);
             rest = &rest[index + 1 + usize::from(crlf)..];
-            self.end_line(&mut payloads);
         }
-        self.extend_line(rest);
-        Ok(payloads)
+        self.line.extend_from_slice(rest);
+        Ok(())
     }
 
     /// Ends the stream: an unterminated last block still counts, as in the TypeScript reader.
-    pub fn finish(&mut self) -> Result<Vec<String>, Error> {
-        let mut payloads = Vec::new();
+    pub fn finish(&mut self, payloads: &mut VecDeque<String>) {
         if std::mem::take(&mut self.carriage_return) || !self.line.is_empty() {
-            self.end_line(&mut payloads);
+            self.end_line(&[], payloads);
         }
-        self.dispatch(&mut payloads);
-        Ok(payloads)
+        self.dispatch(payloads);
     }
 
-    fn extend_line(&mut self, bytes: &[u8]) {
-        self.line.extend_from_slice(bytes);
-        self.line_units += utf16_units(bytes);
+    /// Ends the line made of the buffered bytes and `tail`, keeping the buffer's capacity.
+    fn end_line(&mut self, tail: &[u8], payloads: &mut VecDeque<String>) {
+        if self.line.is_empty() {
+            return self.decode_line(tail, payloads);
+        }
+        let mut line = std::mem::take(&mut self.line);
+        line.extend_from_slice(tail);
+        self.decode_line(&line, payloads);
+        line.clear();
+        self.line = line;
     }
 
-    /// Decodes the buffered line: an empty one ends the block, a `data:` line adds to it.
-    fn end_line(&mut self, payloads: &mut Vec<String>) {
-        let mut bytes = std::mem::take(&mut self.line);
-        if !std::mem::replace(&mut self.started, true) && bytes.starts_with(b"\xef\xbb\xbf") {
-            bytes.drain(..3);
+    /// Decodes a complete line: an empty one ends the block, a `data:` line adds to it.
+    fn decode_line(&mut self, line: &[u8], payloads: &mut VecDeque<String>) {
+        let mut bytes = line;
+        if !std::mem::replace(&mut self.started, true) {
+            bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
         }
         if bytes.is_empty() {
-            self.line_units = 0;
             self.dispatch(payloads);
             return;
         }
-        self.block_units += std::mem::take(&mut self.line_units) + 1;
-        let line = String::from_utf8_lossy(&bytes);
-        if let Some(value) = line.strip_prefix("data:") {
-            let value = value.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
-            self.data.push(value.to_owned());
+        self.block_bytes += line.len() + 1;
+        self.block_units += utf16_units(line) + 1;
+        // The prefix is ASCII, so decoding only the value gives the same text as decoding the whole line.
+        if let Some(value) = bytes.strip_prefix(b"data:") {
+            let value = String::from_utf8_lossy(value);
+            if std::mem::replace(&mut self.has_data, true) {
+                self.data.push('\n');
+            }
+            self.data.push_str(value.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}'));
         }
     }
 
-    fn dispatch(&mut self, payloads: &mut Vec<String>) {
+    fn dispatch(&mut self, payloads: &mut VecDeque<String>) {
+        self.block_bytes = 0;
         self.block_units = 0;
-        let data = std::mem::take(&mut self.data).join("\n");
-        if !data.is_empty() {
-            payloads.push(data);
+        self.has_data = false;
+        if !self.data.is_empty() {
+            payloads.push_back(std::mem::take(&mut self.data));
         }
     }
 }
 
 /// UTF-16 code units of UTF-8 bytes, counted per lead byte so a split code point counts once.
 fn utf16_units(bytes: &[u8]) -> usize {
+    if bytes.is_ascii() {
+        return bytes.len();
+    }
     bytes
         .iter()
         .map(|byte| match byte {
@@ -169,20 +185,18 @@ where
             let decoded = match state.body.next().await {
                 Some(Ok(chunk)) => {
                     (state.activity)();
-                    state.decoder.push(&chunk)
+                    state.decoder.push(&chunk, &mut state.ready)
                 }
                 Some(Err(error)) => Err(Error::Transport(error.to_string())),
                 None => {
                     state.ended = true;
-                    state.decoder.finish()
+                    state.decoder.finish(&mut state.ready);
+                    Ok(())
                 }
             };
-            match decoded {
-                Ok(payloads) => state.ready.extend(payloads),
-                Err(error) => {
-                    state.ended = true;
-                    return Some((Err(error), state));
-                }
+            if let Err(error) = decoded {
+                state.ended = true;
+                return Some((Err(error), state));
             }
         }
     })
@@ -298,28 +312,39 @@ mod tests {
         assert_eq!(received[1].as_ref().unwrap_err().to_string(), "Transport: contract failure");
     }
 
+    fn push(decoder: &mut Decoder, chunk: &[u8]) -> Result<Vec<String>, Error> {
+        let mut payloads = VecDeque::new();
+        decoder.push(chunk, &mut payloads).map(|()| payloads.into())
+    }
+
+    fn finish(decoder: &mut Decoder) -> Vec<String> {
+        let mut payloads = VecDeque::new();
+        decoder.finish(&mut payloads);
+        payloads.into()
+    }
+
     // solid-connection.test.ts "a reconnect does not ask the volatile event stream to replay": the reader
     // keeps no `id:` field, so nothing can send a Last-Event-ID.
     #[test]
     fn ignores_fields_other_than_data() {
         let mut decoder = Decoder::new();
-        let payloads = decoder.push(b"id: timeline-event-7\nevent: x\nretry: 5\ndata: {}\n\n").unwrap();
+        let payloads = push(&mut decoder, b"id: timeline-event-7\nevent: x\nretry: 5\ndata: {}\n\n").unwrap();
         assert_eq!(payloads, vec!["{}"]);
     }
 
     #[test]
     fn normalizes_crlf_and_cr_across_chunks() {
         let mut decoder = Decoder::new();
-        assert_eq!(decoder.push(b"data: 1\r").unwrap(), Vec::<String>::new());
-        assert_eq!(decoder.push(b"\n\r").unwrap(), Vec::<String>::new());
-        assert_eq!(decoder.push(b"\ndata: 2\r\rdata: 3\n").unwrap(), vec!["1", "2"]);
-        assert_eq!(decoder.finish().unwrap(), vec!["3"]);
+        assert_eq!(push(&mut decoder, b"data: 1\r").unwrap(), Vec::<String>::new());
+        assert_eq!(push(&mut decoder, b"\n\r").unwrap(), Vec::<String>::new());
+        assert_eq!(push(&mut decoder, b"\ndata: 2\r\rdata: 3\n").unwrap(), vec!["1", "2"]);
+        assert_eq!(finish(&mut decoder), vec!["3"]);
     }
 
     #[test]
     fn joins_data_lines_and_drops_a_leading_bom() {
         let mut decoder = Decoder::new();
-        let payloads = decoder.push("\u{feff}data:a\ndata:  b\n\n".as_bytes()).unwrap();
+        let payloads = push(&mut decoder, "\u{feff}data:a\ndata:  b\n\n".as_bytes()).unwrap();
         assert_eq!(payloads, vec!["a\nb"]);
     }
 
@@ -327,8 +352,8 @@ mod tests {
     #[test]
     fn a_buffer_ending_in_a_multibyte_character_takes_the_next_chunk() {
         let mut decoder = Decoder::new();
-        assert_eq!(decoder.push("data: \u{2580}".as_bytes()).unwrap(), Vec::<String>::new());
-        assert_eq!(decoder.push(b"x\n\n").unwrap(), vec!["\u{2580}x"]);
+        assert_eq!(push(&mut decoder, "data: \u{2580}".as_bytes()).unwrap(), Vec::<String>::new());
+        assert_eq!(push(&mut decoder, b"x\n\n").unwrap(), vec!["\u{2580}x"]);
     }
 
     #[test]
@@ -341,8 +366,8 @@ mod tests {
         ];
         let read = |chunks: &[&[u8]]| {
             let mut decoder = Decoder::new();
-            let mut payloads = chunks.iter().flat_map(|chunk| decoder.push(chunk).unwrap()).collect::<Vec<_>>();
-            payloads.extend(decoder.finish().unwrap());
+            let mut payloads = chunks.iter().flat_map(|chunk| push(&mut decoder, chunk).unwrap()).collect::<Vec<_>>();
+            payloads.extend(finish(&mut decoder));
             payloads
         };
         for character in characters {
@@ -362,9 +387,9 @@ mod tests {
     #[test]
     fn invalid_utf8_becomes_a_replacement_character() {
         let mut decoder = Decoder::new();
-        assert_eq!(decoder.push(b"data: \xff\n\n").unwrap(), vec!["\u{fffd}"]);
-        assert_eq!(decoder.push(b"data: \xe2\x98").unwrap(), Vec::<String>::new());
-        assert_eq!(decoder.finish().unwrap(), vec!["\u{fffd}"]);
+        assert_eq!(push(&mut decoder, b"data: \xff\n\n").unwrap(), vec!["\u{fffd}"]);
+        assert_eq!(push(&mut decoder, b"data: \xe2\x98").unwrap(), Vec::<String>::new());
+        assert_eq!(finish(&mut decoder), vec!["\u{fffd}"]);
     }
 
     #[test]
@@ -372,12 +397,32 @@ mod tests {
         // 4-byte code points are 2 UTF-16 units each, so this is 2 units per 4 bytes.
         let mut decoder = Decoder::new();
         let emoji = "\u{1f600}".repeat(MAX_EVENT_UNITS / 2 - 3);
-        assert!(decoder.push(format!("data:{emoji}").as_bytes()).is_ok());
-        assert_eq!(decoder.push(b"xx"), Err(Error::EventTooLarge));
+        assert!(push(&mut decoder, format!("data:{emoji}").as_bytes()).is_ok());
+        assert_eq!(push(&mut decoder, b"xx"), Err(Error::EventTooLarge));
         // Completed blocks no longer count.
         let mut decoder = Decoder::new();
         let half = "x".repeat(MAX_EVENT_UNITS / 2);
-        assert!(decoder.push(format!("data:{half}\n\n").as_bytes()).is_ok());
-        assert!(decoder.push(format!("data:{half}\n\n").as_bytes()).is_ok());
+        assert!(push(&mut decoder, format!("data:{half}\n\n").as_bytes()).is_ok());
+        assert!(push(&mut decoder, format!("data:{half}\n\n").as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn a_chunk_that_reaches_the_limit_exactly_is_accepted() {
+        // A complete line, an open line, and a held CR count; the CR brings the open event to the limit.
+        let quarter = MAX_EVENT_UNITS / 4;
+        let mut decoder = Decoder::new();
+        assert!(push(&mut decoder, format!("data:{}\n", "x".repeat(quarter - 6)).as_bytes()).is_ok());
+        assert!(push(&mut decoder, format!("data:{}", "x".repeat(MAX_EVENT_UNITS - quarter - 6)).as_bytes()).is_ok());
+        assert_eq!(push(&mut decoder, b"\r"), Ok(Vec::new()));
+        assert_eq!(push(&mut decoder, b"\n"), Err(Error::EventTooLarge));
+        // Past the limit in bytes but not in units: 2-byte code points are 1 unit each.
+        let mut decoder = Decoder::new();
+        assert!(push(&mut decoder, format!("data:{}\n", "\u{e9}".repeat(quarter * 2 - 6)).as_bytes()).is_ok());
+        let rest = MAX_EVENT_UNITS - quarter * 2 - 5;
+        let open = format!("data:{}", "\u{e9}".repeat(rest));
+        let (first, second) = open.as_bytes().split_at(open.len() / 2 + 1);
+        assert!(push(&mut decoder, first).is_ok());
+        assert!(push(&mut decoder, second).is_ok());
+        assert_eq!(push(&mut decoder, b"\n"), Err(Error::EventTooLarge));
     }
 }

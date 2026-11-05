@@ -1132,6 +1132,7 @@ dependencies = [
  "futures-util",
  "indexmap",
  "log",
+ "memchr",
  "percent-encoding",
  "rand",
  "reqwest",
