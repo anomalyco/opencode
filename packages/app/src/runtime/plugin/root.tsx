@@ -15,9 +15,9 @@ import { createContext, useContext } from "solid-js"
 
 const HostApisContext = createContext<HostApis>()
 
-// Desktop only: a window loads the plugin GUIs main sends.
+// The plugin GUIs this window loads: main sends them on the desktop; a web window reads its own server itself.
 const PluginsContext = createContext<{
-  bridge: Bridge
+  bridge: Bridge | undefined
   set: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
   reserved: () => readonly string[]
 }>()
@@ -52,8 +52,8 @@ export function PluginRoot(props: ParentProps) {
 
   const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
 
-  // The GUIs of the plugins on the app's own server, as main sends them; undefined until main first sends them. The web
-  // runs built-ins only.
+  // The GUIs of the plugins on the app's own server, as main sends them on the desktop or this window reads them on
+  // the web. Undefined until main first sends them, so desktop theme loading still waits for that list.
   const [plugins, setPlugins] = createSignal<readonly PluginGui[] | undefined>(bridge ? undefined : [])
   // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Extensions › Plugins shows
   // them.
@@ -73,17 +73,15 @@ export function PluginRoot(props: ParentProps) {
   return (
     <HostApisContext.Provider value={apis}>
       <PluginsContext.Provider
-        value={
-          bridge && {
-            bridge,
-            set: (next, ids) =>
-              batch(() => {
-                setPlugins(next)
-                setReserved(ids)
-              }),
-            reserved,
-          }
-        }
+        value={{
+          bridge,
+          set: (next, ids) =>
+            batch(() => {
+              setPlugins(next)
+              setReserved(ids)
+            }),
+          reserved,
+        }}
       >
         <PluginHostProvider
           definitions={definitions}
@@ -123,7 +121,7 @@ export function PluginAttachment(props: ParentProps) {
     <PluginAttachmentProvider value={attachment}>
       <PluginCommands />
       <PluginServerEndpoints />
-      <Show when={plugins}>{(value) => <PluginGuiLoader bridge={value().bridge} onChange={value().set} />}</Show>
+      {plugins && <PluginGuiLoader bridge={plugins.bridge} onChange={plugins.set} />}
       <Show when={host.ready()}>
         <MountedInterface attach={attachment.attach} />
         {props.children}
