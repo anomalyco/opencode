@@ -1360,6 +1360,29 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("converts the GitHub Copilot billing on the message delta to USD", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn" },
+                usage: { output_tokens: 2 },
+                copilot_usage: { total_nano_aiu: 4_473_525_000 },
+              },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0.04473525 })
+    }),
+  )
+
   it.effect("preserves terminal state across usage-only message deltas", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

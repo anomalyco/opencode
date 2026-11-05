@@ -890,7 +890,11 @@ export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(reque
 // cached-read and cache-write subsets, and `output_tokens` (inclusive total)
 // with a `reasoning_tokens` subset. Pass the totals through and derive the
 // non-cached breakdown.
-export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
+export const mapUsage = (
+  usage: OpenResponsesUsage | null | undefined,
+  providerMetadataKey: string,
+  ...frames: ReadonlyArray<unknown>
+) => {
   if (!usage) return undefined
   const cached = usage.input_tokens_details?.cached_tokens
   const cacheWrite = usage.input_tokens_details?.cache_write_tokens
@@ -904,7 +908,7 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
-    ...ProviderShared.reportedBilling(usage),
+    ...ProviderShared.reportedBilling(usage, ...frames),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -1397,7 +1401,8 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
       normalized: mapFinishReason(event, current.hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
-    usage: mapUsage(event.response?.usage, current.providerMetadataKey),
+    // Copilot reports its billing on the terminal event, beside `response`.
+    usage: mapUsage(event.response?.usage, current.providerMetadataKey, event, event.response),
     providerMetadata:
       event.response?.id || event.response?.service_tier
         ? providerMetadata(current, {
