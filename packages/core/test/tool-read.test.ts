@@ -37,6 +37,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
+    FileSystem.node,
     Location.node,
   ],
 })
@@ -79,6 +80,11 @@ const reader = Layer.succeed(
     },
   }),
 )
+let indexedFiles: string[] = []
+const fileIndex = Layer.mock(FileSystem.Service, {
+  find: () =>
+    Effect.succeed(indexedFiles.map((file) => FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" }))),
+})
 let allow = true
 let deniedResource: string | undefined
 const permission = permissionLayer({
@@ -112,6 +118,7 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
+      FileSystem.node.replace(fileIndex),
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
@@ -136,6 +143,7 @@ describe("ReadTool", () => {
     readDefect = undefined
     missingDirectories = []
     directoryEntryDetails = []
+    indexedFiles = []
     readResult = {
       type: "file",
       uri: "file:///README.md",
@@ -789,6 +797,45 @@ describe("ReadTool", () => {
         error: {
           type: "tool.execution",
           message: `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(process.cwd(), "__only_in_workspace__", "file.tsx")}`,
+        },
+      })
+    }),
+  )
+
+  it.effect("suggests the same file name elsewhere in the project, nearest first", () =>
+    Effect.gen(function* () {
+      const moved = "src/cluster/queue.rs"
+      indexedFiles = ["tests/queue.rs", "src/queue.ts", "src/land/queue.rs", "queue.rs.bak"]
+      missingDirectories = [path.join(process.cwd(), "src", "cluster")]
+      directoryEntryDetails = [{ name: "clusters", type: "directory" }]
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), moved) })
+      const registry = yield* Tool.Service
+      const read = (input: string) =>
+        executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-elsewhere", name: "read", input: { path: input } },
+        })
+
+      expect(yield* read(moved)).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: [
+            `File not found: ${moved}`,
+            `The folder ${path.join(process.cwd(), "src", "cluster")} does not exist. The nearest folder that does is ${path.join(process.cwd(), "src")}.`,
+            `Did you mean one of these?\nsrc/land/queue.rs\ntests/queue.rs\n${path.join(process.cwd(), "src", "clusters")}`,
+          ].join("\n\n"),
+        },
+      })
+
+      missingDirectories = []
+      directoryEntryDetails = [{ name: "queue.ts", type: "file" }]
+      expect(yield* read(path.join(process.cwd(), "lib", "queue.rs"))).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: `File not found: ${path.join(process.cwd(), "lib", "queue.rs")}\n\nDid you mean one of these?\n${path.join(process.cwd(), "lib", "queue.ts")}\n${path.join(process.cwd(), "tests", "queue.rs")}\n${path.join(process.cwd(), "src", "land", "queue.rs")}`,
         },
       })
     }),

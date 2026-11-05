@@ -240,6 +240,18 @@ const missHint = (source: string, oldString: string, newString: string) => {
   ].join("\n")
 }
 
+const matchLineLimit = 10
+
+/** The 1-based line each sorted match starts on. */
+const matchLines = (source: string, matches: readonly Match[]) => {
+  let line = 1
+  let offset = 0
+  return matches.map((match) => {
+    for (; offset < match.start; offset++) if (source.charCodeAt(offset) === 10) line++
+    return line
+  })
+}
+
 /** Number of sorted positions strictly before offset. */
 const countBefore = (positions: number[], offset: number) => {
   let low = 0
@@ -333,8 +345,11 @@ export const Plugin = {
                 })
               }
               if (replacements > 1 && input.replaceAll !== true) {
+                const lines = [...new Set(matchLines(source, matches))]
+                const shown = lines.slice(0, matchLineLimit).join(", ")
+                const more = lines.length > matchLineLimit ? ` and ${lines.length - matchLineLimit} more` : ""
                 return yield* new ToolFailure({
-                  message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
+                  message: `Found ${replacements} matches for oldString (${lines.length === 1 ? "line" : "lines"} ${shown}${more}), but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
                 })
               }
               if (replaced === source) {
