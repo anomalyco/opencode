@@ -235,8 +235,14 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   }
 
   // A stage or clear from elsewhere, or a sent prompt committing the revert: the stream is the source of truth again.
-  // A commit lands after every request sent before it.
-  const echoes = event.type === "revert.committed" ? [] : state.echoes
+  // A commit lands after every request already sent, but a running operation may still be interrupting or waiting,
+  // so its own echo stays due. Echoes drain in order, so a pending one at the end is always the running operation's.
+  const echoes =
+    event.type !== "revert.committed"
+      ? state.echoes
+      : state.status === "running" && state.operation.type !== "withdraw"
+        ? state.echoes.slice(-1)
+        : []
 
   // A newer boundary replaced this rewind, so its Undo would restore a stale draft.
   if (state.status === "restored") return changed(idle(state.attempt, echoes), [{ type: "toast.dismiss" }])
