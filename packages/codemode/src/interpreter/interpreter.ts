@@ -3,6 +3,7 @@ import { nativeKind } from "../machine/native-kind.js"
 import { BoundaryWalk, fromJson, type Json, walk } from "../data.js"
 import type { ToolRuntime } from "../tool-runtime.js"
 import type { ExtensionRequest } from "../machine/scheduler.js"
+import { requireSealedKinds } from "../machine/frame.js"
 import { Machine } from "../machine/machine.js"
 import { globals } from "./globals.js"
 import type { Builtins } from "./intrinsics.js"
@@ -44,6 +45,7 @@ export class Interpreter<R> {
     /** Data bound for this program, part of its saved state; host globals of the same name win. */
     readonly bindings?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
+    requireSealedKinds()
     this.tools = options.tools
     this.builtins = options.builtins
     this.logs = options.logs ?? []

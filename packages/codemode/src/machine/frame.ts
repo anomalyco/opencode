@@ -64,11 +64,29 @@ export class Frame {
 /** Every frame kind, by name, so a saved frame can name its kind. */
 export const kinds = new Map<string, Kind>()
 
+let sealed = false
+
+/** Closes the kind and consumer registries: `machine/kinds.ts` does it once every module that defines one has loaded. */
+export const sealKinds = () => {
+  sealed = true
+}
+
+/** A runtime is made only once the registries are sealed, so the kinds a saved state names are the package's own. */
+export const requireSealedKinds = () => {
+  if (!sealed) throw new Error("Frame kinds aren't sealed: import src/machine/kinds.ts before making a runtime.")
+}
+
+/** Throws once the registries are sealed: `what` (frame kinds, consumers) are only defined while the package loads. */
+export const unsealed = (what: string, name: string) => {
+  if (sealed) throw new Error(`${what} are sealed: "${name}" can't be registered after Code Mode has loaded.`)
+}
+
 export const kind = (
   name: string,
   step: Kind["step"],
   options?: Pick<Kind, "unwind" | "cut" | "yielded" | "counts" | "locates">,
 ): Kind => {
+  unsealed("Frame kinds", name)
   if (kinds.has(name)) throw new Error(`Frame kind "${name}" is defined twice.`)
   const made = { name, step, ...options }
   kinds.set(name, made)

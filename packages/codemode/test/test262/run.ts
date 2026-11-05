@@ -1,9 +1,9 @@
 // Runs one vendored test262 file verbatim. The harness (assert, Test262Error, compareArray, $DONE,
-// $DONOTEVALUATE) is host-provided because programs cannot attach properties to functions, which
-// test262's own assert.js relies on.
+// $DONOTEVALUATE) is host-provided, except `assert` itself: a program function made by the prelude, so that
+// `assert.throws` can call the function it tests and catch what it throws as plain program code. Its checks and
+// failure messages are the host's (`$assert`).
 import path from "node:path"
 import { Effect } from "effect"
-import { materialize } from "../../src/interpreter/errors.js"
 import { executeProgram } from "../../src/interpreter/execute.js"
 import type { Interpreter } from "../../src/interpreter/interpreter.js"
 import { Throw } from "../../src/interpreter/model.js"
@@ -11,9 +11,6 @@ import { createErrorValue } from "../../src/interpreter/intrinsics.js"
 import { constructor, fn, methods } from "../../src/interpreter/native.js"
 import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/interpreter/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
-import { Push } from "../../src/interpreter/signals.js"
-import { PENDING } from "../../src/machine/frame.js"
-import { nativeKind } from "../../src/machine/native-kind.js"
 
 export const root = import.meta.dir
 
@@ -35,6 +32,16 @@ type Frontmatter = {
 const limits = { timeoutMs: 5000, maxToolCalls: undefined, maxOutputBytes: undefined }
 const prepared = ToolRuntime.prepare<never>({})
 
+// One line, on the line of the "use strict" directive, so the test's own line numbers stay as they are.
+const prelude = [
+  "function assert(mustBeTrue, message) { $assert(mustBeTrue, message) }",
+  "assert.sameValue = $assert.sameValue; assert.notSameValue = $assert.notSameValue;",
+  "assert.compareArray = $assert.compareArray;",
+  "assert.throws = function (expected, func, message) {",
+  "try { func() } catch (thrown) { $assert.thrown(expected, message, thrown); return }",
+  "$assert.notThrown(expected, message) };",
+].join(" ")
+
 export const run = async (file: string): Promise<Outcome> => {
   const source = await Bun.file(path.join(root, file)).text()
   const start = source.indexOf("/*---")
@@ -45,7 +52,7 @@ export const run = async (file: string): Promise<Outcome> => {
   // work instead, so drain explicitly.
   const drain = meta.flags?.includes("async") ? "\nfor (let i = 0; i < 100; i++) await null" : ""
   const result = await Effect.runPromise(
-    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (ctx) =>
+    executeProgram(`"use strict"; ${prelude}\n${source}${drain}`, prepared, limits, {}, (ctx) =>
       harness(ctx, (error) => {
         done ??= { error }
       }),
@@ -77,6 +84,7 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
     throw new Throw(test262([message]))
   }
   const prefix = (message: unknown) => (message === undefined ? "" : `${String(message)} `)
+  const expectedName = (ctor: unknown) => (ctor instanceof Callable ? String(get(ctor, "name")) : show(ctor))
   const compare = (a: unknown, b: unknown) =>
     a instanceof Arr &&
     b instanceof Arr &&
@@ -90,7 +98,7 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
   methods(builtins, test262Error, [["thrower", 1, (_, args) => fail(String(args[0]))]])
   const compareArray = fn(builtins, "compareArray", 2, (_, args) => compare(args[0], args[1]))
   methods(builtins, compareArray, [["format", 1, (_, args) => show(args[0])]])
-  const assert = fn(builtins, "assert", 2, (_, args) =>
+  const assert = fn(builtins, "$assert", 2, (_, args) =>
     args[0] === true
       ? undefined
       : fail(args[1] === undefined ? `Expected true but got ${show(args[0])}` : String(args[1])),
@@ -122,10 +130,26 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
               `Actual ${show(args[0])} and expected ${show(args[1])} should have the same contents. ${prefix(args[2])}`,
             ),
     ],
-    ["throws", 3, (_, args) => new Push(Throws, [test262Prototype, args[0], args[1], args[2], undefined])],
+    [
+      "notThrown",
+      2,
+      (_, args) =>
+        fail(`${prefix(args[1])}Expected a ${expectedName(args[0])} to be thrown but no exception was thrown at all`),
+    ],
+    [
+      "thrown",
+      3,
+      (_, args) => {
+        if (!(args[2] instanceof Obj)) return fail(`${prefix(args[1])}Thrown value was not an object!`)
+        const actual = get(args[2], "constructor")
+        return actual === args[0]
+          ? undefined
+          : fail(`${prefix(args[1])}Expected a ${expectedName(args[0])} but got a ${show(actual)}`)
+      },
+    ],
   ])
   return [
-    ["assert", assert],
+    ["$assert", assert],
     ["compareArray", compareArray],
     ["Test262Error", test262Error],
     [
@@ -143,43 +167,6 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
     ],
   ]
 }
-
-// assert.throws: calls the function, then checks what it threw. Slots: the Test262Error prototype, the expected
-// constructor, the function, the message, and the failure caught.
-const Throws = nativeKind(
-  "test262 assert.throws",
-  (task, frame) => {
-    const slots = frame.slots
-    const expectedCtor = slots[1] as Value
-    const expected = expectedCtor instanceof Callable ? String(get(expectedCtor, "name")) : show(expectedCtor)
-    const prefix = slots[3] === undefined ? "" : `${String(slots[3])} `
-    const fail = (message: string) => {
-      throw new Throw(createErrorValue(slots[0] as Obj, message))
-    }
-    if (frame.phase === 0) {
-      frame.phase = 1
-      if (task.call(slots[2] as Value, undefined, [], frame.node) === PENDING) return PENDING
-    }
-    if (frame.phase === 1) {
-      frame.phase = 3
-      return fail(`${prefix}Expected a ${expected} to be thrown but no exception was thrown at all`)
-    }
-    frame.phase = 3
-    const thrown = materialize(task.ctx, slots[4])
-    if (!(thrown instanceof Obj)) return fail(`${prefix}Thrown value was not an object!`)
-    const actual = get(thrown, "constructor")
-    if (actual === expectedCtor) return undefined
-    return fail(`${prefix}Expected a ${expected} but got a ${show(actual)}`)
-  },
-  {
-    unwind: (_task, frame, error) => {
-      if (frame.phase !== 1) return false
-      frame.phase = 2
-      frame.slots[4] = error
-      return true
-    },
-  },
-)
 
 const show = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value)

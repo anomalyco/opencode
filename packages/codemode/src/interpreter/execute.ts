@@ -20,6 +20,7 @@ import { Driver, type Outcome, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import { stats } from "../machine/task.js"
+import "../machine/kinds.js"
 
 /** How a runtime runs programs: its tools, limits, hooks, and host globals, shared by every run it starts. */
 export type Setup<R> = {

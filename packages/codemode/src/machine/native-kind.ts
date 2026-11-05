@@ -1,6 +1,6 @@
 import type { AstNode } from "../interpreter/model.js"
 import type { Value } from "../interpreter/objects.js"
-import { type Frame, kind, type Kind, type Out } from "./frame.js"
+import { type Frame, kind, type Kind, type Out, unsealed } from "./frame.js"
 import type { MachineTask } from "./task.js"
 
 // Built-ins that call program code run as frames whose state is plain data: a kind (a module constant, named once)
@@ -40,6 +40,7 @@ export const consumers = new Map<string, Consumer>()
 
 /** Defines a consumer, once per name. */
 export const consumer = (made: Consumer): Consumer => {
+  unsealed("Consumers", made.name)
   if (consumers.has(made.name)) throw new Error(`Consumer "${made.name}" is defined twice.`)
   consumers.set(made.name, made)
   return made
