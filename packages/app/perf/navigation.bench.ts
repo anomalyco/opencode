@@ -38,6 +38,8 @@ const palette = '[role="dialog"] [role="combobox"]'
 
 const selected = '[role="dialog"] [role="option"][aria-selected="true"]'
 
+const paletteList = '[role="dialog"] [data-component="menu-scroll"] > [data-scrollable]'
+
 // Eight restored tabs of a normal 20-message first page each (44 parts, 139 KB).
 const restored = Array.from({ length: 8 }, (_, index) => ({
   ...fixture.sessions[0],
@@ -85,6 +87,7 @@ const scenes = new Map<string, Scene>([
   ["activate a restored tab", restoring],
   ["search commands in a session", inSource],
   ["search commands on home", onHome],
+  ["scroll the command palette", inSource],
 ])
 
 const fresh: Pick<Case<{}>, "reset"> = {
@@ -133,8 +136,10 @@ export default bench({
     }),
   },
 
-  async setup({ page, prepared }) {
+  async setup({ case: name, page, prepared }) {
     await page.waitFor(prepared.ready, { timeout: 60_000 })
+
+    if (name === "scroll the command palette") await page.press("ControlOrMeta+Shift+P", { until: paletteList })
     await page.idle()
   },
 
@@ -260,6 +265,17 @@ export default bench({
         await page.press("Escape")
         await page.idle()
       },
+    },
+
+    // The palette's result list scrolls in a MenuScroll, which moves its thumb on every scroll frame.
+    "scroll the command palette": {
+      primary: "main.busy",
+      metrics: ["main.work", "frames.dropped.pct"],
+      async run({ page }) {
+        await page.scroll(paletteList, { by: 3000, speed: 3000 })
+        await page.scroll(paletteList, { by: -3000, speed: 3000 })
+      },
+      reset: ({ page }) => page.idle(),
     },
   },
 })
