@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Eingi tilskot uppsett",
   skills: "Førleikar",
   "skills.empty": "Eingin førleiki er uppsettur",
-  lsp: "LSP",
-  "lsp.empty": "Eingin LSP ambætari er uppsettur",
   failed: "Mistókst",
   retry: "Royn aftur",
   connecting: "Samband...",

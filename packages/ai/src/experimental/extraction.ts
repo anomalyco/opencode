@@ -2,7 +2,14 @@ import { Effect, Schema } from "effect"
 import { MediaModel, tryRequest } from "../media-model.js"
 import { RequestExecutor } from "../route/executor.js"
 import type { MediaRoute } from "../route/media.js"
-import { AIError, HttpOptions, ProviderMetadata, ProviderOptions, Usage, type OpenString } from "../schema/index.js"
+import {
+  AIError,
+  ProviderMetadata,
+  ProviderOptions,
+  Usage,
+  type BaseRequest,
+  type OpenString,
+} from "../schema/index.js"
 
 // ---------------------------------------------------------------------------
 // Answers
@@ -119,31 +126,26 @@ const ExtractionRequestSchema = Schema.Struct({
   ),
   referenceDate: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
 })
 
 /** A normalized extraction request, the plain object `Extraction.request(...)` returns. */
 export interface ExtractionRequest<
   Model extends ExtractionModel = ExtractionModel,
   Fields extends ExtractionFields = ExtractionFields,
-> {
-  readonly model: Model
+> extends BaseRequest<Model, ExtractionModelOptions<Model>> {
   /** The text to read; text answers carry spans into it. */
   readonly input: string
   readonly fields: Fields
   /** ISO date that anchors dates written without a year. */
   readonly referenceDate?: string
-  readonly providerOptions?: ExtractionModelOptions<Model>
-  readonly http?: HttpOptions
 }
 
 /** Input accepted by `Extraction.request` and `generate`; an `ExtractionRequest` is also a valid input. */
 export type ExtractionRequestInput<
   Model extends ExtractionModel = ExtractionModel,
   Fields extends ExtractionFields = ExtractionFields,
-> = Omit<ExtractionRequest<Model, Fields>, "providerOptions" | "http"> & {
+> = Omit<ExtractionRequest<Model, Fields>, "providerOptions"> & {
   readonly providerOptions?: NoInfer<ExtractionModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 export class ExtractionResponse extends Schema.Class<ExtractionResponse>("Extraction.Response")({
@@ -163,7 +165,7 @@ export type ExtractionResponseFor<Fields extends ExtractionFields> = Omit<Extrac
 /** Normalize extraction request input into a plain `ExtractionRequest`. */
 export const request = <const Model extends ExtractionModel, const Fields extends ExtractionFields>(
   input: ExtractionRequestInput<Model, Fields>,
-): ExtractionRequest<Model, Fields> => ({ ...input, http: HttpOptions.make(input.http) })
+): ExtractionRequest<Model, Fields> => ({ ...input })
 
 const validate = Schema.decodeUnknownSync(ExtractionRequestSchema)
 

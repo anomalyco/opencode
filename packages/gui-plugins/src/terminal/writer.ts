@@ -1,62 +1,87 @@
 // Writes output and runs steps such as resizes in the order they were pushed. Consecutive output is written as one
-// chunk, and nothing after it starts until the terminal reports that chunk done.
+// chunk, and nothing after it starts until the terminal reports that chunk done. `clear` drops everything not yet
+// written and ignores later pushes and a late `done`.
 export function terminalWriter(write: (data: Uint8Array, done: VoidFunction) => void) {
   const queue: (Uint8Array | VoidFunction)[] = []
-  let scheduled = false
-  let writing = false
+  let status: "idle" | "scheduled" | "writing" | "cleared" = "idle"
 
   const wake = () => {
-    if (scheduled) return
-    scheduled = true
+    if (status !== "idle" || queue.length === 0) return
+    status = "scheduled"
     queueMicrotask(run)
   }
 
+  // One callback for every write, so streaming output allocates none.
+  const done = () => {
+    if (status !== "writing") return
+    status = "idle"
+    wake()
+  }
+
   const run = () => {
-    scheduled = false
+    if (status !== "scheduled") return
+    status = "idle"
 
-    while (!writing && queue.length) {
-      const next = queue[0]
+    // A step or write that throws loses only itself; the rest of the queue still runs.
+    try {
+      while (status === "idle") {
+        const next = queue.shift()
 
-      if (!(next instanceof Uint8Array)) {
-        queue.shift()
-        next()
+        if (next === undefined) break
 
-        continue
+        if (!(next instanceof Uint8Array)) {
+          next()
+
+          continue
+        }
+
+        const data = take(queue, next)
+        let started = false
+        status = "writing"
+
+        try {
+          write(data, done)
+          started = true
+        } finally {
+          if (!started && status === "writing") status = "idle"
+        }
       }
-
-      const end = queue.findIndex((item) => !(item instanceof Uint8Array))
-
-      const chunks = queue
-        .splice(0, end === -1 ? queue.length : end)
-        .filter((item): item is Uint8Array => item instanceof Uint8Array)
-
-      writing = true
-      write(concat(chunks), () => {
-        writing = false
-
-        if (queue.length) wake()
-      })
+    } finally {
+      wake()
     }
   }
 
-  const push = (item: Uint8Array | VoidFunction) => {
-    if (item instanceof Uint8Array && !item.length) return
-    queue.push(item)
-
-    if (!writing) wake()
+  return {
+    push(item: Uint8Array | VoidFunction) {
+      if (status === "cleared" || (item instanceof Uint8Array && !item.length)) return
+      queue.push(item)
+      wake()
+    },
+    clear() {
+      status = "cleared"
+      queue.length = 0
+    },
   }
-
-  return { push }
 }
 
-function concat(chunks: Uint8Array[]) {
-  if (chunks.length === 1) return chunks[0]
-  const data = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0))
+// Joins `first` with the output queued right after it. A lone chunk is written as is.
+function take(queue: (Uint8Array | VoidFunction)[], first: Uint8Array) {
+  const end = queue.findIndex(isStep)
+  const count = end === -1 ? queue.length : end
+
+  if (count === 0) return first
+  const chunks = queue.splice(0, count).filter((item) => item instanceof Uint8Array)
+  const data = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, first.length))
+  data.set(first)
   chunks.reduce((offset, chunk) => {
     data.set(chunk, offset)
 
     return offset + chunk.length
-  }, 0)
+  }, first.length)
 
   return data
+}
+
+function isStep(item: Uint8Array | VoidFunction) {
+  return !(item instanceof Uint8Array)
 }

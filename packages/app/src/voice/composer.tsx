@@ -46,13 +46,13 @@ export function VoiceComposer(props: ParentProps<{ session: SessionInfo | undefi
   createEffect(() => {
     const session = props.session
 
-    if (session && voice.state.server === server.key) voice.view(server.key, session)
+    if (session) voice.syncSession(server.key, session)
   })
 
   return (
     <>
       {props.children}
-      <Show when={enabled() && props.session && voice.state.status === "idle"}>
+      <Show when={enabled() && props.session && voice.view().canStart}>
         <div class="voice-call-action">
           <Button
             size="small"
@@ -60,7 +60,7 @@ export function VoiceComposer(props: ParentProps<{ session: SessionInfo | undefi
             onClick={() => {
               const session = props.session
 
-              if (session) void voice.start(server.key, server.ctx, session)
+              if (session) voice.start(server.key, server.ctx, session)
             }}
           >
             {language.t("voice.call")}
@@ -76,7 +76,7 @@ export function VoiceOverlay() {
   const voice = useVoice()
 
   return (
-    <Show when={voice.state.status !== "idle"}>
+    <Show when={voice.view().panelOpen}>
       <VoicePanel />
     </Show>
   )
@@ -174,23 +174,23 @@ function VoicePanel() {
       }}
     >
       <div class="voice-controls">
-        <meter class="voice-level" min={0} max={1} value={voice.state.level} aria-label={language.t("voice.level")} />
-        <span class="voice-title">{voice.state.title}</span>
-        <Show when={voice.state.status === "dropped"}>
-          <Button size="small" variant="outline" onClick={() => void voice.rejoin()}>
+        <meter class="voice-level" min={0} max={1} value={voice.view().level} aria-label={language.t("voice.level")} />
+        <span class="voice-title">{voice.view().title}</span>
+        <Show when={voice.view().canRejoin}>
+          <Button size="small" variant="outline" onClick={voice.rejoin}>
             {language.t("voice.rejoin")}
           </Button>
         </Show>
         <Button
           size="small"
           variant="ghost"
-          disabled={voice.state.status !== "connected"}
-          aria-pressed={voice.state.muted}
+          disabled={!voice.view().canMute}
+          aria-pressed={voice.view().muted}
           onClick={voice.mute}
         >
-          {language.t(voice.state.muted ? "voice.unmute" : "voice.mute")}
+          {language.t(voice.view().muted ? "voice.unmute" : "voice.mute")}
         </Button>
-        <Button size="small" variant="ghost" onClick={() => void voice.end()}>
+        <Button size="small" variant="ghost" onClick={voice.end}>
           {language.t("voice.end")}
         </Button>
         <IconButton
@@ -203,29 +203,33 @@ function VoicePanel() {
           onClick={() => setPosition("expanded", !position.expanded)}
         />
       </div>
-      <Show when={voice.state.status === "connecting"}>
+      <Show when={voice.view().connecting}>
         <p class="voice-status" role="status">
           <Loader class="size-3.5 shrink-0" />
           {language.t("voice.connecting")}
         </p>
       </Show>
-      <Show when={voice.state.status === "dropped"}>
-        <p class="voice-status" role="alert">
-          {language.t(`voice.failure.${voice.state.failure ?? "dropped"}`)}
-        </p>
+      <Show when={voice.view().failure}>
+        {(failure) => (
+          <p class="voice-status" role="alert">
+            {language.t(`voice.failure.${failure()}`)}
+          </p>
+        )}
       </Show>
       <Show
         when={position.expanded}
         fallback={
-          <Show when={voice.state.caption}>
-            <p class="voice-caption voice-latest">
-              <span>{speaker(voice.state.speaker)}</span> {voice.state.caption}
-            </p>
+          <Show when={voice.view().latestCaption}>
+            {(latest) => (
+              <p class="voice-caption voice-latest">
+                <span>{speaker(latest().speaker)}</span> {latest().text}
+              </p>
+            )}
           </Show>
         }
       >
         <div class="voice-captions" data-scrollable>
-          <For each={voice.state.captions}>
+          <For each={voice.view().captions}>
             {(caption) => (
               <p class="voice-caption">
                 <span>{speaker(caption.speaker)}</span> {caption.text}

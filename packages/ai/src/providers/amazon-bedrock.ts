@@ -73,7 +73,7 @@ export const model: ProviderPackage.Model<Settings, BedrockConverse.OptionsInput
     auth,
     baseURL,
     credentials,
-    generation: topP === undefined ? undefined : { topP },
+    topP,
     headers: headers === undefined ? undefined : { ...headers },
     http: body === undefined ? undefined : { body: { ...body } },
     providerOptions,
