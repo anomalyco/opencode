@@ -307,7 +307,7 @@ function RootSettings() {
                 active={surface.view().tab === "models"}
                 provider={state.modelProvider}
                 headerAction={<SettingsServerSwitcher />}
-                onReveal={() => setState("modelProvider", undefined)}
+                onConsumeTarget={() => setState("modelProvider", undefined)}
               />
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
