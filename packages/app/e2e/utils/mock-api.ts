@@ -150,6 +150,19 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("integrationOAuthCancel", "/api/integration/:integrationID/connect/oauth/:attemptID", {
+      params: { integrationID: Schema.String, attemptID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("integrationConnectExternal", "/api/integration/:integrationID/connect/external", {
+      params: { integrationID: Schema.String },
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("credentialActivate", "/api/credential/:credentialID/activate", {
       params: { credentialID: Schema.String },
       success: NoContent,
