@@ -37,6 +37,9 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
     }),
   )
 
+  // A session created again under a deleted session's ID, such as a re-import, must stop being hidden.
+  onCleanup(input.data.on("session.created", (event) => mutation.restore(event.data.sessionID)))
+
   // Lists loaded earlier (the Home index, the live store, search results) learn each session's newer
   // `time.updated` from its events, so they rank sessions in the server's order without reloading.
   SESSION_ACTIVITY.forEach((type) =>
@@ -61,6 +64,10 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
       ...input.data.session,
       list: () => apply(input.data.session.list()),
       apply,
+      remember: (info: SessionInfo) => {
+        mutation.restore(info.id)
+        input.data.session.remember(info)
+      },
       remove: (sessionID: string) =>
         mutation.remove(sessionID).then(() => {
           setActivity(sessionID, undefined)
@@ -100,6 +107,9 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
           clear(mutation.id)
           throw error
         })
+    },
+    restore(sessionID: string) {
+      setStore("session", (current) => current.filter((mutation) => mutation.sessionID !== sessionID))
     },
     // Keep the deleted session hidden: cached lists such as the Home index still hold it until they refetch.
     deleted(sessionID: string) {
