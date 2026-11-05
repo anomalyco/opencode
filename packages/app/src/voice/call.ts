@@ -136,6 +136,8 @@ export function createVoiceCall(input: {
       return
     }
 
+    // The transport already dropped the call for a fatal error; any other one rejected a single client event.
+    if (event.type === "error") console.warn("[voice] Live rejected a client event", event.error)
     const next = responseEvent(event)
 
     if (next) dispatch(next)
@@ -190,7 +192,7 @@ export function createVoiceCall(input: {
         effect.outputs.forEach((output) =>
           transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
         )
-        transport.send({ type: "response.create" })
+        transport.send({ type: "response.create", event_id: effect.requestID })
         dispatchReply({ type: "sessions.dirty", sessionIDs: tools.replies.sessions })
       })
 

@@ -6,7 +6,7 @@ import { VoiceFailure, VoiceTransport } from "./transport"
 // WebRTC and Web Audio do not exist outside a browser, so these stand in for the few calls the transport makes.
 class FakeChannel {
   readyState: RTCDataChannelState = "open"
-  sent: { type: string }[] = []
+  sent: { type: string; event_id: string }[] = []
   onmessage: ((message: { data: string }) => void) | null = null
   onclose: (() => void) | null = null
 
@@ -266,4 +266,7 @@ test("a rejected session.update keeps the live call open", async () => {
   expect(result.transport.canSend).toBe(true)
   result.transport.instructions("Next")
   expect(result.peer.channel.sent.at(-1)?.type).toBe("session.update")
+  // A request keeps its own ID, so a later rejection can name the delegation that sent it.
+  result.transport.send({ type: "response.create", event_id: "del_1_4" })
+  expect(result.peer.channel.sent.at(-1)).toEqual({ type: "response.create", event_id: "del_1_4" })
 })
