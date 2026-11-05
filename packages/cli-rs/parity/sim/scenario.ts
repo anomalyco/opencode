@@ -17,6 +17,10 @@ export type Step =
   | { resize: [number, number] }
   // Waits until the screen shows the text.
   | { until: string }
+  // Lets the model reply waiting at `{ hold: name }` stream on (scenario.ts `Reply`).
+  | { release: string }
+  // Waits for a time, for state that has no text to wait for. The scenario says why.
+  | { sleep: number }
   | {
       checkpoint: string
       // Text the screen shows once it is ready.
@@ -29,6 +33,14 @@ export type Step =
 export type SimScenario = {
   width?: number
   height?: number
+  // Merged into the client's cli.json, after the runner's defaults.
+  config?: Record<string, unknown>
+  // Client arguments before `--server`; `$session:<n>` becomes the ID of `sessions[n]`.
+  args?: string[]
+  // Sessions the runner creates and prompts on the server directly (not through the recording proxy) before the
+  // client starts, in order, each prompt waited on until the session is idle. Their turns take the first model
+  // replies. A session with a title gets no title call.
+  sessions?: { title?: string; prompts: string[] }[]
   // Rules after the allow-all rule; the last matching rule wins.
   permissions?: { action: string; resource: string; effect: "allow" | "deny" | "ask" }[]
   // Files under the working directory, written before the server starts.
