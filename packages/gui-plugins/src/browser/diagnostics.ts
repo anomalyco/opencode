@@ -35,14 +35,15 @@ export function createDiagnostics(cdp: Cdp) {
     timestampMs: number,
     source?: Browser.ConsoleEntry["source"],
   ) => {
-    messages.push({
+    const entry: Browser.ConsoleEntry = {
       id: `${scope}:${++sequence}`,
       timestampMs,
       level,
       text: text.slice(0, 2_000),
       textTruncated: text.length > 2_000,
-      ...(source ? { source } : {}),
-    })
+    }
+
+    messages.push(source ? { ...entry, source } : entry)
 
     if (messages.length > 500) {
       messages.shift()
@@ -59,6 +60,7 @@ export function createDiagnostics(cdp: Cdp) {
     if (!next) {
       chains.delete(key)
       stashed.delete(key)
+
       return
     }
 
@@ -109,8 +111,8 @@ export function createDiagnostics(cdp: Cdp) {
             : "info",
       event.args
         .map((arg) =>
-          typeof arg.value === "string"
-            ? arg.value
+          arg.type === "string"
+            ? String(arg.value)
             : arg.value !== undefined
               ? JSON.stringify(arg.value)
               : (arg.description ?? arg.unserializableValue ?? arg.type),
@@ -261,6 +263,7 @@ export function createDiagnostics(cdp: Cdp) {
         input.id,
         "Request ID is no longer retained in this tab or belongs to another tab. Call browser.network.list({tabID}) and copy a current id into browser.network.get with the same tabID. Do not reload or resend a request just to inspect it.",
       )
+
       const max = input.maxBodyChars ?? 20_000
 
       const fetchBody = async (): Promise<Browser.Body> => {
@@ -273,6 +276,7 @@ export function createDiagnostics(cdp: Cdp) {
 
         return value.length ? { state: "text", text: value.slice(0, max), truncated: value.length > max } : { state: "empty" }
       }
+
       const known = responseBody(hop, input.includeBody)
 
       return {

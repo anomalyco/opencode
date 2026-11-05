@@ -216,11 +216,14 @@ describe("bounds", () => {
 
   test("evicting the last hop forgets the request ID", () => {
     const chain = replay([sent("h1", "http://site/", 1), sent("h2", "http://site/", 2)])
+
     if (!chain) throw new Error("No chain")
 
     const rest = evictHop(chain, "h1")
     expect(rest?.hops.map((hop) => hop.id)).toEqual(["h2"])
+
     if (!rest) throw new Error("No chain")
+
     expect(evictHop(rest, "h2")).toBeUndefined()
   })
 })

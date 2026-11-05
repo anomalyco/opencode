@@ -91,6 +91,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
   switch (event.type) {
     case "request": {
       const redirect = event.event.redirectResponse
+
       const hops =
         latest && redirect
           ? replaceLast(current.hops, redirected(latest, redirect, event.event))
@@ -112,6 +113,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
         started: event.event.timestamp,
       })
     }
+
     case "ws.created":
       return append({ ...current, hops: supersede(current.hops, undefined) }, {
         id: event.id,
@@ -135,6 +137,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
 
       return { ...current, hops: replaceAt(current.hops, index, requestWire(current.hops[index], event.headers)) }
     }
+
     case "response.extra":
       return responseExtra(chain, current, event.wire)
     case "response": {
@@ -153,6 +156,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
         }),
       }
     }
+
     case "ws.request": {
       if (!latest || latest.resourceType !== "websocket" || !open(latest)) return chain
       const headers = trimHeaders({ ...event.event.request.headers, ...latest.request.headers })
@@ -168,6 +172,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
         }),
       }
     }
+
     case "ws.response": {
       // A WebSocket's handshake is its whole request lifecycle; later frame errors and closes do not change it.
       if (!latest || latest.resourceType !== "websocket" || !open(latest)) return chain
@@ -184,6 +189,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
         }),
       }
     }
+
     case "ws.error":
     case "ws.closed":
       if (!latest || latest.resourceType !== "websocket" || !open(latest)) return chain
@@ -313,6 +319,7 @@ function responseExtra(chain: Chain | undefined, current: Chain, wire: WireRespo
 
     return { ...current, responseWire: [...current.responseWire, wire] }
   }
+
   const later = current.hops.findIndex((hop, at) => at > index && hop.phase.status !== "redirected" && awaitsResponse(hop))
 
   // A redirect hop that never sent its response ExtraInfo cannot take a final status; give it to the
@@ -335,6 +342,7 @@ function append(
   },
 ): Chain {
   const headers = trimHeaders(input.request.headers)
+
   const created: Hop = {
     id: input.id,
     nativeID: input.nativeID,
@@ -351,6 +359,7 @@ function append(
     wire: "both",
     phase: input.started === undefined ? { status: "connecting" } : { status: "pending", started: input.started },
   }
+
   // Queued ExtraInfo can only belong to this hop: earlier hops took theirs on arrival.
   const requested = chain.requestWire.length ? requestWire(created, chain.requestWire[0]) : created
   const hop = chain.responseWire.length ? responseWire(requested, chain.responseWire[0]) : requested
