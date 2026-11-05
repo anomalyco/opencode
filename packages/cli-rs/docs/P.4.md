@@ -18,7 +18,9 @@ exports one symbol, `opencode_plugin_v1`, that returns a `#[repr(C)]` table, `Pl
 | `destroy(instance)`, `free(buffer)` | 1.0 | Ends an instance; frees a buffer the plugin wrote |
 | `describe(&out)` | 1.1 | Optional (nullable): the plugin's metadata, such as its version |
 
-The host passes a `HostApi` table of the same shape (`size`, `major`, `minor`, `ctx`, `call`, `free`). Past
+The host passes a `HostApi` table of the same shape (`size`, `major`, `minor`, `ctx`, `call`, `free`, and since
+1.2 the nullable `theme_mode(ctx)`, dark or light, which a plugin reads as `Host::theme_mode` and gets `None` from
+an older host). Past
 the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the host (`fence`,
 `slot`, `route`, `command`), and a `HostRequest` from the plugin (`log`, `toast`, `storage-get`,
 `storage-set`, `open-route`). Each side frees the buffers it allocated, so each keeps its own allocator.
@@ -26,14 +28,14 @@ the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Reque
 Versions only grow by appending:
 
 - A new entry goes at the end of a table and is optional. A reader treats entries past the other side's
-  `size` as absent, so a plugin built against ABI 1.0 loads on a 1.1 host.
+  `size` as absent, so a plugin built against ABI 1.0 loads on a 1.2 host.
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
   answers a request it does not know with an error. A plugin that cannot work without a newer host sets
   `requires_minor`, and the host refuses it with a message naming both versions.
 - Only a deliberate major-version break refuses a plugin. The host reads `major` before anything else, and
   the plugin manager shows why: "plugin ABI 2.0 is not supported: this opencode-rs loads ABI 1.x plugins
-  (up to 1.1); rebuild the plugin against opencode-plugin-abi 1".
+  (up to 1.2); rebuild the plugin against opencode-plugin-abi 1".
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
 

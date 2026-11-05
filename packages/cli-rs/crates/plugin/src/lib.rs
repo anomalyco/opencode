@@ -27,6 +27,13 @@ pub trait Host: 'static {
     fn app(&self) -> &App;
     /// The page theme.
     fn theme(&self) -> Theme;
+    /// Whether the page theme resolved dark or light (TS `api.themeMode`). By default, from the page background's
+    /// luminance.
+    fn theme_mode(&self) -> ThemeMode {
+        let color = self.theme().background.base;
+        let luminance = 0.2126 * f64::from(color.r) + 0.7152 * f64::from(color.g) + 0.0722 * f64::from(color.b);
+        if luminance > 127.5 { ThemeMode::Light } else { ThemeMode::Dark }
+    }
     /// The keymap plugin layers register on.
     fn keymap(&self) -> &DialogKeymap;
 
