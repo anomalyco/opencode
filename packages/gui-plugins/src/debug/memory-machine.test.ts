@@ -10,6 +10,7 @@ import {
 } from "./memory-machine"
 
 const on: MemoryDiagnosticsEvent = { type: "synced", enabled: true }
+
 const off: MemoryDiagnosticsEvent = { type: "synced", enabled: false }
 
 function after(...events: MemoryDiagnosticsEvent[]) {

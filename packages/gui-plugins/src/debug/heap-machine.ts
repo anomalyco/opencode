@@ -152,6 +152,7 @@ export function transitionHeapCapture(state: HeapCaptureState, event: HeapCaptur
           ok: false as const,
           error: event.type === "capture.failed" ? event.error : new Error("Heap capture timed out"),
         }
+
   const settled: HeapCaptureEffect[] = [
     { type: "timer.cancel" },
     ...(state.active.source === "command"

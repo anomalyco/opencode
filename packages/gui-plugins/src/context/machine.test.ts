@@ -13,7 +13,7 @@ import {
 } from "./machine"
 
 /* oxlint-disable anti-slop/require-safety-comment-for-type-assertion -- the export only passes this record through */
-const data = { info: { id: "ses_1" }, messages: [] } as unknown as SessionExportData
+const data: SessionExportData = { info: { id: "ses_1" } as SessionExportData["info"], messages: [] }
 
 function exportAfter(...events: SessionExportEvent[]) {
   return events.reduce<SessionExportState>(
@@ -61,6 +61,7 @@ describe("transitionSessionExport", () => {
 
   test("a cancelled save dialog ends the export without a toast; a failure toasts its message", () => {
     const loading = exportAfter({ type: "export.requested", sessionKey: "a", sessionID: "ses_1" })
+
     const cancelled = transitionSessionExport(loading, {
       type: "export.saved",
       attempt: 1,
@@ -68,6 +69,7 @@ describe("transitionSessionExport", () => {
       filename: "a.json",
       saved: false,
     })
+
     const failed = transitionSessionExport(loading, {
       type: "export.failed",
       attempt: 1,
@@ -99,6 +101,7 @@ describe("transitionSessionExport", () => {
       { type: "export.requested", sessionKey: "a", sessionID: "ses_1" },
       { type: "export.requested", sessionKey: "b", sessionID: "ses_2" },
     )
+
     const disposed = transitionSessionExport(state, { type: "disposed" })
 
     expect(disposed.effects).toEqual([
@@ -135,6 +138,7 @@ describe("transitionContextScroll", () => {
       { type: "interacted" },
       { type: "scrolled", position: { x: 0, y: 500 } },
     )
+
     const rendered = transitionContextScroll(state, { type: "content.changed" })
 
     expect(rendered).toEqual({ state, effects: [] })

@@ -77,6 +77,7 @@ export function transitionMemoryDiagnostics(
     if (state.status === "on") {
       return { state: { status: "off", issued: state.issued, probing: state.probing }, effects: stop(state.run) }
     }
+
     const run = state.issued + 1
 
     return {

@@ -211,6 +211,7 @@ export function transitionContextScroll(state: ContextScrollState, event: Contex
       if (state.applied && same(state.applied, event.position)) {
         return { state: { ...state, applied: undefined }, effects: NO_SCROLL_EFFECTS }
       }
+
       const attempt = state.attempt + 1
       const save: ContextScrollEffect = { type: "frame.schedule", kind: "save", attempt }
 

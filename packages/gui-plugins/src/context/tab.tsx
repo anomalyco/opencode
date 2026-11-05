@@ -225,6 +225,7 @@ export default function SessionContextTab(props: { session: MountedSession }) {
   const runExport = (effect: SessionExportEffect) => {
     if (effect.type === "export.fetch") {
       const controller = new AbortController()
+
       const failed = (cause: unknown) =>
         dispatchExport({
           type: "export.failed",

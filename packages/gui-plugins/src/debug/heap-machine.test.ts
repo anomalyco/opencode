@@ -14,13 +14,16 @@ import {
 } from "./heap-machine"
 
 const reply = (): HeapCaptureReply => ({ resolve: () => undefined, reject: () => undefined })
+
 const result = { directory: "/downloads/opencode-heap-1", complete: true }
+
 const command = (value = reply()): HeapCaptureEvent => ({
   type: "command.requested",
   root: "/downloads",
   includeServer: true,
   reply: value,
 })
+
 const signal: HeapCaptureEvent = { type: "signal.received", root: "/heap", includeServer: false }
 
 function captureAfter(...events: HeapCaptureEvent[]) {
