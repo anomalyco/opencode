@@ -1,7 +1,7 @@
 export * as SkillDiscovery from "./discovery.js"
 
 import path from "path"
-import { Context, Effect, Layer, Schedule, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -88,23 +88,25 @@ const layer = Layer.effect(
       )
     })
 
-    // Skills already published to the cache by an earlier pull. Staging and backup directories
-    // from an interrupted refresh are skipped.
-    const cached = Effect.fn("SkillDiscovery.cached")(function* (sourceRoot: string) {
-      const names = yield* fs.readDirectory(sourceRoot).pipe(Effect.orElseSucceed(() => [] as string[]))
-      const directories = yield* Effect.forEach(
-        names.filter((name) => isSafeSegment(name) && !/\.(tmp|old)-[0-9a-f-]+$/.test(name)),
-        (name) =>
-          Effect.gen(function* () {
-            const root = path.resolve(sourceRoot, name)
-            if (!(yield* fs.isDir(root))) return []
-            const exists =
-              (yield* fs.existsSafe(path.join(root, "SKILL.md"))) ||
-              (yield* fs.existsSafe(path.join(root, `${name}.md`)))
-            return exists ? [AbsolutePath.make(root)] : []
-          }),
+    // Names of the skills returned by the last successful pull, in index order. When the catalog is
+    // unreachable, serve exactly these: folders for skills since removed from the index stay on disk
+    // but are not listed here.
+    const manifest = (sourceRoot: string) => path.join(sourceRoot, ".opencode-skills.json")
+    const decodeManifest = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.String)))
+
+    const lastPulled = Effect.fn("SkillDiscovery.lastPulled")(function* (sourceRoot: string) {
+      const text = yield* fs.readFileStringSafe(manifest(sourceRoot)).pipe(Effect.orElseSucceed(() => undefined))
+      const names = text === undefined ? [] : Option.getOrElse(decodeManifest(text), () => [] as readonly string[])
+      const directories = yield* Effect.forEach(names.filter(isSafeSegment), (name) =>
+        Effect.gen(function* () {
+          const root = path.resolve(sourceRoot, name)
+          if (!FSUtil.contains(sourceRoot, root) || root === sourceRoot) return []
+          const exists =
+            (yield* fs.existsSafe(path.join(root, "SKILL.md"))) || (yield* fs.existsSafe(path.join(root, `${name}.md`)))
+          return exists ? [AbsolutePath.make(root)] : []
+        }),
       )
-      return directories.flat().toSorted()
+      return directories.flat()
     })
 
     return Service.of({
@@ -123,8 +125,8 @@ const layer = Layer.effect(
         )
         // Keep serving the last good copy when the catalog is unreachable, so an offline start or
         // a catalog outage does not remove skills that were already downloaded.
-        if (!data) return yield* cached(sourceRoot)
-        return yield* Effect.forEach(
+        if (!data) return yield* lastPulled(sourceRoot)
+        const published = yield* Effect.forEach(
           data.skills.flatMap((skill) => {
             if (!isSafeSegment(skill.name)) {
               return []
@@ -216,7 +218,25 @@ const layer = Layer.effect(
               return exists ? [AbsolutePath.make(root)] : []
             }),
           { concurrency: skillConcurrency },
-        ).pipe(Effect.map((directories) => directories.flat()))
+        )
+        const directories = published.flat()
+        // Skip the write when nothing was published and nothing was recorded before, so a catalog
+        // that never yielded a skill leaves no cache behind.
+        if (directories.length > 0 || (yield* fs.existsSafe(manifest(sourceRoot)))) {
+          // Write then rename so a concurrent pull of the same catalog never reads a partial file.
+          const staging = `${manifest(sourceRoot)}.tmp-${crypto.randomUUID()}`
+          yield* fs
+            .writeWithDirs(staging, JSON.stringify(directories.map((directory) => path.basename(directory))))
+            .pipe(
+              Effect.andThen(fs.rename(staging, manifest(sourceRoot))),
+              Effect.catch((error) =>
+                Effect.logWarning("failed to record cached skills", { url: index, error }).pipe(
+                  Effect.andThen(fs.remove(staging, { force: true }).pipe(Effect.ignore)),
+                ),
+              ),
+            )
+        }
+        return directories
       }),
     })
   }),

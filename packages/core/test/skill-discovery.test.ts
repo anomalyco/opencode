@@ -180,4 +180,29 @@ describe("SkillDiscovery.pull", () => {
       expect(result.directories).toEqual([])
     }),
   )
+
+  it.live(
+    "does not restore skills removed from the index when the index is unavailable",
+    Effect.gen(function* () {
+      const catalog = yield* fixture
+      yield* catalog.pull(
+        [
+          { name: "legacy", version: "1", files: ["SKILL.md"] },
+          { name: "deploy", version: "1", files: ["SKILL.md"] },
+        ],
+        { "/catalog/legacy/SKILL.md": "# Legacy", "/catalog/deploy/SKILL.md": "# Deploy" },
+      )
+      const current = yield* catalog.pull(
+        [
+          { name: "release", version: "1", files: ["SKILL.md"] },
+          { name: "deploy", version: "1", files: ["SKILL.md"] },
+        ],
+        { "/catalog/release/SKILL.md": "# Release", "/catalog/deploy/SKILL.md": "# Deploy" },
+      )
+      const offline = yield* catalog.pull(undefined)
+
+      expect(current.directories.map((directory) => path.basename(directory))).toEqual(["release", "deploy"])
+      expect(offline.directories).toEqual(current.directories)
+    }),
+  )
 })
