@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
+import type { FormCreated, FormNotFoundError, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
 import { createEffect, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createWebSearchRequest } from "@/session/requests/websearch"
@@ -47,7 +47,13 @@ function fixture(form: FormCreated["data"]["form"] | null = consent) {
     const replies: FormReplyInput[] = []
     const loads: string[] = []
 
-    const [state, setState] = createStore({
+    const [state, setState] = createStore<{
+      request: FormCreated["data"]["form"] | undefined
+      owner: string
+      connected: boolean
+      loadFails: boolean
+      replyFails: boolean | "settled"
+    }>({
       request: form ?? undefined,
       owner: "ses_root",
       connected: true,
@@ -68,6 +74,10 @@ function fixture(form: FormCreated["data"]["form"] | null = consent) {
       },
       reply: async (input) => {
         replies.push(input)
+
+        // The client rejects with the decoded wire error, a plain tagged object.
+        if (state.replyFails === "settled")
+          throw { _tag: "FormNotFoundError", id: input.formID, message: "Form not found" } satisfies FormNotFoundError
 
         if (state.replyFails) throw new Error("offline")
         setState("request", undefined)
@@ -200,6 +210,50 @@ describe("web search request state", () => {
     expect(input.model.options()).toEqual(options)
     expect(input.model.loadFailed()).toBe(false)
     expect(input.replies).toEqual([])
+  })
+
+  test("keeps the provider options while the consent form is handed off", async () => {
+    const input = fixture()
+    await ready(() => !input.model.loading())
+    input.model.select("parallel")
+    const pending = input.model.submit("parallel")
+    expect(input.state.request).toBeUndefined()
+    expect(input.model.options()).toEqual(options)
+    expect(input.model.selected()).toBe("parallel")
+    input.create()
+    await pending
+  })
+
+  test("says so when the provider form no longer offers the chosen provider", async () => {
+    const input = fixture()
+    await ready(() => !input.model.loading())
+    input.model.select("parallel")
+    const pending = input.model.submit("parallel")
+
+    const narrowed = {
+      ...provider,
+      fields: [{ key: "provider", type: "string" as const, options: [options[0]!], required: true, custom: false }],
+    }
+
+    input.create(narrowed)
+    await pending
+    expect(input.replies.map((reply) => reply.answer)).toEqual([{ choice: "choose" }])
+    expect(input.model.optionUnavailable()).toBe(true)
+    expect(input.model.sending()).toBe(false)
+    expect(input.model.request()?.id).toBe(provider.id)
+    expect(input.model.selected()).toBe("exa")
+    input.model.select("exa")
+    expect(input.model.optionUnavailable()).toBe(false)
+  })
+
+  test("closes a form that was already settled elsewhere without an error", async () => {
+    const input = fixture()
+    await ready(() => !input.model.loading())
+    input.setState("replyFails", "settled")
+    await input.model.submit("random")
+    expect(input.replies.map((reply) => reply.answer)).toEqual([{ choice: "allow" }])
+    expect(input.model.failed()).toBe(false)
+    expect(input.model.request()).toBeUndefined()
   })
 
   test.each(["navigate", "disconnect", "dispose", "cancel"])("stops automatic replies on %s", async (action) => {

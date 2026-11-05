@@ -235,6 +235,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
         loading: () => false,
         loadFailed: () => false,
         failed: () => false,
+        optionUnavailable: () => false,
         sending: () => false,
         connected: () => true,
         select: (value) => setState("searchProvider", value),
