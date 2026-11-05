@@ -477,13 +477,13 @@ export function createDirectorySearch(args: {
     return fuzzysort.go(query, items, { key: "name", limit }).map((item) => item.obj.absolute)
   }
 
-  return async (filter: string, options?: { signal?: AbortSignal }) => {
+  return async (filter: string, options?: { signal?: AbortSignal }): Promise<string[]> => {
     const active = () => !options?.signal?.aborted
     const value = cleanPickerInput(filter)
     const input = scoped(value)
     const location = args.location()
 
-    if (!input || !location) return [] as string[]
+    if (!input || !location) return []
     const raw = normalizePickerDrive(value)
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)

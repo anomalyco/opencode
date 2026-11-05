@@ -22,8 +22,9 @@ test("Tab and Enter while suggestions load act on the typed folder, not the prev
   const picker = await openPicker(page, {
     fileList: (path) =>
       path === directory ? ["alpha", "beta"].map((name) => fileNode(directory, name, "directory")) : [],
-    findFiles: (input) => (input.query === "alp" ? ["alpha"] : input.query === "beta" ? ["beta"] : []),
+    findFiles: (input) => ["alpha", "beta"].filter((name) => input.query.length >= 3 && name.startsWith(input.query)),
   })
+
   const input = picker.getByRole("combobox")
 
   await input.fill("alp")
@@ -45,6 +46,7 @@ test("Tab and Enter while suggestions load act on the typed folder, not the prev
 
 test("a folder that cannot be listed leaves the root readable and retries when expanded", async ({ page }) => {
   let failures = 0
+
   const picker = await openPicker(page, {
     fileList: (path) => {
       if (path === `${directory}/locked`) {

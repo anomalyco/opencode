@@ -19,9 +19,11 @@ import {
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
 
-// The picker only reads `api.file.find` and `api.file.list`.
-const sdk = (file: { find?: (input: never) => Promise<unknown>; list?: (input: never) => Promise<unknown> }) =>
-  ({ api: { file } }) as unknown as Sdk
+type FileApi = { find?: (input: never) => Promise<object>; list?: (input: never) => Promise<object> }
+
+// SAFETY: the picker only reads `api.file.find` and `api.file.list`, which every fake here provides.
+// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- a partial fake stands in for the generated SDK client
+const sdk = (file: FileApi) => ({ api: { file } }) as unknown as Sdk
 
 test("maps server directory entries into Pierre paths", () => {
   expect(
@@ -323,8 +325,8 @@ const projects = Array.from({ length: 60 }, (_, index) => ({ path: `project-${in
 const fallbacks: {
   name: string
   query: string
-  find: () => Promise<unknown>
-  list: () => Promise<unknown>
+  find: () => Promise<object>
+  list: () => Promise<object>
   expected: string[]
   listed: string[]
 }[] = [
