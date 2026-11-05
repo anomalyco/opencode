@@ -28,7 +28,10 @@ export type Snapshot = {
 export type Header = {
   /** The build that wrote it: the package version, and a hash of the frame kinds, consumers, codecs, and built-ins. */
   readonly build: string
-  /** A hash of the host's globals (extensions, a test harness), which the resuming runtime must have too. */
+  /**
+   * A hash of the host's globals (extensions, a test harness), and of each extension's name and whether it has
+   * `snapshot` hooks, which the resuming runtime must have too.
+   */
   readonly hosts: string
   readonly runId: string
   /** The program texts, re-parsed on restore and checked against their hashes. */
@@ -54,10 +57,12 @@ export const buildId = (bare: Bare): string =>
 
 const hostsId = (ctx: Interpreter<unknown>): string =>
   hash(
-    ctx.intrinsics
-      .all()
-      .filter((name) => name.startsWith("@"))
-      .join("\n"),
+    [
+      ...ctx.intrinsics.all().filter((name) => name.startsWith("@")),
+      ...(ctx.hosts?.extensions ?? []).map(
+        (extension) => `${extension.name} ${extension.hooked ? "hooks" : "no hooks"}`,
+      ),
+    ].join("\n"),
   )
 
 /** Saves a run's state. `pristine` is a fresh runtime with the same host globals, to tell which built-ins changed. */
@@ -115,6 +120,7 @@ export const capture = (
     },
     lost,
     strict: options.strict,
+    hosts: ctx.hosts,
   })
   const snapshot: Snapshot = {
     format: FORMAT,
@@ -185,6 +191,7 @@ export const restore = (
       return key !== "loc" && Array.isArray(owned) ? owned : undefined
     },
     interruption: options.interruption,
+    hosts: fresh.hosts,
   })
   fresh.tools.calls.push(...header.toolCalls.map((call) => ({ name: call.name })))
   return snapshot

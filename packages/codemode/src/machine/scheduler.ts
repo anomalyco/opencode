@@ -79,15 +79,17 @@ export type HostRequest =
 /**
  * One step of a call to an extension function: its `extension.before` hook (`before`), settling what the host function
  * returned or threw (`settle`: `host` is that), or calling an async host function and settling its result (`run`:
- * `host` is the function). `invocation` is what the hooks see, for a global or a global object's function. The host
- * function and what it returns are live host values with no data form.
+ * `host` is the function). `invocation` is what the hooks see, for a global or a global object's function, and
+ * `extension` names the extension the function came from, whose `snapshot` hooks save the values it returns. The host
+ * function and what it returns are live host values with no data form, dropped once the call completes.
  */
 export type ExtensionRequest = {
   readonly stage: "before" | "settle" | "run"
   readonly label: string
-  readonly invocation: ExtensionInvocation | undefined
-  readonly host: unknown
-  readonly args: ReadonlyArray<unknown>
+  readonly extension: string | undefined
+  invocation: ExtensionInvocation | undefined
+  host: unknown
+  args: ReadonlyArray<unknown>
   readonly threw: boolean
 }
 

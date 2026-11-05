@@ -3,7 +3,7 @@ import { Cause, Deferred, Effect, Option, Schema, type Scope } from "effect"
 import type { DataValue, Diagnostic, Pending, ResolvedExecutionLimits, Result, Suspended } from "../codemode.js"
 import type { Json } from "../data.js"
 import { capture, fromBytes, header, restore, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
-import { toolExpression, ToolRuntime } from "../tool-runtime.js"
+import { ToolRuntime } from "../tool-runtime.js"
 import type { HostCall } from "../machine/scheduler.js"
 import { SuspendError } from "../suspend-error.js"
 import { normalizeError } from "./errors.js"
@@ -11,7 +11,7 @@ import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
 import type { Value } from "./objects.js"
 import { formatLocation, sourceLocation } from "./model.js"
-import { Driver, type Outcome, SUSPENDED } from "./driver.js"
+import { callPath, Driver, type Outcome, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import { stats } from "../machine/task.js"
@@ -24,7 +24,7 @@ export type Setup<R> = {
   readonly hooks: ToolRuntime.Hooks<R>
   /** The host's globals, made again for a restored run; see `Interpreter`. */
   readonly globals?: ((ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>) | undefined
-  /** Whether the host globals can hand the program values with no data form (extensions can). */
+  /** Whether the host globals can hand the program values with no data form (extensions without `snapshot` hooks can). */
   readonly lossy?: boolean
   /** The most bytes a suspended run's state may take. */
   readonly suspend?: { readonly maxBytes?: number | undefined }
@@ -360,9 +360,8 @@ class Running<R> {
   private save(asking?: HostCall): Suspended | SuspendError {
     const ctx = this.ctx
     const machine = ctx.machine
-    const blocking = this.driver.blocking().filter((call) => call !== asking)
-    if (blocking.length > 0) {
-      const running = blocking.map((call) => ({ key: call.key, path: callPath(call) }))
+    const running = this.driver.blocking(asking)
+    if (running.length > 0) {
       return new SuspendError({
         message: `The run can't be suspended while ${running.map((call) => call.path).join(", ")} ${running.length === 1 ? "is" : "are"} running; only a durable tool's started work can be.`,
         running,
@@ -427,8 +426,8 @@ class Running<R> {
   }
 
   // The round-trip test mode's checkpoint: saves the state to bytes and continues in a brand-new runtime. States that
-  // hold live host values (an extension call in flight, a function an extension returned) can't round-trip, so they
-  // are skipped; a lost value anywhere else is a codec gap and fails the run.
+  // hold live host values (an extension call in flight, a function an extension without `snapshot` hooks returned)
+  // can't round-trip, so they are skipped; a lost value anywhere else is a codec gap and fails the run.
   private trip(): void {
     const ctx = this.ctx!
     const driver = this.driver!
@@ -440,16 +439,25 @@ class Running<R> {
       this.skip--
       return
     }
-    if (ctx.machine.calls().some((call) => call.request.kind === "extension")) return
+    if (driver.holdsHostValues) return
     this.trips++
-    const saved = capture(ctx as Interpreter<unknown>, {
-      bare: bare(),
-      pristine: pristine(this.setup),
-      runId: this.runId,
-      limits: { timeoutMs: null, maxToolCalls: null, maxOutputBytes: null },
-      activeMs: 0,
-      strict: this.setup.lossy !== true,
-    })
+    const attempted = attempt(() =>
+      capture(ctx as Interpreter<unknown>, {
+        bare: bare(),
+        pristine: pristine(this.setup),
+        runId: this.runId,
+        limits: { timeoutMs: null, maxToolCalls: null, maxOutputBytes: null },
+        activeMs: 0,
+        strict: this.setup.lossy !== true,
+      }),
+    )
+    // An extension's `snapshot` hooks may refuse to save a value, which fails a suspend, not the run.
+    if (!attempted.ok) {
+      const error = attempted.error
+      if (error instanceof SnapshotError && error.message.startsWith("The extension ")) return
+      throw error
+    }
+    const saved = attempted.value
     const bytes = toBytes(saved.snapshot)
     this.skip = Math.floor(saved.snapshot.records.length / 200 + bytes.byteLength / 100_000)
     if (saved.lost.length > 0) return
@@ -468,13 +476,6 @@ const attempt = <A>(run: () => A): { ok: true; value: A } | { ok: false; error: 
   } catch (error) {
     return { ok: false, error }
   }
-}
-
-/** A host call as the program wrote it: `tools.x.y`, `search`, or an extension function's path. */
-const callPath = (call: HostCall): string => {
-  const request = call.request
-  if (request.kind === "tool") return toolExpression(request.path.flatMap((segment) => segment.split(".")).join("."))
-  return request.kind === "search" ? "search" : request.call.label
 }
 
 export const parseProgram = (

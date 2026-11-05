@@ -273,8 +273,7 @@ describe("suspend", () => {
       ),
     )
     await jobs.started()
-    await slow.called()
-    await Bun.sleep(1)
+    while (slow.calls.length < 2) await Bun.sleep(1)
     expect((await blocked(run)).running).toEqual([
       { key: "n:1", path: "tools.slow" },
       { key: "n:2", path: "tools.slow" },
@@ -500,6 +499,8 @@ describe("ctx.suspend", () => {
       ),
     )
     await slow.called()
+    // The program may reach the durable call only later: answer once it was refused.
+    while (!ask.log.includes("refused w:1")) await Bun.sleep(1)
     slow.calls[0]!.answer(2)
     expect(await Effect.runPromise(run.result)).toMatchObject({
       ok: true,
@@ -536,6 +537,131 @@ describe("ctx.suspend", () => {
     expect(
       await Effect.runPromise(start(CodeMode.make({ tools: { tool } }).execute(`return await tools.tool({})`)).result),
     ).toMatchObject({ ok: true, value: "SuspendError: Only a durable tool can suspend its run." })
+  })
+})
+
+describe("extension snapshot hooks", () => {
+  type Saved = {
+    readonly url: string
+    readonly headers: ReadonlyArray<readonly [string, string]>
+    readonly body: Uint8Array
+  }
+  const data = Symbol("data")
+
+  /** A `get` global whose responses its `snapshot` hooks save as plain data, as core's `fetch` does. */
+  const web = (snapshot: Partial<Extension.Snapshot> = {}) => {
+    const counts = { encode: 0, decode: 0 }
+    const response = (saved: Saved) => ({
+      [data]: saved,
+      url: saved.url,
+      text: async () => new TextDecoder().decode(saved.body),
+      bytes: async () => saved.body,
+      headers: { get: (name: string) => saved.headers.find(([key]) => key === name)?.[1] ?? null },
+    })
+    const extension = Extension.make({
+      name: "web",
+      globals: {
+        get: async (url: string) =>
+          response({ url, headers: [["x-id", "7"]], body: new TextEncoder().encode(`hello ${url}`) }),
+      },
+      snapshot: {
+        encode: (value) => (counts.encode++, (value as { [data]: Saved })[data]),
+        decode: (saved) => (counts.decode++, response(saved as Saved)),
+        ...snapshot,
+      },
+    })
+    return { extension, counts }
+  }
+
+  const code = `
+    const res = await get("https://a.test/")
+    const text = res.text
+    const header = res.headers.get
+    await tools.job({ value: 1 })
+    return [await text(), header("x-id"), res.headers.get("x-id"), [...(await res.bytes())].length, res.url]`
+
+  const suspendWith = async (extension: Extension.Extension) => {
+    const jobs = durableJobs()
+    const run = start(
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [extension] }).execute(code, undefined, { runId: "h" }),
+    )
+    await jobs.started()
+    await Bun.sleep(1)
+    return { jobs, run }
+  }
+
+  test("functions inside a returned value survive a suspend, saved once through the extension's hooks", async () => {
+    const { extension, counts } = web()
+    const { jobs, run } = await suspendWith(extension)
+    // The round-trip test mode saves and restores the run all along; count this suspend's calls alone.
+    const encoded = counts.encode
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    // Two functions taken from one response, one of them nested, and the response itself: one saved value.
+    expect(suspended.state.records.filter((record) => record.t === "HostValue")).toHaveLength(1)
+    expect(counts.encode - encoded).toBe(1)
+
+    const resumed = web()
+    const execution = start(
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [resumed.extension] }).resume(
+        CodeMode.toBytes(suspended.state),
+        { "h:1": { ok: true, value: { value: 1 } } },
+      ),
+    )
+    // Restoring decoded the response once; the program hasn't run on yet.
+    expect(resumed.counts).toEqual({ encode: 0, decode: 1 })
+    const outcome = await Effect.runPromise(execution.result)
+    expect(outcome).toEqual({
+      ok: true,
+      value: ["hello https://a.test/", "7", "7", 21, "https://a.test/"],
+      toolCalls: [{ name: "job" }],
+    })
+  })
+
+  test("a suspend fails, and the run goes on, when encode throws or gives anything but plain data", async () => {
+    const cases: ReadonlyArray<readonly [Partial<Extension.Snapshot>, string]> = [
+      [
+        { encode: () => ({ when: new Date(0) }) },
+        "The run's state couldn't be saved: The extension \"web\" saved a value it returned as data holding a Date; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+      ],
+      [
+        { encode: () => ({ run: () => 1 }) },
+        "The run's state couldn't be saved: The extension \"web\" saved a value it returned as data holding a function; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+      ],
+      [
+        {
+          encode: () => {
+            throw new Error("no")
+          },
+        },
+        "The run's state couldn't be saved: The extension \"web\" couldn't save a value it returned: no",
+      ],
+    ]
+    for (const [snapshot, message] of cases) {
+      const { jobs, run } = await suspendWith(web(snapshot).extension)
+      const error = await blocked(run)
+      expect(error.message).toBe(message)
+      expect(error.running).toEqual([])
+      jobs.finish("h:1", 1)
+      expect(await Effect.runPromise(run.result)).toMatchObject({
+        ok: true,
+        value: ["hello https://a.test/", "7", "7", 21, "https://a.test/"],
+      })
+    }
+  })
+
+  test("a state that holds a hooked value is refused without that extension or without its hooks", async () => {
+    const { extension } = web()
+    const { jobs, run } = await suspendWith(extension)
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    const outcomes = { "h:1": { ok: true, value: { value: 1 } } } as const
+    const unhooked = Extension.make({ name: "web", globals: extension.globals })
+    const other = Extension.make({ name: "other", globals: extension.globals, snapshot: extension.snapshot })
+    for (const extensions of [[], [unhooked], [other]]) {
+      expect(
+        (await refusal(CodeMode.make({ tools: { job: jobs.tool }, extensions }).resume(suspended.state, outcomes)))
+          .message,
+      ).toBe("This state was saved by a runtime with other host globals (extensions); resume it with the same ones.")
+    }
   })
 })
 

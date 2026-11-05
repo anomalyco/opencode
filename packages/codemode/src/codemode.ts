@@ -241,7 +241,7 @@ export const make = <
     limits,
     hooks: options.hooks ?? {},
     globals: extensions.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, extensions),
-    lossy: extensions.length > 0,
+    lossy: extensions.some((extension) => extension.snapshot === undefined),
     suspend: options.suspend,
   }
   const data = (bindings: Readonly<Record<string, DataValue>> | undefined) =>

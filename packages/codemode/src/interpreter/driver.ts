@@ -7,6 +7,8 @@ import { toolError } from "../tool-error.js"
 import type { SuspendError } from "../suspend-error.js"
 import { locate } from "./errors.js"
 import { PendingThrow } from "./model.js"
+import { toolExpression } from "../tool-runtime.js"
+import { ExtensionCall } from "./extensions.js"
 import { abrupt, type Completion, Interruption, normal } from "./signals.js"
 
 /** What `Driver.run` returns once the run was suspended: its state is saved, and the machine stopped. */
@@ -101,14 +103,36 @@ export class Driver<R> {
   }
 
   /**
-   * The host calls that block a suspend now: every call in progress but a durable tool's started work, which has its
-   * handle, and a tool call queued but not started, which starts on resume. A queued extension call blocks too: it holds
-   * live host values.
+   * The host calls that block a suspend now, but `asking`, a durable call suspending the run itself: every call in
+   * progress but a durable tool's started work, which has its handle, and a tool call queued but not started, which
+   * starts on resume. A queued extension call blocks too, and so does a synchronous one the program is in the middle
+   * of, started or not: they hold live host values. One not started yet has no key.
    */
-  blocking(): Array<HostCall> {
-    return this.machine
+  blocking(asking?: HostCall): Array<{ readonly key: string; readonly path: string }> {
+    const machine = this.machine
+    const calls = machine
       .calls()
-      .filter((call) => call.status !== "started" && (call.status !== "queued" || call.request.kind === "extension"))
+      .filter(
+        (call) =>
+          call !== asking &&
+          call.status !== "started" &&
+          (call.status !== "queued" || call.request.kind === "extension"),
+      )
+    const running = calls.map((call) => ({ key: call.key, path: callPath(call) }))
+    // Synchronous extension calls don't nest, so the program is in at most one.
+    const frame = machine.root.stack.find((item) => item.kind === ExtensionCall)
+    if (frame !== undefined && !calls.some((call) => call.blocking && call.request.kind === "extension")) {
+      running.push({ key: machine.continuing?.key ?? "", path: frame.slots[2] as string })
+    }
+    return running
+  }
+
+  /** Whether the run holds live host values: an extension call in progress. */
+  get holdsHostValues(): boolean {
+    return (
+      this.machine.calls().some((call) => call.request.kind === "extension") ||
+      this.machine.root.stack.some((frame) => frame.kind === ExtensionCall)
+    )
   }
 
   /**
@@ -264,4 +288,11 @@ export class Driver<R> {
 const copy = (value: Json): Json | undefined => {
   const text = JSON.stringify(value)
   return text === undefined ? undefined : JSON.parse(text)
+}
+
+/** A host call as the program wrote it: `tools.x.y`, `search`, or an extension function's path. */
+export const callPath = (call: HostCall): string => {
+  const request = call.request
+  if (request.kind === "tool") return toolExpression(request.path.flatMap((segment) => segment.split(".")).join("."))
+  return request.kind === "search" ? "search" : request.call.label
 }

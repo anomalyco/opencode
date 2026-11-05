@@ -68,6 +68,8 @@ export class Machine {
   private input: Completion | undefined
   /** A slice is due once the queued host calls are handed over. */
   private sliced = false
+  /** The blocking call whose outcome `input` holds, until the job that made it continues with it. */
+  continuing: HostCall | undefined
 
   constructor(readonly ctx: Interpreter<unknown>) {
     this.root = new MachineTask(this, new ScopeStack([]))
@@ -96,6 +98,7 @@ export class Machine {
       const input = this.input
       if (input !== undefined) {
         this.input = undefined
+        this.continuing = undefined
         this.continue(input)
         continue
       }
@@ -126,9 +129,18 @@ export class Machine {
     const call = this.running.get(id)
     if (call === undefined) return
     this.running.delete(id)
+    // Its outcome is all that is left to deliver: the host function, its arguments, and what it returned are dropped,
+    // so a completed call is data. The request is shared with the signal that asked for it.
+    const request = call.request
+    if (request.kind === "extension") {
+      request.call.invocation = undefined
+      request.call.host = undefined
+      request.call.args = []
+    }
     if (call.blocking) {
       call.status = "completed"
       this.input = completion
+      this.continuing = call
       return
     }
     this.inbox.push({ call, completion })
@@ -190,7 +202,16 @@ export class Machine {
     },
   ): HostCall {
     const id = this.nextHostID++
-    const record = new HostCall(id, `${this.runId}:${id}`, request, call.label, false, call.result, call.resolving, call.site)
+    const record = new HostCall(
+      id,
+      `${this.runId}:${id}`,
+      request,
+      call.label,
+      false,
+      call.result,
+      call.resolving,
+      call.site,
+    )
     this.queued.push(record)
     return record
   }

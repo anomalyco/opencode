@@ -31,6 +31,18 @@ import { describeValue, isOpaque } from "./references.js"
 import { Host, Push } from "./signals.js"
 import { nativeKind } from "../machine/native-kind.js"
 import type { ExtensionRequest } from "../machine/scheduler.js"
+import { type HostOrigin, SnapshotError } from "../snapshot/codec.js"
+
+/**
+ * Where a value crossing from the host is: under an extension's global object (`root` undefined), whose functions are
+ * entry points that fire the hooks, or inside a value a function of an extension with `snapshot` hooks returned, at
+ * `path` (undefined inside a Map or a Set, where no path leads).
+ */
+type Within = {
+  readonly extension: Extension
+  readonly root: object | undefined
+  readonly path: ReadonlyArray<string | number> | undefined
+}
 
 /**
  * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and built-in
@@ -42,6 +54,9 @@ export const extensionGlobals = <R>(
   extensions: ReadonlyArray<Extension>,
 ): ReadonlyArray<readonly [string, Value]> => {
   const builtins = ctx.builtins
+  const byName = new Map(extensions.map((extension) => [extension.name, extension]))
+  // The program functions wrapping functions inside values a hooked extension returned, by where they came from.
+  const origins = new WeakMap<object, HostOrigin>()
 
   const toHost = (value: Value, label: string, depth = 0, seen = new Set<object>()): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
@@ -77,14 +92,23 @@ export const extensionGlobals = <R>(
     return copied
   }
 
-  // `extension` is set while converting a global object, whose functions are entry points like globals and fire the hooks.
-  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), extension?: string): Value => {
+  // `within` says where the value is, so a function inside it fires the hooks, or can be saved; see `Within`.
+  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), within?: Within): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
-    if (typeof value === "function")
-      return wrap(value, label, extension === undefined ? undefined : (args) => ({ extension, name: label, args }))
+    if (typeof value === "function") return wrap(value, label, within)
     if (value !== null && typeof value === "object") {
-      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen, extension)
+      const next = (item: unknown, path: string, key?: string | number) =>
+        fromHost(
+          item,
+          path,
+          depth + 1,
+          seen,
+          within && {
+            ...within,
+            path: key === undefined || within.path === undefined ? undefined : [...within.path, key],
+          },
+        )
       // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
       // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
       if (value instanceof Date) return new DateObj(builtins.Date, Date.prototype.getTime.call(value))
@@ -107,7 +131,7 @@ export const extensionGlobals = <R>(
           // Read once: a getter could pass the check and then hand back a function.
           const field = fields[key]
           if (typeof field === "function") continue
-          const item = crossing(() => next(field, `${label}.${key}`))
+          const item = crossing(() => next(field, `${label}.${key}`, key))
           if (item === left) continue
           define(copied, key, item, key === "cause" ? hidden : undefined)
         }
@@ -139,7 +163,7 @@ export const extensionGlobals = <R>(
         // Filled in order so the copy stays a dense array; holes stay holes, as a copy made with `map` would leave them.
         const items: Array<Value> = []
         for (let index = 0; index < length; index += 1) {
-          if (index in value) items[index] = next(value[index], `${label}[${index}]`)
+          if (index in value) items[index] = next(value[index], `${label}[${index}]`, index)
         }
         items.length = length
         seen.delete(value)
@@ -148,7 +172,7 @@ export const extensionGlobals = <R>(
       const prototype = Object.getPrototypeOf(value)
       if (prototype === Object.prototype || prototype === null) {
         const copied = new Obj(builtins.Object)
-        for (const [key, item] of Object.entries(value)) define(copied, key, next(item, `${label}.${key}`))
+        for (const [key, item] of Object.entries(value)) define(copied, key, next(item, `${label}.${key}`, key))
         seen.delete(value)
         return copied
       }
@@ -159,26 +183,77 @@ export const extensionGlobals = <R>(
   // A host function as a program function. Arguments cross in; for a global or a global object's function, the
   // `extension.before` hook runs before the host function is called, so a call it denies never reaches the host. The
   // host's result, or what it threw, crosses out so the program catches a copy, and `extension.after` sees how the
-  // call ended. Functions inside results are part of a value's API and skip the hooks.
-  const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) => {
+  // call ended. Functions inside results are part of a value's API and skip the hooks; one inside a value an extension
+  // with `snapshot` hooks returned is known by where it came from, so a suspended run can save it.
+  const wrap = (value: Function, label: string, within: Within | undefined) => {
     // The host function's own `name` and `length` can be anything, even getters: each is read once, and only text
     // and a count cross.
     const name: unknown = value.name
     const length: unknown = value.length
-    return native(builtins, {
+    const extension = within?.extension.name
+    const root = within?.root
+    const wrapped = native(builtins, {
       runtime: "extension",
       name: typeof name === "string" ? name : "",
       length: typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
       call: (_, values, site) => {
         const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-        const invocation = describe?.(args)
+        const invocation =
+          within !== undefined && root === undefined ? { extension: extension!, name: label, args } : undefined
         // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
         if (isAsync(value)) {
-          return pending(ctx, { stage: "run", label, invocation, host: value, args, threw: false }, site)
+          return pending(ctx, { stage: "run", label, extension, invocation, host: value, args, threw: false }, site)
         }
-        return new Push(ExtensionCall, [value, args, label, invocation])
+        return new Push(ExtensionCall, [value, args, label, invocation, extension])
       },
     })
+    if (root !== undefined && within!.path !== undefined) {
+      origins.set(wrapped, { extension: extension!, root, path: within!.path, label })
+    }
+    return wrapped
+  }
+
+  ctx.hosts = {
+    extensions: extensions.map((extension) => ({ name: extension.name, hooked: extension.snapshot !== undefined })),
+    origin: (value) => origins.get(value),
+    encode: (name, root) => hostStep(name, "save", () => hooks(name).encode(root)),
+    decode: (name, data) => {
+      const root = hostStep(name, "restore", () => hooks(name).decode(data))
+      if ((typeof root !== "object" && typeof root !== "function") || root === null) {
+        throw new SnapshotError(
+          `The extension "${name}" restored a value it returned as ${typeof root}, not an object.`,
+        )
+      }
+      return root
+    },
+    rewrap: (target, origin) => {
+      const host = origin.path.reduce<unknown>(
+        (at, key) =>
+          (typeof at === "object" && at !== null) || typeof at === "function"
+            ? (at as { readonly [key: string | number]: unknown })[key]
+            : undefined,
+        origin.root,
+      )
+      if (typeof host !== "function") {
+        throw new SnapshotError(
+          `The extension "${origin.extension}" restored a value with no function at ${origin.label}, so this state can't resume.`,
+        )
+      }
+      const made = wrap(host, origin.label, {
+        extension: byName.get(origin.extension)!,
+        root: origin.root,
+        path: origin.path,
+      })
+      // The restored function keeps its own properties; only what calling it does comes from the new one.
+      Object.assign(target, { tag: made.tag, call: made.call, construct: made.construct, callback: made.callback })
+      origins.set(target, origin)
+    },
+  }
+
+  const hooks = (name: string) => {
+    const snapshot = byName.get(name)?.snapshot
+    if (snapshot === undefined) throw new SnapshotError(`The extension "${name}" has no snapshot hooks.`)
+    return snapshot
   }
 
   // The Effect each step of an extension call runs as, with the program's services in its requirements.
@@ -190,9 +265,24 @@ export const extensionGlobals = <R>(
     const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
     if (request.stage === "before") return before ?? Effect.void
     const after = call && hooks["extension.after"]
+    const extension = request.extension === undefined ? undefined : byName.get(request.extension)
+    // What a function returns is a value of its extension's, which its `snapshot` hooks save, when it has them.
     const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
       (after ? hooked(call, undefined, after, effect) : effect).pipe(
-        Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
+        Effect.mapBoth({
+          onFailure: cross,
+          onSuccess: (result) =>
+            fromHost(
+              result,
+              label,
+              0,
+              new Set(),
+              extension?.snapshot !== undefined &&
+                ((typeof result === "object" && result !== null) || typeof result === "function")
+                ? { extension, root: result, path: [] }
+                : undefined,
+            ),
+        }),
       )
     if (request.stage === "settle") return settle(outcome<R>(request.host, request.threw))
     return Effect.andThen(
@@ -204,33 +294,30 @@ export const extensionGlobals = <R>(
   return extensions.flatMap((extension) =>
     Object.entries(extension.globals).map(
       ([name, value]) =>
-        [
-          name,
-          typeof value === "function"
-            ? wrap(value, name, (args) => ({ extension: extension.name, name, args }))
-            : fromHost(value, name, 0, new Set(), extension.name),
-        ] as const,
+        [name, fromHost(value, name, 0, new Set(), { extension, root: undefined, path: undefined })] as const,
     ),
   )
 }
 
-// Slots: the host function, its arguments, its label, and what the hooks see. Its `extension.before` hook runs first
+// Slots: the host function, its arguments, its label, what the hooks see, and its extension's name. Its
+// `extension.before` hook runs first
 // (blocking, as the call is synchronous); then the host function is called. What it returns settles now, blocking,
 // unless it is an Effect or a Promise, which the program holds a promise for.
-const ExtensionCall = nativeKind("extension call", (task, frame, input) => {
+export const ExtensionCall = nativeKind("extension call", (task, frame, input) => {
   const slots = frame.slots
   const label = slots[2] as string
   const invocation = slots[3] as ExtensionInvocation | undefined
+  const extension = slots[4] as string | undefined
   const args = slots[1] as ReadonlyArray<unknown>
   if (frame.phase === 2) return input as Value
   if (slots[0] instanceof Lost) throw lostError(`The function ${label}`)
   if (frame.phase === 0 && invocation !== undefined && task.ctx.tools.hooks["extension.before"] !== undefined) {
     frame.phase = 1
-    const call = { stage: "before", label, invocation, host: undefined, args, threw: false } as const
+    const call = { stage: "before", label, extension, invocation, host: undefined, args, threw: false } as const
     return task.request(new Host({ kind: "extension", call }), frame.node)
   }
   const [host, threw] = callHost(slots[0] as Function, args)
-  const call = { stage: "settle", label, invocation, host, args, threw } as const
+  const call = { stage: "settle", label, extension, invocation, host, args, threw } as const
   if (!threw && (Effect.isEffect(host) || host instanceof Promise)) return pending(task.ctx, call, frame.node)
   frame.phase = 2
   return task.request(new Host({ kind: "extension", call }), frame.node)
@@ -241,6 +328,18 @@ const pending = <R>(ctx: Interpreter<R>, call: ExtensionRequest, site: AstNode |
   const resolving = ctx.machine.resolving(ctx.machine.newPromise(), site)
   ctx.machine.host({ kind: "extension", call }, { label: call.label, result: "value", resolving, site })
   return resolving.promise
+}
+
+// Runs an extension's `snapshot` hook; what goes wrong is the state's problem, said as such.
+const hostStep = <A>(extension: string, what: "save" | "restore", step: () => A): A => {
+  try {
+    return step()
+  } catch (error) {
+    if (error instanceof SnapshotError) throw error
+    throw new SnapshotError(
+      `The extension "${extension}" couldn't ${what} a value it returned: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
 }
 
 /** Calls a host function: what it returned, or what it threw. */
