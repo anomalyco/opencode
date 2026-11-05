@@ -1356,9 +1356,7 @@ test("providers: a rejected API key shows the server error and can be sent again
   expect(keys).toEqual([expect.objectContaining({ key: "sk-bad" })])
 })
 
-test("providers: Back during a pending API key request does not report the provider as connected", async ({
-  page,
-}) => {
+test("providers: Back during a pending API key request does not report the provider as connected", async ({ page }) => {
   const keys: string[] = []
 
   const { settings } = await open(page, {
@@ -1577,6 +1575,117 @@ test("providers: adding an account starts a lone method once", async ({ page, co
   await popup
   await expect.poll(() => attempts).toEqual(["github-copilot"])
   expect(attempts).toEqual(["github-copilot"])
+})
+
+test("providers: Back from a pending sign-in cancels it and lets a backdrop click close the list", async ({
+  page,
+  context,
+}) => {
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const cancelled: string[] = []
+
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "github-copilot",
+        name: "GitHub Copilot",
+        methods: [{ id: "device", type: "oauth", label: "GitHub" }],
+        connections: [],
+      },
+    ],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GH12-3456" }),
+    onIntegrationOAuthCancel: (attemptID) => cancelled.push(attemptID),
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const popup = page.waitForEvent("popup")
+  await dialog.locator('[data-provider-id="github-copilot"]').click()
+  await popup
+  await expect(dialog.getByText("Waiting for authorization…", { exact: true })).toBeVisible()
+
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(dialog.locator('[data-provider-id="github-copilot"]')).toBeVisible()
+  await expect.poll(() => cancelled).toEqual(["con_mock_1"])
+
+  // The page corner is outside the dialog, so the click lands on the backdrop.
+  await page.mouse.click(8, 8)
+  await expect(dialog).toHaveCount(0)
+})
+
+test("providers: Back from a Claude Agent check started by Add account returns to its accounts", async ({ page }) => {
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "claude-agent",
+        name: "Claude Agent",
+        methods: [{ id: "claude-login", type: "external", label: "Claude Code login (claude auth login)" }],
+        connections: [{ type: "credential", id: "cred_claude", label: "Claude Code", method: "external" }],
+      },
+    ],
+  })
+
+  const held = await holdRoute(page, /\/api\/integration\/claude-agent\/connect\/external(\?|$)/, { method: "POST" })
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.locator('[data-provider-id="claude-agent"]').click()
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Check again", exact: true }).click()
+  await held.arrived
+  await expect(dialog.getByText("Checking Claude Code…", { exact: true })).toBeVisible()
+
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(dialog.getByRole("radio", { name: "Claude Code", exact: true })).toBeVisible()
+  held.release()
+})
+
+test("providers: Back from a Console connection without models returns to its sign-in methods", async ({
+  page,
+  context,
+}) => {
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const state = { authorized: false }
+
+  const { settings } = await open(page, {
+    // The workspace has loaded, but it offers no models.
+    provider: () =>
+      state.authorized
+        ? {
+            all: [
+              { id: "opencode", integrationID: "opencode", name: "Anomaly / OpenCode", models: {} },
+              { id: "console-google", integrationID: "opencode", name: "Anomaly / Google", models: {} },
+            ],
+            connected: ["opencode", "console-google"],
+            default: {},
+          }
+        : NO_PROVIDER,
+    integrations: consoleIntegrations,
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=ABCD-EFGH" }),
+    onIntegrationOAuthStatus: () => {
+      state.authorized = true
+
+      return "complete"
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
+  const popup = page.waitForEvent("popup")
+  await dialog.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
+  await popup
+  await expect(page.getByRole("dialog").getByText("OpenCode connected", { exact: true })).toBeVisible()
+
+  await page.getByRole("dialog").getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
+    "OpenCode Console account",
+    "API key (service account)",
+  ])
 })
 
 test("providers: the account options rename and remove the active account", async ({ page }) => {

@@ -119,6 +119,8 @@ export interface MockServerConfig {
   onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
+  // Runs on DELETE .../connect/oauth/:attemptID, which closes an OAuth attempt the dialog left.
+  onIntegrationOAuthCancel?: (attemptID: string) => void
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -825,6 +827,9 @@ function mockHandlers(
               },
             })
           }),
+        integrationOAuthCancel: (ctx) =>
+          Effect.sync(() => config.onIntegrationOAuthCancel?.(ctx.params.attemptID)).pipe(Effect.andThen(noContent)),
+        integrationConnectExternal: () => noContent,
         credentialActivate: (ctx) =>
           Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialUpdate: (ctx) =>
