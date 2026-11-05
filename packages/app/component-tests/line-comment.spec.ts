@@ -44,6 +44,33 @@ story("autosizes compact comments without native field-sizing", async ({ mount, 
   await expect.poll(() => textarea.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
 })
 
+story("Enter while a mention search runs waits for its results instead of sending", async ({ mount }) => {
+  const component = await mount("ui-line-comment--editor-with-mentions")
+  const textarea = component.getByRole("textbox")
+  const items = component.locator('[data-slot="line-comment-v2-mention-item"]')
+
+  await textarea.fill("Check @src/a")
+  await textarea.press("Enter")
+  await expect(textarea).toHaveValue("Check @src/a")
+  await expect(component.getByRole("status", { name: "Editor result" })).toHaveText("")
+
+  // From the keyboard, so the pointer does not rest over the list that opens and highlight a row.
+  await component.getByRole("button", { name: "Finish search", exact: true }).press("Enter")
+  await expect(items).toHaveText(["src/app.ts", "src/api.ts"])
+  await textarea.press("Enter")
+  await expect(textarea).toHaveValue("Check @src/app.ts ")
+  await expect(items).toHaveCount(0)
+})
+
+story("Escape after a bare @ cancels the comment", async ({ mount }) => {
+  const component = await mount("ui-line-comment--editor-with-mentions")
+  const textarea = component.getByRole("textbox")
+
+  await textarea.fill("see @")
+  await textarea.press("Escape")
+  await expect(component.getByRole("status", { name: "Editor result" })).toHaveText("Cancelled")
+})
+
 story("completes compact optional comments with or without text", async ({ mount }) => {
   const component = await mount("ui-line-comment--editor", { args: { variant: "compact", allowEmpty: true } })
   const action = component.getByRole("button", { name: "Comment", exact: true })

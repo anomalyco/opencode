@@ -118,3 +118,38 @@ export const EditorFilled = {
     )
   },
 }
+
+/** File search answers only when "Finish search" is pressed, so the loading state can be explored. */
+export const EditorWithMentions = {
+  render: () => {
+    const [value, setValue] = createSignal("")
+    const [result, setResult] = createSignal("")
+    const pending: (() => void)[] = []
+    const files = ["src/app.ts", "src/api.ts", "src/server.ts"]
+
+    return (
+      <div style={{ width: "400px" }}>
+        <LineCommentEditor
+          value={value()}
+          onInput={setValue}
+          onCancel={() => {
+            setValue("")
+            setResult("Cancelled")
+          }}
+          onSubmit={(comment) => {
+            setValue("")
+            setResult(`Submitted: ${comment}`)
+          }}
+          mention={{
+            items: (query) =>
+              new Promise((resolve) => pending.push(() => resolve(files.filter((file) => file.includes(query))))),
+          }}
+        />
+        <button type="button" onClick={() => pending.splice(0).forEach((finish) => finish())}>
+          Finish search
+        </button>
+        <output aria-label="Editor result">{result()}</output>
+      </div>
+    )
+  },
+}
