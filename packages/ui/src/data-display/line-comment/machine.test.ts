@@ -57,20 +57,48 @@ function run(state: LineCommentEditorState, ...events: LineCommentEditorEvent[])
 const attemptOf = (state: LineCommentEditorState) => (state.status === "disposed" ? -1 : state.attempt)
 
 describe("line comment editor machine", () => {
-  test("Enter and Tab while a mention search runs never send the half-typed comment", () => {
+  test("Enter and Tab wait for a refined search only while the previous list is on screen", () => {
     const settings = config({ value: "Check @src/a" })
-    const loading = run(createLineCommentEditorState(), typed("Check @src/a"))
 
-    expect(loading.state.status).toBe("mention-loading")
-    expect(loading.effects).toEqual([{ type: "mention.load", attempt: 1, query: "src/a" }])
+    const open = run(createLineCommentEditorState(), typed("Check @src"), {
+      type: "mention.loaded",
+      attempt: 1,
+      items: ["server.ts"],
+    })
+
+    const refining = run(open.state, typed("Check @src/a"))
+
+    expect(refining.state.status).toBe("mention-loading")
+    expect(refining.effects).toEqual([{ type: "mention.load", attempt: 2, query: "src/a" }])
 
     for (const name of ["Enter", "Tab"]) {
-      const pressed = transitionLineCommentEditor(loading.state, key(name, settings))
+      const pressed = transitionLineCommentEditor(refining.state, key(name, settings))
 
       expect(pressed.handled).toBe(true)
       expect(pressed.effects).toEqual([])
-      expect(pressed.state).toBe(loading.state)
+      expect(pressed.state).toBe(refining.state)
     }
+  })
+
+  test("with no list on screen, Enter sends at once and Tab leaves the field while a search runs", () => {
+    const settings = config({ value: "mail a@b.com" })
+    const loading = run(createLineCommentEditorState(), typed("mail a@b.com"))
+
+    expect(loading.state.status).toBe("mention-loading")
+
+    const enter = transitionLineCommentEditor(loading.state, key("Enter", settings))
+
+    expect(enter.effects).toEqual([{ type: "submit", mode: "primary", value: "mail a@b.com" }])
+    expect(enter.state.status).toBe("editing")
+    // The search's late answer no longer opens a list.
+    expect(
+      transitionLineCommentEditor(enter.state, { type: "mention.loaded", attempt: 1, items: ["b.ts"] }).state,
+    ).toBe(enter.state)
+
+    const tab = transitionLineCommentEditor(loading.state, key("Tab", settings))
+
+    expect(tab.handled).toBe(false)
+    expect(tab.state).toBe(loading.state)
   })
 
   test("a bare @ or a token with no matches leaves Escape to cancel the comment", () => {

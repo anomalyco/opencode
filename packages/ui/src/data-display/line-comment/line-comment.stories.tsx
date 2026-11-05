@@ -2,6 +2,7 @@
 import { createSignal } from "solid-js"
 import { LineCommentEditor, LineComment, LineCommentOverflowIcon } from "./line-comment"
 import { Menu } from "../../navigation/menu/menu"
+import { Popover } from "../../components/popover"
 
 const docs = `### Overview
 Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, small \`Button\` ghost + contrast actions).
@@ -148,6 +149,30 @@ export const EditorWithMentions = {
         <button type="button" onClick={() => pending.splice(0).forEach((finish) => finish())}>
           Finish search
         </button>
+        <output aria-label="Editor result">{result()}</output>
+      </div>
+    )
+  },
+}
+
+/** An editor inside a popover: Escape in the field cancels the comment, and Escape on its buttons closes the popover. */
+export const EditorInPopover = {
+  render: () => {
+    const [value, setValue] = createSignal("")
+    const [result, setResult] = createSignal("")
+
+    return (
+      <div>
+        <Popover trigger="Open editor" triggerAs="button" portal={false}>
+          <div style={{ width: "360px" }}>
+            <LineCommentEditor
+              value={value()}
+              onInput={setValue}
+              onCancel={() => setResult("Cancelled")}
+              onSubmit={(comment) => setResult(`Submitted: ${comment}`)}
+            />
+          </div>
+        </Popover>
         <output aria-label="Editor result">{result()}</output>
       </div>
     )

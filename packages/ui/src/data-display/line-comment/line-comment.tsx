@@ -335,8 +335,6 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
       data-component="line-comment-v2"
       data-variant="editor"
       data-layout={local.variant ?? "default"}
-      // Escape cancels the mention list or the comment before a dialog or popover around the editor closes.
-      data-owns-escape
       aria-busy={view().submitting || undefined}
       classList={{
         ...local.classList,
@@ -354,6 +352,8 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
                 textareaRef = el
               }}
               data-slot="line-comment-v2-textarea"
+              // Escape here closes the mention list or cancels the comment, not a dialog or popover around the editor.
+              data-owns-escape
               data-scrollable
               aria-label={local.label ?? i18n.t("ui.lineComment.submit")}
               dir="auto"
@@ -429,6 +429,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
             >
               <IconButton
                 data-slot="line-comment-v2-submit"
+                data-owns-escape
                 type="button"
                 size="small"
                 variant={view().compactVariant}

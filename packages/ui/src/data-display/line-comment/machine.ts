@@ -230,8 +230,8 @@ function textareaKey(state: Live, key: LineCommentEditorKey, config: LineComment
 
     if (state.status === "mention-open") return insert(state, state.activeIndex)
 
-    // Enter while a mention search runs would send the half-typed `@query`.
-    if (state.status === "mention-loading") return handled(state)
+    // The previous query's list is on screen while the refined one loads: picking from it would insert a stale path.
+    if (listed) return handled(state)
 
     return key.repeat ? handled(state) : submit(state, config, false)
   }
@@ -239,7 +239,7 @@ function textareaKey(state: Live, key: LineCommentEditorKey, config: LineComment
   if (key.key === "Tab" && !key.alt && !key.ctrl && !key.meta) {
     if (state.status === "mention-open") return insert(state, state.activeIndex)
 
-    if (state.status === "mention-loading") return handled(state)
+    if (listed) return handled(state)
 
     return unchanged(state)
   }
