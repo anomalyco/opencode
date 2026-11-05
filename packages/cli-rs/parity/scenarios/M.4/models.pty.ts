@@ -2,8 +2,7 @@
 // catalog (opencode first, deprecated models left out); a pick names the new model, and the variant cycle steps
 // through its variants. `/settings` lists mini's settings, and right on Verbosity saves the next preset.
 import { definePty } from "../../pty/run"
-import { config, leave } from "./fixture"
-import { catalog } from "./fixture"
+import { catalog, config, leave } from "./fixture"
 import { server } from "../M.2/fixture"
 
 export default definePty({
