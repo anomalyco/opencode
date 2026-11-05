@@ -85,7 +85,9 @@ export type EncodeEnv = {
   /** The anchors: objects the restored runtime already has, filled in place (`Machine`, its root task, ...). */
   readonly anchorOf: (value: object) => string | undefined
   readonly nodeId: (node: AstNode) => readonly [source: string, index: number] | undefined
-  readonly astArray: (array: ReadonlyArray<unknown>) => readonly [source: string, index: number, key: string] | undefined
+  readonly astArray: (
+    array: ReadonlyArray<unknown>,
+  ) => readonly [source: string, index: number, key: string] | undefined
   /** Values with no data form are reported here; strict encoding throws on the first instead. */
   readonly lost: Array<string>
   readonly strict: boolean
@@ -384,7 +386,9 @@ class Encoder {
     for (const [id, params] of this.params) {
       const owner = this.owners.get(params)
       this.records[id] =
-        owner === undefined ? { t: "URLSearchParams", s: params.toString() } : { t: "URLSearchParams", o: this.ref(owner) }
+        owner === undefined
+          ? { t: "URLSearchParams", s: params.toString() }
+          : { t: "URLSearchParams", o: this.ref(owner) }
     }
   }
 
@@ -463,7 +467,7 @@ class Encoder {
     if (object instanceof TextDecoder) return { t: "TextDecoder", f: object.fatal, i: object.ignoreBOM }
     const what = typeof object === "function" ? "a host function" : `a host ${object.constructor?.name ?? "object"}`
     this.lose(what)
-    return { t: "Lost", d: what }
+    return { t: "Lost", f: [what] }
   }
 
   private lose(what: string): void {
@@ -484,7 +488,8 @@ class Encoder {
     const fields = only ?? spec.fields
     if (only === undefined) {
       for (const key of Object.keys(object)) {
-        if (fields.includes(key) || spec.skip?.includes(key) || (spec.constants !== undefined && key in spec.constants)) continue
+        if (fields.includes(key) || spec.skip?.includes(key) || (spec.constants !== undefined && key in spec.constants))
+          continue
         if (spec.obj && (objFields.includes(key) || key === "tag")) continue
         throw new SnapshotError(`Codec gap: ${spec.name}.${key} is not saved.`)
       }
@@ -495,7 +500,10 @@ class Encoder {
     for (const [key, slot] of object.props) {
       props.push(typeof key === "symbol" ? this.value(key) : key)
       if ("value" in slot) {
-        props.push(this.value(slot.value), (slot.writable ? 1 : 0) | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0))
+        props.push(
+          this.value(slot.value),
+          (slot.writable ? 1 : 0) | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0),
+        )
       } else props.push(null, 8 | (slot.enumerable ? 2 : 0) | (slot.configurable ? 4 : 0))
     }
     return { f: values, p: object.proto === null ? null : this.value(object.proto), x: object.extensible, o: props }
@@ -504,8 +512,12 @@ class Encoder {
   private error(error: Error): Record {
     const name = errorNames.get(error.constructor)
     if (name === undefined) {
+      // A failure only ever reaches the program when it is thrown, so it is saved as what throwing a lost value does.
       this.lose(`a host ${error.constructor.name}`)
-      return { t: "Lost", d: `a host ${error.constructor.name}` }
+      return {
+        t: "PendingThrow",
+        ...this.fields(lostError(`An error of class ${error.constructor.name}`), byName.get("PendingThrow")!),
+      }
     }
     const fields: Array<Encoded> = []
     for (const key of Object.keys(error)) {
@@ -535,12 +547,16 @@ const invalid = (message: string): never => {
 }
 
 const isRecord = (value: unknown): value is { readonly t: string; readonly [field: string]: unknown } =>
-  typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as { t?: unknown }).t === "string"
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  typeof (value as { t?: unknown }).t === "string"
 
 const list = (value: unknown, what: string): ReadonlyArray<unknown> =>
   Array.isArray(value) ? value : invalid(`${what} is not a list.`)
 
-const text = (value: unknown, what: string): string => (typeof value === "string" ? value : invalid(`${what} is not text.`))
+const text = (value: unknown, what: string): string =>
+  typeof value === "string" ? value : invalid(`${what} is not text.`)
 
 const count = (value: unknown, what: string): number =>
   Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : invalid(`${what} is not a count.`)
@@ -604,7 +620,12 @@ class Decoder {
         const message = text(record.m, "an error message")
         if (ctor === ToolError) return toolError(message)
         const made = Object.create(ctor.prototype) as Error
-        Object.defineProperty(made, "message", { value: message, writable: true, configurable: true, enumerable: false })
+        Object.defineProperty(made, "message", {
+          value: message,
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        })
         return made
       }
       case "URL":

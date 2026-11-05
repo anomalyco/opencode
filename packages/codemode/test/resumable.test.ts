@@ -4,6 +4,9 @@ import { Interpreter } from "../src/interpreter/interpreter.js"
 import { createBuiltins } from "../src/interpreter/intrinsics.js"
 import { getOwn, Native, nativeRule, Obj } from "../src/interpreter/objects.js"
 import { CodeMode } from "../src/index.js"
+import { decode, encode } from "../src/snapshot/codec.js"
+import { Lost, PendingThrow } from "../src/interpreter/model.js"
+import { normalizeError } from "../src/interpreter/errors.js"
 import { Effect } from "effect"
 import { ToolRuntime } from "../src/tool-runtime.js"
 import { nodeId, sourceOf } from "../src/interpreter/source.js"
@@ -297,5 +300,54 @@ describe("prelude", () => {
       ok: false,
       error: { location: { line: 2, column: 8 } },
     })
+  })
+})
+
+describe("lost values", () => {
+  const encodeEnv = (lost: Array<string>) => ({
+    nameOf: () => undefined,
+    unchanged: () => false,
+    anchorOf: () => undefined,
+    nodeId: () => undefined,
+    astArray: () => undefined,
+    lost,
+    strict: false,
+  })
+  const decodeEnv = {
+    named: () => undefined,
+    anchor: () => undefined,
+    node: () => undefined,
+    astArray: () => undefined,
+    interruption: () => {
+      throw new Error("no interruption is saved")
+    },
+  }
+
+  test("a host function, a host object, and an unknown host error decode to what using a lost value throws", () => {
+    class Handle {}
+    class SocketError extends Error {}
+    const lost: Array<string> = []
+    const saved = encode(
+      [{ data: [1, "two", { three: 3 }], fn: () => 1, host: new Handle(), error: new SocketError("boom") }],
+      encodeEnv(lost),
+    )
+    expect(lost).toEqual(["a host function", "a host Handle", "a host SocketError"])
+    const [root] = decode(JSON.parse(JSON.stringify(saved)), decodeEnv) as [Record<string, unknown>]
+    expect(root.data).toEqual([1, "two", { three: 3 }])
+    expect(root.fn).toBeInstanceOf(Lost)
+    expect((root.fn as Lost).description).toBe("a host function")
+    expect(root.host).toBeInstanceOf(Lost)
+    expect((root.host as Lost).description).toBe("a host Handle")
+    expect(root.error).toBeInstanceOf(PendingThrow)
+    expect(normalizeError(root.error)).toEqual({
+      kind: "ExecutionFailure",
+      message:
+        "TypeError: An error of class SocketError came from the host and was lost when the run was suspended; get it again after resuming.",
+    })
+    // A restored placeholder saves and restores again the same way.
+    const again = decode(JSON.parse(JSON.stringify(encode([root], encodeEnv([])))), decodeEnv) as [
+      Record<string, unknown>,
+    ]
+    expect((again[0].fn as Lost).description).toBe("a host function")
   })
 })
