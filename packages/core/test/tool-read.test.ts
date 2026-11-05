@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
+import { Ripgrep } from "@opencode/core/ripgrep"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
@@ -37,7 +38,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
-    FileSystem.node,
+    Ripgrep.node,
     Location.node,
   ],
 })
@@ -81,8 +82,8 @@ const reader = Layer.succeed(
   }),
 )
 let indexedFiles: string[] = []
-const fileIndex = Layer.mock(FileSystem.Service, {
-  find: () =>
+const ripgrep = Layer.mock(Ripgrep.Service, {
+  glob: () =>
     Effect.succeed(indexedFiles.map((file) => FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" }))),
 })
 let allow = true
@@ -104,12 +105,14 @@ const permission = permissionLayer({
             ),
       ),
     ),
+  allows: (input) => Effect.succeed(allow && !input.resources.includes(deniedResource ?? "")),
 })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node)
+const vcs = { type: "git", store: AbsolutePath.make(path.join(process.cwd(), ".git")) }
 const locationLayer = Layer.succeed(
   Location.Service,
-  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
+  Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) }, { vcs })),
 )
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
@@ -118,7 +121,7 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
-      FileSystem.node.replace(fileIndex),
+      Ripgrep.node.replace(ripgrep),
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
@@ -652,25 +655,14 @@ describe("ReadTool", () => {
   it.effect("preserves actionable read failure messages", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
-      for (const [error, message] of [
-        [
-          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, lines: 3 }),
-          "Offset 10 is out of range for this file (3 lines)",
-        ],
-        [
-          new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
-          "Path is not a file: socket",
-        ],
-      ] as const) {
-        readFailure = error
-        expect(
-          yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: { type: "tool-call", id: `call-${error._tag}`, name: "read", input: { path: "target" } },
-          }),
-        ).toEqual({ status: "error", error: { type: "unknown", message } })
-      }
+      readFailure = new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" })
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-path-kind", name: "read", input: { path: "target" } },
+        }),
+      ).toEqual({ status: "error", error: { type: "unknown", message: "Path is not a file: socket" } })
     }),
   )
 
@@ -802,10 +794,11 @@ describe("ReadTool", () => {
     }),
   )
 
-  it.effect("suggests the same file name elsewhere in the project, nearest first", () =>
+  it.effect("suggests close names nearby and readable same-name files elsewhere, nearest first", () =>
     Effect.gen(function* () {
       const moved = "src/cluster/queue.rs"
-      indexedFiles = ["tests/queue.rs", "src/queue.ts", "src/land/queue.rs", "queue.rs.bak"]
+      indexedFiles = ["tests/queue.rs", "src/queue.ts", "src/land/queue.rs", "queue.rs.bak", moved, "secret/queue.rs"]
+      deniedResource = "secret/queue.rs"
       missingDirectories = [path.join(process.cwd(), "src", "cluster")]
       directoryEntryDetails = [{ name: "clusters", type: "directory" }]
       readFailure = new Environment.NotFound({ path: path.join(process.cwd(), moved) })
@@ -815,29 +808,20 @@ describe("ReadTool", () => {
           sessionID,
           ...toolIdentity,
           call: { type: "tool-call", id: "call-elsewhere", name: "read", input: { path: input } },
-        })
+        }).pipe(Effect.map((result) => result.error?.message))
+      const cwd = (...parts: string[]) => path.join(process.cwd(), ...parts)
 
-      expect(yield* read(moved)).toEqual({
-        status: "error",
-        error: {
-          type: "tool.execution",
-          message: [
-            `File not found: ${moved}`,
-            `The folder ${path.join(process.cwd(), "src", "cluster")} does not exist. The nearest folder that does is ${path.join(process.cwd(), "src")}.`,
-            `Did you mean one of these?\nsrc/land/queue.rs\ntests/queue.rs\n${path.join(process.cwd(), "src", "clusters")}`,
-          ].join("\n\n"),
-        },
-      })
-
+      expect(yield* read(moved)).toBe(
+        `File not found: ${moved}\n\nThe folder ${cwd("src", "cluster")} does not exist. The nearest folder that does is ${cwd("src")}.\n\nDid you mean one of these?\nsrc/land/queue.rs\ntests/queue.rs\n${cwd("src", "clusters")}`,
+      )
       missingDirectories = []
       directoryEntryDetails = [{ name: "queue.ts", type: "file" }]
-      expect(yield* read(path.join(process.cwd(), "lib", "queue.rs"))).toEqual({
-        status: "error",
-        error: {
-          type: "tool.execution",
-          message: `File not found: ${path.join(process.cwd(), "lib", "queue.rs")}\n\nDid you mean one of these?\n${path.join(process.cwd(), "lib", "queue.ts")}\n${path.join(process.cwd(), "tests", "queue.rs")}\n${path.join(process.cwd(), "src", "land", "queue.rs")}`,
-        },
-      })
+      expect(yield* read(cwd("lib", "queue.rs"))).toBe(
+        `File not found: ${cwd("lib", "queue.rs")}\n\nDid you mean one of these?\n${cwd("lib", "queue.ts")}\n${cwd("tests", "queue.rs")}\n${cwd("src", "land", "queue.rs")}`,
+      )
+      directoryEntryDetails = ["config.ts", "db.ts"].map((name) => ({ name, type: "file" as const }))
+      expect(yield* read("conifg.ts")).toBe("File not found: conifg.ts\n\nDid you mean one of these?\nconfig.ts")
+      expect(yield* read("ui.ts")).toBe("File not found: ui.ts")
     }),
   )
 

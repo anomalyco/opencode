@@ -1,12 +1,12 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, relative, sep } from "path"
+import { basename, dirname, extname, isAbsolute, join } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
-import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
+import { Ripgrep } from "../../ripgrep.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
@@ -24,10 +24,11 @@ const LocationInput = Schema.Struct({
     description: "The line or directory entry to start reading from (1-based)",
   }),
   limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
-    description: "The maximum number of lines or directory entries to read (defaults to and capped at 2000)",
+    description: "Maximum lines or directory entries to read (up to 2000)",
   }),
 })
 export const Input = LocationInput
+type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
 const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 
 export const Plugin = {
@@ -40,7 +41,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const files = yield* FileSystem.Service
+    const ripgrep = yield* Ripgrep.Service
 
     yield* ctx.tool
       .transform((editor) =>
@@ -109,15 +110,15 @@ export const Plugin = {
                       const alternate = yield* alternatePath(requested.absolute).pipe(
                         Effect.orElseSucceed(() => undefined),
                       )
-                      if (!alternate) return yield* missing(input.path, requested)
+                      if (!alternate) return yield* missing({ input: input.path, requested, context })
                       const target = yield* access.authorizeRead(alternate, context, { siblingOf: requested })
                       const content = yield* read(target).pipe(
                         Effect.catchIf(
                           (error) => error instanceof Environment.NotFound,
-                          () => missing(input.path, requested),
+                          () => missing({ input: input.path, requested, context }),
                         ),
                       )
-                      if (content.type === "list-page") return yield* missing(input.path, requested)
+                      if (content.type === "list-page") return yield* missing({ input: input.path, requested, context })
                       return {
                         content,
                         target,
@@ -164,7 +165,6 @@ export const Plugin = {
                 const message =
                   error instanceof ReadToolFileSystem.BinaryFileError ||
                   error instanceof ReadToolFileSystem.MediaIngestLimitError ||
-                  error instanceof ReadToolFileSystem.OffsetOutOfRangeError ||
                   error instanceof ReadToolFileSystem.PathKindError
                     ? error.message
                     : `Unable to read ${input.path}`
@@ -201,53 +201,56 @@ export const Plugin = {
           if (candidate.includes(base) || base.includes(candidate)) return true
           // Names that only differ in look-alike characters are what alternatePath recovers or deliberately skips.
           if (canonical(candidate) === canonical(base)) return false
-          return stem(candidate) === stem(base) || withinTwoEdits(candidate, base)
+          const wanted = stem(base)
+          return editDistance(stem(candidate), wanted) <= (wanted.length < 3 ? 0 : wanted.length < 5 ? 1 : 2)
         })
         .slice(0, 3)
     }
 
-    // Files with the same name elsewhere in the Location, nearest to the requested path first. Uses the
-    // Location's file index and gives up quickly, so a large or cold tree only costs the suggestion.
-    const elsewhere = Effect.fn("ReadTool.elsewhere")(function* (input: string, requested: FileAccess.Target) {
-      if (requested.externalDirectory !== undefined) return []
-      const name = basename(requested.absolute).toLowerCase()
-      const segments = relative(location.directory, requested.absolute).split(sep)
-      const shared = (path: string) => {
-        const parts = path.split("/")
-        const index = parts.findIndex((part, offset) => part !== segments[offset])
-        return index === -1 ? parts.length : index
-      }
-      const found = yield* files.find({ query: basename(requested.absolute), type: "file", limit: 50 }).pipe(
-        Effect.timeoutOption("2 seconds"),
-        Effect.map(Option.getOrElse(() => [])),
-        Effect.catchDefect(() => Effect.succeed([])),
+    // Readable same-name files elsewhere in the repository, nearest first. A timeout kills the ripgrep child.
+    const elsewhere = Effect.fn("ReadTool.elsewhere")(function* ({ input, requested, context }: Missing) {
+      if (!location.vcs || !FSUtil.contains(location.directory, requested.absolute)) return []
+      const name = basename(requested.absolute)
+      const segments = requested.resource.split("/")
+      const shared = (path: string) => path.split("/").findIndex((part, offset) => part !== segments[offset])
+      // Glob metacharacters become single-character wildcards; the exact name is checked below.
+      const pattern = `**/${name.replace(/[*?[\]{}\\!]/g, "?")}`
+      const found = yield* ripgrep.glob({ cwd: location.directory, pattern, limit: 50 }).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.orElseSucceed(() => []),
       )
-      return found
-        .map((entry) => entry.path.replaceAll("\\", "/"))
-        .filter((path) => basename(path).toLowerCase() === name)
+      const candidates = found
+        .map((entry) => entry.path)
+        .filter((path) => path !== requested.resource && path.split("/").at(-1) === name)
         .sort((a, b) => shared(b) - shared(a))
-        .slice(0, 3)
-        .map((path) => (isAbsolute(input) ? join(location.directory, path) : path))
+      const readable = yield* Effect.filter(candidates, (path) =>
+        permission.allows({ action: "read", resources: [path], save: ["*"], ...Permission.invocation(context) }),
+      )
+      const absolute = isAbsolute(input) || input.startsWith("~/")
+      return readable.slice(0, 3).map((path) => (absolute ? join(location.directory, path) : path))
     })
+
+    const didYouMean = (suggestions: string[]) =>
+      suggestions.length === 0 ? [] : [`Did you mean one of these?\n${suggestions.slice(0, 3).join("\n")}`]
 
     // A missing folder usually means a removed worktree, a moved directory, or a relative path
     // resolved from the wrong place, so name the first missing folder and its nearest existing parent.
-    const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (input: string, requested: FileAccess.Target) {
-      const folder = dirname(requested.absolute)
-      let child = folder
-      let parent = dirname(folder)
+    const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (miss: Missing) {
+      const { input } = miss
+      let child = dirname(miss.requested.absolute)
+      let parent = dirname(child)
       while (parent !== child) {
         const found = yield* listing(parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
           const suggestions = [
-            ...(yield* elsewhere(input, requested)),
+            ...(yield* elsewhere(miss)),
             ...similar(found.names, basename(child)).map((entry) => join(parent, entry)),
-          ].slice(0, 3)
+          ]
           const message = [
             `File not found: ${input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
-            ...(suggestions.length === 0 ? [] : [`Did you mean one of these?\n${suggestions.join("\n")}`]),
+            ...didYouMean(suggestions),
           ].join("\n\n")
           return yield* new ToolFailure({ message })
         }
@@ -257,18 +260,14 @@ export const Plugin = {
       return yield* new ToolFailure({ message: `File not found: ${input}` })
     })
 
-    const missing = Effect.fn("ReadTool.missing")(function* (input: string, requested: FileAccess.Target) {
-      const found = yield* listing(dirname(requested.absolute))
-      if (found.type === "missing") return yield* missingFolder(input, requested)
-      const nearby =
-        found.type === "found" ? similar(found.names, basename(input)).map((entry) => join(dirname(input), entry)) : []
+    const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
+      const { input } = miss
+      const found = yield* listing(dirname(miss.requested.absolute))
+      if (found.type === "missing") return yield* missingFolder(miss)
       const suggestions =
-        nearby.length < 3 ? [...new Set([...nearby, ...(yield* elsewhere(input, requested))])].slice(0, 3) : nearby
-      const message =
-        suggestions.length === 0
-          ? `File not found: ${input}`
-          : `File not found: ${input}\n\nDid you mean one of these?\n${suggestions.join("\n")}`
-      return yield* new ToolFailure({ message })
+        found.type === "found" ? similar(found.names, basename(input)).map((entry) => join(dirname(input), entry)) : []
+      if (suggestions.length < 3) suggestions.push(...(yield* elsewhere(miss)))
+      return yield* new ToolFailure({ message: [`File not found: ${input}`, ...didYouMean(suggestions)].join("\n\n") })
     })
   }),
 }
@@ -281,8 +280,7 @@ const canonical = (name: string) =>
 
 const stem = (name: string) => name.slice(0, name.length - extname(name).length) || name
 
-const withinTwoEdits = (a: string, b: string) => {
-  if (Math.abs(a.length - b.length) > 2) return false
+const editDistance = (a: string, b: string) => {
   let previous = Array.from({ length: b.length + 1 }, (_, index) => index)
   for (let i = 1; i <= a.length; i++) {
     const current = [i]
@@ -290,7 +288,7 @@ const withinTwoEdits = (a: string, b: string) => {
       current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
     previous = current
   }
-  return previous[b.length] <= 2
+  return previous[b.length]
 }
 
 function parseSkillUri(value: string) {
@@ -333,14 +331,12 @@ export const toModelContent = (path: string, offset: number | undefined, output:
   // Pages already join selected lines; a trailing newline represents a selected blank line.
   const text = output.type === "file" ? output.content.replace(/\n$/, "") : output.content
   const lines = output.content === "" ? [] : text.split("\n")
-  const pastEnd =
-    output.type === "text-page" && output.pastEnd !== undefined
-      ? ` (offset ${output.pastEnd.offset} is past the end; the file has ${output.pastEnd.lines} ${output.pastEnd.lines === 1 ? "line" : "lines"})`
-      : ""
+  // A page that starts before the requested offset is the file's tail, returned for an offset past the end.
+  const total = start + lines.length - 1
+  const pastEnd = output.type === "text-page" && offset !== undefined && start < offset
   const content = [
-    lines.length === 0
-      ? `Read file ${path}, 0 lines${pastEnd}`
-      : `Read file ${path}, lines ${start}-${start + lines.length - 1}${pastEnd}`,
+    (lines.length === 0 ? `Read file ${path}, 0 lines` : `Read file ${path}, lines ${start}-${total}`) +
+      (pastEnd ? ` (offset ${offset} is past the end; the file has ${total} ${total === 1 ? "line" : "lines"})` : ""),
   ]
   lines.forEach((line, index) => content.push(`${start + index}: ${line}`))
   if (output.type === "text-page" && output.truncated && output.next !== undefined)

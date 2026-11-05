@@ -215,26 +215,27 @@ describe("ReadToolFileSystem", () => {
   it.effect("returns the last lines when the offset is past the end", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
-      const short = path.join(directory, "short.txt")
-      const long = path.join(directory, "long.txt")
-      yield* files.writeFileString(short, "one\ntwo\nthree\nfour\nfive\n")
-      yield* files.writeFileString(long, Array.from({ length: 30_000 }, (_, index) => `line ${index + 1}`).join("\n"))
+      const read = (name: string, content: string, page: ReadToolFileSystem.PageInput) =>
+        files.writeFileString(path.join(directory, name), content).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      const long = Array.from({ length: 1_800 }, (_, index) => `${index + 1}`.padEnd(1_000, "x"))
 
-      const page = yield* ReadToolFileSystem.read(environment, absolute(short), "short.txt", { offset: 9, limit: 2 })
-      const tail = yield* ReadToolFileSystem.read(environment, absolute(long), "long.txt", { offset: 40_000 })
-
-      expect(page).toMatchObject({
-        type: "text-page",
-        content: "four\nfive",
-        offset: 4,
-        truncated: false,
-        pastEnd: { offset: 9, lines: 5 },
-      })
-      expect(ReadTool.toModelContent("short.txt", 9, page)).toBe(
-        "Read file short.txt, lines 4-5 (offset 9 is past the end; the file has 5 lines)\n4: four\n5: five",
-      )
-      expect(tail).toMatchObject({ type: "text-page", offset: 29_901, pastEnd: { offset: 40_000, lines: 30_000 } })
-      expect(tail.type === "text-page" ? tail.content.split("\n").at(-1) : undefined).toBe("line 30000")
+      expect(yield* read("short.txt", "one\ntwo\nthree\nfour\nfive\n", { offset: 9, limit: 2 })).toEqual([
+        "Read file short.txt, lines 4-5 (offset 9 is past the end; the file has 5 lines)",
+        "4: four",
+        "5: five",
+      ])
+      expect(yield* read("empty.txt", "", { offset: 5 })).toEqual([
+        "Read file empty.txt, 0 lines (offset 5 is past the end; the file has 0 lines)",
+      ])
+      // The 50 KB cap keeps the last 51 of 100 tail lines, still ending at the last line.
+      const tail = yield* read("long.txt", long.join("\n"), { offset: 2_000, limit: 2_000 })
+      expect([tail[0], tail.at(-1)]).toEqual([
+        "Read file long.txt, lines 1750-1800 (offset 2000 is past the end; the file has 1800 lines)",
+        `1800: ${long.at(-1)}`,
+      ])
     }),
   )
 
