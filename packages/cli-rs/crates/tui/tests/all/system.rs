@@ -404,7 +404,7 @@ fn plugin_manager_matches_typescript() {
     wait_for(&app, "view error enter");
     assert_dialog(&app, "E.18b/plugins-failed", "Plugins");
 
-    let app = TestApp::new(100, 60);
+    let app = TestApp::new(100, 40);
     let (mounted, _) = plugin_manager(&app, json!({}));
     opencode_tui::dialogs::plugins::show(&mounted.tui);
     wait_for(&app, "team.plugins");
