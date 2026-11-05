@@ -136,6 +136,22 @@ impl Tui {
         self.this.clone()
     }
 
+    /// Runs `request` on tokio. `done` gets its value on the UI thread; an error shows as an error toast.
+    /// Neither runs once the TUI is gone.
+    pub fn request<T: Send + 'static, E: std::fmt::Display + Send + 'static>(
+        &self,
+        request: impl Future<Output = Result<T, E>> + Send + 'static,
+        done: impl FnOnce(&Tui, T) + 'static,
+    ) {
+        self.app.spawn(
+            request,
+            bind!(self, |tui, _, result| match result {
+                Ok(value) => done(&tui, value),
+                Err(error) => tui.toasts.error(error.to_string()),
+            }),
+        );
+    }
+
     /// The resolved config now (`useConfig().data`). Keep the borrow short: a change replaces it.
     pub fn config(&self) -> std::cell::Ref<'_, Resolved> {
         self.settings.config()

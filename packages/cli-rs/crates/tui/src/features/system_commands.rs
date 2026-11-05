@@ -140,15 +140,9 @@ fn reload(tui: &Tui) {
         ToastOptions::new(Variant::Info, "Reloading configuration…").duration(std::time::Duration::from_secs(30)),
     );
     let client = tui.data.client().clone();
-    tui.app.spawn(
-        async move { client.location_reload().await.map_err(|error| error.to_string()) },
-        bind!(tui, |tui, _, result| {
-            match result {
-                Ok(()) => tui.toasts.show(ToastOptions::new(Variant::Success, "Configuration reloaded")),
-                Err(error) => tui.toasts.error(error),
-            }
-        }),
-    );
+    tui.request(async move { client.location_reload().await }, |tui, ()| {
+        tui.toasts.show(ToastOptions::new(Variant::Success, "Configuration reloaded"));
+    });
 }
 
 /// One `config.update` of a toggle, then closes dialogs.

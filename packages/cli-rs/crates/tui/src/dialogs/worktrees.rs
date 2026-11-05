@@ -201,7 +201,7 @@ impl Workspaces {
                             state.directories = Some(directories);
                             state.load_error = None;
                         }
-                        Err(error) => state.load_error = Some(error_message(&error)),
+                        Err(error) => state.load_error = Some(error.tui_message()),
                     }
                     let refresh = state.directories.is_some() && !state.refreshed;
                     state.refreshed |= refresh;
@@ -226,7 +226,7 @@ impl Workspaces {
         let weak = tui.weak();
         tui.app.spawn(async move { client.worktree_refresh(&input).await }, move |_, result| {
             if let (Err(error), Some(tui), true) = (result, weak.upgrade(), toast) {
-                tui.toasts.error(error_message(&error));
+                tui.toasts.error(error.tui_message());
             }
         });
     }
@@ -664,7 +664,7 @@ impl Workspaces {
 
     fn failed(&self, error: &opencode_api::error::Error) {
         if let Some(tui) = self.tui() {
-            tui.toasts.show(ToastOptions::new(Variant::Error, error_message(error)).title("Failed to delete worktree"));
+            tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).title("Failed to delete worktree"));
         }
     }
 
@@ -734,12 +734,7 @@ impl Workspaces {
         tui.dialogs.clear();
         let client = tui.data.client().clone();
         let input = SessionMoveInput { session_id: id, directory: AbsolutePath(directory.clone()), delivery: None };
-        let weak = tui.weak();
-        tui.app.spawn(async move { client.session_move(&input).await }, move |_, result| {
-            if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                tui.toasts.error(error_message(&error));
-            }
-        });
+        tui.request(async move { client.session_move(&input).await.map_err(|error| error.tui_message()) }, |_, _| {});
     }
 }
 
@@ -775,16 +770,6 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
     });
     actions.push(dialog("dialog.move_session.refresh", "refresh", |workspaces| workspaces.refresh_worktrees(true)));
     actions
-}
-
-/// `errorMessage`: a declared error's message, else the error.
-pub(crate) fn error_message(error: &opencode_api::error::Error) -> String {
-    match error.declared() {
-        Some(declared) => {
-            declared.message.clone().or_else(|| declared.tag.clone()).unwrap_or_else(|| error.to_string())
-        }
-        None => error.to_string(),
-    }
 }
 
 /// The server marks a delete that would lose file changes (`WorktreeError` with `data.forceRequired`).

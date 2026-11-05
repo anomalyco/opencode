@@ -56,6 +56,16 @@ impl Error {
             None => self.to_string(),
         }
     }
+
+    /// What the TUI's `errorMessage` shows: a declared error's message, else its tag, else the error.
+    pub fn tui_message(&self) -> String {
+        match self.declared() {
+            Some(declared) => {
+                declared.message.clone().or_else(|| declared.tag.clone()).unwrap_or_else(|| self.to_string())
+            }
+            None => self.to_string(),
+        }
+    }
 }
 
 impl From<crate::sse::Error> for Error {
