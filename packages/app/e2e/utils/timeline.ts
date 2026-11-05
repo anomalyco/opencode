@@ -11,7 +11,7 @@ import type {
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
-import { expect, test, type Page, type TestInfo } from "@playwright/test"
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test"
 import { Schema } from "effect"
 import { SERVER, seed, sessionHref } from "./app"
 import { mockOpenCodeServer, type MockServerConfig } from "./mock-server"
@@ -1116,4 +1116,25 @@ function provider() {
     connected: ["opencode", "company-gateway"],
     default: { providerID: "opencode", modelID: "claude-opus-4-6" },
   }
+}
+
+/** Hovers a user message, opens the chevron menu its bubble (or, without text, its footer) shows, and picks an action. */
+export async function chooseUserMessageAction(page: Page, row: Locator, name: string) {
+  const bubble = row.locator('[data-slot="user-message-text"]')
+
+  if ((await bubble.count()) > 0) await bubble.hover()
+  else await row.locator('[data-component="user-message"]').hover()
+  await row.getByRole("button", { name: "More actions", exact: true }).click()
+  await page.getByRole("menuitem", { name, exact: true }).click()
+}
+
+/** Hovers a user message, opens its chevron menu, and returns the open menu. */
+export async function openUserMessageMenu(page: Page, row: Locator) {
+  const bubble = row.locator('[data-slot="user-message-text"]')
+
+  if ((await bubble.count()) > 0) await bubble.hover()
+  else await row.locator('[data-component="user-message"]').hover()
+  await row.getByRole("button", { name: "More actions", exact: true }).click()
+
+  return page.getByRole("menu")
 }
