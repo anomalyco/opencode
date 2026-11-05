@@ -23,7 +23,7 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
-import { drain } from "../lib/clock"
+import { advance, drain } from "../lib/clock"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
@@ -136,7 +136,9 @@ describe("GithubCopilotPlugin", () => {
       const providers = yield* Provider.Service
       const requests: string[] = []
       yield* connect()
+      const models = () => requests.filter((url) => url.endsWith("/models"))
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, copilotAPI(requests)))
+      yield* advance(() => models().length === 1)
       yield* drain
       const folds = { count: 0 }
       yield* providers.transform(() => {
@@ -145,8 +147,9 @@ describe("GithubCopilotPlugin", () => {
       const before = folds.count
 
       yield* TestClock.adjust("10 minutes")
+      // Each refresh reads the endpoint before the model list.
+      yield* advance(() => models().length === 2)
       yield* drain
-      expect(requests.filter((url) => url.endsWith("/models"))).toHaveLength(2)
       expect(folds.count).toBe(before)
     }),
   )
@@ -157,6 +160,7 @@ describe("GithubCopilotPlugin", () => {
       const requests: string[] = []
       yield* connect({ apiEndpoint: "https://api.individual.githubcopilot.com" })
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, copilotAPI(requests)))
+      yield* advance(() => requests.some((url) => url.endsWith("/models")))
       yield* drain
 
       expect(requests).toEqual([
@@ -182,7 +186,7 @@ describe("GithubCopilotPlugin", () => {
           : copilotAPI(requests).execute(request),
       )
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, failing))
-      yield* drain
+      yield* advance(() => requests.some((url) => url.endsWith("/models")))
 
       expect(requests.at(-1)).toBe("https://api.individual.githubcopilot.com/models")
     }),
