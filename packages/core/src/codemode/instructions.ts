@@ -1,105 +1,55 @@
 export * as CodeModeInstructions from "./instructions.js"
 
-import { searchSignature, toolExpression } from "@opencode/codemode"
-import { Effect, Option, Schema } from "effect"
+import { searchSignature } from "@opencode/codemode"
+import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
 
-const pathRule =
-  "Each result's `path` is the complete call expression: write it out as code, for example `await tools.ns.tool_name({ ... })`. Do not use it as a key such as `tools[path]`."
+const EMPTY =
+  "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
 
 // prettier-ignore
-const prompt = (hasMoreTools: boolean) => `# Code Mode
+const prompt = `# Code Mode
 
-The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
+The tools listed below, and \`search\`, cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. ${pathRule}
+Each namespace lists its tools by name with their required parameters, and \`…\` when a tool also takes optional ones; pinned tools show their full signature. Before calling a tool whose signature is not shown, get it with the global \`search(...)\` function, for example \`search({ query: "tools.ns.tool_name" })\`, and return the result; one \`execute\` can search for several tools. A namespace that lists fewer tools than it has finds the rest the same way. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
 
-- ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
+- ${searchSignature}
 
 ## Code Mode tools (call only inside \`execute\`)`
 
 export function render(catalog: CodeModeCatalog.Summary) {
-  if (catalog.total === 0)
-    return "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool."
+  if (catalog.total === 0) return EMPTY
+  return `${prompt}
 
-  const tools = catalog.namespaces.flatMap((namespace) => {
-    return [CodeModeCatalog.namespaceLine(namespace), ...namespace.entries.map((entry) => entry.line)]
-  })
-
-  return `${prompt(catalog.shown < catalog.total)}
-
-${tools.join("\n")}`
+${catalog.namespaces.map(CodeModeCatalog.renderSection).join("\n")}`
 }
 
-// Tells the model what changed since the catalog it last saw. The session's catalog keeps the tools it listed
-// (see `CodeModeCatalog.summarize`), so a namespace or tool coming or going renders as a few lines; the whole
-// catalog is restated only when a namespace's guidance changes or the delta would be longer.
+// Sections are independent, so an update names the namespaces that came or went and restates only the sections
+// that changed; the whole catalog is restated only around an empty one or when that is shorter.
 export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatalog.Summary) {
   const replacement = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
 
 ${render(current)}`
   if (current.total === 0 || previous.total === 0) return replacement
-
-  const namespaces = Instructions.diffByKey(
+  const sections = Instructions.diffByKey(
     previous.namespaces,
     current.namespaces,
-    (namespace) => namespace.name,
-    (before, after) => CodeModeCatalog.namespaceLine(before) !== CodeModeCatalog.namespaceLine(after),
+    (section) => section.name,
+    (before, after) => CodeModeCatalog.renderSection(before) !== CodeModeCatalog.renderSection(after),
   )
-  if (namespaces.changed.some((change) => change.previous.description !== change.current.description))
-    return replacement
-  const kept = new Set(current.namespaces.map((namespace) => namespace.name))
-  const entries = Instructions.diffByKey(
-    previous.namespaces.filter((namespace) => kept.has(namespace.name)).flatMap((namespace) => namespace.entries),
-    current.namespaces.flatMap((namespace) => namespace.entries),
-    (entry) => entry.path,
-    (before, after) => before.line !== after.line,
-  )
-  const arrived = new Set(namespaces.added.flatMap((namespace) => namespace.entries.map((entry) => entry.path)))
-  const complete = current.shown === current.total
-  const wasComplete = previous.shown === previous.total
-  const recounted = namespaces.changed.some((change) => change.previous.count !== change.current.count)
-
   const parts = [
-    ...(wasComplete && !complete
-      ? [
-          `The catalog is now partial. \`search\`, like the listed tools, only works as JavaScript inside \`execute\`. Before calling a tool that is not listed, find it with the global \`search(...)\` function. Do not guess tool names. ${pathRule}\n\n- ${searchSignature}`,
-        ]
-      : []),
-    ...(!wasComplete && complete
-      ? ["The catalog is now complete: every Code Mode tool is listed. Do not guess tool names."]
-      : []),
-    ...section(
-      "New tool namespaces are available:",
-      namespaces.added.flatMap((namespace) => [
-        CodeModeCatalog.namespaceLine(namespace),
-        ...namespace.entries.map((entry) => entry.line),
-      ]),
+    ...block("New tool namespaces are available:", sections.added),
+    ...block(
+      "These namespaces changed; their listings supersede the previous ones:",
+      sections.changed.map((change) => change.current),
     ),
-    ...section(
-      "New tools are available in addition to those previously listed:",
-      entries.added.filter((entry) => !arrived.has(entry.path)).map((entry) => entry.line),
-    ),
-    ...section(
-      "Changed tool listings supersede the previously listed ones:",
-      entries.changed.map((change) => change.current.line),
-    ),
-    // Counts in the namespace lines the model saw are stale once tools are added, removed or newly listed.
-    ...section(
-      !complete && recounted
-        ? "These namespaces changed; search them again before relying on previous results:"
-        : "These namespaces now read:",
-      namespaces.changed.map((change) => CodeModeCatalog.namespaceLine(change.current)),
-    ),
-    ...(entries.removed.length === 0
-      ? []
-      : [`The following tools are no longer available and must not be called: ${expressions(entries.removed)}.`]),
-    ...(namespaces.removed.length === 0
+    ...(sections.removed.length === 0
       ? []
       : [
-          `The following tool namespaces are no longer available and must not be used: ${namespaces.removed
-            .map((namespace) => `\`${namespace.name}\``)
+          `The following tool namespaces are no longer available and must not be used: ${sections.removed
+            .map((section) => `\`${section.name}\``)
             .join(", ")}.`,
         ]),
   ]
@@ -108,24 +58,15 @@ ${render(current)}`
   return delta.length < replacement.length ? delta : replacement
 }
 
-function section(heading: string, lines: ReadonlyArray<string>) {
-  return lines.length === 0 ? [] : [[heading, ...lines].join("\n")]
+function block(heading: string, sections: ReadonlyArray<CodeModeCatalog.Section>) {
+  return sections.length === 0 ? [] : [[heading, ...sections.map(CodeModeCatalog.renderSection)].join("\n")]
 }
 
-function expressions(entries: ReadonlyArray<{ readonly path: string }>) {
-  return entries.map((entry) => toolExpression(entry.path)).join(", ")
-}
-
-export const key = Instructions.Key.make("core/codemode")
+const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
-const decode = Schema.decodeUnknownOption(codec)
 
-/** `previous` is the catalog value the session last admitted, as stored; an undecodable one is ignored. */
-export const make = (inventory?: CodeModeCatalog.Inventory, previous?: Schema.Json): Instructions.List => {
-  const catalog =
-    inventory === undefined
-      ? Instructions.removed
-      : CodeModeCatalog.summarize(inventory, { previous: Option.getOrUndefined(decode(previous)) })
+export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
+  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.summarize(inventory)
   return Instructions.make({
     key,
     codec,

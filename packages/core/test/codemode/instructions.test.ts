@@ -35,7 +35,7 @@ describe("CodeModeInstructions", () => {
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), initialized)
       expect(added.text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
       expect(added.text).toContain("they only work as JavaScript inside the `execute` tool")
-      expect(added.text).toContain(echo.signature)
+      expect(added.text).toContain("- notes (1 tool)\n  - echo")
 
       expect(yield* readUpdate(CodeModeInstructions.make({ tools: [] }), { values: added.values })).toMatchObject({
         text:
@@ -45,20 +45,18 @@ describe("CodeModeInstructions", () => {
     }),
   )
 
-  it.effect("renders the initial catalog, semantic deltas, and removal", () =>
+  it.effect("renders the initial catalog, namespace deltas, and removal", () =>
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
       expect(initialized.text).toContain(
-        "The tools listed below cannot be called directly: they only work as JavaScript inside the `execute` tool.",
+        "The tools listed below, and `search`, cannot be called directly: they only work as JavaScript inside the `execute` tool.",
       )
-      expect(initialized.text).toContain("The catalog is complete.")
       expect(initialized.text).toContain("## Code Mode tools (call only inside `execute`)")
-      expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
+      expect(initialized.text).toContain("- notes (1 tool)\n  - echo")
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)
       expect(added.text).toBe(
-        "The Code Mode tool catalog has changed.\n\n" +
-          `New tool namespaces are available:\n- orders (1 tool)\n  - ${lookup.signature} // Look up an order`,
+        "The Code Mode tool catalog has changed.\n\nNew tool namespaces are available:\n- orders (1 tool)\n  - lookup",
       )
 
       const removed = yield* readUpdate(CodeModeInstructions.make({ tools: [echo] }), { values: added.values })

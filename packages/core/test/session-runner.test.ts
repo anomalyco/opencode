@@ -89,7 +89,7 @@ import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
-const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
+const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
   readonly count: number
   readonly started: Deferred.Deferred<void>
@@ -2367,122 +2367,114 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("keeps Code Mode listings stable through namespace changes, compaction, fork and revert", function* (s) {
+  scenario("narrates only the Code Mode namespaces that change, through compaction and fork", function* (s) {
     const registry = yield* Tool.Service
-    // More tools than the catalog budget lists, so the catalog is partial and must choose.
-    const namespace = (name: string, count: number) =>
+    const tools = (name: string, count: number, from = 0) =>
       Object.fromEntries(
-        Array.from({ length: count }, (_, index) => [
-          `${name}_${index}`,
-          {
-            name: `${name}_${index}`,
-            description: `${name} tool ${index}`,
-            input: Schema.Struct({
-              [`${name}_${index}_${"argument".repeat(index % 4)}`]: Schema.String.annotate({
-                description: "x".repeat(120),
-              }),
-            }),
-            output: Schema.String,
-            execute: () => Effect.succeed({ output: "ok" }),
-          } satisfies ToolInfo,
-        ]),
+        Array.from({ length: count }, (_, offset) => {
+          const index = from + offset
+          return [
+            `${name}_${index}`,
+            {
+              name: `${name}_${index}`,
+              description: `${name} tool ${index}`,
+              input: Schema.Struct({ id: Schema.String, note: Schema.optionalKey(Schema.String) }),
+              output: Schema.String,
+              execute: () => Effect.succeed({ output: "ok" }),
+            } satisfies ToolInfo,
+          ]
+        }),
       )
-    const register = (name: string, count: number) =>
+    const register = (name: string, count: number, from = 0) =>
       Effect.gen(function* () {
         const scope = yield* Scope.make()
-        yield* transformTools(registry, namespace(name, count), { namespace: name }).pipe(Scope.provide(scope))
+        yield* transformTools(registry, tools(name, count, from), { namespace: name }).pipe(Scope.provide(scope))
         return scope
       })
     const catalogOf = (request: LLMRequest | undefined) =>
       request?.system.map((part) => part.text).find((text) => text.includes("# Code Mode")) ?? ""
-    const listed = (text: string, name: string) => text.match(new RegExp(`tools\\.${name}\\.${name}_\\d+`, "g")) ?? []
-    const codeModeUpdates = (request: LLMRequest | undefined) =>
+    const updates = (request: LLMRequest | undefined) =>
       request ? systemTexts(request).filter((text) => text.startsWith("The Code Mode tool catalog has changed")) : []
+    const section = (name: string) =>
+      Effect.gen(function* () {
+        const snapshot = yield* registry.snapshot()
+        const found = CodeModeCatalog.summarize(snapshot.codeModeCatalog!).namespaces.find((item) => item.name === name)
+        return found === undefined ? "" : CodeModeCatalog.renderSection(found)
+      })
 
-    yield* register("alpha", 60)
+    yield* register("alpha", 12)
     yield* s.runPrompt("First")
-    const baseline = catalogOf(s.requests.at(-1))
-    expect(baseline).toContain("The catalog is partial.")
-    const alpha = listed(baseline, "alpha")
-    expect(alpha.length).toBeGreaterThan(0)
+    const alpha = yield* section("alpha")
+    expect(catalogOf(s.requests.at(-1))).toContain(alpha)
+    expect(alpha).toContain("alpha_0(id, …)")
 
-    const beta = yield* register("beta", 30)
+    const beta = yield* register("beta", 5)
     yield* s.runPrompt("Second")
-    const arrived = codeModeUpdates(s.requests.at(-1))
-    expect(arrived).toHaveLength(1)
-    expect(arrived[0]).toContain("New tool namespaces are available:\n- beta (30 tools")
-    expect(arrived[0]).not.toContain("This catalog supersedes")
-    expect(listed(arrived[0]!, "alpha")).toEqual([])
-    // The next step rebuilds the catalog from the stored one and has nothing new to say.
+    expect(updates(s.requests.at(-1))).toEqual([
+      `The Code Mode tool catalog has changed.\n\nNew tool namespaces are available:\n${yield* section("beta")}`,
+    ])
+
+    // The next step rebuilds the same catalog and has nothing to say.
     yield* s.runPrompt("Again")
-    expect(codeModeUpdates(s.requests.at(-1))).toEqual(arrived)
+    expect(updates(s.requests.at(-1))).toHaveLength(1)
 
     yield* Scope.close(beta, Exit.void)
     yield* s.runPrompt("Third")
-    const departed = codeModeUpdates(s.requests.at(-1)).at(-1)
-    expect(departed).toBe(
+    expect(updates(s.requests.at(-1)).at(-1)).toBe(
       "The Code Mode tool catalog has changed.\n\n" +
         "The following tool namespaces are no longer available and must not be used: `beta`.",
     )
 
-    // Compaction restates the stored catalog as the new baseline: the same alpha listings, no beta, no update.
+    yield* register("alpha", 1, 12)
+    yield* s.runPrompt("Fourth")
+    const grown = yield* section("alpha")
+    expect(updates(s.requests.at(-1)).at(-1)).toBe(
+      `The Code Mode tool catalog has changed.\n\nThese namespaces changed; their listings supersede the previous ones:\n${grown}`,
+    )
+
+    // Compaction restates the stored catalog as the new baseline and has no update to send.
     yield* s.llm.push(TestLLM.text("## Objective\n- summary", "catalog-summary"))
     yield* s.session.compact({ sessionID })
     yield* s.resume
-    const latest = yield* s.runPrompt("Fourth")
-    const compacted = catalogOf(s.requests.at(-1))
-    expect(listed(compacted, "alpha")).toEqual(alpha)
-    expect(listed(compacted, "beta")).toEqual([])
-    expect(codeModeUpdates(s.requests.at(-1))).toEqual([])
+    const latest = yield* s.runPrompt("Fifth")
+    expect(catalogOf(s.requests.at(-1))).toContain(grown)
+    expect(catalogOf(s.requests.at(-1))).not.toContain("- beta")
+    expect(updates(s.requests.at(-1))).toEqual([])
 
     // A fork starts from the same catalog and has nothing to narrate.
     const forked = yield* s.session.fork({ sessionID, before: latest.id })
     yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
     yield* s.session.resume(forked.id)
-    expect(listed(catalogOf(s.requests.at(-1)), "alpha")).toEqual(alpha)
-    expect(codeModeUpdates(s.requests.at(-1))).toEqual([])
+    expect(catalogOf(s.requests.at(-1))).toContain(grown)
+    expect(updates(s.requests.at(-1))).toEqual([])
   })
 
-  scenario("turns a complete Code Mode catalog partial with a delta and restates it at compaction", function* (s) {
+  scenario("caps each Code Mode namespace on its own so a large one never squeezes another", function* (s) {
     const registry = yield* Tool.Service
     const tools = (name: string, count: number) =>
       Object.fromEntries(
         Array.from({ length: count }, (_, index) => [
-          `${name}_${index}`,
+          `${name}_${index}_with_a_long_descriptive_name`,
           {
-            name: `${name}_${index}`,
+            name: `${name}_${index}_with_a_long_descriptive_name`,
             description: `${name} tool ${index}`,
-            input: Schema.Struct({ value: Schema.String.annotate({ description: "x".repeat(200) }) }),
+            input: Schema.Struct({ account: Schema.String, zone: Schema.String, record: Schema.String }),
             output: Schema.String,
             execute: () => Effect.succeed({ output: "ok" }),
           } satisfies ToolInfo,
         ]),
       )
-    const catalogOf = (request: LLMRequest | undefined) =>
-      request?.system.map((part) => part.text).find((text) => text.includes("# Code Mode")) ?? ""
-    yield* transformTools(registry, tools("small", 2), { namespace: "small" })
+    yield* transformTools(registry, tools("small", 3), { namespace: "small" })
+    yield* transformTools(registry, tools("huge", 800), { namespace: "huge" })
     yield* s.runPrompt("First")
-    expect(catalogOf(s.requests.at(-1))).toContain("The catalog is complete.")
-
-    // A server that finishes connecting after the first step makes the catalog partial.
-    yield* transformTools(registry, tools("late", 60), { namespace: "late" })
-    yield* s.runPrompt("Second")
-    const flipped = systemTexts(s.requests.at(-1)!).filter((text) => text.startsWith("The Code Mode tool catalog"))
-    expect(flipped).toHaveLength(1)
-    expect(flipped[0]).toContain(
-      "The catalog is now partial. `search`, like the listed tools, only works as JavaScript inside `execute`.",
-    )
-    expect(flipped[0]).toContain("- late (60 tools")
-    expect(flipped[0]).not.toContain("This catalog supersedes")
-
-    yield* s.llm.push(TestLLM.text("## Objective\n- summary", "flip-summary"))
-    yield* s.session.compact({ sessionID })
-    yield* s.resume
-    yield* s.runPrompt("Third")
-    const compacted = catalogOf(s.requests.at(-1))
-    expect(compacted).toContain("The catalog is partial.")
-    expect(compacted).toContain("- late (60 tools")
-    expect(systemTexts(s.requests.at(-1)!).filter((text) => text.startsWith("The Code Mode tool catalog"))).toEqual([])
+    const catalog =
+      s.requests
+        .at(-1)
+        ?.system.map((part) => part.text)
+        .find((text) => text.includes("# Code Mode")) ?? ""
+    expect(catalog).toContain("- small (3 tools)\n")
+    expect(catalog).toMatch(/- huge \(800 tools, \d+ listed; search for the rest\)/)
+    expect(catalog).toContain("small_2_with_a_long_descriptive_name(account, zone, record)")
   })
 
   scenario("rebuilds a consistent Code Mode catalog when a revert removes its update", function* (s) {
@@ -2494,16 +2486,16 @@ describe("SessionRunnerLLM", () => {
           {
             name: `${name}_${index}`,
             description: `${name} tool ${index}`,
-            input: Schema.Struct({ value: Schema.String.annotate({ description: "x".repeat(200) }) }),
+            input: Schema.Struct({ value: Schema.String }),
             output: Schema.String,
             execute: () => Effect.succeed({ output: "ok" }),
           } satisfies ToolInfo,
         ]),
       )
-    yield* transformTools(registry, tools("alpha", 40), { namespace: "alpha" })
+    yield* transformTools(registry, tools("alpha", 10), { namespace: "alpha" })
     yield* s.runPrompt("First")
     const second = yield* s.runPrompt("Second")
-    yield* transformTools(registry, tools("beta", 10), { namespace: "beta" })
+    yield* transformTools(registry, tools("beta", 4), { namespace: "beta" })
     yield* s.runPrompt("Third")
 
     // The beta update is delivered with "Third", after the boundary, so the revert drops it and resyncs.
@@ -2518,7 +2510,7 @@ describe("SessionRunnerLLM", () => {
         ?.system.map((part) => part.text)
         .join("\n\n"),
     ).toContain(fresh)
-    expect(fresh).toContain("- beta (10 tools")
+    expect(fresh).toContain("- beta (4 tools)")
     expect(systemTexts(s.requests.at(-1)!).filter((text) => text.includes("Code Mode tool catalog"))).toEqual([])
   })
 

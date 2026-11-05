@@ -11,7 +11,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Clock, Context, Effect, Option, Ref, Schema, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
@@ -223,22 +223,55 @@ export const catalog = (inventory: Inventory) => {
       .filter((registration) => registration.options?.pinned === true)
       .map(qualifiedName),
   )
+  const inputs = new Map(
+    Array.from(inventory.tools.values(), (registration) => [qualifiedName(registration), registration] as const),
+  )
   const root: CatalogNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
-  for (const tool of runtime(inventory).catalog)
+  for (const tool of runtime(inventory).catalog) {
+    const registration = inputs.get(tool.path)
     getNode(root, tool.path).tool = {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for pinned tools; the rest are listed by name.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
+      ...(registration === undefined ? {} : { parameters: parameters(described(inventory, registration).inputSchema) }),
     }
+  }
   return {
     tools: renderCatalog(root),
   } satisfies CodeModeCatalog.Inventory
 }
 
 type CatalogNode = Node<CodeModeCatalog.Tool>
+
+// The parts of a tool's JSON Schema input that name its parameters. An Effect schema with an identifier encodes
+// as a `$ref` into its own definitions.
+const InputShape = Schema.Struct({
+  properties: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  required: Schema.optionalKey(Schema.Array(Schema.String)),
+  $ref: Schema.optionalKey(Schema.String),
+  $defs: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  definitions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+})
+const decodeInputShape = Schema.decodeUnknownOption(InputShape)
+
+// Required parameter names, then `…` when the tool also takes optional ones; undefined for an unreadable schema.
+function parameters(schema: unknown) {
+  const shape = Option.getOrUndefined(decodeInputShape(schema))
+  if (shape === undefined) return undefined
+  const name = shape.$ref?.split("/").at(-1)
+  const referenced = name === undefined ? undefined : (shape.$defs?.[name] ?? shape.definitions?.[name])
+  const root = referenced === undefined ? shape : Option.getOrUndefined(decodeInputShape(referenced))
+  if (root === undefined) return undefined
+  const names = Object.keys(root.properties ?? {})
+  const required = names.filter((key) => root.required?.includes(key))
+  return required.length < names.length ? [...required, "…"] : required
+}
 
 function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | CodeModeCatalog.Namespace> {
   return Array.from(root.children)
@@ -296,12 +329,25 @@ export const check = (
       }),
     )
 
+// A definition converts its tool's schemas, which an inventory's runtime and catalog both need; convert once each.
+const definitions = new WeakMap<Inventory, Map<Info, ReturnType<typeof definition>>>()
+
+function described(inventory: Inventory, registration: Info) {
+  const known = definitions.get(inventory) ?? new Map<Info, ReturnType<typeof definition>>()
+  definitions.set(inventory, known)
+  const cached = known.get(registration)
+  if (cached) return cached
+  const value = definition(registration)
+  known.set(registration, value)
+  return value
+}
+
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
-    const child = definition(registration)
+    const child = described(inventory, registration)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,

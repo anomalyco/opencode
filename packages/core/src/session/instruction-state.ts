@@ -176,17 +176,6 @@ export const current = Effect.fn("InstructionState.current")(function* (
   return (yield* find(db, sessionID))?.current_values
 })
 
-/** The value one source last admitted for this Session, or `undefined` before it has one. */
-export const value = Effect.fn("InstructionState.value")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  key: Instructions.Key,
-) {
-  const hash = (yield* find(db, sessionID))?.current_values[key]
-  if (hash === undefined) return undefined
-  return requireBlob(yield* loadBlobs(db, [hash]), hash)
-})
-
 export const preview = Effect.fn("InstructionState.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,

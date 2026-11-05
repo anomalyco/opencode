@@ -19,7 +19,6 @@ import { Tool } from "../tool.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
-import { InstructionState } from "./instruction-state.js"
 import { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
@@ -144,7 +143,6 @@ const layer = Layer.effect(
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(permissions),
           entries: entries.load(sessionID),
-          catalog: InstructionState.value(db, sessionID, CodeModeInstructions.key),
         },
         { concurrency: "unbounded" },
       )
@@ -155,8 +153,7 @@ const layer = Layer.effect(
         // prompt-cache prefix: user-level catalog and guidance, then project instructions, then
         // the date and environment, which vary by day and directory.
         instructions: Instructions.combine([
-          // Built on the catalog the Session last saw, so its listings stay put as tools come and go.
-          CodeModeInstructions.make(loaded.tools.codeModeCatalog, loaded.catalog),
+          CodeModeInstructions.make(loaded.tools.codeModeCatalog),
           loaded.mcp,
           loaded.references,
           loaded.skills,
