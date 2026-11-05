@@ -6,7 +6,9 @@ committed source, shows the working-tree image in its card (`DiffViewerImage` in
 and draws it, with a click that opens the image preview dialog.
 
 **Rust.** The card's header says `Image`, as in TS, and its body says "Image preview is not available in
-opencode-rs." No file is read. The committed and deleted image messages are the same as in TS.
+opencode-rs." (`plugins/diffs/viewer.rs`). No file is read. The committed and deleted image messages are the same
+as in TS.
 
-**Reason.** The image preview (`dialog-image-preview`) and the decoder are E.4's (`dialogs/image_preview.rs`), which
-has not landed. The card can use them once it has. No scenario has an image file.
+**Reason.** The image preview dialog (`dialogs/image_preview.rs`, E.4) and the image widget it draws with have
+landed, but the diff card does not use them yet: it needs a `file.read` of the working-tree image and an
+`ImageView` in the card body, then a click that calls `image_preview::show`. No scenario has an image file.
