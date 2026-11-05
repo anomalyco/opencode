@@ -77,9 +77,10 @@ export default [
       // /product. The legacy redirects (/go, /zen, /enterprise, /black, /auth, …) are zone rules.
       const moved = movedPath(url.pathname)
       if (moved) {
-        const headers = new Headers({ Location: `${locale ? route(locale, moved) : moved}${url.search}` })
-        event.response.headers.getSetCookie().forEach((value) => headers.append("set-cookie", value))
-        return new Response(null, { status: 301, headers })
+        return new Response(null, {
+          status: 301,
+          headers: { Location: `${locale ? route(locale, moved) : moved}${url.search}` },
+        })
       }
 
       if (event.request.method !== "GET" && event.request.method !== "HEAD") return
@@ -92,9 +93,7 @@ export default [
       const englishOnly = locale !== null && /^\/(changelog|font)(?=$|[/.])/.test(path)
       const slash = requested.length > 1 && requested.endsWith("/") && !/^\/docs(\/|$)/.test(path)
       if (english || englishOnly || (slash && findPageMarkdown(path))) {
-        const headers = new Headers({ Location: `${route(locale ?? "en", path)}${url.search}` })
-        event.response.headers.getSetCookie().forEach((value) => headers.append("set-cookie", value))
-        return new Response(null, { status: 301, headers })
+        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", path)}${url.search}` } })
       }
       // One release as JSON, at a stable URL per version (for the apps' "What's new").
       const release = path.match(/^\/changelog\/(v\d[\w.+-]*)\.json$/)?.[1]
