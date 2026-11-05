@@ -6,6 +6,7 @@ import {
   createSignal,
   getOwner,
   on,
+  onCleanup,
   runWithOwner,
   untrack,
   type Accessor,
@@ -55,6 +56,14 @@ import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
+import {
+  createHostApiAttachState,
+  selectAttachAttempt,
+  selectAttached,
+  selectDraining,
+  transitionHostApiAttach,
+  type HostApiAttachEvent,
+} from "./attach-machine"
 import { closedEntry, createClosedTabs } from "./closed-tabs"
 import { panelsMoving } from "@/shell/panel-motion"
 import { createEmbeds } from "./embeds"
@@ -114,36 +123,49 @@ export function createHostApis() {
   const desktop = createMediaQuery("(min-width: 768px)")
   const narrow = () => !desktop()
   const systemDark = createMediaQuery("(prefers-color-scheme: dark)")
-  const [attached, setAttached] = createSignal<Attached>()
+  // A plain signal: the interface holds live functions and SDK clients, which a store would wrap in proxies.
+  const [attachState, setAttachState] = createSignal(createHostApiAttachState<Attached>())
+  const attached = () => selectAttached(attachState())
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, ReturnType<Storage["memory"]>>()
   const current = () => attached()
-  // Writes made while the app interface is not mounted, in call order.
-  const early: ((value: Attached) => void)[] = []
   // Removals of a session's store wait for its location, as layout writes do.
   const located = createLocatedWrites()
 
-  // Runs a write now when the interface is mounted and nothing waits before it; otherwise once it mounts.
-  const write = (run: (value: Attached) => void) => {
-    const value = untrack(attached)
+  const dispatchAttach = (event: HostApiAttachEvent<Attached>) => {
+    const next = transitionHostApiAttach(untrack(attachState), event)
 
-    if (value && early.length === 0) return run(value)
-    early.push(run)
+    setAttachState(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "schedule.drain") return queueMicrotask(() => drain(effect.attempt))
+
+      if (effect.type === "drop") return effect.items.forEach((item) => item.onDrop?.())
+
+      // Promise.try runs each write synchronously and isolates a throw, such as an unlisted server, from the later ones.
+      void Promise.try(() => effect.run(effect.attached)).catch((cause: unknown) => console.error("[plugin]", cause))
+    })
+
+    return next.queued
   }
 
-  // Promise.try runs each write synchronously and isolates a throw, such as an unlisted server, from the later ones.
-  const flush = () => {
-    const value = untrack(attached)
+  // Each step takes the next write off the queue before running it, so a throw cannot stall the writes behind it.
+  const drain = (attempt: number) =>
+    batch(() => {
+      while (selectDraining(untrack(attachState), attempt)) dispatchAttach({ type: "drain.next", attempt })
+    })
 
-    if (!value) return
-    batch(() =>
-      early
-        .splice(0)
-        .forEach(
-          (run) => void Promise.try(() => run(value)).catch((cause: unknown) => console.error("[plugin]", cause)),
-        ),
-    )
+  // Runs a write now when the interface is mounted and nothing waits before it; otherwise once it mounts. Returns a
+  // cancel for a write that waits; `onDrop` runs instead of the write when it is dropped.
+  const write = (run: (value: Attached) => void, onDrop?: () => void) => {
+    const id = dispatchAttach({ type: "write", run, onDrop })
+
+    return () => {
+      if (id !== undefined) dispatchAttach({ type: "cancel", id })
+    }
   }
+
+  // Writes still waiting when the plugin root goes away are dropped.
+  if (getOwner()) onCleanup(() => dispatchAttach({ type: "disposed" }))
 
   const embeds = createEmbeds({
     bridge: platform.plugins,
@@ -381,15 +403,30 @@ export function createHostApis() {
         return { dismiss: runWithOwner(owner, () => register(dismiss)) ?? dismiss }
       },
     }),
-    // The user's notification settings live in the app interface, so a notification waits for it to mount.
+    // The user's notification settings live in the app interface, so a notification waits for it to mount. One that
+    // the plugin going away or the host dropping it ends first resolves as not shown.
     attention: (plugin, _owner, context) => ({
       notify: (options) =>
-        new Promise((resolve) =>
-          write((value) => {
-            if (context.signal.aborted) return resolve({ notification: false, sound: false })
+        new Promise((resolve) => {
+          const skip = () => {
+            context.signal.removeEventListener("abort", abort)
+            resolve({ notification: false, sound: false })
+          }
+
+          const abort = () => {
+            cancel()
+            skip()
+          }
+
+          if (context.signal.aborted) return skip()
+          context.signal.addEventListener("abort", abort, { once: true })
+
+          const cancel = write((value) => {
+            if (context.signal.aborted) return skip()
+            context.signal.removeEventListener("abort", abort)
             void value.notify(plugin, options).then(resolve)
-          }),
-        ),
+          }, skip)
+        }),
     }),
     // No command is registered before the interface mounts.
     commands: () => ({ run: (id) => untrack(attached)?.run(id) ?? false }),
@@ -437,25 +474,13 @@ export function createHostApis() {
      * Runs `run` now while the app interface is mounted and no write waits; otherwise after the interface's first
      * render, behind the writes made before it. The returned function cancels a run that still waits.
      */
-    whenMounted(run: () => void) {
-      const state = { cancelled: false }
-
-      write(() => {
-        if (!state.cancelled) run()
-      })
-
-      return () => {
-        state.cancelled = true
-      }
-    },
+    whenMounted: (run: () => void) => write(() => run()),
+    /** Writes that wait, and writes made during the interface's first render, run after that render in call order. */
     attach(value: Attached) {
-      setAttached(() => value)
-      // After the interface's first render, so the waiting writes find its layout, in call order.
-      queueMicrotask(flush)
+      dispatchAttach({ type: "attach", attached: value })
+      const attempt = selectAttachAttempt(untrack(attachState))
 
-      return () => {
-        if (attached() === value) setAttached(undefined)
-      }
+      return () => void dispatchAttach({ type: "detach", attempt })
     },
     workspaceRemoved(value: { server: string; directory: string }) {
       removed.forEach((handler) => handler(value))
