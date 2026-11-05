@@ -1,5 +1,16 @@
-import { createEffect, on, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import {
+  createTextRevealState,
+  selectTextRevealEntering,
+  selectTextRevealLeaving,
+  selectTextRevealReady,
+  selectTextRevealSwapping,
+  selectTextRevealTrackWidth,
+  TEXT_REVEAL_READY_TIMEOUT_MS,
+  transitionTextReveal,
+  type TextRevealEffect,
+  type TextRevealEvent,
+} from "./text-reveal-machine"
 
 const px = (value: number | string | undefined, fallback: number) => {
   if (typeof value === "number") return `${value}px`
@@ -36,108 +47,107 @@ export function TextReveal(props: {
   growOnly?: boolean
   truncate?: boolean
 }) {
-  const [state, setState] = createStore({
-    cur: props.text,
-    old: undefined as string | undefined,
-    width: "auto",
-    ready: false,
-    swapping: false,
-  })
-
-  const cur = () => state.cur
-  const old = () => state.old
-  const width = () => state.width
-  const ready = () => state.ready
-  const swapping = () => state.swapping
+  const [machine, setMachine] = createSignal(createTextRevealState(props.text))
   let inRef: HTMLSpanElement | undefined
   let outRef: HTMLSpanElement | undefined
   let rootRef: HTMLSpanElement | undefined
   let frame: number | undefined
+  let readyTimer: ReturnType<typeof setTimeout> | undefined
 
   const win = () => inRef?.scrollWidth ?? 0
   const wout = () => outRef?.scrollWidth ?? 0
+  const growOnly = () => props.growOnly ?? true
+  const animates = typeof requestAnimationFrame === "function"
 
-  const widen = (next: number) => {
-    if (next <= 0) return
+  const dispatch = (event: TextRevealEvent) => {
+    const next = transitionTextReveal(untrack(machine), event)
 
-    if (props.growOnly ?? true) {
-      const prev = Number.parseFloat(width())
-
-      if (Number.isFinite(prev) && next <= prev) return
-    }
-
-    setState("width", `${next}px`)
+    // Commit first: the effects measure the text nodes this state renders.
+    if (next.state !== untrack(machine)) setMachine(next.state)
+    next.effects.forEach(run)
   }
 
-  createEffect(
-    on(
-      () => props.text,
-      (next, prev) => {
-        if (next === prev) return
+  const cancelFrame = () => {
+    if (frame !== undefined) cancelAnimationFrame(frame)
+    frame = undefined
+  }
 
-        if (typeof next === "string" && typeof prev === "string" && next.startsWith(prev)) {
-          setState("cur", next)
-          widen(win())
+  const onFrame = (finish: () => void) => {
+    cancelFrame()
 
-          return
-        }
+    if (!animates) return finish()
+    frame = requestAnimationFrame(() => {
+      frame = undefined
+      finish()
+    })
+  }
 
-        setState("swapping", true)
-        setState("old", prev)
-        setState("cur", next)
+  const run = (effect: TextRevealEffect) => {
+    if (effect.type === "measure.entering") {
+      dispatch({ type: "width.measured", widthPx: win(), growOnly: growOnly() })
 
-        if (typeof requestAnimationFrame !== "function") {
-          widen(Math.max(win(), wout()))
-          rootRef?.offsetHeight
-          setState("swapping", false)
+      return
+    }
 
-          return
-        }
+    if (effect.type === "ready.frame") {
+      onFrame(() => dispatch({ type: "ready.settled", widthPx: win(), growOnly: growOnly() }))
 
-        if (frame !== undefined && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame)
-        frame = requestAnimationFrame(() => {
-          widen(Math.max(win(), wout()))
-          rootRef?.offsetHeight
-          setState("swapping", false)
-          frame = undefined
-        })
-      },
-    ),
-  )
+      return
+    }
+
+    if (effect.type === "swap.frame") {
+      onFrame(() => {
+        const widthPx = Math.max(win(), wout())
+        rootRef?.offsetHeight
+        dispatch({ type: "swap.settled", attempt: effect.attempt, widthPx, growOnly: growOnly() })
+      })
+
+      return
+    }
+
+    if (effect.type === "cancel.frame") {
+      cancelFrame()
+
+      return
+    }
+
+    clearTimeout(readyTimer)
+    readyTimer = undefined
+  }
+
+  createEffect(() => {
+    const text = props.text
+    untrack(() => dispatch({ type: "text.changed", text }))
+  })
 
   onMount(() => {
-    widen(win())
+    dispatch({ type: "width.measured", widthPx: win(), growOnly: growOnly() })
+
+    if (!animates) {
+      dispatch({ type: "ready.settled", widthPx: win(), growOnly: growOnly() })
+
+      return
+    }
+
+    readyTimer = setTimeout(
+      () => dispatch({ type: "ready.timed-out", widthPx: win(), growOnly: growOnly() }),
+      TEXT_REVEAL_READY_TIMEOUT_MS,
+    )
     const fonts = typeof document !== "undefined" ? document.fonts : undefined
+    const settle = () => dispatch({ type: "fonts.settled", widthPx: win(), growOnly: growOnly() })
 
-    if (typeof requestAnimationFrame !== "function") {
-      setState("ready", true)
-
-      return
-    }
-
-    if (!fonts) {
-      requestAnimationFrame(() => setState("ready", true))
-
-      return
-    }
-
-    void fonts.ready.finally(() => {
-      widen(win())
-      requestAnimationFrame(() => setState("ready", true))
-    })
+    if (!fonts) return settle()
+    void fonts.ready.finally(settle)
   })
 
-  onCleanup(() => {
-    if (frame === undefined || typeof cancelAnimationFrame !== "function") return
-    cancelAnimationFrame(frame)
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return (
     <span
       ref={rootRef}
       data-component="text-reveal"
-      data-ready={ready() ? "true" : "false"}
-      data-swapping={swapping() ? "true" : "false"}
+      data-ready={selectTextRevealReady(machine()) ? "true" : "false"}
+      data-swapping={selectTextRevealSwapping(machine()) ? "true" : "false"}
       data-truncate={props.truncate ? "true" : "false"}
       class={props.class}
       aria-label={props.text ?? ""}
@@ -149,12 +159,12 @@ export function TextReveal(props: {
         "--text-reveal-spring-soft": props.springSoft ?? "cubic-bezier(0.34, 1, 0.64, 1)",
       }}
     >
-      <span data-slot="text-reveal-track" style={{ width: props.truncate ? "100%" : width() }}>
+      <span data-slot="text-reveal-track" style={{ width: selectTextRevealTrackWidth(machine(), props.truncate) }}>
         <span data-slot="text-reveal-entering" ref={inRef}>
-          {cur() ?? "\u00A0"}
+          {selectTextRevealEntering(machine())}
         </span>
         <span data-slot="text-reveal-leaving" ref={outRef}>
-          {old() ?? "\u00A0"}
+          {selectTextRevealLeaving(machine())}
         </span>
       </span>
     </span>

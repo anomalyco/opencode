@@ -55,6 +55,37 @@ export const Basic = {
   ),
 }
 
+export const ProgrammaticAndNonModal = {
+  render: () => {
+    const [open, setOpen] = createSignal(false)
+
+    return (
+      <div style={{ display: "flex", gap: "16px", "align-items": "flex-start" }}>
+        {/* Opens a task after the click, like a shortcut handler or an async action. */}
+        <Button onClick={() => setTimeout(() => setOpen(true))}>Open from code</Button>
+        <Menu gutter={6} open={open()} onOpenChange={setOpen}>
+          <Menu.Trigger as={Button}>Controlled</Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Item>Rename</Menu.Item>
+              <Menu.Item>Duplicate</Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+        <Menu gutter={6} modal={false}>
+          <Menu.Trigger as={Button}>Non-modal</Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Item>Pin</Menu.Item>
+              <Menu.Item>Archive</Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </div>
+    )
+  },
+}
+
 export const Appearances = {
   render: () => (
     <div style={{ display: "flex", gap: "16px" }}>

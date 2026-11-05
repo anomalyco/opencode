@@ -1,7 +1,17 @@
+import { observeReducedMotion, prefersReducedMotion } from "../../motion/reduced"
+import {
+  AVATAR_DISPOSED,
+  AVATAR_POINTER_LEFT,
+  AVATAR_REFRESH,
+  createAvatarClock,
+  INITIAL_AVATAR_ANIMATION_STATE,
+  selectAvatarPaintTime,
+  selectAvatarRunning,
+  transitionAvatarAnimation,
+  type AvatarAnimationEvent,
+  type AvatarAnimationState,
+} from "./animation-machine"
 import { drawProjectIcon, type GeneratedProjectIcon } from "./generated"
-
-// The animation starts once the pointer rests on the avatar's row, so passing over a list does no drawing.
-const REST_MS = 150
 
 const HOVER_TARGET = 'a, button, [role="menuitem"], [role="option"], [data-titlebar-tab]'
 
@@ -10,11 +20,14 @@ const HOVER_TARGET = 'a, button, [role="menuitem"], [role="option"], [data-title
 // row animates only that row's icon even when other rows show the same project. Only a hovered avatar runs an
 // animation loop, and it stops once the icon has eased back to its static frame.
 export function attachGeneratedAvatar(canvas: HTMLCanvasElement, icon: () => GeneratedProjectIcon) {
+  let state: AvatarAnimationState = INITIAL_AVATAR_ANIMATION_STATE
+  const clock = createAvatarClock()
   let frame = 0
-  let time = 0
-  let hovering = false
-  let last = 0
-  let entered = 0
+  let stopMotionObserver: (() => void) | undefined
+  // Reused every frame, so the loop allocates nothing.
+  const enterEvent = { type: "pointer.entered" as const, now: 0, reduced: false }
+  const frameEvent = { type: "frame" as const, now: 0 }
+  const motionEvent = { type: "motion.changed" as const, reduced: false }
 
   const paint = (draw: (ctx: CanvasRenderingContext2D, px: number) => void) => {
     const px = Math.max(1, Math.round((canvas.clientWidth || 16) * (window.devicePixelRatio || 1)))
@@ -25,60 +38,75 @@ export function attachGeneratedAvatar(canvas: HTMLCanvasElement, icon: () => Gen
     if (ctx) draw(ctx, px)
   }
 
-  const paintStatic = () =>
-    paint((ctx, px) => {
-      ctx.clearRect(0, 0, px, px)
-      const still = staticFrame(icon(), px)
+  const drawStatic = (ctx: CanvasRenderingContext2D, px: number) => {
+    ctx.clearRect(0, 0, px, px)
+    const still = staticFrame(icon(), px)
 
-      if (still) ctx.drawImage(still, 0, 0)
-    })
+    if (still) ctx.drawImage(still, 0, 0)
+  }
 
-  const tick = (now: number) => {
-    if (hovering && time === 0 && now - entered < REST_MS) {
-      last = now
+  const drawAnimated = (ctx: CanvasRenderingContext2D, px: number) =>
+    drawProjectIcon(ctx, px, icon(), selectAvatarPaintTime(state, clock))
+
+  const dispatch = (event: AvatarAnimationEvent) => {
+    const prev = state
+    const next = transitionAvatarAnimation(prev, clock, event)
+    state = next.state
+
+    if (selectAvatarRunning(prev) !== selectAvatarRunning(state)) reconcile()
+
+    if (next.effect === "paint-static") paint(drawStatic)
+
+    if (next.effect === "paint-frame") paint(drawAnimated)
+  }
+
+  const reconcile = () => {
+    if (selectAvatarRunning(state)) {
+      stopMotionObserver = observeReducedMotion(onMotionChange)
       frame = requestAnimationFrame(tick)
 
       return
     }
+    cancelAnimationFrame(frame)
+    frame = 0
+    stopMotionObserver?.()
+    stopMotionObserver = undefined
+  }
 
-    const seconds = Math.min((now - last) / 1000, 0.1)
-    last = now
-    time = hovering ? time + seconds : time * Math.pow(0.002, seconds)
+  const tick = (now: number) => {
+    frame = 0
+    frameEvent.now = now
+    dispatch(frameEvent)
 
-    if (!hovering && time < 0.01) {
-      time = 0
-      frame = 0
-      paintStatic()
-
-      return
-    }
-
-    paint((ctx, px) => drawProjectIcon(ctx, px, icon(), time))
-    frame = requestAnimationFrame(tick)
+    if (selectAvatarRunning(state) && !frame) frame = requestAnimationFrame(tick)
   }
 
   const enter = () => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return
-    hovering = true
-
-    if (frame) return
-    entered = last = performance.now()
-    frame = requestAnimationFrame(tick)
+    enterEvent.now = performance.now()
+    enterEvent.reduced = prefersReducedMotion()
+    dispatch(enterEvent)
   }
 
-  const leave = () => (hovering = false)
+  const leave = () => dispatch(AVATAR_POINTER_LEFT)
+
+  const onMotionChange = () => {
+    motionEvent.reduced = prefersReducedMotion()
+    dispatch(motionEvent)
+  }
 
   const target =
-    canvas.closest<HTMLElement>(HOVER_TARGET) ?? canvas.closest<HTMLElement>('[data-component="project-avatar-v2"]') ?? canvas
+    canvas.closest<HTMLElement>(HOVER_TARGET) ??
+    canvas.closest<HTMLElement>('[data-component="project-avatar-v2"]') ??
+    canvas
 
   target.addEventListener("pointerenter", enter)
   target.addEventListener("pointerleave", leave)
 
   return {
     /** Repaints the static frame unless the avatar is animating, e.g. after the icon changed. */
-    refresh: () => !frame && paintStatic(),
+    refresh: () => dispatch(AVATAR_REFRESH),
     dispose: () => {
-      cancelAnimationFrame(frame)
+      dispatch(AVATAR_DISPOSED)
       target.removeEventListener("pointerenter", enter)
       target.removeEventListener("pointerleave", leave)
     },
