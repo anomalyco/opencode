@@ -11,3 +11,11 @@ workspace = true
 
 [dependencies]
 opentui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Only for its re-exported synchronous `tungstenite`; the endpoint runs on plain threads.
+tokio-tungstenite.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
