@@ -3,6 +3,15 @@ import { Button } from "@opencode/ui/button"
 import { Loader } from "@opencode/ui/loader"
 import { createLatest, usePlugin } from "@opencode/plugin/gui"
 import { createOfficeWorker, type WorkerClient } from "./office-worker"
+import {
+  createWordPaintState,
+  transitionWordPaint,
+  wordPaintAttempt,
+  wordPaintFailed,
+  type WordPaintEffect,
+  type WordPaintEvent,
+} from "./word-paint-machine"
+import { SupersededError, WorkerClosedError } from "./worker-rpc"
 import { OfficePages, type PaintPage, type ScrollToPage } from "./pages"
 import {
   createWordLayoutState,
@@ -144,13 +153,90 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  const paint: PaintPage = async (index, canvas, scale, signal) => {
-    const painted = client.call(
-      "paint",
-      { index, scale, ratio: window.devicePixelRatio || 1 },
-      // A newer paint of the page, such as at another scale, replaces this one while it waits, and a page that
-      // scrolled away withdraws it.
-      { key: `paint:${index}`, signal },
+  // Each page's paint, at most one per page; a page that left has none.
+  const [paintState, setPaintState] = createSignal(createWordPaintState())
+  // The paint calls still running, by attempt; the canvas each page paints on and the signal its page holds.
+  const calls = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  const canvases = new Map<number, { canvas: HTMLCanvasElement; signal: AbortSignal }>()
+
+  const dispatchPaint = (event: WordPaintEvent) => {
+    const next = transitionWordPaint(untrack(paintState), event)
+
+    setPaintState(() => next.state)
+    next.effects.forEach(runPaint)
+  }
+
+  const runPaint = (effect: WordPaintEffect) => {
+    if (effect.type === "request-paint")
+      return requestPaint(effect.index, effect.attempt, effect.scale, effect.ratio, effect.timeoutMs)
+
+    if (effect.type === "abort-paint") {
+      const call = calls.get(effect.attempt)
+
+      calls.delete(effect.attempt)
+      clearTimeout(call?.timer)
+      call?.controller.abort()
+
+      return
+    }
+
+    if (effect.type === "close-bitmap") return effect.bitmap.close()
+
+    const canvas = canvases.get(effect.index)?.canvas
+
+    if (effect.type === "clear-canvas") {
+      if (!canvas) return
+
+      canvas.width = 0
+      canvas.height = 0
+
+      return
+    }
+
+    const context = canvas?.getContext("bitmaprenderer")
+
+    if (!canvas || !context) return effect.bitmap.close()
+
+    canvas.width = effect.bitmap.width
+    canvas.height = effect.bitmap.height
+    context.transferFromImageBitmap(effect.bitmap)
+  }
+
+  // Asks the worker for one page. A newer paint of the page, such as at another scale, replaces this one while it
+  // waits, and a page that scrolled away withdraws it.
+  const requestPaint = (index: number, attempt: number, scale: number, ratio: number, timeoutMs: number) => {
+    const call = {
+      controller: new AbortController(),
+      timer: setTimeout(() => dispatchPaint({ type: "paint.timed-out", index, attempt }), timeoutMs),
+    }
+
+    const settle = () => {
+      clearTimeout(call.timer)
+
+      if (calls.get(attempt) === call) calls.delete(attempt)
+    }
+
+    calls.set(attempt, call)
+    void client.call("paint", { index, scale, ratio }, { key: `paint:${index}`, signal: call.controller.signal }).then(
+      (bitmap) => {
+        settle()
+        // The worker answers without a bitmap only for a paint it was told to drop, or a page it cannot build.
+        dispatchPaint(
+          bitmap
+            ? { type: "paint.succeeded", index, attempt, bitmap }
+            : { type: "paint.failed", index, attempt, quiet: call.controller.signal.aborted },
+        )
+      },
+      (error: Error) => {
+        settle()
+        // A replaced or withdrawn paint shows nothing; a closed or stopped worker reports itself.
+        dispatchPaint({
+          type: "paint.failed",
+          index,
+          attempt,
+          quiet: error instanceof SupersededError || error instanceof WorkerClosedError,
+        })
+      },
     )
 
     // Builds the next page after the paints waiting, so scrolling on rarely waits for it. Pages stay unbuilt beyond
@@ -159,19 +245,29 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
 
     // The worker runs calls in order, so the rest of the layout queues behind the first pages' paints.
     dispatch(queued)
+  }
 
-    // A withdrawn paint rejects here, and the worker closes any bitmap it made for it.
-    const bitmap = await painted
+  onCleanup(() => dispatchPaint({ type: "disposed" }))
 
-    if (!bitmap) return
+  const paint: PaintPage = (index, canvas, scale, signal) => {
+    if (signal.aborted) return Promise.resolve()
 
-    const context = canvas.getContext("bitmaprenderer")
+    canvases.set(index, { canvas, signal })
+    // The page that leaves withdraws whichever paint it holds then, a retried one included.
+    signal.addEventListener(
+      "abort",
+      () => {
+        if (canvases.get(index)?.signal !== signal) return
+        canvases.delete(index)
+        const attempt = wordPaintAttempt(untrack(paintState), index)
 
-    if (!context) return bitmap.close()
+        if (attempt !== undefined) dispatchPaint({ type: "paint.aborted", index, attempt })
+      },
+      { once: true },
+    )
+    dispatchPaint({ type: "paint.started", index, scale, ratio: window.devicePixelRatio || 1 })
 
-    canvas.width = bitmap.width
-    canvas.height = bitmap.height
-    context.transferFromImageBitmap(bitmap)
+    return Promise.resolve()
   }
 
   const text = async (index: number, signal: AbortSignal) => {
@@ -216,7 +312,29 @@ function DocumentContent(props: { opened: Opened; onDetails: (details: readonly 
       pages={pages()}
       paint={paint}
       label={(index) => ctx.t("page", { number: index + 1 })}
-      overlay={(input) => <WordTextLayer index={input.index} page={pages()[input.index]} text={text} follow={follow} />}
+      overlay={(input) => (
+        <Show
+          when={wordPaintFailed(paintState(), input.index)}
+          fallback={<WordTextLayer index={input.index} page={pages()[input.index]} text={text} follow={follow} />}
+        >
+          {/* A page that could not paint says so, rather than show as blank paper. */}
+          <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div
+              role="status"
+              class="flex items-center gap-2 rounded-md bg-v2-background-bg-base px-3 py-1.5 text-12-regular text-v2-text-text-muted shadow-[var(--v2-elevation-raised)]"
+            >
+              {ctx.t("document.pageFailed")}
+              <Button
+                size="small"
+                variant="outline"
+                onClick={() => dispatchPaint({ type: "paint.retried", index: input.index })}
+              >
+                {ctx.t("common.retry")}
+              </Button>
+            </div>
+          </div>
+        </Show>
+      )}
       text
       footer={(index) => (
         <Show when={index === pages().length - 1}>

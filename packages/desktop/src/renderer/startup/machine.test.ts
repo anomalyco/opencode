@@ -10,6 +10,7 @@ import {
   selectSidecar,
   selectStartupFailure,
   selectStartupLocale,
+  selectStartupRevealed,
   transitionStartup,
   type StartupEffect,
   type StartupEvent,
@@ -214,11 +215,6 @@ describe("desktop startup", () => {
   test.each([
     ["the local server fails", [], "booting"],
     ["onboarding fails", mounted, "hydrating"],
-    [
-      "onboarding fails after the app shows",
-      [...mounted, { type: "tabs.ready" }, { type: "fade.timed-out" }],
-      "revealed",
-    ],
   ] satisfies [string, StartupEvent[], string][])("shows the error page when %s", (_name, events, from) => {
     const error = new Error("boom")
     const before = replay(events)
@@ -228,6 +224,22 @@ describe("desktop startup", () => {
     expect(selectStartupFailure(result.state)).toEqual({ error })
     expect(selectInterfaceMounted(result.state)).toBe(false)
   })
+
+  test.each([
+    ["fading in", [...mounted, { type: "tabs.ready" }]],
+    ["shown", [...mounted, { type: "tabs.ready" }, { type: "fade.timed-out" }]],
+  ] satisfies [string, StartupEvent[]][])(
+    "keeps the app when a late failure arrives while it is %s",
+    (_name, events) => {
+      // On dev onboarding that failed after the hydration timeout showed the app replaced it with the error page.
+      const before = replay(events)
+      const result = transitionStartup(before.state, { type: "startup.failed", error: new Error("boom") })
+
+      expect(selectStartupRevealed(before.state)).toBe(true)
+      expect(result.state).toBe(before.state)
+      expect(selectInterfaceMounted(result.state)).toBe(true)
+    },
+  )
 
   test("stops its timer when the error boundary catches a render error", () => {
     const fresh = replay(

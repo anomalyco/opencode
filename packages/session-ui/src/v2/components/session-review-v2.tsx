@@ -68,13 +68,6 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   const minWidth = () => props.minWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN
   const maxWidth = () => props.maxWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX
 
-  createEffect(() => {
-    if (!resizing()) return
-    const stop = () => setResizing(false)
-    makeEventListener(document, "pointerup", stop)
-    makeEventListener(document, "pointercancel", stop)
-  })
-
   return (
     <div data-component="session-review-v2-sidebar-root">
       <Show when={props.open}>
@@ -136,13 +129,14 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
         </aside>
       </Show>
       <Show when={props.open && props.onWidthChange}>
-        <div data-slot="session-review-v2-sidebar-resize" onPointerDown={() => setResizing(true)}>
+        <div data-slot="session-review-v2-sidebar-resize">
           <ResizeHandle
             direction="horizontal"
             size={width()}
             min={minWidth()}
             max={maxWidth()}
             onResize={(next) => props.onWidthChange?.(next)}
+            onDraggingChange={setResizing}
             onDblClick={() => props.onWidthChange?.(SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT)}
           />
         </div>

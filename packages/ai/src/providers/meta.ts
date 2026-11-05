@@ -5,10 +5,10 @@ import { MetaResponses } from "../protocols/meta-responses.js"
 import { MetaMessages } from "../protocols/meta-messages.js"
 import { MetaImages } from "../protocols/meta-images.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
+import { ProviderID, ToolDefinition, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
@@ -75,7 +75,7 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -95,7 +95,7 @@ const responsesRoute = Route.make({
   endpoint: Endpoint.path("/responses", { baseURL }),
   // Meta Responses does not support WebSocket upgrades; always use HTTP/SSE.
   transport: MetaResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 const chatRoute = Route.make({
@@ -114,7 +114,7 @@ const messagesRoute = Route.make({
   protocol: MetaMessages.protocol,
   endpoint: Endpoint.path("/messages", { baseURL }),
   framing: AnthropicMessages.framing,
-  defaults: { providerOptions: { thinking: { type: "adaptive", display: "omitted" } } },
+  options: { providerOptions: { thinking: { type: "adaptive", display: "omitted" } } },
 })
 
 export const routes = [responsesRoute, chatRoute, messagesRoute]

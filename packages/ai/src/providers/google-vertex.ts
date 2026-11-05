@@ -4,7 +4,7 @@ import { Gemini } from "../protocols/gemini.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { Auth } from "../route/auth.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import {
@@ -13,6 +13,7 @@ import {
   type LLMRequest,
   type ModelID,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
@@ -24,7 +25,7 @@ export type GeminiProviderOptionsInput = GeminiOptionsInput
 
 export const id = ProviderID.make("google-vertex")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   GoogleVertexShared.ApiKeyOptions & {
     readonly baseURL?: string
     readonly location?: string

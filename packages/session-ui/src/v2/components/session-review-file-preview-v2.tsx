@@ -8,7 +8,7 @@ import { mediaKindFromPath } from "../../pierre/media"
 import { previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
-import { createMemo, Show } from "solid-js"
+import { children, createMemo, Show, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { normalize, text, type ViewDiff } from "../../components/session-diff"
 import type {
@@ -43,6 +43,8 @@ export type SessionReviewFilePreviewV2Props = {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+  /** Shown in place of the diff, under the file's header, while the full diff loads or after it failed to load. */
+  placeholder?: JSX.Element
 }
 
 function statusLabel(status: ViewDiff["status"]) {
@@ -173,6 +175,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   })
 
   const expandUnchanged = () => props.expandMode === "expand"
+  const placeholder = children(() => props.placeholder)
 
   const diffViewer = () => (
     <Dynamic
@@ -236,14 +239,21 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         data-slot="session-review-v2-diff-scroll"
       >
         <Show
-          when={diffCanRender() || mediaKind()}
+          when={placeholder()}
           fallback={
-            <div data-slot="session-review-v2-empty">
-              <span class="text-12-regular text-text-weak">{i18n.t("ui.fileMedia.binary.title")}</span>
-            </div>
+            <Show
+              when={diffCanRender() || mediaKind()}
+              fallback={
+                <div data-slot="session-review-v2-empty">
+                  <span class="text-12-regular text-text-weak">{i18n.t("ui.fileMedia.binary.title")}</span>
+                </div>
+              }
+            >
+              {diffViewer()}
+            </Show>
           }
         >
-          {diffViewer()}
+          <div data-slot="session-review-v2-empty">{placeholder()}</div>
         </Show>
       </div>
     </>

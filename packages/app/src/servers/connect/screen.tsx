@@ -3,8 +3,6 @@ import { Button } from "@opencode/ui/button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Wordmark } from "@opencode/ui/wordmark"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { cameraHint, createCameraAvailability } from "./camera"
 import { createServerConnectController } from "./controller"
 import { ConnectMethodSwitch } from "./method"
 import "./screen.css"
@@ -13,8 +11,6 @@ const PairingScanner = lazy(() => import("./scanner").then((module) => ({ defaul
 
 export function ConnectServerScreen(props: { url?: string } = {}) {
   const language = useLanguage()
-  const platform = usePlatform()
-  const camera = createCameraAvailability()
   // Read once: the screen leaves when the server it signs in to answers, so its address does not change while it shows.
   const form = createServerConnectController({ surface: "screen", target: { kind: "connect", url: props.url } })
   const view = form.view
@@ -39,10 +35,7 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
             <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
               <PairingScanner
                 redeem={form.redeem}
-                onCancel={() => {
-                  form.dispatch({ type: "scan.cancelled" })
-                  void camera.refetch()
-                }}
+                onCancel={() => form.dispatch({ type: "scan.cancelled" })}
                 onScan={(link) => form.dispatch({ type: "scan.completed", link })}
               />
             </Suspense>
@@ -131,21 +124,17 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
               {language.t(view().busy ? "dialog.server.add.checking" : "server.connect.button")}
             </Button>
           </form>
-          <Show when={view().draft.method === "link" && platform.platform === "web"}>
-            <Show
-              when={camera.available.latest || camera.available.loading}
-              fallback={<p>{language.t(cameraHint())}</p>}
+          <Show when={view().showScan}>
+            <Button
+              variant="neutral"
+              size="large"
+              disabled={!view().canScan}
+              onClick={() => form.dispatch({ type: "scan.started" })}
             >
-              <Button
-                variant="neutral"
-                size="large"
-                disabled={view().disabled || !camera.available.latest}
-                onClick={() => form.dispatch({ type: "scan.started" })}
-              >
-                {language.t("server.connect.scan")}
-              </Button>
-            </Show>
+              {language.t("server.connect.scan")}
+            </Button>
           </Show>
+          <Show when={view().cameraHint}>{(hint) => <p>{hint()}</p>}</Show>
           <ConnectMethodSwitch
             method={view().draft.method}
             disabled={view().disabled}
