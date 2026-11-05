@@ -1174,6 +1174,11 @@ name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
  "opentui",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio-tungstenite",
+ "url",
 ]
 
 [[package]]
