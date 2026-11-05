@@ -1156,6 +1156,62 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
+  it.effect("resumes a silent child after restart without reporting or waking its parent", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const bus = yield* Bus.Service
+      const parent = Session.ID.make("ses_subagent_silent_resume_parent")
+      const child = Session.ID.make("ses_subagent_silent_resume_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        time_suspended: Date.now(),
+        metadata: { "subagent.notify": false },
+      })
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Silent shutdown inspection",
+        },
+        run: Effect.never,
+      })
+      yield* jobs.background(child)
+      const marker = (yield* jobs.pendingBackground)[0]
+      if (!marker) return yield* Effect.die("background record missing")
+
+      const answered = yield* Deferred.make<void>()
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Scope.provide(scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) =>
+          sessionID === child
+            ? answer(bus, child, "Silent resumed result").pipe(Effect.andThen(Deferred.succeed(answered, undefined)))
+            : Effect.sync(() => void drained.push(sessionID)),
+        undefined,
+        restarted,
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions
+      yield* Deferred.await(answered)
+      yield* pendingEmpty(restarted)
+
+      expect(drained).toEqual([])
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      expect(yield* restarted.pendingBackground).toEqual([])
+      yield* restart.resumeSuspendedSessions
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+    }),
+  )
+
   it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service

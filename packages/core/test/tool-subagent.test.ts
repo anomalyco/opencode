@@ -308,6 +308,84 @@ describe("SubagentTool", () => {
     ),
   )
 
+  completionIt.live("replays a silent child's durable row without reporting to the parent", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Silent recipient",
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const database = yield* Database.Service
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-silent-replay",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "quiet review",
+                prompt: "review",
+                background: true,
+                notify: false,
+              },
+            },
+          })
+          const child = outputSessionID(result.metadata)
+          yield* jobs.wait({ id: child })
+          yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
+          const synthetic = () =>
+            sessions
+              .context(parent.id)
+              .pipe(Effect.map((messages) => messages.filter((message) => message.type === "synthetic")))
+          expect(yield* synthetic()).toEqual([])
+
+          // The crash durable row a silent child's observer leaves behind: replaying it must clear
+          // the marker without admitting a report for the parent.
+          const notificationID = SessionMessage.ID.create()
+          yield* database.db
+            .insert(JobTable)
+            .values({
+              notification_id: notificationID,
+              id: child,
+              session_id: parent.id,
+              child_session_id: child,
+              kind: "subagent",
+              title: "quiet review",
+              status: "completed",
+              output: "Silent replayed result",
+              error: null,
+              recovery: {
+                kind: "subagent",
+                parentSessionID: parent.id,
+                childSessionID: child,
+                agent: "reviewer",
+                description: "quiet review",
+              },
+            })
+            .run()
+          expect(yield* jobs.pendingBackground).toHaveLength(1)
+          const restart = yield* SessionRestart.Service
+          yield* restart.resumeSuspendedSessions
+          yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
+
+          expect(yield* synthetic()).toEqual([])
+          expect(yield* jobs.pendingBackground).toEqual([])
+          expect(yield* SessionInbox.list(database.db, parent.id)).toEqual([])
+        }),
+      ),
+    ),
+  )
+
   completionIt.live("returns a foreground child inline without reporting to the parent", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
