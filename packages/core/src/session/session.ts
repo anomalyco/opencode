@@ -29,10 +29,26 @@ import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
+import { SubagentCompletion } from "./subagent-completion.js"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
   resume?: boolean
+}
+
+/** What a waiting parent gets back once its child goes idle. */
+export type WaitResult = {
+  /**
+   * Outcome of the most recent busy period that reached a terminal transition. Absent when the
+   * session never ran; a shutdown interrupt leaves the previous outcome in place.
+   */
+  readonly outcome: SessionSchema.Info["outcome"]
+  /**
+   * Text of the newest completed, error-free assistant answer, or `SubagentCompletion.NO_TEXT`.
+   * Read regardless of outcome, so a failed or interrupted period can still return an earlier
+   * good answer.
+   */
+  readonly text: string
 }
 
 /**
@@ -278,6 +294,14 @@ export const make = Effect.fn("Session.make")(function* () {
   const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)
     yield* execution.awaitIdle(sessionID)
+    // Read again after idle: the terminal event writes `idle_outcome` before the deferred behind
+    // `awaitIdle` resolves, so the first get would carry the previous period's outcome.
+    const session = yield* get(sessionID)
+    const messages = yield* store.messages({ sessionID, order: "desc", limit: 20, type: "assistant" })
+    const assistant = messages.find(
+      (message) => message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+    )
+    return { outcome: session.outcome, text: SubagentCompletion.text(assistant) } satisfies WaitResult
   })
   const resume = Effect.fn("Session.resume")(function* (sessionID: SessionSchema.ID) {
     yield* get(sessionID)

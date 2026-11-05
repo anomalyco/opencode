@@ -437,7 +437,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.wait",
         Effect.fn(function* (ctx) {
-          yield* session.wait(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          // Item sub-spawn-wait.3 surfaces a typed decode failure; today the protocol advertises only
+          // NotFound and ServiceUnavailable, so a corrupt row dies rather than failing a declared error.
+          yield* session
+            .wait(ctx.params.sessionID)
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("Session.MessageDecodeError", Effect.die),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )

@@ -80,6 +80,8 @@ import { SubagentMetadata } from "./session/subagent-metadata.js"
 
 export { ListAnchor, ListCursor }
 
+export type { WaitResult } from "./session/session.js"
+
 export const ListInput = SessionStore.ListInput
 export type ListInput = SessionStore.ListInput
 
@@ -276,7 +278,8 @@ export interface Interface {
   readonly compact: (
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  /** Waits until the session is idle, then returns its last outcome and newest completed, error-free assistant text. */
+  readonly wait: (id: SessionSchema.ID) => ReturnType<Session.Handle["wait"]>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
