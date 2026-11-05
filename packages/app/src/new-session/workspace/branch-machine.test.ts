@@ -98,7 +98,7 @@ describe("branch picker", () => {
     expect(transitionBranchPicker(outside.state, close).effects).toEqual([])
 
     // The picker unmounts before Kobalte closes it, then the draft returns to the same root.
-    const reopened = replay([target(undefined), target("/repo-a"), loaded(4), open], outside.state)
+    const reopened = replay([target(undefined), target("/repo-a"), loaded(3), open], outside.state)
     expect(selectBranchPopoverOpen(reopened.state)).toBe(true)
     expect(transitionBranchPicker(reopened.state, { type: "branch.selected", branch: "dev" }).effects).toEqual([
       { type: "branch.choose", branch: "dev" },
@@ -132,7 +132,7 @@ describe("branch picker", () => {
     expect(transitionBranchPicker(synced.state, loaded(2, ["old"])).state).toBe(synced.state)
     expect(transitionBranchPicker(synced.state, { type: "branches.timed-out", attempt: 2 }).state).toBe(synced.state)
 
-    const elsewhere = { type: "branches.synced", directory: "/repo-b", items: ["x"] } as const
+    const elsewhere: BranchPickerEvent = { type: "branches.synced", directory: "/repo-b", items: ["x"] }
     expect(transitionBranchPicker(opened.state, elsewhere).state).toBe(opened.state)
   })
 
