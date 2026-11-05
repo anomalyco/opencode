@@ -1,0 +1,113 @@
+{
+  "scenario": "E.14/goal",
+  "sides": [
+    "ts",
+    "rs"
+  ],
+  "status": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "dialog": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "paused": {
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "footer": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "ended": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "requests": {
+    "equal": true,
+    "writes": {
+      "a": [
+        "POST /api/session {\"agent\":\"build\",\"id\":\"<ses>\",\"location\":{\"directory\":\"<root>/work\"},\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/command {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"name\":\"goal\",\"text\":\"Ship the sidebar with every built-in section\"}",
+        "POST /api/session/<ses>/command {\"name\":\"goal\",\"text\":\"pause\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}"
+      ],
+      "b": [
+        "POST /api/session {\"agent\":\"build\",\"id\":\"<ses>\",\"location\":{\"directory\":\"<root>/work\"},\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/command {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"name\":\"goal\",\"text\":\"Ship the sidebar with every built-in section\"}",
+        "POST /api/session/<ses>/command {\"name\":\"goal\",\"text\":\"pause\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}"
+      ]
+    },
+    "onlyA": [
+      "GET /api/fs/list",
+      "GET /api/plugin"
+    ],
+    "onlyB": []
+  },
+  "model": [
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ],
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ]
+  ]
+}

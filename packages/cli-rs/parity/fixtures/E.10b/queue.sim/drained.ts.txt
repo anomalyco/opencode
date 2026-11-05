@@ -1,0 +1,30 @@
+   Simulated session             +
+  ┃
+
+     Answered the steer.
+
+     Build · Simulated Model
+
+  ┃
+  ┃  First queued
+  ┃
+
+     Answered the first queued prompt.
+
+     Build · Simulated Model
+
+  ┃
+  ┃  Second queued
+  ┃
+
+     Answered the second queued prompt.
+
+     Build · Simulated Model
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+

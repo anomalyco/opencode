@@ -1,0 +1,30 @@
+ ⠋ Simulated session             +
+
+  ┃
+  ┃  Read the parser
+  ┃
+
+     Reading the parser.
+
+  ┃
+  ┃  Steer this         Search queued prompts                            esc
+  ┃
+                    ┃   First queued                                  1 of 1
+  ┃
+  ┃  Second queued
+  ┃                                delete ctrl+d   undo ctrl+u   steer enter
+
+
+
+
+  ┃
+  ┃  1 queued · First queued
+  ┃
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   [⋯] esc interrupt                                             shift+tab agents  ctrl+p commands
+

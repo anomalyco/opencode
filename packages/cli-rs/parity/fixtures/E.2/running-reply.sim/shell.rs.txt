@@ -1,0 +1,30 @@
+ ⠋ Simulated session             +
+
+  ┃
+  ┃  Run the shell command `echo hello` and then reply done
+  ┃
+
+     + Thought: Planning the command
+
+  ┃
+  ┃  ⋯ sleep 5; echo hello
+  ┃
+
+     Press ctrl+b to move running work to the background
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   [⋯] esc interrupt                                                    ↓ 1 shell  ctrl+p commands
+

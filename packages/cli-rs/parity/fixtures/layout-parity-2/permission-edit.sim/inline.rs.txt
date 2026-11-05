@@ -1,0 +1,30 @@
+ ! Simulated session             +
+
+  ┃
+  ┃  Fix the parser
+  ┃
+
+  ┃
+  ┃  ⋯ Patching notes.txt
+  ┃
+
+
+
+
+
+  ┃
+  ┃  △ Permission required
+  ┃    → Edit notes.txt
+  ┃
+  ┃  1   Parser notes
+  ┃  2 - The parser keeps every value.
+  ┃  2 + The parser keeps every value, trims the spaces around it, and skips the empty values
+  ┃      and the lines that start with #.
+  ┃  3   See the tests.
+  ┃
+  ┃
+  ┃
+  ┃
+  ┃   Allow once   Always allow   Reject             ctrl+f fullscreen  ⇆ select  enter confirm
+  ┃
+

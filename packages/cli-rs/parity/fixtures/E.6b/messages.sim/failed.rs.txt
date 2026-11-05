@@ -1,0 +1,40 @@
+   Fix the parser                +
+                                                                           ┃                     ┃
+  ┃                                                                        ┃  Session failed  x  ┃
+  ┃  Why does the parser fail?                                             ┃                     ┃
+  ┃                                                                        ┃  Request too large  ┃
+                                                                           ┃                     ┃
+     Reading the parser.
+
+     Build · Simulated Model
+
+  ────────────────────────────────────────── Compaction ──────────────────────────────────────────
+
+     Objective
+
+     - Fix the parser.
+
+  ┃
+  ┃  Try again
+  ┃
+
+     Error: Request too large
+
+     Build · Simulated Model
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Simulated Model Simulation
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  /tmp/opencode-parity/                      /work               shift+tab agents  ctrl+p commands
+

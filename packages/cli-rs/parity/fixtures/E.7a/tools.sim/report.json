@@ -1,0 +1,125 @@
+{
+  "scenario": "E.7a/tools",
+  "sides": [
+    "ts",
+    "rs"
+  ],
+  "open": {
+    "equal": false,
+    "differences": 3,
+    "colorOnly": 0,
+    "deviation": [
+      "P15-metadata-gap-fg"
+    ]
+  },
+  "requests": {
+    "equal": true,
+    "writes": {
+      "a": [
+        "POST /api/session {\"agent\":\"build\",\"id\":\"<ses>\",\"location\":{\"directory\":\"<root>/work\"},\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Fix the off-by-one in the parser\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}"
+      ],
+      "b": [
+        "POST /api/session {\"agent\":\"build\",\"id\":\"<ses>\",\"location\":{\"directory\":\"<root>/work\"},\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/model {\"model\":{\"id\":\"gpt-sim-model\",\"providerID\":\"simulation\"}}",
+        "POST /api/session/<ses>/prompt {\"agents\":[],\"delivery\":\"steer\",\"files\":[],\"id\":\"<msg>\",\"text\":\"Fix the off-by-one in the parser\"}",
+        "POST /api/session/<ses>/view {\"idle\":<epoch>}"
+      ]
+    },
+    "onlyA": [
+      "GET /api/fs/list",
+      "GET /api/plugin"
+    ],
+    "onlyB": []
+  },
+  "model": [
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "title",
+        "reply": null
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ],
+    [
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "title",
+        "reply": null
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 0,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      },
+      {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "kind": "turn",
+        "reply": 1,
+        "tools": [
+          "glob",
+          "grep",
+          "patch",
+          "question",
+          "read",
+          "shell",
+          "skill",
+          "subagent",
+          "webfetch",
+          "websearch",
+          "execute"
+        ]
+      }
+    ]
+  ]
+}
