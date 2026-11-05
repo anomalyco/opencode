@@ -9,9 +9,11 @@ pub mod resize;
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
+use std::sync::OnceLock;
 
 use opencode_api::generated::SessionID;
 use opencode_local::cli_config::TabsLayout;
+use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
@@ -169,11 +171,12 @@ pub fn reload(tui: &Tui, storage: &Storage) {
     refresh(tui);
 }
 
-/// Writes one `layout` width under the storage lock, off the UI thread.
+/// Writes one `layout` width under the storage lock, on one worker thread so the writes land in order.
 fn save_layout(tui: &Tui, key: &'static str, width: u16) {
     tui.frame.layout.borrow_mut()[key] = json!(width);
     let Some(storage) = tui.storage() else { return };
-    tui.app.runtime().spawn_blocking(move || {
+    static WRITER: OnceLock<Serial> = OnceLock::new();
+    WRITER.get_or_init(|| Serial::new("layout")).run(move || {
         let result = storage.update("layout", &json!({}), |value| {
             if let Some(object) = value.as_object_mut() {
                 object.insert(key.to_owned(), json!(width));
