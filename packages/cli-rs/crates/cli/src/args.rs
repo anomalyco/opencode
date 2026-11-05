@@ -475,7 +475,6 @@ pub struct MiniArgs {
     pub server: ServerFlags,
 }
 
-#[allow(dead_code, reason = "read by the handlers of later steps")]
 impl MiniArgs {
     pub fn replay(&self) -> Option<bool> {
         match (self.replay, self.no_replay) {

@@ -155,11 +155,6 @@ impl<S: Copy + PartialEq> Canvas<S> {
         self.cells[row][..self.row_ends[row] as usize].iter().map(|cell| cell.ch.as_str()).collect()
     }
 
-    pub fn to_text(&self, trim: Trim) -> String {
-        let (start, end) = self.row_range(trim);
-        (start..end).map(|row| self.row_text(row)).collect::<Vec<_>>().join("\n")
-    }
-
     /// The widest row's terminal width (`getTextSize().width`).
     pub fn text_width(&self, trim: Trim) -> i32 {
         let (start, end) = self.row_range(trim);
@@ -168,11 +163,6 @@ impl<S: Copy + PartialEq> Canvas<S> {
             .map(|row| text::width(&self.row_text(row)))
             .max()
             .unwrap_or(0)
-    }
-
-    pub fn text_height(&self, trim: Trim) -> i32 {
-        let (start, end) = self.row_range(trim);
-        (end - start) as i32
     }
 
     /// The styled runs of each row: cells with equal `key` join one run. A row ends at its last non-blank

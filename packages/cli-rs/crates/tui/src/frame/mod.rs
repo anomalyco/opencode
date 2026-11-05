@@ -161,11 +161,6 @@ fn save_layout(tui: &Tui, key: &'static str, width: u16) {
     });
 }
 
-/// The stored layout, for tests and the P-FILE proof.
-pub fn stored_layout(tui: &Tui) -> Value {
-    tui.frame.layout.borrow().clone()
-}
-
 /// `tabsAvailable`: tabs are on, one is open, and the route is not a plugin's.
 fn available(tui: &Tui) -> bool {
     Tabs::enabled(tui) && !tui.tabs.tabs(tui).is_empty() && !matches!(tui.route(), Route::Plugin { .. })
