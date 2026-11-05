@@ -7,7 +7,6 @@ import { Config } from "../../config.js"
 import { Credential } from "../../credential.js"
 import { ManagedPolicy } from "../../managed-policy.js"
 import { State } from "../../state.js"
-import { Wildcard } from "../../util/wildcard.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigIntegration } from "../integration.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
@@ -97,15 +96,7 @@ export const Plugin = define({
     })
     yield* ctx.permission.hook("evaluate", (event) =>
       Effect.sync(() => {
-        const statements = policies()
-        const denied = event.resources
-          .map((resource) =>
-            statements.findLast(
-              (policy) =>
-                policy.action === "tool.use" && Wildcard.match(`${event.action}:${resource}`, policy.resource),
-            ),
-          )
-          .find((policy) => policy?.effect === "deny")
+        const denied = ManagedPolicy.denying(policies(), event.action, event.resources)
         if (!denied) return
         event.effect = "deny"
         event.message = denied.message

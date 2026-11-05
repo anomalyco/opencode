@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { ShellParse } from "../src/shell/parse.js"
 import { ShellScan } from "../src/shell/scan.js"
 import { Wildcard } from "../src/util/wildcard.js"
+import { malformedCases } from "./fixture/shell-parse-cases"
 
 describe("ShellParse native parity", () => {
   test("scans generated supported syntax with valid saved prefixes and no fallback", async () => {
@@ -74,17 +75,7 @@ describe("ShellParse native parity", () => {
 })
 
 describe("ShellParse malformed native syntax", () => {
-  test.each([
-    ["bash", 'echo "unterminated', "unterminated-quote"],
-    ["bash", "printf done &&", "invalid-structure"],
-    ["bash", "cat >", "invalid-redirect"],
-    ["bash", ">", "invalid-redirect"],
-    ["bash", "FOO=bar >", "invalid-redirect"],
-    ["bash", "echo \\", "unterminated-escape"],
-    ["pwsh", 'Write-Output "unterminated', "unterminated-quote"],
-    ["pwsh", "git 12>bar", "invalid-redirect"],
-    ["pwsh", "Write-Output `", "unterminated-escape"],
-  ] as const)("fails explicitly for malformed %s syntax: %s", async (shell, command, reason) => {
+  test.each(malformedCases)("fails explicitly for malformed %s syntax: %s", async (shell, command, reason) => {
     const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
     expect(scanned).toEqual({ kind: "opaque", reason })
     expect(await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace")))).toMatchObject({

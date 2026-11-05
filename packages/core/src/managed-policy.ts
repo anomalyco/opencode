@@ -39,6 +39,20 @@ export function decision(policies: readonly ConfigPolicy.Info[], action: ConfigP
 }
 
 /**
+ * The `tool.use` statement denying a permission check, matched as `<action>:<resource>`. A check covering several
+ * resources, such as the commands of a compound shell line, is denied when any one of them is.
+ */
+export function denying<Policy extends ConfigPolicy.Info>(
+  policies: readonly Policy[],
+  action: string,
+  resources: readonly string[],
+) {
+  return resources
+    .map((resource) => match(policies, "tool.use", `${action}:${resource}`))
+    .find((policy) => policy?.effect === "deny")
+}
+
+/**
  * The `integration.use` resource for what an integration supplies: `<integration>#<account>` when a connection with
  * a known account backs it, otherwise the bare integration ID (env keys, local config, the signed-out free tier).
  * A bare-ID pattern such as `opencode` therefore matches only connectionless use, never an org account. `#`

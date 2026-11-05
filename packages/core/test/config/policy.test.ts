@@ -21,6 +21,7 @@ import { FetchHttpClient } from "effect/http"
 import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { organizationPolicy } from "../fixture/policy"
+import { toolPolicyCases } from "../fixture/policy-cases"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -82,15 +83,23 @@ const evaluate = Effect.fn(function* (action: string, resources: string[], effec
 })
 
 describe("ConfigPolicyPlugin.Plugin", () => {
-  it.effect("preserves last-match precedence for tool.use without granting approvals", () =>
+  for (const item of toolPolicyCases)
+    it.effect(`decides organization tool.use statements: ${item.name}`, () =>
+      Effect.gen(function* () {
+        yield* addPlugin([organizationPolicy(item.policies, "Acme")])
+        for (const [action, resources, effect] of item.checks)
+          expect(yield* evaluate(action, resources), `${action}: ${resources.join(", ")}`).toEqual(
+            effect === "deny" ? { effect, message: "Blocked by Acme's policy" } : { effect, message: undefined },
+          )
+      }),
+    )
+
+  it.effect("keeps an approval prompt when no statement denies", () =>
     Effect.gen(function* () {
       yield* addPlugin([
         document(tool("deny", "shell:*"), tool("allow", "shell:git *"), tool("deny", "shell:git push *")),
       ])
       expect((yield* evaluate("shell", ["git status"], "ask")).effect).toBe("ask")
-      expect((yield* evaluate("shell", ["git push origin main"])).effect).toBe("deny")
-      expect((yield* evaluate("shell", ["ls"])).effect).toBe("deny")
-      expect((yield* evaluate("edit", ["notes.md"])).effect).toBe("allow")
     }),
   )
 
@@ -146,50 +155,12 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }).pipe(Effect.provide(Config.testLayer([document(provider("deny", "openai"))]))),
   )
 
-  it.effect("denies permissions matched as action:resource", () =>
-    Effect.gen(function* () {
-      yield* addPlugin([document(tool("deny", "shell:git push *"))])
-
-      expect(yield* evaluate("shell", ["git push"])).toEqual({
-        effect: "deny",
-        message: "Blocked by configuration policy",
-      })
-      expect(yield* evaluate("shell", ["git push origin main"])).toEqual({
-        effect: "deny",
-        message: "Blocked by configuration policy",
-      })
-      // Compound commands check several resources; any denied resource denies the operation.
-      expect((yield* evaluate("shell", ["git status", "git push"])).effect).toBe("deny")
-      expect(yield* evaluate("shell", ["git status"])).toEqual({ effect: "allow", message: undefined })
-      expect(yield* evaluate("edit", ["git push"])).toEqual({ effect: "allow", message: undefined })
-    }),
-  )
-
   it.effect("turns an ask into a deny but never grants", () =>
     Effect.gen(function* () {
       yield* addPlugin([document(tool("deny", "webfetch:*"), tool("allow", "shell:*"))])
 
       expect((yield* evaluate("webfetch", ["https://example.com"], "ask")).effect).toBe("deny")
       expect((yield* evaluate("shell", ["ls"], "ask")).effect).toBe("ask")
-    }),
-  )
-
-  it.effect("lets a later allow lift an earlier broad deny", () =>
-    Effect.gen(function* () {
-      yield* addPlugin([document(tool("deny", "shell:*"), tool("allow", "shell:git status *"))])
-
-      expect((yield* evaluate("shell", ["git status --short"])).effect).toBe("allow")
-      expect((yield* evaluate("shell", ["rm -rf /"])).effect).toBe("deny")
-    }),
-  )
-
-  it.effect("denies every permission with a bare wildcard", () =>
-    Effect.gen(function* () {
-      yield* addPlugin([document(tool("deny", "*"))])
-
-      expect((yield* evaluate("question", ["*"])).effect).toBe("deny")
-      expect((yield* evaluate("read", ["/tmp/notes.txt"])).effect).toBe("deny")
-      expect((yield* evaluate("github_delete_repository", ["*"])).effect).toBe("deny")
     }),
   )
 
