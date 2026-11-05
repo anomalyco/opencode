@@ -240,4 +240,3 @@ function watch(trigger: HTMLElement, card: HTMLElement) {
     window.removeEventListener("resize", refresh)
   }
 }
-

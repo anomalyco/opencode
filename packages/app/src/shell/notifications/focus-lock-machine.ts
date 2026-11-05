@@ -37,7 +37,10 @@ export function transitionFocusLock(state: FocusLockState, event: FocusLockEvent
   if (state.status === "disposed") return { state, effects: release }
 
   if (event.type === "disposed")
-    return { state: DISPOSED, effects: state.status === "held" ? [{ type: "lock.release", attempt: state.attempt }] : NONE }
+    return {
+      state: DISPOSED,
+      effects: state.status === "held" ? [{ type: "lock.release", attempt: state.attempt }] : NONE,
+    }
 
   if (event.type === "focus.changed") {
     if (state.status === "unfocused") {

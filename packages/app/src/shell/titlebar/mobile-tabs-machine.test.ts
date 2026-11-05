@@ -27,7 +27,8 @@ const gone: MobileTabsEvent = { type: "content.present", present: false }
 
 const settings: MobileTabsEvent = { type: "settings.requested" }
 
-const opensSettings = (effects: MobileTabsEffect[]) => effects.filter((effect) => effect.type === "settings.open").length
+const opensSettings = (effects: MobileTabsEffect[]) =>
+  effects.filter((effect) => effect.type === "settings.open").length
 
 describe("mobile tabs drawer", () => {
   test("Settings opens once the drawer has slid out", () => {
@@ -81,7 +82,10 @@ describe("mobile tabs drawer", () => {
   })
 
   test("route and viewport changes close an open drawer", () => {
-    for (const event of [{ type: "route.changed" }, { type: "viewport.changed", mobile: false }] satisfies MobileTabsEvent[]) {
+    for (const event of [
+      { type: "route.changed" },
+      { type: "viewport.changed", mobile: false },
+    ] satisfies MobileTabsEvent[]) {
       const result = replay([opened, event])
       expect(result.state).toEqual({ status: "closed", attempt: 0 })
       expect(result.effects).toEqual([])

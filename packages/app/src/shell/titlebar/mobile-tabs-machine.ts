@@ -53,7 +53,10 @@ export function transitionMobileTabs(state: MobileTabsState, event: MobileTabsEv
     // A close the drawer reports while it slides out to Settings is the one already under way.
     if (event.open === (state.status === "open") || (closing && !event.open)) return unchanged(state)
 
-    return { state: { status: event.open ? "open" : "closed", attempt: state.attempt }, effects: closing ? CLEAR : NONE }
+    return {
+      state: { status: event.open ? "open" : "closed", attempt: state.attempt },
+      effects: closing ? CLEAR : NONE,
+    }
   }
 
   if (event.type === "close" || event.type === "route.changed") {

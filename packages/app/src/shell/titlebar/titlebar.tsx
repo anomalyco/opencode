@@ -506,7 +506,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                 if (effect.type === "timer.clear") return
                 const attempt = effect.attempt
-                closeTimer = setTimeout(() => dispatchMobileTabs({ type: "close.timed-out", attempt }), effect.timeoutMs)
+                closeTimer = setTimeout(
+                  () => dispatchMobileTabs({ type: "close.timed-out", attempt }),
+                  effect.timeoutMs,
+                )
               })
             }
 

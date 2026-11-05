@@ -375,7 +375,12 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     })
   }
 
-  createEffect(on(() => props.error, () => dispatch({ type: "error.presented" })))
+  createEffect(
+    on(
+      () => props.error,
+      () => dispatch({ type: "error.presented" }),
+    ),
+  )
 
   onMount(() => {
     void import("@sentry/solid")
