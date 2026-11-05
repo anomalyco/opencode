@@ -508,6 +508,7 @@ export function createHost(input: {
           () => dispatch({ type: "catalog.failed", owner, attempt }),
         )
       }
+
       case "cancel-catalog-timer":
         clearTimeout(resources.catalogTimers.get(command.owner))
         resources.catalogTimers.delete(command.owner)
@@ -703,10 +704,12 @@ export function createHost(input: {
     // Registered first, so it runs last: the instance's embeds go after everything else it contributed. They are
     // owned by the instance, so releasing them never touches a replacement's.
     contribute(() => embeds.releaseOwner(instance))
+
     // Setup waits for the instance's copy in the app locale; the host keeps it in that locale until the instance goes.
     const ready = new Promise<void>((reply) =>
       dispatch({ type: "catalog.registered", owner: instance, catalog: loaded.i18n, reply }),
     )
+
     contribute(() => dispatch({ type: "catalog.unregistered", owner: instance }))
     // The instance's HostApis, each created on first read.
     const created: HostApis = {}

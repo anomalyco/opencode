@@ -1,5 +1,5 @@
 import { app } from "electron"
-import { Effect, Exit, FileSystem, Option, Path } from "effect"
+import { Effect, Exit, FileSystem, Option, Path, Predicate } from "effect"
 import { scoped } from "../native/logging"
 import { hasExistingAppState } from "../storage/install-state"
 import { FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY } from "../storage/keys"
@@ -12,12 +12,12 @@ import {
   type MainOnboardingEvent,
 } from "./onboarding-machine"
 
-const current = { state: createMainOnboardingState() }
+const onboarding = { state: createMainOnboardingState() }
 
 // Records completion at once; the caller runs the directory it is handed.
 const dispatch = (event: MainOnboardingEvent) => {
-  const next = transitionMainOnboarding(current.state, event)
-  current.state = next.state
+  const next = transitionMainOnboarding(onboarding.state, event)
+  onboarding.state = next.state
 
   if (next.commands.some((command) => command.type === "persist-complete"))
     getStore().set(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, true)
@@ -27,16 +27,14 @@ const dispatch = (event: MainOnboardingEvent) => {
 
 export const initializeFirstLaunchOnboarding = Effect.fn("Onboarding.initialize")(function* (userDataPath: string) {
   const store = getStore()
-  const stored = store.get(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY)
-  const complete = typeof stored === "boolean" ? stored : yield* detectExistingAppState(userDataPath)
+  const current = store.get(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY)
 
-  if (typeof stored !== "boolean") store.set(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, complete)
-  dispatch({ type: "initialized", complete })
+  if (Predicate.isBoolean(current)) {
+    dispatch({ type: "initialized", complete: current })
 
-  return complete
-})
+    return current
+  }
 
-const detectExistingAppState = Effect.fnUntraced(function* (userDataPath: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const names = (yield* fs.exists(userDataPath)) ? yield* fs.readDirectory(userDataPath) : []
@@ -51,11 +49,15 @@ const detectExistingAppState = Effect.fnUntraced(function* (userDataPath: string
     { concurrency: "unbounded" },
   )
 
-  return hasExistingAppState(entries)
+  const complete = hasExistingAppState(entries)
+  store.set(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, complete)
+  dispatch({ type: "initialized", complete })
+
+  return complete
 })
 
 export const isFirstLaunchOnboardingPending = Effect.fn("Onboarding.isPending")(function* () {
-  const pending = selectOnboardingPending(current.state)
+  const pending = selectOnboardingPending(onboarding.state)
   yield* scoped("onboarding", Effect.logInfo("first launch onboarding pending checked", { pending }))
 
   return pending

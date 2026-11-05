@@ -35,7 +35,10 @@ export function setProtocolReporter(reporter: ProtocolReport) {
 // would otherwise sit between the renderer and its HTML.
 const burst = { state: createProtocolBurstState() }
 
-const timers: { cap?: ReturnType<typeof setTimeout>; quiet?: ReturnType<typeof setTimeout> } = {}
+/** The burst's cap and quiet-window timers; the machine says when each starts and stops. */
+type BurstTimers = { cap?: ReturnType<typeof setTimeout>; quiet?: ReturnType<typeof setTimeout> }
+
+const timers: BurstTimers = {}
 
 const dispatch = (event: ProtocolBurstEvent) => {
   const next = transitionProtocolBurst(burst.state, event)
