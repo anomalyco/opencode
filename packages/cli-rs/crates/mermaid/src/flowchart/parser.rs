@@ -34,13 +34,37 @@ static EXPLICIT_SHAPE: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^{I
 static CIRCLE: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^{ID}\(\(.+\)\)$")));
 static CLASS_SUFFIX: LazyLock<Regex> = LazyLock::new(|| pattern(r"\s*:::.*$"));
 static END: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^end$"));
-// TS `EDGE_OPERATOR_RE`; the lookahead needs fancy-regex.
-static EDGE_OPERATOR: LazyLock<fancy_regex::Regex> = LazyLock::new(|| {
-    fancy_regex::Regex::new(
-        r"(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?",
-    )
-    .expect("edge operator pattern")
-});
+// TS `EDGE_OPERATOR_RE` without the lookahead `-\.(?!->)`; `edge_operator_matches` applies it.
+const EDGE_OPERATOR_REST: &str =
+    r"(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?";
+static EDGE_OPERATOR: LazyLock<Regex> =
+    LazyLock::new(|| pattern(&format!(r"(-\.(.+?)\.(?:->|-))|{EDGE_OPERATOR_REST}")));
+// The same groups with the first branch disabled (`\z-` never matches), anchored for a retry where the
+// lookahead fails.
+static EDGE_OPERATOR_AFTER_LOOKAHEAD: LazyLock<Regex> =
+    LazyLock::new(|| pattern(&format!(r"^(?:(\z-(.+?)\.(?:->|-))|{EDGE_OPERATOR_REST})")));
+
+/// The matches of `EDGE_OPERATOR_RE`, with each capture's byte range in `text`.
+fn edge_operator_matches(text: &str) -> Vec<Vec<Option<std::ops::Range<usize>>>> {
+    let mut matches = Vec::new();
+    let mut start = 0;
+    while let Some(captures) = EDGE_OPERATOR.captures_at(text, start) {
+        let whole = captures.get(0).expect("match");
+        let ranges = if captures.get(1).is_some() && text[whole.start()..].starts_with("-.->") {
+            let Some(retry) = EDGE_OPERATOR_AFTER_LOOKAHEAD.captures(&text[whole.start()..]) else {
+                start = whole.start() + 1;
+                continue;
+            };
+            let offset = whole.start();
+            retry.iter().map(|m| m.map(|m| m.start() + offset..m.end() + offset)).collect::<Vec<_>>()
+        } else {
+            captures.iter().map(|m| m.map(|m| m.range())).collect()
+        };
+        start = ranges[0].as_ref().expect("match").end;
+        matches.push(ranges);
+    }
+    matches
+}
 
 pub fn is_flowchart(content: &str) -> bool {
     HEADER.is_match(first_meaningful_line(content).unwrap_or(""))
@@ -237,21 +261,19 @@ fn edge_style(arrows: &[&str]) -> Option<EdgeStyle> {
 
 fn parse_edge_operators(line: &str) -> Vec<Operator> {
     let masked = mask_node_label_operators(line);
-    EDGE_OPERATOR
-        .captures_iter(&masked)
-        .filter_map(Result::ok)
+    edge_operator_matches(&masked)
+        .into_iter()
         .map(|captures| {
-            let whole = captures.get(0).expect("match");
-            let inline = captures.get(1).map(|m| m.as_str());
-            let group = |index: usize| captures.get(index).map(|m| m.as_str());
+            let whole = captures[0].clone().expect("match");
+            let group = |index: usize| captures[index].clone().map(|range| &masked[range]);
+            let inline = group(1);
             let start_arrow = inline.or(group(3)).or(group(6)).unwrap_or("");
             let end_arrow = inline.or(group(5)).or(group(6)).unwrap_or("");
-            let label_range = [2, 4, 7]
-                .into_iter()
-                .find_map(|index| captures.get(index).filter(|m| !m.as_str().is_empty()).map(|m| m.range()));
+            let label_range =
+                [2, 4, 7].into_iter().find_map(|index| captures[index].clone().filter(|range| !range.is_empty()));
             Operator {
-                index: whole.start(),
-                end: whole.end(),
+                index: whole.start,
+                end: whole.end,
                 label: strip_quotes(label_range.map_or("", |range| &line[range])),
                 style: edge_style(&[start_arrow, end_arrow]),
                 arrowhead: end_arrow == "~~~" || end_arrow.ends_with('>'),
@@ -473,4 +495,21 @@ fn descendants_of(subgraphs: &[Subgraph], id: &str) -> HashSet<String> {
         ids.extend(descendants_of(subgraphs, &child.id));
     }
     ids
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn edge_operators_apply_the_dotted_lookahead() {
+        let operators = |line: &str| {
+            super::parse_edge_operators(line)
+                .into_iter()
+                .map(|op| (op.index, op.end, op.label, op.arrowhead))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(operators("A -.-> B"), [(2, 7, String::new(), true)]);
+        assert_eq!(operators("A -.->B.- C"), [(2, 6, String::new(), true)]);
+        assert_eq!(operators("A -. note .-> B"), [(2, 13, "note".to_owned(), true)]);
+        assert_eq!(operators("A -.-> B -. x .- C"), [(2, 7, String::new(), true), (9, 16, "x".to_owned(), false)]);
+    }
 }

@@ -36,7 +36,6 @@ serde_json.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
 url.workspace = true
-uuid.workspace = true
 opencode-acp.workspace = true
 opencode-api.workspace = true
 opencode-latex.workspace = true

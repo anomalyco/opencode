@@ -96,7 +96,7 @@ impl Pane {
             socket: RefCell::default(),
             state: RefCell::new(State { terminal_size: Some(Size { cols: 80, rows: 24 }), ..State::default() }),
             disposed: Cell::new(false),
-            attachment: uuid::Uuid::new_v4().to_string(),
+            attachment: opencode_local::id::v4(),
             theme: super::palette::osc(&page, mode, background),
             tui: tui.weak(),
         });

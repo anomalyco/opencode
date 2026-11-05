@@ -152,7 +152,7 @@ fn publish(file: &Path, info: &Registration, handoff: Value) -> std::io::Result<
     source.insert("url".to_owned(), json!(info.url));
     let text = json!({ "source": source, "handoff": handoff, "expiresAt": number(expires_at) }).to_string();
     let mut temporary = sidecar(file).into_os_string();
-    temporary.push(format!(".{}.tmp", uuid::Uuid::new_v4()));
+    temporary.push(format!(".{}.tmp", opencode_local::id::v4()));
     let temporary = PathBuf::from(temporary);
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
