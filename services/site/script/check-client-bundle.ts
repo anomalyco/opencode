@@ -5,6 +5,9 @@
 // Also fails when server-only code reaches it: the Worker's cache, GitHub calls and the build-time
 // GitHub snapshot. Pages may import their modules for the queries, whose "use server" bodies the
 // browser build drops along with everything only those bodies read.
+// Last, it fails when a page's initial JavaScript (the entry and every chunk the page's route imports
+// statically, which the server modulepreloads) passes the budget below, gzipped. Code a page needs
+// only later belongs behind a dynamic import.
 // Run after `vite build`, optionally with the output directory: `bun script/check-client-bundle.ts .output`.
 import path from "node:path"
 import { Glob } from "bun"
@@ -56,4 +59,46 @@ if (found.length) {
 }
 console.log(
   `check-client-bundle: ${files.length} client files, no Settings, Design mode, device preview or server-only code`,
+)
+
+// In kB, gzipped. The heaviest pages, the legal documents (which carry their text), were 195 kB when
+// this was set; every other page was under 185 kB.
+const budget = 210
+type Chunk = { file: string; imports?: string[] }
+const manifest: Record<string, Chunk> = await Bun.file(path.join(root, ".vite/manifest.json")).json()
+const sizes = new Map<string, number>()
+const gzipped = async (file: string) => {
+  const known = sizes.get(file)
+  if (known !== undefined) return known
+  const size = Bun.gzipSync(await Bun.file(path.join(root, file)).bytes(), { level: 9 }).length
+  sizes.set(file, size)
+  return size
+}
+const closure = (key: string, seen = new Set<string>()): Set<string> => {
+  if (seen.has(key)) return seen
+  seen.add(key)
+  manifest[key].imports?.forEach((next) => closure(next, seen))
+  return seen
+}
+const entry = closure("src/entry-client.tsx")
+const pages = await Promise.all(
+  Object.keys(manifest)
+    .filter((key) => key.startsWith("src/routes/") && key.includes("?pick=default"))
+    .map(async (key) => {
+      const chunks = [...new Set([...entry, ...closure(key)])].map((chunk) => manifest[chunk].file)
+      const bytes = (await Promise.all(chunks.map(gzipped))).reduce((sum, size) => sum + size, 0)
+      return { route: key.slice("src/routes/".length).split("?")[0], kB: Math.round(bytes / 100) / 10 }
+    }),
+)
+const over = pages.filter((page) => page.kB > budget)
+if (over.length) {
+  console.error(
+    `check-client-bundle: initial JavaScript over the ${budget} kB (gzipped) budget:\n  ` +
+      over.map((page) => `${page.route}: ${page.kB} kB`).join("\n  "),
+  )
+  process.exit(1)
+}
+const heaviest = pages.toSorted((a, b) => b.kB - a.kB)[0]
+console.log(
+  `check-client-bundle: every page's initial JavaScript is within ${budget} kB gzipped (heaviest ${heaviest.route}, ${heaviest.kB} kB)`,
 )
