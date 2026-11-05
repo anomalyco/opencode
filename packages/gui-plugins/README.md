@@ -265,6 +265,7 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 | [`CodeBlock`](../plugin/src/gui/registries.ts)       | window  | Your UI in place of the highlighted code of complete fenced code blocks of the languages you list, such as a diagram or a table                                                                                                      |
 | [`CodeBlockAction`](../plugin/src/gui/registries.ts) | window  | A button beside the Copy button of complete fenced code blocks of the languages you list, such as "Run in terminal"                                                                                                                  |
 | [`Slot`](../plugin/src/gui/registries.ts)            | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
+| [`Slot`](../plugin/src/gui/registries.ts)            | window  | `session.message.footer`: a line under each user message and assistant response in the timeline, such as cost, tokens or the model; rows build nothing while no plugin fills it                                                      |
 | [`Style`](../plugin/src/gui/registries.ts)           | window  | CSS imported with `?inline`                                                                                                                                                                                                          |
 | [`Theme`](../plugin/src/gui/registries.ts)           | window  | A color theme in the app's theme file format, listed in Settings › Appearance › Theme                                                                                                                                                |
 | [`MenubarItem`](../plugin/src/gui/main.ts)           | main    | An item of the native app menu                                                                                                                                                                                                       |
@@ -273,6 +274,12 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
 owning screen show the host's location details without this slot. Render its rows with `ctx.ui.MenuItem`,
 `ctx.ui.MenuSub`, `ctx.ui.MenuGroup` and `ctx.ui.MenuSeparator`, so they navigate and close like the host's rows.
+
+`session.message.footer` renders under each user message and under the last row of each assistant response, with the
+owning `screen`, the timeline's `session`, `active`, and `message`: `{ role: "user", info }` or
+`{ role: "assistant", promptID, messages, completed }`. It is the one slot on timeline rows, so it stays free while
+unused: rows read one shared boolean as they mount and build nothing until a plugin fills it. Content mounts only on
+rows the virtualizer renders, takes no room when empty, and grows the row through its ResizeObserver.
 
 `session.location.branch.menu` (built-ins only, through `BuiltinSlot`) contributes items after Copy branch name in
 the branch submenu, with the same `screen`, live `session`, and project-menu `shown` context. It renders only when a

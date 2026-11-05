@@ -9,17 +9,24 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SlotMap,
 } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
-import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
+import type { mountCodeBlocks, mountMessageFooters, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
 /** What the code block cases drive from the page. */
 type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the message footer case drives from the page. */
+type MessageFootersHost = ReturnType<typeof mountMessageFooters>
+
+/** What a message footer receives. */
+type MessageFooterInput = SlotMap["session.message.footer"]
 
 /** What the theme preview case drives from the page. */
 type ThemesHost = ReturnType<typeof mountThemes>
@@ -2231,3 +2238,99 @@ story("code block content follows plugins that join and leave after the message 
   await expect(root.getByTestId("chart")).toHaveCount(0)
   await expect(root.locator("pre code")).toHaveText("A,B")
 })
+
+story(
+  "message footers render under each message with live input, only while a plugin fills the slot",
+  async ({ page }) => {
+    const host = await page.evaluateHandle(async (fixture) => {
+      const { mountMessageFooters, until } = await import(fixture)
+      const host: MessageFootersHost = mountMessageFooters({ definitions: [] })
+      await until(() => !!document.querySelector('[data-testid="message-footers"] [data-timeline-row="AssistantPart"]'))
+
+      return host
+    }, fixture)
+
+    const root = page.getByTestId("message-footers")
+    await expect(root.getByText("Now list the slots.")).toBeVisible()
+    // Without a contribution the rows build no footer at all.
+    expect(await host.evaluate((host) => host.footers())).toBe(0)
+
+    await host.evaluate(async (host, fixture) => {
+      const { Slot, createMemo } = await import(fixture)
+
+      host.define([
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Slot, {
+                at: "session.message.footer",
+                render: (input: MessageFooterInput) => {
+                  const message = input.message
+
+                  // Renders nothing under the first prompt, which then takes no room.
+                  if (message.role === "user" && message.info.id === "msg_user_1") return null
+                  const badge = document.createElement("span")
+                  badge.dataset.testid = "footer"
+                  createMemo(() => {
+                    const shared = `${input.session.id} ${input.active} ${input.screen === host.screen}`
+
+                    badge.textContent =
+                      message.role === "user"
+                        ? `user ${message.info.id} ${shared}`
+                        : `assistant ${message.promptID} ${message.messages.length} ${message.completed ? "done" : "live"} ${shared}`
+                  })
+
+                  return badge
+                },
+              }),
+          }),
+        },
+        {
+          id: "broken",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Slot, {
+                at: "session.message.footer",
+                render: () => {
+                  throw new Error("footer failed")
+                },
+              }),
+          }),
+        },
+      ])
+    }, fixture)
+
+    const footers = root.getByTestId("footer")
+    await expect(footers).toHaveText([
+      "assistant msg_user_1 1 done ses_footer true true",
+      "user msg_user_2 ses_footer true true",
+      "assistant msg_user_2 1 live ses_footer true true",
+    ])
+
+    // A throwing footer fails only its own plugin, and leaves no room under the prompt the other plugin skipped.
+    expect(await host.evaluate((host) => ({ broken: host.failure("broken"), acme: host.failure("acme") }))).toEqual({
+      broken: { phase: "render", error: expect.stringContaining("footer failed") },
+      acme: undefined,
+    })
+    await expect(
+      root.locator(
+        '[data-timeline-row="UserMessage"][data-message-id="msg_user_1"] [data-slot="session-message-footer"]',
+      ),
+    ).toBeHidden()
+
+    // A new step moves the response's footer to its newest row; finishing the response completes it.
+    await host.evaluate((host) => host.step())
+    await expect(footers).toHaveText([
+      "assistant msg_user_1 1 done ses_footer true true",
+      "user msg_user_2 ses_footer true true",
+      "assistant msg_user_2 2 live ses_footer true true",
+    ])
+    await host.evaluate((host) => host.finish())
+    await expect(footers.nth(2)).toHaveText("assistant msg_user_2 2 done ses_footer true true")
+
+    await host.evaluate((host) => host.define([]))
+    await expect(footers).toHaveCount(0)
+    expect(await host.evaluate((host) => host.footers())).toBe(0)
+  },
+)

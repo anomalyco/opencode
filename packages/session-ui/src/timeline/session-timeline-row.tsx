@@ -27,6 +27,7 @@ import { springStyle } from "@opencode/ui/motion/solid"
 import { Dynamic } from "solid-js/web"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
+import { useMessageFooters, type MessageFooters, type MessageFooterTarget } from "../context/message-footer"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
 import { TimelineSeparator } from "../components/timeline-separator"
@@ -114,6 +115,7 @@ export function createSessionTimelineRowRenderer(input: {
   const i18n = useI18n()
   const data = useData()
   const sourcesHost = useSources()
+  const footers = useMessageFooters()
   // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
@@ -640,6 +642,18 @@ export function createSessionTimelineRowRenderer(input: {
     </div>
   )
 
+  // Hidden while empty, so a message the contributions render nothing under keeps its height.
+  function footerView(footers: MessageFooters, target: MessageFooterTarget) {
+    const role = target.role
+    const content = footers.render(target)
+
+    return (
+      <div data-slot="session-message-footer" data-role={role}>
+        {content}
+      </div>
+    )
+  }
+
   function Notice(props: { messageID: string; grouped?: boolean }) {
     const inset = () => (props.grouped ? "" : padding())
     const message = createMemo(() => input.projection.messageByID().get(props.messageID))
@@ -990,7 +1004,7 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
+  const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void, footer?: MessageFooters) => {
     if (Predicate.isTagged(row(), "TurnGap")) return <TurnGap messageID={row().userMessageID} />
 
     // The host owns live status and renders this slot itself.
@@ -1022,6 +1036,15 @@ export function createSessionTimelineRowRenderer(input: {
             {(message) => {
               const presentation = () => input.presentation(message())
 
+              const userFooter =
+                footer &&
+                footerView(footer, {
+                  role: "user",
+                  get info() {
+                    return message()
+                  },
+                })
+
               return (
                 <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
                   <div data-slot="session-turn-message-content" aria-live="off">
@@ -1042,6 +1065,7 @@ export function createSessionTimelineRowRenderer(input: {
                       onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />
                   </div>
+                  {userFooter}
                 </div>
               )
             }}
@@ -1135,6 +1159,7 @@ export function createSessionTimelineRowRenderer(input: {
 
       // Construct once per row key, not inside JSX that reruns when group refs change.
       const content = renderAssistant(current, onSizeChange)
+      const responseFooter = footer && <ResponseFooter footers={footer} row={current} />
 
       return (
         <Frame row={current()}>
@@ -1142,6 +1167,7 @@ export function createSessionTimelineRowRenderer(input: {
             <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
               {content}
             </div>
+            {responseFooter}
           </div>
         </Frame>
       )
@@ -1343,10 +1369,42 @@ export function createSessionTimelineRowRenderer(input: {
     )
   }
 
-  function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
+  // The response's footer renders under its last part row, and moves to each new one while the response streams.
+  function ResponseFooter(props: { footers: MessageFooters; row: Accessor<TimelineRow.AssistantPart> }) {
+    const last = createMemo(
+      () => input.projection.lastAssistantGroupKey().get(props.row().userMessageID) === props.row().group.key,
+    )
+
     return (
-      <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
+      <Show when={last()}>
+        {(_) =>
+          footerView(props.footers, {
+            role: "assistant",
+            get promptID() {
+              return props.row().userMessageID
+            },
+            get messages() {
+              return (
+                input.projection.assistantMessagesByParent().get(props.row().userMessageID) ?? emptyAssistantMessages
+              )
+            },
+            get completed() {
+              return phase(props.row().userMessageID).settled
+            },
+          })
+        }
+      </Show>
+    )
+  }
+
+  function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
+    // Rows mount again when footers come or go, so while none render a row neither subscribes to nor builds anything.
+    const key = (row: TimelineRow.TimelineRow) =>
+      footers?.enabled() ? `${TimelineRow.key(row)}:footer` : TimelineRow.key(row)
+
+    return (
+      <Show when={key(props.row())} keyed>
+        {(_key) => render(props.row, props.onSizeChange, footers?.enabled() ? footers : undefined)}
       </Show>
     )
   }

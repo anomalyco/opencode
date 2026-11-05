@@ -1,3 +1,4 @@
+import type { SessionMessageAssistant, SessionMessageUser } from "@opencode/client/promise"
 import type { JSX } from "solid-js"
 import type { IconName } from "./icon-name.js"
 import { Registry } from "./core.js"
@@ -897,6 +898,54 @@ export interface SlotMap {
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
+  /**
+   * Under each user message and each assistant response in the session timeline, for per-message details such as
+   * cost, tokens, the model, or a link. The host renders it only for the messages on screen (the timeline is
+   * virtualized), so a message scrolled away unmounts its content and renders it again when it returns. Content that
+   * renders nothing takes no room; the row grows with what you render, so keep it to a line. While a response streams,
+   * its footer moves to the response's newest row and renders again there. Cached timelines stay mounted while hidden;
+   * `active` is false then.
+   */
+  readonly "session.message.footer": {
+    /** The timeline's owning session screen; always present. */
+    readonly screen: SessionScreen
+    /** The timeline's session: its latest object, kept while the timeline is hidden. */
+    readonly session: MountedSession
+    /** The timeline is the one on screen. */
+    readonly active: boolean
+    /** The message the footer is under; its `role` never changes for one render. */
+    readonly message: TimelineUserMessage | TimelineResponse
+  }
+}
+
+/** A user message, as `session.message.footer` receives it. Read the getters where you use them; do not destructure. */
+export interface TimelineUserMessage {
+  /** The footer is under a message the user sent. */
+  readonly role: "user"
+  /** The message as the server stores it: `id`, `text`, attachments, `metadata` and `time.created`. Reactive. */
+  readonly info: SessionMessageUser
+}
+
+/**
+ * An assistant response: every step the model took to answer one user message, as `session.message.footer` receives
+ * it. Read the getters where you use them; do not destructure.
+ */
+export interface TimelineResponse {
+  /** The footer is under the model's response. */
+  readonly role: "assistant"
+  /** The id of the user message the response answers; constant for the response, so use it to key your state. */
+  readonly promptID: string
+  /**
+   * The response's assistant messages, one per model step, oldest first; never empty. Each carries its `model`,
+   * `agent`, `content` parts, `tokens`, `cost`, `finish`, `error` and `time`. Reactive: a streaming step updates in
+   * place, and each new step adds a message.
+   */
+  readonly messages: readonly SessionMessageAssistant[]
+  /**
+   * The model stopped working on the response: it finished, failed or was interrupted. False while it streams and
+   * while it waits to retry a step. Reactive.
+   */
+  readonly completed: boolean
 }
 
 /** Content for one of the host's slots, typed by `at`. */
