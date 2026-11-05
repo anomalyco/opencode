@@ -21,6 +21,7 @@ opencode-mermaid = { path = "crates/mermaid" }
 opencode-mini = { path = "crates/mini" }
 opencode-parity = { path = "crates/parity" }
 opencode-plugin = { path = "crates/plugin" }
+opencode-plugin-abi = { path = "crates/plugin-abi" }
 opencode-service = { path = "crates/service" }
 opencode-store = { path = "crates/store" }
 opencode-tui = { path = "crates/tui" }
@@ -41,6 +42,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 indexmap = { version = "2", features = ["serde"] }
 jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 libc = "0.2"
+libloading = "0.9"
 log = { version = "0.4", features = ["std"] }
 notify = "8"
 percent-encoding = "2"
