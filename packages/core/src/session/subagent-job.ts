@@ -58,8 +58,8 @@ const make: Effect.Effect<
     }).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
   })
 
-  // Waits until the child stops for good: idle, with no background work or undelivered input left
-  // to wake it. It only waits and never resumes, since resuming an idle child runs a model step.
+  // Resume once for launch, then wait until the child is idle with no background work or input
+  // left. Never resume just to inspect settlement: resuming an idle child runs another model step.
   const settle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
     const outcomes = [
       SessionEvent.Execution.Succeeded,

@@ -55,8 +55,8 @@ export const outstanding = Effect.fnUntraced(function* (
 
 /**
  * Whether an idle Session will be woken again by its own work: a background job of its own or a
- * descendant's still running, or admitted input not yet delivered, such as a finished shell's
- * notice. A subagent's report waits for this so it carries the child's final state.
+ * descendant's still running, completion notices awaiting admission, or admitted input not yet
+ * delivered. A subagent's report waits for this so it carries the child's final state.
  */
 export const unsettled = Effect.fnUntraced(function* (
   jobs: Pick<Job.Interface, "runningBackground" | "pendingBackground">,
