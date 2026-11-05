@@ -897,6 +897,21 @@ export interface SlotMap {
     /** The routed session; a new object when another session is routed. */
     readonly session: MountedSession
   }
+  /**
+   * Sections of the app's sidebar, the list of projects, sessions and tabs at the window's start: under that list and
+   * above the sidebar's footer pills. Not the inner sidebar of side panels (`Layout.sidebar`). Only the Side tabs and
+   * Inbox interface layouts have this sidebar, in windows 768px and wider: with Top tabs, and on narrow screens where
+   * tabs open in a drawer, the slot renders nothing. Contributions stay mounted while the user collapses the sidebar.
+   * Together they take at most half the sidebar's height and scroll past it. Read the routed session from
+   * `Sessions.current`; the slot shows on Home and drafts too.
+   */
+  readonly "sidebar.section": {
+    /**
+     * The sidebar is on screen: docked open, or peeking while collapsed. False while it is collapsed, where your section
+     * stays mounted but hidden; pause polling and subscriptions until it is true again.
+     */
+    readonly shown: boolean
+  }
 }
 
 /** Content for one of the host's slots, typed by `at`. */

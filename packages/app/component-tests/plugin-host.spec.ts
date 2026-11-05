@@ -9,17 +9,21 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SlotMap,
 } from "@opencode/plugin/gui"
 import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
 import type { JSHandle } from "@playwright/test"
-import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
+import type { mountCodeBlocks, mountSidebarSections, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
 /** What the code block cases drive from the page. */
 type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the sidebar section cases drive from the page. */
+type SidebarHost = ReturnType<typeof mountSidebarSections>
 
 /** What the theme preview case drives from the page. */
 type ThemesHost = ReturnType<typeof mountThemes>
@@ -984,6 +988,134 @@ story("a contribution that throws renders nothing and records the error; the oth
     failure: { phase: "render", named: true },
   })
 })
+
+story(
+  "sidebar sections render in order under the list, stay mounted while the sidebar collapses, and leave no box without them",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountSidebarSections, until, Slot } = await import(fixture)
+      const renders = { count: 0 }
+
+      const host: SidebarHost = mountSidebarSections({
+        definitions: [
+          {
+            id: "fixture",
+            windowEntry: async () => ({
+              default: (ctx: Context) => {
+                ctx.add(Slot, {
+                  at: "sidebar.section",
+                  order: 2,
+                  render: () => Object.assign(document.createElement("p"), { textContent: "pinned" }),
+                })
+                ctx.add(Slot, {
+                  at: "sidebar.section",
+                  order: 1,
+                  render: (input: SlotMap["sidebar.section"]) => {
+                    renders.count++
+
+                    return () => (input.shown ? "shown" : "hidden")
+                  },
+                })
+                ctx.add(Slot, {
+                  at: "sidebar.section",
+                  order: 3,
+                  render: () => Object.assign(document.createElement("div"), { style: "height: 1000px; flex: none" }),
+                })
+              },
+            }),
+          },
+        ],
+      })
+
+      const sections = () => host.container.querySelector<HTMLElement>('[data-slot="sidebar-sections"]')
+      await until(() => !!sections()?.textContent)
+      const box = sections()!.getBoundingClientRect()
+      const list = host.container.querySelector('[data-testid="list"]')!.getBoundingClientRect()
+      const frame = host.container.getBoundingClientRect()
+
+      const placed = {
+        text: sections()!.textContent,
+        underList: box.top >= list.bottom && Math.abs(box.bottom - frame.bottom) < 1,
+        half: box.height <= frame.height / 2 && sections()!.scrollHeight > sections()!.clientHeight,
+      }
+
+      host.show(false)
+      await until(() => sections()?.textContent === "hiddenpinned")
+      const collapsed = { text: sections()?.textContent, renders: renders.count }
+
+      host.show(true)
+      await until(() => sections()?.textContent === "shownpinned")
+      host.disable(["fixture"])
+      await until(() => host.status("fixture") === "disabled")
+      const outcome = { placed, collapsed, renders: renders.count, left: sections() === null }
+
+      host.unmount()
+
+      return outcome
+    }, fixture)
+
+    expect(result).toEqual({
+      placed: { text: "shownpinned", underList: true, half: true },
+      collapsed: { text: "hiddenpinned", renders: 1 },
+      renders: 1,
+      left: true,
+    })
+  },
+)
+
+story(
+  "a sidebar section that throws renders nothing and records the error; the other sections stay",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountSidebarSections, until, Slot } = await import(fixture)
+      const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+
+      const host: SidebarHost = mountSidebarSections({
+        definitions: [
+          {
+            id: "fixture",
+            windowEntry: async () => ({
+              default: (ctx: Context) => {
+                ctx.add(Slot, {
+                  at: "sidebar.section",
+                  render: () => {
+                    throw new Error("broken section")
+                  },
+                })
+                ctx.add(Slot, { at: "sidebar.section", render: text("kept") })
+              },
+            }),
+          },
+          {
+            id: "other",
+            windowEntry: async () => ({
+              default: (ctx: Context) => void ctx.add(Slot, { at: "sidebar.section", render: text("other") }),
+            }),
+          },
+        ],
+      })
+
+      await until(() => !!host.failure("fixture") && !!host.container.textContent?.includes("other"))
+      const failure = host.failure("fixture")
+
+      const outcome = {
+        text: host.container.querySelector('[data-slot="sidebar-sections"]')?.textContent,
+        status: [host.status("fixture"), host.status("other")],
+        failure: { phase: failure?.phase, named: !!failure?.error.includes("broken section") },
+      }
+
+      host.unmount()
+
+      return outcome
+    }, fixture)
+
+    expect(result).toEqual({
+      text: "keptother",
+      status: ["active", "active"],
+      failure: { phase: "render", named: true },
+    })
+  },
+)
 
 story(
   "plugin GUIs join, hot-reload in place, run their returned cleanup and leave, without holding startup",

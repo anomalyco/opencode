@@ -19,6 +19,7 @@ import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarOrganized } from "@/shell/titlebar/sidebar-organized"
+import { SidebarSections } from "@/shell/titlebar/sidebar-sections"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -68,7 +69,7 @@ const macTrafficLightsTopClearance = 28
 // titlebar row stays 16px clear of it, as ChatGPT's phone header does. Without one, 8px matches the content gap below.
 const mobileTopClearance = "max(8px, min(16px, env(safe-area-inset-top, 0px) * 1000))"
 
-export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
+export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement; shown: boolean } }) {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
@@ -803,6 +804,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <SidebarInbox />
                               </Show>
                             </div>
+                            <SidebarSections shown={vertical().shown} />
                             <Show when={titlebarItems.ids().length > 0}>
                               <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
                                 <TitlebarItems items={titlebarItems} vertical />
