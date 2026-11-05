@@ -29,19 +29,30 @@ story("a close mid-flight after the origin is gone fades out without landing at 
   await mount("components-image-preview--from-message")
   await open(page)
   const preview = page.locator('[data-component="image-preview"]')
-  await expect(preview).toHaveAttribute("data-stage", "flying")
+  await preview.waitFor({ state: "attached" })
+
+  // In the page, so the close lands mid-flight however slow the runner: the origin goes the moment the flight starts,
+  // and Escape follows. Every stage the preview shows from then on is recorded.
   const stages = await preview.evaluateHandle((element: HTMLElement) => {
     const seen: (string | undefined)[] = []
-    new MutationObserver(() => seen.push(element.dataset.stage)).observe(element, {
-      attributes: true,
-      attributeFilter: ["data-stage"],
-    })
+    let closed = false
+
+    const close = () => {
+      if (closed || element.dataset.stage === "pending") return
+      closed = true
+      document.querySelector('[data-story-image="inline"]')?.remove()
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    }
+
+    new MutationObserver(() => {
+      if (closed) seen.push(element.dataset.stage)
+      close()
+    }).observe(element, { attributes: true, attributeFilter: ["data-stage"] })
+    close()
 
     return seen
   })
 
-  await page.locator('[data-story-image="inline"]').evaluate((element) => element.remove())
-  await page.keyboard.press("Escape")
   await expect(preview).toHaveCount(0)
   const seen = await stages.jsonValue()
   expect(seen).toContain("closing")

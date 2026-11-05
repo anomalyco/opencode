@@ -92,18 +92,18 @@ describe("image preview zoom gesture", () => {
   })
 
   test.each([
-    ["an unzoomed press on the backdrop", [down("viewport", { zoomed: false, onBackdrop: true })], true],
-    ["a press on the band around the body", [down("content", { onBackdrop: true })], true],
-    ["a zoomed press on the backdrop that stays put", [down("viewport", { onBackdrop: true }), up], true],
+    ["an unzoomed press on the backdrop closes", [down("viewport", { zoomed: false, onBackdrop: true })], true],
+    ["a press on the band around the body closes", [down("content", { onBackdrop: true })], true],
+    ["a zoomed press on the backdrop that stays put closes", [down("viewport", { onBackdrop: true }), up], true],
     [
-      "a zoomed press on the backdrop that stays put, then loses capture",
+      "a zoomed press on the backdrop that stays put, then loses capture, closes",
       [down("viewport", { onBackdrop: true }), up, { type: "pointer.cancel", pointerId: 1 } satisfies PreviewZoomEvent],
       true,
     ],
-    ["a zoomed press on the image, whose captured click lands on the backdrop", [down("viewport"), up], false],
-    ["a zoomed press on the backdrop that pans", [down("viewport", { onBackdrop: true }), moved, up], false],
-    ["a press on a control", [down("content")], false],
-  ])("%s closes the preview on click: %p", (_, events, closes) => {
+    ["a zoomed press on the image, whose captured click lands on the backdrop, stays", [down("viewport"), up], false],
+    ["a zoomed press on the backdrop that pans stays", [down("viewport", { onBackdrop: true }), moved, up], false],
+    ["a press on a control stays", [down("content")], false],
+  ])("on its click, %s", (_, events, closes) => {
     const pressed = replay(events)
     const clicked = transitionPreviewZoom(pressed.state, { type: "backdrop.click", onBackdrop: true })
 
