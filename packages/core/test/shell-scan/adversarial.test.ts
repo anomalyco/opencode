@@ -77,6 +77,13 @@ describe("ShellScan adversarial corpus", () => {
     expect(performance.now() - start).toBeLessThan(500)
   })
 
+  test("scans repeated zsh q flags in bounded time", () => {
+    const start = performance.now()
+    ShellScan.scan("echo ${(" + "q".repeat(40) + "!x}", "zsh")
+    ShellScan.scan("echo ${(" + "q-".repeat(40) + "!x}", "zsh")
+    expect(performance.now() - start).toBeLessThan(500)
+  })
+
   test.each([
     ['pwsh --command "Remove-Item victim.txt"', ["pwsh"]],
     ["Import-Module ./evil.psm1", ["Import-Module"]],

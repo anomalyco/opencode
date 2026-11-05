@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { extractPromptFromMessage } from "@/composer/prompt"
 import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
-import { queuedPromptAttachments, queuedPromptRows, undoQueuedPrompt, type SentEdit } from "./queue"
+import { undoQueuedPrompt } from "./queue"
+import { queuedPromptAttachments, queuedPromptRows, type SentEdit } from "./queue-machine"
 
 const queued = [
   {

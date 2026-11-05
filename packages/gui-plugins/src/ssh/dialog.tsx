@@ -8,7 +8,7 @@ import { createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js
 import { createStore } from "solid-js/store"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
 import type { SshConfig, SshItem } from "./contract"
-import { isSshConnecting, sshName } from "./name"
+import { sshName } from "./name"
 import type { SshController } from "./state"
 
 export { default as css } from "./ssh.css?inline"
@@ -49,7 +49,7 @@ export function DialogSsh(props: {
   })
 
   const busy = createMemo(
-    () => ssh.submitting(id) || (state.started && !ssh.error(id) && isSshConnecting(item()?.stage ?? "connecting")),
+    () => ssh.submitting(id) || (state.started && !ssh.error(id) && (item()?.stage ?? "connecting") === "connecting"),
   )
 
   const prompt = createMemo<SshItem["prompt"]>((previous) => item()?.prompt ?? (busy() ? previous : undefined))

@@ -4,6 +4,8 @@ export default {
   "tab.title": "/btw",
   "question.required": "Add a question after /btw",
   error: "Couldn’t answer that question",
+  "error.empty": "The model replied without any text.",
+  "error.timeout": "The model took too long to reply.",
   retry: "Retry",
   copy: "Copy answer",
 }

@@ -6,6 +6,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { Command, createVisitState, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import type { DetailsPanelProps } from "./panel"
+import type { McpControllers } from "./server-panel"
 
 /** Every mounted details popover, so a shortcut finds the one on screen. */
 export type DetailsMenus = Set<{ trigger: () => HTMLButtonElement | undefined; toggle: () => void }>
@@ -16,6 +17,7 @@ export function DetailsHeader(props: {
   session: MountedSession
   active: boolean
   panel: Component<DetailsPanelProps>
+  mcp: McpControllers
 }) {
   const Panel = props.panel
   // Cached timelines stay mounted while hidden; routing away from the session closes its details.
@@ -25,7 +27,7 @@ export function DetailsHeader(props: {
     <Show when={props.session.project}>
       <DetailsPopover menus={props.menus} active={props.active} open={open()} onOpenChange={setOpen}>
         <Suspense>
-          <Panel session={props.session} shown={open()} onClose={() => setOpen(false)} />
+          <Panel session={props.session} shown={open()} mcp={props.mcp} onClose={() => setOpen(false)} />
         </Suspense>
       </DetailsPopover>
     </Show>

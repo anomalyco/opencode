@@ -502,6 +502,34 @@ test.describe("timeline history", () => {
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("keep this draft")
   })
+
+  test("a message hash and message navigation keep the prompt in view and the hash in step", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      assistantMessage([textPart("prt_cursor_tail", "Latest answer")]),
+    ])
+
+    const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
+    const row = (index: number) => page.locator(`[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`)
+    const hash = () => page.evaluate(() => location.hash)
+
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+    await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(10))
+    await expect(row(10)).toBeInViewport()
+
+    await page.keyboard.press("Control+Alt+BracketLeft")
+    await expect.poll(hash).toBe(`#message-${prompt(9)}`)
+    await expect(row(9)).toBeInViewport()
+    await page.keyboard.press("Control+Alt+BracketRight")
+    await expect.poll(hash).toBe(`#message-${prompt(10)}`)
+    await expect(row(10)).toBeInViewport()
+
+    await page.getByRole("button", { name: "Jump to latest" }).click()
+    await expect.poll(hash).toBe("")
+    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+  })
 })
 
 declare global {

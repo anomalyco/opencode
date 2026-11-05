@@ -14,6 +14,10 @@ describe("sessionExportFilename", () => {
   ])("names %o as %s", (session, filename) => {
     expect(sessionExportFilename(session)).toBe(filename)
   })
+
+  test("shortens long titles to fit the filename limit", () => {
+    expect(sessionExportFilename({ id: "ses_123", title: "a".repeat(300) })).toBe(`${"a".repeat(250)}.json`)
+  })
 })
 
 describe("fetchSessionExport", () => {

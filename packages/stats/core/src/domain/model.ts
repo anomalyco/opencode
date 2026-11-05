@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, max, or } from "drizzle-orm"
+import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
@@ -10,7 +10,6 @@ import {
   DATA_SITE_TIERS,
   inserted,
   omitUniqueUsers,
-  periodKeyFor,
   rankBy,
   statPeriodKey,
   statRowScope,
@@ -19,6 +18,7 @@ import {
   UPSERT_CHUNK_SIZE,
   withUniqueUsersFallback,
   type StatBaseAggregate,
+  type StatPeriodScope,
 } from "./stat"
 
 export type ModelStatRow = typeof modelStat.$inferInsert
@@ -45,10 +45,9 @@ export type ModelStatMetric = {
 export declare namespace ModelStatRepo {
   export interface Service {
     readonly listDaily: () => Effect.Effect<ModelStatMetric[], DatabaseError>
-    readonly lastSyncedAt: (since: Date) => Effect.Effect<Date | null, DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
     readonly deleteRetiredDimensions: (
-      rows: ModelStatRow[],
+      scope: StatPeriodScope,
       hiddenModels: readonly string[],
     ) => Effect.Effect<void, DatabaseError>
     readonly deleteUnknownDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
@@ -117,18 +116,6 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         })
       })
 
-      const lastSyncedAt = Effect.fn("ModelStatRepo.lastSyncedAt")(function* (since: Date) {
-        const result = yield* Effect.tryPromise({
-          try: () =>
-            db
-              .select({ value: max(modelStat.updated_at) })
-              .from(modelStat)
-              .where(and(eq(modelStat.grain, "day"), gte(modelStat.period_key, periodKeyFor("day", since)))),
-          catch: (cause) => DatabaseError.make({ cause }),
-        })
-        return result[0]?.value ?? null
-      })
-
       const upsert = Effect.fn("ModelStatRepo.upsert")(function* (rows: ModelStatRow[]) {
         yield* Effect.forEach(
           chunks(rows, UPSERT_CHUNK_SIZE),
@@ -177,23 +164,20 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
       }
 
       const deleteRetiredDimensions = Effect.fn("ModelStatRepo.deleteRetiredDimensions")(function* (
-        rows: ModelStatRow[],
+        scope: StatPeriodScope,
         hiddenModels: readonly string[],
       ) {
-        const scope = statRowScope(rows)
-        if (!scope) return
-
         yield* Effect.tryPromise({
           try: () =>
             db
               .delete(modelStat)
               .where(
                 and(
-                  inArray(modelStat.grain, scope.grains),
-                  inArray(modelStat.period_key, scope.periodKeys),
-                  inArray(modelStat.dataset, scope.datasets),
-                  inArray(modelStat.client, scope.clients),
-                  inArray(modelStat.source, scope.sources),
+                  eq(modelStat.grain, scope.grain),
+                  eq(modelStat.period_key, scope.periodKey),
+                  eq(modelStat.dataset, scope.dataset),
+                  eq(modelStat.client, "all"),
+                  eq(modelStat.source, "all"),
                   or(
                     inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
                     inArray(modelStat.model, [...RETIRED_STAT_MODELS, ...hiddenModels]),
@@ -253,7 +237,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         )
       })
 
-      return ModelStatRepo.of({ listDaily, lastSyncedAt, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
+      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
     }),
   )
 }
@@ -293,7 +277,7 @@ function rankRows(rows: ModelStatRow[]) {
   return Object.values(
     rows.reduce<Record<string, ModelStatRow[]>>((result, row) => {
       const key = statPeriodKey(row)
-      result[key] = [...(result[key] ?? []), row]
+      ;(result[key] ??= []).push(row)
       return result
     }, {}),
   ).flatMap((group) => {

@@ -120,8 +120,8 @@ export function SettingsScreen() {
 
   const project = (server: ServerConnection.Any, directory: string) =>
     global
-      .ensureServerCtx(server)
-      .projects.list()
+      .serverCtx(ServerConnection.key(server))
+      ?.projects.list()
       .find((item) => item.worktree === directory)
 
   const targetServer = createMemo(() => {
@@ -242,10 +242,9 @@ function RootSettings() {
       })),
     },
     {
-      items: [...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs()],
-    },
-    {
       items: [
+        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
+        ...pluginTabs(),
         {
           value: "servers",
           icon: pageIcons.servers,
@@ -253,11 +252,14 @@ function RootSettings() {
         },
       ],
     },
-    ...(experimentalSettingsAvailable
-      ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
-      : []),
     {
-      items: [...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs("about")],
+      items: [
+        ...pluginTabs("about"),
+        ...(experimentalSettingsAvailable
+          ? experimentalTab.map((item) => ({ ...item, label: language.t(item.label) }))
+          : []),
+        ...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })),
+      ],
     },
   ])
 

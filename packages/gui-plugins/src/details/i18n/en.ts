@@ -14,8 +14,6 @@ export default {
   "plugins.empty": "No plugins configured",
   skills: "Skills",
   "skills.empty": "No skills configured",
-  lsp: "LSP",
-  "lsp.empty": "No LSP servers configured",
   failed: "Failed",
   retry: "Retry",
   connecting: "Connecting…",
@@ -23,6 +21,7 @@ export default {
   configure: "Configuration file",
   copyConfigPath: "Copy configuration file path",
   configFileMissing: "No configuration file found",
+  timedOut: "The server took too long to respond",
   "setup.mcp": "Add a server with OpenCode",
   "setup.mcp.prompt":
     "Help me add an MCP server to my global OpenCode config. Ask me which service I want to connect, then set it up and check that it connects.",
@@ -32,9 +31,6 @@ export default {
   "setup.skills": "New skill with OpenCode",
   "setup.skills.prompt":
     "Help me write a new OpenCode skill in my global config. Ask me what it should teach you, then write its SKILL.md.",
-  "setup.lsp": "Set up with OpenCode",
-  "setup.lsp.prompt":
-    "Help me configure a language server in my global OpenCode config. Ask me which language I work in, then set it up.",
   loadingChanges: "Loading changes…",
   noChanges: "No changes",
   basedOn: "Based on {{branch}}",
@@ -50,10 +46,20 @@ export default {
   "mcp.error.status": "Connection failed",
   "mcp.error.actionLabel": "Details for {{name}}",
   "mcp.signIn.open": "Sign in to {{name}}",
+  "mcp.signIn.description":
+    "Your browser opens so you can sign in to {{name}}. If it can't reach the machine running OpenCode, paste the URL it was redirected to below.",
+  "mcp.signIn.waiting": "Waiting for authorization…",
+  "mcp.signIn.failed": "Authorization failed: {{error}}",
+  "mcp.signIn.expired": "Authorization expired",
+  "mcp.signIn.openBrowser": "Open browser",
+  "mcp.signIn.paste.label": "Redirect URL",
+  "mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
+  "mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
   "mcp.error.open": "{{name}} failed, view error",
   "mcp.error.title": "MCP server: {{name}}",
   "mcp.error.copy": "Copy details",
   "mcp.error.copyFailed": "Couldn't copy error details",
   "mcp.error.disable": "Disable",
+  "mcp.timedOut": "{{name}} took too long to respond",
   "mcp.error.details": "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
 }

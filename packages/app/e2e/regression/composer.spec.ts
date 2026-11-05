@@ -15,16 +15,22 @@ test("mention a session by title, send its stable token, and open its own tab", 
     sessions: [
       { id: "ses_mentions_source", title: "Review the plan" },
       { id: target, title: "Auth middleware" },
+      { id: "ses_0123456789authtokensabcdef", title: "Auth tokens" },
+      { id: "ses_0123456789authreviewabcdef", title: "Auth review" },
+      { id: "ses_0123456789authloggingabcde", title: "Auth logging" },
+      { id: "ses_0123456789authsessionsabcd", title: "Auth sessions" },
+      { id: "ses_0123456789authscopesabcdef", title: "Auth scopes" },
     ],
     seed: { tabs: ["ses_mentions_source"] },
     onPrompt: (input) => void prompts.push(input.body),
   })
 
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+
   await view.editor.fill("Compare with @Auth")
-  await page
-    .locator('[data-component="composer-suggestions"]')
-    .getByRole("button", { name: /Auth middleware/ })
-    .click()
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toHaveCount(5)
+  await view.editor.pressSequentially(" mid")
+  await suggestions.getByRole("button", { name: /Auth middleware/ }).click()
   await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -49,6 +55,14 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
       { id: "ses_mention_search_source", title: "Review the plan" },
       { id: "ses_0123456789homesessionabcde", title: "HOME" },
       { id: target, title: "OPENCODE CONSOLE" },
+      { id: "ses_0123456789backhomeabcdefgh", title: "Back home", created: T0 + 2 },
+      {
+        id: "ses_0123456789otherprojecthome",
+        title: "HOME elsewhere",
+        projectID: "proj_other",
+        directory: "C:/OpenCode/Other",
+        created: T0 + 3,
+      },
     ],
     seed: { tabs: ["ses_mention_search_source"] },
     onPrompt: (input) => void prompts.push(input.body),
@@ -57,9 +71,23 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   const suggestions = page.locator('[data-component="composer-suggestions"]')
   const files = await holdRoute(page, (url) => url.pathname === "/api/fs/find")
 
+  // A bare @ offers only this project's sessions.
   await view.editor.pressSequentially("Compare with @")
   await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
   await expect(suggestions.getByRole("button", { name: /OPENCODE CONSOLE/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /HOME elsewhere/ })).toHaveCount(0)
+
+  // Typed matches rank this project first, then the exact title, a title start and a later word, ahead of recency.
+  await view.editor.pressSequentially("home")
+  await expect(suggestions.locator('[data-suggestion-id^="session:"]')).toContainText([
+    /HOME(?! elsewhere)/,
+    "Back home",
+    "HOME elsewhere",
+  ])
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
+  await view.editor.press("Backspace")
 
   await view.editor.pressSequentially("open")
   await files.arrived
@@ -79,7 +107,7 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
 
   // A space after a full title ends a typed mention, so the rest stays prose.
   await view.editor.pressSequentially("@home")
-  await expect(suggestions.getByRole("button", { name: /HOME/ })).toBeVisible()
+  await expect(suggestions.getByRole("button", { name: /^HOME SessionMentionSearch$/ })).toBeVisible()
   await view.editor.pressSequentially(" now")
   await expect(suggestions).toBeHidden()
   await view.editor.press("Enter")
@@ -862,6 +890,115 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
       }),
     )
     .toBe(0)
+})
+
+test("Enter that confirms an IME candidate never sends, even after Safari's early compositionend", async ({ page }) => {
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+  const view = await openSession(page, { name: "ComposerImeEnter", onPrompt: (input) => void prompts.push(input.body) })
+
+  const enter = (keyCode: number) =>
+    view.editor.evaluate(
+      (element, keyCode) =>
+        element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode, bubbles: true, cancelable: true })),
+      keyCode,
+    )
+
+  await view.editor.fill("にほん")
+  // Safari delivers the confirming Enter after compositionend, so isComposing is false and only keyCode marks it.
+  await enter(229)
+  await expect(view.editor).toHaveText("にほん")
+  await enter(13)
+  await expect.poll(() => prompts.map((body) => body.text)).toEqual(["にほん"])
+})
+
+test.describe("touch keyboard", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("Return only adds a line, even over suggestions; the touch bar and Cmd+Return send", async ({ page }) => {
+    const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+
+    const view = await openSession(page, {
+      name: "ComposerTouchReturn",
+      onPrompt: (input) => void prompts.push(input.body),
+    })
+
+    const bar = page.locator('[data-slot="composer-touch-bar"]')
+
+    await expect(bar).toBeVisible()
+    await expect(page.locator('[data-action="composer-attach"]')).toHaveCount(0)
+    await expect(view.editor).toHaveAttribute("enterkeyhint", "enter")
+
+    await view.editor.fill("/model")
+    await expect(page.locator('[data-suggestion-id="model.choose"]')).toHaveAttribute("data-active", "")
+    await view.editor.press("Enter")
+    await expect(page.locator('[data-component="composer-suggestions"]')).toBeHidden()
+    await expect.poll(() => view.editor.innerText()).toMatch(/^\/model\n/)
+    await expect(page.getByRole("dialog", { name: "Select model", exact: true })).toBeHidden()
+
+    await view.editor.fill("first line")
+    await view.editor.press("Enter")
+    await view.editor.pressSequentially("second line")
+    await expect.poll(() => view.editor.innerText()).toBe("first line\nsecond line")
+    expect(prompts).toEqual([])
+
+    await bar.getByRole("button", { name: "Send", exact: true }).tap()
+    await expect.poll(() => prompts.map((body) => body.text)).toEqual(["first line\nsecond line"])
+    await expect(view.editor).toBeEmpty()
+
+    // A hardware keyboard, as on an iPad, still sends with Cmd+Return.
+    await view.editor.fill("from the iPad keyboard")
+    await view.editor.press("ControlOrMeta+Enter")
+    await expect
+      .poll(() => prompts.map((body) => body.text))
+      .toEqual(["first line\nsecond line", "from the iPad keyboard"])
+  })
+
+  test("the / and @ keys toggle their lists, and Backspace or typing in the editor closes them", async ({ page }) => {
+    const view = await openSession(page, { name: "ComposerTouchSlash" })
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    const slash = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-commands"]')
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("/")
+    await slash.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toBeEmpty()
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await page.keyboard.press("Backspace")
+    await expect(suggestions).toBeHidden()
+
+    // With a draft, / opens the searchable menu instead. Backspace backs out of it and keeps the draft, from the editor
+    // as well: iOS keeps the keyboard there rather than moving it to the menu's search.
+    await view.editor.fill("keep me")
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    await view.editor.press("Backspace")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me")
+
+    await slash.tap()
+    await expect(suggestions).toBeVisible()
+    // Focusing the editor programmatically leaves the caret wherever the browser puts it, so move it to the end first.
+    await expect(suggestions.getByRole("textbox", { name: "Commands", exact: true })).toBeFocused()
+    await view.editor.focus()
+    await page.keyboard.press("End")
+    await page.keyboard.type(" now")
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now")
+
+    // @ toggles the same way, taking back only the @ it typed.
+    const at = page.locator('[data-slot="composer-touch-bar"] [data-action="composer-context"]')
+    await view.editor.pressSequentially(" ")
+    await at.tap()
+    await expect(suggestions).toBeVisible()
+    await expect(view.editor).toHaveText("keep me now @")
+    await at.tap()
+    await expect(suggestions).toBeHidden()
+    await expect(view.editor).toHaveText("keep me now ")
+  })
 })
 
 test("a key-up never moves the caret back after later navigation", async ({ page }) => {
