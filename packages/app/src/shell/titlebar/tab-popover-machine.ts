@@ -69,21 +69,20 @@ export function transitionTabPreview<El>(
   if (event.type === "preview.opened") {
     if (state.status === "open" && state.owner === event.owner) return unchanged(state)
 
-    return {
-      state: {
-        status: "open",
-        attempt: state.attempt,
-        owner: event.owner,
-        instant: state.status !== "cold",
-        follow: undefined,
-      },
-      effects:
-        state.status === "warm"
-          ? [{ type: "warm.clear" }]
-          : state.status === "open"
-            ? [...stop(state), { type: "owner.close", owner: state.owner }]
-            : NONE,
+    const next: TabPreviewState<El> = {
+      status: "open",
+      attempt: state.attempt,
+      owner: event.owner,
+      instant: state.status !== "cold",
+      follow: undefined,
     }
+
+    if (state.status === "cold") return { state: next, effects: NONE }
+
+    if (state.status === "warm") return { state: next, effects: [{ type: "warm.clear" }] }
+
+    // Another tab's preview takes over at once and closes the one that was up.
+    return { state: next, effects: [...stop(state), { type: "owner.close", owner: state.owner }] }
   }
 
   if (event.type === "preview.closed" || event.type === "owner.disposed") {

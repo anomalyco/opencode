@@ -75,10 +75,12 @@ describe("tab preview", () => {
   test("the warm window skips the open delay until it expires", () => {
     const b = owner()
     const c = owner()
+
     const warm = replay([
       { type: "preview.opened", owner: b },
       { type: "owner.disposed", owner: b },
     ])
+
     expect(warm.state).toEqual({ status: "warm", attempt: 1, instant: false })
     expect(selectTabPreviewOpenDelay(warm.state)).toBe(0)
 

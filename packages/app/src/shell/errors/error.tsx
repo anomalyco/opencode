@@ -303,34 +303,36 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     }
 
     const attempt = effect.attempt
-    const fail = (error: unknown) => dispatch({ type: "action.failed", attempt, error: formatError(error, language.t) })
+
+    // Each action resolves to its error message, or undefined when it succeeded.
+    const settle = (work: Promise<string | undefined>) =>
+      void work.then(
+        (error) =>
+          dispatch(
+            error === undefined ? { type: "action.succeeded", attempt } : { type: "action.failed", attempt, error },
+          ),
+        (cause) => dispatch({ type: "action.failed", attempt, error: formatError(cause, language.t) }),
+      )
 
     if (effect.type === "logs.export") {
       const recorded = effect.recordFirst ? (recording ?? record(effect.fatalAttempt)) : Promise.resolve(true)
 
       // A crash that cannot be recorded still leaves the logs to export; the native save dialog has no time limit.
-      void within(recorded, effect.recordTimeoutMs)
-        .then(() => platform.exportDebugLogs?.())
-        .then(() => dispatch({ type: "action.succeeded", attempt }), fail)
-
-      return
+      return settle(
+        within(recorded, effect.recordTimeoutMs)
+          .then(() => platform.exportDebugLogs?.())
+          .then(() => undefined),
+      )
     }
 
     later(effect.timeoutMs, () =>
       dispatch({ type: "action.timed-out", attempt, error: language.t("common.requestFailed") }),
     )
 
-    if (effect.type === "updater.install")
-      return void Promise.try(() => updater()?.install()).then(() => dispatch({ type: "action.succeeded", attempt }), fail)
+    if (effect.type === "updater.install") return settle(Promise.try(() => updater()?.install()).then(() => undefined))
 
-    void Promise.try(() => updater()?.check()).then(
-      (state) =>
-        dispatch(
-          state?.status === "error"
-            ? { type: "action.failed", attempt, error: state.message }
-            : { type: "action.succeeded", attempt },
-        ),
-      fail,
+    settle(
+      Promise.try(() => updater()?.check()).then((state) => (state?.status === "error" ? state.message : undefined)),
     )
   }
 

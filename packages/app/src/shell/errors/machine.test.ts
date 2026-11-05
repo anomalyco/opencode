@@ -68,6 +68,7 @@ describe("error page actions", () => {
       { type: "fatal.settled", attempt: 1, recorded: true },
       exportLogs,
     ])
+
     expect(late.effects.at(-1)).toMatchObject({ type: "logs.export", recordFirst: false })
   })
 
@@ -118,6 +119,7 @@ describe("error page actions", () => {
       { type: "action.failed", attempt: 2, error: "Check failed" },
       install,
     ])
+
     expect(reported.effects).toContainEqual({ type: "sentry.capture" })
     expect(selectReported(reported.state)).toBe(true)
     expect(selectReportDisabled(reported.state)).toBe(true)
