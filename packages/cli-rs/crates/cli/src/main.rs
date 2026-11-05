@@ -26,7 +26,7 @@ fn main() -> ExitCode {
     if let Some(port) = askpass::port() {
         return ExitCode::from(askpass::run(&port));
     }
-    let command = help::command();
+    let mut command = help::command();
     let raw: Vec<_> = std::env::args_os().collect();
     let argv = match args::normalize(&command, raw.clone()) {
         Ok(argv) => argv,
@@ -34,11 +34,8 @@ fn main() -> ExitCode {
     };
     // Effect CLI runs its action flags before it checks for missing arguments, so the wizard can ask for them.
     let wizard = wizard::requested(&argv);
-    let parser = match wizard {
-        true => wizard::lenient(command.clone()),
-        false => command.clone(),
-    };
-    let matches = match parser.try_get_matches_from(argv) {
+    let mut lenient = wizard.then(|| wizard::lenient(command.clone()));
+    let matches = match lenient.as_mut().unwrap_or(&mut command).try_get_matches_from_mut(argv) {
         Ok(matches) => matches,
         Err(error) => {
             // Effect CLI exits 1 on a usage error; clap would exit 2. Help output (`--help`) exits 0.
