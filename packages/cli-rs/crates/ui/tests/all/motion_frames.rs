@@ -19,6 +19,7 @@ const TEXT: Color = Color::hex(0xeeeeee);
 const BACKDROP: Color = Color::hex(0x0a0a0a);
 const ACCENT: Color = Color::hex(0xfab283);
 const PAGE: Color = Color::hex(0x1a1b26);
+const FAINT: Color = Color::rgba(0xe4, 0xe4, 0xe4, 0x5e);
 
 // The TypeScript screen is transparent, while an opentui-rust app clears the screen with its theme background.
 fn test_app(width: u16) -> TestApp {
@@ -110,6 +111,15 @@ fn prompt_scanner_blends_into_the_page_background() {
     );
     app.root().add(&page);
     assert_filmstrip(&app, "scanner-page");
+}
+
+#[test]
+fn an_alpha_spinner_and_label_blend_into_the_page_background() {
+    let app = test_app(12);
+    let page = View::new(&app).bg(PAGE);
+    page.add(&Spinner::new(&app).color(FAINT).label("Working"));
+    app.root().add(&page);
+    assert_filmstrip(&app, "spinner-page");
 }
 
 #[test]
