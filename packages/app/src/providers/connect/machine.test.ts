@@ -310,3 +310,56 @@ test("a failed refresh retries the refresh, not the sign-in", () => {
     { type: "refresh", method: key },
   ])
 })
+
+const formOauth: ProviderConnectMethod = {
+  id: "oauth",
+  type: "oauth",
+  label: "Sign in",
+  form: [
+    { key: "setup", type: "external", url: "https://setup.example.test" },
+    { key: "region", type: "string", hidden: true, default: "eu" },
+  ],
+}
+
+test("an answered form starts the method with the answer and its hidden defaults", () => {
+  const form = replay([loaded([formOauth])])
+
+  expect(form.state.status).toBe("form")
+  expect(selectProviderConnectView(form.state).form).toMatchObject({ kind: "external", canFinish: false })
+
+  const opening = replay([{ type: "form", event: { type: "external.open" } }], form.state)
+
+  expect(opening.effects).toMatchObject([{ type: "form.open.browser", attempt: 1, browser: 1 }])
+
+  const started = replay(
+    [
+      { type: "form.browser.opened", attempt: 1, browser: 1, opened: false },
+      { type: "form", event: { type: "step.submitted" } },
+    ],
+    opening.state,
+  )
+
+  expect(started.state.status).toBe("starting")
+  expect(started.effects).toEqual([
+    { type: "start", attempt: 2, method: formOauth, answer: { setup: true, region: "eu" } },
+  ])
+})
+
+test("a form with nothing to ask starts the method at once", () => {
+  const hidden: ProviderConnectMethod = {
+    ...key,
+    form: [{ key: "region", type: "string", hidden: true, default: "eu" }],
+  }
+
+  expect(replay([loaded([hidden])]).state).toMatchObject({ status: "entering", answer: { region: "eu" } })
+})
+
+test("Back while the form opens the browser ignores the late result", () => {
+  const opening = replay([loaded([formOauth]), { type: "form", event: { type: "external.open" } }])
+  const back = replay([{ type: "back" }], opening.state)
+
+  expect(back.state.status).toBe("choosing")
+  expect(
+    transitionProviderConnect(back.state, { type: "form.browser.opened", attempt: 1, browser: 1, opened: true }).state,
+  ).toBe(back.state)
+})

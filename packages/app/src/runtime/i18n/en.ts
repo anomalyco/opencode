@@ -249,6 +249,7 @@ export const dict = {
   "provider.connect.form.open": "Open link",
   "provider.connect.form.openAgain": "Open link again",
   "provider.connect.form.finished": "I finished",
+  "provider.connect.form.browserFailed": "We couldn't open your browser. Open the link below, then select I finished.",
   "provider.connect.form.selectOne": "Select at least one option",
   "provider.connect.form.minItems": "Select at least {{count}}",
   "provider.connect.form.maxItems": "Select at most {{count}}",
@@ -391,6 +392,7 @@ export const dict = {
   "dialog.mcp.signIn.paste.label": "Redirect URL",
   "dialog.mcp.signIn.paste.placeholder": "http://127.0.0.1:…/callback?code=…",
   "dialog.mcp.signIn.paste.required": "Paste the URL from the browser's address bar",
+  "dialog.mcp.signIn.syncFailed": "Signed in, but couldn't refresh {{name}}: {{error}}",
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
