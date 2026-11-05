@@ -14,13 +14,16 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use opencode_api::client::Client;
+use opencode_api::error::Error;
 use opencode_api::generated::{
-    EventSubscribeInput, ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder,
-    ModelDefaultInput, SessionID, SessionInterruptInput,
+    ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder, ModelDefaultInput,
+    SessionID, SessionInboxItem, SessionInterruptInput, SessionMessageAssistant,
+    SessionMessageAssistantContentItem as ContentItem, SessionMessageCompaction, SessionMessageInfo,
+    SessionStructuredError, V2Event,
 };
-use opencode_api::transport::SseResponse;
 use opentui::app::ProxyError;
 use opentui::prelude::*;
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::scrollback::{Commit, EntryKind, Phase, Source};
@@ -158,7 +161,7 @@ pub struct Output {
     /// `session.renamed`.
     pub title: Option<String>,
     /// Events for the footer views of M.3 (permissions, forms, subagents, the queue).
-    pub footer: Vec<Value>,
+    pub footer: Vec<V2Event>,
 }
 
 impl Output {
@@ -209,7 +212,7 @@ pub struct Transcript {
     pending: HashMap<String, Pending>,
     promoted: HashSet<String>,
     /// Events that arrive while a resize replay lists the messages again.
-    buffered: Option<Vec<Value>>,
+    buffered: Option<Vec<V2Event>>,
     /// Rows printed only locally, newest last (`localRows`).
     local: Vec<Commit>,
     /// With tools hidden, a message's text waits for its step to end, and is dropped when the message turns out
@@ -243,7 +246,7 @@ impl Transcript {
 
     /// The first or a reconnecting hydration (`hydrate`): every listed message, shown unless this is the first
     /// hydration and replay is off.
-    pub fn hydrate(&mut self, messages: &[Value], active: bool) -> Output {
+    pub fn hydrate(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
         let render = !self.initial || self.replay;
         let mut output = Output::default();
         for message in messages {
@@ -271,7 +274,7 @@ impl Transcript {
 
     /// Ends a resize replay (`performResizeReplay`) after the terminal was cleared: the listed messages, then the
     /// rows only this client printed, then the events that waited.
-    pub fn replayed(&mut self, messages: &[Value], active: bool) -> Output {
+    pub fn replayed(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
         let buffered = self.buffered.take().unwrap_or_default();
         self.message_ids.clear();
         self.errors.clear();
@@ -440,27 +443,31 @@ impl Transcript {
     }
 
     /// `renderMessage`: one message of a list.
-    pub fn message(&mut self, message: &Value, render: bool) -> Output {
-        let id = message["id"].as_str().unwrap_or_default();
-        match message["type"].as_str() {
-            Some("user") => {
+    pub fn message(&mut self, message: &SessionMessageInfo, render: bool) -> Output {
+        match message {
+            SessionMessageInfo::User(user) => {
+                let id = user.id.as_str();
                 self.pending.remove(id);
                 self.promoted.insert(id.to_owned());
-                self.user(id, message["text"].as_str().unwrap_or_default(), render)
+                self.user(id, &user.text, render)
             }
-            Some("compaction") => self.compaction(message, render),
-            Some("assistant") => self.assistant(message, render),
+            SessionMessageInfo::Compaction(compaction) => self.compaction(compaction, render),
+            SessionMessageInfo::Assistant(assistant) => self.assistant(assistant, render),
             // Skills and shells are drawn by M.4.
             _ => Output::default(),
         }
     }
 
-    fn compaction(&mut self, message: &Value, render: bool) -> Output {
-        let id = message["id"].as_str().unwrap_or_default();
+    fn compaction(&mut self, message: &SessionMessageCompaction, render: bool) -> Output {
+        let (id, summary, completed) = match message {
+            SessionMessageCompaction::Running(running) => (running.id.as_str(), running.summary.as_str(), false),
+            SessionMessageCompaction::Completed(done) => (done.id.as_str(), done.summary.as_str(), true),
+            SessionMessageCompaction::Failed(failed) => (failed.id.as_str(), "", false),
+            SessionMessageCompaction::Unknown(_) => return Output::default(),
+        };
         if !self.message_ids.insert(id.to_owned()) {
             return Output::default();
         }
-        let status = message["status"].as_str().unwrap_or_default();
         let header = || {
             let mut commit = Commit::new(EntryKind::System, Source::System, Phase::Start, "Compaction")
                 .message(id)
@@ -468,17 +475,14 @@ impl Transcript {
             commit.compaction = true;
             commit
         };
-        if status == "failed" {
-            if !render || message["error"]["type"] == "aborted" {
+        if let SessionMessageCompaction::Failed(failed) = message {
+            if !render || failed.error.r#type == "aborted" {
                 return Output::default();
             }
-            let error = Commit::error(message["error"]["message"].as_str().unwrap_or_default())
-                .message(id)
-                .part_id("compaction:error");
+            let error = Commit::error(&failed.error.message).message(id).part_id("compaction:error");
             return Output::commits(vec![header(), error]);
         }
-        let summary = message["summary"].as_str().unwrap_or_default();
-        let show = render || status == "running";
+        let show = render || matches!(message, SessionMessageCompaction::Running(_));
         let fragment = Fragment { message_id: id.to_owned(), part_id: "compaction:summary".into() };
         self.fragments.project(&fragment, summary, show);
         if !show {
@@ -491,26 +495,25 @@ impl Transcript {
         if !summary.is_empty() {
             commits.push(part(summary, Phase::Progress));
         }
-        if status == "completed" {
+        if completed {
             commits.push(part("", Phase::Final));
         }
         Output::commits(commits)
     }
 
-    fn assistant(&mut self, message: &Value, render: bool) -> Output {
-        let id = message["id"].as_str().unwrap_or_default();
+    fn assistant(&mut self, message: &SessionMessageAssistant, render: bool) -> Output {
+        let id = message.id.as_str();
         self.message_ids.insert(id.to_owned());
-        let content = message["content"].as_array().map(Vec::as_slice).unwrap_or_default();
-        let has_tools = content.iter().any(|item| item["type"] == "tool");
+        let has_tools = message.content.iter().any(|item| matches!(item, ContentItem::Tool(_)));
         if has_tools && !self.tools {
             self.remember_tool_message(id);
         }
         let mut commits = Vec::new();
         let (mut text_ordinal, mut reasoning_ordinal) = (0, 0);
-        for item in content {
-            let text = item["text"].as_str().unwrap_or_default();
-            match item["type"].as_str() {
-                Some("text") => {
+        for item in &message.content {
+            match item {
+                ContentItem::Text(part) => {
+                    let text = part.text.as_str();
                     let fragment = Fragment::new(id, "text", text_ordinal);
                     text_ordinal += 1;
                     let visible = render && (self.tools || !has_tools);
@@ -519,7 +522,8 @@ impl Transcript {
                         commits.push(text_commit(&fragment, suffix(text, &update.previous)));
                     }
                 }
-                Some("reasoning") => {
+                ContentItem::Reasoning(part) => {
+                    let text = part.text.as_str();
                     let fragment = Fragment::new(id, "reasoning", reasoning_ordinal);
                     reasoning_ordinal += 1;
                     let update = self.fragments.project(&fragment, text, render);
@@ -532,13 +536,13 @@ impl Transcript {
                         commits.push(reasoning_commit(&fragment, delta));
                     }
                 }
-                Some("tool") if render && self.tools => {
-                    commits.extend(crate::tools::commits(id, item));
+                ContentItem::Tool(tool) if render && self.tools => {
+                    commits.extend(crate::tools::commits(id, tool));
                 }
                 _ => {}
             }
         }
-        if let Some(error) = message.get("error").filter(|error| !error.is_null())
+        if let Some(error) = &message.error
             && self.errors.insert(id.to_owned())
             && render
         {
@@ -548,42 +552,33 @@ impl Transcript {
     }
 
     /// `apply`: one live event of this session. Events of other sessions are ignored here (subagents are M.3's).
-    pub fn event(&mut self, event: &Value) -> Output {
+    pub fn event(&mut self, event: &V2Event) -> Output {
         if let Some(buffered) = &mut self.buffered {
             buffered.push(event.clone());
             return Output::default();
         }
-        let data = &event["data"];
-        let kind = event["type"].as_str().unwrap_or_default();
-        let session = match kind {
-            "form.created" => data["form"]["sessionID"].as_str(),
-            _ => data["sessionID"].as_str(),
-        };
-        if session != Some(self.session_id.as_str()) {
+        if session_of(event) != Some(self.session_id.as_str()) {
             return Output::default();
         }
-        let output = self.apply(kind, event, data);
+        let output = self.apply(event);
         self.remember_all(&output.commits);
         output
     }
 
-    fn apply(&mut self, kind: &str, event: &Value, data: &Value) -> Output {
-        let message = data["assistantMessageID"].as_str().unwrap_or_default();
-        let ordinal = data["ordinal"].as_u64().unwrap_or_default();
-        match kind {
-            "session.renamed" => Output { title: data["title"].as_str().map(str::to_owned), ..Output::default() },
-            "session.inbox.enqueued" => {
-                if data["item"]["type"] != "user" {
+    fn apply(&mut self, event: &V2Event) -> Output {
+        let footer = || Output { footer: vec![event.clone()], ..Output::default() };
+        match event {
+            V2Event::SessionRenamed(renamed) => Output { title: Some(renamed.data.title.clone()), ..Output::default() },
+            V2Event::SessionInboxEnqueued(enqueued) => {
+                let SessionInboxItem::User(item) = &enqueued.data.item else {
                     return Output::default();
-                }
-                let id = data["inboxID"].as_str().unwrap_or_default();
-                let text = data["item"]["payload"]["text"].as_str().unwrap_or_default();
-                let mut output = self.admitted(id, text);
+                };
+                let mut output = self.admitted(enqueued.data.inbox_id.as_str(), &item.payload.text);
                 output.footer.push(event.clone());
                 output
             }
-            "session.inbox.delivered" => {
-                let id = data["inboxID"].as_str().unwrap_or_default();
+            V2Event::SessionInboxDelivered(delivered) => {
+                let id = delivered.data.inbox_id.as_str();
                 self.promoted.insert(id.to_owned());
                 let mut output = match self.pending.remove(id) {
                     Some(pending) => self.user(id, &pending.text, true),
@@ -593,51 +588,57 @@ impl Transcript {
                 output.footer.push(event.clone());
                 output
             }
-            "session.inbox.cancelled" => {
-                self.pending.remove(data["inboxID"].as_str().unwrap_or_default());
-                Output { footer: vec![event.clone()], ..Output::default() }
+            V2Event::SessionInboxCancelled(cancelled) => {
+                self.pending.remove(cancelled.data.inbox_id.as_str());
+                footer()
             }
-            "session.step.started" => Output::patch(true, "assistant responding"),
-            "session.text.delta" => {
-                let fragment = Fragment::new(message, "text", ordinal);
-                let delta = data["delta"].as_str().unwrap_or_default();
-                if self.fragments.delta(&fragment, delta).is_none() {
+            V2Event::SessionStepStarted(_) => Output::patch(true, "assistant responding"),
+            V2Event::SessionTextDelta(delta) => {
+                let data = &delta.data;
+                let message = data.assistant_message_id.as_str();
+                let fragment = Fragment::new(message, "text", data.ordinal as u64);
+                if self.fragments.delta(&fragment, &data.delta).is_none() {
                     return Output::default();
                 }
                 if !self.tools {
-                    self.buffer_quiet(message, &fragment.part_id, delta, false);
+                    self.buffer_quiet(message, &fragment.part_id, &data.delta, false);
                     return Output::default();
                 }
-                Output::commits(vec![text_commit(&fragment, delta)])
+                Output::commits(vec![text_commit(&fragment, data.delta.as_str())])
             }
-            "session.text.ended" => {
-                let fragment = Fragment::new(message, "text", ordinal);
-                let text = data["text"].as_str().unwrap_or_default();
-                let update = self.fragments.end(&fragment, text);
+            V2Event::SessionTextEnded(ended) => {
+                let data = &ended.data;
+                let message = data.assistant_message_id.as_str();
+                let fragment = Fragment::new(message, "text", data.ordinal as u64);
+                let update = self.fragments.end(&fragment, &data.text);
                 if !self.tools {
-                    self.buffer_quiet(message, &fragment.part_id, text, true);
+                    self.buffer_quiet(message, &fragment.part_id, &data.text, true);
                     return Output::default();
                 }
-                if text.len() <= update.previous.len() {
+                if data.text.len() <= update.previous.len() {
                     return Output::default();
                 }
-                Output::commits(vec![text_commit(&fragment, suffix(text, &update.previous))])
+                Output::commits(vec![text_commit(&fragment, suffix(&data.text, &update.previous))])
             }
-            "session.reasoning.delta" => {
-                let fragment = Fragment::new(message, "reasoning", ordinal);
-                let delta = data["delta"].as_str().unwrap_or_default();
-                match self.fragments.delta(&fragment, delta) {
+            V2Event::SessionReasoningDelta(delta) => {
+                let data = &delta.data;
+                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
+                match self.fragments.delta(&fragment, &data.delta) {
                     Some(update) if self.thinking => {
-                        let text =
-                            if update.previous.is_empty() { format!("Thinking: {delta}") } else { delta.to_owned() };
+                        let text = if update.previous.is_empty() {
+                            format!("Thinking: {}", data.delta)
+                        } else {
+                            data.delta.clone()
+                        };
                         Output::commits(vec![reasoning_commit(&fragment, text)])
                     }
                     _ => Output::default(),
                 }
             }
-            "session.reasoning.ended" => {
-                let fragment = Fragment::new(message, "reasoning", ordinal);
-                let text = data["text"].as_str().unwrap_or_default();
+            V2Event::SessionReasoningEnded(ended) => {
+                let data = &ended.data;
+                let text = data.text.as_str();
+                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
                 let update = self.fragments.end(&fragment, text);
                 if !self.thinking || text.len() <= update.previous.len() {
                     return Output::default();
@@ -649,21 +650,17 @@ impl Transcript {
                 };
                 Output::commits(vec![reasoning_commit(&fragment, text)])
             }
-            "session.step.ended" => {
-                let tokens = &data["tokens"];
-                let count = |value: &Value| value.as_u64().unwrap_or_default();
-                let total = count(&tokens["input"])
-                    + count(&tokens["output"])
-                    + count(&tokens["reasoning"])
-                    + count(&tokens["cache"]["read"])
-                    + count(&tokens["cache"]["write"]);
-                let cost = data["cost"].as_f64().filter(|cost| *cost != 0.0);
-                let quiet = self.flush_quiet(message);
+            V2Event::SessionStepEnded(ended) => {
+                let data = &ended.data;
+                let tokens = &data.tokens;
+                let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
+                let cost = Some(data.cost).filter(|cost| *cost != 0.0);
+                let quiet = self.flush_quiet(data.assistant_message_id.as_str());
                 Output {
                     commits: quiet,
                     patch: Some(Patch {
-                        usage: Some((total > 0 || cost.is_some()).then_some(Usage {
-                            tokens: total,
+                        usage: Some((total > 0.0 || cost.is_some()).then_some(Usage {
+                            tokens: total as u64,
                             percent: None,
                             cost,
                         })),
@@ -672,38 +669,104 @@ impl Transcript {
                     ..Output::default()
                 }
             }
-            "session.step.failed" => {
+            V2Event::SessionStepFailed(failed) => {
+                let message = failed.data.assistant_message_id.as_str();
                 let mut commits = self.flush_quiet(message);
                 if self.errors.insert(message.to_owned()) {
-                    commits.push(Commit::error(error_message(&data["error"])).message(message));
+                    commits.push(Commit::error(error_message(&failed.data.error)).message(message));
                 }
                 Output::commits(commits)
             }
-            "session.execution.started" => {
+            V2Event::SessionExecutionStarted(_) => {
                 self.root_active = true;
                 Output { patch: Some(Patch { running: Some(true), ..Patch::default() }), ..Output::default() }
             }
-            "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" => {
+            V2Event::SessionExecutionSucceeded(_)
+            | V2Event::SessionExecutionFailed(_)
+            | V2Event::SessionExecutionInterrupted(_) => {
                 self.root_active = false;
                 let messages: Vec<String> = self.quiet.iter().map(|(id, _)| id.clone()).collect();
                 let commits = messages.iter().flat_map(|id| self.flush_quiet(id)).collect();
                 Output { commits, ..Output::patch(false, "") }
             }
-            kind if kind.starts_with("session.tool.") && !self.tools => {
-                self.remember_tool_message(message);
-                Output { footer: vec![event.clone()], ..Output::default() }
+            _ => {
+                if let Some(message) = tool_message(event) {
+                    if !self.tools {
+                        self.remember_tool_message(message);
+                    }
+                    return footer();
+                }
+                match event {
+                    V2Event::SessionShellStarted(_)
+                    | V2Event::SessionShellEnded(_)
+                    | V2Event::SessionCompactionStarted(_)
+                    | V2Event::SessionCompactionDelta(_)
+                    | V2Event::SessionCompactionEnded(_)
+                    | V2Event::SessionCompactionFailed(_)
+                    | V2Event::PermissionAsked(_)
+                    | V2Event::PermissionReplied(_)
+                    | V2Event::FormCreated(_)
+                    | V2Event::FormReplied(_)
+                    | V2Event::FormCancelled(_) => footer(),
+                    _ => Output::default(),
+                }
             }
-            kind if kind.starts_with("session.tool.")
-                || kind.starts_with("session.shell.")
-                || kind.starts_with("session.compaction.")
-                || kind.starts_with("permission.")
-                || kind.starts_with("form.") =>
-            {
-                Output { footer: vec![event.clone()], ..Output::default() }
-            }
-            _ => Output::default(),
         }
     }
+}
+
+/// The session an event belongs to, for the events the transcript reads (`form.created` names it in its form).
+fn session_of(event: &V2Event) -> Option<&str> {
+    Some(match event {
+        V2Event::SessionRenamed(event) => event.data.session_id.as_str(),
+        V2Event::SessionInboxEnqueued(event) => event.data.session_id.as_str(),
+        V2Event::SessionInboxDelivered(event) => event.data.session_id.as_str(),
+        V2Event::SessionInboxCancelled(event) => event.data.session_id.as_str(),
+        V2Event::SessionStepStarted(event) => event.data.session_id.as_str(),
+        V2Event::SessionTextDelta(event) => event.data.session_id.as_str(),
+        V2Event::SessionTextEnded(event) => event.data.session_id.as_str(),
+        V2Event::SessionReasoningDelta(event) => event.data.session_id.as_str(),
+        V2Event::SessionReasoningEnded(event) => event.data.session_id.as_str(),
+        V2Event::SessionStepEnded(event) => event.data.session_id.as_str(),
+        V2Event::SessionStepFailed(event) => event.data.session_id.as_str(),
+        V2Event::SessionExecutionStarted(event) => event.data.session_id.as_str(),
+        V2Event::SessionExecutionSucceeded(event) => event.data.session_id.as_str(),
+        V2Event::SessionExecutionFailed(event) => event.data.session_id.as_str(),
+        V2Event::SessionExecutionInterrupted(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolInputStarted(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolInputDelta(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolInputEnded(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolCalled(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolProgress(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolSuccess(event) => event.data.session_id.as_str(),
+        V2Event::SessionToolFailed(event) => event.data.session_id.as_str(),
+        V2Event::SessionShellStarted(event) => event.data.session_id.as_str(),
+        V2Event::SessionShellEnded(event) => event.data.session_id.as_str(),
+        V2Event::SessionCompactionStarted(event) => event.data.session_id.as_str(),
+        V2Event::SessionCompactionDelta(event) => event.data.session_id.as_str(),
+        V2Event::SessionCompactionEnded(event) => event.data.session_id.as_str(),
+        V2Event::SessionCompactionFailed(event) => event.data.session_id.as_str(),
+        V2Event::PermissionAsked(event) => event.data.session_id.as_str(),
+        V2Event::PermissionReplied(event) => event.data.session_id.as_str(),
+        V2Event::FormCreated(event) => event.data.form.session_id.as_str(),
+        V2Event::FormReplied(event) => event.data.session_id.as_str(),
+        V2Event::FormCancelled(event) => event.data.session_id.as_str(),
+        _ => return None,
+    })
+}
+
+/// The assistant message of a `session.tool.*` event.
+fn tool_message(event: &V2Event) -> Option<&str> {
+    Some(match event {
+        V2Event::SessionToolInputStarted(event) => event.data.assistant_message_id.as_str(),
+        V2Event::SessionToolInputDelta(event) => event.data.assistant_message_id.as_str(),
+        V2Event::SessionToolInputEnded(event) => event.data.assistant_message_id.as_str(),
+        V2Event::SessionToolCalled(event) => event.data.assistant_message_id.as_str(),
+        V2Event::SessionToolProgress(event) => event.data.assistant_message_id.as_str(),
+        V2Event::SessionToolSuccess(event) => event.data.assistant_message_id.as_str(),
+        V2Event::SessionToolFailed(event) => event.data.assistant_message_id.as_str(),
+        _ => return None,
+    })
 }
 
 /// `text.slice(previous.length)`, by byte, on a character boundary.
@@ -723,30 +786,25 @@ fn reasoning_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
         .part_id(&fragment.part_id)
 }
 
-/// `errorMessage`: the message, else the tag.
-fn error_message(error: &Value) -> String {
-    [&error["message"], &error["_tag"]]
-        .into_iter()
-        .filter_map(Value::as_str)
-        .find(|text| !text.is_empty())
-        .unwrap_or("Session execution failed")
-        .to_owned()
+/// `errorMessage`: the message, else a fallback (the structured error has no `_tag`).
+fn error_message(error: &SessionStructuredError) -> String {
+    if error.message.is_empty() { "Session execution failed".to_owned() } else { error.message.clone() }
 }
 
 /// What the network side posts to the UI thread.
 pub enum Incoming {
     /// The stream (re)connected and the messages were listed.
     Hydrated {
-        messages: Vec<Value>,
+        messages: Vec<SessionMessageInfo>,
         active: bool,
     },
-    Event(Value),
+    Event(Box<V2Event>),
     /// The stream dropped; it reconnects.
     Disconnected(String),
 }
 
 /// `projectedMessages`: the newest `limit` messages, oldest first.
-pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<Value>, String> {
+pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<SessionMessageInfo>, String> {
     let input = MessageListInput {
         session_id: SessionID(session.to_owned()),
         limit: Some(i64::from(limit)),
@@ -755,9 +813,17 @@ pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<
     };
     let call = Client::message_list_call(&input).map_err(|error| error.to_string())?;
     let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
-    let mut data = list["data"].as_array().cloned().unwrap_or_default();
-    data.reverse();
-    Ok(data)
+    let data = list["data"].as_array().map(Vec::as_slice).unwrap_or_default();
+    Ok(data.iter().rev().map(decode_message).collect())
+}
+
+/// Decodes a listed message once, at the boundary. A message this client cannot read is kept as unknown, so one
+/// bad message does not fail the list.
+fn decode_message(value: &Value) -> SessionMessageInfo {
+    SessionMessageInfo::deserialize(value).unwrap_or_else(|error| {
+        log::warn!("mini could not decode a message: {error}");
+        SessionMessageInfo::Unknown(value.clone())
+    })
 }
 
 /// Whether the session is running (`session.active`).
@@ -767,7 +833,7 @@ pub async fn active(client: &Client, session: &str) -> bool {
 }
 
 /// Lists the messages and whether the session runs, as a hydration does.
-pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<(Vec<Value>, bool), String> {
+pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<(Vec<SessionMessageInfo>, bool), String> {
     let messages = messages(client, session, limit).await?;
     Ok((messages, active(client, session).await))
 }
@@ -789,10 +855,10 @@ pub async fn connect(client: Client, session: String, limit: u32, proxy: AppProx
 
 /// One connection. `Ok` means the app is gone.
 async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) -> Result<(), String> {
-    let response = client.event_subscribe(&EventSubscribeInput::default()).await.map_err(|error| error.to_string())?;
-    let mut events = Box::pin(SseResponse::<Value>::new(response.response).events(|| {}));
+    let mut events = opencode_api::events::raw::<V2Event>(client);
     match events.next().await {
-        Some(Ok(first)) if first["type"] == "server.connected" => {}
+        Some(Ok(V2Event::ServerConnected(_))) => {}
+        Some(Err(error)) if !matches!(error, Error::MalformedResponse(_)) => return Err(error.to_string()),
         _ => return Err("Event stream disconnected".into()),
     }
     // Events that arrive meanwhile wait in the stream, so they reach the UI after the hydration.
@@ -801,8 +867,16 @@ async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) ->
         return Ok(());
     }
     while let Some(event) = events.next().await {
-        let event = event.map_err(|error| error.to_string())?;
-        if !post(proxy, Incoming::Event(event)).await {
+        let event = match event {
+            Ok(event) => event,
+            // An event this client cannot decode is skipped; the stream goes on.
+            Err(Error::MalformedResponse(error)) => {
+                log::warn!("mini could not decode an event: {error}");
+                continue;
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+        if !post(proxy, Incoming::Event(Box::new(event))).await {
             return Ok(());
         }
     }
@@ -881,14 +955,41 @@ mod tests {
         output.commits.iter().map(|commit| (commit.kind, commit.text.clone())).collect()
     }
 
-    fn history() -> Vec<Value> {
+    /// A listed message, with the fields the tests do not care about filled in.
+    pub(crate) fn message(value: Value) -> SessionMessageInfo {
+        let mut value = value;
+        value["time"] = json!({ "created": 1 });
+        if value["type"] == "assistant" {
+            value["agent"] = json!("build");
+            value["model"] = json!({ "id": "model", "providerID": "demo" });
+        }
+        SessionMessageInfo::deserialize(&value).unwrap()
+    }
+
+    /// A live event of `ses_1` unless `data` names another session.
+    pub(crate) fn event(kind: &str, data: Value) -> V2Event {
+        let mut data = data;
+        if data.get("sessionID").is_none() {
+            data["sessionID"] = json!("ses_1");
+        }
+        let event = json!({ "id": "evt_1", "created": 1, "type": kind,
+            "durable": { "aggregateID": "ses_1", "seq": 1, "version": 1 }, "data": data });
+        V2Event::deserialize(&event).unwrap()
+    }
+
+    fn delta(message: &str, text: &str) -> V2Event {
+        event("session.text.delta", json!({ "assistantMessageID": message, "ordinal": 0, "delta": text }))
+    }
+
+    fn history() -> Vec<SessionMessageInfo> {
         vec![
-            json!({ "id": "msg_u1", "type": "user", "text": "first" }),
-            json!({ "id": "msg_a1", "type": "assistant", "content": [
+            message(json!({ "id": "msg_u1", "type": "user", "text": "first" })),
+            message(json!({ "id": "msg_a1", "type": "assistant", "content": [
                 { "type": "reasoning", "text": "hmm" },
                 { "type": "text", "text": "answer" },
-            ] }),
-            json!({ "id": "msg_a2", "type": "assistant", "content": [], "error": { "_tag": "Boom" } }),
+            ] })),
+            message(json!({ "id": "msg_a2", "type": "assistant", "content": [],
+                "error": { "type": "provider", "message": "Boom" } })),
         ]
     }
 
@@ -916,21 +1017,19 @@ mod tests {
     fn live_deltas_after_a_list_print_only_what_is_new() {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(
-            &[json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "text", "text": "Hello" }] })],
+            &[message(json!({ "id": "msg_a", "type": "assistant", "content": [{ "type": "text", "text": "Hello" }] }))],
             true,
         );
-        let delta = |text: &str| {
-            json!({ "type": "session.text.delta", "data": {
-            "sessionID": "ses_1", "assistantMessageID": "msg_a", "ordinal": 0, "delta": text } })
-        };
-        assert!(transcript.event(&delta("Hel")).commits.is_empty());
-        assert!(transcript.event(&delta("lo")).commits.is_empty());
-        assert_eq!(texts(&transcript.event(&delta(" world"))), [(EntryKind::Assistant, " world".into())]);
-        let ended = json!({ "type": "session.text.ended", "data": {
-            "sessionID": "ses_1", "assistantMessageID": "msg_a", "ordinal": 0, "text": "Hello world!" } });
+        assert!(transcript.event(&delta("msg_a", "Hel")).commits.is_empty());
+        assert!(transcript.event(&delta("msg_a", "lo")).commits.is_empty());
+        assert_eq!(texts(&transcript.event(&delta("msg_a", " world"))), [(EntryKind::Assistant, " world".into())]);
+        let ended =
+            event("session.text.ended", json!({ "assistantMessageID": "msg_a", "ordinal": 0, "text": "Hello world!" }));
         assert_eq!(texts(&transcript.event(&ended)), [(EntryKind::Assistant, "!".into())]);
-        let other = json!({ "type": "session.text.delta", "data": {
-            "sessionID": "ses_2", "assistantMessageID": "msg_b", "ordinal": 0, "delta": "x" } });
+        let other = event(
+            "session.text.delta",
+            json!({ "sessionID": "ses_2", "assistantMessageID": "msg_b", "ordinal": 0, "delta": "x" }),
+        );
         assert!(transcript.event(&other).commits.is_empty());
     }
 
@@ -938,23 +1037,23 @@ mod tests {
     fn with_tools_hidden_text_waits_for_its_step_and_tool_messages_stay_quiet() {
         let mut transcript = Transcript::new("ses_1", true, false, true, None);
         transcript.hydrate(&[], true);
-        let event = |kind: &str, data: Value| {
-            let mut data = data;
-            data["sessionID"] = json!("ses_1");
-            json!({ "type": kind, "data": data })
-        };
-        let delta = |message: &str, text: &str| {
-            event("session.text.delta", json!({ "assistantMessageID": message, "ordinal": 0, "delta": text }))
-        };
         assert!(transcript.event(&delta("msg_a", "Hello")).commits.is_empty());
         assert!(transcript.event(&delta("msg_a", " there")).commits.is_empty());
-        let ended = event("session.step.ended", json!({ "assistantMessageID": "msg_a", "tokens": {} }));
+        let tokens = json!({ "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
+        let ended = event(
+            "session.step.ended",
+            json!({ "assistantMessageID": "msg_a", "finish": "stop", "cost": 0, "tokens": tokens }),
+        );
         assert_eq!(texts(&transcript.event(&ended)), [(EntryKind::Assistant, "Hello there".into())]);
         assert!(transcript.event(&delta("msg_b", "Let me look")).commits.is_empty());
-        let tool = event("session.tool.called", json!({ "assistantMessageID": "msg_b", "id": "call_1" }));
-        assert!(transcript.event(&tool).commits.is_empty());
-        let done = event("session.execution.succeeded", json!({}));
-        assert!(transcript.event(&done).commits.is_empty());
+        let tool = event(
+            "session.tool.called",
+            json!({ "assistantMessageID": "msg_b", "id": "call_1", "input": {}, "executed": true }),
+        );
+        let output = transcript.event(&tool);
+        assert!(output.commits.is_empty());
+        assert_eq!(output.footer.len(), 1);
+        assert!(transcript.event(&event("session.execution.succeeded", json!({}))).commits.is_empty());
     }
 
     #[test]
@@ -962,13 +1061,11 @@ mod tests {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(&[], false);
         assert!(transcript.admitted("msg_p", "hi").commits.is_empty());
-        let delivered =
-            json!({ "type": "session.inbox.delivered", "data": { "sessionID": "ses_1", "inboxID": "msg_p" } });
-        let output = transcript.event(&delivered);
+        let output = transcript.event(&event("session.inbox.delivered", json!({ "inboxID": "msg_p" })));
         assert_eq!(texts(&output), [(EntryKind::User, "hi".into())]);
         assert_eq!(output.patch.unwrap().status.as_deref(), Some("waiting for assistant"));
         // The listed user message does not print it again.
-        let listed = json!({ "id": "msg_p", "type": "user", "text": "hi" });
+        let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hi" }));
         assert!(transcript.message(&listed, true).commits.is_empty());
     }
 
@@ -977,14 +1074,10 @@ mod tests {
         let mut transcript = Transcript::new("ses_1", true, true, true, None);
         transcript.hydrate(&history(), false);
         // A live answer the list does not have yet, and a local error.
-        let delta = json!({ "type": "session.text.delta", "data": {
-            "sessionID": "ses_1", "assistantMessageID": "msg_live", "ordinal": 0, "delta": "streamed" } });
-        transcript.event(&delta);
+        transcript.event(&delta("msg_live", "streamed"));
         transcript.remember(&Commit::error("send failed").message("msg_local"));
         transcript.begin_replay();
-        let late = json!({ "type": "session.text.delta", "data": {
-            "sessionID": "ses_1", "assistantMessageID": "msg_live", "ordinal": 0, "delta": " more" } });
-        assert!(transcript.event(&late).commits.is_empty());
+        assert!(transcript.event(&delta("msg_live", " more")).commits.is_empty());
         let output = transcript.replayed(&history(), false);
         assert_eq!(
             texts(&output),
@@ -999,6 +1092,13 @@ mod tests {
             ]
         );
         assert!(!transcript.replaying());
+    }
+
+    /// One message the client cannot read does not fail the list.
+    #[test]
+    fn an_unreadable_message_is_kept_as_unknown() {
+        let value = json!({ "id": "msg_a", "type": "assistant", "content": "not a list" });
+        assert!(matches!(decode_message(&value), SessionMessageInfo::Unknown(_)));
     }
 
     #[test]

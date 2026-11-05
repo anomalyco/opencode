@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use anyhow::Context as _;
 use opencode_api::client::Client;
+use opencode_api::generated::V2Event;
 use opencode_local::cli_config::{ThemeMode as ConfigMode, Visibility};
 use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
 use opencode_ui::theme::ThemeMode;
@@ -423,7 +424,7 @@ impl Mini {
                     transcript.hydrate(&messages, active)
                 }
                 Incoming::Event(event) => {
-                    self.trace("recv.event", event.clone());
+                    self.trace("recv.event", serde_json::to_value(&event).unwrap_or_default());
                     transcript.event(&event)
                 }
                 Incoming::Disconnected(error) => {
@@ -451,7 +452,13 @@ impl Mini {
     /// Writes a transcript output: footer events, commits, then the status.
     fn output(&self, cx: &mut Cx<'_>, output: Output) {
         for event in &output.footer {
-            if event["type"].as_str().is_some_and(|kind| kind.starts_with("session.inbox.")) {
+            if matches!(
+                event,
+                V2Event::SessionInboxEnqueued(_)
+                    | V2Event::SessionInboxDelivered(_)
+                    | V2Event::SessionInboxCancelled(_)
+                    | V2Event::SessionInboxDeliveryChanged(_)
+            ) {
                 self.prompt.inbox_event(event);
                 self.footers.queue_changed();
                 self.paint_status();
