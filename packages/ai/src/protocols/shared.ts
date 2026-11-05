@@ -77,6 +77,15 @@ export const reportedBilling = (usage: unknown, ...frames: ReadonlyArray<unknown
 }
 
 /**
+ * The filter that blocked a response, from maps keyed by filter name: Azure's `content_filter_results`
+ * (`{ hate: { filtered: true } }`) or GitHub Copilot's `copilot_annotations` (`{ TextCopyright: [...] }`).
+ */
+export const contentFilterCategory = (...sources: ReadonlyArray<unknown>) =>
+  sources
+    .flatMap((source) => (isRecord(source) ? Object.entries(source) : []))
+    .find(([, value]) => (isRecord(value) && "filtered" in value ? value.filtered === true : Boolean(value)))?.[0]
+
+/**
  * Accepts stream frames that carry no `type`, alongside the typed event schema. Gateways inject such frames as
  * keep-alives, so they decode as an ignored event; one with an `error` still decodes as an error event.
  */

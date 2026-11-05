@@ -444,6 +444,35 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("names the GitHub Copilot content filter that blocked a response", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.incomplete",
+              response: {
+                id: "resp_1",
+                incomplete_details: { reason: "content_filter" },
+                content_filters: [
+                  { source_type: "prompt", blocked: false },
+                  {
+                    source_type: "completion",
+                    blocked: true,
+                    content_filter_raw: [{ action: "BLOCK", label: "TextCopyright", result: true }],
+                  },
+                ],
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toMatchObject({ normalized: "content-filter", category: "TextCopyright" })
+    }),
+  )
+
   it.effect("converts the GitHub Copilot billing on the completed event to USD", () =>
     Effect.gen(function* () {
       const model = configure({ apiKey: "test-key", baseURL: "https://api.githubcopilot.test" }).model("gpt-5")

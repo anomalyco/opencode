@@ -913,6 +913,36 @@ export const mapUsage = (
   })
 }
 
+// GitHub Copilot lists the filters that ran; the blocking one names its rule in `content_filter_raw`.
+const decodeContentFilters = Schema.decodeUnknownOption(
+  Schema.Array(
+    Schema.Struct({
+      source_type: Schema.optional(Schema.String),
+      blocked: Schema.optional(Schema.Boolean),
+      content_filter_raw: Schema.optional(
+        Schema.Array(
+          Schema.Struct({
+            action: Schema.optional(Schema.String),
+            label: Schema.optional(Schema.String),
+            result: Schema.optional(Schema.Unknown),
+          }),
+        ),
+      ),
+      content_filter_results: Schema.optional(Schema.Unknown),
+    }),
+  ),
+)
+
+const contentFilterCategory = (raw: unknown) => {
+  const blocked = Option.getOrElse(decodeContentFilters(raw), () => []).filter((filter) => filter.blocked)
+  const filter = blocked.find((item) => item.source_type === "completion") ?? blocked[0]
+  if (!filter) return undefined
+  return (
+    filter.content_filter_raw?.find((rule) => rule.action === "BLOCK" && rule.result === true)?.label ??
+    ProviderShared.contentFilterCategory(filter.content_filter_results)
+  )
+}
+
 const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
   const reason = event.response?.incomplete_details?.reason
   if (reason === undefined) {
@@ -1397,10 +1427,12 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
     }
     events.push(...pending.events)
   }
+  const normalized = mapFinishReason(event, current.hasFunctionCall)
   const lifecycle = Lifecycle.finish(current.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, current.hasFunctionCall),
+      normalized,
       raw: event.response?.incomplete_details?.reason,
+      ...(normalized === "content-filter" ? { category: contentFilterCategory(event.response?.content_filters) } : {}),
     },
     // Copilot reports its billing on the terminal event, beside `response`.
     usage: mapUsage(event.response?.usage, current.providerMetadataKey, event, event.response),
