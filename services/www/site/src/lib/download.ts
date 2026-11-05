@@ -87,11 +87,17 @@ export const desktopAssets = {
 } as const satisfies Record<DownloadPlatform, string>
 
 /**
+ * The update API (services/update). Always production's: there is one release service, and it has
+ * no route on dev.opencode.ai.
+ */
+export const updateApi = "https://opencode.ai/update/api"
+
+/**
  * A desktop build's download: the update API answers it with a 302 to the file in the files bucket.
- * Not locale-prefixed, so never pass it through `route()`.
+ * Absolute, so never pass it through `route()`.
  */
 export function getDownloadHref(platform: DownloadPlatform, channel: "latest" | "beta" = "latest") {
-  return `/update/api/${channel}/desktop/opencode/${desktopAssets[platform]}`
+  return `${updateApi}/${channel}/desktop/opencode/${desktopAssets[platform]}`
 }
 
 /** The desktop builds, in order. The .AppImage build stays out until it works. */
