@@ -215,6 +215,7 @@ export const SessionReview = (props: SessionReviewProps) => {
     untrack(files),
     untrack(() => props.open),
   )
+
   const [reviewState, setReviewState] = createSignal(reviewCurrent)
 
   const dispatchReview = (event: SessionReviewEvent) => {
