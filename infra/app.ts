@@ -27,17 +27,13 @@ const web = new sst.cloudflare.x.Astro("Web", {
   },
 })
 
-// The site serves itself under /docs, so these routes take /docs on the main host. `sst dev` deploys no Worker.
+// The site serves itself under /docs, so this route takes /docs on the main host. An exact `/docs` pattern misses
+// `/docs?query`, so it's a `/docs*` prefix. `sst dev` deploys no Worker.
 const webServer = web.nodes.server
 if (webServer) {
-  for (const [name, pattern] of [
-    ["WebDocsRoute", `${domain}/docs`],
-    ["WebDocsPathRoute", `${domain}/docs/*`],
-  ]) {
-    new cloudflare.WorkersRoute(name, {
-      zoneId: zoneID,
-      pattern,
-      script: webServer.nodes.worker.scriptName,
-    })
-  }
+  new cloudflare.WorkersRoute("WebDocsRoute", {
+    zoneId: zoneID,
+    pattern: `${domain}/docs*`,
+    script: webServer.nodes.worker.scriptName,
+  })
 }
