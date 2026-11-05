@@ -63,8 +63,23 @@ describe("transitionTextReveal", () => {
     const timedOut = run(createTextRevealState("A"), { type: "ready.timed-out", ...measured(30) })
 
     expect(timedOut.state).toMatchObject({ status: "idle", widthPx: 30 })
-    expect(run(timedOut.state, { type: "fonts.settled", ...measured(50) }).state).toBe(timedOut.state)
     expect(run(timedOut.state, { type: "ready.settled", ...measured(50) }).state).toBe(timedOut.state)
+  })
+
+  test("fonts that settle after the timeout re-measure the width without a frame", () => {
+    const timedOut = run(createTextRevealState("A"), { type: "ready.timed-out", ...measured(30) }).state
+    const late = transitionTextReveal(timedOut, { type: "fonts.settled", ...measured(50) })
+
+    expect(late.state).toMatchObject({ status: "idle", widthPx: 50 })
+    expect(late.effects).toEqual([])
+    expect(transitionTextReveal(late.state, { type: "fonts.settled", ...measured(50) }).state).toBe(late.state)
+
+    const swapping = transitionTextReveal(timedOut, { type: "text.changed", text: "B" }).state
+
+    expect(transitionTextReveal(swapping, { type: "fonts.settled", ...measured(60) }).state).toMatchObject({
+      status: "swapping",
+      widthPx: 60,
+    })
   })
 
   test("swaps a replaced text and wipes it out after one frame", () => {

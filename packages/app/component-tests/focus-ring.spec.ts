@@ -47,8 +47,9 @@ story("leaves focus where an outside click put it when a non-modal menu closes",
   await expect(page.getByRole("menuitem", { name: "Pin" })).toBeVisible()
   await page.mouse.click(4, 300)
   await expect(page.getByRole("menuitem", { name: "Pin" })).toHaveCount(0)
-  // Focus returns in a task queued when the menu unmounts; one more task runs after it.
-  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve)))
+  // The close focus restore has run once the story counts it; the click on empty space left focus on the body.
+  await expect(page.getByLabel("Non-modal focus restores")).toHaveText("1")
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true)
   await expect(trigger).not.toBeFocused()
 })
 

@@ -74,14 +74,15 @@ export function transitionTextReveal(state: TextRevealState, event: TextRevealEv
 
   if (event.type === "text.changed") return changeText(state, event.text)
 
-  if (event.type === "width.measured") {
+  if (state.status === "measuring" && event.type === "fonts.settled") {
+    return { state: { ...state, widthPx: widen(state.widthPx, event) }, effects: [READY_FRAME] }
+  }
+
+  // Fonts that settle after the ready timeout still widen the track to the real text.
+  if (event.type === "width.measured" || event.type === "fonts.settled") {
     const widthPx = widen(state.widthPx, event)
 
     return { state: widthPx === state.widthPx ? state : { ...state, widthPx }, effects: NO_EFFECTS }
-  }
-
-  if (state.status === "measuring" && event.type === "fonts.settled") {
-    return { state: { ...state, widthPx: widen(state.widthPx, event) }, effects: [READY_FRAME] }
   }
 
   if (state.status === "measuring" && (event.type === "ready.settled" || event.type === "ready.timed-out")) {

@@ -58,6 +58,7 @@ export const Basic = {
 export const ProgrammaticAndNonModal = {
   render: () => {
     const [open, setOpen] = createSignal(false)
+    const [restores, setRestores] = createSignal(0)
 
     return (
       <div style={{ display: "flex", gap: "16px", "align-items": "flex-start" }}>
@@ -75,12 +76,14 @@ export const ProgrammaticAndNonModal = {
         <Menu gutter={6} modal={false}>
           <Menu.Trigger as={Button}>Non-modal</Menu.Trigger>
           <Menu.Portal>
-            <Menu.Content>
+            {/* Counts close focus restores, which run a task after the menu closes. */}
+            <Menu.Content onCloseAutoFocus={() => setRestores((count) => count + 1)}>
               <Menu.Item>Pin</Menu.Item>
               <Menu.Item>Archive</Menu.Item>
             </Menu.Content>
           </Menu.Portal>
         </Menu>
+        <output aria-label="Non-modal focus restores">{restores()}</output>
       </div>
     )
   },
