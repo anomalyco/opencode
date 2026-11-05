@@ -46,21 +46,17 @@ export type Handle = Schema.Json
 
 /**
  * How a durable tool runs work that can outlive a suspended run: `start` launches it under the idempotency `key` and
- * returns a handle quickly; `attach` waits for its result (interrupting it detaches, never cancels); `lookup` finds the
- * handle of work started under `key` when the run was saved before `start` returned; `cancel` stops the work.
+ * returns a handle quickly; `attach` waits for its result (interrupting it detaches, never cancels); `cancel` stops
+ * the work. A run can be suspended while a durable call's work runs, once `start` returned its handle; the host then
+ * waits on the work itself and gives its outcome to `resume`. `lookup`, which finds the handle of work started under
+ * `key`, is for the host: the runtime doesn't call it.
  */
 export type Durable<Input = unknown, Output = unknown, R = never> = {
   readonly start: (input: Input, context: { readonly key: string }) => Effect.Effect<Handle, unknown, R>
   readonly attach: (handle: Handle) => Effect.Effect<Output, unknown, R>
-  readonly lookup: (key: string) => Effect.Effect<Handle | undefined, unknown, R>
+  readonly lookup?: ((key: string) => Effect.Effect<Handle | undefined, unknown, R>) | undefined
   readonly cancel: (handle: Handle) => Effect.Effect<void, unknown, R>
 }
-
-/**
- * Whether a call that was running when its run was suspended may run again on resume: `safe` re-runs it; `unsafe`
- * (the default) rejects the program's promise instead, since the call may have partially run.
- */
-export type Retry = "safe" | "unsafe"
 
 /** Executable tool exposed through CodeMode's `tools` object. */
 export type Tool<R = never> = {
@@ -74,7 +70,6 @@ export type Tool<R = never> = {
    */
   readonly execute: (input: unknown, context?: { readonly key: string }) => Effect.Effect<unknown, unknown, R>
   readonly durable?: Durable<unknown, unknown, R> | undefined
-  readonly retry?: Retry | undefined
 }
 
 type InputType<S> = S extends Schema.Decoder<unknown> ? S["Type"] : unknown
@@ -86,7 +81,6 @@ export type Options<I extends SchemaType, O extends SchemaType | undefined, R = 
   readonly description: string
   readonly input: I
   readonly output?: O
-  readonly retry?: Retry
 } & (
   | {
       readonly execute: (
@@ -126,6 +120,5 @@ export const make = <I extends SchemaType, const O extends SchemaType | undefine
         ? execute(input, context)
         : Effect.flatMap(durable!.start(input, context), (handle) => durable!.attach(handle)),
     ...(durable === undefined ? {} : { durable }),
-    ...(options.retry === undefined ? {} : { retry: options.retry }),
   }
 }

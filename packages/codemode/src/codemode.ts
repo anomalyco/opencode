@@ -10,12 +10,14 @@ import { globalNames } from "./interpreter/globals.js"
 import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
+import type { Handle } from "./tool.js"
 
 export { scanTools }
 export { fromBytes, SnapshotError, toBytes } from "./snapshot/snapshot.js"
 import type { SnapshotError } from "./snapshot/snapshot.js"
 export type { Header as SnapshotHeader, Snapshot } from "./snapshot/snapshot.js"
 export type { Execution, Outcome }
+export { SuspendError } from "./suspend-error.js"
 
 /** A tool call admitted during an execution. */
 export type {
@@ -65,11 +67,9 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   suspend?: SuspendOptions
 }
 
-/** How suspending a run settles its host calls and saves its state. */
+/** How suspending a run saves its state. */
 export type SuspendOptions = {
-  /** Milliseconds to wait for running host calls to finish before detaching or abandoning them. Default 50. */
-  readonly graceMs?: number
-  /** The most bytes a saved state may take; a larger one fails the run instead of suspending it. */
+  /** The most bytes a saved state may take; a larger one fails the suspend, and the run goes on. */
   readonly maxBytes?: number
 }
 
@@ -148,22 +148,18 @@ export const Result = Schema.Union([Success, Failure])
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type Result = typeof Result.Type
 
-/** A host call a suspended run was waiting on. */
+/** A durable tool call a suspended run waits on: its work runs on, and `resume` needs its outcome, by key. */
 export type Pending = {
-  readonly id: number
-  /** The tool path, `search`, or an extension function's name. */
+  /** The idempotency key, `<run id>:<call id>`, which the durable tool named its work by. */
+  readonly key: string
+  /** The tool's path, as the program called it: `tools.x.y`. */
   readonly path: string
   readonly args: ReadonlyArray<Json>
-  /** The idempotency key, `<run id>:<id>`; a durable tool names its work by it. */
-  readonly key: string
-  /**
-   * `queued`: it never started. `starting`: it may have started, and its outcome is unknown. `started`: a durable
-   * tool's work, still running, reattached by its handle on resume.
-   */
-  readonly status: "queued" | "starting" | "started"
+  /** The handle the durable tool's `start` returned. */
+  readonly handle: Handle
 }
 
-/** A run stopped by `run.suspend`: its whole state, to resume with `Runtime.resume`, and the calls it waits on. */
+/** A run stopped by `execution.suspend`: its whole state, to resume with `Runtime.resume`, and the calls it waits on. */
 export type Suspended = {
   readonly ok: "suspended"
   readonly state: Snapshot

@@ -5,10 +5,10 @@ import type { HostCall } from "../machine/scheduler.js"
 import type { ToolRuntime } from "../tool-runtime.js"
 import { toolError } from "../tool-error.js"
 import { locate } from "./errors.js"
-import { lostError, PendingThrow } from "./model.js"
+import { PendingThrow } from "./model.js"
 import { abrupt, type Completion, Interruption, normal } from "./signals.js"
 
-/** What `Driver.run` returns when a suspend was asked for: the machine stopped at a step boundary. */
+/** What `Driver.run` returns once the run was suspended: its state is saved, and the machine stopped. */
 export const SUSPENDED: unique symbol = Symbol("codemode.suspended")
 
 /** An outcome the host already knows for a pending call, by its key, handed to a resumed run. */
@@ -44,8 +44,8 @@ export class Driver<R> {
   ) {}
 
   /**
-   * Runs the machine until the program's body completes, then returns how it ended, or `SUSPENDED` once a suspend
-   * was asked for. Host work it started may still be running; `interrupt` stops it, `detach` settles it to suspend.
+   * Runs the machine until the program's body completes, then returns how it ended, or `SUSPENDED` once the run was
+   * suspended (see `detach`). Host work it started may still be running; `interrupt` stops it.
    * Host work interrupted on its own that reaches the program's body, or blocking host work that is interrupted,
    * interrupts the execution.
    */
@@ -67,7 +67,7 @@ export class Driver<R> {
             continue
           }
           if (self.checkpoint !== undefined) yield* self.checkpoint
-          // Suspending now leaves the calls queued: none of them has started.
+          // Suspended now: the calls stay queued, and start on resume.
           if (self.suspending) continue
           for (const handed of stop.calls) self.launch(self.machine.call(handed.id) ?? handed)
           continue
@@ -88,42 +88,34 @@ export class Driver<R> {
     })
   }
 
-  /** Asks `run` to stop at the next step boundary, waking it if it waits on host work. */
-  suspend(): void {
-    this.suspending = true
-    this.wake?.()
+  /**
+   * The host calls that block a suspend now: every call in progress but a durable tool's started work, which has its
+   * handle, and a tool call queued but not started, which starts on resume. A queued extension call blocks too: it holds
+   * live host values.
+   */
+  blocking(): Array<HostCall> {
+    return this.machine
+      .calls()
+      .filter((call) => call.status !== "started" && (call.status !== "queued" || call.request.kind === "extension"))
   }
 
   /**
-   * Settles running host work to suspend: waits up to `graceMs` for calls that are not detachable yet (a durable
-   * tool's `start`, any other call) to finish, so their outcomes are saved, then interrupts the rest. A durable tool's
-   * `attach` is interrupted at once; its work keeps running and its call stays `started` with its handle. Any other
-   * call still running stays `starting`: its outcome is unknown.
+   * Stops the run to suspend it, once its state is saved: `run` returns `SUSPENDED` at its next step, and running
+   * durable calls' fibers are detached, so ending them leaves their work running and reports nothing.
    */
-  detach(graceMs: number): Effect.Effect<void> {
-    const self = this
-    return Effect.gen(function* () {
-      const waiting = [...self.fibers].filter(([id]) => self.machine.call(id)?.status !== "started")
-      if (waiting.length > 0 && graceMs > 0) {
-        yield* Effect.raceFirst(
-          Fiber.awaitAll(waiting.map(([, fiber]) => fiber)),
-          Effect.sleep(graceMs),
-        )
-      }
-      while (self.fibers.size > 0) {
-        for (const id of self.fibers.keys()) self.detached.add(id)
-        yield* Fiber.interruptAll([...self.fibers.values()])
-      }
-    })
+  detach(): void {
+    this.suspending = true
+    for (const id of this.fibers.keys()) this.detached.add(id)
+    this.wake?.()
   }
 
-  /** Stops host work still running, waiting for its cleanup; a durable tool's work is cancelled. */
+  /** Stops host work still running, waiting for its cleanup; a durable tool's work is cancelled unless detached. */
   interrupt(): Effect.Effect<void> {
     const self = this
     return Effect.gen(function* () {
       self.stopping = true
       while (self.fibers.size > 0) yield* Fiber.interruptAll([...self.fibers.values()])
-      // A suspended run's durable work keeps running, to be reattached on resume.
+      // A suspended run's durable work keeps running, for the host to wait on.
       if (self.suspending) return
       for (const call of self.machine.calls()) {
         const request = call.request
@@ -134,10 +126,8 @@ export class Driver<R> {
   }
 
   /**
-   * Picks up the host calls a restored machine was waiting on: an outcome the host already knows completes its call;
-   * a durable call reattaches by handle, or finds its handle by key, or starts; a call that never started starts; any
-   * other call that was running re-runs when its tool is safe to retry, and otherwise fails with an error the program
-   * can catch, since it may have partially run.
+   * Picks up the host calls a restored machine was waiting on: the host's outcomes complete pending durable calls, by
+   * key, and calls that never started start.
    */
   resume(outcomes: Readonly<Record<string, Outcome>>): void {
     for (const call of this.machine.calls()) {
@@ -146,39 +136,17 @@ export class Driver<R> {
         this.machine.complete(call.id, known.ok ? normal(known.value) : abrupt(toolError(known.error)))
         continue
       }
-      const request = call.request
-      if (request.kind === "extension") {
-        const failure =
-          call.status === "queued" ? lostError(`The call to ${call.label}`) : interruptedError(call.label)
-        this.machine.complete(call.id, abrupt(failure))
-        continue
-      }
-      if (request.kind === "tool" && this.tools.tool(request.path)?.durable !== undefined) {
-        if (call.status === "started" && call.handle !== undefined) this.attach(call)
-        else if (call.status === "starting") this.lookup(call)
-        else this.launch(call)
-        continue
-      }
-      const retry = request.kind === "search" || this.retries(call)
-      if (call.status === "queued" || retry) this.launch(call)
-      else this.machine.complete(call.id, abrupt(interruptedError(call.label)))
+      if (call.status === "queued") this.launch(call)
     }
-  }
-
-  private retries(call: HostCall): boolean {
-    const request = call.request
-    return request.kind === "tool" && this.tools.tool(request.path)?.retry === "safe"
   }
 
   // Starts host work now; its outcome goes back to the machine: a blocking call's continues the job that made it, a
   // concurrent call's waits in the inbox and settles its promise in a later job, in completion order.
   private launch(call: HostCall): void {
-    // A call that was running when its run was suspended was admitted then; running it again is not a new call.
-    const again = call.status !== "queued"
     call.status = "starting"
     const request = call.request
     if (request.kind === "tool" && this.tools.tool(request.path)?.durable !== undefined) {
-      return this.fork(call.id, this.tools.start(request.path, request.args, call.key, again), (handle) => {
+      return this.fork(call.id, this.tools.start(request.path, request.args, call.key), (handle) => {
         const current = this.machine.call(call.id)
         if (current === undefined) return
         current.status = "started"
@@ -186,8 +154,8 @@ export class Driver<R> {
         this.attach(current)
       })
     }
-    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args, call.key, again))
-    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args, call.key, again))
+    if (request.kind === "tool") return this.fork(call.id, this.tools.execute(request.path, request.args, call.key))
+    if (request.kind === "search") return this.fork(call.id, this.tools.search(request.args, call.key))
     // An extension's work, made by the extension bridge with the program's services in its requirements.
     return this.fork(call.id, this.machine.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>)
   }
@@ -195,21 +163,10 @@ export class Driver<R> {
   private attach(call: HostCall): void {
     const request = call.request
     if (request.kind !== "tool") return
-    this.fork(call.id, this.tools.attach(request.path, request.args, call.key, call.handle!, () => this.suspending))
-  }
-
-  // A durable call that may have started before the run was saved: reattach to its work if it did, else start it.
-  private lookup(call: HostCall): void {
-    const request = call.request
-    if (request.kind !== "tool") return
-    this.fork(call.id, this.tools.lookup(request.path, call.key), (handle) => {
-      const current = this.machine.call(call.id)
-      if (current === undefined) return
-      if (handle === undefined) return this.launch(current)
-      current.status = "started"
-      current.handle = handle as Json
-      this.attach(current)
-    })
+    this.fork(
+      call.id,
+      this.tools.attach(request.path, request.args, call.key, call.handle!, () => this.suspending),
+    )
   }
 
   // Forks `work` with the caller's services; it starts synchronously, so admission and hooks happen before the machine
@@ -260,9 +217,3 @@ export class Driver<R> {
     })
   }
 }
-
-/** What a call that was running when its run was suspended fails with, when it can't safely run again. */
-const interruptedError = (label: string) =>
-  toolError(
-    `The call to ${label} was interrupted when the run was suspended and may have partially run; check its effects before calling it again.`,
-  )

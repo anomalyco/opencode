@@ -3,7 +3,9 @@ import { Cause, Deferred, Effect, Option, Schema, type Scope } from "effect"
 import type { DataValue, Diagnostic, Pending, ResolvedExecutionLimits, Result, Suspended } from "../codemode.js"
 import type { Json } from "../data.js"
 import { capture, fromBytes, restore, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
-import { ToolRuntime } from "../tool-runtime.js"
+import { toolExpression, ToolRuntime } from "../tool-runtime.js"
+import type { HostCall } from "../machine/scheduler.js"
+import { SuspendError } from "../suspend-error.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
@@ -24,8 +26,8 @@ export type Setup<R> = {
   readonly globals?: ((ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>) | undefined
   /** Whether the host globals can hand the program values with no data form (extensions can). */
   readonly lossy?: boolean
-  /** How long suspending waits for running host calls to finish, and the most bytes a saved state may take. */
-  readonly suspend?: { readonly graceMs?: number | undefined; readonly maxBytes?: number | undefined }
+  /** The most bytes a suspended run's state may take. */
+  readonly suspend?: { readonly maxBytes?: number | undefined }
 }
 
 /** A started program: its outcome, and a way to suspend it. */
@@ -33,13 +35,12 @@ export type Execution = {
   /** Waits for the program's result, or its saved state once suspended. */
   readonly result: Effect.Effect<Result | Suspended>
   /**
-   * Stops the run at the next step boundary, settles its host calls, and saves its state; what `result` gives. A run
-   * that already ended gives its result.
+   * Saves the run's state and stops it, at once: what `result` gives. It fails with a `SuspendError`, leaving the run
+   * running, while a host call other than a durable tool's started work is in progress. A run that already ended
+   * gives its result.
    */
-  readonly suspend: Effect.Effect<Result | Suspended>
+  readonly suspend: Effect.Effect<Result | Suspended, SuspendError>
 }
-
-const DEFAULT_GRACE_MS = 50
 
 export const executeProgram = <R>(
   code: string,
@@ -175,9 +176,12 @@ if (roundTrip) {
 
 /** One run's state: the runtime it is in now (restoring swaps it), its driver, and how much active time it used. */
 class Running<R> {
-  private ctx: Interpreter<R> | undefined
-  private driver: Driver<R> | undefined
-  private suspendAsked = false
+  private ctx!: Interpreter<R>
+  private driver!: Driver<R>
+  private startedAt = 0
+  // Set once the program's body ends, and once a suspend saved the run: either way, `done` gets the outcome next.
+  private finished = false
+  private suspended: Suspended | undefined
   private trips = 0
   // Checkpoints to let pass before the next round trip, so a large state is not saved at every one.
   private skip = 0
@@ -192,15 +196,29 @@ class Running<R> {
     private readonly outcomes?: Readonly<Record<string, Outcome>>,
   ) {}
 
-  // Runs the program in a fiber of the current scope.
+  // Makes the run's runtime and driver, then runs the program in a fiber of the current scope.
   start(): Effect.Effect<Execution, never, R | Scope.Scope> {
-    return Effect.as(Effect.forkScoped(this.execute().pipe(Effect.onExit((exit) => Deferred.done(this.done, exit)))), {
-      result: Deferred.await(this.done),
-      suspend: Effect.suspend(() => {
-        this.suspendAsked = true
-        this.driver?.suspend()
-        return Deferred.await(this.done)
-      }),
+    const self = this
+    return Effect.gen(function* () {
+      const prepared = self.prepare()
+      if (!(prepared instanceof Interpreter)) return ended(prepared)
+      self.ctx = prepared
+      self.driver = new Driver(prepared.machine, prepared.tools, yield* Effect.context<R>())
+      if (roundTrip) self.driver.checkpoint = Effect.sync(() => self.trip())
+      self.startedAt = Date.now()
+      yield* Effect.forkScoped(self.execute().pipe(Effect.onExit((exit) => Deferred.done(self.done, exit))))
+      return {
+        result: Deferred.await(self.done),
+        suspend: Effect.suspend(() => {
+          if (self.finished) return Deferred.await(self.done)
+          const saved = self.save()
+          if (saved instanceof SuspendError) return Effect.fail(saved)
+          self.finished = true
+          self.suspended = saved
+          self.driver.detach()
+          return Deferred.await(self.done)
+        }),
+      } satisfies Execution
     })
   }
 
@@ -208,30 +226,21 @@ class Running<R> {
     const self = this
     const setup = this.setup
     const limits = setup.limits
-    const startedAt = Date.now()
     const logged = () => {
-      const logs = self.ctx?.logs ?? []
+      const logs = self.ctx.logs
       return logs.length > 0 ? { logs: [...logs] } : {}
     }
-    const toolCalls = () => self.ctx?.tools.calls ?? []
+    const toolCalls = () => self.ctx.tools.calls
     // Set only after copy-out so timeouts cannot report invalid values as completed.
     let returned: { value: DataValue; warnings: () => Array<Diagnostic> } | undefined
 
     const base = Effect.gen(function* () {
-      const prepared = self.prepare()
-      if (!(prepared instanceof Interpreter)) return prepared
-      self.ctx = prepared
-      const services = yield* Effect.context<R>()
-      const driver = new Driver(prepared.machine, prepared.tools, services)
-      self.driver = driver
-      if (self.suspendAsked) driver.suspend()
-      if (roundTrip) driver.checkpoint = Effect.sync(() => self.trip())
+      const driver = self.driver
       if (self.outcomes !== undefined) driver.resume(self.outcomes)
       const outcome = yield* driver.run()
-      if (outcome === SUSPENDED) {
-        yield* driver.detach(setup.suspend?.graceMs ?? DEFAULT_GRACE_MS)
-        return self.save(Date.now() - startedAt)
-      }
+      // Suspended: the durable calls' work was detached, and is left running.
+      if (outcome === SUSPENDED) return self.suspended!
+      self.finished = true
       const ctx = self.ctx
       if (!outcome.ok) {
         return { ok: false, error: normalizeError(outcome.error), ...logged(), toolCalls: toolCalls() } satisfies Result
@@ -249,7 +258,7 @@ class Running<R> {
         ...logged(),
         toolCalls: toolCalls(),
       } satisfies Result
-    }).pipe(Effect.ensuring(Effect.suspend(() => self.driver?.interrupt() ?? Effect.void)))
+    }).pipe(Effect.ensuring(Effect.suspend(() => self.driver.interrupt())))
     const timeoutMs = limits.timeoutMs
     const operation =
       timeoutMs === undefined
@@ -258,7 +267,9 @@ class Running<R> {
             Effect.timeoutOrElse({
               duration: Math.max(0, timeoutMs - this.activeBefore),
               orElse: () =>
-                Effect.sync(() => {
+                Effect.sync((): Result | Suspended => {
+                  self.finished = true
+                  if (self.suspended !== undefined) return self.suspended
                   if (returned === undefined) {
                     return {
                       ok: false,
@@ -304,44 +315,67 @@ class Running<R> {
     )
   }
 
-  // Saves the run's state once its host calls are settled.
-  private save(activeMs: number): Result | Suspended {
-    const ctx = this.ctx!
+  /**
+   * Saves the run's state, with no effect on the run: the calls that block a suspend, or the state as it is now and
+   * the durable calls it waits on. The program shares this thread with the caller, so it is at a step boundary.
+   */
+  private save(): Suspended | SuspendError {
+    const ctx = this.ctx
+    const machine = ctx.machine
+    const blocking = this.driver.blocking()
+    if (blocking.length > 0) {
+      const running = blocking.map((call) => ({ key: call.key, path: callPath(call) }))
+      return new SuspendError({
+        message: `The run can't be suspended while ${running.map((call) => call.path).join(", ")} ${running.length === 1 ? "is" : "are"} running; only a durable tool's started work can be.`,
+        running,
+      })
+    }
     const limits = this.setup.limits
-    const saved = capture(ctx as Interpreter<unknown>, {
-      bare: bare(),
-      pristine: pristine(this.setup),
-      runId: this.runId,
-      limits: {
-        timeoutMs: limits.timeoutMs ?? null,
-        maxToolCalls: limits.maxToolCalls ?? null,
-        maxOutputBytes: limits.maxOutputBytes ?? null,
-      },
-      activeMs: this.activeBefore + activeMs,
-      strict: false,
-    })
+    const saved = attempt(() =>
+      capture(ctx as Interpreter<unknown>, {
+        bare: bare(),
+        pristine: pristine(this.setup),
+        runId: this.runId,
+        limits: {
+          timeoutMs: limits.timeoutMs ?? null,
+          maxToolCalls: limits.maxToolCalls ?? null,
+          maxOutputBytes: limits.maxOutputBytes ?? null,
+        },
+        activeMs: this.activeBefore + Date.now() - this.startedAt,
+        strict: false,
+      }),
+    )
+    if (!saved.ok) {
+      const error = saved.error
+      return new SuspendError({
+        message: `The run's state couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
+        running: [],
+      })
+    }
+    const snapshot = saved.value.snapshot
     const maxBytes = this.setup.suspend?.maxBytes
     if (maxBytes !== undefined) {
-      const size = toBytes(saved.snapshot).byteLength
+      const size = toBytes(snapshot).byteLength
       if (size > maxBytes) {
-        const message = `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`
-        return { ok: false, error: { kind: "ExecutionFailure", message }, toolCalls: ctx.tools.calls }
+        return new SuspendError({
+          message: `The run's state takes ${size} bytes, more than the ${maxBytes}-byte limit, so it couldn't be suspended.`,
+          running: [],
+        })
       }
     }
-    const pending = ctx.machine.calls().flatMap((call): Array<Pending> => {
-      if (call.status === "completed") return []
+    const pending = machine.calls().flatMap((call): Array<Pending> => {
       const request = call.request
+      if (call.status !== "started" || request.kind !== "tool") return []
       return [
         {
-          id: call.id,
-          path: request.kind === "tool" ? request.path.join(".") : request.kind === "search" ? "search" : call.label,
-          args: request.kind === "extension" ? [] : request.args.map((arg): Json => arg ?? null),
           key: call.key,
-          status: call.status,
+          path: callPath(call),
+          args: request.args.map((arg): Json => arg ?? null),
+          handle: call.handle!,
         },
       ]
     })
-    return { ok: "suspended", state: saved.snapshot, pending }
+    return { ok: "suspended", state: snapshot, pending }
   }
 
   // The round-trip test mode's checkpoint: saves the state to bytes and continues in a brand-new runtime. States that
@@ -377,6 +411,22 @@ class Running<R> {
     driver.machine = fresh.machine
     driver.tools = fresh.tools
   }
+}
+
+// Saving runs host code (an extension's `snapshot.encode`), and anything it throws fails the suspend.
+const attempt = <A>(run: () => A): { ok: true; value: A } | { ok: false; error: unknown } => {
+  try {
+    return { ok: true, value: run() }
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+/** A host call as the program wrote it: `tools.x.y`, `search`, or an extension function's path. */
+const callPath = (call: HostCall): string => {
+  const request = call.request
+  if (request.kind === "tool") return toolExpression(request.path.flatMap((segment) => segment.split(".")).join("."))
+  return request.kind === "search" ? "search" : request.call.label
 }
 
 export const parseProgram = (
