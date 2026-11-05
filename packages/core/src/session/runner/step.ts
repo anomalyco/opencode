@@ -47,6 +47,8 @@ interface Input {
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
   readonly prepared: Omit<SessionModelRequest.Prepared, "event">
+  /** Set when this attempt runs because an earlier one in the step scheduled a retry. */
+  readonly retryAttempt?: number
   readonly retry: (
     cause: AIError,
     error: SessionError.Error,
@@ -77,6 +79,7 @@ export const make = Effect.gen(function* () {
     yield* Effect.annotateCurrentSpan({
       "gen_ai.provider.name": input.model.ref.providerID,
       "gen_ai.request.model": input.model.ref.id,
+      ...(input.retryAttempt === undefined ? {} : { "opencode.retry.attempt": input.retryAttempt }),
     })
     const publisher = createLLMEventPublisher(bus, {
       sessionID: input.sessionID,
@@ -213,7 +216,6 @@ export const make = Effect.gen(function* () {
             : undefined
         if (llmFailure && llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
-          yield* Effect.annotateCurrentSpan("opencode.retry.attempt", retry.attempt)
           yield* publisher.startAssistant()
           return Outcome.Retry({ error: llmError, decision: retry })
         }
@@ -281,10 +283,8 @@ export const make = Effect.gen(function* () {
           record.outputStarted &&
           tools.declines.length === 0 &&
           !tools.interrupted
-        ) {
-          yield* Effect.annotateCurrentSpan("opencode.retry.attempt", retry.attempt)
+        )
           return Outcome.Continue({ error: llmError, decision: retry })
-        }
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {

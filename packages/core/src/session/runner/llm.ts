@@ -237,6 +237,7 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      let retryAttempt: number | undefined
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -294,6 +295,7 @@ const layer = Layer.effect(
             // A tool call can arrive during a reload; its permission check reads the session's agent.
             executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
           },
+          retryAttempt,
           retry: (cause, error, proposed) =>
             retry.decide({
               cause,
@@ -312,6 +314,7 @@ const layer = Layer.effect(
               : Effect.succeed(false),
           ),
         })
+        retryAttempt = undefined
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {
             // The Session is about to go idle, which leaves the background summary time to finish.
@@ -321,13 +324,16 @@ const layer = Layer.effect(
               )
             return outcome.needsContinuation
           }),
-          Retry: (outcome) =>
-            retry.wait({
+          Retry: Effect.fnUntraced(function* (outcome) {
+            retryAttempt = outcome.decision.attempt
+            yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
               assistantMessageID,
-            }),
+            })
+          }),
           Continue: Effect.fnUntraced(function* (outcome) {
+            retryAttempt = outcome.decision.attempt
             yield* retry.wait({
               decision: outcome.decision,
               error: outcome.error,
