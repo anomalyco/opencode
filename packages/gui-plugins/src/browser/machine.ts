@@ -224,13 +224,9 @@ type SessionEvent = Exclude<
   { type: "disposed" | "ipc.changed" | "server.changed" | "session.attached" | "session.removed" | "session.routed" }
 >
 
-const DISPOSED: State = { status: "disposed" }
-
-const NO_FOCUS: AddressFocus = { status: "none" }
-
-const SUSPENDED_IPC: Phase = { status: "suspended", reason: "ipc" }
-
-const NO_TABS: readonly Browser.TabID[] = []
+// No attachment shares an object with another, not even an empty one: the model reconciles the state into its store,
+// which writes into existing objects in place, so a shared object would carry one session's change into the others.
+const noFocus = (): AddressFocus => ({ status: "none" })
 
 export function createInitialState(ipc: Ipc): State {
   return { status: "open", ipc, issued: 0, unsupported: {}, sessions: {} }
@@ -340,7 +336,7 @@ export function addressFocusTab(state: State, sessionKey: string) {
 
 function dispose(state: Open): Transition {
   return {
-    state: DISPOSED,
+    state: { status: "disposed" },
     effects: [
       ...listed(state.sessions).flatMap(([key, attachment]) => [...stop(key, attachment.phase), detach(key)]),
       ...Object.keys(state.unsupported).map((serverID): MachineEffect => ({ type: "unwatch-server", serverID })),
@@ -408,8 +404,8 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     browser: null,
     embeds: {},
     error: undefined,
-    strip: { located: event.located, mirrored: NO_TABS, prune: false, focus: undefined },
-    addressFocus: NO_FOCUS,
+    strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
+    addressFocus: noFocus(),
   })
 }
 
@@ -440,7 +436,7 @@ function routed(state: Open, sessionKey: string | undefined): Transition {
       ...state,
       sessions: {
         ...state.sessions,
-        ...Object.fromEntries(reset.map(([key, attachment]) => [key, { ...attachment, addressFocus: NO_FOCUS }])),
+        ...Object.fromEntries(reset.map(([key, attachment]) => [key, { ...attachment, addressFocus: noFocus() }])),
       },
     },
     effects: [],
@@ -473,7 +469,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       if (attachment.addressFocus.status !== "ready" || attachment.addressFocus.tabID !== event.tabID)
         return { state, effects: [] }
 
-      return put(state, key, { ...attachment, addressFocus: NO_FOCUS })
+      return put(state, key, { ...attachment, addressFocus: noFocus() })
     }
 
     case "register.accepted": {
@@ -557,7 +553,7 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
   return put(
     state,
     key,
-    { ...attachment, strip: { located: true, mirrored: ids ?? NO_TABS, prune: false, focus: undefined } },
+    { ...attachment, strip: { located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
     [
       ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
       ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
@@ -605,7 +601,7 @@ function command(
   const request = state.issued + 1
 
   const focus: AddressFocus = event.focusAddress
-    ? { status: "opening", request, known: attachment.browser?.tabs.map((tab) => tab.id) ?? NO_TABS, settled: false }
+    ? { status: "opening", request, known: attachment.browser?.tabs.map((tab) => tab.id) ?? [], settled: false }
     : attachment.addressFocus
 
   if (phase.status === "registering" || phase.status === "ready")
@@ -624,7 +620,7 @@ function command(
     return put(
       state,
       key,
-      { ...attachment, error: undefined, addressFocus: NO_FOCUS },
+      { ...attachment, error: undefined, addressFocus: noFocus() },
       [{ type: "reject-command", sessionKey: key, request, error, unavailable: false }],
       request,
     )
@@ -635,7 +631,7 @@ function command(
     return put(
       state,
       key,
-      { ...suspend(attachment, "ipc"), addressFocus: NO_FOCUS },
+      { ...suspend(attachment, "ipc"), addressFocus: noFocus() },
       [{ type: "reject-command", sessionKey: key, request, error: "browser.pane.unavailable", unavailable: true }],
       request,
     )
@@ -668,7 +664,7 @@ function commandFailed(
   // A tab that never opened has no address field to focus.
   const focus =
     attachment.addressFocus.status === "opening" && attachment.addressFocus.request === event.request
-      ? NO_FOCUS
+      ? noFocus()
       : attachment.addressFocus
 
   if (event.unavailable) {
@@ -730,8 +726,8 @@ function paneState(
         browser: null,
         embeds: {},
         error: replaced ? event.error : undefined,
-        strip: { located: attachment.strip.located, mirrored: NO_TABS, prune: false, focus: undefined },
-        addressFocus: NO_FOCUS,
+        strip: { located: attachment.strip.located, mirrored: [], prune: false, focus: undefined },
+        addressFocus: noFocus(),
       },
       stop(key, phase),
     )
@@ -784,7 +780,7 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
       phase: { status: "backoff", attempt, attempts: prior + 1 },
       embeds: {},
       error: undefined,
-      addressFocus: NO_FOCUS,
+      addressFocus: noFocus(),
     },
     [
       ...stop(key, phase),
@@ -803,8 +799,7 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
 // just closed is not reopened before the desktop confirms. Only a native inventory prunes; suspended and restoring
 // states keep the tabs they will restore. While the strip cannot be written, the prune waits for the location.
 function mirror(key: string, strip: Strip, browser: Browser.State | null, native: boolean) {
-  if (!browser)
-    return { strip: { located: strip.located, mirrored: NO_TABS, prune: false, focus: undefined }, effects: [] }
+  if (!browser) return { strip: { located: strip.located, mirrored: [], prune: false, focus: undefined }, effects: [] }
   const ids = browser.tabs.map((tab) => tab.id)
 
   if (!strip.located)
@@ -842,15 +837,15 @@ function follow(focus: AddressFocus, browser: Browser.State | null): AddressFocu
   if (focus.status === "ready") {
     const tab = tabs.find((item) => item.id === focus.tabID)
 
-    return tab && blank(tab) ? focus : NO_FOCUS
+    return tab && blank(tab) ? focus : noFocus()
   }
 
   const added = tabs.filter((tab) => !focus.known.includes(tab.id))
 
-  if (added.length === 0) return focus.settled ? NO_FOCUS : focus
+  if (added.length === 0) return focus.settled ? noFocus() : focus
   const opened = added.find(blank)
 
-  return opened ? { status: "ready", tabID: opened.id } : NO_FOCUS
+  return opened ? { status: "ready", tabID: opened.id } : noFocus()
 }
 
 function blank(tab: Browser.Tab) {
@@ -860,11 +855,11 @@ function blank(tab: Browser.Tab) {
 function suspend(attachment: Attachment, reason: "idle" | "ipc", browser = attachment.browser): Attachment {
   return {
     ...attachment,
-    phase: reason === "ipc" ? SUSPENDED_IPC : { status: "suspended", reason },
+    phase: { status: "suspended", reason },
     browser,
     embeds: {},
     error: undefined,
-    addressFocus: NO_FOCUS,
+    addressFocus: noFocus(),
   }
 }
 

@@ -103,6 +103,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const owner = getOwner()
   const history = ctx.stores.history
   const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {} })
+  const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   // The I/O handles the machine's effects drive. They are never read as state.
   const drives = new Map<string, Drive>()
@@ -135,7 +136,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const next = transition(previous, event)
 
     // The state lands before the effects: closing a strip tab asks this model whether the desktop still has it.
-    if (next.state !== previous) setState("machine", reconcile(next.state))
+    // Reconciled field by field, as the pane's memos count changes of a tab's fields; a whole new state would wake
+    // every reader on every event. `reconcile` writes into the store's objects in place, so the store takes a copy
+    // and never holds an object of the machine's.
+    if (next.state !== previous) setState("machine", reconcile(structuredClone(next.state)))
     next.effects.forEach(run)
   }
 
@@ -335,8 +339,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   // restored tab's saved URL carries no title until it loads again. Only the desktop's own reports count: a restored
   // tab's embed arrives before its page loads, with the saved URL as if it had.
   const record = (sessionKey: string) => {
-    const machine = state.machine
-    const attachment = machine.status === "open" ? machine.sessions[sessionKey] : undefined
+    const current = machine()
+    const attachment = current.status === "open" ? current.sessions[sessionKey] : undefined
 
     attachment?.browser?.tabs.forEach((tab) => {
       if (tab.loading || tab.loadError || !attachment.embeds[tab.id] || !recordable(tab.url)) return
@@ -359,7 +363,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       ...pages,
       [event.tabID]: event.icon ? { icon: event.icon, zoom: event.zoom } : { zoom: event.zoom },
     }))
-    const url = sessionTab(state.machine, sessionKey, event.tabID)?.url
+    const url = sessionTab(machine(), sessionKey, event.tabID)?.url
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
 
     if (visits) history.set({ visits })
@@ -425,14 +429,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const attach = (ref: SessionRef) => {
     const sessionKey = ref.key
 
-    if (
-      drives.has(sessionKey) ||
-      !serverSupported(
-        untrack(() => state.machine),
-        ref.server.id,
-      )
-    )
-      return
+    if (drives.has(sessionKey) || !serverSupported(untrack(machine), ref.server.id)) return
     const drive: Drive = { ref, previews: [], dispose: () => undefined }
     drives.set(sessionKey, drive)
     dispatch({ type: "session.attached", sessionKey, serverID: ref.server.id, located: !!ref.location })
@@ -487,18 +484,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (!view?.id) return
     const ref = sessions.list().find((item) => item.key === view.key)
 
-    return ref?.server.compatible && serverSupported(state.machine, ref.server.id) ? ref : undefined
+    return ref?.server.compatible && serverSupported(machine(), ref.server.id) ? ref : undefined
   }, attach)
 
   // An attachment closes with its shell tab, or when its server stops being compatible.
   createKeyed(
     () => {
-      const machine = state.machine
+      const current = machine()
 
-      if (machine.status !== "open") return
+      if (current.status !== "open") return
       const owned = new Set(sessions.list().map((ref) => ref.key))
 
-      const stale = Object.keys(machine.sessions).filter((id) => {
+      const stale = Object.keys(current.sessions).filter((id) => {
         const drive = drives.get(id)
 
         return !!drive && !(owned.has(id) && drive.ref.server.compatible)
@@ -528,12 +525,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   makeEventListener(document, "pointerdown", wakeCurrent)
   makeEventListener(document, "keydown", wakeCurrent)
 
-  const attached = (session: Session) => sessionAttached(state.machine, session.key)
+  const attached = (session: Session) => sessionAttached(machine(), session.key)
 
   const available = (session: SessionRef) =>
-    serverSupported(state.machine, session.server.id) && !!session.id && session.server.compatible && !layout.narrow()
+    serverSupported(machine(), session.server.id) && !!session.id && session.server.compatible && !layout.narrow()
 
-  const tab = (session: Session, tabID: string) => sessionTab(state.machine, session.key, tabID)
+  const tab = (session: Session, tabID: string) => sessionTab(machine(), session.key, tabID)
 
   const registration = (session: Session) => registrations.get(session.key)?.registration
 
@@ -595,10 +592,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** Whether the user just opened the blank tab this session shows; true once, for the pane that focuses its address. */
     opened(session: Session) {
-      const tabID = addressFocusTab(
-        untrack(() => state.machine),
-        session.key,
-      )
+      const tabID = addressFocusTab(untrack(machine), session.key)
 
       if (!tabID) return false
       dispatch({ type: "address.focused", sessionKey: session.key, tabID })
@@ -620,27 +614,27 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       recorded.clear()
       history.set({ visits: [] })
     },
-    pending: (session: SessionRef) => sessionPending(state.machine, session),
+    pending: (session: SessionRef) => sessionPending(machine(), session),
     /**
      * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
      * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.
      */
-    tabs: (session: SessionRef, open: readonly string[]) => sessionTabs(state.machine, session, open),
+    tabs: (session: SessionRef, open: readonly string[]) => sessionTabs(machine(), session, open),
     error(session: Session) {
-      const code = sessionError(state.machine, session.key)
+      const code = sessionError(machine(), session.key)
 
       return code === undefined ? undefined : describe(code)
     },
-    suspended: (session: Session) => sessionSuspended(state.machine, session.key),
+    suspended: (session: Session) => sessionSuspended(machine(), session.key),
     /** The host embed of a tab's page, once main created the page. */
-    embed: (session: Session, tabID: string) => sessionEmbed(state.machine, session.key, tabID),
+    embed: (session: Session, tabID: string) => sessionEmbed(machine(), session.key, tabID),
     /**
      * Creates a restored tab's page, which then reports its embed. Holds for the caller's scope: a new registration,
      * e.g. after a suspension, has no page for the tab and loads it again.
      */
     load(session: Session, tabID: Browser.TabID) {
       createKeyed(
-        () => sessionRegistration(state.machine, session.key),
+        () => sessionRegistration(machine(), session.key),
         () => registration(session)?.load(tabID),
       )
     },
@@ -657,7 +651,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     focusTab(session: Session, tabID: string) {
       const item = tab(session, tabID)
 
-      if (item && item.id !== sessionBrowser(state.machine, session.key)?.focusedTabID)
+      if (item && item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
     },
     /** The page's element picker starting, stopping, or picking an element. */

@@ -9,6 +9,7 @@ import {
   sessionPending,
   sessionSuspended,
   transition,
+  type Attachment,
   type Event,
   type Ipc,
   type MachineEffect,
@@ -562,6 +563,45 @@ describe("browser pane machine", () => {
       { type: "detach", sessionKey: other },
     ])
     expect(transition(disposed.state, { type: "session.wake", sessionKey: key }).state).toBe(disposed.state)
+  })
+
+  // The model reconciles the state into its store in place, so an object two attachments share carries one's change
+  // into the other.
+  test("attachments share no object, empty ones included", () => {
+    // Every object an attachment holds.
+    const objects = (value: Attachment | undefined) =>
+      new Set<object>(
+        value
+          ? [
+              value,
+              value.phase,
+              value.embeds,
+              value.strip,
+              value.strip.mirrored,
+              value.addressFocus,
+              ...(value.addressFocus.status === "opening" ? [value.addressFocus.known] : []),
+              ...(value.browser ? [value.browser, value.browser.tabs, ...value.browser.tabs] : []),
+            ]
+          : [],
+      )
+
+    const states = [
+      replay([...attach(), ...attach(other)]).state,
+      replay([...attach(key, false), ...attach(other, false)]).state,
+      replay([...attach(), ...attach(other)], createInitialState({ status: "pending" })).state,
+    ]
+
+    const both = states.flatMap((start) => {
+      const alpha = ready(start)
+      const lost = transition(alpha, { type: "ipc.changed", ipc: { status: "pending" } }).state
+
+      return [start, alpha, transition(alpha, command(true)).state, lost]
+    })
+
+    for (const state of both) {
+      const alpha = objects(attachment(state))
+      expect([...objects(attachment(state, other))].filter((item) => alpha.has(item))).toEqual([])
+    }
   })
 
   test("removing a session closes its binding", () => {
