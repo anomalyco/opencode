@@ -830,12 +830,27 @@ impl Data {
                         .collect();
                     let mut messages = fetched;
                     messages.extend(local);
-                    state.messages.insert(session.clone(), Transcript::new(messages));
-                    match response.cursor.next.flatten() {
+                    let next = response.cursor.next.flatten();
+                    let paged = state.cursor.contains_key(&session) == next.is_some();
+                    match next {
                         Some(next) => state.cursor.insert(session.clone(), next),
                         None => state.cursor.remove(&session),
                     };
-                    state.log.messages(&session);
+                    // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
+                    let current = state.messages.get_mut(&session).filter(|transcript| {
+                        paged && transcript.items().iter().map(MessageExt::id).eq(messages.iter().map(MessageExt::id))
+                    });
+                    let Some(transcript) = current else {
+                        state.messages.insert(session.clone(), Transcript::new(messages));
+                        state.log.messages(&session);
+                        return;
+                    };
+                    for (item, message) in transcript.items_mut().iter_mut().zip(messages) {
+                        if *item != message {
+                            state.log.message(&session, &SessionMessageID(message.id().to_owned()));
+                            *item = message;
+                        }
+                    }
                 });
                 Ok(())
             },
@@ -886,8 +901,8 @@ impl Data {
     fn start_load(&self, session: &SessionID, options: LoadMore) -> Option<Task<bool>> {
         let mut state = self.lock();
         let cursor = state.cursor.get(session).cloned()?;
+        // No view reads `messages_loading` (the transcript keeps its own flag), so it logs no change.
         state.loading.insert(session.clone());
-        state.log.messages(session);
         let token = state.token();
         let data = self.clone();
         let id = session.clone();
@@ -897,7 +912,6 @@ impl Data {
             let result = load_pages(&data, &id, cursor, all, cancel.as_ref()).await;
             data.write(|state| {
                 state.loading.remove(&id);
-                state.log.messages(&id);
                 if state.message_loads.get(&id).is_some_and(|(current, _)| *current == token) {
                     state.message_loads.remove(&id);
                 }
@@ -952,9 +966,8 @@ async fn load_pages(
     data.write(|state| {
         let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
         let transcript = state.transcript_mut(session);
-        let ids: HashSet<String> = transcript.items().iter().map(|item| item.id().to_owned()).collect();
-        let mut messages: Vec<_> = fetched.into_iter().rev().filter(|item| !ids.contains(item.id())).collect();
-        messages.extend(transcript.items().iter().cloned());
+        let mut messages: Vec<_> = fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
+        messages.append(transcript.items_mut());
         *transcript = Transcript::new(messages);
         match &next {
             Some(next) => state.cursor.insert(session.clone(), next.clone()),
