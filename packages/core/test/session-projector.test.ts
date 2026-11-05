@@ -247,6 +247,93 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("supersedes only the reverted session's instruction notices and retains their IDs", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const otherSessionID = Session.ID.make("ses_other_instructions")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: otherSessionID,
+          project_id: Project.ID.global,
+          slug: "other",
+          directory: "/project",
+          version: "test",
+        })
+        .run()
+      const noticeID = SessionMessage.ID.make("msg_old_instructions")
+      const ordinaryID = SessionMessage.ID.make("msg_other_notice")
+      const foreignID = SessionMessage.ID.make("msg_foreign_instructions")
+      const boundary = SessionMessage.ID.make("msg_instruction_boundary")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: noticeID,
+            session_id: sessionID,
+            type: "system",
+            seq: 1,
+            data: {
+              text: "Old instructions",
+              time: { created: 0 },
+              metadata: { notice: "instructions", extra: "kept" },
+            },
+          },
+          {
+            id: ordinaryID,
+            session_id: sessionID,
+            type: "system",
+            seq: 2,
+            data: {
+              text: "Ordinary notice",
+              time: { created: 0 },
+              metadata: { notice: "other" },
+            },
+          },
+          {
+            id: foreignID,
+            session_id: otherSessionID,
+            type: "system",
+            seq: 1,
+            data: {
+              text: "Other session instructions",
+              time: { created: 0 },
+              metadata: { notice: "instructions" },
+            },
+          },
+          assistantRow(boundary, 3),
+        ])
+        .run()
+      yield* db
+        .insert(InstructionStateTable)
+        .values({
+          session_id: sessionID,
+          epoch_start: 0,
+          through_seq: 3,
+          initial_values: {},
+          current_values: {},
+        })
+        .run()
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: boundary })
+
+      const rows = yield* db.select().from(SessionMessageTable).all()
+      expect(rows.find((row) => row.id === noticeID)?.data.metadata).toEqual({
+        notice: "instructions",
+        extra: "kept",
+        instructionSuperseded: true,
+      })
+      expect(rows.find((row) => row.id === ordinaryID)?.data.metadata).toEqual({ notice: "other" })
+      expect(rows.find((row) => row.id === foreignID)?.data.metadata).toEqual({ notice: "instructions" })
+      expect((yield* SessionHistory.load(db, sessionID, "latest")).map((message) => message.id)).toEqual([ordinaryID])
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: noticeID })
+      expect(yield* SessionHistory.load(db, sessionID, "latest")).toEqual([])
+      expect((yield* db.select().from(SessionMessageTable).all()).map((row) => row.id)).toEqual([foreignID])
+    }),
+  )
+
   it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
       yield* seedSession()

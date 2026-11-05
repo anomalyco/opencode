@@ -229,7 +229,11 @@ const messageEntries = Effect.fnUntraced(function* (
   // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
   return entries.filter(
     (entry) =>
-      !(entry.message.type === "system" && native && entry.seq < native.seq) && replayable(entry.message, boundary),
+      !(
+        entry.message.type === "system" &&
+        ((native && entry.seq < native.seq) ||
+          (entry.message.metadata?.notice === "instructions" && entry.message.metadata.instructionSuperseded === true))
+      ) && replayable(entry.message, boundary),
   )
 })
 
