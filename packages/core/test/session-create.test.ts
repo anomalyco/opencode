@@ -8,7 +8,7 @@ import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
 import { Agent } from "@opencode/core/agent"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -397,6 +397,42 @@ describe("Session.create", () => {
 
       expect(retried).toEqual(first)
       expect((yield* session.list()).data).toEqual([first])
+    }),
+  )
+
+  it.effect("rejects creation when the ID is held by an unmigrated V1 session", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const legacyID = Session.ID.create()
+      yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id text PRIMARY KEY, title text)`)
+      yield* db.run(sql`INSERT INTO session (id, title) VALUES (${legacyID}, 'Original V1 session')`)
+
+      expect(yield* Effect.flip(session.create({ id: legacyID, location }))).toEqual(
+        new Session.NotFoundError({ sessionID: legacyID }),
+      )
+      // No shadow row is projected into the V2 store, and the V1 row is untouched.
+      expect((yield* session.list()).data).toEqual([])
+      expect(
+        yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session WHERE id = ${legacyID}`),
+      ).toEqual({
+        value: 1,
+      })
+    }),
+  )
+
+  it.effect("creates with an explicit ID when the V1 table holds only other sessions", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id text PRIMARY KEY, title text)`)
+      yield* db.run(sql`INSERT INTO session (id, title) VALUES (${Session.ID.create()}, 'Other V1 session')`)
+
+      const created = yield* session.create({ id, location })
+      expect(created.id).toBe(id)
+      const fresh = yield* session.create({ location })
+      expect(fresh.id).not.toBe(created.id)
+      expect((yield* session.list()).data).toHaveLength(2)
     }),
   )
 

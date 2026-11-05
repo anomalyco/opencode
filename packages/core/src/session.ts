@@ -4,7 +4,7 @@ export * from "./session/schema.js"
 import { DateTime, Effect, Layer, Context, Option, Stream } from "effect"
 import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
@@ -289,6 +289,18 @@ const layer = Layer.effect(
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
+        if (input.id) {
+          // An ID still held by an unmigrated V1 session must not be reused:
+          // the new row would resolve globally and hide the original session,
+          // whose history only exists in the legacy `session` table.
+          const legacyTable = yield* db
+            .get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)
+            .pipe(Effect.orDie)
+          if (legacyTable) {
+            const legacy = yield* db.get(sql`SELECT id FROM session WHERE id = ${sessionID}`).pipe(Effect.orDie)
+            if (legacy) return yield* new NotFoundError({ sessionID })
+          }
+        }
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
         const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
