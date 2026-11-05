@@ -22,5 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Check Android shell scripts
+        run: bash -n ocu/android/setup-termux.sh ocu/android/run-termux.sh
       - name: Run gateway tests
         run: node --test ocu/gateway/test-gateway.mjs
