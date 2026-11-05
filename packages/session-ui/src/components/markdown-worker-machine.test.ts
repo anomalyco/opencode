@@ -75,7 +75,9 @@ const posted = (effects: MarkdownWorkerEffect[]) =>
 
 const disposals = (effects: MarkdownWorkerEffect[]) =>
   effects.flatMap((effect) =>
-    effect.type === "post" && effect.message.type === "dispose" ? [`${effect.message.target}:${effect.message.key}`] : [],
+    effect.type === "post" && effect.message.type === "dispose"
+      ? [`${effect.message.target}:${effect.message.key}`]
+      : [],
   )
 
 const rejected = (effects: MarkdownWorkerEffect[], kind?: string) =>

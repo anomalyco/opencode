@@ -65,7 +65,9 @@ export function transitionTextShimmer(state: TextShimmerState, event: TextShimme
 
     // Reduced motion turns the crossfade off, so there is nothing to wait for.
     if (event.reducedMotion)
-      return state.attempts === 0 ? INITIAL_INACTIVE_TEXT_SHIMMER_STATE : { status: "inactive", attempts: state.attempts }
+      return state.attempts === 0
+        ? INITIAL_INACTIVE_TEXT_SHIMMER_STATE
+        : { status: "inactive", attempts: state.attempts }
 
     return { status: "fading", attempt: state.attempts + 1 }
   }

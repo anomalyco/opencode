@@ -427,7 +427,11 @@ function refused(
   }
 }
 
-function disposeEffect(state: MarkdownWorkerReady, target: MarkdownWorkerLaneTarget, key: string): MarkdownWorkerEffect {
+function disposeEffect(
+  state: MarkdownWorkerReady,
+  target: MarkdownWorkerLaneTarget,
+  key: string,
+): MarkdownWorkerEffect {
   return { type: "post", attempt: state.attempts, message: { type: "dispose", target, key } }
 }
 

@@ -118,11 +118,10 @@ describe("typing", () => {
 
   test("never splits a surrogate pair", () => {
     // The old code sliced UTF-16 units, so "A🚀B" showed a lone surrogate for one step.
-    const displayed = [0, 1, 2, 3].map(
-      (count) =>
-        selectTypewriterDisplayed(
-          run(INITIAL_EMPTY_TYPEWRITER_STATE, sync("A🚀B"), ...Array.from({ length: count }, () => step())).state,
-        ),
+    const displayed = [0, 1, 2, 3].map((count) =>
+      selectTypewriterDisplayed(
+        run(INITIAL_EMPTY_TYPEWRITER_STATE, sync("A🚀B"), ...Array.from({ length: count }, () => step())).state,
+      ),
     )
 
     expect(displayed).toEqual(["", "A", "A🚀", "A🚀B"])
@@ -162,7 +161,10 @@ describe("disposal", () => {
     ["empty", [], "none"],
     ["done", [sync("Hi", true)], "none"],
   ] as const)("disposing while %s ends every later event", (_, events, effect) => {
-    const disposed = transitionTypewriter(run(INITIAL_EMPTY_TYPEWRITER_STATE, ...events).state, DISPOSED_TYPEWRITER_EVENT)
+    const disposed = transitionTypewriter(
+      run(INITIAL_EMPTY_TYPEWRITER_STATE, ...events).state,
+      DISPOSED_TYPEWRITER_EVENT,
+    )
 
     expect(disposed.state).toBe(DISPOSED_TYPEWRITER_STATE)
     expect(disposed.effect).toEqual({ type: effect })
