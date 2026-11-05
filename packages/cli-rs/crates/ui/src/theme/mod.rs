@@ -204,7 +204,7 @@ impl Theme {
         for (surface, tokens) in self.views.surfaces.iter().enumerate() {
             let tier = &mut tiers[usize::from(surface != self.surface)];
             let mut count = 0;
-            tokens.visit_ref(&mut |_, token| {
+            tokens.visit_colors(&mut |token| {
                 if token == color {
                     tier.push(self.views.tones[surface][count].1);
                 }
@@ -229,7 +229,7 @@ impl Theme {
         for (surface, tokens) in self.views.surfaces.iter().enumerate() {
             let mut index = None;
             let mut count = 0;
-            tokens.visit_ref(&mut |_, token| {
+            tokens.visit_colors(&mut |token| {
                 if std::ptr::eq(token, color) {
                     index = Some(count);
                 }
