@@ -484,7 +484,8 @@ impl Component for Strip {
                     .fg(theme.text.base)
                     .bg(theme.background.action.primary.hovered)
             } else {
-                Style::new().fg(theme.text.muted)
+                // A transparent background blends an alpha muted token as the TS `<text>` does.
+                Style::new().fg(theme.text.muted).bg(Color::TRANSPARENT)
             };
             painter.text(x as i32, 0, " + ", style);
             self.plus.set(Some(x));
