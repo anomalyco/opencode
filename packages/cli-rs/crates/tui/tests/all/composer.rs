@@ -9,11 +9,12 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use opencode_api::client::Client;
+use opencode_api::client::{Auth, Client};
 use opencode_api::client_mcp;
 use opencode_api::generated::SessionID;
 use opencode_api::memory::{Logged, Memory, Route as MemoryRoute};
 use opencode_api::pty::{self, Incoming};
+use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{self, Resolved};
 use opencode_local::paths::Paths;
 use opencode_tui::app::Roots;
@@ -152,13 +153,43 @@ struct Harness {
 }
 
 fn mount() -> Harness {
+    mount_with(None)
+}
+
+/// Where sockets open, and with which credentials.
+type Endpoint = Arc<Mutex<(url::Url, Option<Auth>)>>;
+
+/// A transport whose socket endpoint moves, as a managed service's does when it restarts.
+struct Moving {
+    memory: Memory,
+    endpoint: Endpoint,
+}
+
+impl Transport for Moving {
+    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
+        self.memory.send(request)
+    }
+
+    fn endpoint(&self, _: url::Url, _: Option<&Auth>) -> (url::Url, Option<Auth>) {
+        self.endpoint.lock().unwrap().clone()
+    }
+}
+
+fn mount_with(endpoint: Option<Endpoint>) -> Harness {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
     let paths =
         Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     let state = paths.state.clone();
     let memory = Memory::new(routes());
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
+    let transport: Arc<dyn Transport> = match endpoint {
+        Some(endpoint) => Arc::new(Moving {
+            memory: memory.clone(),
+            endpoint,
+        }),
+        None => Arc::new(memory.clone()),
+    };
+    let client = Client::with_transport("http://opencode.local", transport).unwrap();
     let app = TestApp::new(100, 30);
     let info = cli_config::decode_text(r#"{"animations":false}"#).unwrap();
     let tui = opencode_tui::mount(
@@ -380,6 +411,43 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
         })
     };
     assert!(closed, "turning the experiment off closes the socket");
+}
+
+#[test]
+fn the_client_mcp_socket_follows_a_restarted_service() {
+    let at = |url: &str, password: &str| {
+        (
+            url::Url::parse(url).unwrap(),
+            Some(Auth::password(password)),
+        )
+    };
+    let endpoint = Arc::new(Mutex::new(at("http://127.0.0.1:4096/", "old")));
+    let harness = mount_with(Some(endpoint.clone()));
+    harness.experiment(true);
+    assert!(harness.wait(|harness| harness.opened.lock().unwrap().len() == 1));
+    // The service restarts on a new port with a new password, and the event stream reconnects to it.
+    *endpoint.lock().unwrap() = at("http://127.0.0.1:5000/", "new");
+    harness
+        .memory
+        .emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
+    assert!(harness.wait(|harness| harness.opened.lock().unwrap().len() == 2));
+    let opened: Vec<_> = harness
+        .opened
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(url, headers, _)| (url.clone(), headers.clone()))
+        .collect();
+    let socket = |port: u16, password: &str| {
+        (
+            format!("ws://127.0.0.1:{port}/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui"),
+            vec![(
+                "authorization".to_owned(),
+                format!("Basic {}", Auth::password(password).token()),
+            )],
+        )
+    };
+    assert_eq!(opened, [socket(4096, "old"), socket(5000, "new")]);
 }
 
 #[test]

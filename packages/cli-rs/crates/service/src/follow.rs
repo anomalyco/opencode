@@ -81,17 +81,22 @@ impl Transport for Follow {
         })
     }
 
+    fn route(&self, url: url::Url) -> url::Url {
+        self.endpoint(url, None).0
+    }
+
     // The terminal socket's `ws:` URL has another origin than the client's `http:` one, so this compares host and
     // port only.
-    fn route(&self, mut url: url::Url) -> url::Url {
+    fn endpoint(&self, mut url: url::Url, auth: Option<&Auth>) -> (url::Url, Option<Auth>) {
         let url::Origin::Tuple(_, host, port) = &self.origin else {
-            return url;
+            return (url, auth.cloned());
         };
         if url.host_str() != Some(&host.to_string()) || url.port_or_known_default() != Some(*port) {
-            return url;
+            return (url, auth.cloned());
         }
-        point(&self.route.read().expect("route lock").url, &mut url);
-        url
+        let route = self.route.read().expect("route lock");
+        point(&route.url, &mut url);
+        (url, route.auth.clone())
     }
 }
 
@@ -277,6 +282,51 @@ mod tests {
                 "ws://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect?ticket=t1&cursor=0&attachment_id=attachment-1&takeover=false&input_protocol=1"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn a_socket_endpoint_follows_a_restarted_service() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(OsString::from(dir.path())),
+            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
+            _ => None,
+        })
+        .unwrap();
+        std::fs::create_dir_all(&paths.state).unwrap();
+        register(&paths, 4096, "old");
+        let server = Arc::new(
+            Server::default()
+                .replies(OLD, [Reply::json(200, HEALTH), Reply::Refused])
+                .reply(NEW, Reply::json(200, HEALTH)),
+        );
+        let env = Env {
+            ts_bin: Some("/nonexistent/opencode-ts".to_owned()),
+            ..Env::default()
+        };
+        let connection = connect::resolve(server.clone(), &paths, &env, &Default::default())
+            .await
+            .unwrap();
+        let client = client(server.clone(), &connection, &paths, &env).unwrap();
+        let endpoint = || {
+            let (url, auth) = client
+                .transport()
+                .endpoint(client.base_url().clone(), client.credentials());
+            (url.to_string(), auth.map(|auth| auth.token()))
+        };
+        let token = |password: &str| Some(Auth::password(password).token());
+        assert_eq!(endpoint(), ("http://127.0.0.1:4096/".to_owned(), token("old")));
+        register(&paths, 5000, "new");
+        assert!(client.server_info(&RequestOptions::default()).await.is_err());
+        assert_eq!(endpoint(), ("http://127.0.0.1:5000/".to_owned(), token("new")));
+        // Another origin keeps its own address and credentials.
+        let other = Auth::password("other");
+        let (url, auth) = client.transport().endpoint(
+            url::Url::parse("http://example.com/").unwrap(),
+            Some(&other),
+        );
+        assert_eq!(url.as_str(), "http://example.com/");
+        assert!(auth == Some(other));
     }
 
     #[tokio::test]
