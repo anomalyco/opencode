@@ -39,6 +39,7 @@ import { makeParser } from "effect/encoding/Sse"
 import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
+import { ModelRetry } from "./model-retry.js"
 import { Provider } from "./provider.js"
 import { State } from "./state.js"
 import { stringify } from "./tool/runtime.js"
@@ -944,11 +945,7 @@ const NETWORK_ERROR_CODES = new Set([
   "ECONNREFUSED",
   "ETIMEDOUT",
   "EPIPE",
-  "ENOTFOUND",
-  "EAI_AGAIN",
-  "ENETUNREACH",
-  "EHOSTUNREACH",
-  "ENETDOWN",
+  ...ModelRetry.UNREACHABLE_CODES,
   "ConnectionRefused",
   "ConnectionClosed",
   "FailedToOpenSocket",

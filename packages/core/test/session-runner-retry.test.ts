@@ -83,6 +83,14 @@ describe("SessionRunnerRetry.policy", () => {
     }),
   )
 
+  test("treats every failed lookup Bun reports as an unreachable host", () => {
+    const failure = (code: string) =>
+      new AIError({ reason: new TransportError({ message: code, transport: "http", operation: "request", code }) })
+    for (const code of ["ENOTFOUND", "EAI_AGAIN", "EBADRESP", "ESERVFAIL", "ETIMEOUT"])
+      expect(ModelRetry.isUnreachable(failure(code))).toBe(true)
+    expect(ModelRetry.isUnreachable(failure("ETIMEDOUT"))).toBe(false)
+  })
+
   it.effect("keeps a refused connection on the general allowance", () =>
     Effect.gen(function* () {
       expect(ModelRetry.isUnreachable(refused)).toBe(false)

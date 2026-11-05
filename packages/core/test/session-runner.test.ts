@@ -640,6 +640,17 @@ const providerUnavailable = () =>
     }),
   })
 
+const hostNotFound = () =>
+  new AIError({
+    reason: new TransportError({
+      message: "getaddrinfo ENOTFOUND provider.test",
+      transport: "http",
+      operation: "request",
+      code: "ENOTFOUND",
+      url: "https://provider.test/v1/responses",
+    }),
+  })
+
 const streamDisconnected = () =>
   new AIError({
     reason: new TransportError({
@@ -6592,6 +6603,28 @@ describe("SessionRunnerLLM", () => {
       ...RETRY_GAPS.map(() => ({ type: "session.step.started.1" })),
       { type: "session.step.started.1" },
       { type: "session.step.failed.1" },
+    ])
+  })
+
+  scenario("keeps retrying past the general allowance while the provider's host doesn't resolve", function* (s) {
+    yield* s.admit("Ride out a DNS outage")
+    // Twice the general allowance, about five minutes of backoff.
+    const outage = RETRY_GAPS.length * 2
+    for (let i = 0; i < outage; i++) yield* s.llm.push(Stream.fail(hostNotFound()))
+    yield* s.llm.push(TestLLM.text("Recovered", "dns-recovered"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    for (let i = 0; i < outage; i++) {
+      yield* Queue.take(scheduled)
+      yield* TestClock.adjust("30 seconds")
+    }
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(outage + 1)
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
     ])
   })
 

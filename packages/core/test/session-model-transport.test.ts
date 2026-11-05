@@ -761,6 +761,38 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("uses HTTP for one exchange when the host doesn't resolve and tries the socket again after", async () => {
+    const fixture = automatic()
+    let lookups = 0
+    const connector: WebSocketConnector = {
+      open: (input) =>
+        lookups++ === 0
+          ? Effect.fail(
+              new AIError({
+                reason: new TransportError({
+                  message: "Failed to open WebSocket: Failed to connect",
+                  transport: "websocket",
+                  operation: "request",
+                  code: "ENOTFOUND",
+                  phase: "connect",
+                  delivery: "not-sent",
+                }),
+              }),
+            )
+          : fixture.connector.open(input),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const executor = (yield* SessionModelTransport.Service).bind(session)
+        expect(yield* collect(executor, exchange("first"))).toEqual(["fallback:first"])
+        expect(yield* collect(executor, exchange("second"))).toEqual(["completed:second"])
+        expect(fixture.connections).toHaveLength(1)
+      }),
+    )
+  })
+
   test("keeps the Session on HTTP after repeated mid-stream socket losses", async () => {
     let opens = 0
     const connector: WebSocketConnector = {
