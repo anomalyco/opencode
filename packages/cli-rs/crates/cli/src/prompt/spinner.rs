@@ -55,7 +55,7 @@ impl Spinner {
         let output = Output::Stdout;
         {
             let mut shared = lock(&self.shared);
-            shared.raw = Some(Raw::enable());
+            shared.raw = Some(Raw::enable(output));
             shared.message = trim_dots(message);
             shared.previous = None;
         }
