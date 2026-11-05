@@ -1,13 +1,14 @@
 import { beforeEach, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
+import { State } from "@opencode/core/state"
 import { Failed, makeFiles, makeMemoryDriver, NotFound } from "@opencode/core/environment/index"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { WorkspaceTable } from "@opencode/core/workspace/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { eq } from "drizzle-orm"
-import { Deferred, Effect, Fiber, Sink, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Scope, Sink, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { ChildProcess } from "effect/process"
 import { ExitCode, make as makeSpawner, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -74,6 +75,28 @@ it.effect("rejects unregistered workspace providers", () =>
         new WorkspaceDriver.ProviderNotFound({ provider }),
       )
     }
+  }),
+)
+
+it.effect("restores earlier workspace drivers when a Location shuts down", () =>
+  Effect.gen(function* () {
+    const registry = WorkspaceDriver.registry({ base: driver })
+    const first = { ...driver }
+    const registration = yield* registry.transform((editor) => editor.add("base", first))
+    const second = { ...driver }
+    const location = yield* Scope.make()
+    yield* registry
+      .transform((editor) => {
+        editor.add("base", second)
+        editor.add("temporary", second)
+      })
+      .pipe(Scope.provide(location))
+    expect(yield* registry.get("base")).toBe(second)
+    yield* State.shutdown(Scope.close(location, Exit.void))
+    expect(yield* registry.list()).toEqual(["base"])
+    expect(yield* registry.get("base")).toBe(first)
+    yield* registration.dispose
+    expect(yield* registry.get("base")).toBe(driver)
   }),
 )
 

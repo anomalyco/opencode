@@ -462,6 +462,50 @@ it.live("configures workspace providers through the SDK facade", () =>
   ),
 )
 
+it.live("provisions a workspace with a plugin-registered driver", () =>
+  withEmbedded("opencode-embedded-workspace-plugin-", (fixture) =>
+    Effect.gen(function* () {
+      const ready = yield* Deferred.make<Plugin.Context["experimental"]["workspace"]>()
+      const opencode = yield* fixture.sdk.OpenCode.create({
+        config: { directory: fixture.directory, project: false, content: "{}" },
+        models: { fetch: false },
+        plugins: [
+          Plugin.define({
+            id: "workspace-plugin",
+            effect: (ctx) =>
+              Effect.gen(function* () {
+                const workspace = ctx.experimental.workspace
+                yield* workspace.transform((editor) =>
+                  editor.add("plugin-driver", {
+                    create: ({ workspaceID }) => Effect.succeed({ binding: { externalID: workspaceID } }),
+                    connect: () => Effect.succeed(makeMemoryDriver()),
+                    suspendForIdle: () => Effect.void,
+                    destroy: () => Effect.void,
+                  }),
+                )
+                yield* Deferred.succeed(ready, workspace)
+              }),
+          }),
+        ],
+      })
+
+      yield* opencode.plugin.list({ location: location(fixture) })
+      const workspace = yield* Deferred.await(ready)
+      expect(yield* workspace.providers()).toContain("plugin-driver")
+      const workspaceID = fixture.sdk.Workspace.ID.create()
+      expect(yield* workspace.create({ id: workspaceID, provider: "plugin-driver" })).toBe(workspaceID)
+      expect((yield* opencode.workspace.provision({ workspaceID })).binding).toEqual({ externalID: workspaceID })
+      expect(yield* workspace.provision(workspaceID)).toEqual({
+        id: workspaceID,
+        provider: "plugin-driver",
+        createdAt: expect.any(Number),
+        lastUsedAt: expect.any(Number),
+      })
+      expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
+    }),
+  ),
+)
+
 const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
   Effect.gen(function* () {
     const calls: string[] = []

@@ -22,6 +22,7 @@ import type { StorageDomain } from "./storage.js"
 import type { ToolDomain } from "./tool.js"
 import type { VcsDomain } from "./vcs.js"
 import type { WebSearchDomain } from "./websearch.js"
+import type { ExperimentalWorkspaceDomain } from "./workspace.js"
 import type { WorktreeDomain } from "./worktree.js"
 
 export interface Context {
@@ -38,6 +39,7 @@ export interface Context {
     /** Stateless generation with a model and a prompt: no session, history or tools. */
     readonly generate: ExperimentalGenerateApi<unknown>
     readonly artifact: ExperimentalArtifactDomain
+    readonly workspace: ExperimentalWorkspaceDomain
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain

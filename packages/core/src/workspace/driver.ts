@@ -5,6 +5,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { Scope } from "effect"
 import type { EnvironmentDriver } from "../environment/driver.js"
+import { State } from "../state.js"
 
 /**
  * Smallest provider-owned JSON value required to reconnect to the same
@@ -63,25 +64,46 @@ export interface Interface {
 
 export const make = (driver: Interface) => driver
 
-export interface Registry {
+export interface Editor {
+  add(name: string, driver: Interface): void
+  remove(name: string): void
+}
+
+export interface Registry extends State.Transformable<Editor> {
   readonly get: (provider: string) => Effect.Effect<Interface, ProviderNotFound>
+  readonly list: () => Effect.Effect<readonly string[]>
 }
 
 export class RegistryService extends Context.Service<RegistryService, Registry>()(
   "@opencode/WorkspaceDriverRegistry",
 ) {}
 
-export const registry = (drivers: Readonly<Record<string, Interface>>): Registry => ({
-  get: (provider) => {
-    const driver = Object.hasOwn(drivers, provider) ? drivers[provider] : undefined
-    return driver ? Effect.succeed(driver) : Effect.fail(new ProviderNotFound({ provider }))
-  },
-})
+export const registry = (drivers: Readonly<Record<string, Interface>>): Registry => {
+  const state = State.create({
+    name: "workspace",
+    scope: "global",
+    initial: () => new Map(Object.entries(drivers)),
+    editor: (draft): Editor => ({
+      add: (name, driver) => draft.set(name, driver),
+      remove: (name) => draft.delete(name),
+    }),
+  })
+  return {
+    transform: state.transform,
+    reload: state.reload,
+    list: () => Effect.sync(() => Array.from(state.get().keys())),
+    get: (provider) =>
+      Effect.suspend(() => {
+        const driver = state.get().get(provider)
+        return driver ? Effect.succeed(driver) : Effect.fail(new ProviderNotFound({ provider }))
+      }),
+  }
+}
 
 export const registryNode = (drivers: Readonly<Record<string, Interface>>) =>
   makeGlobalNode({
     service: RegistryService,
-    layer: Layer.succeed(RegistryService, RegistryService.of(registry(drivers))),
+    layer: Layer.sync(RegistryService, () => registry(drivers)),
     deps: [],
   })
 

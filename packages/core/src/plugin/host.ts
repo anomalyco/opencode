@@ -30,6 +30,7 @@ import { AbsolutePath, type DeepMutable } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Tool } from "../tool.js"
 import { Workspace } from "../workspace.js"
+import { WorkspaceDriver } from "../workspace/driver.js"
 import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
@@ -77,6 +78,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const instructionEntries = yield* InstructionEntry.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
+  const workspaces = yield* Workspace.Service
+  const workspaceDrivers = yield* WorkspaceDriver.RegistryService
   const worktrees = yield* Worktree.Service
   const worktreeStrategies = yield* WorktreeStrategies.Service
   const currentWorktreeStrategies = location.workspaceID ? undefined : worktreeStrategies
@@ -116,6 +119,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
 
   const decodeWorktree = Schema.decodeUnknownEffect(Worktree.Info)
   const decodeWorktrees = Schema.decodeUnknownEffect(Schema.Array(Worktree.ListEntry))
+
+  const driverError = (cause: unknown) =>
+    cause instanceof WorkspaceDriver.Error ? cause : new WorkspaceDriver.Error({ cause })
 
   const listAgents = Effect.fn("PluginHost.listAgents")((ref: Location.Ref) =>
     atLocation(
@@ -316,6 +322,39 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
               },
             })
           }),
+      },
+      workspace: {
+        providers: workspaceDrivers.list,
+        transform: (callback) =>
+          workspaceDrivers.transform((editor) =>
+            callback({
+              add: (name, driver) =>
+                editor.add(name, {
+                  create: (input) => driver.create(input).pipe(Effect.mapError(driverError)),
+                  connect: (input) => driver.connect(input).pipe(Effect.mapError(driverError)),
+                  suspendForIdle: (input) => driver.suspendForIdle(input).pipe(Effect.mapError(driverError)),
+                  destroy: (input) => driver.destroy(input).pipe(Effect.mapError(driverError)),
+                }),
+              remove: editor.remove,
+            }),
+          ),
+        create: (input) =>
+          workspaces.create({
+            id: input.id === undefined ? undefined : Workspace.ID.make(input.id),
+            provider: input.provider,
+          }),
+        provision: (id) =>
+          workspaces
+            .provision(Workspace.ID.make(id))
+            .pipe(
+              Effect.map((info) => ({
+                id: info.id,
+                provider: info.provider,
+                createdAt: info.createdAt,
+                lastUsedAt: info.lastUsedAt,
+              })),
+            ),
+        destroy: (id) => workspaces.destroy(Workspace.ID.make(id)),
       },
     },
     generate: {
@@ -649,6 +688,8 @@ export const requirements = LayerNode.group([
   Tool.node,
   Vcs.node,
   WebSearch.node,
+  Workspace.node,
+  WorkspaceDriver.node,
   Worktree.node,
   WorktreeStrategies.node,
   Generate.node,

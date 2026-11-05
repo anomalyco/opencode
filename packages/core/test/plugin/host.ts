@@ -81,6 +81,13 @@ export function host(overrides: Overrides = {}): Plugin.Context {
         transform: () => Effect.die("unused experimental.artifact.transform"),
         reload: () => Effect.die("unused experimental.artifact.reload"),
       },
+      workspace: {
+        transform: () => Effect.die("unused experimental.workspace.transform"),
+        providers: () => Effect.die("unused experimental.workspace.providers"),
+        create: () => Effect.die("unused experimental.workspace.create"),
+        provision: () => Effect.die("unused experimental.workspace.provision"),
+        destroy: () => Effect.die("unused experimental.workspace.destroy"),
+      },
     },
     generate: overrides.generate ?? {
       text: () => Effect.die("unused generate.text"),
