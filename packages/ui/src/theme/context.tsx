@@ -227,7 +227,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     // The CSS and storage change before the state, so effects that read computed styles see the new theme.
     const step = (next: ThemeTransition) => {
-      next.effects.forEach((effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => console.error(cause)))
+      next.effects.forEach(
+        (effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => console.error(cause)),
+      )
 
       if (next.state !== state()) setState(next.state)
 
@@ -288,8 +290,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onMount(() => {
       makeEventListener(window, "storage", (e: StorageEvent) => {
-        if (e.key === STORAGE_KEYS.THEME_ID && e.newValue)
-          dispatch({ type: "storage.theme.changed", id: e.newValue })
+        if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) dispatch({ type: "storage.theme.changed", id: e.newValue })
 
         if (e.key === STORAGE_KEYS.COLOR_SCHEME && e.newValue)
           dispatch({ type: "storage.scheme.changed", scheme: parseColorScheme(e.newValue) })

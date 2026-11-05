@@ -135,8 +135,7 @@ export function transitionTheme(
 
   switch (event.type) {
     case "theme.selected": {
-      if (!known(state, event.id, bundled))
-        return { state, effects: [{ type: "warn-missing-theme", id: event.id }] }
+      if (!known(state, event.id, bundled)) return { state, effects: [{ type: "warn-missing-theme", id: event.id }] }
 
       if (state.committed.themeId === event.id && !state.failed[event.id] && preview(state).themeId === undefined)
         return { state, effects: NO_EFFECTS }
@@ -193,8 +192,12 @@ export function transitionTheme(
         },
         bundled,
         [
-          ...(state.preview.themeId === undefined ? [] : [{ type: "persist-theme", id: state.preview.themeId } as const]),
-          ...(state.preview.scheme === undefined ? [] : [{ type: "persist-scheme", scheme: state.preview.scheme } as const]),
+          ...(state.preview.themeId === undefined
+            ? []
+            : [{ type: "persist-theme", id: state.preview.themeId } as const]),
+          ...(state.preview.scheme === undefined
+            ? []
+            : [{ type: "persist-scheme", scheme: state.preview.scheme } as const]),
         ],
       )
     }

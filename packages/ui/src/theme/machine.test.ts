@@ -236,7 +236,10 @@ test("a plugin theme withdrawn and registered again caches both variants again",
   )
   const withdrawn = run(selected.state, { type: "theme.unregistered", theme: midnight })
 
-  expect(withdrawn.effects).toEqual([{ type: "clear-cache" }, expect.objectContaining({ type: "apply-theme", id: "oc-2" })])
+  expect(withdrawn.effects).toEqual([
+    { type: "clear-cache" },
+    expect.objectContaining({ type: "apply-theme", id: "oc-2" }),
+  ])
 
   const restored = run(withdrawn.state, { type: "theme.registered", theme: midnight })
 
@@ -250,9 +253,11 @@ test("mode and theme id follow a preview and return on cancel; the saved scheme 
   const state = start({ themeId: "oc-2", scheme: "dark" }).state
   const previewed = run(state, { type: "preview.scheme", scheme: "light" }, { type: "preview.theme", id: "dracula" })
 
-  expect([selectMode(previewed.state), selectThemeId(previewed.state, bundled), selectColorScheme(previewed.state)]).toEqual(
-    ["light", "dracula", "dark"],
-  )
+  expect([
+    selectMode(previewed.state),
+    selectThemeId(previewed.state, bundled),
+    selectColorScheme(previewed.state),
+  ]).toEqual(["light", "dracula", "dark"])
 
   const cancelled = run(previewed.state, { type: "preview.cancelled" }).state
 
@@ -330,7 +335,10 @@ test("a saved plugin theme keeps the cached colors until plugins settle without 
   const settled = run(initial.state, { type: "settled" })
 
   expect(selectThemeId(settled.state, bundled)).toBe("oc-2")
-  expect(settled.effects).toEqual([{ type: "clear-cache" }, expect.objectContaining({ type: "apply-theme", id: "oc-2" })])
+  expect(settled.effects).toEqual([
+    { type: "clear-cache" },
+    expect.objectContaining({ type: "apply-theme", id: "oc-2" }),
+  ])
 })
 
 test("preloading skips loaded and loading themes and retries failed ones", () => {
