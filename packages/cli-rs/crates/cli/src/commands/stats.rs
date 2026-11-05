@@ -6,14 +6,17 @@ use std::io::IsTerminal;
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone};
-use opencode_api::client::Call;
+use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
-use opencode_api::generated::types::{SessionStatsInfo, SessionStatsTools};
+use opencode_api::generated::types::{
+    ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, LocationGetInput, ProjectID, SessionStatsInfo,
+    SessionStatsTools,
+};
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
 use serde_json::Value;
 
 use super::Context;
-use super::client::{block_on, connect, get_located, pretty};
+use super::client::{block_on, connect, here, pretty};
 use crate::args::StatsArgs;
 use crate::output::{Exit, print};
 
@@ -36,31 +39,32 @@ fn stats(context: &Context, args: &StatsArgs) -> anyhow::Result<()> {
         let server = connect(context).await?;
         let url = &server.endpoint().url;
         let project = match args.project.as_deref() {
-            Some(".") => Some(
-                request(url, get_located(&server.client, "/api/location", &[400, 401, 404])).await?["project"]["id"]
-                    .clone(),
-            ),
-            Some(project) => Some(Value::from(project)),
+            Some(".") => {
+                let location = async {
+                    let input = LocationGetInput { location: Some(here()?) };
+                    Ok(server.client.json::<Value>(Client::location_get_call(&input)?).await?)
+                };
+                request(url, location).await?["project"]["id"].as_str().map(ProjectID::from)
+            }
+            Some(project) => Some(ProjectID::from(project)),
             None => None,
         };
-        let mut call = Call::new("GET", "/api/experimental/session/stats".to_owned(), 200, &[400, 401]);
-        if let Some(from) = range.from {
-            call.query("from", &from)?;
-        }
-        call.query("to", &range.to)?;
-        if let Some(project) = &project {
-            call.query("project", project)?;
-        }
-        call.query("timezone", &time_zone())?;
         let tools = if args.json || args.tools || args.full {
-            "detail"
+            ExperimentalSessionStatsInputTools::Detail
         } else if details {
-            "none"
+            ExperimentalSessionStatsInputTools::None
         } else {
-            "summary"
+            ExperimentalSessionStatsInputTools::Summary
         };
-        call.query("tools", tools)?;
-        request(url, async { Ok(server.client.json::<Value>(call).await?) }).await
+        let input = ExperimentalSessionStatsInput {
+            from: range.from.map(|from| from as f64),
+            to: Some(range.to as f64),
+            project,
+            timezone: Some(time_zone()),
+            tools: Some(tools),
+        };
+        request(url, async { Ok(server.client.json::<Value>(Client::experimental_session_stats_call(&input)?).await?) })
+            .await
     })??;
     let data = &stats["data"];
     if args.json {

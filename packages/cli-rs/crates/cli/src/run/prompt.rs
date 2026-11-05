@@ -160,12 +160,8 @@ impl Run {
         }
         if let Some(model) = &self.input.model {
             // The TS key order, `{ providerID, id, variant }`; the generated `ModelRef` puts `id` first.
-            let mut call = Call::new(
-                "POST",
-                format!("/api/session/{}/model", path(&self.input.session_id)),
-                204,
-                &[400, 401, 404],
-            );
+            let input = SessionSwitchModelInput { session_id: session.clone(), ..Default::default() };
+            let mut call = Client::session_switch_model_call(&input).map_err(|error| error.error_message())?;
             call.json(&json!({ "model": object([
                 ("providerID", Some(model.provider_id.0.clone().into())),
                 ("id", Some(model.id.clone().into())),
@@ -189,29 +185,28 @@ impl Run {
             }))
             .collect::<Vec<_>>()
             .join("\n\n");
-        let files: Vec<Value> = self
+        let files = self
             .input
             .files
             .iter()
             .filter_map(|file| match file {
-                Prepared::Attachment { uri, name } => Some(json!({ "uri": uri, "name": name })),
+                Prepared::Attachment { uri, name } => {
+                    Some(PromptInputFileAttachment { uri: uri.clone(), name: Some(name.clone()), ..Default::default() })
+                }
                 Prepared::Text(_) => None,
             })
             .collect();
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/prompt", path(&self.input.session_id)),
-            200,
-            &[400, 401, 404, 409],
-        );
-        call.json(&json!({
-            "id": self.message_id,
-            "text": text,
-            "files": files,
-            "delivery": "steer",
-        }))
-        .map_err(|error| error.error_message())?;
-        let admitted = client.json::<Value>(call).await.map_err(|error| error.error_message());
+        let input = SessionPromptInput {
+            session_id: session.clone(),
+            id: Some(Some(SessionMessageID(self.message_id.clone()))),
+            text,
+            files: Some(files),
+            delivery: Some(Some(SessionInboxDelivery::Steer)),
+            ..Default::default()
+        };
+        let admitted = async { client.json::<Value>(Client::session_prompt_call(&input)?).await }
+            .await
+            .map_err(|error| error.error_message());
         if let Err(error) = admitted {
             self.abort.send_replace(true);
             let _ = self.wait_completed().await;
@@ -222,8 +217,11 @@ impl Run {
         }
 
         let permissions =
-            self.data(&format!("/api/session/{}/permission", path(&self.input.session_id)), &[]).await.ok();
-        let forms = self.data(&format!("/api/session/{}/form", path(&self.input.session_id)), &[]).await.ok();
+            self.data(Client::permission_list_call(&PermissionListInput { session_id: session.clone() })).await.ok();
+        let forms = self
+            .data(Client::session_form_list_call(&SessionFormListInput { session_id: session.0.clone() }))
+            .await
+            .ok();
         for permission in array(permissions.as_ref()) {
             self.reply_permission(permission).await;
         }
@@ -846,19 +844,16 @@ impl Run {
         let mut messages = Vec::new();
         let mut cursor: Option<String> = None;
         loop {
-            let mut call = Call::new(
-                "GET",
-                format!("/api/session/{}/message", path(&self.input.session_id)),
-                200,
-                &[400, 401, 404, 500],
-            );
-            call.query("limit", &200).map_err(|error| error.error_message())?;
-            match &cursor {
-                Some(cursor) => call.query("cursor", cursor),
-                None => call.query("order", "desc"),
-            }
-            .map_err(|error| error.error_message())?;
-            let page: Value = self.input.client.json(call).await.map_err(|error| error.error_message())?;
+            let input = MessageListInput {
+                session_id: SessionID(self.input.session_id.clone()),
+                limit: Some(200),
+                order: cursor.is_none().then_some(MessageListInputOrder::Desc),
+                cursor: cursor.clone(),
+                r#type: None,
+            };
+            let page = async { self.input.client.json::<Value>(Client::message_list_call(&input)?).await }
+                .await
+                .map_err(|error| error.error_message())?;
             for message in page["data"].as_array().into_iter().flatten() {
                 if text(&message["id"]) == self.message_id {
                     messages.reverse();
@@ -878,13 +873,12 @@ impl Run {
         if !settled_flags(&self.flags.borrow()) {
             return false;
         }
-        let jobs = self
-            .data(
-                "/api/experimental/job",
-                &[("sessionID", Value::from(self.input.session_id.clone())), ("descendants", Value::from(true))],
-            )
-            .await
-            .unwrap_or_else(|_| json!([]));
+        let input = ExperimentalJobListInput {
+            session_id: Some(SessionID(self.input.session_id.clone())),
+            descendants: Some(true),
+            ..Default::default()
+        };
+        let jobs = self.data(Client::experimental_job_list_call(&input)).await.unwrap_or_else(|_| json!([]));
         for job in array(Some(&jobs)) {
             self.add_job_session(text(&job["sessionID"]));
             if job["kind"] == "subagent" {
@@ -896,11 +890,11 @@ impl Run {
         }
         // A finished job wakes its session before its row is removed, so a wake that raced the list above
         // shows up as a queued inbox item or an active session in the tree.
-        let active = self.data("/api/session/active", &[]).await.unwrap_or_else(|_| json!({}));
+        let active = self.data(Client::session_active_call()).await.unwrap_or_else(|_| json!({}));
         let sessions = self.job_sessions.borrow().clone();
         for session in sessions {
-            let inbox =
-                self.data(&format!("/api/session/{}/inbox", path(&session)), &[]).await.unwrap_or_else(|_| json!([]));
+            let input = SessionInboxListInput { session_id: session.as_str().into() };
+            let inbox = self.data(Client::session_inbox_list_call(&input)).await.unwrap_or_else(|_| json!([]));
             if !array(Some(&inbox)).is_empty() {
                 return true;
             }
@@ -930,7 +924,7 @@ impl Run {
             let result = if session == GLOBAL_FORM_SESSION_ID {
                 false
             } else {
-                match self.data(&format!("/api/session/{}", path(session)), &[]).await {
+                match self.data(Client::session_get_call(&SessionGetInput { session_id: session.into() })).await {
                     Ok(info) => match info["parentID"].as_str() {
                         Some(parent) if !parent.is_empty() => self.owns(parent).await,
                         _ => false,
@@ -999,13 +993,9 @@ impl Run {
         Ok(())
     }
 
-    /// `GET path` and its `data`, as the TS Promise client unwraps it.
-    async fn data(&self, path: &str, query: &[(&str, Value)]) -> Result<Value, ApiError> {
-        let mut call = Call::new("GET", path.to_owned(), 200, &[400, 401, 404]);
-        for (key, value) in query {
-            call.query(key, value)?;
-        }
-        let mut value: Value = self.input.client.json(call).await?;
+    /// The response to `call` and its `data`, as the TS Promise client unwraps it.
+    async fn data(&self, call: Result<Call, ApiError>) -> Result<Value, ApiError> {
+        let mut value: Value = self.input.client.json(call?).await?;
         Ok(value.get_mut("data").map(Value::take).unwrap_or(Value::Null))
     }
 
@@ -1157,10 +1147,6 @@ fn text(value: &Value) -> &str {
 
 fn truthy(value: &Value) -> bool {
     !matches!(value, Value::Null | Value::Bool(false))
-}
-
-fn path(segment: &str) -> String {
-    opencode_api::client::path_param(segment).unwrap_or_else(|_| segment.to_owned())
 }
 
 fn event_time(event: &Value) -> Value {

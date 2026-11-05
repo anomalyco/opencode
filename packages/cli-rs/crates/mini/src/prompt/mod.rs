@@ -1671,12 +1671,10 @@ fn delivery(value: &Value) -> Delivery {
 
 /// `session.inbox.list`: the session's pending user prompts.
 async fn inbox(client: &Client, session: &str) -> Vec<Queued> {
-    let call = opencode_api::client::Call::new(
-        "GET",
-        format!("/api/session/{}/inbox", crate::replay::encode(session)),
-        200,
-        &[400, 401, 404],
-    );
+    let input = opencode_api::generated::SessionInboxListInput { session_id: session.into() };
+    let Ok(call) = Client::session_inbox_list_call(&input) else {
+        return Vec::new();
+    };
     client
         .json::<Value>(call)
         .await

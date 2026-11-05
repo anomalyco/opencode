@@ -1,14 +1,17 @@
 //! `models`: list the available models (`packages/cli/src/commands/handlers/models.ts`).
 
+use opencode_api::client::Client;
+use opencode_api::generated::ModelListInput;
 use serde_json::Value;
 
 use super::Context;
-use super::client::{block_on, connect, get_located, locale_compare};
+use super::client::{block_on, connect, here, locale_compare};
 
 pub fn run(context: &Context) -> anyhow::Result<()> {
     let response = block_on(async {
         let server = connect(context).await?;
-        get_located(&server.client, "/api/model", &[400, 401, 404, 503]).await
+        let input = ModelListInput { location: Some(here()?), types: None };
+        anyhow::Ok(server.client.json::<Value>(Client::model_list_call(&input)?).await?)
     })??;
     let mut models: Vec<String> =
         data(&response).iter().map(|model| format!("{}/{}", text(&model["providerID"]), text(&model["id"]))).collect();

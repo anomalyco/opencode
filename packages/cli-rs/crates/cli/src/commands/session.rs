@@ -5,9 +5,12 @@ use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
 use chrono::{Local, TimeZone};
-use opencode_api::client::{Call, Client};
+use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
-use opencode_api::generated::types::SessionRemoveInput;
+use opencode_api::generated::types::{
+    AbsolutePath, ExperimentalSessionExportInput, LocationGetInput, LocationQueryInput, ProjectID, SessionListInput,
+    SessionListInputOrder, SessionRemoveInput,
+};
 use serde_json::{Map, Value};
 
 use super::Context;
@@ -44,12 +47,14 @@ fn list(context: &Context, args: &SessionListArgs) -> anyhow::Result<()> {
     let sessions = block_on(async {
         let server = connect(context).await?;
         let location = location(&server.client, &cwd()?).await?;
-        let mut call = Call::new("GET", "/api/session".to_owned(), 200, &[400, 401]);
-        call.query("limit", &args.max_count.unwrap_or(100))?;
-        call.query("order", "desc")?;
-        call.query("parentID", &Value::Null)?;
-        call.query("project", &location["project"]["id"])?;
-        anyhow::Ok(data(get(&server.client, call).await?))
+        let input = SessionListInput {
+            limit: Some(args.max_count.map_or(100, i64::from)),
+            order: Some(SessionListInputOrder::Desc),
+            parent_id: Some(None),
+            project: location["project"]["id"].as_str().map(ProjectID::from),
+            ..Default::default()
+        };
+        anyhow::Ok(data(server.client.json(Client::session_list_call(&input)?).await?))
     })??;
     if args.format == SessionListFormat::Table && sessions.is_empty() {
         return Ok(());
@@ -132,14 +137,9 @@ fn export(context: &Context, args: &SessionExportArgs) -> anyhow::Result<()> {
                 None => return anyhow::Ok(None),
             },
         };
-        let mut call = Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/export", opencode_api::client::path_param(&session)?),
-            200,
-            &[400, 401, 404, 500],
-        );
-        call.query("sanitize", &args.sanitize)?;
-        anyhow::Ok(Some(get(&server.client, call).await?["data"].take()))
+        let input = ExperimentalSessionExportInput { session_id: session.into(), sanitize: Some(args.sanitize) };
+        let mut response: Value = server.client.json(Client::experimental_session_export_call(&input)?).await?;
+        anyhow::Ok(Some(response["data"].take()))
     })??;
     match data {
         Some(data) => print(&pretty(&data)?),
@@ -153,12 +153,14 @@ async fn pick(client: &Client) -> anyhow::Result<Option<String>> {
     let output = Output::Stderr;
     output.intro("Export session");
     let location = location(client, &cwd()?).await?;
-    let mut call = Call::new("GET", "/api/session".to_owned(), 200, &[400, 401]);
-    call.query("directory", &location["directory"])?;
-    call.query("parentID", &Value::Null)?;
-    call.query("order", "desc")?;
-    call.query("limit", &50)?;
-    let sessions = data(get(client, call).await?);
+    let input = SessionListInput {
+        limit: Some(50),
+        order: Some(SessionListInputOrder::Desc),
+        parent_id: Some(None),
+        directory: location["directory"].as_str().map(AbsolutePath::from),
+        ..Default::default()
+    };
+    let sessions = data(client.json(Client::session_list_call(&input)?).await?);
     if sessions.is_empty() {
         output.log("No sessions found", &prompt::red(prompt::S_ERROR()));
         output.outro("Done");
@@ -203,10 +205,11 @@ fn import(context: &Context, args: &SessionImportArgs) -> anyhow::Result<()> {
         let location = location(&server.client, &directory).await?;
         // A `location` in the file keeps its place and takes the new value, as the TS spread does.
         body.insert("location".to_owned(), serde_json::json!({ "directory": location["directory"] }));
-        let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[400, 401, 404, 409]);
+        // The file goes as it is, unknown fields included.
+        let mut call = Client::experimental_session_import_call(&Default::default())?;
         call.json(&body)?;
         // TS reads the raw response, so a declared error prints its status text, as an undeclared one does.
-        let status = match get(&server.client, call).await {
+        let status = match server.client.json::<Value>(call).await {
             Ok(response) => return anyhow::Ok(Some(text_of(&response["data"]["id"])?)),
             Err(ApiError::UnexpectedStatus { status }) => status,
             Err(ApiError::Declared(error)) => error.status,
@@ -257,13 +260,8 @@ fn text_of(value: &Value) -> anyhow::Result<String> {
 }
 
 async fn location(client: &Client, directory: &str) -> Result<Value, ApiError> {
-    let mut call = Call::new("GET", "/api/location".to_owned(), 200, &[400, 401, 404]);
-    call.query("location", &serde_json::json!({ "directory": directory }))?;
-    get(client, call).await
-}
-
-async fn get(client: &Client, call: Call) -> Result<Value, ApiError> {
-    client.json(call).await
+    let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory.to_owned()) }) };
+    client.json(Client::location_get_call(&input)?).await
 }
 
 fn data(mut response: Value) -> Vec<Value> {

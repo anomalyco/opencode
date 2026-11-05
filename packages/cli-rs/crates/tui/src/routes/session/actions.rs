@@ -6,11 +6,12 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use opencode_api::client::Call;
+use opencode_api::client::Client;
 use opencode_api::generated::{
-    ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID, SessionInboxCancelInput, SessionInboxInfo,
-    SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction,
-    SessionMessageInfo, SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput, SessionUpdateInput,
+    ExperimentalSessionExportInput, ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID,
+    SessionInboxCancelInput, SessionInboxInfo, SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem,
+    SessionMessageCompaction, SessionMessageInfo, SessionMessageUser, SessionRevertClearInput, SessionRevertStageInput,
+    SessionUpdateInput,
 };
 use opencode_store::{MessageExt, State};
 use opencode_ui::bind;
@@ -442,16 +443,8 @@ fn transcript(
     let client = tui.data.client().clone();
     let session = session.clone();
     async move {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/export", opencode_api::client::path_param(&session)?),
-            200,
-            &[400, 401, 404, 500],
-        );
-        if let Some(sanitize) = sanitize {
-            call.query("sanitize", &sanitize)?;
-        }
-        let mut body: Value = client.json(call).await?;
+        let input = ExperimentalSessionExportInput { session_id: session, sanitize };
+        let mut body: Value = client.json(Client::experimental_session_export_call(&input)?).await?;
         Ok(body["data"].take())
     }
 }
