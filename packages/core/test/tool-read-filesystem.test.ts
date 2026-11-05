@@ -212,18 +212,29 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("reports out-of-range pagination as a typed error", () =>
+  it.effect("returns the last lines when the offset is past the end", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
-      const file = path.join(directory, "short.txt")
-      yield* files.writeFileString(file, "one\n")
+      const short = path.join(directory, "short.txt")
+      const long = path.join(directory, "long.txt")
+      yield* files.writeFileString(short, "one\ntwo\nthree\nfour\nfive\n")
+      yield* files.writeFileString(long, Array.from({ length: 30_000 }, (_, index) => `line ${index + 1}`).join("\n"))
 
-      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "short.txt", { offset: 2 }).pipe(
-        Effect.flip,
+      const page = yield* ReadToolFileSystem.read(environment, absolute(short), "short.txt", { offset: 9, limit: 2 })
+      const tail = yield* ReadToolFileSystem.read(environment, absolute(long), "long.txt", { offset: 40_000 })
+
+      expect(page).toMatchObject({
+        type: "text-page",
+        content: "four\nfive",
+        offset: 4,
+        truncated: false,
+        pastEnd: { offset: 9, lines: 5 },
+      })
+      expect(ReadTool.toModelContent("short.txt", 9, page)).toBe(
+        "Read file short.txt, lines 4-5 (offset 9 is past the end; the file has 5 lines)\n4: four\n5: five",
       )
-
-      expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
-      expect(error.message).toBe("Offset 2 is out of range for this file (1 line)")
+      expect(tail).toMatchObject({ type: "text-page", offset: 29_901, pastEnd: { offset: 40_000, lines: 30_000 } })
+      expect(tail.type === "text-page" ? tail.content.split("\n").at(-1) : undefined).toBe("line 30000")
     }),
   )
 

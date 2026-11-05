@@ -15,6 +15,7 @@ export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
 export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
+const TAIL_LINES = 100
 const MAX_LINE_LENGTH = 2_000
 const TREE_BASE = 6
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
@@ -85,6 +86,8 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   offset: PositiveInt,
   truncated: Schema.Boolean,
   next: Schema.optionalKey(PositiveInt),
+  /** Set when the requested offset was past the end, so this page holds the file's last lines instead. */
+  pastEnd: Schema.optionalKey(Schema.Struct({ offset: PositiveInt, lines: NonNegativeInt })),
 }) {}
 
 export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
@@ -113,7 +116,22 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Re
 
 const mimeType = (value: string) => lookup(value) || "application/octet-stream"
 
-export const read = Effect.fn("ReadTool.read")(function* (
+// An offset past the end reads the file's last lines instead of failing.
+export const read = (files: Files, input: AbsolutePath, resource: string, page: PageInput = {}) =>
+  readPage(files, input, resource, page).pipe(
+    Effect.catchTag("ReadTool.OffsetOutOfRangeError", (error) => {
+      const limit = Math.min(page.limit || TAIL_LINES, MAX_READ_LINES)
+      return readPage(files, input, resource, { offset: Math.max(1, error.lines - limit + 1), limit }).pipe(
+        Effect.map((result) =>
+          result instanceof TextPage
+            ? new TextPage({ ...result, pastEnd: { offset: error.offset, lines: error.lines } })
+            : result,
+        ),
+      )
+    }),
+  )
+
+const readPage = Effect.fn("ReadTool.read")(function* (
   files: Files,
   input: AbsolutePath,
   resource: string,
