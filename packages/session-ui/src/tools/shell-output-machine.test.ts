@@ -83,6 +83,40 @@ describe("transitionShellFollower", () => {
     expect(waits(polled.effects)).toEqual([1_000])
   })
 
+  test.each([
+    ["backing off", "waiting", ["read"]],
+    ["reading", "reading", []],
+  ] as const)("a shell that stops while %s after failed polls still gets its final reads", (_, status, effects) => {
+    let live = fresh(true)
+
+    for (let i = 0; i < 5; i++) live = fail(live).state
+
+    // After five failed polls the follower reads again; one more failure leaves it backing off.
+    const before =
+      status === "waiting" && live.status === "reading"
+        ? transitionShellFollower(live, { type: "read.failed", attempt: live.attempt }).state
+        : live
+
+    expect(before).toMatchObject({ status, running: true })
+
+    const stopped = transitionShellFollower(before, { type: "running.changed", running: false })
+
+    expect(stopped.state).toMatchObject({ status: "reading", running: false, failures: 0 })
+    expect(stopped.effects.map((effect) => effect.type)).toEqual([...effects])
+
+    const delays: number[] = []
+    let state = stopped.state
+
+    for (let i = 0; i < SHELL_EXITED_MAX_RETRIES; i++) {
+      const next = fail(state)
+      delays.push(...next.delays)
+      state = next.state
+    }
+
+    expect(delays).toEqual([1_000, 2_000, 4_000])
+    expect(fail(state).state).toMatchObject({ status: "failed" })
+  })
+
   test("reads a complete shell again from its cursor once the late inventory says it runs", () => {
     const complete = createShellFollowerState({
       cached: { cursor: 6, output: "hello\n", complete: true },

@@ -189,22 +189,18 @@ function runningChanged(
 
   if (running === state.running) return { state, effects: NO_EFFECTS }
 
+  // A shell that stops gets the full retry budget of an exited shell, however often its live polls failed.
   // The read in flight still counts; the next one decides whether the output is final.
   if (state.status === "reading")
-    return { state: { ...state, running, final: state.final && !running }, effects: NO_EFFECTS }
+    return {
+      state: { ...state, running, final: state.final && !running, failures: running ? state.failures : 0 },
+      effects: NO_EFFECTS,
+    }
 
   if (running) return { state: { ...state, running }, effects: NO_EFFECTS }
 
-  // The shell stopped between polls: read its final output now instead of after the interval.
-  if (state.failures === 0) return read(state, false, 0)
-
-  if (state.failures > SHELL_EXITED_MAX_RETRIES)
-    return {
-      state: { status: "failed", attempt: state.attempt, cursor: state.cursor, output: state.output },
-      effects: [CANCEL],
-    }
-
-  return { state: { ...state, running }, effects: NO_EFFECTS }
+  // The shell stopped between polls or during a backoff: read its final output now.
+  return read(state, false, 0)
 }
 
 function read(state: Progress, running: boolean, failures: number): ShellFollowerTransition {
