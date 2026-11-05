@@ -93,7 +93,8 @@ export function transitionLogging(state: LoggingState, event: LoggingEvent): Log
       ? { state: { ...state, resumeNetLog: true }, commands: [] }
       : unchanged(state)
 
-  if (event.type === "export.requested") return { state: { ...state, exports: [...state.exports, event.reply] }, commands: [] }
+  if (event.type === "export.requested")
+    return { state: { ...state, exports: [...state.exports, event.reply] }, commands: [] }
 
   if (event.type === "export.cancelled")
     return state.exports.includes(event.reply)

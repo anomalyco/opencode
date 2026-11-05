@@ -81,7 +81,9 @@ export function createDraftStore(
           : db
               .all<{
                 id: string
-              }>(sql`SELECT ref.id FROM (${referenced(value)}) AS ref WHERE ref.id NOT IN (SELECT ${blobs.id} FROM ${blobs})`)
+              }>(
+                sql`SELECT ref.id FROM (${referenced(value)}) AS ref WHERE ref.id NOT IN (SELECT ${blobs.id} FROM ${blobs})`,
+              )
               .map((row) => row.id)
 
       if (!strict || missing.length === 0) writer.set(key, value)
@@ -139,7 +141,12 @@ function createDraftGc(db: Database, input: { collectDelay?: number; onError?: (
     timers.clear()
 
     if (command.type === "cancel-timer") return
-    const timer = setTimeout(() => dispatch({ type: "timer.fired", attempt: command.attempt, at: Date.now() }), command.delayMs)
+
+    const timer = setTimeout(
+      () => dispatch({ type: "timer.fired", attempt: command.attempt, at: Date.now() }),
+      command.delayMs,
+    )
+
     timer.unref()
     timers.add(timer)
   }

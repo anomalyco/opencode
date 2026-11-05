@@ -116,10 +116,7 @@ function schedule(attempt: number, lastCollectedAt: number, dueAt: number, at: n
 function collect(attempt: number, at: number): DraftGcTransition {
   return {
     state: { status: "collecting", attempt: attempt + 1 },
-    commands: [
-      { type: "cancel-timer" },
-      { type: "collect", attempt: attempt + 1, at, before: at - BLOB_GRACE_MS },
-    ],
+    commands: [{ type: "cancel-timer" }, { type: "collect", attempt: attempt + 1, at, before: at - BLOB_GRACE_MS }],
   }
 }
 

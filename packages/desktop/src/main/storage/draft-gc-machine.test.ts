@@ -78,9 +78,7 @@ describe("draft blob GC machine", () => {
   test("a typing burst inside the interval leaves the armed sweep alone", () => {
     const scheduled = transitionDraftGc(clean, { type: "documents.written", at: 30_000 }).state
 
-    const burst = [31_000, 32_000, 40_000].map((at) =>
-      transitionDraftGc(scheduled, { type: "documents.written", at }),
-    )
+    const burst = [31_000, 32_000, 40_000].map((at) => transitionDraftGc(scheduled, { type: "documents.written", at }))
 
     burst.forEach((next) => expect(next).toEqual({ state: scheduled, commands: [] }))
     burst.forEach((next) => expect(next.state).toBe(scheduled))
@@ -109,7 +107,11 @@ describe("draft blob GC machine", () => {
 
   test.each([
     { name: "a timer from a replaced schedule", from: opened.state, event: { type: "timer.fired", attempt: 0, at: 1 } },
-    { name: "a sweep result while scheduled", from: opened.state, event: { type: "collect.succeeded", attempt: 1, at: 1, oldestOrphanAt: null } },
+    {
+      name: "a sweep result while scheduled",
+      from: opened.state,
+      event: { type: "collect.succeeded", attempt: 1, at: 1, oldestOrphanAt: null },
+    },
     { name: "a timer while clean", from: clean, event: { type: "timer.fired", attempt: 2, at: 1 } },
     {
       name: "a stale sweep result",
@@ -124,7 +126,9 @@ describe("draft blob GC machine", () => {
     const closed = transitionDraftGc(opened.state, { type: "close.requested" })
     expect(closed).toEqual({ state: { status: "closed" }, commands: [{ type: "cancel-timer" }] })
 
-    expect(transitionDraftGc(closed.state, { type: "documents.written", at: BLOB_GRACE_MS * 2 }).state).toBe(closed.state)
+    expect(transitionDraftGc(closed.state, { type: "documents.written", at: BLOB_GRACE_MS * 2 }).state).toBe(
+      closed.state,
+    )
     expect(transitionDraftGc(closed.state, { type: "timer.fired", attempt: 1, at: 1 }).state).toBe(closed.state)
   })
 })

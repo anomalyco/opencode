@@ -37,9 +37,9 @@ describe("CLI install machine", () => {
     expect(presenting.commands).toEqual([{ type: "show-dialog", attempt: 1, outcome }])
     expect(transitionInstallCli(presenting.state, { type: "install.requested" }).state).toBe(presenting.state)
 
-    expect(
-      replay([{ type: "dialog.dismissed", attempt: 1 }, { type: "install.requested" }], presenting.state),
-    ).toEqual({ state: { status: "installing", attempt: 2 }, commands: [{ type: "run-install", attempt: 2 }] })
+    expect(replay([{ type: "dialog.dismissed", attempt: 1 }, { type: "install.requested" }], presenting.state)).toEqual(
+      { state: { status: "installing", attempt: 2 }, commands: [{ type: "run-install", attempt: 2 }] },
+    )
   })
 
   test("a failure, timeout or resolve defect shows the error dialog and then accepts a retry", () => {
@@ -92,7 +92,10 @@ describe("CLI install machine", () => {
   test.each([
     { phase: "idle", events: [] },
     { phase: "installing", events: [{ type: "install.requested" }] },
-    { phase: "presenting", events: [{ type: "install.requested" }, { type: "install.failed", attempt: 1, error: "e" }] },
+    {
+      phase: "presenting",
+      events: [{ type: "install.requested" }, { type: "install.failed", attempt: 1, error: "e" }],
+    },
   ] satisfies { phase: InstallCliState["status"]; events: InstallCliEvent[] }[])(
     "disposal while $phase ignores every later event",
     (row) => {

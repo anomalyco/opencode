@@ -130,7 +130,9 @@ const serviceLayer = Layer.effect(
         const attempt = command.attempt
 
         return report(
-          Effect.suspend(() => (netLog.currentlyLogging ? Effect.tryPromise(() => netLog.stopLogging()) : Effect.void)).pipe(
+          Effect.suspend(() =>
+            netLog.currentlyLogging ? Effect.tryPromise(() => netLog.stopLogging()) : Effect.void,
+          ).pipe(
             Effect.timeoutOrElse({
               duration: NETLOG_TIMEOUT_MS,
               orElse: () => Effect.fail(new Error("net log timed out")),

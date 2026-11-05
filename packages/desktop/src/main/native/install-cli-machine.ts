@@ -1,4 +1,6 @@
-export type InstallCliOutcome = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly error: string }
+export type InstallCliOutcome =
+  | { readonly ok: true; readonly path: string }
+  | { readonly ok: false; readonly error: string }
 
 /**
  * The macOS `Install CLI…` menu action. One installer runs at a time, and a click while it runs or while its result

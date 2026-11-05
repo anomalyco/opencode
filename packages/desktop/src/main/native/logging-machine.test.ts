@@ -23,10 +23,7 @@ const replay = (events: readonly LoggingEvent[], from: LoggingState = initialLog
     { state: from, commands: [] },
   )
 
-const logging = replay([
-  { type: "network.requested" },
-  { type: "netlog.started", attempt: 1, path: netlog },
-]).state
+const logging = replay([{ type: "network.requested" }, { type: "netlog.started", attempt: 1, path: netlog }]).state
 
 describe("logging machine", () => {
   test("exports while NetLog runs stop it once, write one archive, settle every caller and restart it once", () => {
@@ -138,9 +135,9 @@ describe("logging machine", () => {
 
     expect(archiving).toMatchObject({ status: "archiving", exports: [staying] })
     expect(transitionLogging(archiving, { type: "export.cancelled", reply: leaving }).state).toBe(archiving)
-    expect(transitionLogging(archiving, { type: "archive.succeeded", attempt: 1, output: "/out.zip" }).commands).toEqual([
-      { type: "resolve-export", replies: [staying], output: "/out.zip" },
-    ])
+    expect(
+      transitionLogging(archiving, { type: "archive.succeeded", attempt: 1, output: "/out.zip" }).commands,
+    ).toEqual([{ type: "resolve-export", replies: [staying], output: "/out.zip" }])
   })
 
   test.each([
@@ -155,7 +152,12 @@ describe("logging machine", () => {
       events: [{ type: "export.requested", reply: reply() }],
       stale: { type: "netlog.stopped", attempt: 1 },
     },
-    { name: "a repeated NetLog request while it runs", events: [], stale: { type: "network.requested" }, from: logging },
+    {
+      name: "a repeated NetLog request while it runs",
+      events: [],
+      stale: { type: "network.requested" },
+      from: logging,
+    },
   ] satisfies { name: string; events: LoggingEvent[]; stale: LoggingEvent; from?: LoggingState }[])(
     "$name is ignored",
     (row) => {
