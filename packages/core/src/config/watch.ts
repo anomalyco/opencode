@@ -1,26 +1,41 @@
 export * as ConfigWatch from "./watch.js"
 
 import path from "path"
+import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import { ConfigDiscovery } from "./discovery.js"
 
+function key(file: string) {
+  const normalized = path.normalize(file)
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+}
+
 /** Paths whose content or presence feeds the loaded config; other writes under watched roots do not. */
-export function inputs(sources: ConfigDiscovery.Sources) {
+export const inputs = Effect.fnUntraced(function* (sources: ConfigDiscovery.Sources, references: Set<string>) {
+  const fs = yield* FSUtil.Service
+  const real = yield* Effect.forEach(references, (file) => fs.realPath(file).pipe(Effect.orElseSucceed(() => file)), {
+    concurrency: "unbounded",
+  })
   const roots = [
     ...(sources.system ? [sources.system.path] : []),
     ...(sources.global ? [sources.global] : []),
     ...sources.project.map((root) => root.path),
   ]
-  return new Set<string>([
-    ...roots,
-    ...roots.flatMap((root) => ConfigDiscovery.names.map((name) => path.join(root, name))),
-    ...sources.direct,
-    ...sources.claude,
-    ...sources.agents,
-    ...(sources.explicit ? [sources.explicit] : []),
-  ])
-}
+  const paths = new Set(
+    [
+      ...roots,
+      ...roots.flatMap((root) => ConfigDiscovery.names.map((name) => path.join(root, name))),
+      ...sources.direct,
+      ...sources.claude,
+      ...sources.agents,
+      ...(sources.explicit ? [sources.explicit] : []),
+      ...references,
+      ...real,
+    ].map(key),
+  )
+  return (file: string) => paths.has(key(file))
+})
 
 export function plan(sources: ConfigDiscovery.Sources) {
   const directories = [
