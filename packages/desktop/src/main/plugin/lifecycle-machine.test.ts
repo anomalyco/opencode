@@ -205,6 +205,7 @@ describe("plugin instance lifecycle", () => {
       { type: "setup.failed", id: "a", attempt: first, error: new Error("late") },
       { type: "dispose.settled", id: "a", attempt: first, canRun: true },
     ]
+
     stale.forEach((event) => expect(m.send(event)).toEqual({ state: preparing, commands: [] }))
 
     const orphan = fake("a1")

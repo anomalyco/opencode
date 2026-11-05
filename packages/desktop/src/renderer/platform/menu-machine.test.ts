@@ -5,6 +5,7 @@ function replay(events: readonly MenuRouterEvent[], from: MenuRouterState = crea
   return events.reduce<{ state: MenuRouterState; triggered: string[] }>(
     (result, event) => {
       const next = transitionMenuRouter(result.state, event)
+
       const triggered = next.commands.flatMap((command) =>
         command.ids.map((id) => `${command.handler === first ? "first" : "second"} ${id}`),
       )

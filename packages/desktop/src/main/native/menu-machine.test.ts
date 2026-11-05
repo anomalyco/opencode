@@ -27,13 +27,9 @@ describe("native menu install", () => {
   })
 
   test("plugin entries recorded before install are in the first build, and later changes rebuild", () => {
-    const installed = transitionMenu(
-      transitionMenu(createMenuState(), { type: "provider.changed", provider: plugins }).state,
-      {
-        type: "installed",
-        deps,
-      },
-    )
+    const recorded = transitionMenu(createMenuState(), { type: "provider.changed", provider: plugins })
+    expect(recorded.commands).toEqual([])
+    const installed = transitionMenu(recorded.state, { type: "installed", deps })
     expect(installed.commands).toEqual([{ type: "build", deps, provider: plugins }])
 
     expect(
@@ -55,6 +51,7 @@ describe("native menu install", () => {
       { type: "refreshed" },
       { type: "provider.changed", provider: plugins },
     ])
+
     expect(run.builds).toEqual([1, 0, 0, 0])
     expect(run.state).toEqual({ status: "uninstalled", provider: plugins })
   })
