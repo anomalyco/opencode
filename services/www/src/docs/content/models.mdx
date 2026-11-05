@@ -87,6 +87,9 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 Variant names come from the selected model's current catalog metadata. Names such as `low`, `high`, and `max` are not
 available for every model, and an unknown variant produces a model-resolution error.
 
+A configured model that is not in the catalog and has no `variants` of its own gets a standard set synthesized from its
+provider package, usually `low`, `medium`, and `high`. An empty `"variants": []` array removes them.
+
 Define new variants, or replace catalog variants with the same ID, in the model's `variants` array:
 
 ```jsonc title="opencode.jsonc"
@@ -232,9 +235,10 @@ already in the catalog, OpenCode assumes:
 - Tool support, text and image input, and text output.
 - A 200,000-token context limit and 32,000-token output limit.
 - An unspecified input limit.
+- A standard reasoning variant set, usually `low`, `medium`, and `high`.
 
-These are fallback assumptions, not detected capabilities. Set accurate `capabilities` and `limit` values when known;
-explicit values replace the fallbacks. Add `disabled: true` to hide a model from the available catalog:
+These are fallback assumptions, not detected capabilities. Set accurate `capabilities`, `limit`, and `variants` values
+when known; explicit values replace the fallbacks. Add `disabled: true` to hide a model from the available catalog:
 
 ```jsonc title="opencode.jsonc"
 {
