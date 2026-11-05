@@ -174,13 +174,14 @@ export const layer = (options?: Options) =>
       const loadFile = Effect.fnUntraced(function* (filepath: string, references: Set<string>) {
         const text = yield* fs.readFileStringSafe(filepath)
         if (text === undefined) return
+        references.add(filepath)
         const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text, references })
         const info = yield* parseInfo(substituted, filepath)
         if (!info) return
         return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
       })
 
-      const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
+      const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry, references: Set<string>) {
         const auth = entry.manifest.auth
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
         const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
@@ -202,6 +203,7 @@ export const layer = (options?: Options) =>
             dir: entry.origin,
             text: JSON.stringify(config),
             env: variables,
+            references,
           }).pipe(
             Effect.flatMap((text) => parseInfo(text, entry.origin)),
             Effect.map((info) =>
@@ -217,7 +219,7 @@ export const layer = (options?: Options) =>
         ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
       })
 
-      const loadWellknown = Effect.fn("Config.loadWellknown")(function* () {
+      const loadWellknown = Effect.fn("Config.loadWellknown")(function* (references: Set<string>) {
         const entries = yield* wellknown
           .entries()
           .pipe(
@@ -226,7 +228,7 @@ export const layer = (options?: Options) =>
             ),
           )
         return yield* Effect.forEach(entries, (entry) =>
-          loadWellknownEntry(entry).pipe(
+          loadWellknownEntry(entry, references).pipe(
             Effect.map((documents) => ({ integrationID: entry.integrationID, documents })),
           ),
         )
@@ -249,7 +251,10 @@ export const layer = (options?: Options) =>
         return ManagedPolicy.decision(lockdown, "integration.use", resource) !== "deny"
       })
 
-      const loadPreferences = Effect.fn("Config.loadPreferences")(function* (plist: AbsolutePath) {
+      const loadPreferences = Effect.fn("Config.loadPreferences")(function* (
+        plist: AbsolutePath,
+        references: Set<string>,
+      ) {
         const result = yield* processes
           .run(ChildProcess.make("plutil", ["-convert", "json", "-o", "-", plist], { stdin: "ignore" }), {
             timeout: "10 seconds",
@@ -259,11 +264,13 @@ export const layer = (options?: Options) =>
           yield* Effect.logWarning("failed to convert managed preferences", { source: plist })
           return []
         }
+        references.add(plist)
         const text = yield* ConfigVariable.substitute({
           type: "virtual",
           source: plist,
           dir: path.dirname(plist),
           text: ConfigDiscovery.stripPreferenceMetadata(result.value.stdout.toString()),
+          references,
         })
         const info = yield* parseInfo(text, plist)
         return info ? [new Document({ type: "document", path: plist, info })] : []
@@ -298,6 +305,7 @@ export const layer = (options?: Options) =>
                 source: "OPENCODE_CONFIG_CONTENT",
                 dir: location.directory,
                 text: options.content,
+                references,
               }).pipe(
                 Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
                 Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
@@ -311,7 +319,7 @@ export const layer = (options?: Options) =>
         // to keep final file-based authority.
         const managed = [
           ...(sources.system?.present ? yield* loadDirectory(sources.system.path, references).pipe(Effect.orDie) : []),
-          ...(sources.preferences ? yield* loadPreferences(sources.preferences).pipe(Effect.orDie) : []),
+          ...(sources.preferences ? yield* loadPreferences(sources.preferences, references).pipe(Effect.orDie) : []),
         ]
         const managedPolicies = managed
           .flatMap((entry) =>
@@ -354,7 +362,7 @@ export const layer = (options?: Options) =>
             ),
           ),
         )
-        const wellknownDocuments = yield* Effect.forEach(yield* loadWellknown().pipe(Effect.orDie), (entry) =>
+        const wellknownDocuments = yield* Effect.forEach(yield* loadWellknown(references).pipe(Effect.orDie), (entry) =>
           supplies(lockdown, entry.integrationID).pipe(
             Effect.map((allowed) =>
               allowed
@@ -381,13 +389,13 @@ export const layer = (options?: Options) =>
             ...content,
             ...managedSettings,
           ],
-          inputs: new Set([...ConfigWatch.inputs(sources), ...references]),
+          isInput: yield* ConfigWatch.inputs(sources, references),
         }
       })
 
       const initial = yield* ConfigDiscovery.discover(options)
       let sources = initial
-      let { configs, inputs } = yield* load(initial)
+      let { configs, isInput } = yield* load(initial)
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const reloads = yield* PubSub.sliding<void>(1)
       // Readiness rescans recover writes made before a watch attached.
@@ -399,19 +407,20 @@ export const layer = (options?: Options) =>
           if (!plan.has(key)) yield* FiberMap.remove(watched, key)
         }
         for (const [key, target] of plan) {
-          yield* watcher.subscribe(target, requestReload).pipe(
+          let real = target.path
+          const ready = Effect.gen(function* () {
+            real = yield* fs.resolve(target.path)
+            yield* requestReload
+          })
+          yield* watcher.subscribe(target, ready).pipe(
             Effect.flatMap(
               Stream.runForEach((update) =>
                 Effect.gen(function* () {
                   yield* PubSub.publish(updates, update)
-                  // Native watches report canonical paths; compare them in the spelling the sources use.
-                  const real = yield* fs.resolve(target.path)
-                  const file = FSUtil.contains(real, update.path)
-                    ? path.join(target.path, path.relative(real, update.path))
-                    : update.path
-                  // Only config inputs reload: skills, plugins, backups and editor temp files under the same
-                  // roots still reach changes(), but reloading for them re-ran every instance's load.
-                  if (inputs.has(file)) yield* requestReload
+                  if (isInput(update.path)) return yield* requestReload
+                  // Native watches can report the canonical path even after the root was deleted.
+                  if (real === target.path || !FSUtil.contains(real, update.path)) return
+                  if (isInput(path.join(target.path, path.relative(real, update.path)))) yield* requestReload
                 }),
               ),
             ),
@@ -424,7 +433,7 @@ export const layer = (options?: Options) =>
         function* () {
           const discovered = yield* ConfigDiscovery.discover(options)
           const next = yield* load(discovered)
-          inputs = next.inputs
+          isInput = next.isInput
           yield* reconcile(discovered)
           const compatibilityChanged =
             !isDeepStrictEqual(sources.claude, discovered.claude) ||

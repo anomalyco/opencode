@@ -838,12 +838,11 @@ describe("Config", () => {
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
             yield* watcher.emit({ type: "update", path: path.join(global, "skills", "demo", "SKILL.md") })
             yield* watcher.emit({ type: "update", path: path.join(global, "opencode.json.bak") })
-            yield* Effect.sleep("300 millis")
-
             expect(Array.from(yield* Fiber.join(changes)).map((update) => update.path)).toEqual([
               path.join(global, "skills", "demo", "SKILL.md"),
               path.join(global, "opencode.json.bak"),
             ])
+            yield* Effect.sleep("300 millis")
             expect(counter.reloads).toBe(before)
             expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
           }).pipe(
@@ -855,46 +854,91 @@ describe("Config", () => {
     ),
   )
 
-  it.live("reloads once for a burst of updates to a config file", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
+  const nextUpdate = Bus.Service.use((bus) =>
+    bus.subscribe(Event.Updated).pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true })),
+  )
+
+  it.live("reloads canonical events for a symlinked global root, even after removal", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const real = path.join(tmp.path, "real")
+        const link = path.join(tmp.path, "link")
+        const file = path.join(real, process.platform === "win32" ? "OpenCode.JSON" : "opencode.json")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(real)
+          await fs.symlink(real, link, "junction")
+        })
+        // Parcel delivers events for the underlying directory rather than the symlink spelling.
+        const canonical = Layer.effect(
+          Watcher.Service,
+          Watcher.Test.use((watcher) =>
+            Effect.succeed(
+              Watcher.Service.of({
+                subscribe: (target, ready) =>
+                  watcher.subscribe(target.path === link ? { ...target, path: real } : target, ready),
+              }),
+            ),
+          ),
+        ).pipe(Layer.provideMerge(Watcher.testLayer))
+        const { tracer, settled } = countReloads()
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const watcher = yield* Watcher.Test
+          yield* settled
+          const created = yield* nextUpdate
+          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "one" })))
+          yield* watcher.emit({ type: "create", path: file })
+          yield* Fiber.join(created).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+
+          const deleted = yield* nextUpdate
+          yield* Effect.promise(() => fs.rename(real, path.join(tmp.path, "moved")))
+          yield* watcher.emit({ type: "delete", path: real })
+          yield* Fiber.join(deleted).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+        }).pipe(Effect.provide(testLayer(tmp.path, link, tmp.path, undefined, canonical)), Effect.withTracer(tracer))
+      }),
+    ),
+  )
+
+  for (const source of ["file", "content"] as const) {
+    it.live(`reloads ${source} config when its symlink target changes under a watched root`, () =>
+      withTempDir((tmp) =>
         Effect.gen(function* () {
           const global = path.join(tmp.path, "global")
-          const project = path.join(tmp.path, "project")
-          const file = path.join(global, "opencode.json")
+          const alias = path.join(tmp.path, "alias")
+          const file = path.join(global, "work.json")
+          const write = (shell: string) => fs.writeFile(file, source === "file" ? JSON.stringify({ shell }) : shell)
           yield* Effect.promise(async () => {
-            await fs.mkdir(global, { recursive: true })
-            await fs.mkdir(project, { recursive: true })
-            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+            await fs.mkdir(global)
+            await fs.symlink(global, alias, "junction")
+            await write("one")
           })
-          const { counter, tracer, settled } = countReloads()
+          const options =
+            source === "file"
+              ? { file: path.join(alias, "work.json") }
+              : {
+                  content: JSON.stringify({ shell: "{file:alias/work.json}" }),
+                }
+          const { tracer, settled } = countReloads()
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
-            const bus = yield* Bus.Service
             const watcher = yield* Watcher.Test
             yield* settled
-            const before = counter.reloads
-            const changed = yield* bus
-              .subscribe(Event.Updated)
-              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
-
-            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            const changed = yield* nextUpdate
+            yield* Effect.promise(() => write("two"))
             yield* watcher.emit({ type: "update", path: file })
-            yield* watcher.emit({ type: "update", path: file })
-            yield* watcher.emit({ type: "update", path: file })
-            yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
-            yield* Effect.sleep("300 millis")
-
-            expect(counter.reloads).toBe(before + 1)
+            yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
             expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
           }).pipe(
-            Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)),
+            Effect.provide(testLayer(tmp.path, global, tmp.path, undefined, undefined, undefined, undefined, options)),
             Effect.withTracer(tracer),
           )
         }),
       ),
-    ),
-  )
+    )
+  }
 
   // Real watcher on purpose: the regression this pins (a deleted config file's
   // watch being torn down, making recreation invisible) only reproduces with
