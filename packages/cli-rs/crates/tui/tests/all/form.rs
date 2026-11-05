@@ -7,22 +7,18 @@
 //! the review; here the prompt sits in the session route of a 100x30 app, two columns in. The comparison covers
 //! the prompt's rows (those with its left border).
 
+use crate::support::{self, Fake, Harness, WAIT, deref_harness};
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::{FormField, FormValue, SessionID};
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
+use opencode_api::generated::{FormField, FormValue};
 use opencode_parity::{Fixture as Cells, compare, fixtures_dir};
 use opencode_tui::routes::session::form::{
     display_value, initial_values, selected_row, set_multiselect_custom, set_url_opener, toggle_multiselect, validate,
     visible_fields,
 };
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// A mutating request as the server saw it.
@@ -34,61 +30,38 @@ struct Sent {
     directory: Option<String>,
 }
 
-/// Serves one session with `forms`, `global` forms at `/project`, and records every POST and DELETE.
+/// One session's `forms` and the `global` forms at `/project`.
 #[derive(Default)]
 struct Fixture {
     forms: Vec<Value>,
     global: Vec<Value>,
-    settled: AtomicBool,
-    sent: Mutex<Vec<Sent>>,
 }
 
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        let settled = self.settled.load(Ordering::SeqCst);
-        let list = |forms: &Vec<Value>| if settled { Vec::new() } else { forms.clone() };
-        let (status, body) = match (request.method, path.as_str()) {
-            ("GET", "/api/session/ses_root") => (200, json!({ "data": session() })),
+/// Serves the fixture's forms and records every POST and DELETE in `sent`; once one arrived, it lists no forms.
+fn fake(fixture: Fixture, sent: Arc<Mutex<Vec<Sent>>>) -> Fake {
+    let settled = AtomicBool::new(false);
+    Fake::new(move |seen| {
+        let list = |forms: &Vec<Value>| if settled.load(Ordering::SeqCst) { Vec::new() } else { forms.clone() };
+        match (seen.method.as_str(), seen.path.as_str()) {
+            ("GET", "/api/session/ses_root") => {
+                (200, json!({ "data": support::session("ses_root", "Fix the parser") }))
+            }
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": [] })),
-            ("GET", "/api/session/ses_root/form") => (200, json!({ "data": list(&self.forms) })),
-            ("GET", "/api/form") => {
-                (200, json!({ "location": { "directory": "/project" }, "data": list(&self.global) }))
-            }
+            ("GET", "/api/session/ses_root/form") => (200, json!({ "data": list(&fixture.forms) })),
+            ("GET", "/api/form") => (200, support::list("/project", json!(list(&fixture.global)))),
             // The goal footer's RPC read (E.14); no goal is set.
             ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
-            ("POST" | "DELETE", _) => {
-                let body = request.body.as_deref().map_or(Value::Null, |body| serde_json::from_slice(body).unwrap());
-                let directory = request
-                    .headers
-                    .iter()
-                    .find(|(name, _)| name == "x-opencode-directory")
-                    .map(|(_, value)| value.clone());
-                self.sent.lock().unwrap().push(Sent { method: request.method, path, body, directory });
-                self.settled.store(true, Ordering::SeqCst);
+            (method @ ("POST" | "DELETE"), path) => {
+                let method = if method == "POST" { "POST" } else { "DELETE" };
+                let directory = seen.header("x-opencode-directory");
+                sent.lock().unwrap().push(Sent { method, path: path.to_owned(), body: seen.body.clone(), directory });
+                settled.store(true, Ordering::SeqCst);
                 (204, Value::Null)
             }
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
-}
-
-fn session() -> Value {
-    json!({
-        "id": "ses_root", "title": "Fix the parser", "projectID": "project", "cost": 0,
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
+            _ => support::not_found(),
+        }
     })
 }
 
@@ -96,63 +69,37 @@ fn form(session: &str, id: &str, title: &str, fields: Value) -> Value {
     json!({ "id": id, "sessionID": session, "title": title, "fields": fields })
 }
 
-struct Harness {
-    app: TestApp,
-    _tui: std::rc::Rc<Tui>,
-    fixture: Arc<Fixture>,
+struct Forms {
+    harness: Harness,
+    sent: Arc<Mutex<Vec<Sent>>>,
 }
 
-fn mount(fixture: Fixture, route: Route) -> Harness {
-    let fixture = Arc::new(fixture);
-    let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
-    let app = TestApp::new(100, 30);
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(Info::default(), |_| None),
-            roots: None,
-            route,
-            continue_: false,
-            events: false,
-        },
-    );
-    Harness { app, _tui: tui, fixture }
+deref_harness!(Forms);
+
+fn mount(fixture: Fixture, route: Route) -> Forms {
+    let sent = Arc::default();
+    let deps = Deps { route, ..support::deps(Arc::new(fake(fixture, Arc::clone(&sent)))) };
+    Forms { harness: support::mount(100, 30, deps), sent }
 }
 
-fn session_form(fields: Value) -> Harness {
+fn session_form(fields: Value) -> Forms {
     mount(
         Fixture { forms: vec![form("ses_root", "frm_1", "Deploy settings", fields)], ..Fixture::default() },
-        Route::Session { id: SessionID("ses_root".into()) },
+        support::session_route("ses_root"),
     )
 }
 
-impl Harness {
-    #[track_caller]
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}\n{:?}", self.fixture.sent.lock().unwrap());
-        screen
-    }
-
-    #[track_caller]
-    fn wait_gone(&self, text: &str) {
-        let gone = self.app.wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
-        assert!(gone, "{text:?} stayed:\n{}", self.app.text());
-    }
-
+impl Forms {
     /// Waits for the requests and returns them.
     fn sent(&self, count: usize) -> Vec<Sent> {
-        let arrived = self.app.wait_until(Duration::from_secs(5), || self.fixture.sent.lock().unwrap().len() >= count);
-        let sent = std::mem::take(&mut *self.fixture.sent.lock().unwrap());
+        let arrived = self.app.wait_until(WAIT, || self.sent.lock().unwrap().len() >= count);
+        let sent = std::mem::take(&mut *self.sent.lock().unwrap());
         assert!(arrived, "expected {count} requests, got {sent:?}");
         sent
     }
 
     fn nothing_sent(&self) {
-        assert_eq!(*self.fixture.sent.lock().unwrap(), []);
+        assert_eq!(*self.sent.lock().unwrap(), []);
     }
 }
 
@@ -442,10 +389,10 @@ fn the_helpers_follow_util_form() {
 }
 
 /// The fixture's form: the fields, with the message the TS script sets.
-fn parity_form(fields: Value) -> Harness {
+fn parity_form(fields: Value) -> Forms {
     let mut form = form("ses_root", "frm_1", "Deploy settings", fields);
     form["metadata"] = json!({ "message": "Pick how to deploy." });
-    mount(Fixture { forms: vec![form], ..Fixture::default() }, Route::Session { id: SessionID("ses_root".into()) })
+    mount(Fixture { forms: vec![form], ..Fixture::default() }, support::session_route("ses_root"))
 }
 
 /// The rows of `cells` whose cell at `x` is the prompt's border, cut to `width` columns from `x`.
@@ -464,7 +411,7 @@ fn panel(cells: &Cells, x: u32, width: u32) -> Cells {
 }
 
 #[track_caller]
-fn assert_panel(harness: &Harness, name: &str) {
+fn assert_panel(harness: &Forms, name: &str) {
     let expected = Cells::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
     let expected = panel(&expected, 0, expected.width);
     let actual = panel(&Cells::from_capture(&harness.app.render()), 2, expected.width);

@@ -2,7 +2,7 @@
 //! transport, for the paths the P-APP scenario `E.13b/composer` does not reach: the client MCP experiment and its
 //! tools, interrupting a subagent, picking a terminal, the queued dock, and the output text.
 
-use crate::support::wait;
+use crate::support::WAIT;
 
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -209,7 +209,7 @@ fn mount_routes(endpoint: Option<Endpoint>, routes: Vec<MemoryRoute>) -> Harness
 
 impl Harness {
     fn wait(&self, check: impl Fn(&Self) -> bool) -> bool {
-        self.app.wait_until(wait::WAIT, || {
+        self.app.wait_until(WAIT, || {
             self.app.render();
             check(self)
         })
@@ -243,7 +243,7 @@ impl Harness {
         let deliver = self.opened.lock().unwrap().last().unwrap().2.deliver.clone();
         deliver.try_send(Incoming::Text(message.to_string())).unwrap();
         let reply = std::cell::RefCell::new(None);
-        self.app.wait_until(wait::WAIT, || {
+        self.app.wait_until(WAIT, || {
             let mut opened = self.opened.lock().unwrap();
             let remote = &mut opened.last_mut().unwrap().2;
             while let Ok(text) = remote.sent.try_recv() {
@@ -366,7 +366,7 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
     let closed = {
         let mut opened = harness.opened.lock().unwrap();
         let remote = &mut opened[0].2;
-        harness.app.wait_until(wait::WAIT, || {
+        harness.app.wait_until(WAIT, || {
             matches!(remote.sent.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected))
         })
     };

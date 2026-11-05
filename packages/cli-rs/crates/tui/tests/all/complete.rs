@@ -2,162 +2,84 @@
 //! keymap's and the server's), `@` mentions of agents, skills, references, and files, `/cd` with
 //! directory completion and recents, and the mentions as atomic prompt parts.
 
-use crate::support::wait;
+use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness, list};
 
 use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
-use opencode_tui::{Deps, Route, Tui};
-use opentui::prelude::*;
-use opentui::testing::TestApp;
+use opencode_tui::Deps;
 use serde_json::{Value, json};
-use wait::WAIT;
 
-/// A request the fixture saw: method, path, query, and JSON body.
-type Seen = Arc<Mutex<Vec<(String, String, String, Value)>>>;
-
-struct Fixture {
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        let query: Vec<(String, String)> = request.url.query_pairs().into_owned().collect();
-        let param =
-            |name: &str| query.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone()).unwrap_or_default();
-        self.seen.lock().unwrap().push((
-            request.method.to_owned(),
-            path.clone(),
-            request.url.query().unwrap_or_default().to_owned(),
-            body.clone(),
-        ));
-        let location = json!({ "directory": "/project" });
-        let (status, body) = match (request.method, path.as_str()) {
-            ("GET", "/api/session") => (200, json!({ "data": [session("ses_a")], "cursor": {} })),
-            ("GET", "/api/session/ses_a") => (200, json!({ "data": session("ses_a") })),
-            ("GET", "/api/session/ses_a/message") => (200, json!({ "data": [], "cursor": {} })),
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [
-                    agent("build", "primary", false), agent("general", "subagent", false),
-                    agent("explore", "all", false), agent("secret", "subagent", true),
-                ] }),
+fn fake() -> Fake {
+    Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/agent") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([
+                    support::agent("build", "primary", false),
+                    support::agent("general", "subagent", false),
+                    support::agent("explore", "all", false),
+                    support::agent("secret", "subagent", true),
+                ]),
             ),
-            ("GET", "/api/model") => (200, json!({ "location": location, "data": [model("p", "m", "Model M")] })),
-            ("GET", "/api/command") => {
-                (200, json!({ "location": location, "data": [{ "name": "review", "description": "Review changes" }] }))
-            }
-            ("GET", "/api/skill") => (
-                200,
-                json!({ "location": location, "data": [{
+        ),
+        ("GET", "/api/command") => {
+            (200, list(DIRECTORY, json!([{ "name": "review", "description": "Review changes" }])))
+        }
+        ("GET", "/api/skill") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([{
                     "id": "release-notes", "name": "release-notes", "description": "Write release notes.",
                     "path": "/skills/release-notes/SKILL.md", "content": "",
-                }] }),
+                }]),
             ),
-            ("GET", "/api/reference") => (
-                200,
-                json!({ "location": location, "data": [
+        ),
+        ("GET", "/api/reference") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([
                     { "name": "docs", "path": "/refs/docs", "source": { "type": "local", "path": "/refs/docs" } },
                     { "name": "hidden", "path": "/refs/h", "hidden": true, "source": { "type": "local", "path": "/refs/h" } },
-                ] }),
+                ]),
             ),
-            ("GET", "/api/fs/find") => (
-                200,
-                json!({ "location": location, "data": [
-                    { "path": "src/main.rs", "type": "file" }, { "path": "src", "type": "directory" },
-                ] }),
-            ),
-            ("GET", "/api/fs/list") => {
-                let entries = match param("path").as_str() {
-                    "/project" => json!([
-                        { "path": "packages", "type": "directory" }, { "path": ".git", "type": "directory" },
-                        { "path": "README.md", "type": "file" },
-                    ]),
-                    "/project/packages" => json!([
-                        { "path": "packages/tui", "type": "directory" }, { "path": "packages/cli", "type": "directory" },
-                    ]),
-                    _ => json!([]),
-                };
-                (200, json!({ "location": location, "data": entries }))
-            }
-            ("GET", "/api/location") => (
-                200,
-                json!({ "directory": "/project", "project": { "id": "project", "directory": "/project", "canonical": "/project" } }),
-            ),
-            ("GET", "/api/provider" | "/api/integration" | "/api/form" | "/api/permission/request") => {
-                (200, json!({ "location": location, "data": [] }))
-            }
-            ("GET", "/api/vcs") => {
-                (200, json!({ "location": location, "data": { "branch": { "current": "main", "default": "main" } } }))
-            }
-            ("GET", path) if path.ends_with("/form") || path.ends_with("/permission") => (200, json!({ "data": [] })),
-            ("GET", "/api/config") => (200, json!([])),
-            ("POST", path) if path.ends_with("/prompt") => (
-                200,
-                json!({ "data": {
-                    "id": body["id"], "sessionID": "ses_a", "time": { "created": 1 }, "type": "user",
-                    "payload": { "text": body["text"] }, "delivery": body["delivery"].as_str().unwrap_or("steer"),
-                } }),
-            ),
-            ("POST", path) if ["/model", "/agent", "/command", "/move"].iter().any(|end| path.ends_with(end)) => {
-                (204, Value::Null)
-            }
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
-}
-
-fn session(id: &str) -> Value {
-    json!({
-        "id": id, "title": "Fix the parser", "projectID": "project", "cost": 0,
-        "agent": "build", "model": { "providerID": "p", "id": "m" },
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
-}
-
-fn agent(id: &str, mode: &str, hidden: bool) -> Value {
-    json!({
-        "id": id, "name": id, "mode": mode, "hidden": hidden, "permissions": [],
-        "request": { "settings": {}, "headers": {}, "body": {} },
-    })
-}
-
-fn model(provider: &str, id: &str, name: &str) -> Value {
-    json!({
-        "id": id, "modelID": id, "providerID": provider, "name": name,
-        "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-        "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-        "enabled": true, "limit": { "context": 1000, "output": 100 },
+        ),
+        ("GET", "/api/fs/find") => (
+            200,
+            list(DIRECTORY, json!([{ "path": "src/main.rs", "type": "file" }, { "path": "src", "type": "directory" }])),
+        ),
+        ("GET", "/api/fs/list") => {
+            let entries = match seen.param("path").as_str() {
+                "/project" => json!([
+                    { "path": "packages", "type": "directory" }, { "path": ".git", "type": "directory" },
+                    { "path": "README.md", "type": "file" },
+                ]),
+                "/project/packages" => json!([
+                    { "path": "packages/tui", "type": "directory" }, { "path": "packages/cli", "type": "directory" },
+                ]),
+                _ => json!([]),
+            };
+            (200, list(DIRECTORY, entries))
+        }
+        ("GET", "/api/vcs") => (200, list(DIRECTORY, json!({ "branch": { "current": "main", "default": "main" } }))),
+        ("POST", path) if path.ends_with("/prompt") => {
+            (200, support::prompted(seen, seen.body["delivery"].as_str().unwrap_or("steer")))
+        }
+        ("POST", path) if path.ends_with("/command") || path.ends_with("/move") => (204, Value::Null),
+        _ => support::base(seen, DIRECTORY),
     })
 }
 
 struct Setup {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
     home: tempfile::TempDir,
 }
+
+deref_harness!(Setup);
 
 impl Setup {
     fn new() -> Self {
@@ -165,44 +87,13 @@ impl Setup {
     }
 
     fn with_home(home: tempfile::TempDir) -> Self {
-        let seen = Seen::default();
-        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
-        let app = TestApp::new(90, 30);
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: "/project".into(),
-                config: Resolved::new(Info::default(), |_| None),
-                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
-                route: Route::Session { id: SessionID("ses_a".into()) },
-                continue_: false,
-                events: false,
-            },
-        );
-        let setup = Self { app, tui, seen, home };
+        let fake = fake();
+        let seen = fake.log();
+        let deps =
+            Deps { roots: support::roots(support::paths(home.path()), "latest"), ..support::deps(Arc::new(fake)) };
+        let setup = Self { harness: support::mount(90, 30, deps), seen, home };
         setup.wait_for("Model M");
         setup
-    }
-
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
-    fn wait_gone(&self, text: &str) {
-        let gone = self.app.wait_until(WAIT, || !self.app.text().contains(text));
-        assert!(gone, "{text:?} stayed:\n{}", self.app.text());
-    }
-
-    fn textarea(&self) -> Textarea {
-        self.tui.textarea.borrow().clone().unwrap()
-    }
-
-    fn text(&self) -> String {
-        self.textarea().text()
     }
 
     fn requests(&self, method: &str, suffix: &str) -> Vec<(String, Value)> {
@@ -210,8 +101,8 @@ impl Setup {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(m, path, _, _)| m == method && path.ends_with(suffix))
-            .map(|(_, _, query, body)| (query.clone(), body.clone()))
+            .filter(|seen| seen.method == method && seen.path.ends_with(suffix))
+            .map(|seen| (seen.query.clone(), seen.body.clone()))
             .collect()
     }
 
@@ -231,21 +122,6 @@ impl Setup {
         self.state_file(name)
     }
 }
-
-fn paths(home: &Path) -> Paths {
-    Paths {
-        home: home.to_owned(),
-        data: home.join("data"),
-        cache: home.join("cache"),
-        config: home.join("config"),
-        state: home.join("state"),
-        tmp: home.join("tmp"),
-        bin: home.join("bin"),
-        log: home.join("log"),
-        repos: home.join("repos"),
-    }
-}
-
 #[test]
 fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     let setup = Setup::new();
@@ -487,7 +363,7 @@ fn mention_main(setup: &Setup) {
 /// prompt reads what TypeScript writes.
 #[test]
 fn frecency_file_is_shared_with_typescript() {
-    let Some(root) = ts_root() else { return };
+    let Some(root) = support::ts_root() else { return };
     let setup = Setup::new();
     mention_main(&setup);
     mention_main(&setup);
@@ -514,19 +390,6 @@ fn frecency_file_is_shared_with_typescript() {
     assert_eq!((last["path"].clone(), last["frequency"].clone()), (json!("/project/src/main.rs"), json!(4)));
     // The load kept one line per path, then the pick appended one.
     assert_eq!(written.lines().count(), 3, "{written}");
-}
-
-/// The TypeScript checkout the P-FILE test runs: `OPENCODE_TS_ROOT`, else this one.
-fn ts_root() -> Option<std::path::PathBuf> {
-    let root = std::env::var_os("OPENCODE_TS_ROOT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let present =
-        root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
-    if !present {
-        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
-    }
-    present.then_some(root)
 }
 
 /// Runs `parity/oracle/E.3-frecency.ts`: the real `FrecencyProvider` on `state`, with the cwd `/project`.

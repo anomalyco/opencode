@@ -2,57 +2,33 @@
 //! question, and skill, each running and finished; a subagent click opens the child session, and an
 //! execute click opens its dialog.
 
-use std::sync::{Arc, Mutex};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+
+use std::sync::Arc;
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Grouping, Info, Resolved, Session};
-use opencode_tui::{Deps, Route, Tui};
+use opencode_local::cli_config::{Grouping, Info, Session};
+use opencode_tui::{Deps, Route};
 use opentui::prelude::Color;
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
 /// Serves the session, an empty child session, and their messages; logs every request.
-struct Fixture {
-    messages: Vec<Value>,
-    log: Mutex<Vec<String>>,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        self.log.lock().unwrap().push(format!("{} {path}", request.method));
-        Box::pin(async move {
-            let (status, body) = match (request.method, path.as_str()) {
-                ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
-                ("GET", "/api/session/ses_t") => (200, json!({ "data": session("ses_t", "Tools") })),
-                ("GET", "/api/session/ses_child") => (200, json!({ "data": session("ses_child", "Child work") })),
-                ("GET", "/api/session/ses_t/message") => {
-                    (200, json!({ "data": self.messages.iter().rev().collect::<Vec<_>>(), "cursor": {} }))
-                }
-                ("GET", "/api/session/ses_child/message") => (200, json!({ "data": [], "cursor": {} })),
-                _ => (404, json!({})),
-            };
-            let body = serde_json::to_vec(&body).unwrap();
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
+fn fake(messages: Vec<Value>) -> Fake {
+    Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_t") => (200, json!({ "data": session("ses_t", "Tools") })),
+        ("GET", "/api/session/ses_child") => (200, json!({ "data": session("ses_child", "Child work") })),
+        ("GET", "/api/session/ses_t/message") => {
+            (200, json!({ "data": messages.iter().rev().collect::<Vec<_>>(), "cursor": {} }))
+        }
+        ("GET", "/api/session/ses_child/message") => (200, json!({ "data": [], "cursor": {} })),
+        _ => support::not_found(),
+    })
 }
 
 fn session(id: &str, title: &str) -> Value {
-    json!({
-        "id": id, "title": title, "projectID": "project", "cost": 0, "agent": "build",
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
+    support::merge(support::session(id, title), json!({ "agent": "build" }))
 }
 
 fn turn(tools: Vec<Value>) -> Vec<Value> {
@@ -89,54 +65,27 @@ fn failed(input: Value, message: &str) -> Value {
     json!({ "status": "error", "input": input, "error": { "type": "unknown", "message": message } })
 }
 
-struct Harness {
-    app: TestApp,
-    tui: std::rc::Rc<Tui>,
-    fixture: Arc<Fixture>,
+struct Tools {
+    harness: Harness,
+    log: Log,
 }
 
-fn open(width: u16, height: u16, messages: Vec<Value>) -> Harness {
-    let fixture = Arc::new(Fixture { messages, log: Mutex::default() });
-    let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
-    let app = TestApp::new(width, height);
+deref_harness!(Tools);
+
+fn open(width: u16, height: u16, messages: Vec<Value>) -> Tools {
+    let fake = fake(messages);
+    let log = fake.log();
     let info = Info {
         animations: Some(false),
         session: Some(Session { grouping: Some(Grouping::None), ..Session::default() }),
         ..Info::default()
     };
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: None,
-            route: Route::Session { id: SessionID("ses_t".into()) },
-            continue_: false,
-            events: false,
-        },
-    );
-    Harness { app, tui, fixture }
+    let deps =
+        Deps { config: support::config(info), route: support::session_route("ses_t"), ..support::deps(Arc::new(fake)) };
+    Tools { harness: support::mount(width, height, deps), log }
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        let log = self.fixture.log.lock().unwrap().clone();
-        assert!(found, "{text:?} never showed:\n{screen}\nrequests: {log:#?}");
-        screen
-    }
-
-    fn find(&self, text: &str) -> (u16, u16) {
-        let screen = self.app.text();
-        screen
-            .lines()
-            .enumerate()
-            .find_map(|(row, line)| line.find(text).map(|byte| (line[..byte].chars().count() as u16, row as u16)))
-            .unwrap_or_else(|| panic!("{text:?} is not on screen:\n{screen}"))
-    }
-
+impl Tools {
     fn fg(&self, text: &str) -> Color {
         let (x, y) = self.find(text);
         self.app.render().cell(u32::from(x), u32::from(y)).unwrap().fg
@@ -301,12 +250,10 @@ fn a_subagent_row_opens_its_child_session() {
     assert_eq!(h.fg("Background"), theme.text.muted);
 
     h.click("Check the docs");
-    let found = h
-        .app
-        .wait_until(Duration::from_secs(5), || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
+    let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
     assert!(found, "still on {:?}", h.tui.route());
     h.wait_for("Child work");
-    assert!(h.fixture.log.lock().unwrap().iter().any(|line| line == "GET /api/session/ses_child/message"),);
+    assert!(support::lines(&h.log).iter().any(|line| line == "GET /api/session/ses_child/message"),);
 }
 
 #[test]
