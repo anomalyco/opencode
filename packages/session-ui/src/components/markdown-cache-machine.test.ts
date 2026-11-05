@@ -145,6 +145,8 @@ describe("transitionMarkdownCache", () => {
 
     expect(transitionMarkdownCache(running, { type: "cache.touched", key: "other", src: "v" }).state).toBe(running)
     expect(transitionMarkdownCache(running, { type: "cache.touched", key: "k", src: "v" }).state).toBe(running)
-    expect(transitionMarkdownCache(running, { type: "parse.failed", jobId: 9, error: new Error("unknown job") }).state).toBe(running)
+    expect(
+      transitionMarkdownCache(running, { type: "parse.failed", jobId: 9, error: new Error("unknown job") }).state,
+    ).toBe(running)
   })
 })
