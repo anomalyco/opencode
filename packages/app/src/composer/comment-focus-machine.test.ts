@@ -10,6 +10,7 @@ import {
 } from "./comment-focus-machine"
 
 const a = { file: "a.ts", id: "c1" }
+
 const b = { file: "b.ts", id: "c2" }
 
 function run(events: CommentFocusEvent[], state: CommentFocusState = INITIAL_COMMENT_FOCUS_STATE) {
@@ -46,6 +47,7 @@ describe("comment focus handoff", () => {
       { type: "comment.opened", target: b },
       { type: "focus.timed-out", attempt: 1 },
     ])
+
     expect(step.state).toEqual({ status: "pending", attempt: 2, target: b, active: b })
 
     const timedOut = transitionCommentFocus(step.state, { type: "focus.timed-out", attempt: 2 })
@@ -72,6 +74,7 @@ describe("comment focus handoff", () => {
       { type: "active.set", target: a },
       { type: "focus.set", target: b },
     ])
+
     expect(step.state).toEqual({ status: "pending", attempt: 1, target: b, active: a })
   })
 

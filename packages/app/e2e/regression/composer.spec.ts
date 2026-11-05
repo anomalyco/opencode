@@ -1155,6 +1155,7 @@ test("an attachment pasted mid-sentence leaves the text and the caret where they
   for (let count = 0; count < "Hello".length; count++) await editor.press("ArrowRight")
   await editor.evaluate((element) => {
     const data = new DataTransfer()
+
     data.items.add(new File(["Attachment fixture"], "notes.txt", { type: "text/plain" }))
     element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
   })

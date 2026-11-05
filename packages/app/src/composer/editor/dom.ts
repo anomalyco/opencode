@@ -4,6 +4,7 @@ import type { ComposerPrompt } from "../types"
 // Where `editorMatchesPrompt` is in the prompt: the part and the characters of it already matched. Module state so
 // the per-keystroke walk allocates nothing; the walk is synchronous, so calls never interleave.
 let matchPart = 0
+
 let matchOffset = 0
 
 /**

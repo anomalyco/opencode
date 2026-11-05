@@ -190,10 +190,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
     // neither rewrites it, which would move the caret and drop native undo. Each check reads every part, so an
     // in-place store update runs this again.
     const matches = editorMatchesPrompt(editor, parts)
-    const step = transitionEditorSync(
-      sync,
-      storeChanged(matches, !matches && isPromptInlineBlank(parts) && isEditorDomBlank(editor)),
-    )
+    const blank = !matches && isPromptInlineBlank(parts) && isEditorDomBlank(editor)
+    const step = transitionEditorSync(sync, storeChanged(matches, blank))
     sync = step.state
 
     if (step.render) renderComposerEditor(editor, parts)
