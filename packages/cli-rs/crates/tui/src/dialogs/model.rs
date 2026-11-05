@@ -101,7 +101,8 @@ pub struct Local {
     state: RefCell<State>,
     listeners: Listeners,
     next_listener: Cell<u64>,
-    usage_loading: Cell<bool>,
+    /// The keys of the locations whose usage limits are loading.
+    usage_loading: RefCell<HashSet<String>>,
     /// The usage warnings shown, once per model and level while the TUI runs (`usage.tsx` `warned`).
     warned: RefCell<HashSet<String>>,
     /// `--agent`, which a session without an agent draft shows over its own agent (`local.tsx:90-96`).
@@ -124,8 +125,9 @@ struct State {
     agents: Option<Vec<AgentInfo>>,
     integrations: Option<Vec<IntegrationInfo>>,
     configured: Option<Selection>,
-    /// `None` until loaded; `Some(None)` when the location is not signed in to OpenCode Console.
-    usage: Option<Option<UsageLimitsInfo>>,
+    /// The usage limits by the key of the location the server answered for (`data.location.usage`): absent until
+    /// loaded, `None` when the location is not signed in to OpenCode Console.
+    usage: HashMap<String, Option<UsageLimitsInfo>>,
     preference: Preference,
     ready: bool,
     agent: Option<String>,
@@ -180,7 +182,7 @@ impl Local {
             state: RefCell::new(State::default()),
             listeners: Rc::default(),
             next_listener: Cell::new(0),
-            usage_loading: Cell::new(false),
+            usage_loading: RefCell::default(),
             warned: RefCell::default(),
             startup_agent: RefCell::default(),
             watch: RefCell::new(None),
@@ -314,12 +316,16 @@ impl Local {
         self.notify();
     }
 
-    /// `useUsageLimits().load`: loads the limits once, or again with `refresh`, keeping the loaded ones meanwhile.
+    /// `useUsageLimits().load`: loads the current location's limits once, or again with `refresh`, keeping the
+    /// loaded ones meanwhile.
     pub fn load_usage(&self, refresh: bool) {
-        if self.usage_loading.get() || (!refresh && self.state.borrow().usage.is_some()) {
+        let key = self.usage_location().key();
+        if self.usage_loading.borrow().contains(&key)
+            || (!refresh && self.state.borrow().usage.contains_key(&key))
+        {
             return;
         }
-        self.usage_loading.set(true);
+        self.usage_loading.borrow_mut().insert(key.clone());
         let client = self.client.clone();
         let input = ExperimentalUsageLimitsInput {
             location: self.location(),
@@ -333,16 +339,27 @@ impl Local {
             },
             move |_, result| {
                 let Some(local) = weak.upgrade() else { return };
-                local.usage_loading.set(false);
+                local.usage_loading.borrow_mut().remove(&key);
                 match result {
                     Ok(output) => {
-                        local.state.borrow_mut().usage = Some(output.data);
+                        // Filed under the location the server answered for, as `locationResource` publishes.
+                        local
+                            .state
+                            .borrow_mut()
+                            .usage
+                            .insert(Location::from(&output.location).key(), output.data);
                         local.notify();
                     }
                     Err(error) => log::warn!("usage limits: {error}"),
                 }
             },
         );
+    }
+
+    /// The location the usage limits are read for (`location.ref ?? data.location.default()`).
+    fn usage_location(&self) -> Location {
+        let location = self.state.borrow().location.clone();
+        location.unwrap_or_else(|| (self.location)())
     }
 
     /// Calls `listener` after the catalog, the preferences, or a selection change.
@@ -460,8 +477,11 @@ impl Local {
     }
 
     /// `useUsageLimits().info`: `None` until loaded, `Some(None)` when not signed in.
+    /// The current location's usage limits: `None` until loaded, `Some(None)` when it is not signed in to
+    /// OpenCode Console.
     pub fn usage(&self) -> Option<Option<UsageLimitsInfo>> {
-        self.state.borrow().usage.clone()
+        let key = self.usage_location().key();
+        self.state.borrow().usage.get(&key).cloned()
     }
 
     /// The selected model and what the usage limits leave it, when some limit applies (`limits.usage(model)`).
