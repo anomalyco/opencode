@@ -134,6 +134,7 @@ export function transitionSettingsSearch(
         [...cancel(state), { type: "navigate", view }],
       )
     }
+
     case "palette.opened": {
       const activation = state.activation + 1
       const view = { ...event.destination, searchActivation: activation }
@@ -143,6 +144,7 @@ export function transitionSettingsSearch(
         { type: "navigate", view },
       ])
     }
+
     case "back.requested":
       if (state.status !== "opened" || !canReturnToSearchOrigin(state, event.view)) return unchanged(state)
 

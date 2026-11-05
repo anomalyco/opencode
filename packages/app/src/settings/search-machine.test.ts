@@ -12,8 +12,11 @@ import {
 import type { SettingsView } from "./route"
 
 const appearance: SettingsView = { type: "root", tab: "appearance" }
+
 const projects: SettingsView = { type: "root", tab: "projects", server: "local" }
+
 const project: SettingsView = { type: "project", server: "local", project: "/repo", tab: "general" }
+
 const projectName: SettingsView = { ...project, target: "project-name" }
 
 function run(events: readonly SettingsSearchEvent[], state = createSettingsSearchState()) {
@@ -39,6 +42,7 @@ describe("settings search machine", () => {
       { type: "result.opened", id: "projects", destination: projects },
       { type: "view.synced", view: routed(projects, 1) },
     ])
+
     // A project card on the Projects page opens the project without a search activation.
     const next = run([{ type: "view.synced", view: project }], opened.state)
 
@@ -59,6 +63,7 @@ describe("settings search machine", () => {
       { type: "result.opened", id: "two", destination: projectName },
       { type: "view.synced", view: routed(projectName, 2) },
     ])
+
     expect(canReturnToSearchOrigin(opened.state, routed(projectName, 2))).toBe(true)
 
     const next = run([{ type: "view.synced", view: routed(project, 1) }], opened.state)
@@ -130,6 +135,7 @@ describe("settings search machine", () => {
       { type: "input.changed", query: "font", view: appearance },
       { type: "result.opened", id: "font", destination: { ...appearance, target: "font" } },
     ])
+
     // The route still shows the previous view while the navigation commits.
     expect(transitionSettingsSearch(opened.state, { type: "reveal.timed-out", activation: 1 }).state).toBe(opened.state)
 
@@ -175,6 +181,7 @@ describe("settings search machine", () => {
       { type: "result.opened", id: "one", destination: appearance },
       { type: "view.synced", view: routed(appearance, 1) },
     ])
+
     const next = transitionSettingsSearch(seeking.state, {
       type: "result.opened",
       id: "two",

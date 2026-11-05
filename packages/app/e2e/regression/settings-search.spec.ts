@@ -410,6 +410,7 @@ test("a page reached through an opened result keeps its own way back", async ({ 
   const key = await page.evaluate(() =>
     /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "Meta+Shift+P" : "Control+Shift+P",
   )
+
   await page.keyboard.press(key)
   const palette = page.getByRole("dialog")
   await palette.getByRole("combobox").fill("OpenCode name")
