@@ -6,6 +6,7 @@ mod support;
 mod actions;
 mod app;
 mod attach;
+mod attention;
 mod click_focus;
 mod complete;
 mod composer;

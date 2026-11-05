@@ -1,6 +1,7 @@
 //! Notifications (E.19a, row N01, `attention.ts:35-189`): the attention service plugins call (TS
 //! `context.attention.notify`). A request becomes a desktop notification through the terminal when
-//! `attention.notifications` is on and its focus rule holds; sounds are E.19b's.
+//! `attention.notifications` is on and its focus rule holds, and its sound plays (E.19b, [`super::sound`]) when
+//! `attention.sound` is on and the sound's focus rule holds.
 //!
 //! `app::Tui` holds one [`Attention`]; `app::mount` calls [`install`] once.
 
@@ -22,6 +23,7 @@ const MESSAGE_LIMIT: usize = 240;
 pub struct Attention {
     pub(super) focus: Cell<Focus>,
     pub(super) program: RefCell<super::program_status::Sent>,
+    pub sound: super::sound::Player,
 }
 
 impl Attention {
@@ -63,21 +65,30 @@ pub fn install(tui: &Tui) {
     focus::install(tui);
 }
 
-/// Sends `request` as a terminal notification under the current config and focus.
+/// Sends `request` as a terminal notification and plays its sound under the current config and focus.
 pub fn notify(tui: &Tui, request: &Request) -> Outcome {
     let destroyed = tui.app.is_quitting();
-    decide(&tui.settings.info(), tui.attention.focus(), destroyed, request, |message, title| {
-        tui.app.notify(message, Some(title))
-    })
+    let info = tui.settings.info();
+    let overrides = info.attention.as_ref().and_then(|attention| attention.sounds.clone()).unwrap_or_default();
+    decide(
+        &info,
+        tui.attention.focus(),
+        destroyed,
+        request,
+        |message, title| tui.app.notify(message, Some(title)),
+        |name, volume| tui.attention.sound.play(tui.app.session().context(), name, &overrides, volume),
+    )
 }
 
-/// `notify` without the terminal: `trigger` sends the notification and says whether the terminal took it.
+/// `notify` without the terminal: `trigger` sends the notification and says whether the terminal took it; `play`
+/// plays a sound at a volume and says whether it plays.
 fn decide(
     info: &Info,
     focus: Focus,
     destroyed: bool,
     request: &Request,
     trigger: impl FnOnce(&str, &str) -> bool,
+    play: impl FnOnce(AttentionSoundName, f32) -> bool,
 ) -> Outcome {
     let config = info.attention.clone().unwrap_or_default();
     let notifications = config.notifications.unwrap_or(false);
@@ -98,9 +109,12 @@ fn decide(
     let notification = requested
         && notification_skip.is_none()
         && trigger(&message, &normalize_text(request.title.as_deref(), DEFAULT_TITLE, TITLE_LIMIT));
-    // E.19b plays the sound; the focus rule already decides what a skipped request reports.
-    let sound_skip = request.sound.as_ref().filter(|_| sounds).and_then(|sound| focus::skip(sound.when, focus));
-    let sound = false;
+    let requested_sound = request.sound.as_ref().filter(|_| sounds);
+    let sound_skip = requested_sound.and_then(|sound| focus::skip(sound.when, focus));
+    let volume = config.volume.map_or(0.4, |volume| volume.0);
+    let sound = sound_skip.is_none()
+        && requested_sound
+            .is_some_and(|sound| play(sound.name, super::sound::clamp_volume(sound.volume.unwrap_or(volume))));
 
     if !notification && !sound {
         if let Some(skip) = notification_skip.filter(|_| requested) {
@@ -165,30 +179,55 @@ mod tests {
 
     /// The outcome and the notification sent, if any.
     fn run(info: &Info, focus: Focus, request: &Request) -> (Outcome, Option<(String, String)>) {
-        let mut sent = None;
-        let outcome = decide(info, focus, false, request, |message, title| {
-            sent = Some((message.to_owned(), title.to_owned()));
-            true
-        });
+        let (outcome, sent, _) = run_with_sound(info, focus, request);
         (outcome, sent)
+    }
+
+    /// The outcome, the notification sent, and the sound played, if any. The engine takes every sound.
+    #[allow(clippy::type_complexity)]
+    fn run_with_sound(
+        info: &Info,
+        focus: Focus,
+        request: &Request,
+    ) -> (Outcome, Option<(String, String)>, Option<(AttentionSoundName, f32)>) {
+        let (mut sent, mut played) = (None, None);
+        let outcome = decide(
+            info,
+            focus,
+            false,
+            request,
+            |message, title| {
+                sent = Some((message.to_owned(), title.to_owned()));
+                true
+            },
+            |name, volume| {
+                played = Some((name, volume));
+                true
+            },
+        );
+        (outcome, sent, played)
     }
 
     #[test]
     fn notifications_follow_the_config_and_the_focus() {
         let blurred = request(Some(When::Blurred), Some(When::Always));
         let sent = Some(("Session done".to_owned(), "Demo session".to_owned()));
-        let ok = Outcome { ok: true, notification: true, ..Outcome::default() };
+        let done = Some((AttentionSoundName::Done, 0.4));
+        let notified = Outcome { ok: true, notification: true, ..Outcome::default() };
+        let sounded = Outcome { ok: true, sound: true, ..Outcome::default() };
+        let both = Outcome { ok: true, notification: true, sound: true, skipped: None };
         let table = [
-            (info(false, false), Focus::Blurred, skipped(Skip::AttentionDisabled), None),
-            (info(true, false), Focus::Blurred, ok, sent.clone()),
-            (info(true, false), Focus::Focused, skipped(Skip::Focused), None),
-            (info(true, false), Focus::Unknown, skipped(Skip::FocusUnknown), None),
-            // Sounds on but not played yet (E.19b): `always` holds, so nothing reports a skip.
-            (info(false, true), Focus::Focused, Outcome::default(), None),
-            (info(true, true), Focus::Blurred, ok, sent),
+            (info(false, false), Focus::Blurred, skipped(Skip::AttentionDisabled), None, None),
+            (info(true, false), Focus::Blurred, notified, sent.clone(), None),
+            (info(true, false), Focus::Focused, skipped(Skip::Focused), None, None),
+            (info(true, false), Focus::Unknown, skipped(Skip::FocusUnknown), None, None),
+            // The sound's rule is `always`: it plays whatever the focus.
+            (info(false, true), Focus::Focused, sounded, None, done),
+            (info(true, true), Focus::Focused, sounded, None, done),
+            (info(true, true), Focus::Blurred, both, sent, done),
         ];
-        for (info, focus, outcome, notification) in table {
-            assert_eq!(run(&info, focus, &blurred), (outcome, notification), "{focus:?}");
+        for (info, focus, outcome, notification, sound) in table {
+            assert_eq!(run_with_sound(&info, focus, &blurred), (outcome, notification, sound), "{focus:?}");
         }
     }
 
@@ -196,9 +235,9 @@ mod tests {
     fn requests_choose_their_own_rules() {
         let on = info(true, true);
         assert_eq!(
-            run(&on, Focus::Focused, &request(None, Some(When::Always))),
+            run(&on, Focus::Focused, &request(None, None)),
             (Outcome::default(), None),
-            "notification: false sends nothing and skips nothing"
+            "notification: false and sound: false send nothing and skip nothing"
         );
         assert_eq!(
             run(&on, Focus::Blurred, &request(None, Some(When::Focused))).0,
@@ -210,10 +249,45 @@ mod tests {
         let mut empty = request(Some(When::Always), None);
         empty.message = " \x1b[31m\n ".to_owned();
         assert_eq!(run(&on, Focus::Focused, &empty).0, skipped(Skip::EmptyMessage));
-        let destroyed = decide(&on, Focus::Blurred, true, &request(Some(When::Always), None), |_, _| true);
+        let destroyed = decide(&on, Focus::Blurred, true, &request(Some(When::Always), None), |_, _| true, |_, _| true);
         assert_eq!(destroyed, skipped(Skip::RendererDestroyed));
-        let refused = decide(&on, Focus::Blurred, false, &request(Some(When::Blurred), None), |_, _| false);
+        let refused =
+            decide(&on, Focus::Blurred, false, &request(Some(When::Blurred), None), |_, _| false, |_, _| true);
         assert_eq!(refused, Outcome::default(), "a terminal without notifications");
+    }
+
+    #[test]
+    fn sounds_follow_their_name_rule_and_volume() {
+        let on = info(false, true);
+        let sound = |name, when, volume| Request {
+            sound: Some(Sound { name, when, volume }),
+            ..request(Some(When::Blurred), None)
+        };
+        let table = [
+            (sound(AttentionSoundName::Permission, When::Always, None), Some((AttentionSoundName::Permission, 0.4))),
+            (sound(AttentionSoundName::Error, When::Always, Some(0.9)), Some((AttentionSoundName::Error, 0.9))),
+            (sound(AttentionSoundName::Question, When::Always, Some(7.0)), Some((AttentionSoundName::Question, 1.0))),
+            (sound(AttentionSoundName::Default, When::Always, Some(-1.0)), Some((AttentionSoundName::Default, 0.0))),
+            (sound(AttentionSoundName::SubagentDone, When::Blurred, None), None),
+        ];
+        for (request, played) in table {
+            assert_eq!(run_with_sound(&on, Focus::Focused, &request).2, played, "{:?}", request.sound);
+        }
+        let blurred = run_with_sound(&on, Focus::Focused, &sound(AttentionSoundName::Done, When::Blurred, None));
+        assert_eq!(blurred.0, skipped(Skip::Focused), "the sound's rule held it back");
+        let mut volume = info(false, true);
+        volume.attention.as_mut().unwrap().volume = Some(opencode_local::cli_config::Bounded(0.7));
+        let played = run_with_sound(&volume, Focus::Focused, &sound(AttentionSoundName::Done, When::Always, None)).2;
+        assert_eq!(played, Some((AttentionSoundName::Done, 0.7)), "attention.volume");
+        let failed = decide(
+            &on,
+            Focus::Focused,
+            false,
+            &sound(AttentionSoundName::Done, When::Always, None),
+            |_, _| true,
+            |_, _| false,
+        );
+        assert_eq!(failed, Outcome::default(), "no engine, no sound, no skip");
     }
 
     #[test]
