@@ -11,8 +11,10 @@ use std::time::Duration;
 use anyhow::Context as _;
 use opencode_api::client::Client;
 use opencode_api::generated::V2Event;
-use opencode_local::cli_config::{ThemeMode as ConfigMode, Visibility};
+use opencode_local::cli_config::{CliConfig, MiniWorkSpinner, NewLocation, ThemeMode as ConfigMode, Visibility};
+use opencode_local::model_pref::ModelPreferences;
 use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
+use opencode_ui::motion::Spinner;
 use opencode_ui::theme::ThemeMode;
 use opentui::native::{KittyKeyboard, MouseTracking};
 use opentui::prelude::*;
@@ -25,9 +27,10 @@ use crate::prompt::status::{self, mono_shortcut};
 use crate::prompt::{Delivery, Hooks, PROMPT_MAX_ROWS, Prompt, RunPrompt};
 use crate::replay::{self, Envelope, Incoming, Output, Transcript};
 use crate::scrollback::{Commit, Flags, Writer};
-use crate::settings::MiniSettings;
+use crate::settings::{Change, MiniSettings};
 use crate::signals::{self, Trace};
 use crate::theme::{self, ThemeInput};
+use crate::variants::{ModelSelection, Provider};
 use crate::{Input, InputError};
 use unicode_width::UnicodeWidthStr;
 
@@ -68,12 +71,17 @@ pub fn run(input: Input) -> anyhow::Result<()> {
     let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
     let footers = Footers::new(&app, &prompt, &theme, settings.mono);
     let status = Text::new(&app, "").wrap(WrapMode::None).truncate(true).height(1).shrink(0.0);
+    status.grow(1.0).basis(Length::Auto).min_width(0);
+    // The work spinner's cell and its gap, shown while a turn runs (`mini-work-spinner`).
+    let spinner_slot = View::new(&app).width(2).height(1).shrink(0.0).visible(false);
+    let status_row =
+        View::new(&app).direction(FlexDirection::Row).height(1).shrink(0.0).child(&spinner_slot).child(&status);
     app.root()
         .direction(FlexDirection::Column)
         .child(footers.root())
         .child(prompt.root())
         .child(prompt.menu_root())
-        .child(&status);
+        .child(&status_row);
     let mini = Rc::new(Mini {
         app: app.clone(),
         client: input.client.clone(),
@@ -84,12 +92,26 @@ pub fn run(input: Input) -> anyhow::Result<()> {
         session: RefCell::new(None),
         prompt,
         status,
+        status_row,
+        spinner_slot,
+        spinner: RefCell::new(None),
+        animations: input.config.animations != Some(false),
+        providers: RefCell::new(None),
+        variants: RefCell::new(Vec::new()),
+        preferences: ModelPreferences::new(&input.paths.state),
+        config_store: CliConfig::new(&input.paths),
         queue: RefCell::new(Queue::default()),
         state: RefCell::new(State::default()),
         theme_input,
-        settings,
+        settings: Cell::new(settings),
         input: Meta {
             directory: input.directory.clone(),
+            new_location: input
+                .config
+                .session
+                .as_ref()
+                .and_then(|session| session.new_location)
+                .unwrap_or(NewLocation::Launch),
             home: input.home.clone(),
             version: input.version.clone(),
             replay: input.replay,
@@ -135,6 +157,7 @@ fn mini_size(app: &App) -> (u16, u16) {
 /// What the command resolved, kept for the session's lifetime.
 struct Meta {
     directory: String,
+    new_location: NewLocation,
     home: std::path::PathBuf,
     version: String,
     replay: bool,
@@ -184,10 +207,21 @@ struct Mini {
     session: RefCell<Option<Session>>,
     prompt: Prompt,
     status: Text,
+    status_row: View,
+    spinner_slot: View,
+    /// The running work spinner, with what it was built for: the color, the motion, and mono.
+    spinner: RefCell<Option<(Spinner, Color, MiniWorkSpinner, bool)>>,
+    animations: bool,
+    /// The provider catalog (`state.providers`), `None` until it loads.
+    providers: RefCell<Option<Vec<Provider>>>,
+    /// The current model's variants (`state.variants`).
+    variants: RefCell<Vec<String>>,
+    preferences: ModelPreferences,
+    config_store: CliConfig,
     queue: RefCell<Queue>,
     state: RefCell<State>,
     theme_input: ThemeInput,
-    settings: MiniSettings,
+    settings: Cell<MiniSettings>,
     input: Meta,
     /// The piped stdin and `--prompt`, sent once the session is ready.
     initial: RefCell<Option<String>>,
@@ -245,8 +279,7 @@ impl Mini {
                 mini.paint_status();
             }))),
             clear_screen: Some(Box::new(with(|mini| mini.clear_screen()))),
-            // `/settings` opens M.4's settings view.
-            settings: None,
+            settings: Some(Box::new(with(|mini| mini.footers.open_settings()))),
         });
         let status = weak.clone();
         let blocker = weak.clone();
@@ -278,6 +311,39 @@ impl Mini {
                 let mini = mini.clone();
                 mini.app.clone().defer(move |cx| mini.close(cx));
             }))),
+            models: Some(Box::new({
+                let weak = weak.clone();
+                move || weak.upgrade().map(|mini| mini.models()).unwrap_or_default()
+            })),
+            model: Some(Box::new({
+                let weak = weak.clone();
+                move |model| {
+                    if let Some(mini) = weak.upgrade() {
+                        mini.select_model(model);
+                    }
+                }
+            })),
+            variant: Some(Box::new({
+                let weak = weak.clone();
+                move |variant| {
+                    if let Some(mini) = weak.upgrade() {
+                        mini.select_variant(variant);
+                    }
+                }
+            })),
+            cycle_variant: Some(Box::new(with(|mini| mini.cycle_variant()))),
+            settings: Some(Box::new({
+                let weak = weak.clone();
+                move || weak.upgrade().map(|mini| mini.settings.get()).unwrap_or_else(|| MiniSettings::resolve(None))
+            })),
+            setting: Some(Box::new({
+                let weak = weak.clone();
+                move |change, done| {
+                    if let Some(mini) = weak.upgrade() {
+                        mini.change_setting(change, done);
+                    }
+                }
+            })),
         });
         drop(weak);
         self.prompt.install();
@@ -347,8 +413,8 @@ impl Mini {
         });
         let mut transcript = Transcript::new(
             &session.id,
-            self.settings.thinking == Visibility::Show,
-            self.settings.tools == Visibility::Show,
+            self.settings.get().thinking == Visibility::Show,
+            self.settings.get().tools == Visibility::Show,
             self.input.replay,
             self.input.replay_limit,
         );
@@ -364,10 +430,204 @@ impl Mini {
         if target.model.is_none() {
             self.load_default_model(&session.directory);
         }
+        self.load_models(&session.directory, target.model.as_ref().and_then(|model| model.variant.clone()));
         let proxy = self.app.proxy();
         let limit = self.input.replay_limit.unwrap_or(replay::DEFAULT_REPLAY_LIMIT);
         let task = self.app.runtime().spawn(replay::connect(self.client.clone(), session.id, limit, proxy));
         *self.stream.borrow_mut() = Some(task);
+    }
+
+    /// `loadCurrentModel`: the provider catalog, then the current model's variants and the variant to use.
+    fn load_models(self: &Rc<Self>, directory: &str, session_variant: Option<String>) {
+        let client = self.client.clone();
+        let directory = directory.to_owned();
+        let mini = self.clone();
+        self.app.spawn(async move { crate::variants::load(&client, &directory).await }, move |_, result| {
+            let providers = result.unwrap_or_else(|error| {
+                log::warn!("mini could not load the providers: {error}");
+                Vec::new()
+            });
+            *mini.providers.borrow_mut() = Some(providers);
+            if let Some(model) = mini.selection() {
+                let variants = crate::variants::variants_for(mini.providers().as_slice(), &model);
+                let saved = crate::variants::saved_variant(&mini.preferences, &model);
+                let variant =
+                    crate::variants::resolve_variant(None, session_variant.as_deref(), saved.as_deref(), &variants);
+                *mini.variants.borrow_mut() = variants;
+                mini.set_variant(variant);
+            }
+            mini.footers.models_changed();
+            mini.paint_status();
+        });
+    }
+
+    fn providers(&self) -> Vec<Provider> {
+        self.providers.borrow().clone().unwrap_or_default()
+    }
+
+    /// The model prompts use (`state.model ?? state.defaultModel`).
+    fn selection(&self) -> Option<ModelSelection> {
+        let state = self.state.borrow();
+        let (model, provider, _) = state.model.as_ref()?;
+        Some(ModelSelection { provider_id: provider.clone()?, model_id: model.clone() })
+    }
+
+    fn models(&self) -> crate::footers::Models {
+        crate::footers::Models {
+            providers: self.providers.borrow().clone(),
+            current: self.selection(),
+            variants: self.variants.borrow().clone(),
+            variant: self.state.borrow().model.as_ref().and_then(|model| model.2.clone()),
+        }
+    }
+
+    /// The variant of the current model, in the status row and in the session's model for the next prompt.
+    fn set_variant(&self, variant: Option<String>) {
+        let Some(model) = self.selection() else { return };
+        self.patch(|state| {
+            if let Some(current) = state.model.as_mut() {
+                current.2 = variant.clone();
+            }
+        });
+        if let Some(session) = self.session.borrow_mut().as_mut() {
+            let mut value = json!({ "providerID": model.provider_id, "id": model.model_id });
+            if let Some(variant) = &variant {
+                value["variant"] = json!(variant);
+            }
+            session.model = Some(value);
+        }
+    }
+
+    /// `onModelSelect`: the next prompt uses `model`, with its saved variant.
+    fn select_model(self: &Rc<Self>, model: ModelSelection) {
+        if self.selection().as_ref() == Some(&model)
+            && self.session.borrow().as_ref().is_some_and(|s| s.model.is_some())
+        {
+            return;
+        }
+        let variants = crate::variants::variants_for(&self.providers(), &model);
+        let saved = crate::variants::saved_variant(&self.preferences, &model);
+        let variant = crate::variants::resolve_variant(None, None, saved.as_deref(), &variants);
+        *self.variants.borrow_mut() = variants;
+        let id = model.model_id.clone();
+        self.patch(|state| state.model = Some((model.model_id, Some(model.provider_id), None)));
+        self.set_variant(variant);
+        self.footers.models_changed();
+        self.set_notice(&format!("model {id}"));
+    }
+
+    /// `onVariantSelect`.
+    fn select_variant(self: &Rc<Self>, variant: Option<String>) {
+        let Some(model) = self.selection().filter(|_| !self.variants.borrow().is_empty()) else {
+            self.set_notice("no variants available");
+            return;
+        };
+        if let Some(name) = variant.as_ref().filter(|name| !self.variants.borrow().contains(name)) {
+            self.set_notice(&format!("variant {name} unavailable"));
+            return;
+        }
+        crate::variants::save_variant(&self.preferences, &model, variant.as_deref());
+        self.set_notice(
+            &variant.as_ref().map_or_else(|| "variant default".to_owned(), |name| format!("variant {name}")),
+        );
+        self.set_variant(variant);
+        self.footers.models_changed();
+    }
+
+    /// `onCycleVariant`: the next variant, then the default, saved for the model.
+    fn cycle_variant(self: &Rc<Self>) {
+        let Some(model) = self.selection().filter(|_| !self.variants.borrow().is_empty()) else {
+            self.set_notice("no variants available");
+            return;
+        };
+        let current = self.state.borrow().model.as_ref().and_then(|model| model.2.clone());
+        let variant = crate::variants::cycle_variant(current.as_deref(), &self.variants.borrow());
+        crate::variants::save_variant(&self.preferences, &model, variant.as_deref());
+        self.set_notice(
+            &variant.as_ref().map_or_else(|| "variant default".to_owned(), |name| format!("variant {name}")),
+        );
+        self.set_variant(variant);
+        self.footers.models_changed();
+    }
+
+    /// `handleMiniSettingChange`: saves the change to `cli.json` off the UI thread, then applies it.
+    fn change_setting(self: &Rc<Self>, change: Change, done: Box<dyn FnOnce()>) {
+        let store = self.config_store.clone();
+        let mini = self.clone();
+        self.app.spawn(
+            async move {
+                tokio::task::spawn_blocking(move || store.update(|info| crate::settings::write_change(info, change)))
+                    .await
+                    .map_err(|error| error.to_string())
+                    .and_then(|result| result.map_err(|error| error.to_string()))
+            },
+            move |_, result| {
+                match result {
+                    Ok(_) => {
+                        mini.apply_settings(mini.settings.get().apply(change));
+                        mini.set_notice("settings updated");
+                    }
+                    Err(error) => {
+                        log::warn!("mini could not save settings: {error}");
+                        mini.set_notice("failed to save settings");
+                    }
+                }
+                done();
+            },
+        );
+    }
+
+    /// Takes new settings: the transcript, the writer, the theme, and the status row follow.
+    fn apply_settings(self: &Rc<Self>, settings: MiniSettings) {
+        let previous = self.settings.replace(settings);
+        if let Some(transcript) = self.transcript.borrow_mut().as_mut() {
+            transcript.thinking = settings.thinking == Visibility::Show;
+            transcript.tools = settings.tools == Visibility::Show;
+        }
+        let mut writer = self.writer.borrow_mut();
+        writer.set_shell_output(settings.shell_output == Visibility::Show);
+        if previous.mono != settings.mono {
+            if let Err(error) = writer.set_mono(settings.mono) {
+                log::warn!("mini could not switch mono: {error}");
+            }
+            let input = ThemeInput { mono: settings.mono, ..self.theme_input.clone() };
+            writer.set_theme(theme::resolve(&input));
+        }
+        drop(writer);
+        self.paint_status();
+    }
+
+    /// The work spinner's cell (`OneCellSpinner` in `mini-work-spinner`): built again when its color, motion, or
+    /// mono changes, removed while idle.
+    fn paint_spinner(&self, busy: bool, color: Color) {
+        let settings = self.settings.get();
+        let mut current = self.spinner.borrow_mut();
+        if !busy {
+            if let Some((spinner, ..)) = current.take() {
+                spinner.detach();
+            }
+            self.spinner_slot.visible(false);
+            return;
+        }
+        let key = (color, settings.work_spinner, settings.mono);
+        if current.as_ref().is_some_and(|(_, color, motion, mono)| (*color, *motion, *mono) == key) {
+            return;
+        }
+        if let Some((spinner, ..)) = current.take() {
+            spinner.detach();
+        }
+        let motion = if settings.mono {
+            opencode_ui::motion::seed_mono()
+        } else {
+            opencode_ui::motion::work_spinner(settings.work_spinner.as_str())
+                .unwrap_or_else(opencode_ui::motion::seed_mono)
+        };
+        let spinner = Spinner::one_cell(&self.app, &motion, color).animations(self.animations);
+        // `glow={!mono}`: mono draws every frame in the plain color.
+        let spinner = if settings.mono { spinner.color(color).still("*") } else { spinner };
+        self.spinner_slot.add(&spinner);
+        self.spinner_slot.visible(true);
+        *current = Some((spinner, color, settings.work_spinner, settings.mono));
     }
 
     /// `loadDefaultModel`: the label of the model a session without one uses.
@@ -477,8 +737,13 @@ impl Mini {
         for commit in output.commits {
             self.write(cx, commit);
         }
-        if let Some(patch) = output.patch {
+        if let Some(mut patch) = output.patch {
             let idle = patch.running == Some(false);
+            // `contextLimit`: the share of the model's context window the step used.
+            let limit = self.selection().and_then(|model| crate::variants::context_limit(&self.providers(), &model));
+            if let (Some(Some(usage)), Some(limit)) = (patch.usage.as_mut(), limit) {
+                usage.percent = Some((usage.tokens as f64 / limit as f64 * 100.0 + 0.5).floor() as u64);
+            }
             self.patch(|state| {
                 if let Some(running) = patch.running {
                     state.running = running || state.turn;
@@ -783,8 +1048,13 @@ impl Mini {
                 variant: model["variant"].as_str().map(str::to_owned),
             })
         });
+        // `newSessionLocation`: `session.new_location: inherit` keeps the current session's location.
+        let directory = match self.input.new_location {
+            NewLocation::Inherit => session.directory.clone(),
+            NewLocation::Launch => self.input.directory.clone(),
+        };
         let input = target::TargetInput {
-            directory: Some(self.input.directory.clone()),
+            directory: Some(directory),
             agent: session.agent.clone(),
             model,
             ..target::TargetInput::default()
@@ -859,16 +1129,13 @@ impl Mini {
 
     /// `turn.duration`: the agent, model, and time of a finished turn, below its answer.
     fn turn_summary(&self, cx: &mut Cx<'_>, started: std::time::Instant) {
-        if self.settings.turn_summary == Visibility::Hide {
+        if self.settings.get().turn_summary == Visibility::Hide {
             return;
         }
-        let model = self
-            .session
-            .borrow()
-            .as_ref()
-            .and_then(|session| session.model.as_ref()?["id"].as_str().map(str::to_owned))
-            .or_else(|| Some(self.state.borrow().model.as_ref()?.0.clone()))
-            .unwrap_or_else(|| "Default model".into());
+        let model = match self.selection() {
+            Some(selection) => crate::variants::model_info(&self.providers(), &selection).0,
+            None => self.state.borrow().model.as_ref().map_or_else(|| "Default model".into(), |model| model.0.clone()),
+        };
         let summary = crate::scrollback::TurnSummary {
             agent: self.agent_label(&self.state.borrow().agent),
             model,
@@ -1001,7 +1268,7 @@ impl Mini {
         let _ = self.writer.borrow_mut().complete(false);
         let session = self.session.borrow().clone();
         if let Some(session) = session
-            && self.settings.splash == Visibility::Show
+            && self.settings.get().splash == Visibility::Show
         {
             let writer = self.writer.borrow();
             if let Some(banner) = crate::splash::exit(
@@ -1102,12 +1369,12 @@ impl Mini {
         let terminal = self.footer.terminal_size();
         let height = match self.footers.height(terminal) {
             Some(height) => {
-                self.status.visible(false);
+                self.status_row.visible(false);
                 height
             }
             None => {
                 let height = prompt_height(terminal.1, self.prompt.rows(terminal));
-                self.status.visible(!self.prompt.menu_visible());
+                self.status_row.visible(!self.prompt.menu_visible());
                 height
             }
         };
@@ -1159,19 +1426,20 @@ impl Mini {
             theme.footer.muted
         };
         let agent = self.prompt.agent_color();
-        let separator = if self.settings.mono { " - " } else { " · " };
+        let separator = if self.settings.get().mono { " - " } else { " · " };
         let mut spans: Vec<Span> = Vec::new();
         let mut previous = None;
-        for group in &groups {
-            match previous {
-                None => {}
-                Some(status::Id::Spinner) => spans.push(" ".fg(theme.footer.muted)),
-                Some(_) => spans.push(separator.fg(theme.footer.muted)),
+        let busy = groups.iter().any(|group| group.id == status::Id::Spinner);
+        drop(state);
+        self.paint_spinner(busy, agent);
+        // The spinner draws in its own cell before the text.
+        for group in groups.iter().filter(|group| group.id != status::Id::Spinner) {
+            if previous.is_some() {
+                spans.push(separator.fg(theme.footer.muted));
             }
             for (text, tone) in &group.parts {
                 let color = match (group.id, tone) {
-                    // M.4 animates the spinner; it stands still in the agent's color until then.
-                    (status::Id::Spinner, _) | (_, status::Tone::Agent) => agent,
+                    (_, status::Tone::Agent) => agent,
                     (_, status::Tone::Text) => theme.footer.text,
                     (_, status::Tone::Muted) => theme.footer.muted,
                     (_, status::Tone::Status) => status,
@@ -1186,7 +1454,7 @@ impl Mini {
     fn status_groups(&self, state: &State) -> Vec<status::Group> {
         let keymap = self.prompt.keymap();
         let shortcut = |id: &str| {
-            keymap.shortcut(id).filter(|key| !key.is_empty()).map(|key| mono_shortcut(&key, self.settings.mono))
+            keymap.shortcut(id).filter(|key| !key.is_empty()).map(|key| mono_shortcut(&key, self.settings.get().mono))
         };
         let interrupt = shortcut("session.interrupt").map(|key| if key == "escape" { "esc".to_owned() } else { key });
         let busy = state.running;
@@ -1195,7 +1463,7 @@ impl Mini {
         let notice = state.notice.trim();
         let shell = self.prompt.shell();
         let takeover = exiting || (busy && armed) || !notice.is_empty();
-        let details = self.settings.footer == Visibility::Show && !takeover;
+        let details = self.settings.get().footer == Visibility::Show && !takeover;
         let width = usize::from(self.footer.terminal_size().0);
         let status_width = width.saturating_sub(if busy { 2 } else { 0 }).max(1);
         let text = if exiting || (busy && armed) {
@@ -1229,7 +1497,15 @@ impl Mini {
         } else {
             if shell { "Shell" } else { "" }.to_owned()
         };
-        let model = state.model.clone().unwrap_or_else(|| ("Default model".into(), None, None));
+        // The status row names the model and provider from the catalog (`modelInfo`).
+        let model = match (&state.model, self.selection()) {
+            (Some((_, _, variant)), Some(selection)) => {
+                let (name, provider) = crate::variants::model_info(&self.providers(), &selection);
+                (name, Some(provider), variant.clone())
+            }
+            (Some(model), None) => model.clone(),
+            (None, _) => ("Default model".into(), None, None),
+        };
         let shown = details && !shell;
         let queued = self.prompt.queued().len();
         let work = match shortcut("session.queued_prompts") {
@@ -1241,7 +1517,7 @@ impl Mini {
         let usage = state.usage.as_ref().filter(|_| details);
         status::policy(&status::Input {
             width,
-            mono: self.settings.mono,
+            mono: self.settings.get().mono,
             status: Some((
                 text,
                 (details && busy).then(|| interrupt.as_ref().map(|key| format!("{key} interrupt"))).flatten(),
@@ -1266,7 +1542,7 @@ impl Mini {
                 label: "menu".into(),
                 expanded: None,
             }),
-            spinner: busy.then(|| if self.settings.mono { "*" } else { "▪" }.to_owned()),
+            spinner: busy.then(|| if self.settings.get().mono { "*" } else { "▪" }.to_owned()),
         })
     }
 
@@ -1308,7 +1584,7 @@ impl Mini {
         if queued > 0 {
             details.push(format!("{queued} pending"));
         }
-        details.join(if self.settings.mono { " - " } else { " · " })
+        details.join(if self.settings.get().mono { " - " } else { " · " })
     }
 
     /// `currentAgent`: the catalog's name for the agent, else its ID in title case.
