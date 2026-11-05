@@ -542,11 +542,10 @@ impl Inner {
                 None => messages,
             };
             // Queued prompts show in the dock (E.10b), not the transcript (`rows.ts:63-67`).
-            let queued: HashSet<String> =
-                crate::routes::session::queued::prompts(state, &session).into_iter().map(|(id, _)| id).collect();
+            let queued: HashSet<&str> = crate::routes::session::queued::ids(state, &session).collect();
             let view = self.view.get();
             let mut rows = reduce(messages, view.turn_tokens.is_some());
-            rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id)));
+            rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id.as_str())));
             let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
             // Compactions waiting in the inbox go last (`createSessionRows`).
             specs.extend(state.pending(&session).iter().filter_map(|item| match item {
@@ -983,7 +982,7 @@ impl Spec {
             Self::Part { message, part } => RowKey::Part(message.clone(), part.clone()),
             Self::Footer(id) => RowKey::Footer(id.clone()),
             Self::TurnUsage { messages, .. } => RowKey::TurnUsage(messages.first().cloned().unwrap_or_default()),
-            Self::Group(group) => RowKey::Group(group.id(0).unwrap_or_default()),
+            Self::Group(group) => RowKey::Group(group.id(0).map(|id| id.to_string()).unwrap_or_default()),
             Self::CompactionQueued(id) => RowKey::CompactionQueued(id.clone()),
         }
     }
