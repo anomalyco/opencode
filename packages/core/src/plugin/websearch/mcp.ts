@@ -1,16 +1,19 @@
 export * as WebSearchMcp from "./mcp.js"
 
-import { Duration, Effect, Schema } from "effect"
+import { Duration, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { collectBoundedResponseBody } from "../../tool/http-body.js"
 
 export const MAX_RESPONSE_BYTES = 256 * 1024
 
+// Servers may send JSON-RPC requests and notifications, such as logging or progress, before the response.
+const decodeServerMessage = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ method: Schema.String })))
+
 export const parseResponse = <F extends Schema.Struct.Fields>(body: string, result: Schema.Struct<F>) => {
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ result })))
   const parse = (payload: string) => {
     const trimmed = payload.trim()
-    if (!trimmed.startsWith("{")) return Effect.undefined
+    if (!trimmed.startsWith("{") || Option.isSome(decodeServerMessage(trimmed))) return Effect.undefined
     return decode(trimmed).pipe(Effect.map((response) => response.result))
   }
   return Effect.gen(function* () {
