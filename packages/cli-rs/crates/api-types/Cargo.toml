@@ -1,0 +1,16 @@
+[package]
+name = "opencode-api-types"
+description = "The HTTP API's generated types and the serde and JavaScript helpers they use, without a transport."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
