@@ -1,18 +1,18 @@
-import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { createMemo, onCleanup, untrack } from "solid-js"
 import type { PluginOptions } from "@opencode/plugin/gui"
-import type { Bridge, BridgePluginGui, BridgePluginGuis, Entry } from "@opencode/plugin/gui/host"
+import type { Bridge, BridgePluginGui, Entry } from "@opencode/plugin/gui/host"
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { pluginDefinition } from "./module"
-
-/** A plugin's `./gui-experimental` bundle as this window evaluated it, at one revision. */
-type Loaded = {
-  readonly id: string
-  readonly revision: string
-  readonly definition: Entry
-  readonly options: PluginOptions
-}
+import {
+  createPluginGuiState,
+  PLUGIN_GUI_INITIAL_TIMEOUT_MS,
+  transitionPluginGui,
+  type LoadedPluginGui,
+  type PluginGuiEffect,
+  type PluginGuiEvent,
+} from "./plugin-gui-machine"
 
 /** A plugin's GUI as the plugin host runs it: its definition, options, and the client of the server that runs it. */
 export type PluginGui = {
@@ -43,61 +43,93 @@ export function PluginGuiLoader(props: {
     return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
   })
 
-  // One evaluation per plugin revision, so an unchanged plugin keeps its definition and the host does not reload it.
-  const cache = new Map<string, Loaded>()
-  const [guis, setGuis] = createSignal<BridgePluginGuis>()
+  // The server that runs the plugin, read each time: it is a new client after that server restarts.
+  const client = () => controller()?.sdk.api
+  const initial = createPluginGuiState()
+  const machine = { state: initial.state }
+  // Events an effect raises synchronously wait behind that effect.
+  const queue: PluginGuiEvent[] = []
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: PluginGuiEvent) => {
+    queue.push(event)
+
+    if (queue.length === 1) untrack(drain)
+  }
+
+  const drain = () => {
+    const event = queue[0]
+
+    if (!event) return
+
+    try {
+      const next = transitionPluginGui(machine.state, event)
+
+      machine.state = next.state
+      next.effects.forEach((effect) =>
+        Promise.try(() => run(effect)).catch((cause: unknown) => console.error("[plugin] plugin GUI effect failed", cause)),
+      )
+    } finally {
+      queue.shift()
+    }
+
+    drain()
+  }
+
+  const run = (effect: PluginGuiEffect) => {
+    if (effect.type === "fetch.initial")
+      return void Promise.try(() => props.bridge.pluginGuis()).then(
+        (guis) => dispatch({ type: "initial.resolved", attempt: effect.attempt, guis }),
+        (cause: unknown) => dispatch({ type: "initial.failed", attempt: effect.attempt, cause }),
+      )
+
+    if (effect.type === "timer.start") {
+      clearTimeout(timer)
+      timer = setTimeout(() => dispatch({ type: "timeout", attempt: effect.attempt }), PLUGIN_GUI_INITIAL_TIMEOUT_MS)
+
+      return
+    }
+
+    if (effect.type === "timer.stop") {
+      clearTimeout(timer)
+      timer = undefined
+
+      return
+    }
+
+    if (effect.type === "evaluate")
+      return void Promise.all(effect.plugins.map(evaluate)).then(
+        (loaded) => dispatch({ type: "evaluated", attempt: effect.attempt, loaded }),
+        (cause: unknown) => dispatch({ type: "evaluate.failed", attempt: effect.attempt, cause }),
+      )
+
+    if (effect.type === "publish")
+      return props.onChange(
+        effect.plugins.map((plugin) => ({ definition: plugin.definition, options: plugin.options, client })),
+        effect.reserved,
+      )
+
+    console.error("[plugin] failed to load plugin GUIs", effect.cause)
+  }
 
   onCleanup(
     props.bridge.on((message) => {
-      if (message.type === "pluginGuis") setGuis({ plugins: message.plugins, reserved: message.reserved })
+      if (message.type === "pluginGuis")
+        dispatch({ type: "pushed", guis: { plugins: message.plugins, reserved: message.reserved } })
     }),
   )
-  // A change main pushed while this request was in flight is newer than its reply.
-  void props.bridge.pluginGuis().then(
-    (initial) => setGuis((current) => current ?? initial),
-    () => undefined,
-  )
-
-  const [found] = createResource(guis, async (input) => {
-    const plugins = await Promise.all(input.plugins.map((plugin) => load(plugin, cache)))
-    const ids = new Set(plugins.map((plugin) => plugin.id))
-    cache.forEach((_, id) => {
-      if (!ids.has(id)) cache.delete(id)
-    })
-
-    return { plugins, reserved: input.reserved }
-  })
-
-  // Syncs the loaded plugins out to the plugin host.
-  createEffect(() => {
-    const latest = found.latest
-
-    if (!latest) return
-    // The server that runs the plugin, read each time: it is a new client after that server restarts.
-    const client = () => controller()?.sdk.api
-    props.onChange(
-      latest.plugins.map((plugin) => ({ definition: plugin.definition, options: plugin.options, client })),
-      latest.reserved,
-    )
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
+  initial.effects.forEach(run)
 
   return null
 }
 
-/** Evaluates a plugin's bundle when its revision is new to this window. */
-async function load(plugin: BridgePluginGui, cache: Map<string, Loaded>): Promise<Loaded> {
-  const cached = cache.get(plugin.id)
-
-  if (cached?.revision === plugin.revision) return cached
-
-  const next = {
+/** Evaluates a plugin's bundle at the revision main sent. */
+async function evaluate(plugin: BridgePluginGui): Promise<LoadedPluginGui> {
+  return {
     id: plugin.id,
     revision: plugin.revision,
     options: plugin.options,
     definition: await pluginDefinition(plugin.id, plugin.code),
   }
-
-  cache.set(plugin.id, next)
-
-  return next
 }

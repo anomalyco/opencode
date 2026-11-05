@@ -34,6 +34,12 @@ import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { pathKey } from "@/workspaces/path-key"
 import { usePluginAttachment } from "./host-apis"
+import {
+  createComposerWriteState,
+  transitionComposerWrite,
+  type ComposerWriteEffect,
+  type ComposerWriteEvent,
+} from "./composer-write-machine"
 
 const noTasks: readonly BackgroundTask[] = []
 
@@ -156,28 +162,63 @@ export function createMountedSession(session: SessionModel) {
   }
 
   // A write before the routed session's draft loads would replace the stored draft, so it waits for the load and then
-  // applies to that session. Later writes queue behind it to keep call order.
-  let writes: Promise<void> | undefined
+  // applies to that session (`composer-write-machine.ts`). Later writes to that session queue behind it to keep call
+  // order; other sessions' drafts do not wait for it.
+  const writes = { state: createComposerWriteState<ComposerStateValue>() }
+  // Events an effect raises synchronously, such as a write a queued write makes, wait behind that effect.
+  const queue: ComposerWriteEvent<ComposerStateValue>[] = []
 
-  const write = (apply: (draft: ComposerStateValue) => void) => {
-    const target = composer.capture()
+  const dispatchWrite = (event: ComposerWriteEvent<ComposerStateValue>) => {
+    queue.push(event)
 
-    if (!writes && composer.ready()) return apply(target)
-    const loaded = composer.ready() ? undefined : composer.ready.promise
+    if (queue.length === 1) untrack(drainWrites)
+  }
 
-    const next = Promise.resolve(writes)
-      .then(() => loaded)
-      .catch(() => undefined)
-      .then(() => apply(target))
+  const drainWrites = () => {
+    const event = queue[0]
 
-    writes = next
+    if (!event) return
 
-    const settle = () => {
-      if (writes === next) writes = undefined
+    try {
+      const next = transitionComposerWrite(writes.state, event)
+
+      writes.state = next.state
+      next.effects.forEach((effect) =>
+        Promise.try(() => runWrite(effect)).catch((cause: unknown) =>
+          console.error("[plugin] Composer write failed", cause),
+        ),
+      )
+    } finally {
+      queue.shift()
     }
 
-    void next.then(settle, settle)
+    drainWrites()
   }
+
+  const runWrite = (effect: ComposerWriteEffect<ComposerStateValue>) => {
+    if (effect.type === "apply") return effect.write(effect.target)
+
+    if (effect.type === "drain") return dispatchWrite({ type: "drain.next", target: effect.target })
+
+    if (effect.type === "observe")
+      return void effect.load.then(
+        // One batch, so the waiting writes land as one change.
+        () => batch(() => dispatchWrite({ type: "loaded", target: effect.target })),
+        (cause: unknown) => dispatchWrite({ type: "failed", target: effect.target, cause }),
+      )
+
+    console.error("[plugin] Composer draft load failed", effect.cause)
+  }
+
+  onCleanup(() => dispatchWrite({ type: "disposed" }))
+
+  const write = (apply: (draft: ComposerStateValue) => void) =>
+    dispatchWrite({
+      type: "write",
+      target: composer.capture(),
+      load: composer.ready() ? undefined : composer.ready.promise,
+      write: apply,
+    })
 
   // A subagent's session has no composer, so its draft is never sent.
   const edit = (apply: (draft: ReturnType<typeof createComposerEditorActions>) => void) => {
@@ -233,9 +274,14 @@ export function createMountedSession(session: SessionModel) {
     focus(commentID, options) {
       if (commentID === undefined) return prompt()?.focus()
 
-      const item = composer.context.items().find((entry) => entry.type === "quote" && entry.commentID === commentID)
+      // Behind the writes still waiting, so it finds a quote an `attach` just before it added.
+      write((draft) => {
+        const item = draft.context
+          .items()
+          .find((entry) => entry.type === "quote" && entry.commentID === commentID)
 
-      if (item) composer.capture().quoteComment.set(item.key, options?.anchor)
+        if (item) draft.quoteComment.set(item.key, options?.anchor)
+      })
     },
     update: (id, patch) => write((draft) => draft.context.updateComment(id, patch)),
     detach: (id) => write((draft) => draft.context.removeComment(id)),
