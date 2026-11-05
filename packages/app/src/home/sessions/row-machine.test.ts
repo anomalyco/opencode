@@ -160,6 +160,7 @@ describe("home session row machine", () => {
       ],
       open.state,
     )
+
     expect(outside.state.status).toBe("idle")
     expect(outside.effects).toEqual([])
 
@@ -170,6 +171,7 @@ describe("home session row machine", () => {
       ],
       open.state,
     )
+
     expect(selectRowEditor(renaming.state, "ses_a")).toMatchObject({ status: "editing", draft: "Old" })
     expect(renaming.effects).toEqual([])
 

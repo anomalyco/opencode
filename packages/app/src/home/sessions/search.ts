@@ -23,6 +23,8 @@ import {
 
 type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 
+type PendingLookup = { controller: AbortController; timer: ReturnType<typeof setTimeout> }
+
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
@@ -30,7 +32,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
   const servers = useServers()
 
   const [searchState, setSearchState] = createSignal(INITIAL_HOME_SESSION_SEARCH_STATE)
-  const lookup: { controller?: AbortController; timer?: ReturnType<typeof setTimeout> } = {}
+  let lookup: PendingLookup | undefined
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let list: HTMLDivElement | undefined
@@ -47,17 +49,15 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     })
 
   function run(effect: HomeSessionSearchEffect) {
-    clearTimeout(lookup.timer)
-    lookup.controller?.abort()
-    lookup.controller = undefined
-    lookup.timer = undefined
+    clearTimeout(lookup?.timer)
+    lookup?.controller.abort()
+    lookup = undefined
 
     if (effect.type === "lookup.abort") return
     const controller = new AbortController()
     const attempt = effect.attempt
     const timer = setTimeout(() => dispatch({ type: "lookup.timed-out", attempt }), effect.timeoutMs)
-    lookup.controller = controller
-    lookup.timer = timer
+    lookup = { controller, timer }
     void sessions.session.lookup(effect.sessionID, controller.signal).then(
       (record) => {
         clearTimeout(timer)
@@ -80,6 +80,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     const records = sessions.data
       .searchRecords()
       .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
+
     const exact = selectSearchExact(searchState())
 
     if (!exact || records.some((record) => record.session.id === exact.session.id)) return records

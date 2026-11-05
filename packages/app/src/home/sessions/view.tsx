@@ -122,8 +122,9 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowState, setRowState] = createSignal(INITIAL_HOME_SESSION_ROW_STATE)
   const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
   const showLocations = createAltHold(props.desktop, props.onRevealLocations)
-  const longPress: { timer?: ReturnType<typeof setTimeout> } = {}
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined
   const renames = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+
   // A list that arrives within the delay paints directly; slower loads show placeholder rows until it does, which stay
   // mounted while the list fades in over them.
   const skeleton = () =>
@@ -141,8 +142,8 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
 
   function runRowEffect(effect: HomeSessionRowEffect) {
     if (effect.type === "long-press.start") {
-      clearTimeout(longPress.timer)
-      longPress.timer = setTimeout(
+      clearTimeout(longPressTimer)
+      longPressTimer = setTimeout(
         () => dispatchRow({ type: "long-press.fired", attempt: effect.attempt }),
         effect.delayMs,
       )
@@ -150,7 +151,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       return
     }
 
-    if (effect.type === "long-press.stop") return clearTimeout(longPress.timer)
+    if (effect.type === "long-press.stop") return clearTimeout(longPressTimer)
 
     if (effect.type === "rename.save") {
       const attempt = effect.attempt

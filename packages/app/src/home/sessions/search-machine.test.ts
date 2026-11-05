@@ -54,6 +54,7 @@ describe("home session search machine", () => {
       { type: "input.changed", value: SESSION_ID },
       { type: "lookup.resolved", attempt: 1, record: record("/a") },
     ])
+
     expect(selectSearchExact(found.state)).toEqual(record("/a"))
 
     const moved = replay([scope("b\0")], found.state)

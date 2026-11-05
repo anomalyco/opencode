@@ -15,6 +15,7 @@ import {
 
 // SAFETY: the brand only marks registry-built keys; these tests compare them as plain strings.
 const A = "http:a" as ServerConnection.Key
+
 // SAFETY: as above.
 const B = "http:b" as ServerConnection.Key
 
