@@ -92,6 +92,35 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
   await expect(view.editor).toBeFocused()
 })
 
+test("Local shows and targets the main checkout when the draft opened in a worktree", async ({ page }) => {
+  const root = "C:/OpenCode/LocalFromWorktree"
+
+  const worktree = `${root}/.worktrees/quiet-river`
+
+  const created: unknown[] = []
+
+  const view = await openDraft(page, {
+    name: "LocalFromWorktree",
+    project: { sandboxes: [worktree] },
+    worktrees: () => [{ directory: root }, { directory: worktree, strategy: "git" }],
+    vcs: (directory) =>
+      directory === worktree
+        ? { current: "worktree-branch", default: "dev" }
+        : { current: "checkout-branch", default: "dev" },
+    onSessionCreate: (body) => void created.push(body.location),
+    seed: { tabs: [{ draft: "draft_localfromworktree", directory: worktree }] },
+  })
+
+  const screen = page.locator('[data-component="new-session"]')
+
+  await expect(newSessionWorktree(page)).toHaveText("Local")
+  await expect(screen.getByText("checkout-branch", { exact: true })).toBeVisible()
+  await expect(screen.getByText("worktree-branch", { exact: true })).toHaveCount(0)
+  await view.editor.fill("Run in the main checkout")
+  await submit(page).click()
+  await expect.poll(() => created).toEqual([{ directory: root }])
+})
+
 for (const binding of ["custom", "none"]) {
   test(`the picker tooltips reflect ${binding} shortcuts`, async ({ page }) => {
     const view = await openDraft(page, {
