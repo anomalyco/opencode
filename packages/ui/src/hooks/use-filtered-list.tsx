@@ -55,7 +55,6 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const track = createReaction(() => dispatch({ type: "items.reload" }))
 
   const load = (attempt: number, query: string) => {
-    // A new attempt supersedes the previous one, whose timeout would otherwise fail it after it was replaced.
     clearTimeout(loadTimer)
     track(() => {
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- `items` is either a list or a loader for one
