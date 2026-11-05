@@ -48,18 +48,45 @@ describe("IPC client machine", () => {
     // On dev the port promise had no timeout, so every invoke and the startup splash waited forever.
     const init = entry()
     const theme = entry()
-    const waiting = replay([started(0, "AppAwaitInitialization", init), started(1, "AppThemeReady", theme)])
+
+    const waiting = replay([
+      started(0, "DesktopEvents", { ...entry(), chunk: () => undefined }),
+      started(1, "AppAwaitInitialization", init),
+      started(2, "AppThemeReady", theme),
+    ])
+
     const timedOut = transitionIpcClient(waiting.state, { type: "handshake.timed-out" })
-    expect(timedOut.state).toEqual({ status: "closed", reason: "timeout" })
+    expect(timedOut.state.status).toBe("timed-out")
     expect(timedOut.commands).toEqual([{ type: "reject", entries: [init, theme], error: ipcClosedError("timeout") }])
 
     const late = entry()
-    expect(transitionIpcClient(timedOut.state, started(2, "AppThemeReady", late)).commands).toEqual([
+    expect(transitionIpcClient(timedOut.state, started(3, "AppThemeReady", late)).commands).toEqual([
       { type: "reject", entries: [late], error: new Error("Desktop IPC port handshake timed out") },
     ])
-    // A port that arrives after all is closed, so main does not keep a renderer nobody reads.
-    expect(transitionIpcClient(timedOut.state, { type: "port.received", port: "late" }).commands).toEqual([
-      { type: "close-port", port: "late" },
+  })
+
+  test("connects a port that arrives after the handshake timed out", () => {
+    // A slow subresource holds back the load event main posts the port on; the document still gets its IPC.
+    const chunk = () => undefined
+
+    const timedOut = replay([
+      started(0, "DesktopEvents", { ...entry(), chunk }),
+      started(1, "AppThemeReady"),
+      { type: "handshake.timed-out" },
+    ])
+
+    const connected = transitionIpcClient(timedOut.state, { type: "port.received", port: "late" })
+    expect(connected.state.status).toBe("connected")
+    expect(connected.commands).toEqual([
+      { type: "cancel-handshake-timer" },
+      { type: "unlisten-window" },
+      { type: "attach-port", port: "late" },
+      { type: "post-request", port: "late", message: message(0, "DesktopEvents") },
+    ])
+    // Events reach the subscription, and new calls go straight to the port.
+    expect(selectPendingChunk(connected.state, 0)).toBe(chunk)
+    expect(transitionIpcClient(connected.state, started(2, "AppThemeReady")).commands).toEqual([
+      { type: "post-request", port: "late", message: message(2, "AppThemeReady") },
     ])
   })
 
@@ -158,7 +185,7 @@ describe("IPC client machine", () => {
     const unsettled = entry()
     const before = replay([started(0, "StorageItems", unsettled), ...input.events])
     const disposed = transitionIpcClient(before.state, { type: "disposed" })
-    expect(disposed.state).toEqual({ status: "closed", reason: "disposed" })
+    expect(disposed.state).toEqual({ status: "closed" })
     expect(disposed.commands).toEqual([
       ...input.release,
       { type: "reject", entries: [unsettled], error: new Error("Desktop IPC connection closed") },

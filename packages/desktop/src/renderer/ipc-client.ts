@@ -61,7 +61,7 @@ window.addEventListener(
   { once: true },
 )
 
-// A closed connection rejects every request; the event stream has no caller to tell.
+// The event stream outlives a handshake timeout; only pagehide rejects it, and nobody is left to tell.
 request("DesktopEvents", null, (values) => {
   // SAFETY: DesktopEvents streams desktop events, whose encoded fields are JSON-native and read as decoded.
   for (const value of values as ReadonlyArray<DesktopEvent>) listeners.get(value._tag)?.forEach((fn) => fn(value))
