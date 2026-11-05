@@ -28,6 +28,12 @@ macro_rules! tokens {
                 Self { $($field: Blank::blank(),)* }
             }
         }
+
+        impl Colors for $name {
+            fn colors<'a>(&'a self, f: &mut impl FnMut(&'a Color)) {
+                $(self.$field.colors(f);)*
+            }
+        }
     )*};
 }
 
@@ -38,6 +44,17 @@ trait Blank {
 impl Blank for Color {
     fn blank() -> Self {
         Color::TRANSPARENT
+    }
+}
+
+/// Every color in field order, which is [`Tokens::visit`] order, without building paths.
+trait Colors {
+    fn colors<'a>(&'a self, f: &mut impl FnMut(&'a Color));
+}
+
+impl Colors for Color {
+    fn colors<'a>(&'a self, f: &mut impl FnMut(&'a Color)) {
+        f(self);
     }
 }
 
@@ -52,6 +69,14 @@ pub struct Feedback<T> {
 impl<T: Blank> Blank for Feedback<T> {
     fn blank() -> Self {
         Self { error: T::blank(), warning: T::blank(), success: T::blank(), info: T::blank() }
+    }
+}
+
+impl<T: Colors> Colors for Feedback<T> {
+    fn colors<'a>(&'a self, f: &mut impl FnMut(&'a Color)) {
+        for feedback in [&self.error, &self.warning, &self.success, &self.info] {
+            feedback.colors(f);
+        }
     }
 }
 
@@ -296,6 +321,11 @@ impl Tokens {
         visit_tokens!(self, f,);
     }
 
+    /// Every token in [`Tokens::visit`] order, without its path.
+    pub(crate) fn visit_colors<'a>(&'a self, f: &mut impl FnMut(&'a Color)) {
+        self.colors(f);
+    }
+
     /// The token at a TypeScript path.
     pub fn get(&self, path: &str) -> Option<&Color> {
         let mut found = None;
@@ -312,5 +342,19 @@ impl Tokens {
         let mut list = Vec::new();
         self.visit_ref(&mut |path, color| list.push((path.to_owned(), *color)));
         list
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colors_walk_the_tokens_in_visit_order() {
+        let tokens = Tokens::blank();
+        let (mut named, mut nameless) = (Vec::new(), Vec::new());
+        tokens.visit_ref(&mut |_, color| named.push(std::ptr::from_ref(color)));
+        tokens.visit_colors(&mut |color| nameless.push(std::ptr::from_ref(color)));
+        assert_eq!(named, nameless);
     }
 }
