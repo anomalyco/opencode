@@ -15,7 +15,7 @@ use opentui::prelude::*;
 use opentui::widget::{MacOsScroll, ScrollAcceleration};
 use serde_json::Value;
 
-use super::messages::list::Transcript;
+use super::messages::list::{ScrollAnchor, Transcript};
 use crate::app::Tui;
 use crate::dialogs::settings;
 
@@ -39,6 +39,8 @@ pub(super) struct Inner {
     first_jump: Cell<bool>,
     away: Cell<bool>,
     scrollbar: Cell<bool>,
+    /// The tab's saved position was restored; until then nothing overwrites it (`restored`).
+    restored: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
 }
 
@@ -68,6 +70,7 @@ impl Controls {
             first_jump: Cell::new(false),
             away: Cell::new(false),
             scrollbar: Cell::new(false),
+            restored: Cell::new(false),
             layers: RefCell::default(),
         });
         inner.install(tui);
@@ -90,11 +93,33 @@ impl Controls {
             }
         });
     }
+
+    /// Once the session's first sync is done, returns to where the reader left the tab, unless they
+    /// moved meanwhile (`restoreScrollPosition`).
+    pub fn restore(&self, tui: &Tui) {
+        let inner = &self.0;
+        if inner.restored.replace(true) || inner.is_away() {
+            return;
+        }
+        let Some(session) = inner.transcript.session() else {
+            return;
+        };
+        let Some(anchor) = tui
+            .tabs
+            .scroll_anchor(tui, &session.0)
+            .filter(|anchor| inner.transcript.mount_around(tui, &anchor.row))
+        else {
+            return;
+        };
+        inner.transcript.scroll().sticky(false);
+        inner.restore_step(tui, anchor);
+    }
 }
 
 impl Drop for Inner {
     fn drop(&mut self) {
         if let Some(tui) = self.tui.upgrade() {
+            self.save_anchor(&tui, self.is_away());
             dispose(&tui, std::mem::take(&mut *self.layers.borrow_mut()));
         }
     }
@@ -438,6 +463,48 @@ impl Inner {
         self.transcript.to_tail(tui);
         self.away.set(false);
         self.latest.visible(false);
+        self.save_anchor(tui, false);
+    }
+
+    /// One step of `restoreScrollPosition` after a layout: puts the anchor's row back at its distance
+    /// from the top, mounting newer rows or adding slack below them while the target is past the end.
+    fn restore_step(&self, tui: &Tui, anchor: ScrollAnchor) {
+        let weak = self.this.clone();
+        after_layout(&tui.app, move || {
+            let Some(inner) = weak.upgrade() else { return };
+            let Some(tui) = inner.tui.upgrade() else {
+                return;
+            };
+            let Some(y) = inner.transcript.row_y(&anchor.row) else {
+                inner.to_bottom(&tui);
+                return;
+            };
+            let target = y - anchor.screen_y;
+            let content = f64::from(inner.transcript.scroll().content_view().rect().height);
+            let viewport = inner.height();
+            if target > (content - viewport).max(0.0) {
+                if !inner.transcript.mount_newer(&tui) {
+                    let current = inner.slack_height.get();
+                    inner.set_slack(super::navigation::slack(target, viewport, content, current));
+                }
+                inner.restore_step(&tui, anchor);
+                return;
+            }
+            inner.transcript.scroll().scroll_to(0.0, target);
+            inner.update_away();
+        });
+    }
+
+    /// `saveScrollAnchor`: the tab keeps the reader's row while they are away from the bottom.
+    fn save_anchor(&self, tui: &Tui, away: bool) {
+        if !self.restored.get() {
+            return;
+        }
+        let Some(session) = self.transcript.session() else {
+            return;
+        };
+        let anchor = away.then(|| self.transcript.anchor()).flatten();
+        tui.tabs.set_scroll_anchor(tui, &session.0, anchor);
     }
 
     /// `clearMessageNavigation`.
@@ -460,20 +527,28 @@ impl Inner {
 
     /// `updateAwayFromBottom`: shows "Jump to latest" while the reader is away from the bottom.
     pub(super) fn update_away(&self) {
+        let away = self.is_away();
+        self.away.set(away);
+        self.latest.visible(away && !self.first_jump.get());
+        if !away {
+            self.transcript.scroll().sticky(true);
+        }
+        if let Some(tui) = self.tui.upgrade() {
+            self.save_anchor(&tui, away);
+        }
+    }
+
+    /// `isAwayFromBottom`.
+    fn is_away(&self) -> bool {
         let scroll = self.transcript.scroll();
         let (_, top) = scroll.scroll_position();
         let content = f64::from(scroll.content_view().rect().height);
         let bottom = (content - self.height()).max(0.0);
-        let away = self.navigation.borrow().is_some()
+        self.navigation.borrow().is_some()
             || self.slack_height.get() > 0.0
             || self.first_jump.get()
             || !self.transcript.at_end()
-            || top < bottom.floor();
-        self.away.set(away);
-        self.latest.visible(away && !self.first_jump.get());
-        if !away {
-            scroll.sticky(true);
-        }
+            || top < bottom.floor()
     }
 }
 
