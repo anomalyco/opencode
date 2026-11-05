@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 use opencode_api::client::Auth;
 use opencode_api::client_mcp::{self, Connection, Connector, Options, Tool, ToolResult, Tungstenite};
 use opencode_api::generated::{SessionID, V2Event};
+use opencode_ui::bind;
 use serde_json::{Map, Value, json};
 use tokio::sync::oneshot;
 
@@ -55,9 +56,7 @@ enum Kind {
 
 /// Takes tool calls on the UI thread and connects when the flag is on. `app::mount_with` calls it once.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    tui.app.on_message(move |_, call: &Call| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_message(bind!(tui, |tui, _, call: &Call| {
         let Some(reply) = call.reply.lock().ok().and_then(|mut reply| reply.take()) else {
             return;
         };
@@ -87,7 +86,7 @@ pub fn install(tui: &Rc<Tui>) {
                 })
             }
         }
-    });
+    }));
     tui.settings.on_change(sync);
     sync(tui);
 }
@@ -249,10 +248,5 @@ fn known(tui: &Tui, session: SessionID, then: impl FnOnce(&Tui) + 'static) {
     if tui.data.read(|state| state.session(&session).is_some()) {
         return then(tui);
     }
-    let weak = tui.weak();
-    tui.app.spawn(tui.data.session_sync(&session, false), move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            then(&tui);
-        }
-    });
+    tui.app.spawn(tui.data.session_sync(&session, false), bind!(tui, |tui, _, _| then(&tui)));
 }

@@ -7,6 +7,7 @@ use std::rc::{Rc, Weak};
 use std::time::{Duration, Instant};
 
 use opencode_local::cli_config::{Grouping, Info, SubmitScroll, Verbosity};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::input::MouseEventKind;
@@ -125,26 +126,23 @@ impl Inner {
     fn install(&self, tui: &Tui) {
         self.configure(&tui.settings.info());
         let weak = self.this.clone();
-        tui.settings.on_change(move |tui| {
-            let Some(inner) = weak.upgrade() else { return };
+        tui.settings.on_change(bind!(weak, |inner, tui| {
             inner.configure(&tui.settings.info());
             inner.register(tui);
-        });
+        }));
         let weak = self.this.clone();
-        self.latest.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        self.latest.mouse_pointer(MousePointer::POINTER).on_click(bind!(weak, |inner, _, _| {
             let Some(tui) = inner.tui.upgrade() else {
                 return;
             };
             inner.to_bottom(&tui);
-        });
+        }));
         let weak = self.this.clone();
-        self.latest.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        self.latest.on_hover(bind!(weak, |inner, _, hovered| {
             inner.latest_hover.set(hovered);
             let action = &inner.theme.text.action.secondary;
             inner.latest_text.fg(if hovered { action.hovered } else { action.base });
-        });
+        }));
         // The wheel and the content's growth move the view; the label follows after they settle.
         let weak = self.this.clone();
         self.transcript.scroll().on_mouse(move |cx, event| {
@@ -155,19 +153,10 @@ impl Inner {
             if inner.first_jump.get() {
                 inner.clear_navigation();
             }
-            let weak = weak.clone();
-            cx.set_timeout(Duration::ZERO, move |_| {
-                if let Some(inner) = weak.upgrade() {
-                    inner.update_away();
-                }
-            });
+            cx.set_timeout(Duration::ZERO, bind!(weak, |inner, _| inner.update_away()));
         });
         let weak = self.this.clone();
-        self.transcript.scroll().content_view().on_resize(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.update_away();
-            }
-        });
+        self.transcript.scroll().content_view().on_resize(bind!(weak, |inner, _, _| inner.update_away()));
         self.register(tui);
     }
 
@@ -200,14 +189,16 @@ impl Inner {
         dispose(tui, std::mem::take(&mut *self.layers.borrow_mut()));
         let command = |id: &str, title: &str, run: fn(&Inner, &Tui)| {
             let weak = self.this.clone();
-            TuiCommand::new(id, move |_, _| {
-                let Some(inner) = weak.upgrade() else { return };
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
-                run(&inner, &tui);
-                tui.dialogs.clear();
-            })
+            TuiCommand::new(
+                id,
+                bind!(weak, |inner, _, _| {
+                    let Some(tui) = inner.tui.upgrade() else {
+                        return;
+                    };
+                    run(&inner, &tui);
+                    tui.dialogs.clear();
+                }),
+            )
             .title(title)
             .group("Session")
             .bind(Bind::Off)
@@ -347,30 +338,34 @@ impl Inner {
         self.transcript.hint().visible(true);
         self.update_away();
         let weak = self.this.clone();
-        self.transcript.load_all(tui, move |tui, result| {
-            let Some(inner) = weak.upgrade() else { return };
-            if !inner.first_jump.get() {
-                return;
-            }
-            if let Err(error) = result {
-                inner.end_first_jump();
-                tui.toasts.error(error);
-                return;
-            }
-            inner.transcript.mount_head(tui);
-            let scroll = inner.transcript.scroll();
-            scroll.sticky(false);
-            scroll.scroll_to(0.0, 0.0);
-            let weak = inner.this.clone();
-            after_layout(&tui.app, move || {
-                let Some(inner) = weak.upgrade() else { return };
+        self.transcript.load_all(
+            tui,
+            bind!(weak, |inner, tui, result| {
                 if !inner.first_jump.get() {
                     return;
                 }
-                inner.transcript.scroll().scroll_to(0.0, 0.0);
-                inner.end_first_jump();
-            });
-        });
+                if let Err(error) = result {
+                    inner.end_first_jump();
+                    tui.toasts.error(error);
+                    return;
+                }
+                inner.transcript.mount_head(tui);
+                let scroll = inner.transcript.scroll();
+                scroll.sticky(false);
+                scroll.scroll_to(0.0, 0.0);
+                let weak = inner.this.clone();
+                after_layout(
+                    &tui.app,
+                    bind!(weak, |inner| {
+                        if !inner.first_jump.get() {
+                            return;
+                        }
+                        inner.transcript.scroll().scroll_to(0.0, 0.0);
+                        inner.end_first_jump();
+                    }),
+                );
+            }),
+        );
     }
 
     fn end_first_jump(&self) {
@@ -392,29 +387,31 @@ impl Inner {
     /// from the top, mounting newer rows or adding slack below them while the target is past the end.
     fn restore_step(&self, tui: &Tui, anchor: ScrollAnchor) {
         let weak = self.this.clone();
-        after_layout(&tui.app, move || {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
-            let Some(y) = inner.transcript.row_y(&anchor.row) else {
-                inner.to_bottom(&tui);
-                return;
-            };
-            let target = y - anchor.screen_y;
-            let content = f64::from(inner.transcript.scroll().content_view().rect().height);
-            let viewport = inner.height();
-            if target > (content - viewport).max(0.0) {
-                if !inner.transcript.mount_newer(&tui) {
-                    let current = inner.slack_height.get();
-                    inner.set_slack(super::navigation::slack(target, viewport, content, current));
+        after_layout(
+            &tui.app,
+            bind!(weak, |inner| {
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                let Some(y) = inner.transcript.row_y(&anchor.row) else {
+                    inner.to_bottom(&tui);
+                    return;
+                };
+                let target = y - anchor.screen_y;
+                let content = f64::from(inner.transcript.scroll().content_view().rect().height);
+                let viewport = inner.height();
+                if target > (content - viewport).max(0.0) {
+                    if !inner.transcript.mount_newer(&tui) {
+                        let current = inner.slack_height.get();
+                        inner.set_slack(super::navigation::slack(target, viewport, content, current));
+                    }
+                    inner.restore_step(&tui, anchor);
+                    return;
                 }
-                inner.restore_step(&tui, anchor);
-                return;
-            }
-            inner.transcript.scroll().scroll_to(0.0, target);
-            inner.update_away();
-        });
+                inner.transcript.scroll().scroll_to(0.0, target);
+                inner.update_away();
+            }),
+        );
     }
 
     /// `saveScrollAnchor`: the tab keeps the reader's row while they are away from the bottom.

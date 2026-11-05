@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use indexmap::IndexMap;
+use opencode_ui::bind;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionForkInput, SessionID, SessionListInput, SessionListInputOrder};
@@ -185,38 +186,37 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
         directory: Some(tui.directory.clone().into()),
         ..SessionListInput::default()
     };
-    let weak = tui.weak();
-    tui.app.spawn(async move { client.session_list(&input, &RequestOptions::default()).await }, move |_, result| {
-        let Some(tui) = weak.upgrade() else { return };
-        match result {
-            Ok(response) => {
-                let Some(session) = response.data.into_iter().next() else {
-                    return;
-                };
-                if fork_it {
-                    fork(&tui, session.id);
-                    return;
+    tui.app.spawn(
+        async move { client.session_list(&input, &RequestOptions::default()).await },
+        bind!(tui, |tui, _, result| {
+            match result {
+                Ok(response) => {
+                    let Some(session) = response.data.into_iter().next() else {
+                        return;
+                    };
+                    if fork_it {
+                        fork(&tui, session.id);
+                        return;
+                    }
+                    let id = session.id.clone();
+                    tui.data.remember(session);
+                    tui.startup.arrive(&id);
+                    tui.navigate(Route::Session { id });
                 }
-                let id = session.id.clone();
-                tui.data.remember(session);
-                tui.startup.arrive(&id);
-                tui.navigate(Route::Session { id });
+                Err(error) => tui.toasts.error(error.to_string()),
             }
-            Err(error) => tui.toasts.error(error.to_string()),
-        }
-    });
+        }),
+    );
 }
 
 /// `session.fork`, then opens the fork.
 fn fork(tui: &Tui, id: SessionID) {
     let client = tui.data.client().clone();
-    let weak = tui.weak();
     tui.app.spawn(
         async move {
             client.session_fork(&SessionForkInput { session_id: id, before: None }, &RequestOptions::default()).await
         },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(tui, |tui, _, result| {
             match result {
                 Ok(session) => {
                     let id = session.id.clone();
@@ -226,7 +226,7 @@ fn fork(tui: &Tui, id: SessionID) {
                 }
                 Err(error) => tui.toasts.error(error.to_string()),
             }
-        },
+        }),
     );
 }
 

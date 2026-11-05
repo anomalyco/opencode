@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, ShellID, ShellOutputInput};
+use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
@@ -104,9 +105,7 @@ impl Shell {
             interval: Cell::new(None),
             painted: RefCell::default(),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.block.on_click(move || {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.block.on_click(bind!(inner, |inner| {
             let expanded = !inner.expanded.get();
             inner.expanded.set(expanded);
             inner.refresh();
@@ -115,7 +114,7 @@ impl Shell {
             }
             inner.watch();
             inner.paint();
-        });
+        }));
         Self(inner)
     }
 
@@ -192,17 +191,18 @@ impl Inner {
             return;
         }
         self.load(false);
-        let weak = Rc::downgrade(self);
-        let timer = self.app.set_interval(Duration::from_secs(1), move |_| {
-            let Some(inner) = weak.upgrade() else { return };
-            inner.refresh();
-            if inner.background_running() {
-                inner.load(false);
-                return;
-            }
-            inner.watch();
-            inner.paint();
-        });
+        let timer = self.app.set_interval(
+            Duration::from_secs(1),
+            bind!(self, |inner, _| {
+                inner.refresh();
+                if inner.background_running() {
+                    inner.load(false);
+                    return;
+                }
+                inner.watch();
+                inner.paint();
+            }),
+        );
         self.interval.set(Some(timer));
     }
 
@@ -234,7 +234,6 @@ impl Inner {
         let client = tui.data.client().clone();
         let start = self.cursor.get();
         let location = call.directory.map(|directory| LocationQueryInput { directory: Some(directory) });
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
                 let mut chunks = Vec::new();
@@ -269,8 +268,7 @@ impl Inner {
                 }
                 (chunks, cursor, skipped)
             },
-            move |_, (chunks, cursor, skipped)| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(self, |inner, _, (chunks, cursor, skipped)| {
                 for chunk in chunks {
                     let next = strip_ansi(&format!("{}{chunk}", inner.output.borrow()));
                     let count = next.chars().count();
@@ -291,7 +289,7 @@ impl Inner {
                     inner.load(true);
                 }
                 inner.paint();
-            },
+            }),
         );
     }
 

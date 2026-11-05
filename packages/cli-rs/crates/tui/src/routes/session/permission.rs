@@ -18,6 +18,7 @@ use opencode_api::generated::{
 };
 use opencode_local::cli_config::{DiffView as ConfigDiffView, Permissions};
 use opencode_store::{Changes, State};
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 pub use opencode_ui::permission::{Presentation, always_lines, presentation};
 use opencode_ui::theme::Theme;
@@ -208,18 +209,15 @@ impl Inner {
             if !self.approved.borrow_mut().insert(request.id.clone()) {
                 continue;
             }
-            let weak = Rc::downgrade(self);
             let id = request.id.clone();
             reply(
                 tui,
                 request,
                 PermissionReply::Once,
                 None,
-                Box::new(move || {
-                    if let Some(inner) = weak.upgrade() {
-                        inner.approved.borrow_mut().remove(&id);
-                    }
-                }),
+                Box::new(bind!(self, |inner| {
+                    inner.approved.borrow_mut().remove(&id);
+                })),
             );
         }
     }
@@ -263,14 +261,7 @@ impl Inner {
 
     /// `SessionQuestion`'s layer.
     fn question_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
-        let run = |action: fn(&Rc<Inner>)| {
-            let weak = Rc::downgrade(self);
-            move |_: Option<&str>, _: Option<&KeyEvent>| {
-                if let Some(inner) = weak.upgrade() {
-                    action(&inner);
-                }
-            }
-        };
+        let run = |action: fn(&Rc<Inner>)| bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| action(&inner));
         let mut commands = vec![
             TuiCommand::new("app.exit", run(Inner::dismiss))
                 .title("Reject permission")
@@ -310,37 +301,28 @@ impl Inner {
 
     /// `RejectPrompt`'s layer.
     fn reject_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
-        let exit = Rc::downgrade(self);
-        let escape = Rc::downgrade(self);
-        let confirm = Rc::downgrade(self);
         KeymapLayer {
             commands: vec![
-                TuiCommand::new("app.exit", move |_, event: Option<&KeyEvent>| {
-                    let Some(inner) = exit.upgrade() else { return };
-                    let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
-                    let field = inner.reject.borrow().clone();
-                    if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
-                        field.set_text("");
-                        return;
-                    }
-                    inner.cancel_reject();
-                })
-                .title("Cancel permission rejection")
-                .group("Permission"),
-                TuiCommand::inline("escape", move |_, _| {
-                    if let Some(inner) = escape.upgrade() {
+                TuiCommand::new(
+                    "app.exit",
+                    bind!(self, |inner, _, event: Option<&KeyEvent>| {
+                        let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
+                        let field = inner.reject.borrow().clone();
+                        if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
+                            field.set_text("");
+                            return;
+                        }
                         inner.cancel_reject();
-                    }
-                })
+                    }),
+                )
                 .title("Cancel permission rejection")
                 .group("Permission"),
-                TuiCommand::inline("return", move |_, _| {
-                    if let Some(inner) = confirm.upgrade() {
-                        inner.confirm_reject();
-                    }
-                })
-                .title("Confirm permission rejection")
-                .group("Permission"),
+                TuiCommand::inline("escape", bind!(self, |inner, _, _| inner.cancel_reject()))
+                    .title("Cancel permission rejection")
+                    .group("Permission"),
+                TuiCommand::inline("return", bind!(self, |inner, _, _| inner.confirm_reject()))
+                    .title("Confirm permission rejection")
+                    .group("Permission"),
             ],
             ..KeymapLayer::default()
         }
@@ -532,21 +514,16 @@ impl Inner {
                 } else {
                     theme.text.action.primary.base
                 }));
-            let hover = Rc::downgrade(self);
-            option.on_hover(move |_, over| {
-                let Some(inner) = hover.upgrade() else { return };
+            option.on_hover(bind!(self, |inner, _, over| {
                 if over && inner.prompted.borrow().selected != index {
                     inner.prompted.borrow_mut().selected = index;
                     inner.render();
                 }
-            });
-            let click = Rc::downgrade(self);
-            option.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-                if let Some(inner) = click.upgrade() {
-                    inner.prompted.borrow_mut().selected = index;
-                    inner.select(choice);
-                }
-            });
+            }));
+            option.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| {
+                inner.prompted.borrow_mut().selected = index;
+                inner.select(choice);
+            }));
             actions.add(&option);
         }
         let hints = View::new(app).row().gap(2).shrink(0.0);
@@ -600,19 +577,9 @@ impl Inner {
             .focused_colors(theme.text.base, Color::TRANSPARENT)
             .cursor_color(theme.text.base);
         let confirm = hint(app, theme, "enter", "confirm");
-        let weak = Rc::downgrade(self);
-        confirm.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.confirm_reject();
-            }
-        });
+        confirm.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.confirm_reject()));
         let cancel = hint(app, theme, "esc", "cancel");
-        let weak = Rc::downgrade(self);
-        cancel.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-            if let Some(inner) = weak.upgrade() {
-                inner.cancel_reject();
-            }
-        });
+        cancel.mouse_pointer(MousePointer::POINTER).on_click(bind!(self, |inner, _, _| inner.cancel_reject()));
         let actions = View::new(app).row().gap(2).shrink(0.0).child(&confirm).child(&cancel);
         let view = View::new(app)
             .column()

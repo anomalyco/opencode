@@ -11,6 +11,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_api::generated::V2Event;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::FadeInText;
 use opentui::keymap::Disposer;
@@ -96,17 +97,12 @@ pub struct Updates {
 /// Installs the updater: `/update` and the server's installation events.
 pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
     *tui.updates.source.borrow_mut() = Some(source);
-    let weak = tui.weak();
-    let command = TuiCommand::new("opencode.update", move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            open(&tui, Origin::Manual);
-        }
-    })
-    .bind(Bind::Off)
-    .title("Update OpenCode")
-    .group("System")
-    .palette()
-    .slash(Slash { name: "update".to_owned(), aliases: Vec::new(), arguments: false });
+    let command = TuiCommand::new("opencode.update", bind!(tui, |tui, _, _| open(&tui, Origin::Manual)))
+        .bind(Bind::Off)
+        .title("Update OpenCode")
+        .group("System")
+        .palette()
+        .slash(Slash { name: "update".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
         KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: the configured keybind (`none` by default).
@@ -235,11 +231,9 @@ pub(crate) fn install(tui: &Tui) {
         return;
     };
     set_state(tui, Some(UpdateState::Installing(version.clone())));
-    let weak = tui.weak();
     source.apply(
         &version.clone(),
-        Box::new(move |result| {
-            let Some(tui) = weak.upgrade() else { return };
+        Box::new(bind!(tui, |tui, result| {
             match result {
                 Ok(()) => {
                     tui.epilogue.updated_version(version.clone());
@@ -247,7 +241,7 @@ pub(crate) fn install(tui: &Tui) {
                 }
                 Err(error) => set_state(&tui, Some(UpdateState::Failed(error))),
             }
-        }),
+        })),
     );
 }
 
@@ -273,11 +267,9 @@ pub(crate) fn check(tui: &Tui, done: Box<dyn FnOnce(Result<Option<String>, Strin
             }
         })
     };
-    let weak = tui.weak();
     source.check(
         installing,
-        Box::new(move |result| {
-            let Some(tui) = weak.upgrade() else { return };
+        Box::new(bind!(tui, |tui, result| {
             if matches!(*tui.updates.state.borrow(), Some(UpdateState::Installing(_))) {
                 set_state(&tui, None);
             }
@@ -300,7 +292,7 @@ pub(crate) fn check(tui: &Tui, done: Box<dyn FnOnce(Result<Option<String>, Strin
                 }
                 Err(error) => done(Err(error)),
             }
-        }),
+        })),
     );
 }
 
@@ -406,8 +398,7 @@ fn render(tui: &Tui) {
     row.add(&text);
     let (weak, styled) = (tui.weak(), row.clone());
     // Restyled in place: a row built again between press and release would lose the click.
-    row.on_hover(move |_, over| {
-        let Some(tui) = weak.upgrade() else { return };
+    row.on_hover(bind!(weak, |tui, _, over| {
         tui.updates.hovered.set(over);
         let theme = tui.page();
         let hovered = theme.background.action.primary.hovered;
@@ -416,7 +407,7 @@ fn render(tui: &Tui) {
             part.clone().backdrop(if over { hovered } else { theme.background.base });
         }
         tui.app.request_redraw();
-    });
+    }));
     let weak = tui.weak();
     row.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
         if !matches!(event.kind, MouseEventKind::Up(MouseButton::Left)) {

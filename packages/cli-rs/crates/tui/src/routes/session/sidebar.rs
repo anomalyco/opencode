@@ -14,6 +14,7 @@ use opencode_api::generated::SessionID;
 use opencode_local::cli_config::Sidebar as SidebarSetting;
 use opencode_plugin::{SlotInput, SlotMount, Slotted, slot};
 use opencode_store::Changes;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -123,12 +124,7 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
             inner.layout(&tui);
         }
     });
-    let weak = Rc::downgrade(&inner);
-    tui.settings.on_change(move |tui| {
-        if let Some(inner) = weak.upgrade() {
-            inner.layout(tui);
-        }
-    });
+    tui.settings.on_change(bind!(inner, |inner, tui| inner.layout(tui)));
     install_layers(tui, &inner);
     let sidebar = Sidebar { inner };
     sidebar.inner.layout(tui);

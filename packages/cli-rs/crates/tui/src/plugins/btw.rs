@@ -9,6 +9,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionGenerateInput, SessionID};
 use opencode_plugin::{Definition, Placement, Slotted, slot};
 use opencode_store::Changes;
+use opencode_ui::bind;
 use opencode_ui::dialog::{self, DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
@@ -38,11 +39,10 @@ pub fn plugin() -> Definition<Tui> {
         cx.layer(KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),
             commands: vec![
-                TuiCommand::new("session.aside", move |input: Option<&str>, _| {
-                    if let Some(tui) = weak.upgrade() {
-                        aside(&tui, &pending, input);
-                    }
-                })
+                TuiCommand::new(
+                    "session.aside",
+                    bind!(weak, |tui, input: Option<&str>, _| aside(&tui, &pending, input)),
+                )
                 .title("Ask a side question")
                 .description("One-shot answer from the session's context without adding to the conversation")
                 .group("Session")
@@ -103,13 +103,12 @@ fn aside(tui: &Tui, pending: &Rc<Cell<u32>>, input: Option<&str>) {
                 PromptProps {
                     title: "/btw".to_owned(),
                     placeholder: Some("Ask anything".to_owned()),
-                    on_confirm: Some(Rc::new(move |value: &str| {
-                        let Some(tui) = weak.upgrade() else { return };
+                    on_confirm: Some(Rc::new(bind!(weak, |tui, value: &str| {
                         tui.dialogs.clear();
                         if !value.is_empty() {
                             ask(&tui, &pending, id.clone(), value.to_owned());
                         }
-                    })),
+                    }))),
                     on_cancel: Some(Rc::new(move || clear.clear())),
                     ..PromptProps::default()
                 },
@@ -218,11 +217,9 @@ fn answer(tui: &Tui, question: String, text: String) {
                 let footer_cx = cx.clone();
                 let footer = footer.clone();
                 let success = theme.text.feedback.success.base;
-                let weak = weak.clone();
                 let text = text.clone();
                 let again = trigger.clone();
-                *copy.borrow_mut() = Some(Rc::new(move || {
-                    let Some(tui) = weak.upgrade() else { return };
+                *copy.borrow_mut() = Some(Rc::new(bind!(weak, |tui| {
                     if !tui.app.copy_to_clipboard(&text) {
                         tui.toasts.error("Failed to copy to clipboard");
                         return;
@@ -235,7 +232,7 @@ fn answer(tui: &Tui, question: String, text: String) {
                         FooterProps { primary: vec![done], ..FooterProps::default() },
                     ));
                     tui.app.request_redraw();
-                }));
+                })));
                 let step = |delta: f64| {
                     let scroll = scroll.clone();
                     move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {

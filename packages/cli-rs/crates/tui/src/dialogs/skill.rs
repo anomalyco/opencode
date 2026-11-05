@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use opencode_api::generated::{SkillID, SkillInfo};
 use opencode_store::{Catalog, Location};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opentui::prelude::*;
@@ -27,23 +28,24 @@ pub fn show(tui: &Tui, location: Option<Location>, on_select: OnSelect) {
         return;
     }
     let open_now = open(tui, Load::Loading, on_select.clone());
-    let weak = tui.weak();
     let read = location.clone();
-    tui.app.spawn(tui.data.catalog_sync(Catalog::Skill, Some(&location)), move |_, result| {
-        let Some(tui) = weak.upgrade() else { return };
-        // Closed meanwhile: reopening it would surprise.
-        if !open_now.get() {
-            return;
-        }
-        let load = match result {
-            Ok(()) => Load::Loaded(
-                tui.data
-                    .read(|state| state.location(Some(&read)).and_then(|data| data.skill.clone()).unwrap_or_default()),
-            ),
-            Err(error) => Load::Failed(error.to_string()),
-        };
-        open(&tui, load, on_select);
-    });
+    tui.app.spawn(
+        tui.data.catalog_sync(Catalog::Skill, Some(&location)),
+        bind!(tui, |tui, _, result| {
+            // Closed meanwhile: reopening it would surprise.
+            if !open_now.get() {
+                return;
+            }
+            let load =
+                match result {
+                    Ok(()) => Load::Loaded(tui.data.read(|state| {
+                        state.location(Some(&read)).and_then(|data| data.skill.clone()).unwrap_or_default()
+                    })),
+                    Err(error) => Load::Failed(error.to_string()),
+                };
+            open(&tui, load, on_select);
+        }),
+    );
 }
 
 enum Load {
@@ -67,15 +69,13 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
             let mut props = SelectProps::new("Skills", options);
             props.render_filter = loaded;
             props.locked = !loaded;
-            props.on_select = Some(Rc::new(move |option: &SelectOption<SkillID>| {
-                let Some(tui) = weak.upgrade() else { return };
+            props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<SkillID>| {
                 let (id, on_select, weak) = (option.value.clone(), on_select.clone(), tui.weak());
-                tui.app.defer(move |_| {
-                    let Some(tui) = weak.upgrade() else { return };
+                tui.app.defer(bind!(weak, |tui, _| {
                     on_select(&tui, &id);
                     tui.dialogs.clear();
-                });
-            }));
+                }));
+            })));
             let (app, theme) = (cx.app.clone(), cx.theme.clone());
             let inset = |children: Vec<AnyWidget>| {
                 let view = View::new(&app).padding_x(DIALOG_LIST_INSET);

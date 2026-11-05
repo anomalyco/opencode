@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageInfo};
 use opencode_store::{LoadMore, MessageExt};
+use opencode_ui::bind;
 use opentui::prelude::*;
 
 use super::scroll::{Inner, after_layout};
@@ -79,40 +80,41 @@ impl Inner {
     /// loads an older page and tries again.
     pub(super) fn to_message(&self, tui: &Tui, next: bool, user_only: bool) {
         let weak = self.this.clone();
-        self.ensure_all_rows(tui, move |tui| {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(session) = inner.transcript.session() else {
-                return;
-            };
-            let (_, top) = inner.transcript.scroll().scroll_position();
-            let anchors = inner.transcript.anchors();
-            let current = inner.navigation.borrow().clone();
-            let target = tui.data.read(|state| {
-                find_boundary(next, &anchors, state.messages(&session), top, current.as_deref(), user_only)
-            });
-            if let Some(target) = target {
-                inner.align(tui, target.id, target.top);
-                return;
-            }
-            if next || !tui.data.read(|state| state.has_more_messages(&session)) {
-                return;
-            }
-            let data = tui.data.clone();
-            let weak = inner.this.clone();
-            tui.app.spawn(
-                async move { data.message_load_more(&session, LoadMore::default()).await },
-                move |_, result| {
-                    let Some(inner) = weak.upgrade() else { return };
-                    let Some(tui) = inner.tui.upgrade() else {
-                        return;
-                    };
-                    match result {
-                        Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
-                        Err(error) => tui.toasts.error(error.to_string()),
-                    }
-                },
-            );
-        });
+        self.ensure_all_rows(
+            tui,
+            bind!(weak, |inner, tui| {
+                let Some(session) = inner.transcript.session() else {
+                    return;
+                };
+                let (_, top) = inner.transcript.scroll().scroll_position();
+                let anchors = inner.transcript.anchors();
+                let current = inner.navigation.borrow().clone();
+                let target = tui.data.read(|state| {
+                    find_boundary(next, &anchors, state.messages(&session), top, current.as_deref(), user_only)
+                });
+                if let Some(target) = target {
+                    inner.align(tui, target.id, target.top);
+                    return;
+                }
+                if next || !tui.data.read(|state| state.has_more_messages(&session)) {
+                    return;
+                }
+                let data = tui.data.clone();
+                let weak = inner.this.clone();
+                tui.app.spawn(
+                    async move { data.message_load_more(&session, LoadMore::default()).await },
+                    bind!(weak, |inner, _, result| {
+                        let Some(tui) = inner.tui.upgrade() else {
+                            return;
+                        };
+                        match result {
+                            Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
+                            Err(error) => tui.toasts.error(error.to_string()),
+                        }
+                    }),
+                );
+            }),
+        );
     }
 
     /// `session.messages_last_user`: the newest user message with text.
@@ -135,23 +137,25 @@ impl Inner {
     /// assistant message.
     pub fn jump(&self, tui: &Tui, id: String) {
         let weak = self.this.clone();
-        self.ensure_all_rows(tui, move |tui| {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(session) = inner.transcript.session() else {
-                return;
-            };
-            let Some(&(_, y)) = inner.transcript.anchors().iter().find(|(message, _)| *message == id) else {
-                return;
-            };
-            let assistant = tui.data.read(|state| {
-                state
-                    .messages(&session)
-                    .iter()
-                    .any(|message| message.id() == id && matches!(message, SessionMessageInfo::Assistant(_)))
-            });
-            let top = (y - if assistant { 1.0 } else { 0.0 }).max(0.0);
-            inner.align(tui, id, top);
-        });
+        self.ensure_all_rows(
+            tui,
+            bind!(weak, |inner, tui| {
+                let Some(session) = inner.transcript.session() else {
+                    return;
+                };
+                let Some(&(_, y)) = inner.transcript.anchors().iter().find(|(message, _)| *message == id) else {
+                    return;
+                };
+                let assistant = tui.data.read(|state| {
+                    state
+                        .messages(&session)
+                        .iter()
+                        .any(|message| message.id() == id && matches!(message, SessionMessageInfo::Assistant(_)))
+                });
+                let top = (y - if assistant { 1.0 } else { 0.0 }).max(0.0);
+                inner.align(tui, id, top);
+            }),
+        );
     }
 
     /// `alignMessage`: stops following the bottom, adds the slack the target needs, and scrolls once
@@ -164,14 +168,16 @@ impl Inner {
         self.set_slack(slack(top, viewport, content, self.slack_height.get()));
         self.update_away();
         let weak = self.this.clone();
-        after_layout(&tui.app, move || {
-            let Some(inner) = weak.upgrade() else { return };
-            if inner.navigation.borrow().as_deref() != Some(id.as_str()) {
-                return;
-            }
-            inner.transcript.scroll().scroll_to(0.0, top);
-            inner.update_away();
-        });
+        after_layout(
+            &tui.app,
+            bind!(weak, |inner| {
+                if inner.navigation.borrow().as_deref() != Some(id.as_str()) {
+                    return;
+                }
+                inner.transcript.scroll().scroll_to(0.0, top);
+                inner.update_away();
+            }),
+        );
     }
 
     /// `ensureAllRows`: navigation walks every loaded row, so they mount first.
@@ -182,11 +188,7 @@ impl Inner {
         }
         self.transcript.mount_all(tui);
         let weak = self.tui.clone();
-        after_layout(&tui.app, move || {
-            if let Some(tui) = weak.upgrade() {
-                continuation(&tui);
-            }
-        });
+        after_layout(&tui.app, bind!(weak, |tui| continuation(&tui)));
     }
 }
 

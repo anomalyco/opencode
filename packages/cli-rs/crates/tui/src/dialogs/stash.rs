@@ -8,6 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use chrono::{Local, TimeZone};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::select::{self, Select, SelectAction, SelectOption, SelectProps};
 use serde_json::Value;
@@ -26,15 +27,11 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
             let list = built;
             let weak = Rc::downgrade(&list);
             let mut props = SelectProps::new("Stash", list.options());
-            props.on_move = Some(Rc::new({
-                let weak = weak.clone();
-                move |_: &SelectOption<usize>| {
-                    let Some(list) = weak.upgrade() else { return };
-                    if list.to_delete.take().is_some() {
-                        list.refresh_later();
-                    }
+            props.on_move = Some(Rc::new(bind!(weak, |list, _: &SelectOption<usize>| {
+                if list.to_delete.take().is_some() {
+                    list.refresh_later();
                 }
-            }));
+            })));
             props.on_select = Some(Rc::new({
                 let weak = weak.clone();
                 move |option: &SelectOption<usize>| {
@@ -42,24 +39,20 @@ pub fn show(tui: &Tui, on_select: OnSelect) {
                         return;
                     };
                     let (index, on_select, weak) = (option.value, on_select.clone(), tui.weak());
-                    tui.app.defer(move |_| {
-                        let Some(tui) = weak.upgrade() else { return };
+                    tui.app.defer(bind!(weak, |tui, _| {
                         if let Some(entry) = tui.prompt.stash.list().get(index) {
                             tui.prompt.stash.remove(&tui.app, index);
                             on_select(entry);
                         }
                         tui.dialogs.clear();
-                    });
+                    }));
                 }
             }));
-            props.actions = vec![SelectAction::new("stash.delete", "delete", {
-                let weak = weak.clone();
-                move |option: &SelectOption<usize>| {
-                    if let Some(list) = weak.upgrade() {
-                        list.delete(option.value);
-                    }
-                }
-            })];
+            props.actions = vec![SelectAction::new(
+                "stash.delete",
+                "delete",
+                bind!(weak, |list, option: &SelectOption<usize>| list.delete(option.value)),
+            )];
             let (view, select) = select::select(cx, props);
             *list.select.borrow_mut() = Some(select);
             cx.on_close(opentui::keymap::Disposer::new(move || {
@@ -133,14 +126,12 @@ impl List {
         let Some(tui) = self.tui.upgrade() else {
             return;
         };
-        let weak = Rc::downgrade(self);
-        tui.app.defer(move |_| {
-            let Some(list) = weak.upgrade() else { return };
+        tui.app.defer(bind!(self, |list, _| {
             let select = list.select.borrow().clone();
             if let Some(select) = select {
                 select.set_options(list.options());
             }
-        });
+        }));
     }
 }
 

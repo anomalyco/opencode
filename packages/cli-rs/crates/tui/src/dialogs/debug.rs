@@ -6,6 +6,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
+use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
@@ -75,8 +76,7 @@ pub fn show(tui: &Tui) {
                         redraw(&weak, &hook);
                     })
                 };
-                Rc::new(move || {
-                    let Some(cx) = cx.upgrade() else { return };
+                Rc::new(bind!(cx, |cx| {
                     let mut action = FooterAction::new(if copied.get() { "✓ copied" } else { "copy" }).key("c");
                     action.on_trigger = Some(run.clone());
                     if copied.get() {
@@ -84,7 +84,7 @@ pub fn show(tui: &Tui) {
                     }
                     slot.clear();
                     slot.add(&footer(&cx, FooterProps { primary: vec![action], ..FooterProps::default() }));
-                })
+                }))
             };
             draw();
             *hook.borrow_mut() = Some(Rc::downgrade(&draw));

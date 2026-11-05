@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::events::{State, Status};
+use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
@@ -69,18 +70,19 @@ pub fn connection_changed(tui: &Tui, state: &State) {
     overlays.connected.set(false);
     let delay =
         if state.status == Status::Reconnecting { Duration::from_millis(1000) } else { Duration::from_millis(5000) };
-    let weak = tui.weak();
-    overlays.timer.set(Some(tui.app.set_timeout(delay, move |_| {
-        let Some(tui) = weak.upgrade() else { return };
-        tui.overlays.timer.set(None);
-        if tui.overlays.reconnecting.borrow().is_some() {
-            return;
-        }
-        let view = reconnecting(&tui);
-        tui.app.root().add(&view);
-        *tui.overlays.reconnecting.borrow_mut() = Some(view);
-        tui.app.request_redraw();
-    })));
+    overlays.timer.set(Some(tui.app.set_timeout(
+        delay,
+        bind!(tui, |tui, _| {
+            tui.overlays.timer.set(None);
+            if tui.overlays.reconnecting.borrow().is_some() {
+                return;
+            }
+            let view = reconnecting(&tui);
+            tui.app.root().add(&view);
+            *tui.overlays.reconnecting.borrow_mut() = Some(view);
+            tui.app.request_redraw();
+        }),
+    )));
 }
 
 /// `Reconnecting`: a dimmed screen with a centered panel.
@@ -132,8 +134,7 @@ fn poll_migration(weak: &Weak<Tui>) {
                 .await
                 .map(|status| serde_json::to_value(status).unwrap_or_default())
         },
-        move |cx, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(weak, |tui, cx, result| {
             let status = match result {
                 Ok(status) => status,
                 Err(error) => return migration_failed(&tui, error.to_string()),
@@ -151,7 +152,7 @@ fn poll_migration(weak: &Weak<Tui>) {
                     cx.app().set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
                 }
             }
-        },
+        }),
     );
 }
 

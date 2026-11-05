@@ -16,6 +16,7 @@ use opencode_api::generated::{
 };
 use opencode_local::cli_config::{Grouping, Info, Verbosity};
 use opencode_store::MessageExt;
+use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opencode_ui::tool_info::{canonical_tool_name, tool_display_metadata};
@@ -584,9 +585,7 @@ impl GroupView {
             latest: RefCell::default(),
             animations: cx.animations,
         });
-        let weak = Rc::downgrade(&inner);
-        inner.header.mouse_pointer(MousePointer::POINTER).on_click(move |cx, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.header.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, cx, _| {
             // A click that ends a text selection does not toggle (`useDisclosure`).
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
@@ -600,13 +599,11 @@ impl GroupView {
             if let Some(refresh) = refresh {
                 refresh();
             }
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.header.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        }));
+        inner.header.on_hover(bind!(inner, |inner, _, hovered| {
             inner.hover.set(hovered);
             inner.paint_color();
-        });
+        }));
         Self(inner)
     }
 

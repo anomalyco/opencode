@@ -8,6 +8,7 @@ use std::rc::Rc;
 use opencode_api::generated::SessionID;
 use opencode_plugin::{Definition, Placement, slot};
 use opencode_store::{Catalog, Location};
+use opencode_ui::bind;
 use opentui::prelude::*;
 use serde_json::json;
 
@@ -89,25 +90,21 @@ fn card(tui: &Tui, onboarding: &Rc<Onboarding>) -> View {
     let theme = tui.page();
     let app = &tui.app;
     let close = Text::new(app, "✕").fg(theme.text.muted);
-    let weak = tui.weak();
     let state = onboarding.clone();
-    on_click(&close, false, move || {
-        if let Some(tui) = weak.upgrade() {
-            state.dismiss(&tui);
-        }
-    });
+    on_click(&close, false, bind!(tui, |tui| state.dismiss(&tui)));
     let connect = View::new(app)
         .row()
         .gap(1)
         .justify(Justify::SpaceBetween)
         .child(&Text::new(app, "Connect provider").fg(theme.text.base))
         .child(&Text::new(app, "/connect").fg(theme.text.muted));
-    let weak = tui.weak();
-    on_click(&connect, false, move || {
-        if let Some(tui) = weak.upgrade() {
+    on_click(
+        &connect,
+        false,
+        bind!(tui, |tui| {
             tui.keymap.dispatch("provider.connect", None);
-        }
-    });
+        }),
+    );
     let muted = |text: &str| Text::new(app, text).fg(theme.text.muted).wrap(WrapMode::Word);
     let body = View::new(app)
         .column()
@@ -146,12 +143,7 @@ fn path(tui: &Tui, directory: &str, value: &str) -> View {
         hover.fg(if hovered { base } else { muted });
         cx.app().request_redraw();
     });
-    let weak = tui.weak();
     let directory = directory.to_owned();
-    on_click(&text, false, move || {
-        if let Some(tui) = weak.upgrade() {
-            crate::dialogs::working_directory::show(&tui, &directory);
-        }
-    });
+    on_click(&text, false, bind!(tui, |tui| crate::dialogs::working_directory::show(&tui, &directory)));
     View::new(&tui.app).child(&text)
 }

@@ -2,6 +2,7 @@
 
 pub mod activity_calendar;
 pub mod alert;
+pub mod bind;
 pub mod code;
 pub mod confirm;
 pub mod dialog;

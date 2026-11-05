@@ -6,6 +6,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::generated::{McpServer, McpServerStatus};
 use opencode_store::Catalog;
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, HeaderProps, header, layout};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
@@ -16,17 +17,12 @@ use crate::app::Tui;
 
 /// Registers `opencode.status` ("View status", `/status`) as `app.tsx:1054-1061` does.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    let command = TuiCommand::new("opencode.status", move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            show(&tui);
-        }
-    })
-    .bind(Bind::Off)
-    .title("View status")
-    .group("System")
-    .palette()
-    .slash(Slash { name: "status".to_owned(), aliases: Vec::new(), arguments: false });
+    let command = TuiCommand::new("opencode.status", bind!(tui, |tui, _, _| show(&tui)))
+        .bind(Bind::Off)
+        .title("View status")
+        .group("System")
+        .palette()
+        .slash(Slash { name: "status".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
         KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: `<leader>s` by default.
@@ -44,10 +40,7 @@ pub fn install(tui: &Rc<Tui>) {
 pub fn show(tui: &Tui) {
     let weak = tui.weak();
     tui.dialogs.replace(
-        move |cx| {
-            let Some(tui) = weak.upgrade() else {
-                return View::new(&cx.app);
-            };
+        bind!(weak, |tui, cx| {
             // The store changes on other threads: take the revision before drawing, so a change in between redraws.
             let seen = tui.data.read(|state| state.revision());
             let body = View::new(&cx.app);
@@ -63,7 +56,7 @@ pub fn show(tui: &Tui) {
             cx.on_close(Disposer::new(move || closed.open.set(false)));
             status.load(&tui);
             layout(cx, &header(cx, HeaderProps { title: "Status".to_owned(), ..HeaderProps::default() }), &body, None)
-        },
+        }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );

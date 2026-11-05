@@ -11,6 +11,7 @@ use std::rc::{Rc, Weak};
 use opencode_api::generated::SessionID;
 use opencode_plugin::{Definition, Placement, SlotInput, Slotted, slot};
 use opencode_store::{Changes, SessionStatus};
+use opencode_ui::bind;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
@@ -24,11 +25,7 @@ pub fn plugin() -> Definition<Tui> {
         goals.install(cx.host());
         let weak = Rc::downgrade(cx.host());
         let dispose = goals.clone();
-        cx.on_dispose(move || {
-            if let Some(tui) = weak.upgrade() {
-                dispose.dispose(&tui);
-            }
-        });
+        cx.on_dispose(bind!(weak, |tui| dispose.dispose(&tui)));
         cx.slot(Placement::append(slot::PROMPT_FOOTER), move |tui, input| Box::new(Footer::new(tui, &goals, input)));
     })
 }
@@ -73,14 +70,8 @@ impl Footer {
             input.prompt.clone().unwrap_or(opencode_plugin::slot::PromptFooter { shell: false, show_details: true });
         let session = input.session_id.clone().map(SessionID);
         let inner = Rc::new_cyclic(|this: &Weak<Inner>| {
-            let goal = session.clone().map(|session| {
-                let this = this.clone();
-                goals.track(tui, session, move |tui| {
-                    if let Some(inner) = this.upgrade() {
-                        inner.refresh(tui);
-                    }
-                })
-            });
+            let goal =
+                session.clone().map(|session| goals.track(tui, session, bind!(this, |inner, tui| inner.refresh(tui))));
             Inner {
                 root: View::new(&tui.app).row().gap(2).min_width(0),
                 session,

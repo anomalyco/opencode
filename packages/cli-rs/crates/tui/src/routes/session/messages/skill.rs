@@ -6,6 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_api::generated::{ModelInfo, ModelRef, SessionID, SessionMessageInfo};
+use opencode_ui::bind;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -53,17 +54,13 @@ impl Notice {
             heading: RefCell::default(),
             hover: Cell::new(false),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.root.on_hover(bind!(inner, |inner, _, hovered| {
             let child = matches!(&*inner.rendered.borrow(), Some(Line::Completion { child: Some(_), .. }));
             inner.root.mouse_pointer(opencode_ui::click_pointer(child));
             inner.hover.set(hovered);
             inner.paint();
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_click(move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        }));
+        inner.root.on_click(bind!(inner, |inner, _, _| {
             let child = match &*inner.rendered.borrow() {
                 Some(Line::Completion { child: Some(child), .. }) => child.clone(),
                 _ => return,
@@ -71,7 +68,7 @@ impl Notice {
             if let Some(tui) = inner.tui.upgrade() {
                 tui.navigate(Route::Session { id: SessionID(child) });
             }
-        });
+        }));
         Self(inner)
     }
 

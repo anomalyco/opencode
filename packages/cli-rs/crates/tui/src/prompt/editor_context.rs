@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use opencode_ui::bind;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use serde::Deserialize;
@@ -297,11 +298,7 @@ pub fn start(tui: &Tui, source: Source) {
     let context = &tui.prompt.editor;
     if context.0.borrow().started.is_none() {
         let weak = Rc::downgrade(&context.0);
-        tui.app.on_message(move |_, posted: &Posted| {
-            if let Some(state) = weak.upgrade() {
-                Context(state).apply(posted);
-            }
-        });
+        tui.app.on_message(bind!(weak, |state, _, posted: &Posted| Context(state).apply(posted)));
     }
     let mut state = context.0.borrow_mut();
     if let Some(started) = state.started.take() {
@@ -375,11 +372,7 @@ impl Context {
         let id = self.listener_id();
         self.0.borrow_mut().mentions.push((id, Rc::new(listener)));
         let weak = Rc::downgrade(&self.0);
-        Disposer::new(move || {
-            if let Some(state) = weak.upgrade() {
-                state.borrow_mut().mentions.retain(|(other, _)| *other != id);
-            }
-        })
+        Disposer::new(bind!(weak, |state| state.borrow_mut().mentions.retain(|(other, _)| *other != id)))
     }
 
     /// Calls `listener` when the selection or its label state changes.
@@ -387,11 +380,7 @@ impl Context {
         let id = self.listener_id();
         self.0.borrow_mut().watchers.push((id, Rc::new(listener)));
         let weak: Weak<RefCell<State>> = Rc::downgrade(&self.0);
-        Disposer::new(move || {
-            if let Some(state) = weak.upgrade() {
-                state.borrow_mut().watchers.retain(|(other, _)| *other != id);
-            }
-        })
+        Disposer::new(bind!(weak, |state| state.borrow_mut().watchers.retain(|(other, _)| *other != id)))
     }
 
     /// Follows the session's directory (`reconnect`); `None` is the TUI's own directory. The selection is
