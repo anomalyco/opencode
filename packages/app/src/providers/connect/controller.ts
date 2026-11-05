@@ -249,7 +249,10 @@ export function createProviderDialogController(options: {
         variant: "success",
         icon: "circle-check",
         title: language.t("provider.connect.toast.connected.title", { provider: name }),
-        description: language.t("provider.connect.toast.connected.description", { provider: name }),
+        description:
+          connectionModels().length > 0
+            ? language.t("provider.connect.toast.connected.description", { provider: name })
+            : undefined,
       })
 
       return
