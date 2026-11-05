@@ -146,7 +146,7 @@ impl Permission {
                 super::form::quiet(tui, tui.data.permission_sync(&id));
             }
         }
-        if tui.config.permissions == Permissions::Autoaccept {
+        if tui.config().permissions == Permissions::Autoaccept {
             inner.auto_approve(tui, &requests);
             return;
         }
@@ -195,7 +195,7 @@ impl Drop for Permission {
 /// transcript draws it in the warning color. It takes the store's state, since the transcript asks while
 /// it reads the store.
 pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -> bool {
-    if tui.config.permissions == Permissions::Autoaccept {
+    if tui.config().permissions == Permissions::Autoaccept {
         return false;
     }
     state
@@ -828,7 +828,7 @@ fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
         .basis(Length::Auto)
         .min_height(0);
     if let Some(diff) = &current.diff {
-        let view = match tui.config.info.diffs.as_ref().and_then(|diffs| diffs.view) {
+        let view = match tui.config().info.diffs.as_ref().and_then(|diffs| diffs.view) {
             Some(ConfigDiffView::Unified) => DiffView::Unified,
             Some(ConfigDiffView::Split) => DiffView::Split,
             _ if tui.app.size().0 > 120 => DiffView::Split,

@@ -173,8 +173,8 @@ pub fn cursor(config: &Resolved) -> (opentui::native::CursorStyle, bool) {
 /// What TS effects redo when the config changes: `renderer.useMouse = config.data.mouse`, and the title effect,
 /// which sets the route's title again once `terminal.title` is back on.
 fn install_effects(tui: &Rc<Tui>) {
-    let mouse = Rc::new(Cell::new(tui.config.mouse));
-    let title = Rc::new(Cell::new(title_enabled(&tui.config.info)));
+    let mouse = Rc::new(Cell::new(tui.config().mouse));
+    let title = Rc::new(Cell::new(title_enabled(&tui.config().info)));
     tui.settings.on_change(move |tui| {
         let info = tui.settings.info();
         if !title.replace(title_enabled(&info)) && title.get() {

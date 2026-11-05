@@ -67,7 +67,8 @@ impl Edit {
             self.shown.take();
             return;
         };
-        let diffs = cx.tui.config.info.diffs.as_ref();
+        let diffs = cx.tui.config().info.diffs.clone();
+        let diffs = diffs.as_ref();
         let view = match diffs.and_then(|diffs| diffs.view) {
             Some(ConfigDiffView::Unified) => DiffView::Unified,
             Some(ConfigDiffView::Split) => DiffView::Split,

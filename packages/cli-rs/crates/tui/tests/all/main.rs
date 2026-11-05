@@ -11,6 +11,7 @@ mod app;
 mod attach;
 mod complete;
 mod composer;
+mod config_live;
 mod diffs;
 mod editor;
 mod form;

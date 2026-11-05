@@ -72,6 +72,10 @@ impl Move {
         }
     }
 
+    pub fn set_animations(&self, enabled: bool) {
+        self.spinner.set_animations(enabled);
+    }
+
     pub fn root(&self) -> &View {
         &self.root
     }
