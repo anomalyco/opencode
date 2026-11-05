@@ -82,9 +82,14 @@ function candidatesFor(config, requestedModel) {
   const automatic = requestedModel === "ocu/auto" || requestedModel === "auto";
   return config.providers
     .filter((provider) => provider.enabled)
-    .flatMap((provider) => provider.models
-      .filter((mapping) => automatic ? true : mapping.alias === requestedModel)
-      .map((mapping) => ({ provider, mapping })))
+    .flatMap((provider) => {
+      // Auto routing must try each provider only once. Prefer its explicit auto
+      // mapping; otherwise use its first configured model as the provider default.
+      const mapping = automatic
+        ? (provider.models.find((item) => item.alias === "ocu/auto") || provider.models[0])
+        : provider.models.find((item) => item.alias === requestedModel);
+      return mapping ? [{ provider, mapping }] : [];
+    })
     .sort((a, b) => a.provider.priority - b.provider.priority);
 }
 
