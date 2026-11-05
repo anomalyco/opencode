@@ -2,7 +2,11 @@
 //! workspace's limits leave for the selected model, in the error color when it is out or reached. Hidden when
 //! no limit applies to the model.
 
-use opencode_plugin::{Definition, Placement, slot};
+use std::rc::Rc;
+
+use opencode_plugin::{Definition, Placement, Slotted, slot};
+use opencode_store::Changes;
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -11,11 +15,36 @@ use crate::routes::session::sidebar::Section;
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.limit", |cx| {
-        // The limits and the selected model live outside the store, so any change reads them again.
         cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, _| {
-            Box::new(Section::new(tui, None, |tui, _| model(tui), view))
+            let section = Rc::new(Section::new(tui, None, |tui, _| model(tui), view));
+            // The limits and the selected model live outside the store: they load or change without a store
+            // change, so `tui.local` refreshes the section too.
+            let weak = Rc::downgrade(&section);
+            let tui_weak = tui.weak();
+            let listener = tui.local.subscribe(move || {
+                if let (Some(section), Some(tui)) = (weak.upgrade(), tui_weak.upgrade()) {
+                    section.sync(&tui, &Changes::everything());
+                }
+            });
+            Box::new(Limit { section, _listener: listener })
         });
     })
+}
+
+struct Limit {
+    section: Rc<Section<(String, bool)>>,
+    _listener: Disposer,
+}
+
+impl Slotted<Tui> for Limit {
+    fn root(&self) -> View {
+        self.section.root()
+    }
+
+    // Any store change reads the limits and the selected model again.
+    fn sync(&self, tui: &Tui, changes: &Changes) {
+        self.section.sync(tui, changes);
+    }
 }
 
 /// What remains, and whether it is out or reached.
