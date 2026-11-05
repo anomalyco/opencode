@@ -106,7 +106,7 @@ fn heap_dump(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
     match block_on(capture(context, args))? {
         Ok(()) => Ok(()),
         Err(error) => {
-            eprintln!("{error:#}");
+            eprintln!("{}", super::auth::error_message(&error));
             Err(Exit(1).into())
         }
     }
