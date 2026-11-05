@@ -36,6 +36,7 @@ test("an upload that lands after the user opened another session does not switch
     ...picked,
     { type: "import.succeeded", attempt: 1, target, session: imported, currentPath: "/server/a/session/ses_other" },
   ])
+
   const [, , stayed] = replay([
     ...picked,
     { type: "import.succeeded", attempt: 1, target, session: imported, currentPath: "/" },
@@ -62,6 +63,7 @@ test("an upload that outlives Home still lands and reports, without taking over 
     { type: "disposed" },
     { type: "import.succeeded", attempt: 1, target, session: imported, currentPath: "/" },
   ])
+
   const [, , , failed] = replay([...picked, { type: "disposed" }, { type: "import.failed", attempt: 1, cause: "500" }])
 
   expect(disposed?.effects).toEqual([])
@@ -97,10 +99,12 @@ test("a cancelled picker is quiet, failures toast, and the next import starts a 
     { type: "import.requested", target },
     { type: "picker.closed", attempt: 1, file },
   ])
+
   const [, pickerFailed] = replay([
     { type: "import.requested", target },
     { type: "picker.failed", attempt: 1, cause: "denied" },
   ])
+
   const [, , uploadFailed] = replay([...picked, { type: "import.failed", attempt: 1, cause: "invalid" }])
 
   expect(cancelled?.effects).toEqual([])

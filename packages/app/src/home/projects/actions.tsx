@@ -139,6 +139,7 @@ export function createProjectActions() {
     const data = await Schema.decodeUnknownPromise(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
       await file.text(),
     )
+
     const ctx = untrack(() => global.serverCtx(ServerConnection.key(target.conn)))
 
     if (!ctx) throw new Error(language.t("common.requestFailed"))

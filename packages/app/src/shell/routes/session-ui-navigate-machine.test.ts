@@ -28,11 +28,13 @@ test("clicking subagent A, then B, lands on B whenever A's sync settles", () => 
     { type: "child.requested", origin: parent, targetSessionID: "ses_a" },
     { type: "child.requested", origin: parent, targetSessionID: "ses_b" },
   ]
+
   const [a, b, syncedB, lateA] = replay([
     ...clicks,
     { type: "child.synced", attempt: 2 },
     { type: "child.synced", attempt: 1 },
   ])
+
   const [, , earlyA, thenB] = replay([...clicks, { type: "child.synced", attempt: 1 }, { type: "child.synced", attempt: 2 }])
 
   // Nothing touches the tab or the route until the sync settles.
@@ -55,6 +57,7 @@ test.each<[string, SessionUINavigateEvent]>([
     leave,
     { type: "child.synced", attempt: 1 },
   ])
+
   const [, abort, lateLink] = replay([
     { type: "referenced.requested", origin: parent, targetSessionID: linked.id },
     leave,
@@ -76,6 +79,7 @@ test("a repeat click joins the request in flight, and the session on screen need
     { type: "referenced.requested", origin: parent, targetSessionID: linked.id },
     { type: "referenced.requested", origin: parent, targetSessionID: linked.id },
   ])
+
   const [self] = replay([{ type: "child.requested", origin: parent, targetSessionID: parent.sessionID }])
 
   expect(repeat?.state).toBe(first!.state)
