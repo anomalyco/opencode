@@ -2,68 +2,72 @@
 #![allow(clippy::all, clippy::pedantic)]
 
 use super::types::*;
-use crate::client::{Call, Client, RequestOptions};
+use crate::client::{Call, Client};
 use crate::error::Error;
 use crate::transport::SseResponse;
 
 impl Client {
     /// `GET /api/info` (`info`)
-    pub async fn server_info(&self, options: &RequestOptions) -> Result<ServerInfoOutput, Error> {
-        let call = Call::new("GET", "/api/info".to_owned(), 200, &[400, 401]);
-
-        self.json(call, options).await
+    pub async fn server_info(&self) -> Result<ServerInfoOutput, Error> {
+        self.json(Self::server_info_call()?).await
+    }
+    pub fn server_info_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/info".to_owned(), 200, &[400, 401]))
     }
 
     /// `POST /api/pair` (`pair`)
-    pub async fn server_pair(&self, options: &RequestOptions) -> Result<ServerPairOutput, Error> {
-        let call = Call::new("POST", "/api/pair".to_owned(), 200, &[400, 401]);
-
-        self.json(call, options).await
+    pub async fn server_pair(&self) -> Result<ServerPairOutput, Error> {
+        self.json(Self::server_pair_call()?).await
+    }
+    pub fn server_pair_call() -> Result<Call, Error> {
+        Ok(Call::new("POST", "/api/pair".to_owned(), 200, &[400, 401]))
     }
 
     /// `GET /auth/connect/:code` (`connect`)
-    pub async fn server_connect(
-        &self,
-        input: &ServerConnectInput,
-        options: &RequestOptions,
-    ) -> Result<ServerConnectOutput, Error> {
-        let call =
-            Call::new("GET", format!("/auth/connect/{}", crate::client::path_param(&input.code)?), 200, &[400, 401]);
-
-        self.json(call, options).await
+    pub async fn server_connect(&self, input: &ServerConnectInput) -> Result<ServerConnectOutput, Error> {
+        self.json(Self::server_connect_call(input)?).await
+    }
+    pub fn server_connect_call(input: &ServerConnectInput) -> Result<Call, Error> {
+        Ok(Call::new("GET", format!("/auth/connect/{}", crate::client::path_param(&input.code)?), 200, &[400, 401]))
     }
 
     /// `GET /api/location` (`get`)
-    pub async fn location_get(
-        &self,
-        input: &LocationGetInput,
-        options: &RequestOptions,
-    ) -> Result<LocationGetOutput, Error> {
+    pub async fn location_get(&self, input: &LocationGetInput) -> Result<LocationGetOutput, Error> {
+        self.json(Self::location_get_call(input)?).await
+    }
+    pub fn location_get_call(input: &LocationGetInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/location".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/location/reload` (`reload`)
-    pub async fn location_reload(&self, options: &RequestOptions) -> Result<(), Error> {
-        let call = Call::new("POST", "/api/location/reload".to_owned(), 204, &[400, 401, 503]);
-
-        self.empty(call, options).await
+    pub async fn location_reload(&self) -> Result<(), Error> {
+        self.empty(Self::location_reload_call()?).await
+    }
+    pub fn location_reload_call() -> Result<Call, Error> {
+        Ok(Call::new("POST", "/api/location/reload".to_owned(), 204, &[400, 401, 503]))
     }
 
     /// `GET /api/agent` (`list`)
-    pub async fn agent_list(&self, input: &AgentListInput, options: &RequestOptions) -> Result<AgentListOutput, Error> {
+    pub async fn agent_list(&self, input: &AgentListInput) -> Result<AgentListOutput, Error> {
+        self.json(Self::agent_list_call(input)?).await
+    }
+    pub fn agent_list_call(input: &AgentListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/agent".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/agent/:agentID` (`get`)
-    pub async fn agent_get(&self, input: &AgentGetInput, options: &RequestOptions) -> Result<AgentGetOutput, Error> {
+    pub async fn agent_get(&self, input: &AgentGetInput) -> Result<AgentGetOutput, Error> {
+        self.json(Self::agent_get_call(input)?).await
+    }
+    pub fn agent_get_call(input: &AgentGetInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/agent/{}", crate::client::path_param(&input.agent_id)?),
@@ -73,38 +77,39 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/plugin` (`list`)
-    pub async fn plugin_list(
-        &self,
-        input: &PluginListInput,
-        options: &RequestOptions,
-    ) -> Result<PluginListOutput, Error> {
+    pub async fn plugin_list(&self, input: &PluginListInput) -> Result<PluginListOutput, Error> {
+        self.json(Self::plugin_list_call(input)?).await
+    }
+    pub fn plugin_list_call(input: &PluginListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/plugin".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/plugin/gui` (`gui`)
-    pub async fn plugin_gui(&self, input: &PluginGuiInput, options: &RequestOptions) -> Result<PluginGuiOutput, Error> {
+    pub async fn plugin_gui(&self, input: &PluginGuiInput) -> Result<PluginGuiOutput, Error> {
+        self.json(Self::plugin_gui_call(input)?).await
+    }
+    pub fn plugin_gui_call(input: &PluginGuiInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/plugin/gui".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
         call.query("id", &input.id)?;
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/plugin/check` (`check`)
-    pub async fn plugin_check(
-        &self,
-        input: &PluginCheckInput,
-        options: &RequestOptions,
-    ) -> Result<PluginCheckOutput, Error> {
+    pub async fn plugin_check(&self, input: &PluginCheckInput) -> Result<PluginCheckOutput, Error> {
+        self.json(Self::plugin_check_call(input)?).await
+    }
+    pub fn plugin_check_call(input: &PluginCheckInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/plugin/check".to_owned(), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
@@ -113,26 +118,28 @@ impl Client {
         if let Some(value) = &input.target {
             call.field("target", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/plugin/update` (`update`)
-    pub async fn plugin_update(&self, input: &PluginUpdateInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn plugin_update(&self, input: &PluginUpdateInput) -> Result<(), Error> {
+        self.empty(Self::plugin_update_call(input)?).await
+    }
+    pub fn plugin_update_call(input: &PluginUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/plugin/update".to_owned(), 204, &[400, 401, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
         call.field("targets", &input.targets)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/session` (`list`)
-    pub async fn session_list(
-        &self,
-        input: &SessionListInput,
-        options: &RequestOptions,
-    ) -> Result<SessionListOutput, Error> {
+    pub async fn session_list(&self, input: &SessionListInput) -> Result<SessionListOutput, Error> {
+        self.json(Self::session_list_call(input)?).await
+    }
+    pub fn session_list_call(input: &SessionListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/session".to_owned(), 200, &[400, 401]);
         if let Some(value) = &input.limit {
             call.query("limit", value)?;
@@ -161,15 +168,14 @@ impl Client {
         if let Some(value) = &input.cursor {
             call.query("cursor", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session` (`create`)
-    pub async fn session_create(
-        &self,
-        input: &SessionCreateInput,
-        options: &RequestOptions,
-    ) -> Result<SessionCreateOutput, Error> {
+    pub async fn session_create(&self, input: &SessionCreateInput) -> Result<SessionCreateOutput, Error> {
+        self.data(Self::session_create_call(input)?).await
+    }
+    pub fn session_create_call(input: &SessionCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/session".to_owned(), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.id {
@@ -196,50 +202,48 @@ impl Client {
         if let Some(value) = &input.permissions {
             call.field("permissions", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/session/active` (`active`)
-    pub async fn session_active(&self, options: &RequestOptions) -> Result<SessionActiveOutput, Error> {
-        let call = Call::new("GET", "/api/session/active".to_owned(), 200, &[400, 401]);
-
-        self.data(call, options).await
+    pub async fn session_active(&self) -> Result<SessionActiveOutput, Error> {
+        self.data(Self::session_active_call()?).await
+    }
+    pub fn session_active_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/session/active".to_owned(), 200, &[400, 401]))
     }
 
     /// `GET /api/session/:sessionID` (`get`)
-    pub async fn session_get(
-        &self,
-        input: &SessionGetInput,
-        options: &RequestOptions,
-    ) -> Result<SessionGetOutput, Error> {
-        let call = Call::new(
+    pub async fn session_get(&self, input: &SessionGetInput) -> Result<SessionGetOutput, Error> {
+        self.data(Self::session_get_call(input)?).await
+    }
+    pub fn session_get_call(input: &SessionGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `DELETE /api/session/:sessionID` (`remove`)
-    pub async fn session_remove(&self, input: &SessionRemoveInput, options: &RequestOptions) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn session_remove(&self, input: &SessionRemoveInput) -> Result<(), Error> {
+        self.empty(Self::session_remove_call(input)?).await
+    }
+    pub fn session_remove_call(input: &SessionRemoveInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `POST /api/session/:sessionID/fork` (`fork`)
-    pub async fn session_fork(
-        &self,
-        input: &SessionForkInput,
-        options: &RequestOptions,
-    ) -> Result<SessionForkOutput, Error> {
+    pub async fn session_fork(&self, input: &SessionForkInput) -> Result<SessionForkOutput, Error> {
+        self.data(Self::session_fork_call(input)?).await
+    }
+    pub fn session_fork_call(input: &SessionForkInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/fork", crate::client::path_param(&input.session_id)?),
@@ -250,15 +254,14 @@ impl Client {
         if let Some(value) = &input.before {
             call.field("before", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/agent` (`switchAgent`)
-    pub async fn session_switch_agent(
-        &self,
-        input: &SessionSwitchAgentInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_switch_agent(&self, input: &SessionSwitchAgentInput) -> Result<(), Error> {
+        self.empty(Self::session_switch_agent_call(input)?).await
+    }
+    pub fn session_switch_agent_call(input: &SessionSwitchAgentInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/agent", crate::client::path_param(&input.session_id)?),
@@ -267,15 +270,14 @@ impl Client {
         );
         call.object();
         call.field("agent", &input.agent)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/model` (`switchModel`)
-    pub async fn session_switch_model(
-        &self,
-        input: &SessionSwitchModelInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_switch_model(&self, input: &SessionSwitchModelInput) -> Result<(), Error> {
+        self.empty(Self::session_switch_model_call(input)?).await
+    }
+    pub fn session_switch_model_call(input: &SessionSwitchModelInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/model", crate::client::path_param(&input.session_id)?),
@@ -284,11 +286,14 @@ impl Client {
         );
         call.object();
         call.field("model", &input.model)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `PATCH /api/session/:sessionID` (`update`)
-    pub async fn session_update(&self, input: &SessionUpdateInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn session_update(&self, input: &SessionUpdateInput) -> Result<(), Error> {
+        self.empty(Self::session_update_call(input)?).await
+    }
+    pub fn session_update_call(input: &SessionUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PATCH",
             format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
@@ -308,11 +313,14 @@ impl Client {
         if let Some(value) = &input.archived {
             call.field("archived", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/move` (`move`)
-    pub async fn session_move(&self, input: &SessionMoveInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn session_move(&self, input: &SessionMoveInput) -> Result<(), Error> {
+        self.empty(Self::session_move_call(input)?).await
+    }
+    pub fn session_move_call(input: &SessionMoveInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/move", crate::client::path_param(&input.session_id)?),
@@ -324,15 +332,14 @@ impl Client {
         if let Some(value) = &input.delivery {
             call.field("delivery", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/prompt` (`prompt`)
-    pub async fn session_prompt(
-        &self,
-        input: &SessionPromptInput,
-        options: &RequestOptions,
-    ) -> Result<SessionPromptOutput, Error> {
+    pub async fn session_prompt(&self, input: &SessionPromptInput) -> Result<SessionPromptOutput, Error> {
+        self.data(Self::session_prompt_call(input)?).await
+    }
+    pub fn session_prompt_call(input: &SessionPromptInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/prompt", crate::client::path_param(&input.session_id)?),
@@ -362,11 +369,14 @@ impl Client {
         if let Some(value) = &input.resume {
             call.field("resume", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/command` (`command`)
-    pub async fn session_command(&self, input: &SessionCommandInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn session_command(&self, input: &SessionCommandInput) -> Result<(), Error> {
+        self.empty(Self::session_command_call(input)?).await
+    }
+    pub fn session_command_call(input: &SessionCommandInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/command", crate::client::path_param(&input.session_id)?),
@@ -388,15 +398,14 @@ impl Client {
         if let Some(value) = &input.delivery {
             call.field("delivery", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/synthetic` (`synthetic`)
-    pub async fn session_synthetic(
-        &self,
-        input: &SessionSyntheticInput,
-        options: &RequestOptions,
-    ) -> Result<SessionSyntheticOutput, Error> {
+    pub async fn session_synthetic(&self, input: &SessionSyntheticInput) -> Result<SessionSyntheticOutput, Error> {
+        self.data(Self::session_synthetic_call(input)?).await
+    }
+    pub fn session_synthetic_call(input: &SessionSyntheticInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/synthetic", crate::client::path_param(&input.session_id)?),
@@ -420,11 +429,14 @@ impl Client {
         if let Some(value) = &input.resume {
             call.field("resume", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/shell` (`shell`)
-    pub async fn session_shell(&self, input: &SessionShellInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn session_shell(&self, input: &SessionShellInput) -> Result<(), Error> {
+        self.empty(Self::session_shell_call(input)?).await
+    }
+    pub fn session_shell_call(input: &SessionShellInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/shell", crate::client::path_param(&input.session_id)?),
@@ -436,15 +448,14 @@ impl Client {
             call.field("id", value)?;
         }
         call.field("command", &input.command)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/compact` (`compact`)
-    pub async fn session_compact(
-        &self,
-        input: &SessionCompactInput,
-        options: &RequestOptions,
-    ) -> Result<SessionCompactOutput, Error> {
+    pub async fn session_compact(&self, input: &SessionCompactInput) -> Result<SessionCompactOutput, Error> {
+        self.data(Self::session_compact_call(input)?).await
+    }
+    pub fn session_compact_call(input: &SessionCompactInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/compact", crate::client::path_param(&input.session_id)?),
@@ -458,15 +469,17 @@ impl Client {
         if let Some(value) = &input.delivery {
             call.field("delivery", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/revert/stage` (`revert.stage`)
     pub async fn session_revert_stage(
         &self,
         input: &SessionRevertStageInput,
-        options: &RequestOptions,
     ) -> Result<SessionRevertStageOutput, Error> {
+        self.data(Self::session_revert_stage_call(input)?).await
+    }
+    pub fn session_revert_stage_call(input: &SessionRevertStageInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/revert/stage", crate::client::path_param(&input.session_id)?),
@@ -478,63 +491,53 @@ impl Client {
         if let Some(value) = &input.files {
             call.field("files", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/session/:sessionID/revert` (`revert.clear`)
-    pub async fn session_revert_clear(
-        &self,
-        input: &SessionRevertClearInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn session_revert_clear(&self, input: &SessionRevertClearInput) -> Result<(), Error> {
+        self.empty(Self::session_revert_clear_call(input)?).await
+    }
+    pub fn session_revert_clear_call(input: &SessionRevertClearInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!("/api/session/{}/revert", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 409, 500],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `POST /api/session/:sessionID/revert/commit` (`revert.commit`)
-    pub async fn session_revert_commit(
-        &self,
-        input: &SessionRevertCommitInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn session_revert_commit(&self, input: &SessionRevertCommitInput) -> Result<(), Error> {
+        self.empty(Self::session_revert_commit_call(input)?).await
+    }
+    pub fn session_revert_commit_call(input: &SessionRevertCommitInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "POST",
             format!("/api/session/{}/revert/commit", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 409],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `GET /api/session/:sessionID/context` (`context`)
-    pub async fn session_context(
-        &self,
-        input: &SessionContextInput,
-        options: &RequestOptions,
-    ) -> Result<SessionContextOutput, Error> {
-        let call = Call::new(
+    pub async fn session_context(&self, input: &SessionContextInput) -> Result<SessionContextOutput, Error> {
+        self.data(Self::session_context_call(input)?).await
+    }
+    pub fn session_context_call(input: &SessionContextInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/session/{}/context", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404, 500],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `GET /api/session/:sessionID/diff` (`diff`)
-    pub async fn session_diff(
-        &self,
-        input: &SessionDiffInput,
-        options: &RequestOptions,
-    ) -> Result<SessionDiffOutput, Error> {
+    pub async fn session_diff(&self, input: &SessionDiffInput) -> Result<SessionDiffOutput, Error> {
+        self.data(Self::session_diff_call(input)?).await
+    }
+    pub fn session_diff_call(input: &SessionDiffInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/session/{}/diff", crate::client::path_param(&input.session_id)?),
@@ -550,32 +553,28 @@ impl Client {
         if let Some(value) = &input.context {
             call.query("context", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/session/:sessionID/inbox` (`inbox.list`)
-    pub async fn session_inbox_list(
-        &self,
-        input: &SessionInboxListInput,
-        options: &RequestOptions,
-    ) -> Result<SessionInboxListOutput, Error> {
-        let call = Call::new(
+    pub async fn session_inbox_list(&self, input: &SessionInboxListInput) -> Result<SessionInboxListOutput, Error> {
+        self.data(Self::session_inbox_list_call(input)?).await
+    }
+    pub fn session_inbox_list_call(input: &SessionInboxListInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/session/{}/inbox", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `DELETE /api/session/:sessionID/inbox/:inboxID` (`inbox.cancel`)
-    pub async fn session_inbox_cancel(
-        &self,
-        input: &SessionInboxCancelInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn session_inbox_cancel(&self, input: &SessionInboxCancelInput) -> Result<(), Error> {
+        self.empty(Self::session_inbox_cancel_call(input)?).await
+    }
+    pub fn session_inbox_cancel_call(input: &SessionInboxCancelInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!(
                 "/api/session/{}/inbox/{}",
@@ -584,17 +583,14 @@ impl Client {
             ),
             204,
             &[400, 401, 404],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `PATCH /api/session/:sessionID/inbox/:inboxID` (`inbox.update`)
-    pub async fn session_inbox_update(
-        &self,
-        input: &SessionInboxUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_inbox_update(&self, input: &SessionInboxUpdateInput) -> Result<(), Error> {
+        self.empty(Self::session_inbox_update_call(input)?).await
+    }
+    pub fn session_inbox_update_call(input: &SessionInboxUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PATCH",
             format!(
@@ -607,15 +603,14 @@ impl Client {
         );
         call.object();
         call.field("delivery", &input.delivery)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/generate` (`generate`)
-    pub async fn session_generate(
-        &self,
-        input: &SessionGenerateInput,
-        options: &RequestOptions,
-    ) -> Result<SessionGenerateOutput, Error> {
+    pub async fn session_generate(&self, input: &SessionGenerateInput) -> Result<SessionGenerateOutput, Error> {
+        self.data(Self::session_generate_call(input)?).await
+    }
+    pub fn session_generate_call(input: &SessionGenerateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/generate", crate::client::path_param(&input.session_id)?),
@@ -624,15 +619,14 @@ impl Client {
         );
         call.object();
         call.field("prompt", &input.prompt)?;
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/interrupt` (`interrupt`)
-    pub async fn session_interrupt(
-        &self,
-        input: &SessionInterruptInput,
-        options: &RequestOptions,
-    ) -> Result<SessionInterruptOutput, Error> {
+    pub async fn session_interrupt(&self, input: &SessionInterruptInput) -> Result<SessionInterruptOutput, Error> {
+        self.json(Self::session_interrupt_call(input)?).await
+    }
+    pub fn session_interrupt_call(input: &SessionInterruptInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/interrupt", crate::client::path_param(&input.session_id)?),
@@ -642,32 +636,28 @@ impl Client {
         if let Some(value) = &input.resume {
             call.query("resume", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/background` (`background`)
-    pub async fn session_background(
-        &self,
-        input: &SessionBackgroundInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn session_background(&self, input: &SessionBackgroundInput) -> Result<(), Error> {
+        self.empty(Self::session_background_call(input)?).await
+    }
+    pub fn session_background_call(input: &SessionBackgroundInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "POST",
             format!("/api/session/{}/background", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `GET /api/session/:sessionID/message/:messageID` (`message.get`)
-    pub async fn session_message_get(
-        &self,
-        input: &SessionMessageGetInput,
-        options: &RequestOptions,
-    ) -> Result<SessionMessageGetOutput, Error> {
-        let call = Call::new(
+    pub async fn session_message_get(&self, input: &SessionMessageGetInput) -> Result<SessionMessageGetOutput, Error> {
+        self.data(Self::session_message_get_call(input)?).await
+    }
+    pub fn session_message_get_call(input: &SessionMessageGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!(
                 "/api/session/{}/message/{}",
@@ -676,33 +666,27 @@ impl Client {
             ),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `GET /api/session/:sessionID/form` (`form.list`)
-    pub async fn session_form_list(
-        &self,
-        input: &SessionFormListInput,
-        options: &RequestOptions,
-    ) -> Result<SessionFormListOutput, Error> {
-        let call = Call::new(
+    pub async fn session_form_list(&self, input: &SessionFormListInput) -> Result<SessionFormListOutput, Error> {
+        self.data(Self::session_form_list_call(input)?).await
+    }
+    pub fn session_form_list_call(input: &SessionFormListInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/session/{}/form", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `POST /api/session/:sessionID/form` (`form.create`)
-    pub async fn session_form_create(
-        &self,
-        input: &SessionFormCreateInput,
-        options: &RequestOptions,
-    ) -> Result<SessionFormCreateOutput, Error> {
+    pub async fn session_form_create(&self, input: &SessionFormCreateInput) -> Result<SessionFormCreateOutput, Error> {
+        self.data(Self::session_form_create_call(input)?).await
+    }
+    pub fn session_form_create_call(input: &SessionFormCreateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/form", crate::client::path_param(&input.session_id)?),
@@ -718,16 +702,15 @@ impl Client {
             call.field("metadata", value)?;
         }
         call.field("fields", &input.fields)?;
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/session/:sessionID/form/:formID` (`form.get`)
-    pub async fn session_form_get(
-        &self,
-        input: &SessionFormGetInput,
-        options: &RequestOptions,
-    ) -> Result<SessionFormGetOutput, Error> {
-        let call = Call::new(
+    pub async fn session_form_get(&self, input: &SessionFormGetInput) -> Result<SessionFormGetOutput, Error> {
+        self.data(Self::session_form_get_call(input)?).await
+    }
+    pub fn session_form_get_call(input: &SessionFormGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!(
                 "/api/session/{}/form/{}",
@@ -736,17 +719,14 @@ impl Client {
             ),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `POST /api/session/:sessionID/form/:formID/reply` (`form.reply`)
-    pub async fn session_form_reply(
-        &self,
-        input: &SessionFormReplyInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_form_reply(&self, input: &SessionFormReplyInput) -> Result<(), Error> {
+        self.empty(Self::session_form_reply_call(input)?).await
+    }
+    pub fn session_form_reply_call(input: &SessionFormReplyInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!(
@@ -759,15 +739,14 @@ impl Client {
         );
         call.object();
         call.field("answer", &input.answer)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/session/:sessionID/form/:formID` (`form.cancel`)
-    pub async fn session_form_cancel(
-        &self,
-        input: &SessionFormCancelInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_form_cancel(&self, input: &SessionFormCancelInput) -> Result<(), Error> {
+        self.empty(Self::session_form_cancel_call(input)?).await
+    }
+    pub fn session_form_cancel_call(input: &SessionFormCancelInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "DELETE",
             format!(
@@ -781,15 +760,14 @@ impl Client {
         if let Some(value) = &input.message {
             call.query("message", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `PUT /api/session/:sessionID/environment` (`environment`)
-    pub async fn session_environment(
-        &self,
-        input: &SessionEnvironmentInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn session_environment(&self, input: &SessionEnvironmentInput) -> Result<(), Error> {
+        self.empty(Self::session_environment_call(input)?).await
+    }
+    pub fn session_environment_call(input: &SessionEnvironmentInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PUT",
             format!("/api/session/{}/environment", crate::client::path_param(&input.session_id)?),
@@ -798,11 +776,14 @@ impl Client {
         );
         call.object();
         call.field("variables", &input.variables)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/session/:sessionID/view` (`view`)
-    pub async fn session_view(&self, input: &SessionViewInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn session_view(&self, input: &SessionViewInput) -> Result<(), Error> {
+        self.empty(Self::session_view_call(input)?).await
+    }
+    pub fn session_view_call(input: &SessionViewInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/view", crate::client::path_param(&input.session_id)?),
@@ -811,15 +792,17 @@ impl Client {
         );
         call.object();
         call.field("idle", &input.idle)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/session/stats` (`stats`)
     pub async fn experimental_session_stats(
         &self,
         input: &ExperimentalSessionStatsInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalSessionStatsOutput, Error> {
+        self.data(Self::experimental_session_stats_call(input)?).await
+    }
+    pub fn experimental_session_stats_call(input: &ExperimentalSessionStatsInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/experimental/session/stats".to_owned(), 200, &[400, 401]);
         if let Some(value) = &input.from {
             call.query("from", value)?;
@@ -836,15 +819,17 @@ impl Client {
         if let Some(value) = &input.tools {
             call.query("tools", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/session/import` (`import`)
     pub async fn experimental_session_import(
         &self,
         input: &ExperimentalSessionImportInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalSessionImportOutput, Error> {
+        self.data(Self::experimental_session_import_call(input)?).await
+    }
+    pub fn experimental_session_import_call(input: &ExperimentalSessionImportInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[400, 401, 404, 409]);
         call.object();
         call.field("info", &input.info)?;
@@ -852,15 +837,17 @@ impl Client {
         if let Some(value) = &input.location {
             call.field("location", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/session/:sessionID/export` (`export`)
     pub async fn experimental_session_export(
         &self,
         input: &ExperimentalSessionExportInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalSessionExportOutput, Error> {
+        self.data(Self::experimental_session_export_call(input)?).await
+    }
+    pub fn experimental_session_export_call(input: &ExperimentalSessionExportInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/experimental/session/{}/export", crate::client::path_param(&input.session_id)?),
@@ -870,15 +857,14 @@ impl Client {
         if let Some(value) = &input.sanitize {
             call.query("sanitize", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/session/:sessionID/skill` (`skill`)
-    pub async fn experimental_session_skill(
-        &self,
-        input: &ExperimentalSessionSkillInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_session_skill(&self, input: &ExperimentalSessionSkillInput) -> Result<(), Error> {
+        self.empty(Self::experimental_session_skill_call(input)?).await
+    }
+    pub fn experimental_session_skill_call(input: &ExperimentalSessionSkillInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/experimental/session/{}/skill", crate::client::path_param(&input.session_id)?),
@@ -890,47 +876,50 @@ impl Client {
         if let Some(value) = &input.resume {
             call.field("resume", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/session/:sessionID/wait` (`wait`)
-    pub async fn experimental_session_wait(
-        &self,
-        input: &ExperimentalSessionWaitInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn experimental_session_wait(&self, input: &ExperimentalSessionWaitInput) -> Result<(), Error> {
+        self.empty(Self::experimental_session_wait_call(input)?).await
+    }
+    pub fn experimental_session_wait_call(input: &ExperimentalSessionWaitInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "POST",
             format!("/api/experimental/session/{}/wait", crate::client::path_param(&input.session_id)?),
             204,
             &[400, 401, 404, 503],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `GET /api/experimental/session/:sessionID/instructions/entries` (`instructions.entry.list`)
     pub async fn experimental_session_instructions_entry_list(
         &self,
         input: &ExperimentalSessionInstructionsEntryListInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalSessionInstructionsEntryListOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_session_instructions_entry_list_call(input)?).await
+    }
+    pub fn experimental_session_instructions_entry_list_call(
+        input: &ExperimentalSessionInstructionsEntryListInput,
+    ) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/experimental/session/{}/instructions/entries", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `PUT /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.put`)
     pub async fn experimental_session_instructions_entry_put(
         &self,
         input: &ExperimentalSessionInstructionsEntryPutInput,
-        options: &RequestOptions,
     ) -> Result<(), Error> {
+        self.empty(Self::experimental_session_instructions_entry_put_call(input)?).await
+    }
+    pub fn experimental_session_instructions_entry_put_call(
+        input: &ExperimentalSessionInstructionsEntryPutInput,
+    ) -> Result<Call, Error> {
         let mut call = Call::new(
             "PUT",
             format!(
@@ -943,16 +932,20 @@ impl Client {
         );
         call.object();
         call.field("value", &input.value)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.remove`)
     pub async fn experimental_session_instructions_entry_remove(
         &self,
         input: &ExperimentalSessionInstructionsEntryRemoveInput,
-        options: &RequestOptions,
     ) -> Result<(), Error> {
-        let call = Call::new(
+        self.empty(Self::experimental_session_instructions_entry_remove_call(input)?).await
+    }
+    pub fn experimental_session_instructions_entry_remove_call(
+        input: &ExperimentalSessionInstructionsEntryRemoveInput,
+    ) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!(
                 "/api/experimental/session/{}/instructions/entries/{}",
@@ -961,17 +954,17 @@ impl Client {
             ),
             204,
             &[400, 401, 404],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `GET /api/experimental/session/:sessionID/log` (`log`)
     pub async fn experimental_session_log(
         &self,
         input: &ExperimentalSessionLogInput,
-        options: &RequestOptions,
     ) -> Result<SseResponse<ExperimentalSessionLogOutput>, Error> {
+        self.sse(Self::experimental_session_log_call(input)?).await
+    }
+    pub fn experimental_session_log_call(input: &ExperimentalSessionLogInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/experimental/session/{}/log", crate::client::path_param(&input.session_id)?),
@@ -984,15 +977,14 @@ impl Client {
         if let Some(value) = &input.follow {
             call.query("follow", value)?;
         }
-        self.sse(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/session/:sessionID/message` (`list`)
-    pub async fn message_list(
-        &self,
-        input: &MessageListInput,
-        options: &RequestOptions,
-    ) -> Result<MessageListOutput, Error> {
+    pub async fn message_list(&self, input: &MessageListInput) -> Result<MessageListOutput, Error> {
+        self.json(Self::message_list_call(input)?).await
+    }
+    pub fn message_list_call(input: &MessageListInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/session/{}/message", crate::client::path_param(&input.session_id)?),
@@ -1011,11 +1003,14 @@ impl Client {
         if let Some(value) = &input.r#type {
             call.query("type", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/model` (`list`)
-    pub async fn model_list(&self, input: &ModelListInput, options: &RequestOptions) -> Result<ModelListOutput, Error> {
+    pub async fn model_list(&self, input: &ModelListInput) -> Result<ModelListOutput, Error> {
+        self.json(Self::model_list_call(input)?).await
+    }
+    pub fn model_list_call(input: &ModelListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/model".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1023,28 +1018,29 @@ impl Client {
         if let Some(value) = &input.types {
             call.query("types", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/model/default` (`default`)
-    pub async fn model_default(
-        &self,
-        input: &ModelDefaultInput,
-        options: &RequestOptions,
-    ) -> Result<ModelDefaultOutput, Error> {
+    pub async fn model_default(&self, input: &ModelDefaultInput) -> Result<ModelDefaultOutput, Error> {
+        self.json(Self::model_default_call(input)?).await
+    }
+    pub fn model_default_call(input: &ModelDefaultInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/generate/text` (`text`)
     pub async fn experimental_generate_text(
         &self,
         input: &ExperimentalGenerateTextInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalGenerateTextOutput, Error> {
+        self.data(Self::experimental_generate_text_call(input)?).await
+    }
+    pub fn experimental_generate_text_call(input: &ExperimentalGenerateTextInput) -> Result<Call, Error> {
         let mut call =
             Call::new("POST", "/api/experimental/generate/text".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
         call.object();
@@ -1052,15 +1048,17 @@ impl Client {
         if let Some(value) = &input.model {
             call.field("model", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/generate/image` (`image`)
     pub async fn experimental_generate_image(
         &self,
         input: &ExperimentalGenerateImageInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalGenerateImageOutput, Error> {
+        self.data(Self::experimental_generate_image_call(input)?).await
+    }
+    pub fn experimental_generate_image_call(input: &ExperimentalGenerateImageInput) -> Result<Call, Error> {
         let mut call =
             Call::new("POST", "/api/experimental/generate/image".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
         call.object();
@@ -1078,40 +1076,42 @@ impl Client {
         if let Some(value) = &input.resolution {
             call.field("resolution", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/generate/decisions` (`decisions`)
     pub async fn experimental_generate_decisions(
         &self,
         input: &ExperimentalGenerateDecisionsInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalGenerateDecisionsOutput, Error> {
+        self.data(Self::experimental_generate_decisions_call(input)?).await
+    }
+    pub fn experimental_generate_decisions_call(input: &ExperimentalGenerateDecisionsInput) -> Result<Call, Error> {
         let mut call =
             Call::new("POST", "/api/experimental/generate/decisions".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
         call.object();
         call.field("model", &input.model)?;
         call.field("input", &input.input)?;
         call.field("questions", &input.questions)?;
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/voice/models` (`models`)
-    pub async fn experimental_voice_models(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<ExperimentalVoiceModelsOutput, Error> {
-        let call = Call::new("GET", "/api/experimental/voice/models".to_owned(), 200, &[400, 401, 404, 503]);
-
-        self.data(call, options).await
+    pub async fn experimental_voice_models(&self) -> Result<ExperimentalVoiceModelsOutput, Error> {
+        self.data(Self::experimental_voice_models_call()?).await
+    }
+    pub fn experimental_voice_models_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/experimental/voice/models".to_owned(), 200, &[400, 401, 404, 503]))
     }
 
     /// `POST /api/experimental/voice/session` (`session`)
     pub async fn experimental_voice_session(
         &self,
         input: &ExperimentalVoiceSessionInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalVoiceSessionOutput, Error> {
+        self.data(Self::experimental_voice_session_call(input)?).await
+    }
+    pub fn experimental_voice_session_call(input: &ExperimentalVoiceSessionInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/voice/session".to_owned(), 200, &[400, 401, 404, 503]);
         call.object();
         call.field("model", &input.model)?;
@@ -1119,28 +1119,26 @@ impl Client {
             call.field("session", value)?;
         }
         call.field("transport", &input.transport)?;
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/provider` (`list`)
-    pub async fn provider_list(
-        &self,
-        input: &ProviderListInput,
-        options: &RequestOptions,
-    ) -> Result<ProviderListOutput, Error> {
+    pub async fn provider_list(&self, input: &ProviderListInput) -> Result<ProviderListOutput, Error> {
+        self.json(Self::provider_list_call(input)?).await
+    }
+    pub fn provider_list_call(input: &ProviderListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/provider".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/provider/:providerID` (`get`)
-    pub async fn provider_get(
-        &self,
-        input: &ProviderGetInput,
-        options: &RequestOptions,
-    ) -> Result<ProviderGetOutput, Error> {
+    pub async fn provider_get(&self, input: &ProviderGetInput) -> Result<ProviderGetOutput, Error> {
+        self.json(Self::provider_get_call(input)?).await
+    }
+    pub fn provider_get_call(input: &ProviderGetInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/provider/{}", crate::client::path_param(&input.provider_id)?),
@@ -1150,28 +1148,26 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/integration` (`list`)
-    pub async fn integration_list(
-        &self,
-        input: &IntegrationListInput,
-        options: &RequestOptions,
-    ) -> Result<IntegrationListOutput, Error> {
+    pub async fn integration_list(&self, input: &IntegrationListInput) -> Result<IntegrationListOutput, Error> {
+        self.json(Self::integration_list_call(input)?).await
+    }
+    pub fn integration_list_call(input: &IntegrationListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/integration".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/integration/:integrationID` (`get`)
-    pub async fn integration_get(
-        &self,
-        input: &IntegrationGetInput,
-        options: &RequestOptions,
-    ) -> Result<IntegrationGetOutput, Error> {
+    pub async fn integration_get(&self, input: &IntegrationGetInput) -> Result<IntegrationGetOutput, Error> {
+        self.json(Self::integration_get_call(input)?).await
+    }
+    pub fn integration_get_call(input: &IntegrationGetInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/integration/{}", crate::client::path_param(&input.integration_id)?),
@@ -1181,15 +1177,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/integration/:integrationID/connect/key` (`connect.key`)
-    pub async fn integration_connect_key(
-        &self,
-        input: &IntegrationConnectKeyInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn integration_connect_key(&self, input: &IntegrationConnectKeyInput) -> Result<(), Error> {
+        self.empty(Self::integration_connect_key_call(input)?).await
+    }
+    pub fn integration_connect_key_call(input: &IntegrationConnectKeyInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/integration/{}/connect/key", crate::client::path_param(&input.integration_id)?),
@@ -1207,15 +1202,14 @@ impl Client {
         if let Some(value) = &input.label {
             call.field("label", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/integration/:integrationID/connect/external` (`connect.external`)
-    pub async fn integration_connect_external(
-        &self,
-        input: &IntegrationConnectExternalInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn integration_connect_external(&self, input: &IntegrationConnectExternalInput) -> Result<(), Error> {
+        self.empty(Self::integration_connect_external_call(input)?).await
+    }
+    pub fn integration_connect_external_call(input: &IntegrationConnectExternalInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/integration/{}/connect/external", crate::client::path_param(&input.integration_id)?),
@@ -1233,15 +1227,17 @@ impl Client {
         if let Some(value) = &input.label {
             call.field("label", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/integration/:integrationID/connect/oauth` (`oauth.connect`)
     pub async fn integration_oauth_connect(
         &self,
         input: &IntegrationOauthConnectInput,
-        options: &RequestOptions,
     ) -> Result<IntegrationOauthConnectOutput, Error> {
+        self.json(Self::integration_oauth_connect_call(input)?).await
+    }
+    pub fn integration_oauth_connect_call(input: &IntegrationOauthConnectInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/integration/{}/connect/oauth", crate::client::path_param(&input.integration_id)?),
@@ -1259,15 +1255,17 @@ impl Client {
         if let Some(value) = &input.label {
             call.field("label", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.status`)
     pub async fn integration_oauth_status(
         &self,
         input: &IntegrationOauthStatusInput,
-        options: &RequestOptions,
     ) -> Result<IntegrationOauthStatusOutput, Error> {
+        self.json(Self::integration_oauth_status_call(input)?).await
+    }
+    pub fn integration_oauth_status_call(input: &IntegrationOauthStatusInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!(
@@ -1281,15 +1279,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/integration/:integrationID/connect/oauth/:attemptID/complete` (`oauth.complete`)
-    pub async fn integration_oauth_complete(
-        &self,
-        input: &IntegrationOauthCompleteInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn integration_oauth_complete(&self, input: &IntegrationOauthCompleteInput) -> Result<(), Error> {
+        self.empty(Self::integration_oauth_complete_call(input)?).await
+    }
+    pub fn integration_oauth_complete_call(input: &IntegrationOauthCompleteInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!(
@@ -1307,15 +1304,14 @@ impl Client {
         if let Some(value) = &input.code {
             call.field("code", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.cancel`)
-    pub async fn integration_oauth_cancel(
-        &self,
-        input: &IntegrationOauthCancelInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn integration_oauth_cancel(&self, input: &IntegrationOauthCancelInput) -> Result<(), Error> {
+        self.empty(Self::integration_oauth_cancel_call(input)?).await
+    }
+    pub fn integration_oauth_cancel_call(input: &IntegrationOauthCancelInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "DELETE",
             format!(
@@ -1329,15 +1325,17 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/integration/:integrationID/connect/command` (`command.connect`)
     pub async fn integration_command_connect(
         &self,
         input: &IntegrationCommandConnectInput,
-        options: &RequestOptions,
     ) -> Result<IntegrationCommandConnectOutput, Error> {
+        self.json(Self::integration_command_connect_call(input)?).await
+    }
+    pub fn integration_command_connect_call(input: &IntegrationCommandConnectInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/integration/{}/connect/command", crate::client::path_param(&input.integration_id)?),
@@ -1352,15 +1350,17 @@ impl Client {
         if let Some(value) = &input.label {
             call.field("label", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/integration/:integrationID/connect/command/:attemptID` (`command.status`)
     pub async fn integration_command_status(
         &self,
         input: &IntegrationCommandStatusInput,
-        options: &RequestOptions,
     ) -> Result<IntegrationCommandStatusOutput, Error> {
+        self.json(Self::integration_command_status_call(input)?).await
+    }
+    pub fn integration_command_status_call(input: &IntegrationCommandStatusInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!(
@@ -1374,15 +1374,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/integration/:integrationID/connect/command/:attemptID` (`command.cancel`)
-    pub async fn integration_command_cancel(
-        &self,
-        input: &IntegrationCommandCancelInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn integration_command_cancel(&self, input: &IntegrationCommandCancelInput) -> Result<(), Error> {
+        self.empty(Self::integration_command_cancel_call(input)?).await
+    }
+    pub fn integration_command_cancel_call(input: &IntegrationCommandCancelInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "DELETE",
             format!(
@@ -1396,52 +1395,60 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/integration/wellknown` (`wellknown.add`)
     pub async fn experimental_integration_wellknown_add(
         &self,
         input: &ExperimentalIntegrationWellknownAddInput,
-        options: &RequestOptions,
     ) -> Result<(), Error> {
+        self.empty(Self::experimental_integration_wellknown_add_call(input)?).await
+    }
+    pub fn experimental_integration_wellknown_add_call(
+        input: &ExperimentalIntegrationWellknownAddInput,
+    ) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/integration/wellknown".to_owned(), 204, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
         call.field("url", &input.url)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/mcp` (`list`)
-    pub async fn mcp_list(&self, input: &McpListInput, options: &RequestOptions) -> Result<McpListOutput, Error> {
+    pub async fn mcp_list(&self, input: &McpListInput) -> Result<McpListOutput, Error> {
+        self.json(Self::mcp_list_call(input)?).await
+    }
+    pub fn mcp_list_call(input: &McpListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/mcp".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/mcp/resource` (`resource.catalog`)
     pub async fn mcp_resource_catalog(
         &self,
         input: &McpResourceCatalogInput,
-        options: &RequestOptions,
     ) -> Result<McpResourceCatalogOutput, Error> {
+        self.json(Self::mcp_resource_catalog_call(input)?).await
+    }
+    pub fn mcp_resource_catalog_call(input: &McpResourceCatalogInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/mcp/resource".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `PUT /api/experimental/mcp/:server` (`add`)
-    pub async fn experimental_mcp_add(
-        &self,
-        input: &ExperimentalMcpAddInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_mcp_add(&self, input: &ExperimentalMcpAddInput) -> Result<(), Error> {
+        self.empty(Self::experimental_mcp_add_call(input)?).await
+    }
+    pub fn experimental_mcp_add_call(input: &ExperimentalMcpAddInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PUT",
             format!("/api/experimental/mcp/{}", crate::client::path_param(&input.server)?),
@@ -1453,15 +1460,14 @@ impl Client {
             call.query("location", value)?;
         }
         call.field("config", &input.config)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/experimental/mcp/:server` (`remove`)
-    pub async fn experimental_mcp_remove(
-        &self,
-        input: &ExperimentalMcpRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_mcp_remove(&self, input: &ExperimentalMcpRemoveInput) -> Result<(), Error> {
+        self.empty(Self::experimental_mcp_remove_call(input)?).await
+    }
+    pub fn experimental_mcp_remove_call(input: &ExperimentalMcpRemoveInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "DELETE",
             format!("/api/experimental/mcp/{}", crate::client::path_param(&input.server)?),
@@ -1471,15 +1477,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/mcp/:server/connect` (`connect`)
-    pub async fn experimental_mcp_connect(
-        &self,
-        input: &ExperimentalMcpConnectInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_mcp_connect(&self, input: &ExperimentalMcpConnectInput) -> Result<(), Error> {
+        self.empty(Self::experimental_mcp_connect_call(input)?).await
+    }
+    pub fn experimental_mcp_connect_call(input: &ExperimentalMcpConnectInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/experimental/mcp/{}/connect", crate::client::path_param(&input.server)?),
@@ -1489,15 +1494,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/mcp/:server/disconnect` (`disconnect`)
-    pub async fn experimental_mcp_disconnect(
-        &self,
-        input: &ExperimentalMcpDisconnectInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_mcp_disconnect(&self, input: &ExperimentalMcpDisconnectInput) -> Result<(), Error> {
+        self.empty(Self::experimental_mcp_disconnect_call(input)?).await
+    }
+    pub fn experimental_mcp_disconnect_call(input: &ExperimentalMcpDisconnectInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/experimental/mcp/{}/disconnect", crate::client::path_param(&input.server)?),
@@ -1507,15 +1511,17 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/client-mcp/token` (`client.token`)
     pub async fn experimental_mcp_client_token(
         &self,
         input: &ExperimentalMcpClientTokenInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalMcpClientTokenOutput, Error> {
+        self.json(Self::experimental_mcp_client_token_call(input)?).await
+    }
+    pub fn experimental_mcp_client_token_call(input: &ExperimentalMcpClientTokenInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/client-mcp/token".to_owned(), 200, &[400, 401, 403, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1524,22 +1530,22 @@ impl Client {
         if let Some(value) = &input.x_opencode_ticket {
             call.header("x-opencode-ticket", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/credential` (`list`)
-    pub async fn credential_list(&self, options: &RequestOptions) -> Result<CredentialListOutput, Error> {
-        let call = Call::new("GET", "/api/credential".to_owned(), 200, &[400, 401]);
-
-        self.data(call, options).await
+    pub async fn credential_list(&self) -> Result<CredentialListOutput, Error> {
+        self.data(Self::credential_list_call()?).await
+    }
+    pub fn credential_list_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/credential".to_owned(), 200, &[400, 401]))
     }
 
     /// `POST /api/credential` (`create`)
-    pub async fn credential_create(
-        &self,
-        input: &CredentialCreateInput,
-        options: &RequestOptions,
-    ) -> Result<CredentialCreateOutput, Error> {
+    pub async fn credential_create(&self, input: &CredentialCreateInput) -> Result<CredentialCreateOutput, Error> {
+        self.data(Self::credential_create_call(input)?).await
+    }
+    pub fn credential_create_call(input: &CredentialCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/credential".to_owned(), 200, &[400, 401, 409]);
         call.object();
         if let Some(value) = &input.id {
@@ -1553,15 +1559,14 @@ impl Client {
         if let Some(value) = &input.activate {
             call.field("activate", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `PATCH /api/credential/:credentialID` (`update`)
-    pub async fn credential_update(
-        &self,
-        input: &CredentialUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn credential_update(&self, input: &CredentialUpdateInput) -> Result<(), Error> {
+        self.empty(Self::credential_update_call(input)?).await
+    }
+    pub fn credential_update_call(input: &CredentialUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PATCH",
             format!("/api/credential/{}", crate::client::path_param(&input.credential_id)?),
@@ -1570,60 +1575,52 @@ impl Client {
         );
         call.object();
         call.field("label", &input.label)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/credential/:credentialID/activate` (`activate`)
-    pub async fn credential_activate(
-        &self,
-        input: &CredentialActivateInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn credential_activate(&self, input: &CredentialActivateInput) -> Result<(), Error> {
+        self.empty(Self::credential_activate_call(input)?).await
+    }
+    pub fn credential_activate_call(input: &CredentialActivateInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "POST",
             format!("/api/credential/{}/activate", crate::client::path_param(&input.credential_id)?),
             204,
             &[400, 401],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `DELETE /api/credential/:credentialID` (`remove`)
-    pub async fn credential_remove(
-        &self,
-        input: &CredentialRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn credential_remove(&self, input: &CredentialRemoveInput) -> Result<(), Error> {
+        self.empty(Self::credential_remove_call(input)?).await
+    }
+    pub fn credential_remove_call(input: &CredentialRemoveInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!("/api/credential/{}", crate::client::path_param(&input.credential_id)?),
             204,
             &[400, 401],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `GET /api/project` (`list`)
-    pub async fn project_list(
-        &self,
-        input: &ProjectListInput,
-        options: &RequestOptions,
-    ) -> Result<ProjectListOutput, Error> {
+    pub async fn project_list(&self, input: &ProjectListInput) -> Result<ProjectListOutput, Error> {
+        self.json(Self::project_list_call(input)?).await
+    }
+    pub fn project_list_call(input: &ProjectListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/project".to_owned(), 200, &[400, 401]);
         if let Some(value) = &input.archived {
             call.query("archived", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `PATCH /api/project/:projectID` (`update`)
-    pub async fn project_update(
-        &self,
-        input: &ProjectUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<ProjectUpdateOutput, Error> {
+    pub async fn project_update(&self, input: &ProjectUpdateInput) -> Result<ProjectUpdateOutput, Error> {
+        self.json(Self::project_update_call(input)?).await
+    }
+    pub fn project_update_call(input: &ProjectUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PATCH",
             format!("/api/project/{}", crate::client::path_param(&input.project_id)?),
@@ -1643,50 +1640,59 @@ impl Client {
         if let Some(value) = &input.commands {
             call.field("commands", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/form` (`list`)
-    pub async fn form_list(&self, input: &FormListInput, options: &RequestOptions) -> Result<FormListOutput, Error> {
+    pub async fn form_list(&self, input: &FormListInput) -> Result<FormListOutput, Error> {
+        self.json(Self::form_list_call(input)?).await
+    }
+    pub fn form_list_call(input: &FormListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/form".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/permission/request` (`request.list`)
     pub async fn permission_request_list(
         &self,
         input: &PermissionRequestListInput,
-        options: &RequestOptions,
     ) -> Result<PermissionRequestListOutput, Error> {
+        self.json(Self::permission_request_list_call(input)?).await
+    }
+    pub fn permission_request_list_call(input: &PermissionRequestListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/permission/request".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/permission/saved` (`saved.list`)
     pub async fn permission_saved_list(
         &self,
         input: &PermissionSavedListInput,
-        options: &RequestOptions,
     ) -> Result<PermissionSavedListOutput, Error> {
+        self.data(Self::permission_saved_list_call(input)?).await
+    }
+    pub fn permission_saved_list_call(input: &PermissionSavedListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/permission/saved".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.project_id {
             call.query("projectID", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `PATCH /api/permission/saved/:id` (`saved.update`)
     pub async fn permission_saved_update(
         &self,
         input: &PermissionSavedUpdateInput,
-        options: &RequestOptions,
     ) -> Result<PermissionSavedUpdateOutput, Error> {
+        self.data(Self::permission_saved_update_call(input)?).await
+    }
+    pub fn permission_saved_update_call(input: &PermissionSavedUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PATCH",
             format!("/api/permission/saved/{}", crate::client::path_param(&input.id)?),
@@ -1700,31 +1706,27 @@ impl Client {
         if let Some(value) = &input.resource {
             call.field("resource", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/permission/saved/:id` (`saved.remove`)
-    pub async fn permission_saved_remove(
-        &self,
-        input: &PermissionSavedRemoveInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn permission_saved_remove(&self, input: &PermissionSavedRemoveInput) -> Result<(), Error> {
+        self.empty(Self::permission_saved_remove_call(input)?).await
+    }
+    pub fn permission_saved_remove_call(input: &PermissionSavedRemoveInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!("/api/permission/saved/{}", crate::client::path_param(&input.id)?),
             204,
             &[400, 401],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `POST /api/session/:sessionID/permission` (`create`)
-    pub async fn permission_create(
-        &self,
-        input: &PermissionCreateInput,
-        options: &RequestOptions,
-    ) -> Result<PermissionCreateOutput, Error> {
+    pub async fn permission_create(&self, input: &PermissionCreateInput) -> Result<PermissionCreateOutput, Error> {
+        self.data(Self::permission_create_call(input)?).await
+    }
+    pub fn permission_create_call(input: &PermissionCreateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/session/{}/permission", crate::client::path_param(&input.session_id)?),
@@ -1749,32 +1751,28 @@ impl Client {
         if let Some(value) = &input.agent {
             call.field("agent", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/session/:sessionID/permission` (`list`)
-    pub async fn permission_list(
-        &self,
-        input: &PermissionListInput,
-        options: &RequestOptions,
-    ) -> Result<PermissionListOutput, Error> {
-        let call = Call::new(
+    pub async fn permission_list(&self, input: &PermissionListInput) -> Result<PermissionListOutput, Error> {
+        self.data(Self::permission_list_call(input)?).await
+    }
+    pub fn permission_list_call(input: &PermissionListInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/session/{}/permission", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `GET /api/session/:sessionID/permission/:requestID` (`get`)
-    pub async fn permission_get(
-        &self,
-        input: &PermissionGetInput,
-        options: &RequestOptions,
-    ) -> Result<PermissionGetOutput, Error> {
-        let call = Call::new(
+    pub async fn permission_get(&self, input: &PermissionGetInput) -> Result<PermissionGetOutput, Error> {
+        self.data(Self::permission_get_call(input)?).await
+    }
+    pub fn permission_get_call(input: &PermissionGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!(
                 "/api/session/{}/permission/{}",
@@ -1783,13 +1781,14 @@ impl Client {
             ),
             200,
             &[400, 401, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `POST /api/session/:sessionID/permission/:requestID/reply` (`reply`)
-    pub async fn permission_reply(&self, input: &PermissionReplyInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn permission_reply(&self, input: &PermissionReplyInput) -> Result<(), Error> {
+        self.empty(Self::permission_reply_call(input)?).await
+    }
+    pub fn permission_reply_call(input: &PermissionReplyInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!(
@@ -1805,11 +1804,14 @@ impl Client {
         if let Some(value) = &input.message {
             call.field("message", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/fs/read/*` (`read`)
-    pub async fn file_read(&self, input: &FileReadInput, options: &RequestOptions) -> Result<bytes::Bytes, Error> {
+    pub async fn file_read(&self, input: &FileReadInput) -> Result<bytes::Bytes, Error> {
+        self.binary(Self::file_read_call(input)?).await
+    }
+    pub fn file_read_call(input: &FileReadInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/fs/read/{}", crate::client::path_wildcard(&input.path)),
@@ -1819,11 +1821,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.binary(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/fs/list` (`list`)
-    pub async fn file_list(&self, input: &FileListInput, options: &RequestOptions) -> Result<FileListOutput, Error> {
+    pub async fn file_list(&self, input: &FileListInput) -> Result<FileListOutput, Error> {
+        self.json(Self::file_list_call(input)?).await
+    }
+    pub fn file_list_call(input: &FileListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/fs/list".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1831,11 +1836,14 @@ impl Client {
         if let Some(value) = &input.path {
             call.query("path", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/fs/find` (`find`)
-    pub async fn file_find(&self, input: &FileFindInput, options: &RequestOptions) -> Result<FileFindOutput, Error> {
+    pub async fn file_find(&self, input: &FileFindInput) -> Result<FileFindOutput, Error> {
+        self.json(Self::file_find_call(input)?).await
+    }
+    pub fn file_find_call(input: &FileFindInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/fs/find".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -1847,78 +1855,83 @@ impl Client {
         if let Some(value) = &input.limit {
             call.query("limit", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/fs/write` (`write`)
     pub async fn experimental_file_write(
         &self,
         input: &ExperimentalFileWriteInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalFileWriteOutput, Error> {
+        self.json(Self::experimental_file_write_call(input)?).await
+    }
+    pub fn experimental_file_write_call(input: &ExperimentalFileWriteInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/fs/write".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
         call.query("path", &input.path)?;
         call.bytes(input.payload.clone());
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/fs/watch` (`watch`)
-    pub async fn experimental_file_watch(
-        &self,
-        input: &ExperimentalFileWatchInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_file_watch(&self, input: &ExperimentalFileWatchInput) -> Result<(), Error> {
+        self.empty(Self::experimental_file_watch_call(input)?).await
+    }
+    pub fn experimental_file_watch_call(input: &ExperimentalFileWatchInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/fs/watch".to_owned(), 204, &[400, 401, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
         call.field("path", &input.path)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/experimental/fs/watch` (`unwatch`)
-    pub async fn experimental_file_unwatch(
-        &self,
-        input: &ExperimentalFileUnwatchInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_file_unwatch(&self, input: &ExperimentalFileUnwatchInput) -> Result<(), Error> {
+        self.empty(Self::experimental_file_unwatch_call(input)?).await
+    }
+    pub fn experimental_file_unwatch_call(input: &ExperimentalFileUnwatchInput) -> Result<Call, Error> {
         let mut call = Call::new("DELETE", "/api/experimental/fs/watch".to_owned(), 204, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
         call.field("path", &input.path)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/command` (`list`)
-    pub async fn command_list(
-        &self,
-        input: &CommandListInput,
-        options: &RequestOptions,
-    ) -> Result<CommandListOutput, Error> {
+    pub async fn command_list(&self, input: &CommandListInput) -> Result<CommandListOutput, Error> {
+        self.json(Self::command_list_call(input)?).await
+    }
+    pub fn command_list_call(input: &CommandListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/command".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/skill` (`list`)
-    pub async fn skill_list(&self, input: &SkillListInput, options: &RequestOptions) -> Result<SkillListOutput, Error> {
+    pub async fn skill_list(&self, input: &SkillListInput) -> Result<SkillListOutput, Error> {
+        self.json(Self::skill_list_call(input)?).await
+    }
+    pub fn skill_list_call(input: &SkillListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/skill".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/rpc/:rpcID/:method` (`call`)
-    pub async fn rpc_call(&self, input: &RpcCallInput, options: &RequestOptions) -> Result<RpcCallOutput, Error> {
+    pub async fn rpc_call(&self, input: &RpcCallInput) -> Result<RpcCallOutput, Error> {
+        self.json(Self::rpc_call_call(input)?).await
+    }
+    pub fn rpc_call_call(input: &RpcCallInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!(
@@ -1936,33 +1949,41 @@ impl Client {
         if let Some(value) = &input.input {
             call.field("input", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/event` (`subscribe`)
     pub async fn event_subscribe(
         &self,
         input: &EventSubscribeInput,
-        options: &RequestOptions,
     ) -> Result<SseResponse<EventSubscribeOutput>, Error> {
+        self.sse(Self::event_subscribe_call(input)?).await
+    }
+    pub fn event_subscribe_call(input: &EventSubscribeInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/event".to_owned(), 200, &[400, 401]);
         if let Some(value) = &input.types {
             call.query("types", value)?;
         }
-        self.sse(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/pty` (`list`)
-    pub async fn pty_list(&self, input: &PtyListInput, options: &RequestOptions) -> Result<PtyListOutput, Error> {
+    pub async fn pty_list(&self, input: &PtyListInput) -> Result<PtyListOutput, Error> {
+        self.json(Self::pty_list_call(input)?).await
+    }
+    pub fn pty_list_call(input: &PtyListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/pty".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/pty` (`create`)
-    pub async fn pty_create(&self, input: &PtyCreateInput, options: &RequestOptions) -> Result<PtyCreateOutput, Error> {
+    pub async fn pty_create(&self, input: &PtyCreateInput) -> Result<PtyCreateOutput, Error> {
+        self.json(Self::pty_create_call(input)?).await
+    }
+    pub fn pty_create_call(input: &PtyCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/pty".to_owned(), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
@@ -1983,21 +2004,27 @@ impl Client {
         if let Some(value) = &input.env {
             call.field("env", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/pty/:ptyID` (`get`)
-    pub async fn pty_get(&self, input: &PtyGetInput, options: &RequestOptions) -> Result<PtyGetOutput, Error> {
+    pub async fn pty_get(&self, input: &PtyGetInput) -> Result<PtyGetOutput, Error> {
+        self.json(Self::pty_get_call(input)?).await
+    }
+    pub fn pty_get_call(input: &PtyGetInput) -> Result<Call, Error> {
         let mut call =
             Call::new("GET", format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `PUT /api/pty/:ptyID` (`update`)
-    pub async fn pty_update(&self, input: &PtyUpdateInput, options: &RequestOptions) -> Result<PtyUpdateOutput, Error> {
+    pub async fn pty_update(&self, input: &PtyUpdateInput) -> Result<PtyUpdateOutput, Error> {
+        self.json(Self::pty_update_call(input)?).await
+    }
+    pub fn pty_update_call(input: &PtyUpdateInput) -> Result<Call, Error> {
         let mut call =
             Call::new("PUT", format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?), 200, &[400, 401, 404]);
         call.object();
@@ -2010,11 +2037,14 @@ impl Client {
         if let Some(value) = &input.size {
             call.field("size", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/pty/:ptyID` (`remove`)
-    pub async fn pty_remove(&self, input: &PtyRemoveInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn pty_remove(&self, input: &PtyRemoveInput) -> Result<(), Error> {
+        self.empty(Self::pty_remove_call(input)?).await
+    }
+    pub fn pty_remove_call(input: &PtyRemoveInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "DELETE",
             format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?),
@@ -2024,15 +2054,14 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/pty/:ptyID/connect-token` (`connect.token`)
-    pub async fn pty_connect_token(
-        &self,
-        input: &PtyConnectTokenInput,
-        options: &RequestOptions,
-    ) -> Result<PtyConnectTokenOutput, Error> {
+    pub async fn pty_connect_token(&self, input: &PtyConnectTokenInput) -> Result<PtyConnectTokenOutput, Error> {
+        self.json(Self::pty_connect_token_call(input)?).await
+    }
+    pub fn pty_connect_token_call(input: &PtyConnectTokenInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/pty/{}/connect-token", crate::client::path_param(&input.pty_id)?),
@@ -2045,15 +2074,17 @@ impl Client {
         if let Some(value) = &input.x_opencode_ticket {
             call.header("x-opencode-ticket", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/session/:sessionID/terminal/read` (`persistentPty.read`)
     pub async fn experimental_persistent_pty_read(
         &self,
         input: &ExperimentalPersistentPtyReadInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyReadOutput, Error> {
+        self.data(Self::experimental_persistent_pty_read_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_read_call(input: &ExperimentalPersistentPtyReadInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/experimental/session/{}/terminal/read", crate::client::path_param(&input.session_id)?),
@@ -2063,31 +2094,35 @@ impl Client {
         if let Some(value) = &input.lines {
             call.query("lines", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/session/:sessionID/terminal` (`persistentPty.list`)
     pub async fn experimental_persistent_pty_list(
         &self,
         input: &ExperimentalPersistentPtyListInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyListOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_persistent_pty_list_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_list_call(input: &ExperimentalPersistentPtyListInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/experimental/session/{}/terminal", crate::client::path_param(&input.session_id)?),
             200,
             &[400, 401, 503],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `POST /api/experimental/session/:sessionID/terminal` (`persistentPty.create`)
     pub async fn experimental_persistent_pty_create(
         &self,
         input: &ExperimentalPersistentPtyCreateInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyCreateOutput, Error> {
+        self.data(Self::experimental_persistent_pty_create_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_create_call(
+        input: &ExperimentalPersistentPtyCreateInput,
+    ) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/experimental/session/{}/terminal", crate::client::path_param(&input.session_id)?),
@@ -2107,48 +2142,51 @@ impl Client {
         if let Some(value) = &input.size {
             call.field("size", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/persistent-pty/shutdown` (`persistentPty.shutdown`)
-    pub async fn experimental_persistent_pty_shutdown(&self, options: &RequestOptions) -> Result<(), Error> {
-        let call = Call::new("POST", "/api/experimental/persistent-pty/shutdown".to_owned(), 204, &[400, 401, 503]);
-
-        self.empty(call, options).await
+    pub async fn experimental_persistent_pty_shutdown(&self) -> Result<(), Error> {
+        self.empty(Self::experimental_persistent_pty_shutdown_call()?).await
+    }
+    pub fn experimental_persistent_pty_shutdown_call() -> Result<Call, Error> {
+        Ok(Call::new("POST", "/api/experimental/persistent-pty/shutdown".to_owned(), 204, &[400, 401, 503]))
     }
 
     /// `POST /api/experimental/persistent-pty/handoff` (`persistentPty.handoff`)
-    pub async fn experimental_persistent_pty_handoff(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<ExperimentalPersistentPtyHandoffOutput, Error> {
-        let call = Call::new("POST", "/api/experimental/persistent-pty/handoff".to_owned(), 200, &[400, 401, 503]);
-
-        self.json(call, options).await
+    pub async fn experimental_persistent_pty_handoff(&self) -> Result<ExperimentalPersistentPtyHandoffOutput, Error> {
+        self.json(Self::experimental_persistent_pty_handoff_call()?).await
+    }
+    pub fn experimental_persistent_pty_handoff_call() -> Result<Call, Error> {
+        Ok(Call::new("POST", "/api/experimental/persistent-pty/handoff".to_owned(), 200, &[400, 401, 503]))
     }
 
     /// `GET /api/experimental/persistent-pty/:ptyID` (`persistentPty.get`)
     pub async fn experimental_persistent_pty_get(
         &self,
         input: &ExperimentalPersistentPtyGetInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyGetOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_persistent_pty_get_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_get_call(input: &ExperimentalPersistentPtyGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 404, 503],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `PUT /api/experimental/persistent-pty/:ptyID` (`persistentPty.update`)
     pub async fn experimental_persistent_pty_update(
         &self,
         input: &ExperimentalPersistentPtyUpdateInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyUpdateOutput, Error> {
+        self.data(Self::experimental_persistent_pty_update_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_update_call(
+        input: &ExperimentalPersistentPtyUpdateInput,
+    ) -> Result<Call, Error> {
         let mut call = Call::new(
             "PUT",
             format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
@@ -2165,47 +2203,55 @@ impl Client {
         if let Some(value) = &input.title {
             call.field("title", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/persistent-pty/:ptyID/snapshot` (`persistentPty.snapshot`)
     pub async fn experimental_persistent_pty_snapshot(
         &self,
         input: &ExperimentalPersistentPtySnapshotInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtySnapshotOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_persistent_pty_snapshot_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_snapshot_call(
+        input: &ExperimentalPersistentPtySnapshotInput,
+    ) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/experimental/persistent-pty/{}/snapshot", crate::client::path_param(&input.pty_id)?),
             200,
             &[400, 401, 404, 503],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `DELETE /api/experimental/persistent-pty/:ptyID` (`persistentPty.remove`)
     pub async fn experimental_persistent_pty_remove(
         &self,
         input: &ExperimentalPersistentPtyRemoveInput,
-        options: &RequestOptions,
     ) -> Result<(), Error> {
-        let call = Call::new(
+        self.empty(Self::experimental_persistent_pty_remove_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_remove_call(
+        input: &ExperimentalPersistentPtyRemoveInput,
+    ) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
             204,
             &[400, 401, 404, 503],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)
     pub async fn experimental_persistent_pty_connect_token(
         &self,
         input: &ExperimentalPersistentPtyConnectTokenInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalPersistentPtyConnectTokenOutput, Error> {
+        self.data(Self::experimental_persistent_pty_connect_token_call(input)?).await
+    }
+    pub fn experimental_persistent_pty_connect_token_call(
+        input: &ExperimentalPersistentPtyConnectTokenInput,
+    ) -> Result<Call, Error> {
         let mut call = Call::new(
             "POST",
             format!("/api/experimental/persistent-pty/{}/connect-token", crate::client::path_param(&input.pty_id)?),
@@ -2215,31 +2261,30 @@ impl Client {
         if let Some(value) = &input.x_opencode_ticket {
             call.header("x-opencode-ticket", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/media/:hash` (`media.get`)
-    pub async fn experimental_media_get(
-        &self,
-        input: &ExperimentalMediaGetInput,
-        options: &RequestOptions,
-    ) -> Result<bytes::Bytes, Error> {
-        let call = Call::new(
+    pub async fn experimental_media_get(&self, input: &ExperimentalMediaGetInput) -> Result<bytes::Bytes, Error> {
+        self.binary(Self::experimental_media_get_call(input)?).await
+    }
+    pub fn experimental_media_get_call(input: &ExperimentalMediaGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/experimental/media/{}", crate::client::path_param(&input.hash)?),
             200,
             &[400, 401, 404],
-        );
-
-        self.binary(call, options).await
+        ))
     }
 
     /// `POST /api/experimental/schedule` (`schedule.create`)
     pub async fn experimental_schedule_create(
         &self,
         input: &ExperimentalScheduleCreateInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalScheduleCreateOutput, Error> {
+        self.data(Self::experimental_schedule_create_call(input)?).await
+    }
+    pub fn experimental_schedule_create_call(input: &ExperimentalScheduleCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/schedule".to_owned(), 200, &[400, 401, 403, 404]);
         call.object();
         call.field("sessionID", &input.session_id)?;
@@ -2259,104 +2304,107 @@ impl Client {
             call.field("ends", value)?;
         }
         call.field("prompt", &input.prompt)?;
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/schedule` (`schedule.list`)
     pub async fn experimental_schedule_list(
         &self,
         input: &ExperimentalScheduleListInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalScheduleListOutput, Error> {
+        self.data(Self::experimental_schedule_list_call(input)?).await
+    }
+    pub fn experimental_schedule_list_call(input: &ExperimentalScheduleListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/experimental/schedule".to_owned(), 200, &[400, 401, 403, 404]);
         call.query("sessionID", &input.session_id)?;
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/schedule/:scheduleID` (`schedule.get`)
     pub async fn experimental_schedule_get(
         &self,
         input: &ExperimentalScheduleGetInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalScheduleGetOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_schedule_get_call(input)?).await
+    }
+    pub fn experimental_schedule_get_call(input: &ExperimentalScheduleGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "GET",
             format!("/api/experimental/schedule/{}", crate::client::path_param(&input.schedule_id)?),
             200,
             &[400, 401, 403, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `POST /api/experimental/schedule/:scheduleID/pause` (`schedule.pause`)
     pub async fn experimental_schedule_pause(
         &self,
         input: &ExperimentalSchedulePauseInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalSchedulePauseOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_schedule_pause_call(input)?).await
+    }
+    pub fn experimental_schedule_pause_call(input: &ExperimentalSchedulePauseInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "POST",
             format!("/api/experimental/schedule/{}/pause", crate::client::path_param(&input.schedule_id)?),
             200,
             &[400, 401, 403, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `POST /api/experimental/schedule/:scheduleID/resume` (`schedule.resume`)
     pub async fn experimental_schedule_resume(
         &self,
         input: &ExperimentalScheduleResumeInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalScheduleResumeOutput, Error> {
-        let call = Call::new(
+        self.data(Self::experimental_schedule_resume_call(input)?).await
+    }
+    pub fn experimental_schedule_resume_call(input: &ExperimentalScheduleResumeInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "POST",
             format!("/api/experimental/schedule/{}/resume", crate::client::path_param(&input.schedule_id)?),
             200,
             &[400, 401, 403, 404],
-        );
-
-        self.data(call, options).await
+        ))
     }
 
     /// `DELETE /api/experimental/schedule/:scheduleID` (`schedule.delete`)
-    pub async fn experimental_schedule_delete(
-        &self,
-        input: &ExperimentalScheduleDeleteInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
-        let call = Call::new(
+    pub async fn experimental_schedule_delete(&self, input: &ExperimentalScheduleDeleteInput) -> Result<(), Error> {
+        self.empty(Self::experimental_schedule_delete_call(input)?).await
+    }
+    pub fn experimental_schedule_delete_call(input: &ExperimentalScheduleDeleteInput) -> Result<Call, Error> {
+        Ok(Call::new(
             "DELETE",
             format!("/api/experimental/schedule/{}", crate::client::path_param(&input.schedule_id)?),
             204,
             &[400, 401, 403, 404],
-        );
-
-        self.empty(call, options).await
+        ))
     }
 
     /// `GET /api/experimental/artifacts/providers` (`artifacts.providers`)
     pub async fn experimental_artifacts_providers(
         &self,
         input: &ExperimentalArtifactsProvidersInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsProvidersOutput, Error> {
+        self.json(Self::experimental_artifacts_providers_call(input)?).await
+    }
+    pub fn experimental_artifacts_providers_call(input: &ExperimentalArtifactsProvidersInput) -> Result<Call, Error> {
         let mut call =
             Call::new("GET", "/api/experimental/artifacts/providers".to_owned(), 200, &[400, 401, 403, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/artifacts` (`artifacts.list`)
     pub async fn experimental_artifacts_list(
         &self,
         input: &ExperimentalArtifactsListInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsListOutput, Error> {
+        self.json(Self::experimental_artifacts_list_call(input)?).await
+    }
+    pub fn experimental_artifacts_list_call(input: &ExperimentalArtifactsListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/experimental/artifacts".to_owned(), 200, &[400, 401, 403, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2367,15 +2415,17 @@ impl Client {
         if let Some(value) = &input.provider {
             call.query("provider", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/experimental/artifacts` (`artifacts.create`)
     pub async fn experimental_artifacts_create(
         &self,
         input: &ExperimentalArtifactsCreateInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsCreateOutput, Error> {
+        self.json(Self::experimental_artifacts_create_call(input)?).await
+    }
+    pub fn experimental_artifacts_create_call(input: &ExperimentalArtifactsCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/experimental/artifacts".to_owned(), 200, &[400, 401, 403, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
@@ -2392,15 +2442,17 @@ impl Client {
         if let Some(value) = &input.session_id {
             call.field("sessionID", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/artifacts/:artifactID` (`artifacts.get`)
     pub async fn experimental_artifacts_get(
         &self,
         input: &ExperimentalArtifactsGetInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsGetOutput, Error> {
+        self.json(Self::experimental_artifacts_get_call(input)?).await
+    }
+    pub fn experimental_artifacts_get_call(input: &ExperimentalArtifactsGetInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
@@ -2410,15 +2462,17 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `PATCH /api/experimental/artifacts/:artifactID` (`artifacts.update`)
     pub async fn experimental_artifacts_update(
         &self,
         input: &ExperimentalArtifactsUpdateInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalArtifactsUpdateOutput, Error> {
+        self.json(Self::experimental_artifacts_update_call(input)?).await
+    }
+    pub fn experimental_artifacts_update_call(input: &ExperimentalArtifactsUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "PATCH",
             format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
@@ -2439,15 +2493,14 @@ impl Client {
         if let Some(value) = &input.session_id {
             call.field("sessionID", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/experimental/artifacts/:artifactID` (`artifacts.delete`)
-    pub async fn experimental_artifacts_delete(
-        &self,
-        input: &ExperimentalArtifactsDeleteInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_artifacts_delete(&self, input: &ExperimentalArtifactsDeleteInput) -> Result<(), Error> {
+        self.empty(Self::experimental_artifacts_delete_call(input)?).await
+    }
+    pub fn experimental_artifacts_delete_call(input: &ExperimentalArtifactsDeleteInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "DELETE",
             format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
@@ -2457,15 +2510,17 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/artifacts/:artifactID/view/*` (`artifacts.view`)
     pub async fn experimental_artifacts_view(
         &self,
         input: &ExperimentalArtifactsViewInput,
-        options: &RequestOptions,
     ) -> Result<bytes::Bytes, Error> {
+        self.binary(Self::experimental_artifacts_view_call(input)?).await
+    }
+    pub fn experimental_artifacts_view_call(input: &ExperimentalArtifactsViewInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!(
@@ -2479,15 +2534,17 @@ impl Client {
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.binary(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/job` (`job.list`)
     pub async fn experimental_job_list(
         &self,
         input: &ExperimentalJobListInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalJobListOutput, Error> {
+        self.data(Self::experimental_job_list_call(input)?).await
+    }
+    pub fn experimental_job_list_call(input: &ExperimentalJobListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/experimental/job".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.session_id {
             call.query("sessionID", value)?;
@@ -2501,24 +2558,26 @@ impl Client {
         if let Some(value) = &input.descendants {
             call.query("descendants", value)?;
         }
-        self.data(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/shell` (`list`)
-    pub async fn shell_list(&self, input: &ShellListInput, options: &RequestOptions) -> Result<ShellListOutput, Error> {
+    pub async fn shell_list(&self, input: &ShellListInput) -> Result<ShellListOutput, Error> {
+        self.json(Self::shell_list_call(input)?).await
+    }
+    pub fn shell_list_call(input: &ShellListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/shell".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/shell` (`create`)
-    pub async fn shell_create(
-        &self,
-        input: &ShellCreateInput,
-        options: &RequestOptions,
-    ) -> Result<ShellCreateOutput, Error> {
+    pub async fn shell_create(&self, input: &ShellCreateInput) -> Result<ShellCreateOutput, Error> {
+        self.json(Self::shell_create_call(input)?).await
+    }
+    pub fn shell_create_call(input: &ShellCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/shell".to_owned(), 200, &[400, 401, 404]);
         call.object();
         if let Some(value) = &input.location {
@@ -2534,25 +2593,27 @@ impl Client {
         if let Some(value) = &input.metadata {
             call.field("metadata", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/shell/:id` (`get`)
-    pub async fn shell_get(&self, input: &ShellGetInput, options: &RequestOptions) -> Result<ShellGetOutput, Error> {
+    pub async fn shell_get(&self, input: &ShellGetInput) -> Result<ShellGetOutput, Error> {
+        self.json(Self::shell_get_call(input)?).await
+    }
+    pub fn shell_get_call(input: &ShellGetInput) -> Result<Call, Error> {
         let mut call =
             Call::new("GET", format!("/api/shell/{}", crate::client::path_param(&input.id)?), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/shell/:id/output` (`output`)
-    pub async fn shell_output(
-        &self,
-        input: &ShellOutputInput,
-        options: &RequestOptions,
-    ) -> Result<ShellOutputOutput, Error> {
+    pub async fn shell_output(&self, input: &ShellOutputInput) -> Result<ShellOutputOutput, Error> {
+        self.json(Self::shell_output_call(input)?).await
+    }
+    pub fn shell_output_call(input: &ShellOutputInput) -> Result<Call, Error> {
         let mut call = Call::new(
             "GET",
             format!("/api/shell/{}/output", crate::client::path_param(&input.id)?),
@@ -2568,49 +2629,49 @@ impl Client {
         if let Some(value) = &input.limit {
             call.query("limit", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/shell/:id` (`remove`)
-    pub async fn shell_remove(&self, input: &ShellRemoveInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn shell_remove(&self, input: &ShellRemoveInput) -> Result<(), Error> {
+        self.empty(Self::shell_remove_call(input)?).await
+    }
+    pub fn shell_remove_call(input: &ShellRemoveInput) -> Result<Call, Error> {
         let mut call =
             Call::new("DELETE", format!("/api/shell/{}", crate::client::path_param(&input.id)?), 204, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/reference` (`list`)
-    pub async fn reference_list(
-        &self,
-        input: &ReferenceListInput,
-        options: &RequestOptions,
-    ) -> Result<ReferenceListOutput, Error> {
+    pub async fn reference_list(&self, input: &ReferenceListInput) -> Result<ReferenceListOutput, Error> {
+        self.json(Self::reference_list_call(input)?).await
+    }
+    pub fn reference_list_call(input: &ReferenceListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/reference".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/worktree` (`list`)
-    pub async fn worktree_list(
-        &self,
-        input: &WorktreeListInput,
-        options: &RequestOptions,
-    ) -> Result<WorktreeListOutput, Error> {
+    pub async fn worktree_list(&self, input: &WorktreeListInput) -> Result<WorktreeListOutput, Error> {
+        self.json(Self::worktree_list_call(input)?).await
+    }
+    pub fn worktree_list_call(input: &WorktreeListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/worktree".to_owned(), 200, &[400, 401, 404]);
         call.query("projectID", &input.project_id)?;
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/worktree` (`create`)
-    pub async fn worktree_create(
-        &self,
-        input: &WorktreeCreateInput,
-        options: &RequestOptions,
-    ) -> Result<WorktreeCreateOutput, Error> {
+    pub async fn worktree_create(&self, input: &WorktreeCreateInput) -> Result<WorktreeCreateOutput, Error> {
+        self.json(Self::worktree_create_call(input)?).await
+    }
+    pub fn worktree_create_call(input: &WorktreeCreateInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/worktree".to_owned(), 200, &[400, 401, 404]);
         call.object();
         call.field("projectID", &input.project_id)?;
@@ -2626,29 +2687,38 @@ impl Client {
         if let Some(value) = &input.name {
             call.field("name", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `DELETE /api/worktree` (`remove`)
-    pub async fn worktree_remove(&self, input: &WorktreeRemoveInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn worktree_remove(&self, input: &WorktreeRemoveInput) -> Result<(), Error> {
+        self.empty(Self::worktree_remove_call(input)?).await
+    }
+    pub fn worktree_remove_call(input: &WorktreeRemoveInput) -> Result<Call, Error> {
         let mut call = Call::new("DELETE", "/api/worktree".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("projectID", &input.project_id)?;
         call.field("directory", &input.directory)?;
         call.field("force", &input.force)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/worktree/refresh` (`refresh`)
-    pub async fn worktree_refresh(&self, input: &WorktreeRefreshInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn worktree_refresh(&self, input: &WorktreeRefreshInput) -> Result<(), Error> {
+        self.empty(Self::worktree_refresh_call(input)?).await
+    }
+    pub fn worktree_refresh_call(input: &WorktreeRefreshInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/worktree/refresh".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("projectID", &input.project_id)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/vcs/init` (`init`)
-    pub async fn vcs_init(&self, input: &VcsInitInput, options: &RequestOptions) -> Result<(), Error> {
+    pub async fn vcs_init(&self, input: &VcsInitInput) -> Result<(), Error> {
+        self.empty(Self::vcs_init_call(input)?).await
+    }
+    pub fn vcs_init_call(input: &VcsInitInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/vcs/init".to_owned(), 204, &[400, 401, 404, 409, 501, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2656,42 +2726,50 @@ impl Client {
         if let Some(value) = &input.provider {
             call.query("provider", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/vcs` (`get`)
-    pub async fn vcs_get(&self, input: &VcsGetInput, options: &RequestOptions) -> Result<VcsGetOutput, Error> {
+    pub async fn vcs_get(&self, input: &VcsGetInput) -> Result<VcsGetOutput, Error> {
+        self.json(Self::vcs_get_call(input)?).await
+    }
+    pub fn vcs_get_call(input: &VcsGetInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/vcs".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/vcs/base` (`base`)
-    pub async fn vcs_base(&self, input: &VcsBaseInput, options: &RequestOptions) -> Result<VcsBaseOutput, Error> {
+    pub async fn vcs_base(&self, input: &VcsBaseInput) -> Result<VcsBaseOutput, Error> {
+        self.json(Self::vcs_base_call(input)?).await
+    }
+    pub fn vcs_base_call(input: &VcsBaseInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/vcs/base".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/vcs/status` (`status`)
-    pub async fn vcs_status(&self, input: &VcsStatusInput, options: &RequestOptions) -> Result<VcsStatusOutput, Error> {
+    pub async fn vcs_status(&self, input: &VcsStatusInput) -> Result<VcsStatusOutput, Error> {
+        self.json(Self::vcs_status_call(input)?).await
+    }
+    pub fn vcs_status_call(input: &VcsStatusInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/vcs/status".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/vcs/branch` (`branch.list`)
-    pub async fn vcs_branch_list(
-        &self,
-        input: &VcsBranchListInput,
-        options: &RequestOptions,
-    ) -> Result<VcsBranchListOutput, Error> {
+    pub async fn vcs_branch_list(&self, input: &VcsBranchListInput) -> Result<VcsBranchListOutput, Error> {
+        self.json(Self::vcs_branch_list_call(input)?).await
+    }
+    pub fn vcs_branch_list_call(input: &VcsBranchListInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/vcs/branch".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2702,11 +2780,14 @@ impl Client {
         if let Some(value) = &input.limit {
             call.query("limit", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/vcs/diff` (`diff`)
-    pub async fn vcs_diff(&self, input: &VcsDiffInput, options: &RequestOptions) -> Result<VcsDiffOutput, Error> {
+    pub async fn vcs_diff(&self, input: &VcsDiffInput) -> Result<VcsDiffOutput, Error> {
+        self.json(Self::vcs_diff_call(input)?).await
+    }
+    pub fn vcs_diff_call(input: &VcsDiffInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/vcs/diff".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
@@ -2721,71 +2802,69 @@ impl Client {
         if let Some(value) = &input.untracked {
             call.query("untracked", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/debug/heap-dump` (`heapDump`)
-    pub async fn debug_heap_dump(
-        &self,
-        input: &DebugHeapDumpInput,
-        options: &RequestOptions,
-    ) -> Result<DebugHeapDumpOutput, Error> {
+    pub async fn debug_heap_dump(&self, input: &DebugHeapDumpInput) -> Result<DebugHeapDumpOutput, Error> {
+        self.json(Self::debug_heap_dump_call(input)?).await
+    }
+    pub fn debug_heap_dump_call(input: &DebugHeapDumpInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/debug/heap-dump".to_owned(), 200, &[400, 401, 500]);
         if let Some(value) = &input.directory {
             call.query("directory", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/debug/location` (`location.list`)
-    pub async fn debug_location_list(&self, options: &RequestOptions) -> Result<DebugLocationListOutput, Error> {
-        let call = Call::new("GET", "/api/debug/location".to_owned(), 200, &[400, 401]);
-
-        self.json(call, options).await
+    pub async fn debug_location_list(&self) -> Result<DebugLocationListOutput, Error> {
+        self.json(Self::debug_location_list_call()?).await
+    }
+    pub fn debug_location_list_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/debug/location".to_owned(), 200, &[400, 401]))
     }
 
     /// `DELETE /api/debug/location` (`location.evict`)
-    pub async fn debug_location_evict(
-        &self,
-        input: &DebugLocationEvictInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn debug_location_evict(&self, input: &DebugLocationEvictInput) -> Result<(), Error> {
+        self.empty(Self::debug_location_evict_call(input)?).await
+    }
+    pub fn debug_location_evict_call(input: &DebugLocationEvictInput) -> Result<Call, Error> {
         let mut call = Call::new("DELETE", "/api/debug/location".to_owned(), 204, &[400, 401]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.empty(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/migration/v1` (`v1.status`)
-    pub async fn experimental_migration_v1_status(
-        &self,
-        options: &RequestOptions,
-    ) -> Result<ExperimentalMigrationV1StatusOutput, Error> {
-        let call = Call::new("GET", "/api/experimental/migration/v1".to_owned(), 200, &[400, 401]);
-
-        self.json(call, options).await
+    pub async fn experimental_migration_v1_status(&self) -> Result<ExperimentalMigrationV1StatusOutput, Error> {
+        self.json(Self::experimental_migration_v1_status_call()?).await
+    }
+    pub fn experimental_migration_v1_status_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/experimental/migration/v1".to_owned(), 200, &[400, 401]))
     }
 
     /// `GET /api/websearch/provider` (`providers`)
     pub async fn websearch_providers(
         &self,
         input: &WebsearchProvidersInput,
-        options: &RequestOptions,
     ) -> Result<WebsearchProvidersOutput, Error> {
+        self.json(Self::websearch_providers_call(input)?).await
+    }
+    pub fn websearch_providers_call(input: &WebsearchProvidersInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/websearch/provider".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `POST /api/websearch` (`query`)
-    pub async fn websearch_query(
-        &self,
-        input: &WebsearchQueryInput,
-        options: &RequestOptions,
-    ) -> Result<WebsearchQueryOutput, Error> {
+    pub async fn websearch_query(&self, input: &WebsearchQueryInput) -> Result<WebsearchQueryOutput, Error> {
+        self.json(Self::websearch_query_call(input)?).await
+    }
+    pub fn websearch_query_call(input: &WebsearchQueryInput) -> Result<Call, Error> {
         let mut call = Call::new("POST", "/api/websearch".to_owned(), 200, &[400, 401, 404, 503]);
         call.object();
         if let Some(value) = &input.location {
@@ -2795,47 +2874,52 @@ impl Client {
         if let Some(value) = &input.provider_id {
             call.field("providerID", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/experimental/usage/limits` (`limits`)
     pub async fn experimental_usage_limits(
         &self,
         input: &ExperimentalUsageLimitsInput,
-        options: &RequestOptions,
     ) -> Result<ExperimentalUsageLimitsOutput, Error> {
+        self.json(Self::experimental_usage_limits_call(input)?).await
+    }
+    pub fn experimental_usage_limits_call(input: &ExperimentalUsageLimitsInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/experimental/usage/limits".to_owned(), 200, &[400, 401, 404, 503]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/config` (`get`)
-    pub async fn config_get(&self, input: &ConfigGetInput, options: &RequestOptions) -> Result<ConfigGetOutput, Error> {
+    pub async fn config_get(&self, input: &ConfigGetInput) -> Result<ConfigGetOutput, Error> {
+        self.json(Self::config_get_call(input)?).await
+    }
+    pub fn config_get_call(input: &ConfigGetInput) -> Result<Call, Error> {
         let mut call = Call::new("GET", "/api/config".to_owned(), 200, &[400, 401, 404]);
         if let Some(value) = &input.location {
             call.query("location", value)?;
         }
-        self.json(call, options).await
+        Ok(call)
     }
 
     /// `GET /api/config/shell` (`shells`)
-    pub async fn config_shells(&self, options: &RequestOptions) -> Result<ConfigShellsOutput, Error> {
-        let call = Call::new("GET", "/api/config/shell".to_owned(), 200, &[400, 401, 404]);
-
-        self.json(call, options).await
+    pub async fn config_shells(&self) -> Result<ConfigShellsOutput, Error> {
+        self.json(Self::config_shells_call()?).await
+    }
+    pub fn config_shells_call() -> Result<Call, Error> {
+        Ok(Call::new("GET", "/api/config/shell".to_owned(), 200, &[400, 401, 404]))
     }
 
     /// `PATCH /api/experimental/config` (`update`)
-    pub async fn experimental_config_update(
-        &self,
-        input: &ExperimentalConfigUpdateInput,
-        options: &RequestOptions,
-    ) -> Result<(), Error> {
+    pub async fn experimental_config_update(&self, input: &ExperimentalConfigUpdateInput) -> Result<(), Error> {
+        self.empty(Self::experimental_config_update_call(input)?).await
+    }
+    pub fn experimental_config_update_call(input: &ExperimentalConfigUpdateInput) -> Result<Call, Error> {
         let mut call = Call::new("PATCH", "/api/experimental/config".to_owned(), 204, &[400, 401, 404]);
         call.object();
         call.field("shell", &input.shell)?;
-        self.empty(call, options).await
+        Ok(call)
     }
 }

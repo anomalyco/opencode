@@ -88,7 +88,7 @@ const document = SchemaRepresentation.toRepresentations(
 )
 const representation = new Map(roots.map((item, index) => [item, document.representations[index]]))
 const types = new Types(document.references)
-for (const name of ["Client", "Call", "Error", "RequestOptions", "SseResponse"]) types.name(name)
+for (const name of ["Client", "Call", "Error", "SseResponse"]) types.name(name)
 
 const methods = plans.map((plan) =>
   emitMethod(types, {
@@ -135,7 +135,7 @@ await Bun.write(
 )
 await Bun.write(
   `${directory}/methods.rs`,
-  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client, RequestOptions};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\n\nimpl Client {\n${methods.join("\n\n")}\n}\n`,
+  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\n\nimpl Client {\n${methods.join("\n\n")}\n}\n`,
 )
 await Bun.write(
   `${directory}/mod.rs`,

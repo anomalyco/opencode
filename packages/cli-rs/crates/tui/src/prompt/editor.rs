@@ -5,12 +5,6 @@
 //! layer runs the 36 `input.*` commands on it through `Tui::textarea` (U.2), and the layers here add
 //! submit, queue, clear, history, shell mode, interrupt, and background.
 
-use std::cell::{Cell, OnceCell, RefCell};
-use std::path::PathBuf;
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionBackgroundInput, SessionID, SessionInboxDelivery, SessionInfo, SessionInterruptInput,
 };
@@ -26,6 +20,10 @@ use opentui::input::Keymap;
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use serde_json::Value;
+use std::cell::{Cell, OnceCell, RefCell};
+use std::path::PathBuf;
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 use unicode_width::UnicodeWidthStr;
 
 use super::autocomplete::{self, Autocomplete, parts};
@@ -768,7 +766,7 @@ impl Inner {
             let client = tui.data.client().clone();
             tui.app.runtime().spawn(async move {
                 let input = SessionInterruptInput { session_id: session, resume: Some(true) };
-                if let Err(error) = client.session_interrupt(&input, &RequestOptions::default()).await {
+                if let Err(error) = client.session_interrupt(&input).await {
                     log::warn!("interrupt failed: {error}");
                 }
             });
@@ -786,7 +784,7 @@ impl Inner {
         let client = tui.data.client().clone();
         tui.app.runtime().spawn(async move {
             let input = SessionBackgroundInput { session_id: session };
-            if let Err(error) = client.session_background(&input, &RequestOptions::default()).await {
+            if let Err(error) = client.session_background(&input).await {
                 log::warn!("background failed: {error}");
             }
         });

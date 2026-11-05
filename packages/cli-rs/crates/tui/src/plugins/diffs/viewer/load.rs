@@ -1,10 +1,8 @@
 //! Loading: the diff for the source, the reported base, and image previews.
 
-use std::rc::Rc;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{FileReadInput, SessionDiffInput, VcsBaseInput, VcsDiffInput};
 use opencode_ui::bind;
+use std::rc::Rc;
 
 use super::render::fill_image;
 use super::{Base, File, ID, Load, Mode, Preview, VCS_DIFF_CONTEXT_LINES, Viewer, query};
@@ -24,7 +22,7 @@ impl Viewer {
         let client = tui.data.client().clone();
         let input = VcsBaseInput { location: self.location() };
         let weak = self.this.clone();
-        tui.app.spawn(async move { client.vcs_base(&input, &RequestOptions::default()).await }, move |_, result| {
+        tui.app.spawn(async move { client.vcs_base(&input).await }, move |_, result| {
             let (Some(viewer), Ok(output)) = (weak.upgrade(), result) else {
                 return;
             };
@@ -52,14 +50,13 @@ impl Viewer {
         let weak = self.this.clone();
         tui.app.spawn(
             async move {
-                let options = RequestOptions::default();
                 if let Some(session) = session {
                     let input = SessionDiffInput {
                         session_id: session,
                         context: Some(VCS_DIFF_CONTEXT_LINES),
                         ..SessionDiffInput::default()
                     };
-                    let files = client.session_diff(&input, &options).await?;
+                    let files = client.session_diff(&input).await?;
                     return Ok((None, None, files));
                 }
                 let mut reported = None;
@@ -70,7 +67,7 @@ impl Viewer {
                     (true, None, None) => {
                         let input = VcsBaseInput { location: query(&location) };
                         let base = client
-                            .vcs_base(&input, &options)
+                            .vcs_base(&input)
                             .await?
                             .data
                             .map(|base| Base { name: base.name, reference: base.r#ref });
@@ -88,7 +85,7 @@ impl Viewer {
                     context: Some(VCS_DIFF_CONTEXT_LINES),
                     untracked: None,
                 };
-                let files = client.vcs_diff(&input, &options).await?.data;
+                let files = client.vcs_diff(&input).await?.data;
                 Ok::<_, opencode_api::error::Error>((reported, base, files))
             },
             bind!(weak, |viewer, _, result| {
@@ -151,7 +148,7 @@ impl Viewer {
         let input = FileReadInput { location: self.location(), path: file.to_owned() };
         let (weak, file, generation) = (self.this.clone(), file.to_owned(), self.state.borrow().generation);
         tui.app.spawn(
-            async move { client.file_read(&input, &RequestOptions::default()).await },
+            async move { client.file_read(&input).await },
             bind!(weak, |viewer, _, result| {
                 let Some(tui) = viewer.tui.upgrade() else {
                     return;

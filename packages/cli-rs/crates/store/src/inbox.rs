@@ -10,7 +10,6 @@ use std::future::Future;
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use indexmap::IndexMap;
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::*;
 use serde_json::Value;
 
@@ -394,10 +393,8 @@ impl Data {
             }
         };
         self.sync_start(format!("session.pending:{}", session.0), register, move |data, (started, token)| async move {
-            let response = data
-                .client()
-                .session_inbox_list(&SessionInboxListInput { session_id: session.clone() }, &RequestOptions::default())
-                .await;
+            let response =
+                data.client().session_inbox_list(&SessionInboxListInput { session_id: session.clone() }).await;
             let response = match response {
                 Ok(response) => response,
                 Err(error) => {
@@ -510,7 +507,7 @@ impl Data {
                 if let Some(prepare) = prepare {
                     prepare().await?;
                 }
-                data.client().session_prompt(&request, &RequestOptions::default()).await.map_err(Error::new)
+                data.client().session_prompt(&request).await.map_err(Error::new)
             },
             move |state, result| {
                 if result.is_err() && fresh && state.outbox.remove(id.as_str()) {
@@ -555,14 +552,11 @@ impl Data {
             move |data| async move {
                 if let Some(model) = model {
                     data.client()
-                        .session_switch_model(
-                            &SessionSwitchModelInput { session_id: input.session_id.clone(), model },
-                            &RequestOptions::default(),
-                        )
+                        .session_switch_model(&SessionSwitchModelInput { session_id: input.session_id.clone(), model })
                         .await
                         .map_err(Error::new)?;
                 }
-                data.client().session_compact(&input, &RequestOptions::default()).await.map_err(Error::new)
+                data.client().session_compact(&input).await.map_err(Error::new)
             },
             move |state, result| {
                 let observed = state.compacting.remove(&target).map(|active| active.observed).unwrap_or_default();

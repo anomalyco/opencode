@@ -11,16 +11,14 @@
 //!
 //! `app::mount` calls [`install`] once and [`connection_changed`] on every connection state.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Weak;
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::events::{State, Status};
 use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::Weak;
+use std::time::Duration;
 
 use crate::app::Tui;
 
@@ -130,7 +128,7 @@ fn poll_migration(weak: &Weak<Tui>) {
     tui.app.spawn(
         async move {
             client
-                .experimental_migration_v1_status(&RequestOptions::default())
+                .experimental_migration_v1_status()
                 .await
                 .map(|status| serde_json::to_value(status).unwrap_or_default())
         },

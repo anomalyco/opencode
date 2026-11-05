@@ -1,14 +1,12 @@
 //! `run`: send a message and print the reply (`packages/cli/src/commands/handlers/run.ts`,
 //! `packages/cli/src/run/run.ts`). The prompt itself and its output are in `run/prompt.rs`.
 
-use std::cell::Cell;
-use std::io::{IsTerminal, Read};
-use std::rc::Rc;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionID, SessionUpdateInput};
 use opencode_store::target::{self, Prepared, TargetInput};
 use serde_json::json;
+use std::cell::Cell;
+use std::io::{IsTerminal, Read};
+use std::rc::Rc;
 
 use super::Context;
 use super::client::{Connected, connect_without_autostart};
@@ -114,15 +112,12 @@ async fn execute(args: &RunArgs, server: &Connected, json: bool, exit: &Rc<Cell<
     let archived = args.archived && (!target.resume || args.fork);
     if title.is_some() || archived {
         client
-            .session_update(
-                &SessionUpdateInput {
-                    session_id: target.session.id.clone(),
-                    title,
-                    archived: archived.then_some(true),
-                    ..Default::default()
-                },
-                &RequestOptions::default(),
-            )
+            .session_update(&SessionUpdateInput {
+                session_id: target.session.id.clone(),
+                title,
+                archived: archived.then_some(true),
+                ..Default::default()
+            })
             .await
             .map_err(|error| error.error_message())?;
     }

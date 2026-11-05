@@ -12,7 +12,6 @@ use std::collections::VecDeque;
 use std::rc::{Rc, Weak};
 
 use base64::Engine;
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{ExperimentalPersistentPtySnapshotInput, PtyID};
 use opencode_api::pty::{self, ConnectInput, Incoming, Message, Role, Size};
 use opencode_ui::bind;
@@ -319,24 +318,20 @@ impl Pane {
         let client = tui.data.client().clone();
         let input = ExperimentalPersistentPtySnapshotInput { pty_id: PtyID(self.pty.clone()) };
         let weak = Rc::downgrade(self);
-        tui.app.spawn(
-            async move { client.experimental_persistent_pty_snapshot(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
-                    return;
-                };
-                let snapshot = match result {
-                    Ok(snapshot) => snapshot,
-                    Err(error) => return pane.fail(&error.to_string()),
-                };
-                let size = Size { cols: snapshot.info.size.cols as u16, rows: snapshot.info.size.rows as u16 };
-                let checkpoint =
-                    base64::engine::general_purpose::STANDARD.decode(&snapshot.checkpoint).unwrap_or_default();
-                pane.set_canonical(size);
-                pane.state.borrow_mut().waiting = Some((size, checkpoint, snapshot.info.output.tail));
-                pane.resume();
-            },
-        );
+        tui.app.spawn(async move { client.experimental_persistent_pty_snapshot(&input).await }, move |_, result| {
+            let Some(pane) = weak.upgrade().filter(|pane| !pane.disposed.get()) else {
+                return;
+            };
+            let snapshot = match result {
+                Ok(snapshot) => snapshot,
+                Err(error) => return pane.fail(&error.to_string()),
+            };
+            let size = Size { cols: snapshot.info.size.cols as u16, rows: snapshot.info.size.rows as u16 };
+            let checkpoint = base64::engine::general_purpose::STANDARD.decode(&snapshot.checkpoint).unwrap_or_default();
+            pane.set_canonical(size);
+            pane.state.borrow_mut().waiting = Some((size, checkpoint, snapshot.info.output.tail));
+            pane.resume();
+        });
     }
 
     /// Goes on with the snapshot once the embedded terminal has its size.

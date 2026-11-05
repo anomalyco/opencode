@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::error::Error;
 use opencode_api::generated::{
     LocationQueryInput, SessionMessageShellOutput, SessionMessageShellStatus, ShellGetInput, ShellInfo,
@@ -248,30 +248,28 @@ async fn load(
     running: bool,
     cursor: Option<i64>,
 ) -> Result<Loaded, Error> {
-    let options = RequestOptions::default();
     let location = || Some(LocationQueryInput { directory: Some(directory.clone()) });
     let info = match running {
-        true => Some(client.shell_get(&ShellGetInput { id: id.clone(), location: location() }, &options).await?.data),
+        true => Some(client.shell_get(&ShellGetInput { id: id.clone(), location: location() }).await?.data),
         false => None,
     };
     let (cursor, start) = match cursor {
         Some(cursor) => (cursor, None),
         None => {
             let head = client
-                .shell_output(
-                    &ShellOutputInput { id: id.clone(), location: location(), cursor: Some(END), limit: None },
-                    &options,
-                )
+                .shell_output(&ShellOutputInput {
+                    id: id.clone(),
+                    location: location(),
+                    cursor: Some(END),
+                    limit: None,
+                })
                 .await?;
             let start = (head.data.size - PAGE_BYTES).max(0);
             (start, Some(start))
         }
     };
     let page = client
-        .shell_output(
-            &ShellOutputInput { id, location: location(), cursor: Some(cursor), limit: Some(PAGE_BYTES) },
-            &options,
-        )
+        .shell_output(&ShellOutputInput { id, location: location(), cursor: Some(cursor), limit: Some(PAGE_BYTES) })
         .await?
         .data;
     Ok(Loaded { info, start, page })

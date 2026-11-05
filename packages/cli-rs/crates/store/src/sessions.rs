@@ -4,7 +4,6 @@
 use std::collections::HashSet;
 
 use futures_util::FutureExt;
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
@@ -418,7 +417,7 @@ impl Data {
             move |data, started| async move {
                 let info = async {
                     data.client()
-                        .session_get(&SessionGetInput { session_id: id.clone() }, &RequestOptions::default())
+                        .session_get(&SessionGetInput { session_id: id.clone() })
                         .await
                         .map_err(|error| evict_missing(&data, error))
                 };
@@ -519,7 +518,7 @@ impl Data {
         let data = self.clone();
         let session = id.clone();
         let task = self.spawn(async move {
-            let result = data.client().session_create(&request, &RequestOptions::default()).await.map_err(Error::new);
+            let result = data.client().session_create(&request).await.map_err(Error::new);
             data.write(|state| {
                 match &result {
                     Ok(info) => {
@@ -561,7 +560,7 @@ async fn list_children(data: &Data, parent: &SessionID) -> Result<Vec<SessionInf
     };
     let mut children = Vec::new();
     loop {
-        let page = data.client().session_list(&input, &RequestOptions::default()).await.map_err(Error::new)?;
+        let page = data.client().session_list(&input).await.map_err(Error::new)?;
         let full = page.data.len() as i64 >= CHILD_PAGE;
         children.extend(page.data);
         let Some(next) = page.cursor.next.flatten().filter(|_| full) else {
@@ -578,10 +577,7 @@ impl Data {
         self.refresh(|data| async move {
             let item = data
                 .client()
-                .session_message_get(
-                    &SessionMessageGetInput { session_id: session.clone(), message_id: message },
-                    &RequestOptions::default(),
-                )
+                .session_message_get(&SessionMessageGetInput { session_id: session.clone(), message_id: message })
                 .await
                 .map_err(Error::new)?;
             data.write(|state| {

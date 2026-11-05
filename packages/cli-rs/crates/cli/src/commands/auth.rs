@@ -8,7 +8,7 @@ use std::io::{IsTerminal, Read};
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::{
     ConnectionInfo, CredentialActivateInput, CredentialRemoveInput, ExperimentalIntegrationWellknownAddInput,
@@ -109,17 +109,13 @@ pub(super) fn location() -> anyhow::Result<Option<LocationQueryInput>> {
     Ok(Some(here()?))
 }
 
-fn options() -> RequestOptions {
-    RequestOptions::default()
-}
-
 /// `loadIntegrations`: the default model first (the readiness boundary of the plugins that add
 /// integrations), then the integrations, OpenCode Go first.
 pub(super) fn load_integrations(server: &Server) -> anyhow::Result<Vec<IntegrationInfo>> {
     let location = location()?;
     let mut integrations = server.run(async {
-        server.client().model_default(&ModelDefaultInput { location: location.clone() }, &options()).await?;
-        let list = server.client().integration_list(&IntegrationListInput { location }, &options()).await?;
+        server.client().model_default(&ModelDefaultInput { location: location.clone() }).await?;
+        let list = server.client().integration_list(&IntegrationListInput { location }).await?;
         anyhow::Ok(list.data)
     })?;
     integrations.sort_by_key(|integration| integration.id.as_str() != "opencode-go");
@@ -223,7 +219,7 @@ fn import(context: &Context, args: &AuthImportArgs) -> anyhow::Result<()> {
         });
         let mut call = Call::new("POST", "/api/credential".to_owned(), 200, &[400, 401, 409]);
         call.json(&body)?;
-        match server.run(server.client().json::<Value>(call, &options())) {
+        match server.run(server.client().json::<Value>(call)) {
             Ok(_) => imported += 1,
             Err(ApiError::Declared(error)) if error.status == 409 => {}
             Err(error) => return Err(error.into()),
@@ -252,7 +248,7 @@ fn read_file(file: &str) -> anyhow::Result<String> {
 }
 
 async fn get(client: &Client, path: &str) -> Result<Value, ApiError> {
-    client.json(Call::new("GET", path.to_owned(), 200, &[400, 401]), &options()).await
+    client.json(Call::new("GET", path.to_owned(), 200, &[400, 401])).await
 }
 
 /// `CredentialLegacy.Entry` decoding of an `auth export` file, with Effect Schema's messages. Entries come
@@ -435,16 +431,13 @@ fn account(context: &Context, args: &AuthAccountArgs, action: Action) -> anyhow:
             Action::Logout => {
                 server
                     .client()
-                    .credential_remove(&CredentialRemoveInput { credential_id: credential.clone().into() }, &options())
+                    .credential_remove(&CredentialRemoveInput { credential_id: credential.clone().into() })
                     .await
             }
             Action::Switch => {
                 server
                     .client()
-                    .credential_activate(
-                        &CredentialActivateInput { credential_id: credential.clone().into() },
-                        &options(),
-                    )
+                    .credential_activate(&CredentialActivateInput { credential_id: credential.clone().into() })
                     .await
             }
         }
@@ -623,7 +616,7 @@ fn find_integration(server: &Server, target: Option<&str>) -> anyhow::Result<Int
         let mut progress = prompt::spinner();
         progress.start("Discovering authentication provider...");
         let input = ExperimentalIntegrationWellknownAddInput { location: location()?, url: target.to_owned() };
-        match server.run(server.client().experimental_integration_wellknown_add(&input, &options())) {
+        match server.run(server.client().experimental_integration_wellknown_add(&input)) {
             Ok(()) => progress.stop("Authentication provider discovered"),
             Err(error) => {
                 progress.stop_with("Discovery failed", 1);
@@ -790,7 +783,7 @@ fn key_login(
         label: None,
     };
     saving("Saving credential...", &format!("Connected to {}", integration.name), || {
-        server.run(server.client().integration_connect_key(&input, &options()))
+        server.run(server.client().integration_connect_key(&input))
     })
 }
 
@@ -808,7 +801,7 @@ fn external_login(
         label: None,
     };
     saving("Saving credential...", &format!("Connected to {}", integration.name), || {
-        server.run(server.client().integration_connect_external(&input, &options()))
+        server.run(server.client().integration_connect_external(&input))
     })
 }
 
@@ -859,7 +852,7 @@ pub(super) fn oauth_login(
     };
     let mut progress = prompt::spinner();
     progress.start("Starting authorization...");
-    let attempt = match server.run(server.client().integration_oauth_connect(&input, &options())) {
+    let attempt = match server.run(server.client().integration_oauth_connect(&input)) {
         Ok(started) => started.data,
         Err(error) => {
             progress.stop_with("Authentication failed", 1);
@@ -877,7 +870,7 @@ pub(super) fn oauth_login(
                 location: location.clone(),
             };
             let client = client.clone();
-            cancel_now(async move { client.integration_oauth_cancel(&input, &options()).await });
+            cancel_now(async move { client.integration_oauth_cancel(&input).await });
         })
     };
     progress.stop("Authorization started");
@@ -898,7 +891,7 @@ pub(super) fn oauth_login(
             code: Some(code),
         };
         saving("Completing authorization...", &connected, || {
-            server.run(server.client().integration_oauth_complete(&input, &options()))
+            server.run(server.client().integration_oauth_complete(&input))
         })?;
         return Ok(guard);
     }
@@ -912,7 +905,7 @@ pub(super) fn oauth_login(
     };
     let status = server.run(async {
         loop {
-            let status = server.client().integration_oauth_status(&input, &options()).await?.data;
+            let status = server.client().integration_oauth_status(&input).await?.data;
             if !matches!(status, IntegrationAttemptStatus::Pending(_)) {
                 return anyhow::Ok(status);
             }
@@ -939,7 +932,7 @@ fn command_login(server: &Server, integration: &IntegrationInfo, method: &str) -
     };
     let mut progress = prompt::spinner();
     progress.start("Starting authentication command...");
-    let attempt = match server.run(server.client().integration_command_connect(&input, &options())) {
+    let attempt = match server.run(server.client().integration_command_connect(&input)) {
         Ok(started) => started.data,
         Err(error) => {
             progress.stop_with("Authentication failed", 1);
@@ -956,7 +949,7 @@ fn command_login(server: &Server, integration: &IntegrationInfo, method: &str) -
         Attempt::new(move || {
             let client = client.clone();
             let input = input.clone();
-            cancel_now(async move { client.integration_command_cancel(&input, &options()).await });
+            cancel_now(async move { client.integration_command_cancel(&input).await });
         })
     };
     progress.stop("Authentication command started");
@@ -970,7 +963,7 @@ fn command_login(server: &Server, integration: &IntegrationInfo, method: &str) -
     let mut printed = 0;
     let status = server.run(async {
         loop {
-            let status = server.client().integration_command_status(&input, &options()).await?.data;
+            let status = server.client().integration_command_status(&input).await?.data;
             let IntegrationCommandAttemptStatus::Pending(pending) = &status else {
                 return anyhow::Ok(status);
             };

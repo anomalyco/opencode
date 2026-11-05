@@ -1,7 +1,7 @@
 //! Additional directories: validation, permission grants, and their record in session metadata
 //! (`packages/cli/src/acp/directories.ts`).
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{PermissionEffect, PermissionRule, SessionInfo, SessionMetadata, SessionUpdateInput};
 use serde_json::{Value, json};
 
@@ -76,15 +76,12 @@ pub async fn activate(client: &Client, session: &SessionInfo, directories: &[Str
     }
     check(
         client
-            .session_update(
-                &SessionUpdateInput {
-                    session_id: session.id.clone(),
-                    permissions: permissions_changed.then_some(permissions),
-                    metadata: metadata_changed.then_some(metadata),
-                    ..SessionUpdateInput::default()
-                },
-                &RequestOptions::default(),
-            )
+            .session_update(&SessionUpdateInput {
+                session_id: session.id.clone(),
+                permissions: permissions_changed.then_some(permissions),
+                metadata: metadata_changed.then_some(metadata),
+                ..SessionUpdateInput::default()
+            })
             .await,
     )
 }

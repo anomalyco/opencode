@@ -2,16 +2,14 @@
 //! location's local and remote branches, searched on the server as the user types (debounced by 150 ms). The
 //! chosen branch is remembered per location and branch until the TUI exits.
 
-use std::cell::{Cell, RefCell};
-use std::rc::{Rc, Weak};
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, VcsBranchListInput};
 use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions};
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
 use opentui::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use super::viewer::Viewer;
 use crate::app::Tui;
@@ -170,7 +168,7 @@ impl Picker {
         let client = tui.data.client().clone();
         let input = VcsBranchListInput { location: self.location.clone(), search: Some(search), limit: Some(LIMIT) };
         tui.app.spawn(
-            async move { client.vcs_branch_list(&input, &RequestOptions::default()).await },
+            async move { client.vcs_branch_list(&input).await },
             bind!(self, |picker, _, result| {
                 if picker.request.get() != request {
                     return;

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use opencode_api::client::{Client, RequestOptions};
+use opencode_api::client::Client;
 use opencode_api::generated::{
     LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectListInput, SessionID, SessionInfo,
     SessionListInput, SessionListInputOrder, SessionRemoveInput,
@@ -218,10 +218,9 @@ impl List {
         tui.app.spawn(
             async move {
                 let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
-                let options = RequestOptions::default();
                 let (location, projects) = futures_util::future::join(
-                    client.location_get(&input, &options),
-                    client.project_list(&ProjectListInput::default(), &options),
+                    client.location_get(&input),
+                    client.project_list(&ProjectListInput::default()),
                 )
                 .await;
                 (location.ok(), projects.unwrap_or_default())
@@ -348,7 +347,7 @@ impl List {
         let toasts = tui.weak();
         let id = id.clone();
         tui.app.spawn(
-            async move { client.session_remove(&input, &RequestOptions::default()).await },
+            async move { client.session_remove(&input).await },
             bind!(weak, |list, _, result| {
                 match result {
                     Ok(()) => {
@@ -584,7 +583,7 @@ fn list_input(location: &LocationPublicInfo, query: &str, all_projects: bool) ->
 }
 
 async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionInfo>> {
-    client.session_list(input, &RequestOptions::default()).await.map(|response| response.data).ok()
+    client.session_list(input).await.map(|response| response.data).ok()
 }
 
 /// `pickerLocation()`: the open session's location, else the default location.

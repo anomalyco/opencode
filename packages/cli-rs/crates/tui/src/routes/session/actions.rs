@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
-use opencode_api::client::{Call, RequestOptions};
+use opencode_api::client::Call;
 use opencode_api::generated::{
     ExperimentalSessionWaitInput, ModelRef, ProviderID, SessionID, SessionInboxCancelInput, SessionInboxInfo,
     SessionInfo, SessionInterruptInput, SessionMessageAssistantContentItem, SessionMessageCompaction,
@@ -140,10 +140,7 @@ impl Inner {
                     title: Some(title),
                     ..SessionUpdateInput::default()
                 };
-                data.client()
-                    .session_update(&input, &RequestOptions::default())
-                    .await
-                    .map_err(|error| error.to_string())?;
+                data.client().session_update(&input).await.map_err(|error| error.to_string())?;
                 // The response can beat the renamed event; read the generated title back.
                 if generate {
                     data.session_invalidate(&session);
@@ -223,7 +220,7 @@ impl Inner {
             tui.app.spawn(
                 async move {
                     let input = SessionInboxCancelInput { session_id: session, inbox_id: id };
-                    client.session_inbox_cancel(&input, &RequestOptions::default()).await
+                    client.session_inbox_cancel(&input).await
                 },
                 bind!(tui, |tui, _, result| {
                     match result {
@@ -239,18 +236,10 @@ impl Inner {
         }
         tui.app.spawn(
             async move {
-                let options = RequestOptions::default();
+                client.session_interrupt(&SessionInterruptInput { session_id: session.clone(), resume: None }).await?;
+                client.experimental_session_wait(&ExperimentalSessionWaitInput { session_id: session.clone() }).await?;
                 client
-                    .session_interrupt(&SessionInterruptInput { session_id: session.clone(), resume: None }, &options)
-                    .await?;
-                client
-                    .experimental_session_wait(&ExperimentalSessionWaitInput { session_id: session.clone() }, &options)
-                    .await?;
-                client
-                    .session_revert_stage(
-                        &SessionRevertStageInput { session_id: session, message_id: id, files: None },
-                        &options,
-                    )
+                    .session_revert_stage(&SessionRevertStageInput { session_id: session, message_id: id, files: None })
                     .await
             },
             bind!(tui, |tui, _, result| {
@@ -269,7 +258,7 @@ impl Inner {
         let client = tui.data.client().clone();
         let input = SessionRevertClearInput { session_id: self.session.clone() };
         tui.app.spawn(
-            async move { client.session_revert_clear(&input, &RequestOptions::default()).await },
+            async move { client.session_revert_clear(&input).await },
             bind!(tui, |tui, _, result| {
                 if let Err(error) = result {
                     tui.toasts.show(
@@ -462,7 +451,7 @@ fn transcript(
         if let Some(sanitize) = sanitize {
             call.query("sanitize", &sanitize)?;
         }
-        let mut body: Value = client.json(call, &RequestOptions::default()).await?;
+        let mut body: Value = client.json(call).await?;
         Ok(body["data"].take())
     }
 }

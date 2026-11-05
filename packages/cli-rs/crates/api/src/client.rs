@@ -52,19 +52,6 @@ impl std::fmt::Debug for Auth {
     }
 }
 
-/// Per-call options. Headers here replace client and input headers of the same name.
-#[derive(Debug, Clone, Default)]
-pub struct RequestOptions {
-    pub headers: Vec<(String, String)>,
-}
-
-impl RequestOptions {
-    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers.push((name.into(), value.into()));
-        self
-    }
-}
-
 /// The API client. Cheap to clone.
 #[derive(Clone)]
 pub struct Client {
@@ -111,6 +98,11 @@ impl Client {
         self
     }
 
+    /// A copy of this client that adds a header to every request.
+    pub fn with_header(&self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.clone().header(name, value)
+    }
+
     pub fn base_url(&self) -> &url::Url {
         &self.base_url
     }
@@ -136,7 +128,7 @@ impl Client {
     }
 
     /// Builds the request for `call`, as `prepare` does in TypeScript.
-    pub fn prepare(&self, call: Call, options: &RequestOptions) -> Result<Request, Error> {
+    pub fn prepare(&self, call: Call) -> Result<Request, Error> {
         let mut query = call.query;
         if let Some(auth @ Auth::Query { .. }) = &self.auth {
             query.push((AUTH_TOKEN_QUERY.to_owned(), auth.token()));
@@ -146,7 +138,7 @@ impl Client {
         if let Some(auth @ Auth::Basic { .. }) = &self.auth {
             headers.push(("authorization".to_owned(), format!("Basic {}", auth.token())));
         }
-        for (name, value) in self.headers.iter().chain(&call.headers).chain(&options.headers) {
+        for (name, value) in self.headers.iter().chain(&call.headers) {
             set_header(&mut headers, name.clone(), value.clone());
         }
         let body = match call.body {
@@ -163,10 +155,10 @@ impl Client {
         Ok(Request { method: call.method, url, headers, body })
     }
 
-    async fn execute(&self, call: Call, options: &RequestOptions) -> Result<Response, Error> {
+    async fn execute(&self, call: Call) -> Result<Response, Error> {
         let success = call.success_status;
         let declared = call.declared_statuses;
-        let request = self.prepare(call, options)?;
+        let request = self.prepare(call)?;
         let response = self.transport.send(request).await.map_err(Error::Transport)?;
         if response.status != success {
             return Err(response_error(response, declared).await);
@@ -176,33 +168,33 @@ impl Client {
 
     /// Sends `call` and decodes the JSON body as `T`. Public so a caller can read a response as
     /// `serde_json::Value`, as the TypeScript Promise client returns it, without the typed decode.
-    pub async fn json<T: DeserializeOwned>(&self, call: Call, options: &RequestOptions) -> Result<T, Error> {
-        let bytes = json_body(self.execute(call, options).await?).await?;
+    pub async fn json<T: DeserializeOwned>(&self, call: Call) -> Result<T, Error> {
+        let bytes = json_body(self.execute(call).await?).await?;
         // Reads the value only, so bytes after it are not checked.
         T::deserialize(&mut serde_json::Deserializer::from_slice(&bytes))
             .map_err(|error| Error::MalformedResponse(error.to_string()))
     }
 
-    pub(crate) async fn data<T: DeserializeOwned>(&self, call: Call, options: &RequestOptions) -> Result<T, Error> {
+    pub(crate) async fn data<T: DeserializeOwned>(&self, call: Call) -> Result<T, Error> {
         #[derive(serde::Deserialize)]
         struct Data<T> {
             data: T,
         }
-        self.json::<Data<T>>(call, options).await.map(|value| value.data)
+        self.json::<Data<T>>(call).await.map(|value| value.data)
     }
 
     /// Sends `call` and expects no body. Public so a caller can send a body with its own key order.
-    pub async fn empty(&self, call: Call, options: &RequestOptions) -> Result<(), Error> {
-        self.execute(call, options).await.map(|_| ())
+    pub async fn empty(&self, call: Call) -> Result<(), Error> {
+        self.execute(call).await.map(|_| ())
     }
 
-    pub(crate) async fn binary(&self, call: Call, options: &RequestOptions) -> Result<Bytes, Error> {
-        let response = self.execute(call, options).await?;
+    pub(crate) async fn binary(&self, call: Call) -> Result<Bytes, Error> {
+        let response = self.execute(call).await?;
         response.bytes().await.map_err(Error::Transport)
     }
 
-    pub(crate) async fn sse<T>(&self, call: Call, options: &RequestOptions) -> Result<SseResponse<T>, Error> {
-        let response = self.execute(call, options).await?;
+    pub(crate) async fn sse<T>(&self, call: Call) -> Result<SseResponse<T>, Error> {
+        let response = self.execute(call).await?;
         if !is_content_type(&response, "text/event-stream") {
             return Err(Error::UnsupportedContentType(response.header("content-type").map(str::to_owned)));
         }

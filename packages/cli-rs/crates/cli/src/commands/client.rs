@@ -4,7 +4,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use opencode_api::client::{Call, Client, RequestOptions};
+use opencode_api::client::{Call, Client};
 use opencode_api::generated::types::LocationQueryInput;
 use opencode_api::transport::{Reqwest, Transport};
 use opencode_local::paths::Paths;
@@ -88,7 +88,7 @@ pub fn here() -> anyhow::Result<LocationQueryInput> {
 pub async fn get_located(client: &Client, path: &str, declared: &'static [u16]) -> anyhow::Result<Value> {
     let mut call = Call::new("GET", path.to_owned(), 200, declared);
     call.query("location", &here()?)?;
-    Ok(client.json(call, &RequestOptions::default()).await?)
+    Ok(client.json(call).await?)
 }
 
 /// `JSON.stringify(value, null, 2)` plus a newline.
@@ -137,7 +137,7 @@ process.exit(0)
         let context = Context { server: ServerFlags { standalone: true, server: None } };
         // The commands bind the result as these lines do; `let (_, client)` stopped the server here.
         let server = connect_in(&context, &paths, &env, false).await.unwrap();
-        let info = server.client.server_info(&RequestOptions::default()).await;
+        let info = server.client.server_info().await;
         assert_eq!(info.unwrap().version, "test");
     }
 }

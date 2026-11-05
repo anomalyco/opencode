@@ -5,17 +5,15 @@
 //! than one registration, and a service of another version is used with a warning, never
 //! replaced. When none is found, [`ensure`] starts the TypeScript service (F.9, `docs/F.9.md`).
 
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
-
-use opencode_api::client::RequestOptions;
 use opencode_api::error::Error as ApiError;
 use opencode_api::transport::Transport;
 use opencode_local::channel::Channels;
 use opencode_local::paths::Paths;
 use opencode_local::registration;
 use opencode_local::service_config::{self, ServiceConfig};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
 use crate::discover;
 use crate::ensure;
@@ -243,7 +241,7 @@ fn mismatch(endpoint: &Endpoint, version: &str, options: &Options) -> Option<Str
 
 async fn server_version(transport: Arc<dyn Transport>, endpoint: &Endpoint) -> Result<String, Error> {
     let client = endpoint.client(transport).map_err(|error| connect_error(endpoint, &error))?;
-    match tokio::time::timeout(SERVER_TIMEOUT, client.server_info(&RequestOptions::default())).await {
+    match tokio::time::timeout(SERVER_TIMEOUT, client.server_info()).await {
         Ok(Ok(info)) => Ok(info.version),
         Ok(Err(error)) => Err(connect_error(endpoint, &error)),
         // The abort signal of the TypeScript client fails the fetch as a transport error.

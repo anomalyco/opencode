@@ -34,7 +34,7 @@ pub fn run(context: &Context, args: &McpArgs) -> anyhow::Result<()> {
 
 fn servers(server: &Server) -> anyhow::Result<Vec<McpServer>> {
     let input = McpListInput { location: location()? };
-    Ok(server.run(server.client().mcp_list(&input, &Default::default()))?.data)
+    Ok(server.run(server.client().mcp_list(&input))?.data)
 }
 
 fn list(context: &Context) -> anyhow::Result<()> {
@@ -252,10 +252,7 @@ fn remove(server: &Server, credentials: &[String]) -> anyhow::Result<()> {
         for credential in credentials {
             server
                 .client()
-                .credential_remove(
-                    &CredentialRemoveInput { credential_id: credential.clone().into() },
-                    &Default::default(),
-                )
+                .credential_remove(&CredentialRemoveInput { credential_id: credential.clone().into() })
                 .await?;
         }
         anyhow::Ok(())
@@ -272,7 +269,7 @@ fn logout(context: &Context, args: &McpLogoutArgs) -> anyhow::Result<()> {
     let integration = match &found.integration_id {
         Some(integration_id) => {
             let input = IntegrationGetInput { integration_id: integration_id.clone(), location: location()? };
-            Some(server.run(server.client().integration_get(&input, &Default::default()))?.data)
+            Some(server.run(server.client().integration_get(&input))?.data)
         }
         None => None,
     };

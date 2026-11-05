@@ -89,24 +89,22 @@ export function emitMethod(types: Types, method: Method) {
   })
   if (method.endpoint.payloads.length > 0 && !method.binaryBody && !method.opaque) statements.unshift("call.object();")
   const declared = [...new Set(method.endpoint.errors.map((error) => error.status))]
-  const send =
-    method.success === "sse"
-      ? "self.sse(call, options).await"
-      : method.success === "data"
-        ? "self.data(call, options).await"
-        : method.success === "empty"
-          ? "self.empty(call, options).await"
-          : method.success === "binary"
-            ? "self.binary(call, options).await"
-            : "self.json(call, options).await"
   const returns = method.success === "sse" ? `SseResponse<${output}>` : output
-  const argument = input === undefined ? "" : `input: &${input}, `
-  const mutable = statements.length === 0 ? "" : "mut "
+  const parameter = input === undefined ? "" : `input: &${input}`
+  const argument = input === undefined ? "" : "input"
+  const call = `Call::new(${JSON.stringify(method.endpoint.endpoint.method)}, ${path}, ${method.successStatus}, &[${declared.join(", ")}])`
+  const body =
+    statements.length === 0
+      ? `        Ok(${call})`
+      : [`let mut call = ${call};`, ...statements, "Ok(call)"].map((line) => `        ${line}`).join("\n")
+  const builder = `${name.replace(/^r#/, "")}_call`
+  // The builder follows its method with no doc or blank line of its own, to keep the file short.
   return `    /// \`${method.endpoint.endpoint.method} ${method.endpoint.endpoint.path}\` (\`${method.endpoint.operation.name}\`)
-    pub async fn ${name}(&self, ${argument}options: &RequestOptions) -> Result<${returns}, Error> {
-        let ${mutable}call = Call::new(${JSON.stringify(method.endpoint.endpoint.method)}, ${path}, ${method.successStatus}, &[${declared.join(", ")}]);
-${statements.map((statement) => `        ${statement}`).join("\n")}
-        ${send}
+    pub async fn ${name}(&self${parameter === "" ? "" : `, ${parameter}`}) -> Result<${returns}, Error> {
+        self.${method.success}(Self::${builder}(${argument})?).await
+    }
+    pub fn ${builder}(${parameter}) -> Result<Call, Error> {
+${body}
     }`
 }
 

@@ -554,7 +554,7 @@ async fn failed_preparation(kind: &str) {
                     session_id: session(),
                     model: ModelRef { provider_id: ProviderID("demo".into()), id: "second".into(), variant: None },
                 };
-                client.client().session_switch_model(&input, &Default::default()).await.map_err(Arc::new)
+                client.client().session_switch_model(&input).await.map_err(Arc::new)
             }
             .boxed()
         })),
