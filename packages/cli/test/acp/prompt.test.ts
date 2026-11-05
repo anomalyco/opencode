@@ -251,6 +251,35 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  // Windows file names cannot contain a newline.
+  const testOutsideWindows = process.platform === "win32" ? test.skip : test
+  testOutsideWindows("completes an edit whose file name breaks the patch header", async () => {
+    await using dir = await tmpdir()
+    const name = "notes.txt\nx"
+    await Bun.write(path.resolve(dir.path, name), "world\n")
+    await using acp = await startWire({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_edit", "edit"),
+          toolCalled(sessionID, "call_edit", { path: name, oldString: "hello", newString: "world" }),
+          toolSucceeded(sessionID, "call_edit", { files: [fileDiff(name, "hello\n", "world\n")] }, "edited"),
+        ),
+    })
+    await acp.initialize()
+    const session = await acp.newSession(dir.path)
+
+    const result = await acp.prompt(session.sessionId, "edit the file")
+
+    expect(result.stopReason).toBe("end_turn")
+    expect(
+      turnUpdates(acp.updates).find(
+        (item) => item.update.sessionUpdate === "tool_call_update" && item.update.status === "completed",
+      )?.update,
+    ).toMatchObject({ content: [{ type: "content", content: { type: "text", text: "edited" } }] })
+  })
+
   test("routes slash commands and compact through their session endpoints", async () => {
     await using acp = await startWire()
     acp.server.catalog.commands = [reviewCommand, { name: "compact", description: "Server compact" }]
