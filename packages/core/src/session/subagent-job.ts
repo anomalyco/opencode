@@ -22,8 +22,19 @@ export type Input = {
   readonly notify: boolean
 }
 
+type Completion = Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
+  readonly recovery: Recovery
+  readonly resume?: boolean
+}
+
 export interface Interface {
   start: (input: Input) => Effect.Effect<Job.Info>
+  recover: (input: {
+    recovery: Recovery
+    id: string
+    notificationID: Job.Background["notificationID"]
+  }) => Effect.Effect<void>
+  complete: (input: Completion) => Effect.Effect<void, Session.NotFoundError | Session.SyntheticConflictError>
   background: (input: Input) => Effect.Effect<void>
   notify: (recovery: Recovery, startedAt: number) => Effect.Effect<void>
 }
@@ -69,6 +80,7 @@ const make: Effect.Effect<
   // Resume once for launch, then wait until the child is idle with no background work or input
   // left. Never resume just to inspect settlement: resuming an idle child runs another model step.
   const settle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+    if (!(yield* store.get(sessionID))) return yield* new Session.NotFoundError({ sessionID })
     const outcomes = [
       SessionEvent.Execution.Succeeded,
       SessionEvent.Execution.Failed,
@@ -90,12 +102,13 @@ const make: Effect.Effect<
       if (event.data.reason === "shutdown") return yield* Effect.never
       return yield* Effect.interrupt
     })
-    yield* sessions.resume(sessionID)
+    yield* execution.resume(sessionID)
     while (true) {
-      yield* sessions.wait(sessionID)
+      if (!(yield* store.get(sessionID))) return yield* new Session.NotFoundError({ sessionID })
+      yield* execution.awaitIdle(sessionID)
       // Read active last: input may have been promoted while the pending-work queries ran.
       const pending = yield* SessionBackground.unsettled(jobs, store, db, sessionID)
-      const active = (yield* sessions.active).has(sessionID)
+      const active = yield* execution.isActive(sessionID)
       const event = yield* Queue.poll(settled)
       if (Option.isSome(event)) {
         yield* terminal(event.value)
@@ -106,32 +119,53 @@ const make: Effect.Effect<
     }
   }, Effect.scoped)
 
-  const notify = Effect.fn("SubagentJob.notify")(function* (recovery: Recovery, startedAt: number) {
-    const key = `${recovery.childSessionID}:${startedAt}`
+  const complete = Effect.fn("SubagentJob.complete")(function* (input: Completion) {
+    const metadata = (yield* store.get(input.recovery.childSessionID))?.metadata
+    if (!SubagentMetadata.notify(metadata)) {
+      if (input.notificationID) yield* jobs.completeBackground(input.notificationID)
+      // A settlement may have seen this job still running. Clear its marker before waking
+      // the idle parent, so a held report gets another chance to release without a model step.
+      const parentID = input.recovery.parentSessionID
+      if (!(yield* store.get(parentID))) return
+      yield* execution.awaitIdle(parentID)
+      yield* execution.wake(parentID)
+      return
+    }
+    yield* SubagentCompletion.deliver(
+      {
+        synthetic: (notice) =>
+          Effect.gen(function* () {
+            yield* sessions.synthetic({ ...notice, resume: false })
+            if (notice.resume !== false && !(yield* sessions.get(notice.sessionID)).revert)
+              yield* execution.wake(notice.sessionID)
+          }).pipe(Effect.uninterruptible),
+      },
+      jobs,
+      input,
+    )
+  })
+
+  const notify = Effect.fn("SubagentJob.notify")(function* (
+    recovery: Recovery,
+    startedAt: number,
+    id: string = recovery.childSessionID,
+  ) {
+    const key = `${id}:${startedAt}`
     if (notifications.has(key)) return
     notifications.add(key)
     yield* Effect.gen(function* () {
-      const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
+      const info = (yield* jobs.wait({ id })).info
       if (!info) return
-      // The preference belongs to the spawn call, so read it after the child settles. A silent
-      // child still clears its durable marker rather than leave a row that restart recovery
-      // would replay as a report the parent asked not to receive.
-      const metadata = yield* sessions.get(recovery.childSessionID).pipe(
-        Effect.map((session) => session.metadata),
-        Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
+      // Scope shutdown cancels only the in-memory job. Its running durable row must survive
+      // for the next process, unlike an explicit cancellation persisted by Job.cancel.
+      if (
+        info.status === "cancelled" &&
+        (yield* jobs.pendingBackground).some(
+          (row) => row.status === "running" && (row.notificationID === info.notificationID || row.id === id),
+        )
       )
-      if (!SubagentMetadata.notify(metadata)) {
-        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
-        // Nothing reaches the parent, so wake it once idle: a parent whose report waited on this job
-        // settles again and reports its final state, without running a model step. Waiting for idle
-        // rather than skipping an active parent covers a settlement that read this job as running.
-        const parentID = recovery.parentSessionID
-        if (!(yield* store.get(parentID))) return
-        yield* execution.awaitIdle(parentID)
-        yield* execution.wake(parentID)
         return
-      }
-      yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
+      yield* complete({ ...info, recovery })
     }).pipe(
       Effect.ensuring(Effect.sync(() => notifications.delete(key))),
       Effect.forkIn(scope, { startImmediately: true }),
@@ -139,7 +173,32 @@ const make: Effect.Effect<
     )
   })
 
+  const run = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+    yield* settle(sessionID)
+    const messages = yield* store.messages({ sessionID, order: "desc", limit: 20 })
+    return SubagentCompletion.text(
+      messages.find(
+        (message) =>
+          message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+      ),
+    )
+  })
+
   return Service.of({
+    recover: (input) =>
+      Effect.gen(function* () {
+        const info = yield* jobs.start({
+          id: input.id,
+          type: "subagent",
+          title: input.recovery.description,
+          notificationID: input.notificationID,
+          recovery: input.recovery,
+          run: run(input.recovery.childSessionID),
+        })
+        yield* jobs.background(input.id)
+        yield* notify(input.recovery, info.started_at, input.id)
+      }).pipe(Effect.setContext(context)),
+    complete,
     start: (input: Input) =>
       Effect.gen(function* () {
         yield* writeNotify(input.recovery, input.notify)
@@ -149,19 +208,7 @@ const make: Effect.Effect<
           title: input.recovery.description,
           metadata: {},
           recovery: input.recovery,
-          run: Effect.gen(function* () {
-            yield* settle(input.recovery.childSessionID)
-            const messages = yield* sessions.messages({
-              sessionID: input.recovery.childSessionID,
-              order: "desc",
-              limit: 20,
-            })
-            const assistant = messages.find(
-              (message) =>
-                message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-            )
-            return SubagentCompletion.text(assistant)
-          }),
+          run: run(input.recovery.childSessionID),
         })
       }).pipe(Effect.setContext(context)),
     background: Effect.fn("SubagentJob.background")(function* (input: Input) {
@@ -173,8 +220,10 @@ const make: Effect.Effect<
   })
 })
 
+export const layer = Layer.effect(Service, make)
+
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
-  layer: Layer.effect(Service, make),
+  layer,
   deps: [Session.node, SessionExecution.node, Job.node, Bus.node, SessionStore.node, Database.node],
 })

@@ -11,7 +11,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
-import { SubagentCompletion } from "../subagent-completion.js"
+import { SubagentJob } from "../subagent-job.js"
 import { SubagentMetadata } from "../subagent-metadata.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
@@ -73,6 +73,7 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
+      const subagents = yield* SubagentJob.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
@@ -166,6 +167,7 @@ export const layer = (options?: Options) =>
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
         suspended: ReadonlySet<SessionSchema.ID>,
+        completions: Array<Effect.Effect<void>>,
       ): Effect.fn.Return<"stale" | "owned" | "reported" | "exhausted" | "resume"> {
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
@@ -174,20 +176,23 @@ export const layer = (options?: Options) =>
         }
         if ((yield* jobs.get(background.id))?.status === "running") return "owned"
 
-        // A silent child reports nothing, whether its settle ran or restart replays it, so only the
-        // durable marker is left to clear.
         const silent = !SubagentMetadata.notify(child.metadata)
         const notify = Effect.fnUntraced(function* (result: Pick<Job.Background, "status" | "output" | "error">) {
+          const completion = subagents
+            .complete({
+              ...result,
+              recovery,
+              notificationID: background.notificationID,
+              resume: suspended.has(recovery.parentSessionID) ? false : undefined,
+            })
+            .pipe(Effect.orDie)
           if (silent) {
-            yield* jobs.completeBackground(background.notificationID)
+            // Silent completion wakes a held parent. Defer it until parent accounting and
+            // recovered job ownership are established, just like a running child's observer.
+            completions.push(completion)
             return
           }
-          yield* SubagentCompletion.deliver(sessions, jobs, {
-            ...result,
-            recovery,
-            notificationID: background.notificationID,
-            resume: suspended.has(recovery.parentSessionID) ? false : undefined,
-          }).pipe(Effect.orDie)
+          yield* completion
         })
 
         // Finished before the crash: no settle survives to report it, so this replay is the report.
@@ -203,42 +208,6 @@ export const layer = (options?: Options) =>
           return "exhausted"
         }
         return "resume"
-      })
-
-      const resumeChild = Effect.fnUntraced(function* (
-        background: Job.Background,
-        recovery: Extract<Job.Recovery, { kind: "subagent" }>,
-      ) {
-        yield* jobs.start({
-          id: background.id,
-          type: "subagent",
-          title: recovery.description,
-          notificationID: background.notificationID,
-          recovery,
-          run: execution.resume(recovery.childSessionID).pipe(
-            Effect.andThen(store.context(recovery.childSessionID)),
-            Effect.map((messages) => {
-              const assistant = messages.findLast(
-                (message) =>
-                  message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-              )
-              return SubagentCompletion.text(assistant)
-            }),
-          ),
-        })
-        yield* jobs.background(background.id)
-        // The child's settle admits its report before the job persists a terminal row, so only a
-        // durably terminal row may be cleared. Shutdown cancellation is never persisted — the row
-        // stays running for the next sweep to resume — and a silent child leaves only this marker.
-        yield* jobs.wait({ id: background.id }).pipe(
-          Effect.andThen(jobs.pendingBackground),
-          Effect.flatMap((pending) =>
-            pending.some((row) => row.notificationID === background.notificationID && row.status !== "running")
-              ? jobs.completeBackground(background.notificationID)
-              : Effect.void,
-          ),
-          Effect.forkIn(scope),
-        )
       })
 
       return Service.of({
@@ -258,6 +227,7 @@ export const layer = (options?: Options) =>
           const owned = new Set<SessionSchema.ID>()
           const exhausted = new Set<SessionSchema.ID>()
           const reported = new Set<string>()
+          const completions: Array<Effect.Effect<void>> = []
           const resumable: Array<{
             readonly background: Job.Background
             readonly recovery: Extract<Job.Recovery, { kind: "subagent" }>
@@ -271,7 +241,7 @@ export const layer = (options?: Options) =>
                 if ((yield* jobs.get(background.id))?.status === "running") return
                 return yield* recoverToolJob(background, recovery)
               }
-              const result = yield* recoverSubagent(background, recovery, suspended)
+              const result = yield* recoverSubagent(background, recovery, suspended, completions)
               if (result === "owned" || result === "resume") owned.add(recovery.childSessionID)
               if (result === "exhausted") exhausted.add(recovery.childSessionID)
               if (result === "reported") reported.add(background.notificationID)
@@ -292,9 +262,19 @@ export const layer = (options?: Options) =>
           )
           // A resumed child's settle wakes its parent, so children start only once every suspended
           // parent has been counted and notified above.
-          yield* Effect.forEach(resumable, ({ background, recovery }) => resumeChild(background, recovery), {
-            discard: true,
-          })
+          yield* Effect.forEach(
+            resumable,
+            ({ background, recovery }) =>
+              subagents.recover({
+                id: background.id,
+                notificationID: background.notificationID,
+                recovery,
+              }),
+            {
+              discard: true,
+            },
+          )
+          yield* Effect.forEach(completions, (completion) => completion.pipe(Effect.forkIn(scope)), { discard: true })
           // Held direct prompts have no job marker. Wake them only after cancellations are admitted,
           // parents are counted, and recovered jobs own their reports. A wake preserves the held
           // answer boundary without retrying an interrupted model execution.
@@ -324,5 +304,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node, SubagentJob.node],
 })

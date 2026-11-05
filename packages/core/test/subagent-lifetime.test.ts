@@ -417,7 +417,7 @@ describe("subagent observer lifetime", () => {
       yield* Effect.addFinalizer(() => Scope.close(before, Exit.void))
       const oldJobs = yield* Job.make.pipe(Scope.provide(before))
       const old = yield* Layer.buildWithScope(
-        SessionExecution.layer.pipe(Layer.provide(Layer.succeed(Job.Service, oldJobs))),
+        SessionExecution.layer.pipe(Layer.provide(Layer.succeed(Job.Service, oldJobs)), Layer.fresh),
         before,
       )
       const oldExecution = Context.get(old, SessionExecution.Service)
@@ -443,8 +443,10 @@ describe("subagent observer lifetime", () => {
       const jobs = yield* Job.make.pipe(Scope.provide(after))
       const context = yield* Layer.buildWithScope(
         SessionRestart.layer().pipe(
+          Layer.provideMerge(SubagentJob.layer),
           Layer.provideMerge(SessionExecution.layer),
           Layer.provide(Layer.succeed(Job.Service, jobs)),
+          Layer.fresh,
         ),
         after,
       )
@@ -469,6 +471,150 @@ describe("subagent observer lifetime", () => {
       expect(yield* llm.requests()).toHaveLength(3)
     }),
   )
+
+  for (const outcome of ["complete", "shutdown"] as const) {
+    it.live(`restart retains a child's job through its silent grandchild's settlement (${outcome})`, () =>
+      Effect.gen(function* () {
+        const store = yield* SessionStore.Service
+        const llm = yield* TestLLM.Test
+        const f = yield* family()
+        const build = (scope: Scope.Closeable, jobs: Job.Interface) =>
+          Layer.buildWithScope(
+            SessionRestart.layer().pipe(
+              Layer.provideMerge(SubagentJob.layer),
+              Layer.provideMerge(SessionExecution.layer),
+              Layer.provide(Layer.succeed(Job.Service, jobs)),
+              Layer.fresh,
+            ),
+            scope,
+          )
+        const before = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(before, Exit.void))
+        const oldJobs = yield* Job.make.pipe(Scope.provide(before))
+        const old = yield* build(before, oldJobs)
+        const oldSubagents = Context.get(old, SubagentJob.Service)
+        const oldExecution = Context.get(old, SessionExecution.Service)
+        const child = {
+          recovery: {
+            kind: "subagent" as const,
+            parentSessionID: f.parent.id,
+            childSessionID: f.child.id,
+            agent: "reviewer",
+            description: "Review fixture",
+          },
+          notify: true,
+        }
+        const descendant = {
+          recovery: {
+            ...child.recovery,
+            parentSessionID: f.child.id,
+            childSessionID: f.descendant.id,
+            description: "Check the tests",
+          },
+          notify: false,
+        }
+        yield* llm.push(Stream.never, TestLLM.text("before restart", "before"))
+        yield* f.sessions.prompt({ sessionID: f.descendant.id, text: "Check the tests", resume: false })
+        yield* oldSubagents.start(descendant)
+        yield* oldSubagents.background(descendant)
+        yield* llm.wait(1)
+        yield* f.sessions.prompt({ sessionID: f.child.id, text: "Review fixture", resume: false })
+        yield* oldSubagents.start(child)
+        yield* oldSubagents.background(child)
+        yield* llm.wait(2)
+        yield* oldExecution.awaitIdle(f.child.id)
+        const held = yield* store.heldReport(f.child.id)
+        const markers = yield* oldJobs.pendingBackground
+        expect(held).toBeDefined()
+        expect(markers).toHaveLength(2)
+        expect(markers.every((row) => row.status === "running")).toBe(true)
+        yield* Scope.close(before, Exit.void)
+        expect(yield* oldJobs.pendingBackground).toEqual(markers)
+        expect(yield* store.heldReport(f.child.id)).toEqual(held)
+        expect(yield* reports(f.parent.id)).toEqual([])
+
+        const after = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(after, Exit.void))
+        const jobs = yield* Job.make.pipe(Scope.provide(after))
+        const go = yield* Deferred.make<void>()
+        const settled = yield* Deferred.make<void>()
+        const finish = yield* Deferred.make<void>()
+        const cleared = yield* Deferred.make<void>()
+        const context = yield* build(after, {
+          ...jobs,
+          // Hold the real job just after D's execution settles: C's wake must observe D
+          // still running and hold again before its completion observer gets to clear D.
+          start: (input) =>
+            jobs.start({
+              ...input,
+              run:
+                input.id !== f.descendant.id
+                  ? input.run
+                  : input.run.pipe(
+                      Effect.tap(() =>
+                        Deferred.succeed(settled, undefined).pipe(Effect.andThen(Deferred.await(finish))),
+                      ),
+                    ),
+            }),
+          completeBackground: (id) =>
+            jobs
+              .completeBackground(id)
+              .pipe(
+                Effect.tap(() => (id === held?.notificationID ? Deferred.succeed(cleared, undefined) : Effect.void)),
+              ),
+        })
+        const restart = Context.get(context, SessionRestart.Service)
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* llm.push(
+          Stream.unwrap(
+            Deferred.await(go).pipe(Effect.as(Stream.fromIterable(TestLLM.text("grandchild done", "grandchild")))),
+          ),
+          TestLLM.text("after restart", "after"),
+        )
+        yield* restart.resumeSuspendedSessions
+        yield* llm.wait(4)
+        yield* execution.awaitIdle(f.child.id)
+        expect(yield* store.heldReport(f.child.id)).toEqual(held)
+        expect((yield* jobs.get(f.child.id))?.status).toBe("running")
+        expect(yield* reports(f.parent.id)).toEqual([])
+        if (outcome === "shutdown") {
+          yield* Scope.close(after, Exit.void)
+          expect(yield* jobs.pendingBackground).toEqual(markers)
+          expect(yield* store.heldReport(f.child.id)).toEqual(held)
+          expect(yield* reports(f.parent.id)).toEqual([])
+          expect((yield* reports(f.child.id)).filter((message) => message.metadata?.source === "subagent")).toEqual([])
+          return
+        }
+        yield* Deferred.succeed(go, undefined)
+        yield* Deferred.await(settled)
+        yield* execution.awaitIdle(f.child.id)
+        expect((yield* jobs.get(f.descendant.id))?.status).toBe("running")
+        expect((yield* jobs.get(f.child.id))?.status).toBe("running")
+        expect(yield* store.heldReport(f.child.id)).toEqual(held)
+        expect(yield* reports(f.parent.id)).toEqual([])
+
+        yield* Deferred.succeed(finish, undefined)
+        yield* Deferred.await(cleared)
+        yield* llm.wait(5)
+        yield* execution.awaitIdle(f.parent.id)
+        const notices = yield* reports(f.parent.id)
+        expect(notices).toHaveLength(1)
+        expect(notices[0]).toMatchObject({
+          id: held?.notificationID,
+          metadata: { source: "subagent", childID: f.child.id, state: "completed" },
+        })
+        expect(notices[0]?.text).toContain("after restart")
+        expect(notices[0]?.text).not.toContain("grandchild done")
+        expect(notices[0]?.text).not.toContain("before restart")
+        expect(yield* jobs.pendingBackground).toEqual([])
+        expect(yield* store.listHeldChildren()).toEqual([])
+        expect(yield* llm.requests()).toHaveLength(5)
+        yield* restart.resumeSuspendedSessions
+        expect(yield* reports(f.parent.id)).toEqual(notices)
+        expect(yield* llm.requests()).toHaveLength(5)
+      }),
+    )
+  }
 
   it.live("a silent background grandchild job releases its parent's held report", () =>
     Effect.gen(function* () {
