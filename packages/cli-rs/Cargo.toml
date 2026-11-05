@@ -118,3 +118,8 @@ debug = "line-tables-only"
 
 [profile.release]
 debug = "line-tables-only"
+
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
