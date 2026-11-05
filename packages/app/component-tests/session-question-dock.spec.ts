@@ -67,6 +67,54 @@ for (const variant of ["classic", "experimental"] as const) {
     await expect(files).not.toBeChecked()
   })
 
+  story(
+    `${variant} closed choices exclude custom answers from display and keyboard navigation`,
+    async ({ mount, page }) => {
+      await page.addInitScript(
+        (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
+        variant === "experimental",
+      )
+
+      const component = await mount("session-question-switch--closed-choices")
+      const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+      const custom = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+      const wide = question.getByRole("radio", { name: /Wide/ })
+
+      await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
+      await expect(custom).toHaveCount(0)
+      await page.keyboard.press("3")
+      await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
+      await page.keyboard.press("End")
+      await expect(wide).toBeFocused()
+      await page.keyboard.press(" ")
+      await expect(wide).toBeChecked()
+      await question.getByRole("button", { name: "Next", exact: true }).click()
+
+      const tasks = question.getByRole("checkbox", { name: "Background tasks", exact: true })
+      await expect(question.getByRole("checkbox", { name: "Changed files", exact: true })).toBeFocused()
+      await expect(custom).toHaveCount(0)
+      await page.keyboard.press("4")
+      await expect(question.getByRole("checkbox", { name: "Changed files", exact: true })).toBeFocused()
+      await page.keyboard.press("End")
+      await expect(tasks).toBeFocused()
+      await page.keyboard.press(" ")
+      await expect(tasks).toBeChecked()
+      await question.getByRole("button", { name: "Next", exact: true }).click()
+
+      // Omitted custom has the same closed-choice default as backend validation.
+      await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
+      await expect(custom).toHaveCount(0)
+      await wide.click()
+      await question.getByRole("button", { name: "Next", exact: true }).click()
+
+      // A string without options still needs its free-text editor.
+      await expect(custom).toBeVisible()
+      await custom.fill("Keep the current layout")
+      await question.getByRole("button", { name: "Submit", exact: true }).click()
+      await expect(component.getByText("Submitted the answer locally", { exact: true })).toBeVisible()
+    },
+  )
+
   story(`${variant} question text links URLs`, async ({ mount, page }) => {
     await page.addInitScript(
       (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
