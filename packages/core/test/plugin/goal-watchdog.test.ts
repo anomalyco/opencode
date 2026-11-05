@@ -34,8 +34,11 @@ const step = (stepSessionID: Session.ID) =>
   ({ type: "session.step.started", data: { sessionID: stepSessionID } }) as unknown as SessionEvent.Step.Started
 
 /** Runs the goal plugin against stubbed domains: plugin storage in memory, and RPC that records what it publishes. */
-const run = Effect.fnUntraced(function* (seed?: Goal.State) {
-  const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
+const run = Effect.fnUntraced(function* (seed?: Goal.State, extra?: Record<string, Schema.Json>) {
+  const stored = new Map<string, Schema.Json>([
+    ...(seed ? ([[`session:${sessionID}`, seed]] as const) : []),
+    ...Object.entries(extra ?? {}),
+  ])
   const changed: unknown[] = []
   const handlers: { get?: (input: { sessionID: string }) => Effect.Effect<Goal.State | null> } = {}
   const events = yield* Queue.unbounded<Watched>()
@@ -98,6 +101,7 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
   return {
     goal: () =>
       Option.getOrUndefined(Schema.decodeUnknownOption(Goal.State)(stored.get(`session:${sessionID}`))),
+    stored,
     changed,
     get: () => handlers.get?.({ sessionID }) ?? Effect.die("the goal RPC was not registered"),
     command: (text: string) =>
@@ -128,6 +132,60 @@ describe("goal plugin waiting", () => {
         status: "paused",
         reason: "The server restarted while the goal was active",
       })
+    }),
+  )
+
+  it.effect("leaves a goal running while the process that armed it still heartbeats", () =>
+    Effect.gen(function* () {
+      // A second server on the same database starts while this goal's owner is alive: the owner's fresh
+      // heartbeat says the goal is still being driven, so the sweep must leave it alone.
+      const plugin = yield* run(
+        {
+          id: "goal-live-owner",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "a-live-process",
+          updatedAt: 0,
+        },
+        { "process:a-live-process": { at: 0 } },
+      )
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+    }),
+  )
+
+  it.effect("pauses a goal whose owning process stopped heartbeating, and drops the stale heartbeat", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(
+        {
+          id: "goal-dead-owner",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "a-dead-process",
+          updatedAt: 0,
+        },
+        { "process:a-dead-process": { at: -Duration.toMillis(GoalPlugin.HEARTBEAT_TTL) - 1 } },
+      )
+      expect(plugin.goal()).toMatchObject({
+        status: "paused",
+        reason: "The server restarted while the goal was active",
+      })
+      expect(plugin.stored.has("process:a-dead-process")).toBe(false)
+    }),
+  )
+
+  it.effect("refreshes its own heartbeat while it runs", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run()
+      const key = [...plugin.stored.keys()].find((key) => key.startsWith("process:"))
+      expect(key).toBeString()
+      expect(plugin.stored.get(key!)).toMatchObject({ at: 0 })
+
+      yield* TestClock.adjust(GoalPlugin.HEARTBEAT_INTERVAL)
+      expect(plugin.stored.get(key!)).toMatchObject({ at: Duration.toMillis(GoalPlugin.HEARTBEAT_INTERVAL) })
     }),
   )
 

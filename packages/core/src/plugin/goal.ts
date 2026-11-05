@@ -6,7 +6,7 @@ import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
 import { Goal } from "@opencode/schema/goal"
 import { Session } from "@opencode/schema/session"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
-import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
+import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Predicate, Schema, Stream } from "effect"
 import CONTINUATION from "./goal/continuation.txt"
 import JUDGE from "./goal/judge.txt"
 import KICKOFF from "./goal/kickoff.txt"
@@ -26,6 +26,13 @@ type State = Goal.State
 const decodeState = Schema.decodeUnknownOption(Goal.State)
 // Storage key prefix of a Session's goal. Plugin storage is the plugin's own, so children and forks start without one.
 const PREFIX = "session:"
+// Storage key prefix of a process liveness record, shared through the database so other servers can read it.
+const PROCESS_PREFIX = "process:"
+/** How often a process refreshes its liveness record while it holds goals. */
+export const HEARTBEAT_INTERVAL = Duration.seconds(15)
+/** A goal whose owner has not heartbeated for this long counts as orphaned and may be paused by another server. */
+export const HEARTBEAT_TTL = Duration.seconds(45)
+const heartbeatKey = (owner: string) => PROCESS_PREFIX + owner
 
 const Verdict = Schema.Struct({
   verdict: Schema.Literals(["done", "continue", "blocked", "paused", "wait"]),
@@ -311,10 +318,31 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
 
+    // Whether another process still holds its goals: it heartbeated within the TTL. A record that is missing,
+    // malformed or stale says the owner is gone. Shared through the database, since each process has its own memory.
+    const alive = (owner: string) =>
+      Effect.gen(function* () {
+        const heartbeat = yield* ctx.storage.get(heartbeatKey(owner))
+        if (!Predicate.isObject(heartbeat) || typeof heartbeat.at !== "number") return false
+        return heartbeat.at > (yield* Clock.currentTimeMillis) - Duration.toMillis(HEARTBEAT_TTL)
+      })
+
+    // Publish this process's liveness so a second server on the same database can tell a live owner's goals from
+    // orphaned ones. Beating starts before the sweep runs: a freshly started process must not read as dead.
+    const beat = Effect.gen(function* () {
+      yield* ctx.storage.set(heartbeatKey(boot()), { at: yield* Clock.currentTimeMillis })
+    })
+    yield* beat
+    yield* Effect.forever(Effect.andThen(Effect.sleep(HEARTBEAT_INTERVAL), beat)).pipe(
+      Effect.catchCause((cause) => Effect.logWarning("failed to refresh the goal heartbeat", { cause })),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
     // A goal an earlier process left active would show as running while nothing drives it, unless something wakes the
     // Session, so pause those now; the boot check in the hook covers any that wake first. Goals of Sessions deleted
-    // while no instance listened are dropped. This assumes one server process per database: a second one would pause
-    // the first one's live goals.
+    // while no instance listened are dropped. A second server on the same database is common (--standalone, `acp`,
+    // a service-less `opencode run`), so the boot check alone would pause the first server's live goals: only a goal
+    // whose owner stopped heartbeating counts as orphaned. Stale heartbeats are dropped so they do not pile up.
     yield* Effect.gen(function* () {
       let after: string | undefined
       do {
@@ -329,12 +357,28 @@ export const Plugin = define({
               if (Option.isNone(session)) return yield* ctx.storage.remove(entry.key)
               const goal = Option.getOrUndefined(decodeState(entry.value))
               if (goal?.status !== "active" || goal.boot === boot()) return
+              if (yield* alive(goal.boot)) return
               yield* settle(session.value.id, goal, "paused", "The server restarted while the goal was active")
             }),
           { discard: true },
         )
         after = page.next
       } while (after !== undefined)
+      let processAfter: string | undefined
+      do {
+        const page = yield* ctx.storage.scan({ prefix: PROCESS_PREFIX, after: processAfter, limit: 100 })
+        yield* Effect.forEach(
+          page.entries,
+          (entry) =>
+            Effect.gen(function* () {
+              const owner = entry.key.slice(PROCESS_PREFIX.length)
+              if (owner === boot() || (yield* alive(owner))) return
+              yield* ctx.storage.remove(entry.key)
+            }),
+          { discard: true },
+        )
+        processAfter = page.next
+      } while (processAfter !== undefined)
     }).pipe(
       Effect.catchCause((cause) => Effect.logWarning("failed to pause goals left by an earlier process", { cause })),
       Effect.forkScoped({ startImmediately: true }),
