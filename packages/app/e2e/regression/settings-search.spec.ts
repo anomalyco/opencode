@@ -420,7 +420,7 @@ test("a page reached through an opened result keeps its own way back", async ({ 
   await expect(view.settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
 })
 
-test("a project edit queued behind a save still reaches its project after jumping to another", async ({ page }) => {
+test("project edits queued behind a save reach their project in order across jumps away and back", async ({ page }) => {
   const view = await open(page, { count: 2 })
   await view.search.fill("OpenCode 00 name")
   await view.results.getByRole("option").click()
@@ -439,11 +439,20 @@ test("a project edit queued behind a save still reaches its project after jumpin
     /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? "Meta+Shift+P" : "Control+Shift+P",
   )
 
-  await page.keyboard.press(key)
-  const palette = page.getByRole("dialog")
-  await palette.getByRole("combobox").fill("OpenCode 01 name")
-  await palette.getByRole("option", { name: /^Project name/ }).click()
-  await expect(name).toHaveValue("OpenCode 01")
+  const jump = async (query: string, value: string) => {
+    await page.keyboard.press(key)
+    const palette = page.getByRole("dialog")
+    await palette.getByRole("combobox").fill(query)
+    await palette.getByRole("option", { name: /^Project name/ }).click()
+    await expect(name).toHaveValue(value)
+  }
+
+  await jump("OpenCode 01 name", "OpenCode 01")
+
+  // Back on the first project before its queued edit went out, a new save must not overtake it.
+  await jump("OpenCode 00 name", "OpenCode 00")
+  await startup.fill("bun start")
+  await startup.blur()
   hold.release()
 
   await expect
@@ -451,6 +460,7 @@ test("a project edit queued behind a save still reaches its project after jumpin
     .toEqual([
       ["/api/project/proj_search_0", { name: "Renamed" }],
       ["/api/project/proj_search_0", { commands: { start: "bun dev" } }],
+      ["/api/project/proj_search_0", { commands: { start: "bun start" } }],
     ])
 })
 

@@ -34,7 +34,8 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   let iconInput: HTMLInputElement | undefined
   let reader: FileReader | undefined
-  // The latest save sent; a flush on close waits for it so saves for one project stay in order.
+  // The latest save sent. Every save and flush waits for it, so saves go out in order even when a flush for a project
+  // the page left is still queued when the page comes back to it.
   let inflight: Promise<unknown> = Promise.resolve()
 
   const dispatch = (event: ProjectSettingsEvent) => {
@@ -61,7 +62,8 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     if (effect.type === "run-save") {
       const controller = new AbortController()
 
-      // The timer outlives the page on purpose: a save sent before it closed still finishes, or is cut off.
+      // The timer outlives the page on purpose: a save sent before it closed still finishes, or is cut off. It starts
+      // now, so time spent waiting behind an earlier save counts against it too.
       const timer = setTimeout(() => {
         controller.abort()
         dispatch({
@@ -71,7 +73,10 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         })
       }, PROJECT_SAVE_TIMEOUT_MS)
 
-      inflight = request(effect.target, effect.patch, controller.signal)
+      const send = () => request(effect.target, effect.patch, controller.signal)
+
+      inflight = inflight
+        .then(send, send)
         .then(
           () => dispatch({ type: "save.succeeded", saveAttempt: effect.saveAttempt }),
           (cause: unknown) =>
