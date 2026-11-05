@@ -13,12 +13,15 @@ workspace = true
 opentui.workspace = true
 opencode-api.workspace = true
 opencode-local.workspace = true
+base64.workspace = true
 chrono.workspace = true
 indexmap.workspace = true
 log.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
+url.workspace = true
 
 tree-sitter-javascript.workspace = true
 tree-sitter-md.workspace = true
