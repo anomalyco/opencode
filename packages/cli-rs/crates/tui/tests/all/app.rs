@@ -91,9 +91,7 @@ fn run(recording: &Recording) -> (bool, String) {
     let zed = recording.zed.as_ref().map(|zed| {
         let directory = tempfile::tempdir().expect("zed directory");
         let db = directory.path().join("db.sqlite");
-        rusqlite::Connection::open(&db)
-            .and_then(|connection| connection.execute_batch(&zed.sql))
-            .expect("zed database");
+        opencode_tui::prompt::editor_context::zed::exec(&db, &zed.sql).expect("zed database");
         (directory, db)
     });
     if ide.is_some() || zed.is_some() {
