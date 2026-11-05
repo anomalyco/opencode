@@ -96,6 +96,52 @@ test("new tab selection and closing stay in the focused pane", async ({ page }) 
   await expect(sideTabs.nth(0)).toHaveAttribute("aria-selected", "true")
 })
 
+test("closing another pane's tab keeps the side pane's New tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/OtherPaneClose"
+  const key = `local\u0000${base64Encode(directory)}/ses_otherpaneclose`
+
+  await openSession(page, {
+    name: "OtherPaneClose",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_otherpaneclose: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            // The side pane selects nothing of its own, so it shows its fallback tab while the split pane is active.
+            [key]: {
+              all: ["review:changes", "file://README.md", "file://notes.md"],
+              active: "file://notes.md",
+              panes: { "file://notes.md": "split" },
+              selected: { split: "file://notes.md" },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const split = page.locator('[data-pane-content="split"]')
+  const sideNewTab = side.getByRole("tab", { name: "New tab", exact: true })
+  await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await side.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(sideNewTab).toHaveAttribute("aria-selected", "true")
+
+  // The selection falls back to the side pane's first tab, which is already listed there: no launcher opened it.
+  await split.getByRole("tab", { name: "notes.md", exact: true }).hover()
+  await split
+    .locator('div[data-value="file://notes.md"]')
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect(split).toHaveCount(0)
+  await expect(sideNewTab).toHaveCount(1)
+  await expect(sideNewTab).toHaveAttribute("aria-selected", "true")
+})
+
 test("closing the last New tab closes the side region, and only a New tab lists the launchers", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openSession(page, { name: "LastNewTab", seed: { panes: { ses_lastnewtab: { review: true } } } })
