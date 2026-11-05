@@ -418,6 +418,13 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionFork", "/api/session/:sessionID/fork", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionCommand", "/api/session/:sessionID/command", {
       params: SessionParams,
       payload: JsonPayload,

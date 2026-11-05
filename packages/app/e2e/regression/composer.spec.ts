@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, provider, sessionHref } from "../utils/app"
+import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, pageMessagesFrom, provider, sessionHref } from "../utils/app"
 import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
 import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-server"
 
@@ -883,7 +883,9 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
         const viewport = element.closest('[data-component="composer-scroll"]')!
         const range = document.createRange()
         range.selectNodeContents(element)
-        const line = Array.from(range.getClientRects()).reduce((last, rect) => (rect.bottom > last.bottom ? rect : last))
+        const line = Array.from(range.getClientRects()).reduce((last, rect) =>
+          rect.bottom > last.bottom ? rect : last,
+        )
         const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
 
         return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))
@@ -1310,6 +1312,62 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()
   await expect(editor).toBeEmpty()
   expect(reloads).toBe(1)
+})
+
+test("/fork forks once while its request is pending, can retry a failure, and restores the prompt", async ({
+  page,
+}) => {
+  const source = { id: "ses_fork_source", title: "Fork source" }
+  const forks: string[] = []
+  const answers = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+
+  const { editor } = await openSession(page, {
+    name: "ComposerFork",
+    provider: NO_PROVIDER,
+    sessions: [source],
+    pageMessages: pageMessagesFrom({
+      [source.id]: [
+        { id: "msg_fork_first", type: "user", text: "First prompt", time: { created: T0 } },
+        { id: "msg_fork_second", type: "user", text: "Second prompt", time: { created: T0 + 1 } },
+      ],
+    }),
+    onFork: async ({ body }) => {
+      forks.push(String(body.before))
+      await answers[forks.length - 1]?.promise
+
+      if (forks.length === 1) return { status: 500, body: { message: "Fork failed" } }
+    },
+  })
+
+  await editor.fill("/fork")
+  await expect(page.locator('[data-suggestion-id="session.fork"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+
+  const dialog = page.getByRole("dialog", { name: "Fork from message", exact: true })
+  const search = dialog.getByRole("searchbox")
+  const newest = dialog.getByRole("option", { name: /Second prompt/ })
+  await expect(search).toBeFocused()
+
+  // Enter forks from the newest prompt; a second Enter while the fork runs sends nothing.
+  await search.press("Enter")
+  await expect(newest).toHaveAttribute("aria-busy", "true")
+  await expect(dialog.getByRole("option", { name: /First prompt/ })).toBeDisabled()
+  await search.press("Enter")
+  answers[0].resolve()
+
+  await expect(page.getByText("Request failed", { exact: true })).toBeVisible()
+  await expect(newest).toBeEnabled()
+  await expect(newest).not.toHaveAttribute("aria-busy")
+  expect(forks).toEqual(["msg_fork_second"])
+
+  await search.press("Enter")
+  await expect(newest).toHaveAttribute("aria-busy", "true")
+  answers[1].resolve()
+
+  await expectPath(page, sessionHref(`${source.id}_fork`))
+  await expect(dialog).toBeHidden()
+  await expect(editor).toHaveText("Second prompt")
+  expect(forks).toEqual(["msg_fork_second", "msg_fork_second"])
 })
 
 const followUp = "Add follow-up, / for commands, @ for context…"
