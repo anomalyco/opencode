@@ -30,6 +30,9 @@ type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
 /** The context the session-routing case keeps from inside its plugin. */
 type Kept = { ctx?: Context }
 
+/** The contexts the window overlay case keeps from inside its two plugins. */
+type Overlays = { fixture?: Context; broken?: Context }
+
 /** What the asking case keeps from inside its plugin: its dialogs, the end of its scope, and that scope's prompt. */
 type Asked = { dialogs?: Dialogs; end?: () => void; prompt?: Promise<string | undefined> }
 
@@ -984,6 +987,95 @@ story("a contribution that throws renders nothing and records the error; the oth
     failure: { phase: "render", named: true },
   })
 })
+
+story(
+  "window.overlay covers the app without taking its clicks, stays below dialogs, and leaves when empty",
+  async ({ page }) => {
+    const result = await page.evaluate(async (fixture) => {
+      const { mountPlugins, until, Slot } = await import(fixture)
+      const kept: Overlays = {}
+      const layer = () => document.querySelector('[data-slot="plugin-window-overlay"]')
+      const find = (name: string) => document.querySelector<HTMLElement>(`[data-hit="${name}"]`)
+
+      const hit = (x: number, y: number) =>
+        document.elementFromPoint(x, y)?.closest("[data-hit]")?.getAttribute("data-hit")
+
+      const element = (name: string, style: string) => () => {
+        const div = document.createElement("div")
+        div.dataset.hit = name
+        div.style.cssText = style
+
+        return div
+      }
+
+      // The shell's highest chrome is fixed at z-index 40, as its collapsed sidebar toggle.
+      const beneath = element(
+        "beneath",
+        "position: fixed; left: 40px; top: 40px; width: 120px; height: 40px; z-index: 40",
+      )()
+
+      document.body.append(beneath)
+
+      const host = mountPlugins({
+        definitions: [
+          { id: "fixture", windowEntry: async () => ({ default: (ctx: Context) => void (kept.fixture = ctx) }) },
+          { id: "broken", windowEntry: async () => ({ default: (ctx: Context) => void (kept.broken = ctx) }) },
+        ],
+      })
+
+      await until(() => host.status("fixture") === "active" && host.status("broken") === "active")
+      const empty = !layer()
+
+      const veil = kept.fixture?.add(Slot, {
+        at: "window.overlay",
+        render: element("veil", "position: absolute; inset: 0"),
+      })
+
+      kept.broken?.add(Slot, {
+        at: "window.overlay",
+        render: () => {
+          throw new Error("broken overlay")
+        },
+      })
+      await until(() => !!find("veil") && !!host.failure("broken"))
+      const box = find("veil")?.getBoundingClientRect()
+      const covers = box?.width === window.innerWidth && box.height === window.innerHeight
+      const passes = hit(100, 60)
+
+      const grab = kept.fixture?.add(Slot, {
+        at: "window.overlay",
+        render: element("grab", "position: absolute; inset: 0; pointer-events: auto"),
+      })
+
+      await until(() => !!find("grab"))
+      const above = hit(100, 60)
+
+      const dialog = kept.fixture?.dialogs.open(element("dialog", "width: 240px; height: 120px; pointer-events: auto"))
+      await until(() => !!find("dialog"))
+      const below = hit(window.innerWidth / 2, window.innerHeight / 2)
+      const broken = { status: host.status("broken"), phase: host.failure("broken")?.phase }
+
+      dialog?.close()
+      veil?.()
+      grab?.()
+      host.disable(["broken"])
+      await until(() => !layer())
+      host.unmount()
+      beneath.remove()
+
+      return { empty, covers, passes, above, below, broken }
+    }, fixture)
+
+    expect(result).toEqual({
+      empty: true,
+      covers: true,
+      passes: "beneath",
+      above: "grab",
+      below: "dialog",
+      broken: { status: "active", phase: "render" },
+    })
+  },
+)
 
 story(
   "plugin GUIs join, hot-reload in place, run their returned cleanup and leave, without holding startup",

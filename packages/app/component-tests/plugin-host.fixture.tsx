@@ -45,7 +45,7 @@ import { createRegion, RegionContent } from "../src/runtime/plugin/panels"
 import { createSessionScreenLayout } from "../src/session/screen-layout"
 import type { SessionModel } from "../src/session/model"
 import { createClosedTabs } from "../src/runtime/plugin/closed-tabs"
-import { PluginLinks, PluginSlot, PluginThemes } from "../src/runtime/plugin/render"
+import { PluginLinks, PluginSlot, PluginThemes, PluginWindowOverlay } from "../src/runtime/plugin/render"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { ThemeProvider, useTheme, type ColorScheme } from "@opencode/ui/theme/context"
 import { persistedHandle } from "../src/runtime/plugin/stores"
@@ -228,7 +228,7 @@ export function mountPluginHost() {
 /**
  * Mounts the real host over these definitions, before any session mounts, with the HostApis faked at their
  * boundary. Storage is the real persisted store of a desktop window whose reads wait until `release()`; `stored` seeds
- * it. Renders the `window.bottom` slot once the startup gate opens.
+ * it. Renders the `window.bottom` and `window.overlay` slots once the startup gate opens.
  */
 export function mountPlugins(input: {
   definitions: readonly Entry[]
@@ -301,6 +301,7 @@ export function mountPlugins(input: {
           )}
         </Show>
         <PluginSlot at="window.bottom" input={{}} />
+        <PluginWindowOverlay />
       </Show>
     )
   }

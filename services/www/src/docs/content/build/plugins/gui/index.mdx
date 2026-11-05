@@ -996,7 +996,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of the window's slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -1009,6 +1009,8 @@ ctx.add(Slot, {
 ```
 
 - `window.bottom` is a full-width strip at the bottom of the window, above toasts.
+- `window.overlay` is a layer over the whole window, for boot animations, ambient effects, and coach marks. See
+  [Window overlay](#window-overlay).
 - `session.header` is the session timeline's title row. A cached timeline stays mounted while hidden, with `active`
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
@@ -1035,6 +1037,58 @@ ctx.add(Slot, {
 })
 ```
 
+#### Window overlay
+
+`window.overlay` renders over the whole window, such as a boot animation, an ambient effect, a focus overlay, or coach
+marks that point at the app's interface. Withdraw the contribution when it is done:
+
+```tsx
+import { Slot } from "@opencode/plugin/gui"
+
+const remove = ctx.add(Slot, {
+  at: "window.overlay",
+  render: () => <Intro onDone={() => remove()} />,
+})
+```
+
+- The layer takes no pointer events, so clicks, hovers, and scrolling reach the app beneath it. Set
+  `pointer-events: auto` on each element of yours that takes them, such as a coach mark's button.
+- It stacks above the app's interface and below its dialogs, menus, popovers, tooltips, and toasts. A dialog that opens
+  during your animation shows above it.
+- On desktop, the native window controls stay above the layer, and the title bar keeps moving the window under your
+  content. Keep interactive elements out of the title bar, whose drag region takes the pointer first, and do not set
+  `app-region`.
+- The host does not animate the layer. Honor `prefers-reduced-motion` in your own animations.
+- The host adds the layer only while a contribution exists, and removes it when the last one is withdrawn.
+- The layer renders on the app's screens: Home, sessions, and Settings.
+
+```css title="intro.css"
+.acme-intro {
+  pointer-events: auto;
+  animation: acme-intro-out 1.2s ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acme-intro {
+    animation-duration: 1ms;
+  }
+}
+```
+
+The layer first renders with the window's interface. That sets when a boot animation can start:
+
+1. On desktop, the window shows the app's loading splash.
+2. The built-in plugins start. The interface first renders once they settle, or once their startup times out.
+3. On desktop, the splash fades out over 300 ms once the first screen is ready.
+4. Plugins from the config join as the desktop app sends their GUIs. They never hold startup, so your first frame can
+   come before or after the splash fades, and after the app's own first frame.
+
+- Open on a frame that suits the app beneath it, such as the window's background color, and do not rely on the user
+  seeing the first moments of the animation.
+- A reload of your plugin, such as a rebuild, runs `setup` again. To play once per window, keep a flag in
+  `ctx.storage.memory`, which survives plugin reloads.
+- Third-party overlays show in the desktop app only. The web app runs built-in plugins only.
+
 #### Reference
 
 ```ts
@@ -1044,6 +1098,7 @@ type Slot = {
 
 interface SlotMap {
   "window.bottom": Record<string, never>
+  "window.overlay": Record<string, never>
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
