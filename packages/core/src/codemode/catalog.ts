@@ -1,5 +1,6 @@
 export * as CodeModeCatalog from "./catalog.js"
 
+import { toolExpression } from "@opencode/codemode"
 import { Schema } from "effect"
 
 export type Tool = {
@@ -84,7 +85,8 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
             sorted
               .filter((entry) => !entry.tool.pinned)
               .map((entry) => {
-                const short = entry.path.slice(name.length + 1)
+                // A tool at the namespace's own path, with no namespace or with child tools, has no shorter name.
+                const short = entry.path === name ? toolExpression(entry.path) : entry.path.slice(name.length + 1)
                 return entry.tool.parameters ? `${short}(${entry.tool.parameters.join(", ")})` : short
               }),
             budget,
@@ -96,15 +98,10 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
 
 /** The leading names whose cost fits `budget`. */
 function fit(names: ReadonlyArray<string>, budget: number) {
-  const shown: string[] = []
-  let remaining = budget
-  for (const name of names) {
-    const price = cost(name.length + 2)
-    if (price > remaining) break
-    shown.push(name)
-    remaining -= price
-  }
-  return shown
+  const totals: number[] = []
+  for (const name of names) totals.push((totals.at(-1) ?? 0) + cost(name.length + 2))
+  const end = totals.findIndex((total) => total > budget)
+  return end === -1 ? names : names.slice(0, end)
 }
 
 function suffix(tool: Tool) {
@@ -115,7 +112,9 @@ function suffix(tool: Tool) {
 }
 
 function compare(left: string, right: string) {
-  return left < right ? -1 : left > right ? 1 : 0
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
 }
 
 function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<string> = []) {

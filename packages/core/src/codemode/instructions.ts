@@ -1,6 +1,6 @@
 export * as CodeModeInstructions from "./instructions.js"
 
-import { searchSignature } from "@opencode/codemode"
+import { searchSignature, toolExpression } from "@opencode/codemode"
 import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -13,7 +13,7 @@ const prompt = `# Code Mode
 
 The tools listed below, and \`search\`, cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-Each namespace lists its tools by name with their required parameters, and \`…\` when a tool also takes optional ones; pinned tools show their full signature. Before calling a tool whose signature is not shown, get it with the global \`search(...)\` function, for example \`search({ query: "tools.ns.tool_name" })\`, and return the result; one \`execute\` can search for several tools. A namespace that lists fewer tools than it has finds the rest the same way. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+Each namespace lists its tools by name with their required parameters, and \`…\` when a tool also takes optional ones; a tool listed without parentheses takes input the list cannot summarize. Pinned tools show their full signature. Before calling a tool whose signature is not shown, get it with the global \`search(...)\` function, for example \`search({ query: "tools.ns.tool_name" })\`, and return the result; one \`execute\` can search for several tools. For a namespace that lists fewer tools than it has, find the rest the same way. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`, and call a name that is not a JavaScript identifier with brackets, as in \`tools.ns["tool-name"]({ ... })\`. Do not use a path as a key such as \`tools[path]\`.
 
 - ${searchSignature}
 
@@ -40,12 +40,14 @@ ${render(current)}`
     (before, after) => CodeModeCatalog.renderSection(before) !== CodeModeCatalog.renderSection(after),
   )
   const parts = [
-    ...block("New tool namespaces are available:", sections.added),
+    ...(sections.added.length === 0
+      ? []
+      : [["New tool namespaces are available:", ...sections.added.map(CodeModeCatalog.renderSection)].join("\n")]),
     ...(sections.changed.length === 0
       ? []
       : [
           [
-            "These namespaces changed; a namespace shown with its whole listing replaces the previous one:",
+            'These namespaces changed. Lines marked "new or changed", "no longer" or "unchanged" are changes to a namespace\'s previous listing; a namespace shown without them is its whole new listing:',
             ...sections.changed.map((change) => changes(change.previous, change.current)),
           ].join("\n"),
         ]),
@@ -62,8 +64,9 @@ ${render(current)}`
   return delta.length < replacement.length ? delta : replacement
 }
 
-// One namespace's change: the tools added, changed or gone under its new header, or its whole listing when that is
-// shorter. A namespace too large to list in full can drop a name without losing the tool, so it says "listed".
+// One namespace's change under its new header: marked lines for the tools new, changed or gone, or its whole listing
+// when that is shorter. A namespace too large to list in full can drop a name without losing the tool, so it says
+// "listed" there; a tool that only moved between pinned and listed by name is not gone.
 function changes(previous: CodeModeCatalog.Section, current: CodeModeCatalog.Section) {
   const names = Instructions.diffByKey(previous.names, current.names, toolName, (before, after) => before !== after)
   const pinned = Instructions.diffByKey(
@@ -72,17 +75,24 @@ function changes(previous: CodeModeCatalog.Section, current: CodeModeCatalog.Sec
     (entry) => entry.path,
     (before, after) => before.line !== after.line,
   )
-  const gone = [
-    ...pinned.removed.map((entry) => entry.path.slice(current.name.length + 1)),
-    ...names.removed.map(toolName),
-  ]
-  const capped = current.pinned.length + current.names.length < current.count
+  const present = new Set([
+    ...current.names.map(toolName),
+    ...current.pinned.map((entry) => pinnedName(current, entry)),
+  ])
+  const gone = [...pinned.removed.map((entry) => pinnedName(previous, entry)), ...names.removed.map(toolName)].filter(
+    (name) => !present.has(name),
+  )
+  const signatures = [...pinned.added, ...pinned.changed.map((change) => change.current)]
   const listed = [...names.added, ...names.changed.map((change) => change.current)]
-  const delta = [
-    CodeModeCatalog.namespaceLine(current),
-    ...[...pinned.added, ...pinned.changed.map((change) => change.current)].map((entry) => entry.line),
+  const capped = current.pinned.length + current.names.length < current.count
+  const marked = [
+    ...(signatures.length === 0 ? [] : ["  - new or changed signatures:", ...signatures.map((entry) => entry.line)]),
     ...(listed.length === 0 ? [] : [`  - new or changed: ${listed.join(", ")}`]),
     ...(gone.length === 0 ? [] : [`  - no longer ${capped ? "listed" : "available"}: ${gone.join(", ")}`]),
+  ]
+  const delta = [
+    CodeModeCatalog.namespaceLine(current),
+    ...(marked.length === 0 ? ["  - listed tools unchanged"] : marked),
   ].join("\n")
   const whole = CodeModeCatalog.renderSection(current)
   return delta.length < whole.length ? delta : whole
@@ -93,8 +103,9 @@ function toolName(listing: string) {
   return open === -1 ? listing : listing.slice(0, open)
 }
 
-function block(heading: string, sections: ReadonlyArray<CodeModeCatalog.Section>) {
-  return sections.length === 0 ? [] : [[heading, ...sections.map(CodeModeCatalog.renderSection)].join("\n")]
+// The name a pinned tool would have if it were listed by name, so a tool moving between the two is recognized.
+function pinnedName(section: CodeModeCatalog.Section, entry: { readonly path: string }) {
+  return entry.path === section.name ? toolExpression(entry.path) : entry.path.slice(section.name.length + 1)
 }
 
 const key = Instructions.Key.make("core/codemode")

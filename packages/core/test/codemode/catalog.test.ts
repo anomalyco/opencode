@@ -3,6 +3,9 @@ import { searchSignature } from "@opencode/codemode"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
+const CHANGED =
+  'These namespaces changed. Lines marked "new or changed", "no longer" or "unchanged" are changes to a namespace\'s previous listing; a namespace shown without them is its whole new listing:'
+
 const entry = (
   path: string,
   description: string,
@@ -20,6 +23,9 @@ const tools = (namespace: string, count: number) =>
   Array.from({ length: count }, (_, index) =>
     entry(`${namespace}.tool${index}`, `${namespace} ${index}`, { parameters: ["id"] }),
   )
+
+// The namespace blocks of an update, after its heading.
+const changed = (text: string) => text.slice(text.indexOf(CHANGED) + CHANGED.length)
 
 const summarize = (inventory: CodeModeCatalog.Inventory["tools"], budget?: number) =>
   CodeModeCatalog.summarize({ tools: inventory }, budget === undefined ? {} : { budget })
@@ -90,6 +96,18 @@ describe("CodeModeCatalog.summarize", () => {
     )
   })
 
+  test("names a tool that sits at its namespace's own path in full", () => {
+    const catalog = summarize([
+      entry("deploy", "Deploy", { parameters: ["target"] }),
+      entry("echo", "Echo", { parameters: ["text"] }),
+      entry("echo.sub", "Sub", { parameters: ["id"] }),
+    ])
+    expect(catalog.namespaces.map((section) => section.names)).toEqual([
+      ["tools.deploy(target)"],
+      ["tools.echo(text)", "sub(id)"],
+    ])
+  })
+
   test("keeps every namespace and its description even when nothing else fits", () => {
     const catalog = summarize(
       [{ type: "namespace", name: "docs", description: "Project docs", tools: tools("x", 3) }, ...tools("alpha", 2)],
@@ -151,7 +169,7 @@ describe("CodeModeInstructions.update", () => {
   test("names the tools that changed in a namespace", () => {
     expect(update([...tools("alpha", 3), ...tools("beta", 2)], [...tools("alpha", 4), ...tools("beta", 2)])).toBe(
       "The Code Mode tool catalog has changed.\n\n" +
-        "These namespaces changed; a namespace shown with its whole listing replaces the previous one:\n" +
+        `${CHANGED}\n` +
         "- alpha (4 tools)\n  - new or changed: tool3(id)",
     )
     const changed = [entry("alpha.tool0", "x", { parameters: ["id", "…"] }), ...tools("alpha", 3).slice(1)]
@@ -172,8 +190,37 @@ describe("CodeModeInstructions.update", () => {
 
   test("restates a namespace's whole listing when that is shorter than its changes", () => {
     const text = update(tools("alpha", 2), [entry("alpha.renamed", "x", { parameters: ["id"] })])
-    expect(text).toContain("- alpha (1 tool)\n  - renamed(id)")
-    expect(text).not.toContain("new or changed")
+    expect(changed(text)).toBe("\n- alpha (1 tool)\n  - renamed(id)")
+  })
+
+  test("marks a pinned signature change so the rest of the namespace stays listed", () => {
+    const before = [entry("ns.pinned", "Pinned", { pinned: true }), ...tools("ns", 9)]
+    const after = [
+      entry("ns.pinned", "Pinned", {
+        pinned: true,
+        signature: "tools.ns.pinned({\n  id: string,\n}): Promise<string>",
+      }),
+      ...tools("ns", 9),
+    ]
+    expect(update(before, after)).toBe(
+      `The Code Mode tool catalog has changed.\n\n${CHANGED}\n` +
+        "- ns (10 tools)\n  - new or changed signatures:\n  - tools.ns.pinned({\n  id: string,\n}): Promise<string> // Pinned",
+    )
+  })
+
+  test("says the listed tools are unchanged when only a namespace's header changed", () => {
+    const before = summarize(tools("big", 300), 100)
+    const after = summarize(tools("big", 301), 100)
+    expect(CodeModeInstructions.update(before, after)).toContain(
+      `- big (301 tools, ${after.namespaces[0]!.names.length} listed; search for the rest)\n  - listed tools unchanged`,
+    )
+  })
+
+  test("does not report a tool gone when it is only pinned or unpinned", () => {
+    const listed = tools("ns", 9)
+    const pinned = [entry("ns.tool0", "ns 0", { pinned: true, parameters: ["id"] }), ...listed.slice(1)]
+    expect(changed(update(listed, pinned))).not.toContain("no longer")
+    expect(changed(update(pinned, listed))).not.toContain("no longer")
   })
 
   test("restates a section whose description changed", () => {

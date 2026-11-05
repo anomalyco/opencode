@@ -89,6 +89,9 @@ import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
+const CHANGED =
+  'These namespaces changed. Lines marked "new or changed", "no longer" or "unchanged" are changes to a namespace\'s previous listing; a namespace shown without them is its whole new listing:'
+
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
   readonly count: number
@@ -2430,7 +2433,7 @@ describe("SessionRunnerLLM", () => {
     const grown = yield* section("alpha")
     expect(updates(s.requests.at(-1)).at(-1)).toBe(
       "The Code Mode tool catalog has changed.\n\n" +
-        "These namespaces changed; a namespace shown with its whole listing replaces the previous one:\n" +
+        `${CHANGED}\n` +
         "- alpha (13 tools)\n  - new or changed: alpha_12(id, …)",
     )
 

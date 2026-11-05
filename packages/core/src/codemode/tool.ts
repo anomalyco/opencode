@@ -252,7 +252,13 @@ type CatalogNode = Node<CodeModeCatalog.Tool>
 // The parts of a tool's JSON Schema input that name its parameters. An Effect schema with an identifier encodes
 // as a `$ref` into its own definitions.
 const InputShape = Schema.Struct({
+  type: Schema.optionalKey(Schema.Unknown),
   properties: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  additionalProperties: Schema.optionalKey(Schema.Unknown),
+  patternProperties: Schema.optionalKey(Schema.Unknown),
+  anyOf: Schema.optionalKey(Schema.Unknown),
+  oneOf: Schema.optionalKey(Schema.Unknown),
+  allOf: Schema.optionalKey(Schema.Unknown),
   required: Schema.optionalKey(Schema.Array(Schema.String)),
   $ref: Schema.optionalKey(Schema.String),
   $defs: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
@@ -260,7 +266,8 @@ const InputShape = Schema.Struct({
 })
 const decodeInputShape = Schema.decodeUnknownOption(InputShape)
 
-// Required parameter names, then `…` when the tool also takes optional ones; undefined for an unreadable schema.
+// Required parameter names, then `…` when the tool also takes optional ones. Undefined unless the input is a plain
+// object, such as a union or a record, whose parameters a list of names would misstate; it is then listed by name.
 function parameters(schema: unknown) {
   const shape = Option.getOrUndefined(decodeInputShape(schema))
   if (shape === undefined) return undefined
@@ -268,6 +275,9 @@ function parameters(schema: unknown) {
   const referenced = name === undefined ? undefined : (shape.$defs?.[name] ?? shape.definitions?.[name])
   const root = referenced === undefined ? shape : Option.getOrUndefined(decodeInputShape(referenced))
   if (root === undefined) return undefined
+  const composed = [root.anyOf, root.oneOf, root.allOf, root.patternProperties].some((value) => value !== undefined)
+  const open = root.additionalProperties !== undefined && root.additionalProperties !== false
+  if (composed || (root.properties === undefined && (root.type !== "object" || open))) return undefined
   const names = Object.keys(root.properties ?? {})
   const required = names.filter((key) => root.required?.includes(key))
   return required.length < names.length ? [...required, "…"] : required
