@@ -293,6 +293,9 @@ export const TurnChangeSummaryFailed = {
       { file: "src/session/retry.test.ts", before: "", after: "test('retries', () => {})\n" },
     ])
 
+    // Built once: Solid reads a call written in a prop again on every access.
+    const turnDiff = retryableTurnDiff(document)
+
     return (
       <CurrentSessionTimelineStory
         title="Turn change summary that failed to load"
@@ -300,7 +303,7 @@ export const TurnChangeSummaryFailed = {
         document={document}
         width="860px"
         turnDiffs
-        turnDiff={retryableTurnDiff(document)}
+        turnDiff={turnDiff}
       />
     )
   },
