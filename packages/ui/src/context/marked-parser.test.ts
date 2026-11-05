@@ -101,9 +101,9 @@ test("highlights fenced code with the app theme variables", async () => {
 })
 
 test("keeps the fence language for code without a lexer", async () => {
-  const html = await parser.parse("```mermaid\ngraph TD; A-->B\n```\n")
+  const html = await parser.parse("```unknown-language\nsome plain code\n```\n")
 
-  expect(html).toContain('<code class="language-mermaid">graph TD; A--&gt;B</code>')
+  expect(html).toContain('<code class="language-unknown-language">some plain code</code>')
 })
 
 test.each(["```", "~~~"])("recognizes an empty %s fence at EOF", async (fence) => {
