@@ -1,14 +1,14 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { SessionResolutionState } from "@/session/resolution-machine"
+import { SESSION_RESOLUTION_TIMEOUT_MS, type SessionResolutionState } from "@/session/resolution-machine"
 import { createSessionResolution } from "@/session/session-resolution"
 
 type Session = { id: string; directory: string }
 
 const sessionOf = (id: string): Session => ({ id, directory: `/dir/${id}` })
 
-function resolved<Scope>(state: SessionResolutionState<Session, Scope>) {
+function resolved<Scope, P>(state: SessionResolutionState<Session, Scope, P>) {
   return state.status === "ready" ? state.session : undefined
 }
 
@@ -317,4 +317,64 @@ test("reports a deleted session as not found until the route targets another ses
 
     dispose()
   })
+})
+
+// The tab promotion creates a new session and caches it before it settles; only the settled promotion loads it.
+test("a prepared session loads once its promotion settles, not when its cache entry appears", async () => {
+  await createRoot(async (dispose) => {
+    const fixture = createFixture()
+    const [pending, setPending] = createSignal<{ draft: string } | undefined>({ draft: "/draft" })
+
+    const current = createSessionResolution(
+      () => "ses_a",
+      () => fixture.sessions,
+      { children: true, pending: () => pending() },
+    )
+
+    expect(current().status).toBe("preparing")
+    fixture.settle("ses_a")
+    await flush()
+    expect(current().status).toBe("preparing")
+    expect(fixture.resolves).toEqual([])
+    expect(fixture.messages.syncs).toEqual([])
+
+    setPending(undefined)
+    expect(resolved(current())?.id).toBe("ses_a")
+    expect(fixture.resolves).toEqual(["ses_a"])
+    expect(fixture.messages.syncs).toEqual(["ses_a"])
+
+    dispose()
+  })
+})
+
+test("an uncached session that never resolves shows as unreachable, and unmounting stops the timeout", () => {
+  jest.useFakeTimers()
+
+  createRoot((dispose) => {
+    const fixture = createFixture()
+    const [connection, setConnection] = createStore({ connected: false })
+
+    const current = createSessionResolution(
+      () => "ses_a",
+      () => fixture.sessions,
+      { connected: () => connection.connected },
+    )
+
+    jest.advanceTimersByTime(SESSION_RESOLUTION_TIMEOUT_MS - 1)
+    expect(current().status).toBe("resolving")
+    jest.advanceTimersByTime(1)
+    expect(current().status).toBe("unreachable")
+
+    // A reconnect retries with a fresh timeout.
+    setConnection("connected", true)
+    expect(current().status).toBe("resolving")
+    expect(fixture.resolves).toEqual(["ses_a"])
+    expect(jest.getTimerCount()).toBe(1)
+
+    dispose()
+    expect(current().status).toBe("idle")
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  jest.useRealTimers()
 })

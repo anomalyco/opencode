@@ -1,6 +1,6 @@
 import { base64Encode } from "@opencode/util/encode"
 import { expect, test } from "@playwright/test"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, project, provider, session } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, provider, session } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -249,4 +249,38 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
   await editor.fill("after sign-in")
   await editor.press("Enter")
   await expect.poll(() => prompts).toEqual(["after sign-in"])
+})
+
+test("a session being created on an SSH host that turns out incompatible says so", async ({ page }) => {
+  const directory = "/home/box/project"
+  const box = session({ id: "ses_ssh_incompatible", directory, title: "SSH incompatible session" })
+
+  const config = {
+    directory,
+    project: project({ id: "proj_ssh_incompatible", directory }),
+    provider: provider(),
+    sessions: [box],
+    pageMessages: () => ({ items: [] }),
+  }
+
+  await mockServers(page, { [SERVER]: { ...config, sessions: [] }, [REMOTE_SERVER]: config })
+  const path = `/server/${base64Encode("ssh:box")}/session/${box.id}`
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", ssh: REMOTE_SERVER, path })}`,
+  )
+  await expectSessionTitle(page, box.title)
+  await page.getByRole("button", { name: "New session", exact: true }).click()
+
+  // The create request stays in flight, so the new session stays in preparation.
+  await holdRoute(page, new RegExp(`^${REMOTE_SERVER.replace(/[.]/g, "\\.")}/api/session(\\?|$)`), { method: "POST" })
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.fill("start on the box")
+  await editor.press("Enter")
+  const preparing = page.locator('[data-component="session-preparing"]')
+  await expect(preparing).toBeVisible()
+
+  await page.getByRole("button", { name: "Report incompatible SSH server" }).click()
+  await expect(page.getByText("This server version isn't supported", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
+  await expect(preparing).toHaveCount(0)
 })

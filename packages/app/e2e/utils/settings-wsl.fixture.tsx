@@ -299,6 +299,16 @@ export function mount(input: {
               >
                 Require SSH sign-in
               </button>
+              {/* The remote server answering with a version this app does not support. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "incompatible" })
+                  publish("ssh")
+                }}
+              >
+                Report incompatible SSH server
+              </button>
               <output aria-label="SSH connects">{store.connects}</output>
             </Show>
             <Show when={input.hold}>
