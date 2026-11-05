@@ -470,7 +470,11 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
     if let Some(manifest) = crate::features::drive::manifest() {
         return crate::features::drive::run(manifest?, options, launch);
     }
-    run_on(App::new(options)?, launch, |_| Ok(()))
+    // Only the TUI on the real terminal plays sounds out loud; tests and harnesses mix them without a device.
+    run_on(App::new(options)?, launch, |tui| {
+        tui.attention.sound.set_output(crate::features::attention::sound::Output::Device);
+        Ok(())
+    })
 }
 
 /// Runs the TUI on `app` until it quits; `started` runs once the TUI is mounted.
