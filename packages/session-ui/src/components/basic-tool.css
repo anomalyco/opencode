@@ -105,7 +105,6 @@
     flex-shrink: 1;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
@@ -151,7 +150,6 @@
     flex-shrink: 1;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
@@ -167,6 +165,36 @@
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+  }
+
+  /* A summary too long for its row fades out at its end instead of cutting off. The scroll timeline is only active
+     while the text overflows, so a summary that fits keeps its last letters. */
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"] {
+    --tool-summary-fade-angle: 90deg;
+    animation: tool-summary-fade linear both;
+    animation-timeline: scroll(self inline);
+
+    &:dir(rtl) {
+      --tool-summary-fade-angle: 270deg;
+    }
+  }
+}
+
+@keyframes tool-summary-fade {
+  from,
+  to {
+    mask-image: linear-gradient(
+      var(--tool-summary-fade-angle),
+      #000 calc(100% - 32px),
+      rgb(0 0 0 / 0.74) calc(100% - 26px),
+      rgb(0 0 0 / 0.54) calc(100% - 21px),
+      rgb(0 0 0 / 0.38) calc(100% - 17px),
+      rgb(0 0 0 / 0.19) calc(100% - 11px),
+      rgb(0 0 0 / 0.075) calc(100% - 6px),
+      rgb(0 0 0 / 0.02) calc(100% - 3px),
+      transparent
+    );
   }
 }
 

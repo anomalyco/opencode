@@ -12,9 +12,14 @@ story("keeps the open Used header below the session title while scrolling", asyn
       return node.getBoundingClientRect().top - scroller.getBoundingClientRect().top
     })
 
+  const fade = () => header.evaluate((node) => getComputedStyle(node, "::after").opacity)
+
   expect(await scroller.evaluate((node) => node.scrollHeight > node.clientHeight * 2)).toBe(true)
+  await expect.poll(fade).toBe("0")
   await scroller.evaluate((node) => (node.scrollTop = 900))
   await expect.poll(() => top(header)).toBe(48)
+  // Content passing under the stuck header fades out instead of being cut.
+  await expect.poll(fade).toBe("1")
 
   // Nested file headers stack below the stuck Used header instead of covering it.
   const file = root.locator('[data-component="sticky-accordion-header"]').filter({ hasText: "model.ts" })

@@ -1169,6 +1169,7 @@ export function createTimelineVirtualizer(input: Input) {
       },
     },
     revealPart,
+    unpin: () => input.onUnpin(),
     View,
   }
 }
