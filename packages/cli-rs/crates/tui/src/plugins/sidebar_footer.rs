@@ -20,36 +20,55 @@ pub fn plugin() -> Definition<Tui> {
         let onboarding = Rc::new(Onboarding::load(cx.host(), cx.storage_key("getting-started")));
         cx.slot(Placement::append(slot::SIDEBAR_FOOTER), move |tui, input| {
             let session = SessionID(input.session_id.clone().unwrap_or_default());
-            let onboarding = onboarding.clone();
-            Box::new(Section::new(tui, move |tui| Some(view(tui, &session, &onboarding))))
+            let (model, render) = (onboarding.clone(), onboarding.clone());
+            // The card follows the terminal height and the stored dismissal, so any change reads the model again.
+            Box::new(Section::new(
+                tui,
+                None,
+                move |tui, _| Some(read(tui, &session, &model)),
+                move |tui, footer| view(tui, footer, &render),
+            ))
         });
     })
 }
 
-fn view(tui: &Tui, session: &SessionID, onboarding: &Rc<Onboarding>) -> View {
+#[derive(PartialEq)]
+struct Footer {
+    card: bool,
+    directory: String,
+    branch: Option<String>,
+}
+
+fn read(tui: &Tui, session: &SessionID, onboarding: &Onboarding) -> Footer {
     sync_catalogs(tui, session, &[Catalog::Integration, Catalog::Vcs]);
-    let (location, integrations, branch) = tui.data.read(|state| {
+    let (directory, connected, branch) = tui.data.read(|state| {
         let location = state
             .session(session)
             .map(|info| Location::from(&info.location))
             .unwrap_or_else(|| state.default_location().clone());
         let data = state.location(Some(&location));
-        let integrations = data.and_then(|data| data.integration.clone());
+        let connected = data
+            .and_then(|data| data.integration.as_ref())
+            .map(|list| list.iter().any(|item| !item.connections.is_empty()));
         let branch = data.and_then(|data| data.vcs.as_ref()).and_then(|vcs| vcs.branch.current.clone());
-        (location, integrations, branch)
+        (location.directory, connected, branch)
     });
+    let card = tui.app.size().1 >= 22 && connected == Some(false) && !onboarding.dismissed.get();
+    Footer { card, directory, branch }
+}
+
+fn view(tui: &Tui, footer: &Footer, onboarding: &Rc<Onboarding>) -> View {
     let root = View::new(&tui.app).gap(1);
-    let connected = integrations.as_ref().map(|list| list.iter().any(|item| !item.connections.is_empty()));
-    if tui.app.size().1 >= 22 && connected == Some(false) && !onboarding.dismissed.get() {
+    if footer.card {
         root.add(&card(tui, onboarding));
     }
     let home = std::env::var("HOME").unwrap_or_default();
-    let directory = opencode_ui::path::abbreviate_home(&location.directory, &home);
-    let value = match branch {
+    let directory = opencode_ui::path::abbreviate_home(&footer.directory, &home);
+    let value = match &footer.branch {
         Some(branch) => format!("{directory}:{branch}"),
         None => directory,
     };
-    root.add(&path(tui, &location.directory, &value));
+    root.add(&path(tui, &footer.directory, &value));
     root
 }
 
