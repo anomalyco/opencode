@@ -11,6 +11,7 @@ use std::time::Duration;
 use bytes::Bytes;
 use opencode_api::client::Client;
 use opencode_api::generated::SessionID;
+use opencode_api::memory;
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_local::cli_config::{self, Info, Resolved};
 use opencode_local::paths::Paths;
@@ -182,6 +183,24 @@ pub fn session(id: &str, title: &str) -> Value {
         "time": { "created": 1, "updated": 1 },
         "location": { "directory": DIRECTORY },
     })
+}
+
+/// A session at [`DIRECTORY`] in project `proj_test`, as the in-memory route tables serve it.
+pub fn test_session(id: &str, title: &str) -> Value {
+    merge(session(id, title), json!({ "projectID": "proj_test" }))
+}
+
+/// In-memory routes for `session`: itself, no messages, and empty inbox, permission and form lists.
+pub fn session_routes(session: &Value) -> Vec<memory::Route> {
+    let path = format!("/api/session/{}", session["id"].as_str().unwrap());
+    let mut routes = vec![
+        memory::Route::json("GET", &path, 200, &json!({ "data": session })),
+        memory::Route::json("GET", &format!("{path}/message"), 200, &json!({ "data": [], "cursor": {} })),
+    ];
+    for list in ["inbox", "permission", "form"] {
+        routes.push(memory::Route::json("GET", &format!("{path}/{list}"), 200, &json!({ "data": [] })));
+    }
+    routes
 }
 
 /// `ses_a` "Fix the parser" on the `build` agent and Model M, as [`base`] serves it.

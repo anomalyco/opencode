@@ -3,21 +3,16 @@
 //! the plugin manager while the TUI keeps running, and a major ABI mismatch is refused there with its reason.
 //! Config and state live in temp directories. The real TUI calls `external` from `opencode-rs` (`commands/default.rs`).
 
+use crate::support::{self, Fake, Harness, deref_harness};
+
 use std::path::Path;
 use std::process::Command;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bytes::Bytes;
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Info, Resolved};
 use opencode_plugin::loader::entry_file;
 use opencode_tui::plugins::host::{External, external};
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// The sample plugin (`crates/plugin/examples/sample`) built with `features`, once per test run.
@@ -45,37 +40,18 @@ fn build(features: &str) -> Vec<u8> {
 }
 
 /// Serves one session whose assistant reply is `text`.
-struct Fixture {
-    text: String,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let path = request.url.path().to_owned();
-        Box::pin(async move {
-            let (status, body) = match path.as_str() {
-                "/api/session" => (200, json!({ "data": [], "cursor": {} })),
-                "/api/session/ses_p" => (200, json!({ "data": session() })),
-                "/api/session/ses_p/message" => (200, json!({ "data": messages(&self.text), "cursor": {} })),
-                "/api/session/ses_p/permission" => (200, json!({ "data": [] })),
-                _ => (404, json!({})),
-            };
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(serde_json::to_vec(&body).unwrap()))])),
-            })
-        })
-    }
+fn fake(text: String) -> Fake {
+    Fake::new(move |seen| match seen.path.as_str() {
+        "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+        "/api/session/ses_p" => (200, json!({ "data": session() })),
+        "/api/session/ses_p/message" => (200, json!({ "data": messages(&text), "cursor": {} })),
+        "/api/session/ses_p/permission" => (200, json!({ "data": [] })),
+        _ => support::not_found(),
+    })
 }
 
 fn session() -> Value {
-    json!({
-        "id": "ses_p", "title": "Plugins", "projectID": "project", "cost": 0, "agent": "build",
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    })
+    support::merge(support::session("ses_p", "Plugins"), json!({ "agent": "build" }))
 }
 
 /// Newest first, as the server pages them.
@@ -93,50 +69,31 @@ fn messages(text: &str) -> Value {
     ])
 }
 
-struct Harness {
-    app: TestApp,
-    tui: Rc<Tui>,
+struct Plugins {
+    harness: Harness,
     plugin: std::path::PathBuf,
     _root: tempfile::TempDir,
 }
 
+deref_harness!(Plugins);
+
 /// The TUI on `route` with the sample's `build` in `<config>/plugins/sample`.
-fn open(route: Route, text: &str, build: &[u8]) -> Harness {
+fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
     let root = tempfile::tempdir().unwrap();
     let config = root.path().join("config");
     let plugin = config.join("plugins/sample");
     std::fs::create_dir_all(&plugin).unwrap();
     std::fs::write(plugin.join(entry_file()), build).unwrap();
-    let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { text: text.to_owned() })).unwrap();
-    let app = TestApp::new(80, 24);
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(Info::default(), |_| None),
-            roots: None,
-            route,
-            continue_: false,
-            events: false,
-        },
-    );
-    external(&tui, External { config_dir: config, cwd: root.path().to_path_buf() });
-    Harness { app, tui, plugin, _root: root }
+    let harness = support::mount(80, 24, Deps { route, ..support::deps(Arc::new(fake(text.to_owned()))) });
+    external(&harness.tui, External { config_dir: config, cwd: root.path().to_path_buf() });
+    Plugins { harness, plugin, _root: root }
 }
 
 fn session_route() -> Route {
-    Route::Session { id: SessionID("ses_p".into()) }
+    support::session_route("ses_p")
 }
 
-impl Harness {
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(10), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
+impl Plugins {
     fn status(&self) -> opencode_plugin::Status {
         let target = self.plugin.to_string_lossy();
         self.tui.plugins.entries().into_iter().find(|entry| entry.target.as_deref() == Some(&*target)).unwrap().status

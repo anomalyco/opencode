@@ -2,40 +2,20 @@
 //! a new worktree staged on home and created by the first submit, and the quick switch slots with their
 //! pins. No test touches a real service or repository.
 
-use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness};
 
-use bytes::Bytes;
-use opencode_api::client::Client;
+use std::sync::Arc;
+
 use opencode_api::generated::{SessionID, V2Event};
-use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_local::cli_config::{Resolved, decode_text};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
-use opencode_tui::{Deps, Route, Tui};
-use opentui::testing::TestApp;
+use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
-/// A request: method, path, query, and JSON body.
-type Seen = Arc<Mutex<Vec<(String, String, String, Value)>>>;
-
-struct Fixture {
-    seen: Seen,
-}
-
-impl Transport for Fixture {
-    fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value =
-            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
-        let path = request.url.path().to_owned();
-        let query = request.url.query().unwrap_or_default().to_owned();
-        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), query.clone(), body.clone()));
-        let location = json!({ "directory": "/project" });
-        let (status, body) = match (request.method, path.as_str()) {
+fn fake() -> Fake {
+    Fake::new(|seen| {
+        let path = seen.path.as_str();
+        match (seen.method.as_str(), path) {
             ("GET", "/api/location") => {
-                let directory = if query.contains("project-new") { "/project-new" } else { "/project" };
+                let directory = if seen.query.contains("project-new") { "/project-new" } else { "/project" };
                 (
                     200,
                     json!({ "directory": directory, "project": { "id": "project", "directory": directory, "canonical": "/project" } }),
@@ -46,33 +26,10 @@ impl Transport for Fixture {
             }
             ("POST", "/api/worktree") => (200, json!({ "directory": "/project-new" })),
             ("GET", "/api/session") => (200, json!({ "data": [session("ses_a"), session("ses_b")], "cursor": {} })),
-            ("GET", "/api/agent") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
-                    "request": { "settings": {}, "headers": {}, "body": {} },
-                }] }),
-            ),
-            ("GET", "/api/model") => (
-                200,
-                json!({ "location": location, "data": [{
-                    "id": "m", "modelID": "m", "providerID": "p", "name": "Model M",
-                    "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
-                    "variants": [], "time": { "released": 0 }, "cost": [], "status": "active",
-                    "enabled": true, "limit": { "context": 1000, "output": 100 },
-                }] }),
-            ),
-            ("GET", "/api/provider" | "/api/integration") => (200, json!({ "location": location, "data": [] })),
-            ("GET", "/api/config") => (200, json!([])),
-            ("POST", "/api/session") => (200, json!({ "data": session(body["id"].as_str().unwrap_or("ses_new")) })),
-            ("POST", path) if path.ends_with("/prompt") => (
-                200,
-                json!({ "data": {
-                    "id": body["id"], "sessionID": path.split('/').nth(3), "time": { "created": 1 }, "type": "user",
-                    "payload": { "text": body["text"] }, "delivery": "steer",
-                } }),
-            ),
-            ("GET", path) if path.starts_with("/api/session/ses_") => {
+            ("POST", "/api/session") => {
+                (200, json!({ "data": session(seen.body["id"].as_str().unwrap_or("ses_new")) }))
+            }
+            ("GET", _) if path.starts_with("/api/session/ses_") => {
                 let id = path.split('/').nth(3).unwrap_or_default();
                 match path.split('/').nth(4) {
                     None => (200, json!({ "data": session(id) })),
@@ -80,38 +37,23 @@ impl Transport for Fixture {
                     Some(_) => (200, json!({ "data": [] })),
                 }
             }
-            ("POST", path) if ["/model", "/agent", "/move", "/refresh"].iter().any(|end| path.ends_with(end)) => {
-                (204, Value::Null)
-            }
-            _ => (404, json!({})),
-        };
-        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
-        Box::pin(async move {
-            Ok(Response {
-                status,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(body))])),
-            })
-        })
-    }
-}
-
-fn session(id: &str) -> Value {
-    json!({
-        "id": id, "title": format!("Session {id}"), "projectID": "project", "cost": 0,
-        "agent": "build", "model": { "providerID": "p", "id": "m" },
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
+            ("POST", _) if path.ends_with("/move") || path.ends_with("/refresh") => (204, Value::Null),
+            _ => support::base(seen, DIRECTORY),
+        }
     })
 }
 
+fn session(id: &str) -> Value {
+    support::merge(support::catalog_session(), json!({ "id": id, "title": format!("Session {id}") }))
+}
+
 struct Setup {
-    app: TestApp,
-    tui: Rc<Tui>,
-    seen: Seen,
+    harness: Harness,
+    seen: Log,
     home: tempfile::TempDir,
 }
+
+deref_harness!(Setup);
 
 impl Setup {
     fn new(route: Route, pinned: &[&str]) -> Self {
@@ -119,37 +61,25 @@ impl Setup {
         let state = home.path().join("state");
         std::fs::create_dir_all(&state).unwrap();
         std::fs::write(state.join("session.json"), json!({ "pinned": pinned }).to_string()).unwrap();
-        let seen = Seen::default();
-        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
-        let app = TestApp::new(100, 30);
-        let info = decode_text(r#"{ "tabs": { "mode": "off" }, "animations": false }"#).unwrap();
-        let tui = opencode_tui::mount(
-            &app,
-            Deps {
-                client,
-                directory: "/project".into(),
-                config: Resolved::new(info, |_| None),
-                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
-                route,
-                continue_: false,
-                events: false,
-            },
-        );
-        let setup = Self { app, tui, seen, home };
+        let fake = fake();
+        let seen = fake.log();
+        let deps = Deps {
+            config: support::config(support::decode(r#"{ "tabs": { "mode": "off" }, "animations": false }"#)),
+            roots: support::roots(support::paths(home.path()), "latest"),
+            route,
+            ..support::deps(Arc::new(fake))
+        };
+        let setup = Self { harness: support::mount(100, 30, deps), seen, home };
         setup.wait_for("Model M");
         setup
     }
 
-    fn wait_for(&self, text: &str) -> String {
-        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
-        let screen = self.app.text();
-        assert!(found, "{text:?} never showed:\n{screen}");
-        screen
-    }
-
     /// Requests other than the startup and catalog reads, in order: method, path, query, body.
     fn log(&self) -> Vec<(String, String, String, Value)> {
-        self.seen.lock().unwrap().clone()
+        let seen = self.seen.lock().unwrap();
+        seen.iter()
+            .map(|seen| (seen.method.clone(), seen.path.clone(), seen.query.clone(), seen.body.clone()))
+            .collect()
     }
 
     fn requests(&self, method: &str, path: &str) -> Vec<(String, Value)> {
@@ -161,15 +91,14 @@ impl Setup {
     }
 
     fn wait_request(&self, method: &str, path: &str) -> Vec<(String, Value)> {
-        let found = self.app.wait_until(Duration::from_secs(5), || !self.requests(method, path).is_empty());
+        let found = self.app.wait_until(WAIT, || !self.requests(method, path).is_empty());
         assert!(found, "no {method} {path}: {:?}", self.log());
         self.requests(method, path)
     }
 
     fn wait_session(&self, id: &str) {
         let id = SessionID(id.into());
-        let loaded =
-            self.app.wait_until(Duration::from_secs(5), || self.tui.data.read(|state| state.session(&id).is_some()));
+        let loaded = self.app.wait_until(WAIT, || self.tui.data.read(|state| state.session(&id).is_some()));
         assert!(loaded, "{id:?} never loaded: {:?}", self.log());
     }
 
@@ -177,7 +106,7 @@ impl Setup {
     /// spinner (`⋯` with animations off).
     fn open_worktrees(&self) -> String {
         self.tui.keymap.dispatch("session.move", None);
-        let ready = self.app.wait_until(Duration::from_secs(5), || {
+        let ready = self.app.wait_until(WAIT, || {
             let screen = self.app.text();
             screen.contains("/project-spike") && !screen.contains("Worktrees ⋯")
         });
@@ -190,27 +119,9 @@ impl Setup {
     }
 }
 
-fn paths(home: &Path) -> Paths {
-    Paths {
-        home: home.to_owned(),
-        data: home.join("data"),
-        cache: home.join("cache"),
-        config: home.join("config"),
-        state: home.join("state"),
-        tmp: home.join("tmp"),
-        bin: home.join("bin"),
-        log: home.join("log"),
-        repos: home.join("repos"),
-    }
-}
-
-fn session_route(id: &str) -> Route {
-    Route::Session { id: SessionID(id.into()) }
-}
-
 #[test]
 fn a_session_moves_to_a_worktree() {
-    let setup = Setup::new(session_route("ses_a"), &[]);
+    let setup = Setup::new(support::session_route("ses_a"), &[]);
     setup.wait_session("ses_a");
     let screen = setup.open_worktrees();
     // A session adds `move`; the session's checkout is current.
@@ -228,17 +139,17 @@ fn a_session_moves_to_a_worktree() {
     let moved = setup.wait_request("POST", "/api/session/ses_a/move");
     assert_eq!(moved, vec![(String::new(), json!({ "directory": "/project-spike" }))]);
     assert!(!setup.tui.dialogs.is_open());
-    assert_eq!(setup.tui.route(), session_route("ses_a"));
+    assert_eq!(setup.tui.route(), support::session_route("ses_a"));
 }
 
 #[test]
 fn picking_a_worktree_goes_home_there() {
-    let setup = Setup::new(session_route("ses_a"), &[]);
+    let setup = Setup::new(support::session_route("ses_a"), &[]);
     setup.wait_session("ses_a");
     setup.open_worktrees();
     setup.app.press("down");
     setup.app.press("return");
-    let home = setup.app.wait_until(Duration::from_secs(5), || setup.tui.route() == Route::Home);
+    let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());
     // The home prompt works in the picked checkout.
     setup.wait_for("/project-spike");
@@ -278,13 +189,13 @@ fn a_new_worktree_is_staged_on_home_and_created_by_the_first_submit() {
         .map(|(method, path, _, _)| format!("{method} {path}"))
         .collect();
     assert_eq!(order[..3], ["POST /api/worktree", "GET /api/location", "POST /api/session"]);
-    let opened = setup.app.wait_until(Duration::from_secs(5), || setup.tui.route() == session_route(&id));
+    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == support::session_route(&id));
     assert!(opened, "{:?}", setup.tui.route());
 }
 
 #[test]
 fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
-    let setup = Setup::new(session_route("ses_a"), &["ses_b", "ses_a"]);
+    let setup = Setup::new(support::session_route("ses_a"), &["ses_b", "ses_a"]);
     setup.wait_session("ses_a");
     // The home's list read would load it; this route reads only its own session.
     setup.tui.data.remember(serde_json::from_value(session("ses_b")).unwrap());
@@ -292,14 +203,14 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
     // Slot 1 is the first pin.
     setup.app.press("ctrl+x");
     setup.app.press("1");
-    assert_eq!(setup.tui.route(), session_route("ses_b"));
+    assert_eq!(setup.tui.route(), support::session_route("ses_b"));
     setup.app.press("ctrl+x");
     setup.app.press("2");
-    assert_eq!(setup.tui.route(), session_route("ses_a"));
+    assert_eq!(setup.tui.route(), support::session_route("ses_a"));
     // An empty slot does nothing.
     setup.app.press("ctrl+x");
     setup.app.press("3");
-    assert_eq!(setup.tui.route(), session_route("ses_a"));
+    assert_eq!(setup.tui.route(), support::session_route("ses_a"));
 
     let deleted: V2Event = serde_json::from_value(json!({
         "id": "evt_1", "created": 1, "type": "session.deleted",
@@ -308,8 +219,6 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
     }))
     .unwrap();
     setup.tui.data.apply(&[deleted]);
-    let pruned = setup
-        .app
-        .wait_until(Duration::from_secs(5), || setup.pins().contains(r#""ses_a""#) && !setup.pins().contains("ses_b"));
+    let pruned = setup.app.wait_until(WAIT, || setup.pins().contains(r#""ses_a""#) && !setup.pins().contains("ses_b"));
     assert!(pruned, "{}", setup.pins());
 }
