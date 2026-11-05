@@ -158,17 +158,41 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(1)
   })
 
-  test("aborted requests leave the queue without being sent", async () => {
-    const input = setup({ limit: 1 })
+  test("a queued request leaves without being sent as soon as its caller aborts, while every slot stays stuck", async () => {
+    const input = setup({ limit: 1, stallMs: 5 })
     const controller = new AbortController()
-    void input.queue.fetch("http://server/api/first")
+    void input.queue.fetch("http://server/api/stuck").catch(() => undefined)
     const aborted = input.queue.fetch("http://server/api/second", { signal: controller.signal })
+    expect(input.queue.queued()).toBe(1)
     controller.abort()
-    await input.settle()
-    input.pending[0]!.resolve()
     await expect(aborted).rejects.toBeInstanceOf(DOMException)
-    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/first"])
+    expect(input.queue.queued()).toBe(0)
+    input.tick(1_000)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(input.logs).toEqual([])
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/stuck"])
+  })
+
+  test("an already-aborted request never joins a full queue", async () => {
+    const input = setup({ limit: 1 })
+    void input.queue.fetch("http://server/api/stuck").catch(() => undefined)
+    await expect(input.queue.fetch("http://server/api/next", { signal: AbortSignal.abort() })).rejects.toBeInstanceOf(
+      DOMException,
+    )
+    expect(input.queue.queued()).toBe(0)
+  })
+
+  test("disposing cancels queued and in-flight requests and rejects later ones", async () => {
+    const input = setup({ limit: 1 })
+    const inflight = input.queue.fetch("http://server/api/a")
+    const queued = input.queue.fetch("http://server/api/b")
+    input.queue.dispose()
+    const errors = await Promise.all([inflight, queued].map((request) => request.catch((cause: unknown) => cause)))
+    expect(errors.map((error) => (error as DOMException).name)).toEqual(["AbortError", "AbortError"])
+    expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/a"])
     expect(input.queue.inflight()).toBe(0)
+    await expect(input.queue.fetch("http://server/api/c")).rejects.toBeInstanceOf(DOMException)
+    expect(input.pending).toHaveLength(1)
   })
 
   test("a request the server never answers times out and frees its slot", async () => {
