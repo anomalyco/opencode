@@ -408,9 +408,9 @@ describe("Session.create", () => {
       yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id text PRIMARY KEY, title text)`)
       yield* db.run(sql`INSERT INTO session (id, title) VALUES (${legacyID}, 'Original V1 session')`)
 
-      expect(yield* Effect.flip(session.create({ id: legacyID, location }))).toEqual(
-        new Session.NotFoundError({ sessionID: legacyID }),
-      )
+      const error = yield* Effect.flip(session.create({ id: legacyID, location }))
+      expect(error).toEqual(new Session.UnmigratedError({ sessionID: legacyID }))
+      expect(error.message).toBe(`Session exists in V1 data but was not migrated: ${legacyID}`)
       // No shadow row is projected into the V2 store, and the V1 row is untouched.
       expect((yield* session.list()).data).toEqual([])
       expect(

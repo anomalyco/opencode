@@ -3,7 +3,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionNotFoundError, UnknownError } from "@opencode/protocol/errors"
 import { expect, test } from "bun:test"
 import { Effect, Logger, References } from "effect"
-import { failedMessageDecode, missingSession } from "../src/handlers/session-error"
+import { failedMessageDecode, missingSession, unmigratedSession } from "../src/handlers/session-error"
 
 test("yieldable session errors preserve the handler failure policy", async () => {
   const sessionID = Session.ID.create()
@@ -16,6 +16,22 @@ test("yieldable session errors preserve the handler failure policy", async () =>
 
   expect(error).toBeInstanceOf(SessionNotFoundError)
   expect(error).toMatchObject({ sessionID, message: `Session not found: ${sessionID}` })
+})
+
+test("unmigrated V1 session errors keep the 404 shape with a distinct message", async () => {
+  const sessionID = Session.ID.create()
+  const error = await Effect.runPromise(
+    Effect.fail(new Session.UnmigratedError({ sessionID })).pipe(
+      Effect.catchTag("Session.UnmigratedError", unmigratedSession),
+      Effect.flip,
+    ),
+  )
+
+  expect(error).toBeInstanceOf(SessionNotFoundError)
+  expect(error).toMatchObject({
+    sessionID,
+    message: `Session exists in V1 data but was not migrated: ${sessionID}`,
+  })
 })
 
 test("message decode policy preserves its reference and log annotations", async () => {

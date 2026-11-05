@@ -11,6 +11,14 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Session.
   sessionID: SessionSchema.ID,
 }) {}
 
+export class UnmigratedError extends Schema.TaggedError<UnmigratedError>()("Session.UnmigratedError", {
+  sessionID: SessionSchema.ID,
+}) {
+  override get message() {
+    return `Session exists in V1 data but was not migrated: ${this.sessionID}`
+  }
+}
+
 export class InvalidListCursorError extends Schema.TaggedError<InvalidListCursorError>()(
   "Session.InvalidListCursorError",
   {},

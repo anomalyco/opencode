@@ -40,6 +40,7 @@ import {
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
+  UnmigratedError,
 } from "./session/error.js"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -115,6 +116,7 @@ export {
   PromptConflictError,
   SkillNotFoundError,
   SyntheticConflictError,
+  UnmigratedError,
 }
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
 
@@ -130,7 +132,7 @@ export interface Interface {
     },
     InvalidListCursorError
   >
-  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError | UnmigratedError>
   readonly fork: (
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
@@ -298,7 +300,7 @@ const layer = Layer.effect(
             .pipe(Effect.orDie)
           if (legacyTable) {
             const legacy = yield* db.get(sql`SELECT id FROM session WHERE id = ${sessionID}`).pipe(Effect.orDie)
-            if (legacy) return yield* new NotFoundError({ sessionID })
+            if (legacy) return yield* new UnmigratedError({ sessionID })
           }
         }
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
