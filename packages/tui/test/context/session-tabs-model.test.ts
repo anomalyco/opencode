@@ -12,6 +12,8 @@ import {
   seedSessionTabMotion,
   sessionTabComplete,
   sessionTabDetail,
+  sessionTabDetailName,
+  sessionTabLabel,
   sessionTabOverflowWidth,
   sessionTabNumberLabel,
 } from "../../src/context/session-tabs-model"
@@ -23,6 +25,30 @@ describe("session tabs", () => {
     expect(sessionTabDetail("opencode", "feature/sidebar", "main", false)).toBe("opencode")
     expect(sessionTabDetail("opencode", "main", "main", true)).toBe("opencode")
     expect(sessionTabDetail("opencode", undefined, "main", true)).toBe("opencode")
+  })
+
+  test("swaps the project name for the home-abbreviated directory in path label mode", () => {
+    const home = "/home/user"
+    expect(sessionTabDetailName("title", "opencode", "/home/user/work/opencode", home)).toBe("opencode")
+    expect(sessionTabDetailName("project", "opencode", "/home/user/work/opencode", home)).toBe("opencode")
+    expect(sessionTabDetailName("path", "opencode", "/home/user/work/opencode", home)).toBe("~/work/opencode")
+    expect(sessionTabDetailName("path", "opencode", "/srv/opencode", home)).toBe("/srv/opencode")
+    expect(sessionTabDetailName("path", "opencode", "", home)).toBe("opencode")
+  })
+
+  test("keeps only the final directory segment in directory label mode", () => {
+    const home = "/home/user"
+    expect(sessionTabDetailName("directory", "opencode", "/home/user/work/monorepo/packages/api", home)).toBe("api")
+    expect(sessionTabDetailName("directory", "opencode", "/srv/opencode", home)).toBe("opencode")
+    expect(sessionTabDetailName("directory", "opencode", "/home/user/work/monorepo", home)).toBe("monorepo")
+    expect(sessionTabDetailName("directory", "opencode", "", home)).toBe("opencode")
+    expect(sessionTabDetailName("directory", "website", "C:\\Users\\user\\work\\api", "C:\\Users\\user")).toBe("api")
+  })
+
+  test("prefixes the tab title with the label context", () => {
+    expect(sessionTabLabel("opencode", "Fix login bug")).toBe("opencode: Fix login bug")
+    expect(sessionTabLabel("", "Fix login bug")).toBe("Fix login bug")
+    expect(sessionTabLabel(undefined, "Fix login bug")).toBe("Fix login bug")
   })
 
   test("labels tabs by ordinal", () => {

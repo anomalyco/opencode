@@ -1,3 +1,5 @@
+import { abbreviateHome, basename } from "../util/path-format"
+
 export type SessionTab = {
   sessionID: string
   title?: string
@@ -19,6 +21,23 @@ export function sessionTabDetail(
 ) {
   const branch = worktree && current !== defaultBranch ? current : undefined
   return branch && project ? `${project} ⎇ ${branch}` : (branch ?? project)
+}
+
+// Path mode swaps the project name for the home-abbreviated session directory and directory mode
+// keeps only its final segment; a session without a directory falls back to the project name.
+export function sessionTabDetailName(
+  label: "title" | "project" | "path" | "directory",
+  project: string,
+  directory: string,
+  home: string,
+) {
+  if (label === "directory" && directory) return basename(directory, home) || directory
+  if (label === "path" && directory) return abbreviateHome(directory, home)
+  return project
+}
+
+export function sessionTabLabel(prefix: string | undefined, title: string) {
+  return prefix ? `${prefix}: ${title}` : title
 }
 
 export type SessionTabHistory = {

@@ -202,6 +202,10 @@ export const Info = Schema.Struct({
       indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
         description: "Show status icons or always show tab numbers",
       }),
+      label: Schema.optional(Schema.Literals(["title", "project", "path", "directory"])).annotate({
+        description:
+          "Tab label context: title only, prefixed with the project name, its path, or just the directory name; vertical tabs use it in the detail line",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
@@ -285,6 +289,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
     indicators: "status" | "numbers"
+    label: "title" | "project" | "path" | "directory"
   }
 }
 
@@ -335,6 +340,7 @@ export function resolve(
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
+      label: input.tabs?.label ?? "title",
     },
   }
 }
