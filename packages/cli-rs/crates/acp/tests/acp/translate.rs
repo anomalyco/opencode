@@ -37,8 +37,7 @@ fn run(events: &[Value], ctx: &TurnContext) -> Run {
     for (index, event) in events.iter().enumerate() {
         let mut event = event.clone();
         event["id"] = json!(format!("evt_{}", index + 1));
-        let folded = translate::fold(&result.state, &event, ctx);
-        result.state = folded.state;
+        let folded = translate::fold(&mut result.state, &event, ctx);
         result.outputs.extend(folded.outputs);
         if folded.terminal.is_some() {
             result.terminal = folded.terminal;
@@ -61,7 +60,7 @@ fn updates(outputs: &[Output]) -> Value {
 
 /// The fields a row checks, as `translate()` in the TS test builds them.
 fn translated(events: &[Value], ctx: &TurnContext) -> Value {
-    let result = run(events, ctx);
+    let mut result = run(events, ctx);
     let terminal = result.terminal.map(|terminal| match terminal {
         Terminal::Succeeded => "succeeded",
         Terminal::Failed => "failed",
@@ -85,7 +84,7 @@ fn translated(events: &[Value], ctx: &TurnContext) -> Value {
         "response": result.terminal.map(|terminal| translate::response(&result.state, ROOT, terminal)),
         "failure": translate::failure(&result.state).map(|failure| failure.tag()),
         "context": usage,
-        "abandoned": updates(&translate::abandon(&result.state, ctx).outputs),
+        "abandoned": updates(&translate::abandon(&mut result.state, ctx).outputs),
     })
 }
 
