@@ -380,6 +380,7 @@ test("selecting a Home project lists its worktrees once, however often the proje
     type: "project.updated",
     data: { ...listed[0]!, name: "alpha renamed" },
   }
+
   await view.server.push([renamed])
   await expect(view.rows).toHaveText(["alpha renamed", "beta"])
 

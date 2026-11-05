@@ -11,9 +11,13 @@ import {
 } from "./machine"
 
 const SIDECAR = ServerConnection.Key.make("sidecar")
+
 const REMOTE = ServerConnection.Key.make("https://apollo.example.test")
+
 const REPO = { id: "proj_repo", worktree: "/srv/repo" }
+
 const API = { id: "proj_api", worktree: "C:/OpenCode/api" }
+
 const APP = { id: "proj_app", worktree: "C:/OpenCode/app" }
 
 const server = (key: ServerConnection.Key, input: Partial<HomeServerSnapshot> = {}): HomeServerSnapshot => ({
@@ -51,6 +55,7 @@ describe("home selection machine", () => {
       loading.state,
       env({ stored, servers: [server(SIDECAR), server(REMOTE, { projectsReady: false })] }),
     )
+
     expect(listed.state.status).toBe("verifying")
     expect(listed.effects).toEqual([])
     expect(selectHomeSelection(listed.state)).toEqual(stored)
@@ -59,6 +64,7 @@ describe("home selection machine", () => {
       listed.state,
       env({ stored, servers: [server(SIDECAR), server(REMOTE, { usedProjects: [REPO] })] }),
     )
+
     expect(ready.state).toMatchObject({ status: "ready", server: REMOTE, project: REPO })
     expect(ready.effects).toEqual([{ type: "worktrees.list", attempt: 1, server: REMOTE, projectID: REPO.id }])
   })
@@ -68,6 +74,7 @@ describe("home selection machine", () => {
       INITIAL_HOME_SELECTION_STATE,
       env({ hydrated: false, stored: { server: SIDECAR }, servers: [server(REMOTE)] }),
     )
+
     expect(early.state.status).toBe("hydrating")
     expect(early.effects).toEqual([])
     expect(selectHomeSelection(early.state)).toEqual({ server: REMOTE })
@@ -76,6 +83,7 @@ describe("home selection machine", () => {
       early.state,
       env({ stored: { server: REMOTE, directory: "/srv/repo" }, servers: [server(REMOTE, { usedProjects: [REPO] })] }),
     )
+
     expect(loaded.state).toMatchObject({ status: "ready", server: REMOTE, project: REPO })
     expect(loaded.effects.map((effect) => effect.type)).toEqual(["worktrees.list"])
   })
@@ -90,10 +98,12 @@ describe("home selection machine", () => {
 
   test("waits for legacy projects to migrate before it keeps or clears the directory", () => {
     const stored = { server: SIDECAR, directory: API.worktree }
+
     const migrating = sync(
       INITIAL_HOME_SELECTION_STATE,
       env({ stored, servers: [server(SIDECAR, { projectsReady: false })] }),
     )
+
     expect(migrating.state.status).toBe("verifying")
     expect(migrating.effects).toEqual([])
 
@@ -110,6 +120,7 @@ describe("home selection machine", () => {
         servers: [server(SIDECAR, { usedProjects: [APP] })],
       }),
     )
+
     expect(selectHomeSelection(result.state)).toEqual({ server: SIDECAR, directory: APP.worktree })
     expect(result.effects).toEqual([
       { type: "selection.persist", selection: { server: SIDECAR, directory: APP.worktree } },
@@ -142,6 +153,7 @@ describe("home selection machine", () => {
       server: SIDECAR,
       directory: APP.worktree,
     })
+
     expect(switched.effects).toEqual([
       { type: "selection.persist", selection: { server: SIDECAR, directory: APP.worktree } },
       { type: "worktrees.list", attempt: 2, server: SIDECAR, projectID: APP.id },
@@ -155,6 +167,7 @@ describe("home selection machine", () => {
       listed.state,
       env({ stored, servers: [server(SIDECAR, { connected: false, usedProjects: [API] })] }),
     )
+
     expect(offline.state.status === "ready" && offline.state.worktrees).toEqual({ status: "idle" })
     expect(transitionHomeSelection(offline.state, { type: "worktrees.listed", attempt: 1 }).state).toBe(offline.state)
     const online = sync(offline.state, env({ stored, servers: [server(SIDECAR, { usedProjects: [API] })] }))
@@ -181,6 +194,7 @@ describe("home selection machine", () => {
       ready,
       env({ stored, servers: [server(SIDECAR, { connected: false, projectsReady: false })] }),
     )
+
     expect(signedOut.state.status).toBe("verifying")
     expect(signedOut.effects).toEqual([])
 
@@ -194,7 +208,9 @@ describe("home selection machine", () => {
       server(SIDECAR, { connected: false, usedProjects: [API] }),
       server(REMOTE, { failed: true, usedProjects: [REPO] }),
     ]
+
     const ready = settle(env({ stored: { server: SIDECAR }, servers }))
+
     const toggle = (state: HomeSelectionState, target: ServerConnection.Key, directory: string) =>
       transitionHomeSelection(state, { type: "project.toggled", server: target, directory })
 
@@ -222,6 +238,7 @@ describe("home selection machine", () => {
       adding.state,
       env({ stored, servers: [server(SIDECAR, { connected: false, usedProjects: [API] }), server(REMOTE)] }),
     )
+
     const added = transitionHomeSelection(listed.state, { type: "project.added", attempt: 1, project: API })
     expect(added.state).toMatchObject({ status: "ready", server: SIDECAR, project: API, adding: undefined })
     expect(added.effects).toEqual([
@@ -256,6 +273,7 @@ describe("home selection machine", () => {
         servers: [server(SIDECAR, { usedProjects: [API] })],
       }),
     )
+
     const disposed = transitionHomeSelection(listing, { type: "disposed" }).state
     expect(disposed.status).toBe("disposed")
     expect(transitionHomeSelection(disposed, { type: "worktrees.listed", attempt: 1 })).toEqual({
