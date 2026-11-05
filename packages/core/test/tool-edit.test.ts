@@ -376,7 +376,10 @@ describe("EditTool", () => {
     withTempDir((tmp) => {
       const edit = makeEditFixture()
       const target = path.join(tmp.path, "matches.txt")
-      return Effect.promise(() => fs.writeFile(target, "same same")).pipe(
+      const items = ["head", ...Array.from({ length: 12 }, (_, index) => `item ${index}\r\nfiller`)].join("\r\n")
+      return Effect.promise(() =>
+        Promise.all([fs.writeFile(target, "same same"), fs.writeFile(path.join(tmp.path, "items.txt"), items)]),
+      ).pipe(
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
@@ -418,33 +421,10 @@ describe("EditTool", () => {
                     "Found 2 matches for oldString (line 1), but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
                 },
               })
-              expect(edit.writes).toEqual([])
-            }),
-          ),
-        ),
-      )
-    }),
-  )
-
-  it.live("lists the lines of ambiguous matches, capped", () =>
-    withTempDir((tmp) => {
-      const edit = makeEditFixture()
-      const target = path.join(tmp.path, "lines.txt")
-      const content = ["head", ...Array.from({ length: 12 }, (_, index) => `item ${index}\r\nfiller`)].join("\r\n")
-      return Effect.promise(() => fs.writeFile(target, content)).pipe(
-        Effect.andThen(
-          withTool(tmp.path, edit, (registry) =>
-            Effect.gen(function* () {
-              expect(
-                yield* executeTool(registry, call({ path: "lines.txt", oldString: "item", newString: "entry" })),
-              ).toEqual({
-                status: "error",
-                error: {
-                  type: "tool.execution",
-                  message:
-                    "Found 12 matches for oldString (lines 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 and 2 more), but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.",
-                },
-              })
+              const capped = call({ path: "items.txt", oldString: "item", newString: "x" })
+              expect((yield* executeTool(registry, capped)).error?.message).toContain(
+                "12 matches for oldString (lines 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 and 2 more)",
+              )
               expect(edit.writes).toEqual([])
             }),
           ),

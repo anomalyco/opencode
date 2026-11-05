@@ -13,7 +13,7 @@ import { Global } from "@opencode/util/global"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
-import { FileSystem } from "@opencode/core/filesystem"
+import { Ripgrep } from "@opencode/core/ripgrep"
 import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
 import { Project } from "@opencode/core/project"
@@ -51,7 +51,7 @@ const readToolNode = makeLocationNode({
     SessionInstructions.node,
     Skill.node,
     FSUtil.node,
-    FileSystem.node,
+    Ripgrep.node,
     Location.node,
   ],
 })

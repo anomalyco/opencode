@@ -41,15 +41,6 @@ export class MediaIngestLimitError extends Schema.TaggedError<MediaIngestLimitEr
   }
 }
 
-export class OffsetOutOfRangeError extends Schema.TaggedError<OffsetOutOfRangeError>()(
-  "ReadTool.OffsetOutOfRangeError",
-  { offset: Schema.Number, lines: Schema.Number },
-) {
-  override get message() {
-    return `Offset ${this.offset} is out of range for this file (${this.lines} ${this.lines === 1 ? "line" : "lines"})`
-  }
-}
-
 export class PathKindError extends Schema.TaggedError<PathKindError>()("ReadTool.PathKindError", {
   resource: Schema.String,
   expected: Schema.Literals(["a file", "a file or directory"]),
@@ -64,7 +55,6 @@ export type ReadError =
   | Environment.Failed
   | BinaryFileError
   | MediaIngestLimitError
-  | OffsetOutOfRangeError
   | PathKindError
 
 export const PageInput = Schema.Struct({
@@ -86,8 +76,6 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   offset: PositiveInt,
   truncated: Schema.Boolean,
   next: Schema.optionalKey(PositiveInt),
-  /** Set when the requested offset was past the end, so this page holds the file's last lines instead. */
-  pastEnd: Schema.optionalKey(Schema.Struct({ offset: PositiveInt, lines: NonNegativeInt })),
 }) {}
 
 export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
@@ -116,22 +104,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Re
 
 const mimeType = (value: string) => lookup(value) || "application/octet-stream"
 
-// An offset past the end reads the file's last lines instead of failing.
-export const read = (files: Files, input: AbsolutePath, resource: string, page: PageInput = {}) =>
-  readPage(files, input, resource, page).pipe(
-    Effect.catchTag("ReadTool.OffsetOutOfRangeError", (error) => {
-      const limit = Math.min(page.limit || TAIL_LINES, MAX_READ_LINES)
-      return readPage(files, input, resource, { offset: Math.max(1, error.lines - limit + 1), limit }).pipe(
-        Effect.map((result) =>
-          result instanceof TextPage
-            ? new TextPage({ ...result, pastEnd: { offset: error.offset, lines: error.lines } })
-            : result,
-        ),
-      )
-    }),
-  )
-
-const readPage = Effect.fn("ReadTool.read")(function* (
+export const read = Effect.fn("ReadTool.read")(function* (
   files: Files,
   input: AbsolutePath,
   resource: string,
@@ -180,17 +153,7 @@ const readPage = Effect.fn("ReadTool.read")(function* (
     }
   }
 
-  if (first.bytes.length >= first.info.size) {
-    const result = textPage(first.bytes, true, page)
-    if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
-    return yield* makeTextPage(
-      input,
-      resource,
-      result,
-      first.bytes.subarray(0, result.consumed).includes(0),
-      lineCount(textLeaf(first.bytes).summary.lines, first.bytes.at(-1)),
-    )
-  }
+  if (first.bytes.length >= first.info.size) return yield* completePage(input, resource, first.bytes, page)
 
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
@@ -200,6 +163,8 @@ const readPage = Effect.fn("ReadTool.read")(function* (
   let ended = false
   while (true) {
     const eof = ended || bytes >= first.info.size
+    if (eof && offset > lineCount(lines, leaves.at(-1)?.bytes.at(-1)))
+      return yield* completePage(input, resource, Buffer.concat(leaves.map((leaf) => leaf.bytes)), page)
     if (lines >= offset - 1 || eof) {
       const tree = textTree(leaves)
       const start = textOffset(tree, offset - 1)
@@ -226,7 +191,7 @@ const readPage = Effect.fn("ReadTool.read")(function* (
           checked += leaf.summary.bytes
           return length > 0 && leaf.bytes.subarray(0, length).includes(0)
         })
-        return yield* makeTextPage(input, resource, translated, binary, lineCount(lines, leaves.at(-1)?.bytes.at(-1)))
+        return yield* makeTextPage(input, resource, translated, binary)
       }
     }
 
@@ -254,16 +219,24 @@ const readFile = (
       Effect.catchTag("Environment.WrongKind", () => Effect.fail(new PathKindError({ resource, expected: "a file" }))),
     )
 
+const completePage = Effect.fnUntraced(function* (
+  input: AbsolutePath,
+  resource: string,
+  bytes: Uint8Array,
+  page: PageInput,
+) {
+  const result = textPage(bytes, true, page)
+  if (result === undefined) return yield* Effect.die("Read page did not settle for a complete file")
+  return yield* makeTextPage(input, resource, result, bytes.subarray(0, result.consumed).includes(0))
+})
+
 const makeTextPage = Effect.fnUntraced(function* (
   input: AbsolutePath,
   resource: string,
   result: NonNullable<ReturnType<typeof textPage>>,
   binary: boolean,
-  lines: number,
 ) {
   if (binary) return yield* new BinaryFileError({ resource })
-  if (result.entries.length === 0 && result.offset !== 1)
-    return yield* new OffsetOutOfRangeError({ offset: result.offset, lines })
   return new TextPage({
     type: "text-page",
     content: result.entries.join("\n"),
@@ -317,6 +290,16 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
 
   const entries: string[] = []
   let size = 0
+  // An offset past the end returns the file's last lines that fit, ending at the last line.
+  if (eof && offset > Math.max(1, available.length)) {
+    for (const value of available.slice(-Math.min(page.limit || TAIL_LINES, TAIL_LINES)).toReversed()) {
+      const text = clampLine(value)
+      size += Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
+      if (size > MAX_READ_BYTES) break
+      entries.unshift(text)
+    }
+    return { entries, offset: available.length - entries.length + 1, next: undefined, consumed: bytes.length }
+  }
   let next: number | undefined
   for (const [index, value] of available.slice(offset - 1).entries()) {
     const line = offset + index
