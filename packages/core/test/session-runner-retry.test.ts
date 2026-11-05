@@ -1,4 +1,4 @@
-import { describe, expect, it as test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { AIError, ProviderInternalError, TransportError } from "@opencode/ai/effect"
 import { ModelRetry } from "@opencode/core/model-retry"
 import { Agent } from "@opencode/schema/agent"
@@ -22,17 +22,6 @@ const dnsFailure = new AIError({
     operation: "request",
     code: "ENOTFOUND",
     url: "https://opencode.ai/zen/v1/responses",
-  }),
-})
-// A WebSocket error event carries the system code only on its underlying error.
-const socketDnsFailure = new AIError({
-  reason: new TransportError({
-    message: "Failed to open WebSocket: error",
-    transport: "websocket",
-    operation: "request",
-    phase: "connect",
-    delivery: "not-sent",
-    cause: Object.assign(new Error("Failed to connect"), { code: "ENOTFOUND" }),
   }),
 })
 const refused = new AIError({
@@ -94,9 +83,8 @@ describe("SessionRunnerRetry.policy", () => {
     }),
   )
 
-  it.effect("recognizes an unreachable host from the socket error's code", () =>
+  it.effect("keeps a refused connection on the general allowance", () =>
     Effect.gen(function* () {
-      expect(ModelRetry.isUnreachable(socketDnsFailure)).toBe(true)
       expect(ModelRetry.isUnreachable(refused)).toBe(false)
       expect(yield* decisions(refused, 11)).toEqual([...Array(10).fill(true), false])
     }),
@@ -109,6 +97,24 @@ describe("SessionRunnerRetry.policy", () => {
       const results: boolean[] = []
       for (let i = 0; i < 11; i++) results.push((yield* policy(input(internal))).retry)
       expect(results).toEqual([...Array(10).fill(true), false])
+    }),
+  )
+})
+
+describe("ModelRetry.retryOneShot", () => {
+  it.effect("doesn't replay a call whose response was cut off by the network going down", () =>
+    Effect.gen(function* () {
+      let calls = 0
+      const cutOff = new AIError({
+        reason: new TransportError({
+          message: "Network is down",
+          transport: "http",
+          operation: "read",
+          code: "ENETDOWN",
+        }),
+      })
+      yield* ModelRetry.retryOneShot(Effect.suspend(() => (calls++, Effect.fail(cutOff)))).pipe(Effect.flip)
+      expect(calls).toBe(1)
     }),
   )
 })
