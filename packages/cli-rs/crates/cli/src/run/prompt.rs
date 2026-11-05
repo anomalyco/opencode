@@ -1103,9 +1103,7 @@ fn interrupt_on_shutdown(client: Client, session: String) -> crate::signals::Reg
         let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
             return;
         };
-        let call = Call::new("POST", format!("/api/session/{}/interrupt", path(&session)), 200, &[400, 401, 404]);
-        let options = RequestOptions::default();
-        let request = client.json::<Value>(call, &options);
+        let request = opencode_mini::replay::interrupt(&client, &session, None);
         let _ = runtime.block_on(async { tokio::time::timeout(std::time::Duration::from_secs(5), request).await });
     })
 }
