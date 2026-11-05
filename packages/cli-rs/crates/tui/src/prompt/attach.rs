@@ -84,7 +84,7 @@ impl Previews {
                 Some(Ok(image)) => cell.add(&image),
                 _ => cell.add(&Text::new(app, "No preview").fg(theme.text.muted)),
             };
-            cell.on_mouse(open(index));
+            cell.mouse_pointer(MousePointer::POINTER).on_mouse(open(index));
             self.root.add(&cell);
         }
         if uris.len() > VISIBLE {
@@ -101,7 +101,7 @@ impl Previews {
                         .wrap(WrapMode::None)
                         .truncate(true),
                 );
-            more.on_mouse(open(VISIBLE));
+            more.mouse_pointer(MousePointer::POINTER).on_mouse(open(VISIBLE));
             self.root.add(&more);
         }
     }
