@@ -1504,143 +1504,116 @@ fn install_layers(inner: &Rc<Inner>) {
         TuiCommand::inline(key, run(action)).title(title).group("Prompt")
     };
     let layers = vec![
-        KeymapLayer {
-            commands: vec![command("app.clear", "Clear screen", "System", |inner| {
-                if let Some(clear) = &inner.hooks().clear_screen {
-                    clear();
+        KeymapLayer::new(vec![command("app.clear", "Clear screen", "System", |inner| {
+            if let Some(clear) = &inner.hooks().clear_screen {
+                clear();
+            }
+            true
+        })]),
+        KeymapLayer::new(vec![command("prompt.clear", "Clear prompt or exit", "Prompt", |inner| {
+            inner.request_exit();
+            true
+        })])
+        .enabled(base),
+        KeymapLayer::new(vec![
+            command("prompt.paste", "Paste", "Prompt", |inner| {
+                inner.paste(None);
+                true
+            }),
+            command("session.interrupt", "Interrupt session", "Session", |inner| {
+                if inner.hooks().interrupt.as_ref().is_some_and(|interrupt| interrupt()) {
+                    return true;
                 }
+                // `onKeyDown`: Escape while idle disarms the two-press gestures.
+                if !inner.state.borrow().running {
+                    inner.input_clear();
+                }
+                false
+            }),
+        ])
+        .enabled(when(|_| true)),
+        KeymapLayer::new(vec![
+            command("prompt.queue", "Queue prompt", "Prompt", |inner| {
+                inner.submit(Delivery::Queue);
                 true
-            })],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: base,
-            commands: vec![command("prompt.clear", "Clear prompt or exit", "Prompt", |inner| {
-                inner.request_exit();
+            })
+            .palette(),
+        ])
+        .enabled(when(|inner| inner.state.borrow().mode != Some(Mode::Mention)))
+        .priority(1),
+        KeymapLayer::new(vec![command("prompt.editor", "Open editor", "Prompt", |inner| {
+            inner.open_editor(None);
+            true
+        })])
+        .enabled(when(|inner| !visible(inner)))
+        .priority(1),
+        KeymapLayer::new(vec![
+            command("prompt.history.previous", "Previous prompt history", "Prompt", |inner| inner.history(true)),
+            command("prompt.history.next", "Next prompt history", "Prompt", |inner| inner.history(false)),
+        ])
+        .enabled(when(|inner| !visible(inner)))
+        .priority(1),
+        KeymapLayer::new(vec![inline("!", "Shell mode", |inner| {
+            if inner.state.borrow().shell || inner.cursor() != 0 {
+                return false;
+            }
+            inner.set_shell(true);
+            true
+        })])
+        .enabled(when(|inner| !visible(inner))),
+        KeymapLayer::new(vec![
+            inline("escape", "Exit shell mode", |inner| {
+                inner.set_shell(false);
                 true
-            })],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: when(|_| true),
-            commands: vec![
-                command("prompt.paste", "Paste", "Prompt", |inner| {
-                    inner.paste(None);
-                    true
-                }),
-                command("session.interrupt", "Interrupt session", "Session", |inner| {
-                    if inner.hooks().interrupt.as_ref().is_some_and(|interrupt| interrupt()) {
-                        return true;
-                    }
-                    // `onKeyDown`: Escape while idle disarms the two-press gestures.
-                    if !inner.state.borrow().running {
-                        inner.input_clear();
-                    }
-                    false
-                }),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 1,
-            enabled: when(|inner| inner.state.borrow().mode != Some(Mode::Mention)),
-            commands: vec![
-                command("prompt.queue", "Queue prompt", "Prompt", |inner| {
-                    inner.submit(Delivery::Queue);
-                    true
-                })
-                .palette(),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 1,
-            enabled: when(|inner| !visible(inner)),
-            commands: vec![command("prompt.editor", "Open editor", "Prompt", |inner| {
-                inner.open_editor(None);
-                true
-            })],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 1,
-            enabled: when(|inner| !visible(inner)),
-            commands: vec![
-                command("prompt.history.previous", "Previous prompt history", "Prompt", |inner| inner.history(true)),
-                command("prompt.history.next", "Next prompt history", "Prompt", |inner| inner.history(false)),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: when(|inner| !visible(inner)),
-            commands: vec![inline("!", "Shell mode", |inner| {
-                if inner.state.borrow().shell || inner.cursor() != 0 {
+            }),
+            inline("backspace", "Exit shell mode", |inner| {
+                if inner.cursor() != 0 {
                     return false;
                 }
-                inner.set_shell(true);
+                inner.set_shell(false);
                 true
-            })],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: when(|inner| inner.state.borrow().shell && !visible(inner)),
-            commands: vec![
-                inline("escape", "Exit shell mode", |inner| {
-                    inner.set_shell(false);
-                    true
-                }),
-                inline("backspace", "Exit shell mode", |inner| {
-                    if inner.cursor() != 0 {
-                        return false;
-                    }
-                    inner.set_shell(false);
-                    true
-                }),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: when(visible),
-            commands: vec![
-                command("prompt.autocomplete.prev", "Previous autocomplete item", "Autocomplete", |inner| {
-                    inner.move_selection(false);
-                    true
-                }),
-                command("prompt.autocomplete.next", "Next autocomplete item", "Autocomplete", |inner| {
-                    inner.move_selection(true);
-                    true
-                }),
-                command("prompt.autocomplete.hide", "Hide autocomplete", "Autocomplete", |inner| {
-                    inner.cancel();
-                    true
-                }),
-                command("prompt.autocomplete.select", "Select autocomplete item", "Autocomplete", |inner| {
-                    if inner.state.borrow().mode == Some(Mode::Slash) && inner.options().is_empty() {
-                        inner.hide();
-                        inner.rows();
-                        return true;
-                    }
-                    inner.select(Delivery::Steer);
-                    true
-                }),
-                command("prompt.autocomplete.complete", "Complete autocomplete item", "Autocomplete", |inner| {
-                    let options = inner.options();
-                    if inner.state.borrow().mode == Some(Mode::Slash) && options.is_empty() {
-                        inner.hide();
-                        inner.rows();
-                        return true;
-                    }
-                    let selected = inner.state.borrow().selection.selected;
-                    if matches!(options.get(selected), Some(Choice::Mention { directory: true, .. })) {
-                        inner.expand();
-                        return true;
-                    }
-                    inner.select(Delivery::Steer);
-                    true
-                }),
-            ],
-            ..KeymapLayer::default()
-        },
+            }),
+        ])
+        .enabled(when(|inner| inner.state.borrow().shell && !visible(inner))),
+        KeymapLayer::new(vec![
+            command("prompt.autocomplete.prev", "Previous autocomplete item", "Autocomplete", |inner| {
+                inner.move_selection(false);
+                true
+            }),
+            command("prompt.autocomplete.next", "Next autocomplete item", "Autocomplete", |inner| {
+                inner.move_selection(true);
+                true
+            }),
+            command("prompt.autocomplete.hide", "Hide autocomplete", "Autocomplete", |inner| {
+                inner.cancel();
+                true
+            }),
+            command("prompt.autocomplete.select", "Select autocomplete item", "Autocomplete", |inner| {
+                if inner.state.borrow().mode == Some(Mode::Slash) && inner.options().is_empty() {
+                    inner.hide();
+                    inner.rows();
+                    return true;
+                }
+                inner.select(Delivery::Steer);
+                true
+            }),
+            command("prompt.autocomplete.complete", "Complete autocomplete item", "Autocomplete", |inner| {
+                let options = inner.options();
+                if inner.state.borrow().mode == Some(Mode::Slash) && options.is_empty() {
+                    inner.hide();
+                    inner.rows();
+                    return true;
+                }
+                let selected = inner.state.borrow().selection.selected;
+                if matches!(options.get(selected), Some(Choice::Mention { directory: true, .. })) {
+                    inner.expand();
+                    return true;
+                }
+                inner.select(Delivery::Steer);
+                true
+            }),
+        ])
+        .enabled(when(visible)),
     ];
     for layer in layers {
         match inner.keymap.layer(layer) {

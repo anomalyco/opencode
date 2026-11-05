@@ -14,7 +14,7 @@ use opencode_api::generated::{
 };
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -211,10 +211,7 @@ impl Inner {
             .bind(Bind::Off)
             .palette()
             .enabled(queued);
-        for layer in [
-            KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-            KeymapLayer { bindings: vec!["session.queued_prompts".to_owned()], ..KeymapLayer::default() },
-        ] {
+        for layer in [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["session.queued_prompts"])] {
             match tui.keymap.layer(layer) {
                 Ok(disposer) => self.layers.borrow_mut().push(disposer),
                 Err(error) => log::error!("queued prompts keymap layer: {error}"),

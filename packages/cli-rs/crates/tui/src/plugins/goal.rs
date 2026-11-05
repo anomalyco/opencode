@@ -274,14 +274,11 @@ fn show(tui: &Tui, tracker: &Tracker) {
                     Condition::Never
                 })
             };
-            cx.layer(KeymapLayer {
-                commands: vec![
-                    bind("p", "Pause goal", goal.status == Status::Active, &pause),
-                    bind("r", "Resume goal", goal.status == Status::Paused, &resume),
-                    bind("x", "Clear goal", true, &clear),
-                ],
-                ..KeymapLayer::default()
-            });
+            cx.layer(KeymapLayer::new(vec![
+                bind("p", "Pause goal", goal.status == Status::Active, &pause),
+                bind("r", "Resume goal", goal.status == Status::Paused, &resume),
+                bind("x", "Clear goal", true, &clear),
+            ]));
             let state = match goal.status {
                 Status::Active => "Active",
                 Status::Paused => "Paused",
@@ -296,11 +293,11 @@ fn show(tui: &Tui, tracker: &Tracker) {
                 .gap(1)
                 .child(&Text::new(app, goal.objective.clone()).fg(theme.text.base))
                 .child(&details);
-            let header = dialog::header(cx, HeaderProps { title: "Goal".to_owned(), ..HeaderProps::default() });
+            let header = dialog::header(cx, HeaderProps::new("Goal"));
             dialog::layout(cx, &header, &body, Some(FooterProps { primary, ..FooterProps::default() }))
         },
         None,
-        DialogOptions { key: Some(DIALOG.to_owned()), ..DialogOptions::default() },
+        DialogOptions::default().key(DIALOG),
     );
 }
 

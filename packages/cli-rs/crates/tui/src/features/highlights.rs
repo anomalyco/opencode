@@ -14,8 +14,7 @@ use serde_json::{Value, json};
 use crate::app::Tui;
 use crate::dialogs::highlights::{self, Highlight};
 use crate::routes::Route;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
-use opentui::keymap::Disposer;
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 
 /// The current release's highlights and the version they belong to.
 #[derive(Clone, Debug, Default)]
@@ -46,19 +45,8 @@ pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
         .title("Show release highlights")
         .group("System")
         .palette()
-        .slash(Slash { name: "highlights".to_owned(), aliases: Vec::new(), arguments: false });
-        // The layer lives as long as the keymap, which the TUI owns.
-        if let Err(error) = tui
-            .keymap
-            .layer(KeymapLayer {
-                mode: Some(GLOBAL_MODE.to_owned()),
-                commands: vec![command],
-                ..KeymapLayer::default()
-            })
-            .map(Disposer::forget)
-        {
-            log::error!("highlights keymap layer: {error}");
-        }
+        .slash("highlights");
+        tui.keymap.install("highlights", [KeymapLayer::global(vec![command])]);
     }
     let Some(mut watch) = tui.connection_watch() else {
         return;

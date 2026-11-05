@@ -508,7 +508,7 @@ impl Inner {
         )
         .title(title)
         .group("Session");
-        let layer = KeymapLayer { commands: vec![toggle], ..KeymapLayer::default() };
+        let layer = KeymapLayer::new(vec![toggle]);
         match tui.keymap.layer(layer) {
             Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
             Err(error) => log::error!("transcript keymap layer: {error}"),

@@ -12,9 +12,8 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::generated::V2Event;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::motion::FadeInText;
-use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
@@ -102,18 +101,15 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
         .title("Update OpenCode")
         .group("System")
         .palette()
-        .slash(Slash { name: "update".to_owned(), aliases: Vec::new(), arguments: false });
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-        // `appBindingCommands`: the configured keybind (`none` by default).
-        KeymapLayer { bindings: vec!["opencode.update".to_owned()], ..KeymapLayer::default() },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("update keymap layer: {error}");
-        }
-    }
+        .slash("update");
+    tui.keymap.install(
+        "update",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appBindingCommands`: the configured keybind (`none` by default).
+            KeymapLayer::default().bindings(["opencode.update"]),
+        ],
+    );
     listen(tui, tui.data.signals());
 }
 

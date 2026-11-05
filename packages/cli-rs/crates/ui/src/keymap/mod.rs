@@ -73,6 +73,30 @@ pub struct Slash {
     pub arguments: bool,
 }
 
+impl Slash {
+    /// `/name`, without aliases or arguments.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), aliases: Vec::new(), arguments: false }
+    }
+
+    pub fn aliases(mut self, aliases: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.aliases = aliases.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Keeps the slash command in the prompt and passes its raw input to `run`.
+    pub fn arguments(mut self) -> Self {
+        self.arguments = true;
+        self
+    }
+}
+
+impl From<&str> for Slash {
+    fn from(name: &str) -> Self {
+        Self::new(name)
+    }
+}
+
 /// Runs a command with the dispatch input, if any, and the key that ran it, if any.
 pub type CommandRun = Rc<dyn Fn(Option<&str>, Option<&KeyEvent>) -> Outcome>;
 
@@ -150,8 +174,8 @@ impl TuiCommand {
         self
     }
 
-    pub fn slash(mut self, slash: Slash) -> Self {
-        self.slash = Some(slash);
+    pub fn slash(mut self, slash: impl Into<Slash>) -> Self {
+        self.slash = Some(slash.into());
         self
     }
 
@@ -183,6 +207,43 @@ impl<T> Default for KeymapLayer<T> {
             commands: Vec::new(),
             bindings: Vec::new(),
         }
+    }
+}
+
+impl<T> KeymapLayer<T> {
+    /// A base-mode layer of `commands`.
+    pub fn new(commands: Vec<TuiCommand>) -> Self {
+        Self { commands, ..Self::default() }
+    }
+
+    /// A layer of `commands` that opts out of modes ([`GLOBAL_MODE`]).
+    pub fn global(commands: Vec<TuiCommand>) -> Self {
+        Self::new(commands).mode(GLOBAL_MODE)
+    }
+
+    pub fn mode(mut self, mode: impl Into<String>) -> Self {
+        self.mode = Some(mode.into());
+        self
+    }
+
+    pub fn enabled(mut self, enabled: impl Into<Condition>) -> Self {
+        self.enabled = enabled.into();
+        self
+    }
+
+    pub fn target(mut self, target: T) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    pub fn priority(mut self, priority: i32) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    pub fn bindings(mut self, names: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.bindings = names.into_iter().map(Into::into).collect();
+        self
     }
 }
 
@@ -331,6 +392,17 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     }
 
     /// Registers a layer, as `Keymap.createLayer` does. Fails on the command shapes TS rejects.
+    /// Registers `layers` for the keymap's lifetime ([`Disposer::forget`]). A layer that fails logs
+    /// `"{name} keymap layer: {error}"`.
+    pub fn install(&self, name: &str, layers: impl IntoIterator<Item = KeymapLayer<T>>) {
+        for layer in layers {
+            match self.layer(layer) {
+                Ok(disposer) => disposer.forget(),
+                Err(error) => log::error!("{name} keymap layer: {error}"),
+            }
+        }
+    }
+
     pub fn layer(&self, layer: KeymapLayer<T>) -> Result<Disposer, String> {
         let mut commands = Vec::new();
         let mut bindings = Vec::new();

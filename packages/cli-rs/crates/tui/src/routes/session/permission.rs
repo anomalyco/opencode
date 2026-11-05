@@ -296,36 +296,33 @@ impl Inner {
             .group("Permission"),
         );
         commands.push(TuiCommand::inline("escape", run(Inner::dismiss)).title("Reject permission").group("Permission"));
-        KeymapLayer { commands, bindings: vec!["app.exit".to_owned(), FULLSCREEN.to_owned()], ..KeymapLayer::default() }
+        KeymapLayer::new(commands).bindings(vec!["app.exit".to_owned(), FULLSCREEN.to_owned()])
     }
 
     /// `RejectPrompt`'s layer.
     fn reject_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
-        KeymapLayer {
-            commands: vec![
-                TuiCommand::new(
-                    "app.exit",
-                    bind!(self, |inner, _, event: Option<&KeyEvent>| {
-                        let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
-                        let field = inner.reject.borrow().clone();
-                        if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
-                            field.set_text("");
-                            return;
-                        }
-                        inner.cancel_reject();
-                    }),
-                )
+        KeymapLayer::new(vec![
+            TuiCommand::new(
+                "app.exit",
+                bind!(self, |inner, _, event: Option<&KeyEvent>| {
+                    let ctrl_c = event.is_some_and(|event| event.matches("ctrl+c"));
+                    let field = inner.reject.borrow().clone();
+                    if let Some(field) = field.filter(|field| ctrl_c && !field.text().is_empty()) {
+                        field.set_text("");
+                        return;
+                    }
+                    inner.cancel_reject();
+                }),
+            )
+            .title("Cancel permission rejection")
+            .group("Permission"),
+            TuiCommand::inline("escape", bind!(self, |inner, _, _| inner.cancel_reject()))
                 .title("Cancel permission rejection")
                 .group("Permission"),
-                TuiCommand::inline("escape", bind!(self, |inner, _, _| inner.cancel_reject()))
-                    .title("Cancel permission rejection")
-                    .group("Permission"),
-                TuiCommand::inline("return", bind!(self, |inner, _, _| inner.confirm_reject()))
-                    .title("Confirm permission rejection")
-                    .group("Permission"),
-            ],
-            ..KeymapLayer::default()
-        }
+            TuiCommand::inline("return", bind!(self, |inner, _, _| inner.confirm_reject()))
+                .title("Confirm permission rejection")
+                .group("Permission"),
+        ])
     }
 
     fn dismiss(self: &Rc<Self>) {

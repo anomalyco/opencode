@@ -11,7 +11,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::select::{Select, SelectOption, SelectProps, select};
 use opentui::keymap::Disposer;
 use serde_json::Value;
@@ -26,18 +26,15 @@ pub fn install(tui: &Rc<Tui>) {
         .title("Switch theme")
         .group("System")
         .palette()
-        .slash(Slash { name: "themes".to_owned(), aliases: Vec::new(), arguments: false });
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
-        // `appBindingCommands`: the configured keybind (`none` by default).
-        KeymapLayer { bindings: vec!["theme.switch".to_owned()], ..KeymapLayer::default() },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("theme list keymap layer: {error}");
-        }
-    }
+        .slash("themes");
+    tui.keymap.install(
+        "theme list",
+        [
+            KeymapLayer::global(vec![command]),
+            // `appBindingCommands`: the configured keybind (`none` by default).
+            KeymapLayer::default().bindings(["theme.switch"]),
+        ],
+    );
 }
 
 /// `DialogThemeList`, in place of any open dialog. `on_close` returns to the caller (Settings) on Escape and

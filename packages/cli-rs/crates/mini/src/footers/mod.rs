@@ -1361,102 +1361,80 @@ fn install_layers(inner: &Rc<Inner>) {
             .collect()
     };
     let layers = vec![
-        KeymapLayer {
-            enabled: when(|inner| composer(inner) && !inner.prompt.menu_visible()),
-            commands: vec![
-                TuiCommand::new("command.palette.show", run(|inner| inner.open_route(Route::Command)))
-                    .title("Open command palette")
-                    .group("Prompt"),
-                TuiCommand::new("variant.cycle", run(Inner::cycle_variant_rc))
-                    .title("Cycle model variant")
-                    .group("Model"),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            enabled: when(|inner| composer(inner) && !inner.prompt.queued().is_empty()),
-            commands: vec![
-                TuiCommand::new("session.queued_prompts", run(Inner::open_queued))
-                    .title("View pending prompts")
-                    .group("Prompt"),
-            ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 2,
-            enabled: when(|inner| route(inner).is_some()),
-            commands: keys(
-                &[
-                    "escape", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n", "pageup", "pagedown", "home", "end",
-                    "return", "ctrl+u",
-                ],
-                Inner::panel_key,
-            ),
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 3,
-            enabled: when(|inner| route(inner) == Some(Route::Queued)),
-            commands: vec![
-                TuiCommand::new("queued_prompt.undo", {
-                    let weak = Rc::downgrade(inner);
-                    move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| inner.pending(true))
-                })
-                .title("Undo")
+        KeymapLayer::new(vec![
+            TuiCommand::new("command.palette.show", run(|inner| inner.open_route(Route::Command)))
+                .title("Open command palette")
                 .group("Prompt"),
-                TuiCommand::new("queued_prompt.delete", {
-                    let weak = Rc::downgrade(inner);
-                    move |_: Option<&str>, _: Option<&KeyEvent>| {
-                        weak.upgrade().is_some_and(|inner| inner.pending(false))
-                    }
-                })
-                .title("Delete pending prompt")
+            TuiCommand::new("variant.cycle", run(Inner::cycle_variant_rc)).title("Cycle model variant").group("Model"),
+        ])
+        .enabled(when(|inner| composer(inner) && !inner.prompt.menu_visible())),
+        KeymapLayer::new(vec![
+            TuiCommand::new("session.queued_prompts", run(Inner::open_queued))
+                .title("View pending prompts")
                 .group("Prompt"),
+        ])
+        .enabled(when(|inner| composer(inner) && !inner.prompt.queued().is_empty())),
+        KeymapLayer::new(keys(
+            &[
+                "escape", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n", "pageup", "pagedown", "home", "end", "return",
+                "ctrl+u",
             ],
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 2,
-            enabled: when(|inner| matches!(shown(inner), Some(Shown::Permission(_)))),
-            commands: keys(
-                &["pageup", "pagedown", "tab", "shift+tab", "left", "h", "right", "l", "return", "escape"],
-                Inner::permission_key,
-            ),
-            ..KeymapLayer::default()
-        },
-        KeymapLayer {
-            priority: 2,
-            enabled: when(|inner| matches!(shown(inner), Some(Shown::Form(_)))),
-            commands: keys(
-                &[
-                    "escape",
-                    "pageup",
-                    "pagedown",
-                    "tab",
-                    "shift+tab",
-                    "left",
-                    "h",
-                    "right",
-                    "l",
-                    "return",
-                    "up",
-                    "k",
-                    "down",
-                    "j",
-                    "1",
-                    "2",
-                    "3",
-                    "4",
-                    "5",
-                    "6",
-                    "7",
-                    "8",
-                    "9",
-                ],
-                Inner::form_key,
-            ),
-            ..KeymapLayer::default()
-        },
+            Inner::panel_key,
+        ))
+        .enabled(when(|inner| route(inner).is_some()))
+        .priority(2),
+        KeymapLayer::new(vec![
+            TuiCommand::new("queued_prompt.undo", {
+                let weak = Rc::downgrade(inner);
+                move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| inner.pending(true))
+            })
+            .title("Undo")
+            .group("Prompt"),
+            TuiCommand::new("queued_prompt.delete", {
+                let weak = Rc::downgrade(inner);
+                move |_: Option<&str>, _: Option<&KeyEvent>| weak.upgrade().is_some_and(|inner| inner.pending(false))
+            })
+            .title("Delete pending prompt")
+            .group("Prompt"),
+        ])
+        .enabled(when(|inner| route(inner) == Some(Route::Queued)))
+        .priority(3),
+        KeymapLayer::new(keys(
+            &["pageup", "pagedown", "tab", "shift+tab", "left", "h", "right", "l", "return", "escape"],
+            Inner::permission_key,
+        ))
+        .enabled(when(|inner| matches!(shown(inner), Some(Shown::Permission(_)))))
+        .priority(2),
+        KeymapLayer::new(keys(
+            &[
+                "escape",
+                "pageup",
+                "pagedown",
+                "tab",
+                "shift+tab",
+                "left",
+                "h",
+                "right",
+                "l",
+                "return",
+                "up",
+                "k",
+                "down",
+                "j",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+            ],
+            Inner::form_key,
+        ))
+        .enabled(when(|inner| matches!(shown(inner), Some(Shown::Form(_)))))
+        .priority(2),
     ];
     for layer in layers {
         match inner.prompt.keymap().layer(layer) {

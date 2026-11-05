@@ -60,14 +60,11 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
             };
             // Escape needs nothing here: the dialog closes on it, which resolves as a cancel.
             let yes = choose(Choice::Yes);
-            cx.layer(KeymapLayer {
-                commands: vec![
-                    TuiCommand::inline(if key == "enter" { "return" } else { key.as_str() }, move |_, _| yes())
-                        .title(title.clone())
-                        .group("Dialog"),
-                ],
-                ..KeymapLayer::default()
-            });
+            cx.layer(KeymapLayer::new(vec![
+                TuiCommand::inline(if key == "enter" { "return" } else { key.as_str() }, move |_, _| yes())
+                    .title(title.clone())
+                    .group("Dialog"),
+            ]));
             let width = u32::from(app.size().0).saturating_sub(2).min(DialogSize::Medium.width());
             let counts = files.iter().map(|file| count_text(file).width() + 2).max().unwrap_or(0);
             let name_width = (width as i64 - DIALOG_INSET as i64 * 2 - 2 - counts.max(7) as i64).max(2);

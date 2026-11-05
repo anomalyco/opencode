@@ -62,14 +62,11 @@ impl LocationMissing {
         self.root.add(&view(tui, &self.session, &directory));
         self.root.visible(true);
         let session = self.session.clone();
-        let layer = KeymapLayer {
-            commands: vec![
-                TuiCommand::inline("return", bind!(tui, |tui, _, _| choose(&tui, session.clone(), directory.clone())))
-                    .title("Select option")
-                    .group("Session recovery"),
-            ],
-            ..KeymapLayer::default()
-        };
+        let layer = KeymapLayer::new(vec![
+            TuiCommand::inline("return", bind!(tui, |tui, _, _| choose(&tui, session.clone(), directory.clone())))
+                .title("Select option")
+                .group("Session recovery"),
+        ]);
         match tui.keymap.layer(layer) {
             Ok(disposer) => *self.layer.borrow_mut() = Some(disposer),
             Err(error) => log::error!("location keymap layer: {error}"),

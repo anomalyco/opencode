@@ -533,7 +533,7 @@ impl Workspaces {
                     View::new(app).min_height(if show_error { 5 } else { full_height }).child(&view)
                 },
                 None,
-                DialogOptions { size: DialogSize::XLarge, key: Some(KEY.into()) },
+                DialogOptions::new(DialogSize::XLarge).key(KEY),
             );
         }
     }

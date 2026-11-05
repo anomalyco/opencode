@@ -21,9 +21,9 @@ use opencode_api::generated::{
 use opencode_local::storage::Storage;
 use opencode_store::{Changes, SessionStatus, State};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::input::{KeyCode, Modifiers};
-use opentui::keymap::{Condition, Disposer};
+use opentui::keymap::Condition;
 use serde::{Deserialize, Serialize};
 
 use crate::app::Tui;
@@ -298,22 +298,14 @@ fn install_commands(tui: &Rc<Tui>) {
         )
     }));
     let names: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
-    let layers = [
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
-        // `sessionTabBindingCommands`, bound only while tabs are on.
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            enabled: enabled(&weak),
-            bindings: names,
-            ..KeymapLayer::default()
-        },
-    ];
-    for layer in layers {
-        // The layers live as long as the keymap, which the TUI owns.
-        if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-            log::error!("tab keymap layer: {error}");
-        }
-    }
+    tui.keymap.install(
+        "tab",
+        [
+            KeymapLayer::global(commands),
+            // `sessionTabBindingCommands`, bound only while tabs are on.
+            KeymapLayer::global(Vec::new()).enabled(enabled(&weak)).bindings(names),
+        ],
+    );
 }
 
 fn enabled(weak: &std::rc::Weak<Tui>) -> Condition {

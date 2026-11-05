@@ -206,23 +206,20 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
                     }
                 }))
             };
-            cx.layer(KeymapLayer {
-                commands: vec![
-                    TuiCommand::inline("return", {
-                        let close = close.clone();
-                        move |_, _| close()
-                    })
-                    .title("Close export result")
-                    .group("Dialog"),
-                    TuiCommand::inline("c", {
-                        let copy = copy.clone();
-                        move |_, _| copy()
-                    })
-                    .title("Copy export path")
-                    .group("Dialog"),
-                ],
-                ..KeymapLayer::default()
-            });
+            cx.layer(KeymapLayer::new(vec![
+                TuiCommand::inline("return", {
+                    let close = close.clone();
+                    move |_, _| close()
+                })
+                .title("Close export result")
+                .group("Dialog"),
+                TuiCommand::inline("c", {
+                    let copy = copy.clone();
+                    move |_, _| copy()
+                })
+                .title("Copy export path")
+                .group("Dialog"),
+            ]));
             let body = Text::new(app, "").fg(theme.text.base);
             body.set_text(vec![
                 Span::raw("Saved to "),
@@ -235,10 +232,7 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
             };
             layout_with(
                 cx,
-                &header(
-                    cx,
-                    HeaderProps { title: "Session exported".into(), on_close: Some(close), ..HeaderProps::default() },
-                ),
+                &header(cx, HeaderProps { on_close: Some(close), ..HeaderProps::new("Session exported") }),
                 &body,
                 Some(FooterProps { primary: vec![action.on_trigger(move || copy())], ..FooterProps::default() }),
                 DIALOG_INSET,

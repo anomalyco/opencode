@@ -16,7 +16,7 @@ use opencode_local::lock;
 use opencode_local::serial::Serial;
 use opencode_ui::bind;
 use opencode_ui::dialog::FocusId;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opentui::keymap::Condition;
 use opentui::prelude::*;
 use serde_json::Value;
@@ -133,38 +133,34 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
     let command = |id: &str, title: &str, action: fn(&Rc<Inner>, &Tui)| {
         TuiCommand::new(id, run(action)).title(title).group("Prompt").bind(Bind::Off).palette()
     };
-    KeymapLayer {
-        mode: Some(GLOBAL_MODE.to_owned()),
-        commands: vec![
-            command("prompt.stash", "Stash prompt", |prompt, tui| {
-                if prompt.textarea.text().is_empty() {
-                    return;
-                }
-                let mut entry = prompt.prompt.borrow().clone();
-                entry["text"] = Value::String(prompt.textarea.text());
-                tui.prompt.stash.push(&tui.app, entry);
-                prompt.reset();
-                tui.dialogs.clear();
-            })
-            .enabled(when(|prompt, _| !prompt.textarea.text().is_empty())),
-            command("prompt.stash.pop", "Stash pop", |prompt, tui| {
-                if let Some(entry) = tui.prompt.stash.pop(&tui.app) {
-                    show(prompt, entry["prompt"].clone());
-                }
-                tui.dialogs.clear();
-            })
-            .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),
-            command("prompt.stash.list", "Stash list", |prompt, tui| {
-                let weak: Weak<Inner> = Rc::downgrade(prompt);
-                crate::dialogs::stash::show(
-                    tui,
-                    Rc::new(bind!(weak, |prompt, entry: &Value| show(&prompt, entry["prompt"].clone()))),
-                );
-            })
-            .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),
-        ],
-        ..KeymapLayer::default()
-    }
+    KeymapLayer::global(vec![
+        command("prompt.stash", "Stash prompt", |prompt, tui| {
+            if prompt.textarea.text().is_empty() {
+                return;
+            }
+            let mut entry = prompt.prompt.borrow().clone();
+            entry["text"] = Value::String(prompt.textarea.text());
+            tui.prompt.stash.push(&tui.app, entry);
+            prompt.reset();
+            tui.dialogs.clear();
+        })
+        .enabled(when(|prompt, _| !prompt.textarea.text().is_empty())),
+        command("prompt.stash.pop", "Stash pop", |prompt, tui| {
+            if let Some(entry) = tui.prompt.stash.pop(&tui.app) {
+                show(prompt, entry["prompt"].clone());
+            }
+            tui.dialogs.clear();
+        })
+        .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),
+        command("prompt.stash.list", "Stash list", |prompt, tui| {
+            let weak: Weak<Inner> = Rc::downgrade(prompt);
+            crate::dialogs::stash::show(
+                tui,
+                Rc::new(bind!(weak, |prompt, entry: &Value| show(&prompt, entry["prompt"].clone()))),
+            );
+        })
+        .enabled(when(|_, tui| !tui.prompt.stash.is_empty())),
+    ])
 }
 
 /// Puts a stashed prompt in the composer with its parts, the cursor at the end; the mode stays

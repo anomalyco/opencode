@@ -13,7 +13,7 @@ use opencode_plugin::{Definition, Slotted};
 use opencode_store::Changes;
 use opencode_ui::activity_calendar::{activity_calendar, time_zone};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
@@ -30,29 +30,25 @@ pub fn plugin() -> Definition<Tui> {
         let back = previous.clone();
         cx.route(ROUTE, move |tui| Box::new(Page::new(tui, back.clone())));
         let weak = Rc::downgrade(cx.host());
-        cx.layer(KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![
-                TuiCommand::new(
-                    "stats.open",
-                    bind!(weak, |tui, _, _| {
-                        let current = tui.route();
-                        if matches!(&current, Route::Plugin { name, .. } if name == ROUTE) {
-                            return;
-                        }
-                        *previous.borrow_mut() = current;
-                        tui.dialogs.clear();
-                        tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
-                    }),
-                )
-                .title("Usage statistics")
-                .group("System")
-                .slash(opencode_ui::keymap::Slash { name: "stats".to_owned(), aliases: Vec::new(), arguments: false })
-                .palette()
-                .bind(Bind::Default),
-            ],
-            ..KeymapLayer::default()
-        });
+        cx.layer(KeymapLayer::global(vec![
+            TuiCommand::new(
+                "stats.open",
+                bind!(weak, |tui, _, _| {
+                    let current = tui.route();
+                    if matches!(&current, Route::Plugin { name, .. } if name == ROUTE) {
+                        return;
+                    }
+                    *previous.borrow_mut() = current;
+                    tui.dialogs.clear();
+                    tui.navigate(Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
+                }),
+            )
+            .title("Usage statistics")
+            .group("System")
+            .slash("stats")
+            .palette()
+            .bind(Bind::Default),
+        ]));
     })
 }
 
@@ -78,19 +74,16 @@ impl Page {
             .child(&scroll);
         let layer = tui
             .keymap
-            .layer(KeymapLayer {
-                commands: vec![
-                    TuiCommand::inline(
-                        "escape",
-                        bind!(tui, |tui, _, _| {
-                            let route = previous.borrow().clone();
-                            tui.navigate(route);
-                        }),
-                    )
-                    .title("back"),
-                ],
-                ..KeymapLayer::default()
-            })
+            .layer(KeymapLayer::new(vec![
+                TuiCommand::inline(
+                    "escape",
+                    bind!(tui, |tui, _, _| {
+                        let route = previous.borrow().clone();
+                        tui.navigate(route);
+                    }),
+                )
+                .title("back"),
+            ]))
             .map_err(|error| log::error!("stats keymap layer: {error}"))
             .ok();
         load(tui, &content);

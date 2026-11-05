@@ -15,7 +15,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::generated::SessionID;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -185,12 +185,11 @@ impl Inner {
                 action(&inner, &tui);
             })
         };
-        let tab = |tab: Tab, commands: Vec<TuiCommand>| KeymapLayer {
-            mode: Some(MODE.to_owned()),
-            enabled: self.condition(move |inner| inner.open.get() && inner.active.get() == tab),
-            priority: 1,
-            commands,
-            ..KeymapLayer::default()
+        let tab = |tab: Tab, commands: Vec<TuiCommand>| {
+            KeymapLayer::new(commands)
+                .mode(MODE)
+                .enabled(self.condition(move |inner| inner.open.get() && inner.active.get() == tab))
+                .priority(1)
         };
         let child_first = TuiCommand::new("session.child.first", run(Inner::toggle))
             .title("Toggle subagent picker")
@@ -198,28 +197,23 @@ impl Inner {
             .bind(Bind::Off)
             .palette();
         let layers = [
-            KeymapLayer {
-                mode: Some(MODE.to_owned()),
-                enabled: open,
-                priority: 1,
-                commands: vec![
-                    TuiCommand::inline("left", run(|inner, tui| inner.switch(tui, -1)))
-                        .title("Previous tab")
-                        .group("Composer"),
-                    TuiCommand::inline("right", run(|inner, tui| inner.switch(tui, 1)))
-                        .title("Next tab")
-                        .group("Composer"),
-                    TuiCommand::inline("escape", run(Inner::close)).title("Close composer").group("Composer"),
-                    TuiCommand::inline("ctrl+c", run(Inner::close)).title("Close composer").group("Composer"),
-                ],
-                ..KeymapLayer::default()
-            },
+            KeymapLayer::new(vec![
+                TuiCommand::inline("left", run(|inner, tui| inner.switch(tui, -1)))
+                    .title("Previous tab")
+                    .group("Composer"),
+                TuiCommand::inline("right", run(|inner, tui| inner.switch(tui, 1))).title("Next tab").group("Composer"),
+                TuiCommand::inline("escape", run(Inner::close)).title("Close composer").group("Composer"),
+                TuiCommand::inline("ctrl+c", run(Inner::close)).title("Close composer").group("Composer"),
+            ])
+            .mode(MODE)
+            .enabled(open)
+            .priority(1),
             tab(Tab::Subagents, subagents::commands(self)),
             tab(Tab::Shell, shell::commands(self)),
             tab(Tab::Terminals, terminals::commands(self)),
             // The session route's command list and its base-mode binding (`routes/session/index.tsx:1399-1407`).
-            KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![child_first], ..KeymapLayer::default() },
-            KeymapLayer { bindings: vec!["session.child.first".to_owned()], ..KeymapLayer::default() },
+            KeymapLayer::global(vec![child_first]),
+            KeymapLayer::default().bindings(["session.child.first"]),
         ];
         for layer in layers {
             match tui.keymap.layer(layer) {

@@ -16,8 +16,8 @@ use opencode_local::cli_config::TabsLayout;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
-use opentui::keymap::{Condition, Disposer};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
+use opentui::keymap::Condition;
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
@@ -507,10 +507,5 @@ fn install_commands(tui: &Rc<Tui>) {
     .into_iter()
     .map(|command| command.bind(Bind::Default))
     .collect();
-    let layer =
-        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), enabled: right_pane, commands, ..KeymapLayer::default() };
-    // The layer lives as long as the keymap, which the TUI owns.
-    if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
-        log::error!("pane keymap layer: {error}");
-    }
+    tui.keymap.install("pane", [KeymapLayer::global(commands).enabled(right_pane)]);
 }

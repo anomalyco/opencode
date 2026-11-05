@@ -40,7 +40,7 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
             select::select(cx, props).0
         },
         None,
-        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
+        DialogOptions::new(DialogSize::Large),
     );
 }
 

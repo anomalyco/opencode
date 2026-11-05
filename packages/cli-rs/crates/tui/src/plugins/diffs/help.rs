@@ -54,7 +54,7 @@ pub fn open(viewer: &Viewer) {
             layout(cx, &head, &scroll, None)
         },
         None,
-        DialogOptions { size: DialogSize::Medium, key: None },
+        DialogOptions::new(DialogSize::Medium),
     );
     tui.dialogs.set_centered(true);
 }

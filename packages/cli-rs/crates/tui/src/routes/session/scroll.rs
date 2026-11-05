@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use opencode_local::cli_config::{Grouping, Info, SubmitScroll, Verbosity};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::input::MouseEventKind;
 use opentui::keymap::{Condition, Disposer};
@@ -248,7 +248,6 @@ impl Inner {
                 inner.to_message(tui, false, true)
             }),
         ];
-        let names = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
         let unfocused = {
             let app = tui.app.clone();
             let textarea = tui.textarea.clone();
@@ -260,39 +259,27 @@ impl Inner {
             })
         };
         let layers = [
-            KeymapLayer {
-                mode: Some(GLOBAL_MODE.to_owned()),
-                commands,
-                bindings: names(&[
-                    "session.page.up",
-                    "session.page.down",
-                    "session.line.up",
-                    "session.line.down",
-                    "session.half.page.up",
-                    "session.half.page.down",
-                ]),
-                ..KeymapLayer::default()
-            },
-            KeymapLayer {
-                enabled: unfocused,
-                bindings: names(&["session.first", "session.last"]),
-                ..KeymapLayer::default()
-            },
-            KeymapLayer {
-                bindings: names(&[
-                    "session.first",
-                    "session.last",
-                    "session.toggle.scrollbar",
-                    "session.toggle.exploration_grouping",
-                    "session.verbosity.cycle",
-                    "session.messages_last_user",
-                    "session.message.next",
-                    "session.message.previous",
-                    "session.message.user.next",
-                    "session.message.user.previous",
-                ]),
-                ..KeymapLayer::default()
-            },
+            KeymapLayer::global(commands).bindings([
+                "session.page.up",
+                "session.page.down",
+                "session.line.up",
+                "session.line.down",
+                "session.half.page.up",
+                "session.half.page.down",
+            ]),
+            KeymapLayer::default().enabled(unfocused).bindings(["session.first", "session.last"]),
+            KeymapLayer::default().bindings([
+                "session.first",
+                "session.last",
+                "session.toggle.scrollbar",
+                "session.toggle.exploration_grouping",
+                "session.verbosity.cycle",
+                "session.messages_last_user",
+                "session.message.next",
+                "session.message.previous",
+                "session.message.user.next",
+                "session.message.user.previous",
+            ]),
         ];
         for layer in layers {
             match tui.keymap.layer(layer) {

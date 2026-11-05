@@ -14,7 +14,7 @@ use opencode_api::generated::{
 };
 use opencode_store::{MessageExt, State};
 use opencode_ui::bind;
-use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::{Condition, Disposer};
 use serde_json::Value;
@@ -77,7 +77,7 @@ impl Inner {
             .group("Session")
             .bind(Bind::Off)
         };
-        let slash = |name: &str, arguments: bool| Slash { name: name.to_owned(), aliases: Vec::new(), arguments };
+        let slash = |name: &str, arguments: bool| Slash { arguments, ..Slash::new(name) };
         // Keymap conditions read the routed session as the last sync left it: they must not lock the store.
         let reverted = {
             let (weak, session) = (tui.weak(), self.session.clone());
@@ -110,11 +110,8 @@ impl Inner {
                 .slash(slash("export", false)),
             command("session.parent", "Go to parent session", Inner::parent).enabled(child),
         ];
-        let bindings = commands.iter().filter_map(|command| command.id.clone()).collect();
-        for layer in [
-            KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
-            KeymapLayer { bindings, ..KeymapLayer::default() },
-        ] {
+        let bindings: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
+        for layer in [KeymapLayer::global(commands), KeymapLayer::default().bindings(bindings)] {
             match tui.keymap.layer(layer) {
                 Ok(disposer) => self.layers.borrow_mut().push(disposer),
                 Err(error) => log::error!("session actions keymap layer: {error}"),
