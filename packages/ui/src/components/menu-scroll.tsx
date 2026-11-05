@@ -1,14 +1,5 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import {
-  createSignal,
-  onCleanup,
-  onMount,
-  Show,
-  splitProps,
-  untrack,
-  type ComponentProps,
-  type JSX,
-} from "solid-js"
+import { createSignal, onCleanup, onMount, Show, splitProps, untrack, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   INITIAL_SCROLL_THUMB_STATE,
