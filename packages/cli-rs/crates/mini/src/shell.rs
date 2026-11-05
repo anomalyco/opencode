@@ -68,6 +68,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
     // The transcript always starts one row below the terminal's earlier output.
     let mut writer = Writer::new(footer.clone(), Scrollback::new(&app)?, theme.clone(), settings.mono, true);
     writer.set_shell_output(settings.shell_output == Visibility::Show);
+    writer.set_image_preview(input.config.session.as_ref().and_then(|session| session.image_preview).unwrap_or(false));
     let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
     let footers = Footers::new(&app, &prompt, &theme, settings.mono);
     let status = Text::new(&app, "").wrap(WrapMode::None).truncate(true).height(1).shrink(0.0);
@@ -966,7 +967,7 @@ impl Mini {
                         .transcript
                         .borrow_mut()
                         .as_mut()
-                        .map(|transcript| transcript.admitted(&id, &text))
+                        .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
                         .unwrap_or_default();
                     mini.output(cx, output);
                     mini.settle(&session.id, started);
@@ -1009,7 +1010,7 @@ impl Mini {
                         .transcript
                         .borrow_mut()
                         .as_mut()
-                        .map(|transcript| transcript.admitted(&id, &text))
+                        .map(|transcript| transcript.admitted(&id, &text, &sent.inline_files()))
                         .unwrap_or_default();
                     mini.output(cx, output);
                 }
