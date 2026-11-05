@@ -2,6 +2,20 @@ import { createEffect, onCleanup, onMount } from "solid-js"
 import { createQuads, type Quads, type Rgba } from "./pin-quads"
 import { PinSound } from "./pin-sound"
 import { prefersReducedMotion } from "@opencode/ui/motion"
+import {
+  acceptsGameInput,
+  acceptsPointer,
+  boardCloseAge,
+  countHomePins,
+  createPin,
+  createPinBoardState,
+  dragKnockDue,
+  isBoardDragging,
+  relayoutPins,
+  shouldReassemble,
+  transitionPinBoard,
+  type Pin,
+} from "./pin-board-machine"
 
 // The wordmark as a 78×14 pin grid: 1 = counter shadow, 2 = "open", 3 = "code".
 const GRID = [
@@ -22,13 +36,6 @@ const GRID = [
 ]
 const COLS = 78
 const ROWS = 14
-
-const HOME = 0
-const AIR = 1
-const REST = 2
-const RETURN = 3
-// Knocked out by the brick breaker ball and fallen off the panel; the socket stays empty until the game ends.
-const OUT = 4
 
 export type PinEntrance = "sweep" | "chain"
 
@@ -62,37 +69,6 @@ const LOOSE = 4
 const REVEAL = 0.75
 const INTERACTIVE =
   'button, a, input, textarea, select, label, [contenteditable], [role], [data-component="composer"], [data-component="new-session-tip"]'
-
-type Pin = {
-  c: number
-  r: number
-  lv: number
-  hx: number
-  hy: number
-  x: number
-  y: number
-  vx: number
-  vy: number
-  z: number
-  zv: number
-  e: number
-  rot: number
-  spin: number
-  state: number
-  pop: number
-  popAt: number
-  bucket: number
-  onComposer: boolean
-  level: number
-  x0: number
-  y0: number
-  rot0: number
-  t0: number
-  duration: number
-  lift: number
-  fd: number
-  bd: number
-}
 
 /**
  * The new session wordmark as a 3D pin board. Pins tilt toward the cursor and sink under it.
@@ -168,17 +144,17 @@ function mountPinBoard(
     composer: undefined as { left: number; right: number; top: number } | undefined,
     region: { x: 0, y: 0, w: 0, h: 0, full: false },
     frontOn: true,
-    game: false,
   }
-  const pointer = { x: 0, y: 0, lx: 0, ly: 0, vx: 0, vy: 0, inside: false, down: false, dragX: 0, dragY: 0 }
+  const pointer = { x: 0, y: 0, lx: 0, ly: 0, vx: 0, vy: 0, inside: false }
   const tilt = { x: REST_TILT[0], y: REST_TILT[1] }
   const piles = { top: new Int16Array(0), floor: new Int16Array(0) }
-  const clock = { born: performance.now() / 1000 - (still ? REVEAL * 2 : 0), last: 0, knocked: -99, closed: 0 }
+  const clock = { born: performance.now() / 1000 - (still ? REVEAL * 2 : 0), last: 0 }
+  let board = createPinBoardState()
   let colors = readColors(stage)
   let raf = 0
 
   const wake = () => {
-    if (raf) return
+    if (raf || board.status === "disposed") return
     clock.last = performance.now() / 1000 - 1 / 60
     raf = requestAnimationFrame(frame)
   }
@@ -216,19 +192,11 @@ function mountPinBoard(
     }
     view.x0 = x0
     view.y0 = y0
-    for (const p of pins) {
-      p.hx = view.x0 + (p.c + 0.5) * view.pitch
-      p.hy = view.y0 + (p.r + 0.5) * view.pitch
-      p.x = p.hx
-      p.y = p.hy
-      p.state = HOME
-      p.pop = 0
-      p.rot = 0
-    }
+    relayoutPins(pins, x0, y0, pitch)
     const buckets = Math.ceil(view.w / view.pitch) + 1
     piles.top = new Int16Array(buckets)
     piles.floor = new Int16Array(buckets)
-    setRegion(false)
+    setRegion(countHomePins(pins) < pins.length)
     setFront(false)
     wake()
   }
@@ -272,14 +240,14 @@ function mountPinBoard(
 
   const knock = (x: number, y: number, radius: number, power: number, carryX: number, carryY: number, now: number) => {
     const hits = pins.filter((p) => Math.hypot(p.x - x, p.y - y) <= radius)
-    hits.filter((p) => p.state === REST).forEach(unstack)
+    hits.filter((p) => p.phase === "rest").forEach(unstack)
     for (const p of hits) {
       const dx = p.x - x
       const dy = p.y - y
       const dist = Math.hypot(dx, dy) || 1
       const f = 1 - dist / radius
-      const home = p.state === HOME
-      p.state = AIR
+      const home = p.phase === "home"
+      p.phase = "air"
       p.e = 1
       p.vx = (home ? 0 : p.vx * 0.3) + (dx / dist) * power * f + carryX + (Math.random() - 0.5) * 60
       p.vy = (home ? 0 : Math.min(0, p.vy) * 0.3) + (dy / dist) * power * f + carryY - (home ? 220 : 420) - 380 * f
@@ -288,7 +256,7 @@ function mountPinBoard(
       p.popAt = now
     }
     if (!hits.length) return
-    clock.knocked = now
+    board = transitionPinBoard(board, { type: "knocked", now })
     setRegion(true)
     if (sound()) PinSound.knock(x, view.w)
   }
@@ -297,8 +265,8 @@ function mountPinBoard(
   const unstack = (p: Pin) => {
     const heights = p.onComposer ? piles.top : piles.floor
     for (const o of pins) {
-      if (o.state !== REST || o.onComposer !== p.onComposer || o.bucket !== p.bucket || o.level < p.level) continue
-      o.state = AIR
+      if (o.phase !== "rest" || o.onComposer !== p.onComposer || o.bucket !== p.bucket || o.level < p.level) continue
+      o.phase = "air"
       o.vx = (Math.random() - 0.5) * 120
       o.vy = -80 - Math.random() * 120
       o.spin += (Math.random() - 0.5) * 6
@@ -329,7 +297,7 @@ function mountPinBoard(
       p.vy = 0
       return
     }
-    p.state = REST
+    p.phase = "rest"
     p.bucket = bucket
     p.onComposer = top
     p.level = heights[bucket]
@@ -340,8 +308,8 @@ function mountPinBoard(
 
   const reassemble = (now: number) => {
     for (const p of pins) {
-      if (p.state !== AIR && p.state !== REST) continue
-      p.state = RETURN
+      if (p.phase !== "air" && p.phase !== "rest") continue
+      p.phase = "return"
       p.x0 = p.x
       p.y0 = p.y
       p.rot0 = p.rot
@@ -351,7 +319,7 @@ function mountPinBoard(
     }
     piles.top.fill(0)
     piles.floor.fill(0)
-    clock.knocked = now
+    board = transitionPinBoard(board, { type: "knocked", now })
   }
 
   const step = (now: number, dt: number) => {
@@ -363,7 +331,8 @@ function mountPinBoard(
     const cx = view.x0 + (COLS * view.pitch) / 2
     const cy = view.y0 + (ROWS * view.pitch) / 2
     // In game mode the board leans only slightly after the ball, so the bricks stay readable.
-    const lean = view.game ? 0.12 : 0.6
+    const game = acceptsGameInput(board)
+    const lean = game ? 0.12 : 0.6
     const tx = pointer.inside ? lerp(REST_TILT[0], clamp(((cx - pointer.x) / (view.w * 0.5)) * 1.4), lean) : REST_TILT[0]
     const ty = pointer.inside ? lerp(REST_TILT[1], clamp(((cy - pointer.y) / (view.h * 0.5)) * 1.4), lean) : REST_TILT[1]
     const ease = 1 - Math.exp(-dt * 4)
@@ -371,21 +340,21 @@ function mountPinBoard(
     tilt.y += (ty - tilt.y) * ease
 
     // A held button keeps knocking along the drag path, spaced so it reads as a trail.
-    if (pointer.down && Math.hypot(pointer.x - pointer.dragX, pointer.y - pointer.dragY) > view.pitch * 1.2) {
-      pointer.dragX = pointer.x
-      pointer.dragY = pointer.y
+    if (dragKnockDue(board, pointer.x, pointer.y, view.pitch)) {
+      board = transitionPinBoard(board, { type: "pointer.dragged", x: pointer.x, y: pointer.y })
       knock(pointer.x, pointer.y, 16, 260, pointer.vx * 0.25, pointer.vy * 0.25, now)
     }
 
     const cell = view.pitch
-    const counts = { air: 0, loose: 0 }
-    const sink = view.game ? 36 : 55
+    let air = 0
+    let loose = 0
+    const sink = game ? 36 : 55
     view.activity = Math.abs(tx - tilt.x) + Math.abs(ty - tilt.y) + (Math.abs(pointer.vx) + Math.abs(pointer.vy)) / 1000
     for (const p of pins) {
-      if (p.state === OUT) continue
+      if (p.phase === "out") continue
       p.e *= Math.exp(-dt * 1.8)
       if (p.pop && now - p.popAt > 1.5) p.pop = 0
-      if (p.state === HOME) {
+      if (p.phase === "home") {
         const dist = pointer.inside ? Math.hypot(p.hx - pointer.x, p.hy - pointer.y) : Infinity
         const f = dist < sink ? 1 - dist / sink : 0
         const target = f * f * 0.9
@@ -394,28 +363,28 @@ function mountPinBoard(
         view.activity = Math.max(view.activity, Math.abs(p.zv) * 0.1 + Math.abs(target - p.z), p.e * 0.05)
         continue
       }
-      if (p.state === REST) {
-        counts.loose++
+      if (p.phase === "rest") {
+        loose++
         p.rot = wrapQuarter(p.rot) * Math.exp(-dt * 14)
         continue
       }
-      if (p.state === RETURN) {
+      if (p.phase === "return") {
         const k = (now - p.t0) / p.duration
         if (k < 0) continue
         if (k >= 1) {
-          Object.assign(p, {
-            state: HOME,
-            x: p.hx,
-            y: p.hy,
-            vx: 0,
-            vy: 0,
-            rot: 0,
-            spin: 0,
-            pop: 0,
-            e: clock.closed ? 0.5 : 0.9,
-            z: clock.closed ? -0.2 : -0.8,
-            zv: 0,
-          })
+          // Pins packing into the closing lodger land softer than ones reassembling the wordmark.
+          const closing = board.status === "closing"
+          p.phase = "home"
+          p.x = p.hx
+          p.y = p.hy
+          p.vx = 0
+          p.vy = 0
+          p.rot = 0
+          p.spin = 0
+          p.pop = 0
+          p.e = closing ? 0.5 : 0.9
+          p.z = closing ? -0.2 : -0.8
+          p.zv = 0
           if (sound()) PinSound.slot(p.c, COLS, p.hx, view.w)
           continue
         }
@@ -425,16 +394,22 @@ function mountPinBoard(
         p.rot = lerp(wrapQuarter(p.rot0), 0, e)
         continue
       }
-      counts.air++
-      counts.loose++
+      air++
+      loose++
       p.vy += 2400 * dt
       p.x += p.vx * dt
       p.y += p.vy * dt
       p.rot += p.spin * dt
-      if (p.x < cell) Object.assign(p, { x: cell, vx: Math.abs(p.vx) * 0.5 })
-      if (p.x > view.w - cell) Object.assign(p, { x: view.w - cell, vx: -Math.abs(p.vx) * 0.5 })
-      if (view.game) {
-        if (p.y > view.h + cell * 4) p.state = OUT
+      if (p.x < cell) {
+        p.x = cell
+        p.vx = Math.abs(p.vx) * 0.5
+      }
+      if (p.x > view.w - cell) {
+        p.x = view.w - cell
+        p.vx = -Math.abs(p.vx) * 0.5
+      }
+      if (game) {
+        if (p.y > view.h + cell * 4) p.phase = "out"
         continue
       }
       if (p.vy <= 0 || popOf(p, now) >= 0.1) continue
@@ -454,16 +429,15 @@ function mountPinBoard(
       p.spin = -p.spin * 0.5 + (Math.random() - 0.5) * 4
     }
 
-    const idle = now - clock.knocked
-    if (!view.game && !pointer.down && counts.loose && ((counts.air === 0 && idle > 2) || idle > 6)) reassemble(now)
-    if (view.region.full && pins.every((p) => p.state === HOME)) setRegion(false)
+    if (shouldReassemble(board, air, loose, now)) reassemble(now)
+    if (view.region.full && countHomePins(pins) === pins.length) setRegion(false)
   }
 
   const revealSpan = entrance === "sweep" ? REVEAL : 1.3
-  const resting = (p: Pin) => p.state === HOME || p.state === OUT
+  const resting = (p: Pin) => p.phase === "home" || p.phase === "out"
   const settled = (now: number) => {
-    if (clock.closed) return now - clock.closed >= 1.2 && pins.every((p) => p.state === HOME)
-    if (now - clock.born < revealSpan || pointer.down || view.activity > 1e-3) return false
+    if (board.status === "closing") return boardCloseAge(board, now) >= 1.2 && countHomePins(pins) === pins.length
+    if (now - clock.born < revealSpan || isBoardDragging(board) || view.activity > 1e-3) return false
     return pins.every(resting)
   }
 
@@ -512,10 +486,10 @@ function mountPinBoard(
     const half = view.size / 2
     const size = view.size
     const age = now - clock.born
-    const closeAge = clock.closed ? now - clock.closed : -1
+    const closeAge = boardCloseAge(board, now)
 
     for (const p of pins) {
-      if (p.state !== HOME) continue
+      if (p.phase !== "home") continue
       const g =
         closeAge >= 0
           ? closeOf(p, closeAge)
@@ -537,9 +511,9 @@ function mountPinBoard(
 
     // An empty socket: a dark rim with its floor visible through the opening, shifted by the tilt.
     for (const p of pins)
-      if (p.state !== HOME) quads.rect(p.hx + ox - half, p.hy + oy - half, size, size, colors.socketRim)
+      if (p.phase !== "home") quads.rect(p.hx + ox - half, p.hy + oy - half, size, size, colors.socketRim)
     for (const p of pins) {
-      if (p.state === HOME) continue
+      if (p.phase === "home") continue
       const w = size - Math.abs(ox * 0.45)
       const h = size - Math.abs(oy * 0.45)
       if (w > 0 && h > 0)
@@ -607,7 +581,7 @@ function mountPinBoard(
     let current = NaN
     band.length = 0
     for (const p of order) {
-      if (p.state !== HOME) continue
+      if (p.phase !== "home") continue
       const height = (p.lv === 1 ? 0.35 : 1) * (1 - Math.max(0, p.z)) + Math.max(0, -p.z) * 0.6
       if (entrance === "sweep" && closeAge < 0) {
         const grow = Math.min(1, Math.max(0, (age - (p.c / COLS) * 0.45) / 0.3))
@@ -667,8 +641,9 @@ function mountPinBoard(
     pointer.x = event.clientX - view.left
     pointer.y = event.clientY - view.top
   }
+  // The board still leans toward the pointer while it packs up, but only the interactive board can be knocked.
   const onEnter = (event: PointerEvent) => {
-    if (view.game) return
+    if (acceptsGameInput(board)) return
     const s = stage.getBoundingClientRect()
     view.left = s.left
     view.top = s.top
@@ -679,37 +654,39 @@ function mountPinBoard(
     wake()
   }
   const onMove = (event: PointerEvent) => {
-    if (view.game) return
+    if (acceptsGameInput(board)) return
     toStage(event)
     pointer.inside = true
     wake()
   }
   const onLeave = () => {
-    if (pointer.down || view.game) return
+    if (isBoardDragging(board) || acceptsGameInput(board)) return
     pointer.inside = false
     wake()
   }
   // Capturing the pointer keeps a long drag alive; without it the browser can start a text
   // selection or native drag mid-gesture and cancel the pointer stream.
   const onDown = (event: PointerEvent) => {
-    if (view.game || event.button !== 0 || (event.target instanceof Element && event.target.closest(INTERACTIVE)))
+    if (
+      !acceptsPointer(board) ||
+      event.button !== 0 ||
+      (event.target instanceof Element && event.target.closest(INTERACTIVE))
+    )
       return
     event.preventDefault()
     stage.setPointerCapture(event.pointerId)
     toStage(event)
-    pointer.down = true
-    pointer.dragX = pointer.x
-    pointer.dragY = pointer.y
+    board = transitionPinBoard(board, { type: "pointer.down", x: pointer.x, y: pointer.y })
     knock(pointer.x, pointer.y, 24, 560, 0, 0, performance.now() / 1000)
     wake()
   }
   const onUp = (event: Event) => {
-    pointer.down = false
+    board = transitionPinBoard(board, { type: "pointer.up" })
     if (event instanceof PointerEvent && stage.hasPointerCapture(event.pointerId))
       stage.releasePointerCapture(event.pointerId)
   }
   const onSelect = (event: Event) => {
-    if (pointer.down) event.preventDefault()
+    if (isBoardDragging(board)) event.preventDefault()
   }
   const onTheme = () => {
     colors = readColors(stage)
@@ -744,13 +721,14 @@ function mountPinBoard(
 
   const handle: PinBoardHandle = {
     collide: (x, y, radius, blast, vx, vy) => {
+      if (!acceptsGameInput(board)) return
       const half = view.size / 2
       const reach = radius + blast + half
       const now = performance.now() / 1000
       const hit = { nx: 0, ny: 0, count: 0 }
       const struck: Pin[] = []
       for (const p of pins) {
-        if (p.state !== HOME) continue
+        if (p.phase !== "home") continue
         const dx = x - p.hx
         const dy = y - p.hy
         if (Math.abs(dx) > reach || Math.abs(dy) > reach) continue
@@ -771,7 +749,7 @@ function mountPinBoard(
         const dy = y - p.hy
         const dist = Math.hypot(dx, dy) || 1
         // Bricks burst away from the ball toward the viewer, then fall off the panel.
-        p.state = AIR
+        p.phase = "air"
         p.e = 1
         p.vx = vx * 0.35 - (dx / dist) * 140 + (Math.random() - 0.5) * 160
         p.vy = vy * 0.35 - (dy / dist) * 140 - 180 - Math.random() * 180
@@ -779,29 +757,34 @@ function mountPinBoard(
         p.pop = 0.45 + Math.random() * 0.4
         p.popAt = now
       }
-      clock.knocked = now
       setRegion(true)
       wake()
       return hit
     },
-    left: () => pins.reduce((n, p) => (p.state === HOME ? n + 1 : n), 0),
+    left: () => countHomePins(pins),
     play: () => {
+      const next = transitionPinBoard(board, { type: "play" })
+      if (next === board) return
+      board = next
       const now = performance.now() / 1000
-      view.game = true
-      pointer.down = false
       pointer.inside = false
       piles.top.fill(0)
       piles.floor.fill(0)
       // Pins still loose from earlier clicks hurry home so the wall is whole when the ball is served.
       for (const p of pins) {
-        if (p.state === HOME) continue
-        Object.assign(p, { state: RETURN, x0: p.x, y0: p.y, rot0: p.rot, t0: now + (p.c / COLS) * 0.2 })
+        if (p.phase === "home") continue
+        p.phase = "return"
+        p.x0 = p.x
+        p.y0 = p.y
+        p.rot0 = p.rot
+        p.t0 = now + (p.c / COLS) * 0.2
         p.duration = 0.35 + Math.random() * 0.1
         p.lift = 20 + Math.random() * 30
       }
       wake()
     },
     steer: (x, y) => {
+      if (!acceptsGameInput(board)) return
       pointer.x = x
       pointer.y = y
       pointer.inside = true
@@ -809,22 +792,21 @@ function mountPinBoard(
     },
     restore: () => {
       const now = performance.now() / 1000
-      view.game = false
+      const next = transitionPinBoard(board, { type: "restore", now })
+      if (next === board) return
+      board = next
       pointer.inside = false
-      clock.knocked = now
       // Lost bricks fly back up from below the panel, sweeping in column by column.
       for (const p of pins) {
-        if (p.state === HOME) continue
-        const out = p.state === OUT
-        Object.assign(p, {
-          state: RETURN,
-          x0: out ? p.hx + (Math.random() - 0.5) * view.pitch * 6 : p.x,
-          y0: out ? view.h + view.pitch * 2 : p.y,
-          rot0: out ? (Math.random() - 0.5) * 6 : p.rot,
-          t0: now + 0.15 + (p.c / COLS) * 0.55 + Math.random() * 0.08,
-          duration: 0.55 + Math.random() * 0.2,
-          lift: 20 + Math.random() * 50,
-        })
+        if (p.phase === "home") continue
+        const out = p.phase === "out"
+        p.phase = "return"
+        p.x0 = out ? p.hx + (Math.random() - 0.5) * view.pitch * 6 : p.x
+        p.y0 = out ? view.h + view.pitch * 2 : p.y
+        p.rot0 = out ? (Math.random() - 0.5) * 6 : p.rot
+        p.t0 = now + 0.15 + (p.c / COLS) * 0.55 + Math.random() * 0.08
+        p.duration = 0.55 + Math.random() * 0.2
+        p.lift = 20 + Math.random() * 50
       }
       wake()
     },
@@ -833,15 +815,15 @@ function mountPinBoard(
   return {
     handle,
     close: () => {
-      if (clock.closed) return
       const now = performance.now() / 1000
-      clock.closed = now
-      pointer.down = false
+      const next = transitionPinBoard(board, { type: "close", now })
+      if (next === board) return
+      board = next
       piles.top.fill(0)
       piles.floor.fill(0)
       for (const p of pins) {
-        if (p.state === HOME) continue
-        p.state = RETURN
+        if (p.phase === "home") continue
+        p.phase = "return"
         p.x0 = p.x
         p.y0 = p.y
         p.rot0 = p.rot
@@ -853,6 +835,7 @@ function mountPinBoard(
       wake()
     },
     dispose: () => {
+      board = transitionPinBoard(board, { type: "dispose" })
       cancelAnimationFrame(raf)
       resize.disconnect()
       theme.disconnect()
@@ -870,39 +853,6 @@ function mountPinBoard(
       layers.back.dispose()
       layers.front.dispose()
     },
-  }
-}
-
-function createPin(c: number, r: number, lv: number): Pin {
-  return {
-    c,
-    r,
-    lv,
-    hx: 0,
-    hy: 0,
-    x: 0,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    z: 0,
-    zv: 0,
-    e: 0,
-    rot: 0,
-    spin: 0,
-    state: HOME,
-    pop: 0,
-    popAt: 0,
-    bucket: 0,
-    onComposer: false,
-    level: 0,
-    x0: 0,
-    y0: 0,
-    rot0: 0,
-    t0: 0,
-    duration: 0,
-    lift: 0,
-    fd: 0,
-    bd: 1,
   }
 }
 
