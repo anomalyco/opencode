@@ -87,6 +87,15 @@ pub fn colors(theme: &Theme) -> DiffColors {
     }
 }
 
+/// The colors of a patch view: the diff's own, the code's text, and the `@@` rows of later hunks.
+#[derive(Clone, Copy, Debug)]
+pub struct Look {
+    pub colors: DiffColors,
+    pub text: Color,
+    pub hunk_header: Color,
+    pub hunk_header_bg: Color,
+}
+
 /// A patch with line numbers, highlighted as `filetype`: a column of one [`Diff`] per hunk, with the `@@` line of
 /// each later hunk in a row of its own. The hunks share one gutter width, with `gutter_padding` extra cells before
 /// the line numbers (`PatchDiff`'s `gutterPadding`).
@@ -101,6 +110,27 @@ pub fn view(
     wrap: WrapMode,
     gutter_padding: u32,
 ) -> View {
+    let look = Look {
+        colors: colors(theme),
+        text: theme.text.base,
+        hunk_header: theme.diff.text.hunk_header,
+        hunk_header_bg: theme.diff.background.context,
+    };
+    view_with(app, &look, syntax, patch, view, filetype, wrap, gutter_padding)
+}
+
+/// [`view`] in the colors of `look`, for clients with their own theme roles (mini).
+#[allow(clippy::too_many_arguments)]
+pub fn view_with(
+    app: &App,
+    look: &Look,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> View {
     crate::grammars::register();
     let gutter =
         DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(last_line(patch).to_string().len() as u32) };
@@ -108,26 +138,20 @@ pub fn view(
     for (index, hunk) in split_hunks(patch).into_iter().enumerate() {
         if index > 0 {
             let header = format!(" {}", hunk.header.unwrap_or_default());
-            let header = Text::new(app, header).fg(theme.diff.text.hunk_header).bg(theme.diff.background.context);
-            column.add(
-                &View::new(app)
-                    .width(Length::Percent(100.0))
-                    .height(1)
-                    .bg(theme.diff.background.context)
-                    .child(&header),
-            );
+            let header = Text::new(app, header).fg(look.hunk_header).bg(look.hunk_header_bg);
+            column.add(&View::new(app).width(Length::Percent(100.0)).height(1).bg(look.hunk_header_bg).child(&header));
         }
         let diff = Diff::new(app)
             .view(view)
             .filetype(filetype)
             .syntax_theme(syntax.clone())
             .wrap(wrap)
-            .colors(colors(theme))
+            .colors(look.colors)
             .gutter(gutter)
             .set_diff(hunk.patch);
         let (left, right) = diff.code_views();
         for code in [left, right] {
-            code.fg(theme.text.base).focusable(false);
+            code.fg(look.text).focusable(false);
         }
         column.add(&diff);
     }
