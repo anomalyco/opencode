@@ -137,8 +137,9 @@ pub struct Inner {
     pub(crate) paste: super::paste::Queue,
     /// The image previews above the textarea (E.4).
     previews: super::attach::Previews,
-    /// `--prompt`, until it is submitted (`home.tsx:68-79`, `session/index.tsx:623-630`).
-    startup: RefCell<Option<String>>,
+    /// `--prompt`, or an Enter pressed before the catalogs loaded, until it is submitted (`home.tsx:68-79`,
+    /// `session/index.tsx:623-630`; deviation `P02-early-enter`).
+    pub(crate) startup: RefCell<Option<(String, SessionInboxDelivery)>>,
     /// The worktree staged from `/worktrees` and its progress row (E.11b).
     pub(crate) staging: super::r#move::Move,
     /// `props.disabled`: a home form holds the keys, so a click does not focus the prompt.
@@ -385,7 +386,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         prompt["text"] = Value::String(text.clone());
         inner.restore(prompt);
         inner.textarea.set_cursor_offset(inner.text_end());
-        *inner.startup.borrow_mut() = Some(text);
+        *inner.startup.borrow_mut() = Some((text, SessionInboxDelivery::Steer));
     }
     load_catalog(tui, &inner);
     // A model, agent, or variant choice (E.16) changes the metadata row.
@@ -590,7 +591,7 @@ impl Inner {
         if !ready {
             return;
         }
-        let Some(text) = self.startup.take() else {
+        let Some((text, delivery)) = self.startup.take() else {
             return;
         };
         if self.textarea.text() != text {
@@ -600,7 +601,7 @@ impl Inner {
         let weak = self.this.clone();
         tui.app.defer(move |_| {
             if let Some(prompt) = weak.upgrade() {
-                super::submit::submit(&prompt, SessionInboxDelivery::Steer);
+                super::submit::submit(&prompt, delivery);
             }
         });
     }

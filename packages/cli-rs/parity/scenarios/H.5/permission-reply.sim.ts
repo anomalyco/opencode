@@ -21,7 +21,8 @@ export default defineSim({
     { items: [{ type: "textDelta", text: "The command printed hello." }] },
   ],
   steps: [
-    // The model line shows once the catalogs have loaded; the Rust TUI ignores Enter before that.
+    // The model line shows once the catalogs have loaded. The TS TUI drops an Enter before that; Rust holds it
+    // (P02-early-enter), so the wait keeps both sides comparable.
     {
       checkpoint: "home",
       until: "Simulated Model",
