@@ -13,7 +13,9 @@ import {
 type Dict = { readonly hello: string }
 
 const en: Dict = { hello: "Hello" }
+
 const de: Dict = { hello: "Hallo" }
+
 const ar: Dict = { hello: "مرحبا" }
 
 const readyOn = (locale: "en" | "de", dictionary: Dict) =>

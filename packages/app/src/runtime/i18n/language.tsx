@@ -259,6 +259,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       fallbackLocale: "en",
       fallbackDictionary: base,
     })
+
     const [machine, setMachine] = createSignal(boot.state)
     let timer: ReturnType<typeof setTimeout> | undefined
 
