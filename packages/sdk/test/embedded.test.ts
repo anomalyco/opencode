@@ -9,6 +9,7 @@ import { makeMemoryDriver } from "@opencode/core/environment/index"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Plugin } from "@opencode/plugin/effect"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { OpenCodeWorkerd } from "../src/effect/workerd"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Stream } from "effect"
@@ -36,6 +37,102 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
+
+for (const recover of [true, false]) {
+  it.live(`session retry ${recover ? "recovers" : "declines"} a rejected OAuth refresh`, () =>
+    withEmbedded("opencode-refresh-retry-", (fixture) =>
+      Effect.gen(function* () {
+        const integrationID = fixture.sdk.Integration.ID.make("refresh-test")
+        const providerID = fixture.sdk.Provider.ID.make("refresh-test")
+        const methodID = fixture.sdk.Integration.MethodID.make("local-oauth")
+        const expiredID = fixture.sdk.Credential.ID.create()
+        const healthyID = fixture.sdk.Credential.ID.create()
+        const retries: SessionHooks["retry"][] = []
+        const llm = yield* TestLLM.Test.pipe(
+          Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("Recovered", "answer") })),
+        )
+        const opencode = yield* fixture.sdk.OpenCode.create(
+          {
+            config: {
+              directory: fixture.directory,
+              project: false,
+              content: JSON.stringify({
+                providers: {
+                  "refresh-test": {
+                    package: "@opencode/ai/providers/openai-compatible",
+                    settings: { baseURL: "https://unused.example/v1" },
+                    models: { primary: {}, replacement: {} },
+                  },
+                },
+              }),
+            },
+            models: { fetch: false },
+            fs: { filewatcher: false },
+            plugins: [
+              Plugin.define({
+                id: "refresh-retry",
+                effect: (ctx) =>
+                  Effect.gen(function* () {
+                    yield* ctx.integration.transform((editor) =>
+                      editor.method.update({
+                        integrationID,
+                        method: { id: methodID, type: "oauth", label: "Local OAuth" },
+                        authorize: () => Effect.die("Credentials are seeded directly"),
+                        refresh: () => Effect.fail(new Error("Refresh rejected")),
+                      }),
+                    )
+                    yield* ctx.session.hook("retry", (event) =>
+                      Effect.gen(function* () {
+                        retries.push({ ...event })
+                        if (!recover) return
+                        yield* ctx.credential.activate({ credentialID: healthyID }).pipe(Effect.orDie)
+                        yield* ctx.session
+                          .switchModel({
+                            sessionID: event.sessionID,
+                            model: fixture.sdk.Model.Ref.make({ providerID, id: fixture.sdk.Model.ID.make("replacement") }),
+                          })
+                          .pipe(Effect.orDie)
+                        event.decision = { retry: true, delay: 0 }
+                      }),
+                    )
+                  }),
+              }),
+            ],
+          },
+          { overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))] },
+        )
+        for (const [id, expires] of [
+          [healthyID, Number.MAX_SAFE_INTEGER],
+          [expiredID, 0],
+        ] as const)
+          yield* opencode.credential.create({
+            id,
+            integrationID,
+            value: { type: "oauth", methodID, access: "local-access", refresh: "local-refresh", expires },
+          })
+        const session = yield* opencode.sessions.create({
+          title: "Refresh regression",
+          location: location(fixture),
+          model: fixture.sdk.Model.Ref.make({ providerID, id: fixture.sdk.Model.ID.make("primary") }),
+          permissions: [{ action: "*", resource: "*", effect: "allow" }],
+        })
+        yield* opencode.sessions.prompt({ sessionID: session.id, text: "Recover this input" })
+        yield* opencode.experimental.session.wait({ sessionID: session.id })
+        const context = yield* opencode.sessions.context({ sessionID: session.id })
+
+        expect(retries).toMatchObject([
+          { model: { id: "primary" }, error: { type: "provider.auth" }, decision: { retry: false }, credentialID: expiredID },
+        ])
+        expect(context.filter((message) => message.type === "user").map((message) => message.text)).toEqual([
+          "Recover this input",
+        ])
+        const requests = yield* llm.requests()
+        expect(requests.map((request) => String(request.model.id))).toEqual(recover ? ["replacement"] : [])
+        expect(JSON.stringify(context).includes("Recovered")).toBe(recover)
+      }),
+    ),
+  )
+}
 
 for (const selection of ["explicit", "default"] as const) {
   it.live(`generate.text uses configured providers with ${selection} model selection`, () =>

@@ -1579,6 +1579,9 @@ Retry decisions follow these rules:
 - `attempt` is the physical attempt under consideration. The initial request is `1`, so the first retry is `2`.
 - Invalid delays such as `NaN`, infinity, or negative values fall back to the computed delay.
 - Context-overflow recovery is separate because it compacts the conversation instead of retrying the same request.
+- The hook also runs when the model's credential fails to resolve, for example a rejected OAuth refresh, before any
+  request is sent. These events set `credentialID` to the failed credential and start with `{ retry: false }`. Activate
+  another credential or switch the model before retrying, or the same failure repeats.
 
 #### Session reference
 

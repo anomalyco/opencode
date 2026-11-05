@@ -2,6 +2,7 @@ export * as SessionRunnerRetry from "./retry.js"
 
 import { AIError, isRetryable } from "@opencode/ai/effect"
 import { Agent } from "@opencode/schema/agent"
+import { Credential } from "@opencode/schema/credential"
 import { Model } from "@opencode/schema/model"
 import { SessionError } from "@opencode/schema/session-error"
 import { Clock, Duration, Effect } from "effect"
@@ -19,6 +20,7 @@ interface Input {
   readonly error: SessionError.Error
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly credentialID?: Credential.ID
   readonly hook: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
   readonly retry: boolean
 }
@@ -40,6 +42,7 @@ export const policy = (sessionID: SessionSchema.ID) =>
           sessionID,
           agent: input.agent,
           model: input.model,
+          ...(input.credentialID === undefined ? {} : { credentialID: input.credentialID }),
           error: input.error,
           attempt: next.attempt,
           decision: next.retry ? { retry: true, delay: next.delay } : { retry: false },

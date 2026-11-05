@@ -1,6 +1,7 @@
 import type { ExperimentalSessionApi, SessionApi } from "@opencode/client/promise/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
+import type { Credential } from "@opencode/schema/credential"
 import type { Model } from "@opencode/schema/model"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
@@ -131,10 +132,16 @@ export interface SessionWebSocketReceive {
 
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
+/**
+ * Runs before a failed step is retried. It also runs when resolving the model's credential fails, such as a
+ * rejected OAuth refresh, before any request is sent; those events carry `credentialID` and default to no retry.
+ */
 export interface SessionRetry {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  /** Set only when credential resolution failed before a request: the credential that failed. */
+  readonly credentialID?: Credential.ID
   readonly error: SessionError.Error
   readonly attempt: number
   decision: SessionRetryDecision

@@ -127,6 +127,7 @@ export class CodeRequiredError extends Schema.TaggedError<CodeRequiredError>()("
 
 export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()("Integration.Authorization", {
   cause: Schema.Defect(),
+  credentialID: Schema.optional(Credential.ID),
 }) {
   override get message() {
     const cause = this.cause
@@ -726,6 +727,8 @@ const layer = Layer.effect(
                 return value
               }),
             ),
+          ).pipe(
+            Effect.mapError((error) => new AuthorizationError({ cause: error.cause, credentialID: credential.id })),
           )
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
