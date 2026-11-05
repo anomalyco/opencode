@@ -37,6 +37,8 @@ type AcpProcess = {
   readonly pid: number
   readonly exited: Promise<number>
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
+  /** Every request and notification the agent sent, in order. */
+  readonly received: () => readonly JsonRpcMessage[]
   readonly close: () => Promise<number>
   readonly stderr: () => string
   readonly [Symbol.asyncDispose]: () => Promise<void>
@@ -197,6 +199,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
   const decoder = new TextDecoder()
   const errorDecoder = new TextDecoder()
   const messages: JsonRpcMessage[] = []
+  const received: JsonRpcMessage[] = []
   const waiters: Waiter[] = []
   let nextID = 1
   let failure: Error | undefined
@@ -214,6 +217,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
   }
 
   const dispatch = (message: JsonRpcMessage) => {
+    if ("method" in message) received.push(message)
     const index = waiters.findIndex((waiter) => waiter.predicate(message))
     if (index === -1) {
       messages.push(message)
@@ -294,6 +298,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     pid: child.pid,
     exited: child.exited,
     request,
+    received: () => received,
     async close() {
       if (!inputClosed) {
         inputClosed = true
