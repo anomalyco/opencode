@@ -115,9 +115,7 @@ export function transitionElicitationDock(
   if (event.type === "request.succeeded") {
     if (state.status !== "sending" || state.attempt !== event.attempt) return unchanged(state)
 
-    return changed({ status: "replied", attempt: state.attempt, draft: state.draft }, [
-      { type: "timeout.clear" },
-    ])
+    return changed({ status: "replied", attempt: state.attempt, draft: state.draft }, [{ type: "timeout.clear" }])
   }
 
   if (event.type === "request.failed" || event.type === "request.timed-out") {
