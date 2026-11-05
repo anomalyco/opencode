@@ -24,13 +24,15 @@ export function listen(
       const server = net.createServer((socket) => {
         sockets.add(socket)
         socket.once("close", () => sockets.delete(socket))
-        void readRequest(socket)
-          .then((envelope) => {
-            const response =
-              envelope.request.op === "own" ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
+        const serve = (): Promise<void> =>
+          readRequest(socket).then((envelope) => {
+            const owning = envelope.request.op === "own"
+            const response = owning ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
             if (response) socket.write(frame(response))
+            // The ownership connection stays open for later requests, such as handoff preparation.
+            if (owning) return serve()
           })
-          .catch(() => socket.destroy())
+        void serve().catch(() => socket.destroy())
       })
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject)
@@ -182,6 +184,7 @@ export const fakeDaemon = Effect.fn(function* () {
       return { type: "created", process: created }
     }
     if (request.op === "control") return { type: "ok" }
+    if (request.op === "prepare_handoff") return { type: "handoff", ticket: "next", expires_at: Date.now() + 60_000 }
     if (request.op === "rename") {
       const found = find(request.id)
       if (!found?.pty) return { type: "error", message: "terminal not found" }

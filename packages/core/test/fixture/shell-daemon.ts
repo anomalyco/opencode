@@ -8,6 +8,9 @@ import { Location } from "@opencode/core/location"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
+import { Bus } from "@opencode/core/bus"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Global } from "@opencode/util/global"
 import { hostEnvironmentLayer } from "./environment"
 import { location } from "./location"
@@ -37,7 +40,7 @@ export const daemonShells = Effect.fn(function* () {
     }),
   ).pipe(Layer.provide(hostEnvironmentLayer))
   const shellLayer = (directory: string) =>
-    AppNodeBuilder.build(Shell.node, [
+    AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node]), [
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -56,7 +59,10 @@ export const daemonShells = Effect.fn(function* () {
       const context = yield* Layer.build(shellLayer(directory))
       return Context.get(context, Shell.Service)
     })
-  const withShell = <A, E>(directory: string, body: (shell: Shell.Interface) => Effect.Effect<A, E>) =>
+  const withShell = <A, E>(
+    directory: string,
+    body: (shell: Shell.Interface) => Effect.Effect<A, E, LocationLifecycle.Service | Bus.Service>,
+  ) =>
     Effect.scoped(
       Effect.gen(function* () {
         const shell = yield* Shell.Service

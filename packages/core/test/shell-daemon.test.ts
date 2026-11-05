@@ -3,6 +3,7 @@ import { existsSync, readdirSync, realpathSync } from "node:fs"
 import { mkdir, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Layer } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Config } from "@opencode/core/config"
@@ -10,6 +11,8 @@ import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
+import { Bus } from "@opencode/core/bus"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -150,18 +153,31 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
-  test(
+  // On the test clock: the timeout and the grace period pass without waiting for them.
+  ;(unix ? it.effect : it.effect.skip)(
     "stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it",
     () =>
       Effect.gen(function* () {
         const env = yield* daemonShells()
         env.daemon.trap.add(1)
+        // Real time for the fake daemon's socket round trips.
+        const until = (done: () => boolean) =>
+          Effect.promise(async () => {
+            while (!done()) await Bun.sleep(5)
+          })
         yield* env.withShell(env.directory, (shell) =>
           Effect.gen(function* () {
             const info = yield* shell.create({ shell: "/bin/sh", command: "trap '' TERM; sleep 60", timeout: 10 })
-            const started = Date.now()
+            yield* TestClock.adjust("10 millis")
+            yield* until(() => env.signals(1).length > 0)
+            expect(env.signals(1)).toEqual(["SIGTERM"])
+            expect((yield* shell.get(info.id)).status).toBe("running")
+            // The grace period starts once the daemon acknowledged SIGTERM.
+            while (env.signals(1).length < 2) {
+              yield* TestClock.adjust("1 second")
+              yield* Effect.promise(() => Bun.sleep(5))
+            }
             expect((yield* shell.wait(info.id)).status).toBe("timeout")
-            expect(Date.now() - started).toBeGreaterThanOrEqual(2900)
             expect(env.signals(1)).toEqual(["SIGTERM", "SIGKILL"])
             expect(env.daemon.processes[0]?.pipe?.metadata).toMatchObject({ stopReason: "timeout" })
             expect(env.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
@@ -175,7 +191,6 @@ describe("Shell on the process daemon", () => {
           }),
         )
       }),
-    { timeout: 10_000 },
   )
 
   test("forgets a command in the daemon before deleting its file, on remove and on eviction", () =>
@@ -266,6 +281,33 @@ describe("Shell on the process daemon", () => {
       )
     }))
 
+  test("a closed Location leaves its daemon commands' timers and reporting to its replacement", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const lifecycle = yield* LocationLifecycle.Service
+          const bus = yield* Bus.Service
+          const exits: string[] = []
+          yield* bus.listen((event) =>
+            Effect.sync(() => {
+              if (event.type === "shell.exited") exits.push(event.type)
+            }),
+          )
+          const info = yield* shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 50 })
+          yield* lifecycle.shutdown
+          yield* Effect.sleep(100)
+          // The replacement owns the timeout now.
+          expect(env.signals(1)).toEqual([])
+          env.daemon.exit(1, 0)
+          // A call still holding this Location gets its result, but nothing is reported twice.
+          expect(yield* shell.wait(info.id)).toMatchObject({ status: "exited", exit: 0 })
+          yield* Effect.sleep(20)
+          expect(exits).toEqual([])
+        }),
+      )
+    }))
+
   test("records a command moved to the background at shutdown so the next server never times it out", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
@@ -323,7 +365,9 @@ describe("Shell on the process daemon", () => {
     }))
 })
 
-// Against the real opencode-pty, when OPENCODE_PTY_BIN names a v8 build.
+// Against the real opencode-pty. Opt-in through OPENCODE_PTY_BIN on purpose: the installed @opencode/pty is still
+// 0.4 (protocol v7) until the release bumps it, so its binaryPath would only exercise the spawner fallback. Once it
+// speaks v8, fall back to binaryPath here like server/test/persistent-pty.test.ts does.
 const real = unix && process.env.OPENCODE_PTY_BIN ? it.live : it.live.skip
 
 describe("Shell on a real process daemon", () => {

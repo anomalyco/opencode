@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Scope } from "effect"
+import { Effect, Exit, Fiber, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { Detaching } from "@opencode/core/detaching"
 import { it } from "./lib/effect"
 
@@ -23,7 +24,7 @@ describe("Detaching", () => {
     }),
   )
 
-  it.live("bounds slow hooks and forgets hooks whose scope closed", () =>
+  it.effect("bounds slow hooks and forgets hooks whose scope closed", () =>
     Effect.gen(function* () {
       const detaching = yield* Detaching.make
       let ran = 0
@@ -32,10 +33,22 @@ describe("Detaching", () => {
       yield* Scope.close(scope, Exit.void)
       yield* detaching.onDetach(Effect.never)
       yield* detaching.handoffPrepared
-      const started = Date.now()
-      expect(yield* detaching.begin).toBe(true)
-      expect(Date.now() - started).toBeLessThan(2_000)
+      const begin = yield* detaching.begin.pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("499 millis")
+      expect(begin.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("1 millis")
+      expect(yield* Fiber.join(begin)).toBe(true)
       expect(ran).toBe(0)
+    }),
+  )
+
+  it.effect("starts stopping on any shutdown, detaching or not", () =>
+    Effect.gen(function* () {
+      const detaching = yield* Detaching.make
+      expect(detaching.isStopping()).toBe(false)
+      expect(yield* detaching.begin).toBe(false)
+      expect(detaching.isStopping()).toBe(true)
+      expect(detaching.isDetaching()).toBe(false)
     }),
   )
 })

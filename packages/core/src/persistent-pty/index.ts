@@ -172,10 +172,7 @@ export interface Interface {
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly shutdown: () => Effect.Effect<void, UnavailableError>
   readonly handoff: () => Effect.Effect<Handoff | null, UnavailableError>
-  readonly attach: (
-    id: Pty.ID,
-    input: SubscribeInput,
-  ) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
+  readonly attach: (id: Pty.ID, input: SubscribeInput) => Effect.Effect<Attachment, NotFoundError | UnavailableError>
   /** Starts the daemon if needed. Fall back to another spawner only on `UnavailableError`. */
   readonly createPipe: (input: CreatePipeInput) => Effect.Effect<PipeInfo, UnavailableError | RequestError>
   /** Resolves when the process exits, on its own connection with no timeout; interrupting closes it. */
@@ -285,8 +282,9 @@ const makeLayer = (options: Options = {}) =>
         ),
       )
 
-      const resize = Effect.fn("PersistentPty.resize")((id: Pty.ID, cols: number, rows: number, attachmentID?: string) =>
-        command(id, "resize", { attachment_id: attachmentID ?? null, cols, rows }, true),
+      const resize = Effect.fn("PersistentPty.resize")(
+        (id: Pty.ID, cols: number, rows: number, attachmentID?: string) =>
+          command(id, "resize", { attachment_id: attachmentID ?? null, cols, rows }, true),
       )
 
       const control = Effect.fn("PersistentPty.control")(
@@ -531,6 +529,7 @@ const makeLayer = (options: Options = {}) =>
   )
 
 export const layer = makeLayer()
+export const layerWith = (options: Options) => makeLayer(options)
 export const configured = (options?: Options) =>
   makeGlobalNode({
     service: Service,
@@ -554,7 +553,8 @@ const lookup = (daemon: DaemonTransport, id: number) =>
     ),
     Effect.flatMap((response) => {
       if (!response) return Effect.succeed(undefined)
-      if (response.type !== "process") return Effect.fail(new Error(`unexpected opencode-pty response: ${response.type}`))
+      if (response.type !== "process")
+        return Effect.fail(new Error(`unexpected opencode-pty response: ${response.type}`))
       return Effect.succeed(response.process)
     }),
   )
