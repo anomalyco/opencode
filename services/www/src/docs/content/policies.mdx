@@ -40,11 +40,11 @@ merges into `policies`:
 
 Each statement has three fields:
 
-| Field      | Values                                                                                                     | Meaning                                              |
-| ---------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | The operation being controlled                       |
-| `resource` | string or wildcard pattern                                                                                 | What the statement applies to; depends on the action |
-| `effect`   | `allow`, `deny`                                                                                            | The decision when this statement matches             |
+| Field      | Values                                                                                                                      | Meaning                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use` | The operation being controlled                       |
+| `resource` | string or wildcard pattern                                                                                                  | What the statement applies to; depends on the action |
+| `effect`   | `allow`, `deny`                                                                                                             | The decision when this statement matches             |
 
 Statements that fail validation are dropped with a warning in the server log and
 the rest of the list still applies. Check the log after editing a `deny`.
@@ -192,11 +192,6 @@ web search work, and changing them in the Console needs no new MDM profile.
 Only managed policies can withhold the MCP servers and config an integration
 delivers; its own policies keep applying either way.
 
-A provider the connected Console workspace supplies can't be changed by user,
-project, or remote configuration: its settings, headers, models, and package come
-only from the Console and managed configuration. Other providers stay configurable
-as usual.
-
 ## MCP servers, skills, and plugins
 
 | Action       | Resource                                                          |
@@ -220,7 +215,7 @@ it was configured.
 
 ### Upgrading from `integration.use`
 
-Before OpenCode 2.3.0, `integration.use` covered MCP servers, skills, and plugins
+Before OpenCode 2.2.3, `integration.use` covered MCP servers, skills, and plugins
 through an `mcp:`, `skill:`, or `plugin:` prefix. Prefixed statements still load and
 are converted to `mcp.use`, `skill.use`, or `plugin.use`.
 
@@ -248,9 +243,29 @@ the old meaning, replace it with:
 Exceptions move the same way: `integration.use` `mcp:github` becomes `mcp.use`
 `github`, and `skill:team:review` becomes `skill.use` `team:review`.
 
-Clients older than 2.3.0 ignore `integration.connect`, `integration.use` (in its new
-meaning), `mcp.use`, `skill.use`, and `plugin.use`, so require 2.3.0 or newer
+Clients older than 2.2.3 ignore `integration.connect`, `integration.use` (in its new
+meaning), `mcp.use`, `skill.use`, and `plugin.use`, so require 2.2.3 or newer
 wherever you rely on them.
+
+## Web search
+
+`websearch.use` controls the web search providers the `websearch` tool can use. The
+resource is the provider ID: `opencode` for OpenCode Web Search from the Console, a
+built-in provider such as `exa`, `firecrawl`, `parallel`, `tavily`, or `tinyfish`, or
+the ID of a provider a plugin adds.
+
+```jsonc
+{
+  "policies": [
+    { "action": "websearch.use", "resource": "*", "effect": "deny" },
+    { "action": "websearch.use", "resource": "opencode", "effect": "allow" },
+  ],
+}
+```
+
+Denied providers are removed even when they work without an API key, such as Exa and
+TinyFish. When every provider is denied, the `websearch` tool is no longer offered.
+Clients older than 2.2.6 ignore `websearch.use`.
 
 ## Precedence
 
@@ -300,12 +315,12 @@ Blocked by Acme's policy
 
 Statements follow the connected account.
 
-| Event                       | Result                                             |
-| --------------------------- | -------------------------------------------------- |
-| Console policy changes      | Applied on the next fetch, about once a minute     |
-| Switch to another workspace | Statements replaced with that workspace's          |
-| Disconnect                  | Statements cleared                                 |
-| Console unreachable         | Last statements for that connection stay in effect |
+| Event                       | Result                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Console policy changes      | Applied on the next fetch: about once a minute, or when a prompt starts over a minute after the last fetch |
+| Switch to another workspace | Statements replaced with that workspace's                                                                  |
+| Disconnect                  | Statements cleared                                                                                         |
+| Console unreachable         | Last statements for that connection stay in effect                                                         |
 
 The Console plugin and the policy plugin cannot be disabled from `plugins`; see
 [plugin control](/plugins#control).

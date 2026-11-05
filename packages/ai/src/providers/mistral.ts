@@ -1,8 +1,9 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { MistralChat } from "../protocols/mistral-chat.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("mistral")
 
@@ -16,7 +17,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings = ProviderPackage.Settings &
   ProviderOptions & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -24,12 +25,7 @@ export const route = MistralChat.route
 export const routes = [route]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL, ...defaults } = input
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: baseURL ?? MistralChat.DEFAULT_BASE_URL },
-    auth: AuthOptions.bearer(input, "MISTRAL_API_KEY"),
-  })
+  const configured = route.with(bearerRouteDefaults(input, "MISTRAL_API_KEY", MistralChat.DEFAULT_BASE_URL))
   return {
     id,
     model: (modelID: string | ModelID) => configured.model<ProviderOptions>({ id: modelID }),
@@ -39,16 +35,7 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Model<Settings, ProviderOptions> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, ProviderOptions> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Mistral from "./mistral.js"

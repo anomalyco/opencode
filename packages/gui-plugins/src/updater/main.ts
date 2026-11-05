@@ -100,7 +100,11 @@ const setup: Plugin.MainSetup = async (ctx) => {
       }),
     )
 
-    if (response.response === 0) yield* updater.install
+    // A failed install returns the updater to ready, so the user can retry from the menu.
+    if (response.response === 0)
+      yield* updater.install.pipe(
+        Effect.catch((error) => Effect.logWarning("update install failed", { message: error.message })),
+      )
   })
 
   ctx.add(

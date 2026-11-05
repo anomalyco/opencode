@@ -41,12 +41,12 @@ function isHiddenDistro(name: string) {
   return /^docker-desktop(?:-data)?$/i.test(name)
 }
 
-export function wslOpencodeAction(check?: WslOpencodeCheck) {
-  if (!check) return
+// Jobs the add dialog waits for: WSL itself, and distros it lists, which have no server yet. Jobs on added servers
+// belong to their rows.
+function dialogJobRunning(state: WslServersState) {
+  if (state.hostJob === "busy") return true
 
-  if (!check.resolvedPath) return "onboarding.installOpencode"
-
-  if (check.matchesDesktop === false) return "onboarding.updateOpencode"
+  return Object.keys(state.distroJobs).some((distro) => !state.servers.some((item) => item.config.distro === distro))
 }
 
 function wslDistroReady(state: WslServersState | undefined, name: string) {
@@ -79,7 +79,7 @@ export function addServerViewModel(input: {
   const installableDistros = addServerInstallableDistros(visibleInstalledDistros, visibleOnlineDistros)
   const filteredInstallableDistros = addServerFilteredInstallableDistros(installableDistros, input.catalogSearch)
   const catalogTarget = addServerCatalogTarget(input.catalogTarget, filteredInstallableDistros)
-  const busy = !!state?.job || input.adding || input.probingAddable
+  const busy = (!!state && dialogJobRunning(state)) || input.adding || input.probingAddable
 
   return {
     busy,
@@ -109,7 +109,7 @@ export function addServerViewModel(input: {
     installableDistros,
     filteredInstallableDistros,
     catalogTarget,
-    installingCatalogDistro: state?.job?.kind === "install-distro",
+    installingCatalogDistro: Object.values(state?.distroJobs ?? {}).includes("installing"),
   }
 }
 
@@ -152,16 +152,10 @@ function addServerDistroStatus(input: {
   const installed = input.state?.installed.find((item) => item.name === input.name)
 
   if (installed?.version === 1) return { label: { key: "onboarding.distroStatus.unsupported" }, tone: "muted" }
-  const job = input.state?.job
+  const probing = input.probingAddable || input.state?.distroJobs[input.name] === "probing"
   const probe = input.state?.distroProbes[input.name]
 
-  if (!probe) {
-    if (input.probingAddable || (job?.kind === "probe-addable" && job.distros.includes(input.name))) {
-      return checkingStatus()
-    }
-
-    return
-  }
+  if (!probe) return probing ? checkingStatus() : undefined
 
   if (!probe.canExecute) {
     if (!installed) {
@@ -177,13 +171,7 @@ function addServerDistroStatus(input: {
 
   const check = input.state?.opencodeChecks[input.name]
 
-  if (!check) {
-    if (input.probingAddable || (job?.kind === "probe-addable" && job.distros.includes(input.name))) {
-      return checkingStatus()
-    }
-
-    return
-  }
+  if (!check) return probing ? checkingStatus() : undefined
 
   if (check.matchesDesktop === false) return { label: { key: "onboarding.updateOpencode" }, tone: "warning" }
 
@@ -207,17 +195,10 @@ function addServerPrimaryButton(input: {
 }): AddServerPrimaryButton {
   const ready = !!input.selectedDistro && wslDistroReady(input.state, input.selectedDistro)
   const probingSelected = input.probingAddable && !addServerSelectedDistroSettled(input.state, input.selectedDistro)
-
-  const probingOpencode =
-    probingSelected ||
-    (ready &&
-      (!input.opencodeCheck ||
-        (!!input.selectedDistro &&
-          input.state?.job?.kind === "probe-addable" &&
-          input.state.job.distros.includes(input.selectedDistro))))
-
-  const installingOpencode =
-    input.state?.job?.kind === "install-opencode" && input.state.job.distro === input.selectedDistro
+  const job = input.selectedDistro ? input.state?.distroJobs[input.selectedDistro] : undefined
+  const busy = (!!input.state && dialogJobRunning(input.state)) || input.adding
+  const probingOpencode = probingSelected || (ready && (!input.opencodeCheck || job === "probing"))
+  const installingOpencode = job === "updating"
 
   if (!ready || probingOpencode) {
     return {
@@ -240,7 +221,7 @@ function addServerPrimaryButton(input: {
         : update
           ? { key: "onboarding.updateOpencode" }
           : { key: "onboarding.installOpencode" },
-      disabled: !!input.state?.job || input.adding,
+      disabled: busy,
       action: "install-opencode",
       loading: installingOpencode,
       width: update ? "138px" : "129px",
@@ -250,7 +231,7 @@ function addServerPrimaryButton(input: {
   return {
     variant: "contrast",
     label: input.adding ? { key: "onboarding.adding" } : { key: "server.add" },
-    disabled: input.adding || !!input.state?.job,
+    disabled: busy,
     action: "add",
     loading: input.adding,
     width: null,
@@ -308,7 +289,7 @@ function addableProbePlan(input: {
 
   if (!state?.runtime?.available || state.pendingRestart || input.view !== "main" || input.adding) return
 
-  if (state.job) return
+  if (dialogJobRunning(state)) return
 
   const ordered = input.selectedDistro
     ? [
@@ -361,27 +342,4 @@ export function addServerProbePlan(input: {
   const addable = addableProbePlan(input)
 
   if (addable) return { kind: "addable", key: `addable:${addable.key}`, plan: addable } satisfies AddServerProbePlan
-}
-
-export function createProbeFailureGate() {
-  let failed: string | undefined
-
-  return {
-    accepts(key: string) {
-      return key !== failed
-    },
-    settle(key: string, succeeded: boolean) {
-      if (!succeeded) failed = key
-    },
-    reset() {
-      failed = undefined
-    },
-  }
-}
-
-export async function runAddableProbePlan(input: {
-  plan: AddableProbePlan
-  probeAddable: (distros: string[]) => Promise<void>
-}) {
-  await input.probeAddable(input.plan.distros)
 }

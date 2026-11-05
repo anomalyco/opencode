@@ -2,6 +2,110 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.2.5 — 2026-10-30
+
+### Highlights
+
+- **Worktree and Shell Mode Shortcuts**: Press `⌘⌥O` on macOS or `Ctrl+Alt+O` on Windows and Linux to choose a worktree, and `⌘⌥B` or `Ctrl+Alt+B` to choose its base branch. `⌘⇧X` or `Ctrl+Shift+X` now toggles shell mode in the composer. ([#60713](https://github.com/anomalyco/opencode/pull/60713))
+- **Send Quotes From the Comment Popup**: Hold `⌘` or `Ctrl` in the quote popup to turn its checkmark into send, or press `⌘Enter` or `Ctrl+Enter`, to send just that quote and comment while leaving the rest of the composer untouched. ([#60640](https://github.com/anomalyco/opencode/pull/60640))
+- **Percentage Compaction Buffer**: Set `"compaction": { "buffer": "20%" }` in `opencode.json` to keep a share of each model's context window free, so one setting fits models with small and large windows. Token counts still work. ([#60647](https://github.com/anomalyco/opencode/pull/60647))
+
+### Core
+
+#### Improvements
+
+- `compaction.buffer` accepts a percentage of the model's context window, such as `"20%"`, in addition to a token count. ([#60647](https://github.com/anomalyco/opencode/pull/60647))
+- When `read` misses because a folder is missing, the error names that folder and the nearest one that exists. ([#60688](https://github.com/anomalyco/opencode/pull/60688))
+- When `edit` can't find `oldString`, the error shows the file's closest lines, or says the change is already there. ([#60689](https://github.com/anomalyco/opencode/pull/60689))
+- Calls to a tool named `bash` now run as `shell` instead of failing, with the same permissions. A plugin tool actually named `bash` still takes precedence. ([#60687](https://github.com/anomalyco/opencode/pull/60687))
+
+#### Bug fixes
+
+- MCP servers that send stdio messages larger than 10 MiB no longer get disconnected, and large messages are read much faster. ([#60694](https://github.com/anomalyco/opencode/pull/60694))
+- Idle locations no longer restart their MCP servers right after shutting down. ([#60668](https://github.com/anomalyco/opencode/pull/60668))
+- Compaction now caps its prompt at the model's context window when the input limit is larger. ([#60660](https://github.com/anomalyco/opencode/pull/60660))
+- LiteLLM context window errors now trigger compaction instead of stopping the session. ([#60692](https://github.com/anomalyco/opencode/pull/60692))
+- Reasoning is no longer turned into plain text when you switch models or resume an interrupted response, which caused request errors on some providers. ([#60498](https://github.com/anomalyco/opencode/pull/60498))
+
+### TUI
+
+#### Bug fixes
+
+- The connect menu no longer lists MCP servers, which are managed in their own place. ([#60675](https://github.com/anomalyco/opencode/pull/60675))
+
+### Desktop
+
+#### Improvements
+
+- Added keyboard shortcuts to choose a worktree and its base branch, shown in tooltips, and a shortcut to toggle shell mode. The worktree path can be selected to copy the full directory. ([#60713](https://github.com/anomalyco/opencode/pull/60713))
+- Hold `⌘` or `Ctrl` in the quote popup to send a quote and its comment directly. ([#60640](https://github.com/anomalyco/opencode/pull/60640))
+- Added flat input surfaces and a compact input size. ([#60598](https://github.com/anomalyco/opencode/pull/60598))
+
+#### Bug fixes
+
+- The connect menu no longer lists MCP servers. ([#60675](https://github.com/anomalyco/opencode/pull/60675))
+- Added the missing top inset to the search field in the recently closed menu. ([#60652](https://github.com/anomalyco/opencode/pull/60652))
+
+## v2.2.4 — 2026-10-30
+
+### Highlights
+
+- **Persistent Desktop Terminals**: Desktop terminals now belong to the session, survive server restarts with their scrollback, and stay synchronized with the TUI and other windows. Renamed terminals also keep their names across restarts. ([#60346](https://github.com/anomalyco/opencode/pull/60346))
+- **Publish Interactive Artifacts**: Enable `"experimental": { "artifacts": true }` in `opencode.json` to let agents publish, update, and serve HTML or static artifacts through the built-in local provider or plugin-provided storage. ([#60351](https://github.com/anomalyco/opencode/pull/60351))
+- **Guided Claude Agent Setup**: Select **Claude Agent** from the provider picker to copy `claude auth login`, install Claude Code, and verify the connection before continuing to model selection. ([#60603](https://github.com/anomalyco/opencode/pull/60603))
+- **Choose a Base Branch Quickly**: While creating a worktree, open **Choose base branch** with `⌘⌥.` on macOS or `Ctrl+Alt+.` on Windows and Linux. The command is also available in the command palette and Settings › Shortcuts. ([#60579](https://github.com/anomalyco/opencode/pull/60579))
+
+### Core
+
+#### Improvements
+
+- Added opt-in artifacts with `artifact_create`, `artifact_read`, `artifact_update`, and `artifact_delete`, including a built-in local static-file provider. ([#60351](https://github.com/anomalyco/opencode/pull/60351))
+- Made enabled schedules run under `opencode serve` and coordinated multiple server processes so a schedule fires only once. Schedules remain opt-in through `experimental.schedules`. ([#60478](https://github.com/anomalyco/opencode/pull/60478))
+- Raised OpenCode Go limits for DeepSeek V4.1 Flash. ([#60625](https://github.com/anomalyco/opencode/pull/60625))
+
+#### Bug fixes
+
+- Allowed user, project, and remote configuration to override Console-supplied provider names, limits, variants, settings, and headers. ([#60597](https://github.com/anomalyco/opencode/issues/60597))
+- Kept local OpenCode service requests out of environment-configured proxies. ([#60441](https://github.com/anomalyco/opencode/pull/60441))
+- Replaced Claude Code’s misleading `/login` instruction with `claude auth login`. Thanks [@Tarquinen](https://github.com/Tarquinen). ([#60592](https://github.com/anomalyco/opencode/pull/60592))
+
+### TUI
+
+#### Bug fixes
+
+- Preserved prompt cursor styles applied by plugins when themes or unrelated prompt state change. ([#60599](https://github.com/anomalyco/opencode/pull/60599))
+- Added missing right padding to edit and patch diffs. ([#60614](https://github.com/anomalyco/opencode/pull/60614))
+- Extended the vertical session-tab activity pulse across the full tab width. ([#60338](https://github.com/anomalyco/opencode/pull/60338))
+
+### Desktop
+
+#### Improvements
+
+- Moved terminals to persistent session PTYs shared with the TUI and other windows, with restored scrollback, server-side renaming, and restart persistence. ([#60346](https://github.com/anomalyco/opencode/pull/60346))
+- Added guided Claude Agent installation, sign-in, connection checking, and recovery from **Needs sign-in**. ([#60603](https://github.com/anomalyco/opencode/pull/60603))
+- Added **Choose base branch** to the command palette and shortcuts, bound to `⌘⌥.` or `Ctrl+Alt+.`. ([#60579](https://github.com/anomalyco/opencode/pull/60579))
+- Simplified the session location popover and made long paths easier to read. ([#60492](https://github.com/anomalyco/opencode/pull/60492))
+
+#### Bug fixes
+
+- Kept terminal tab clicks and rename fields attached to the intended tab. ([#60645](https://github.com/anomalyco/opencode/pull/60645))
+- Listed matching commands before sessions in command-palette search. ([#60616](https://github.com/anomalyco/opencode/pull/60616))
+- Restored copying user messages from an open actions menu. ([#60576](https://github.com/anomalyco/opencode/pull/60576))
+- Reduced repeated work and allocations while streaming Markdown, especially in long sessions. ([#60549](https://github.com/anomalyco/opencode/pull/60549), [#60562](https://github.com/anomalyco/opencode/pull/60562), [#60577](https://github.com/anomalyco/opencode/pull/60577))
+
+### SDK
+
+#### Improvements
+
+- Added `client.experimental.artifacts.providers`, `list`, `create`, `get`, `update`, `delete`, and `view`. ([#60351](https://github.com/anomalyco/opencode/pull/60351))
+- Extended `client.experimental.persistentPty.update` to rename terminals or clear a user title, and exposed `userTitle` plus `persistent-pty.updated` events. ([#60329](https://github.com/anomalyco/opencode/pull/60329))
+
+### Extensions
+
+#### Improvements
+
+- Added `ctx.experimental.artifact.transform(...)` to Effect and Promise plugins for registering artifact providers, capabilities, prompts, and the default provider. ([#60351](https://github.com/anomalyco/opencode/pull/60351))
+
 ## v2.2.3 — 2026-10-30
 
 ### Highlights
@@ -10,14 +114,8 @@ Release notes for OpenCode V2, newest first.
 - **Faster Long Sessions in Desktop**: Streaming replies and long conversations now do much less rendering work. ([#60489](https://github.com/anomalyco/opencode/pull/60489), [#60521](https://github.com/anomalyco/opencode/pull/60521), [#60513](https://github.com/anomalyco/opencode/pull/60513), [#60481](https://github.com/anomalyco/opencode/pull/60481))
 - **Desktop Stability Fixes**: Fixes side-panel tabs, repeated "Session not found" toasts, and **Open file** over HTTP. ([#60430](https://github.com/anomalyco/opencode/pull/60430), [#60436](https://github.com/anomalyco/opencode/pull/60436), [#60459](https://github.com/anomalyco/opencode/pull/60459), [#60462](https://github.com/anomalyco/opencode/pull/60462))
 
+
 ### Breaking changes
-
-#### `@opencode/ai` experimental media and one `tool()`
-
-These changes affect code that imports `@opencode/ai` directly. They don't change the CLI, Desktop, or the HTTP API.
-
-- Speech, transcription, video, and their clients and types moved from `@opencode/ai/effect` to `@opencode/ai/experimental`. On the Promise client, use `ai.experimental.speech`, `ai.experimental.transcription`, and `ai.experimental.video`. `TestSpeech`, `TestTranscription`, and `TestVideo` moved to `@opencode/ai/experimental/testing`. ([#60484](https://github.com/anomalyco/opencode/pull/60484))
-- Both clients build tools with `tool(...)`, which replaces `AI.tool` and `Tool.make`, and `testing.tool` is now `testing.toolCall`. ([#60407](https://github.com/anomalyco/opencode/pull/60407))
 
 #### TUI plugins require OpenTUI 0.8
 

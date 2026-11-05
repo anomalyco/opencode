@@ -1,11 +1,5 @@
-import { For, Show, createMemo, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
-import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
-import { isSortable } from "@dnd-kit/solid/sortable"
-import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
-import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
-import { RestrictToElement } from "@dnd-kit/dom/modifiers"
+import { For, Match, Show, Switch, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { Button } from "@opencode/ui/button"
 import { Tabs } from "@opencode/ui/tabs"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -13,33 +7,23 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { Keybind } from "@opencode/ui/keybind"
 import { uuid } from "@opencode/util/uuid"
 import { createKeyed, usePlugin, usePanel, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
-import type { TerminalModel, TerminalWorkspace } from "./model"
-import { terminalTab, type LocalPTY } from "./state"
-import { SortableTerminalTab } from "./tab"
+import type { TerminalModel } from "./model"
+import { TerminalTab } from "./tab"
 import { Terminal } from "./terminal"
-import { terminalTabLabel } from "./title"
 import { focusTerminalById } from "./focus"
 import type { TerminalQuoteTarget } from "./quote"
-
-const MAX_CACHED_TERMINAL_WORKSPACES = 20
-
-type CachedTerminalSurface = {
-  key: string
-  workspace: string
-  pty: LocalPTY
-  ops: TerminalWorkspace
-  focus: boolean
-}
-
-type TerminalPanelState = {
-  recovered: Record<string, boolean>
-  surfaces: CachedTerminalSurface[]
-  workspaces: string[]
-}
+import {
+  initialSurfaceState,
+  surfaceAt,
+  surfaceMounts,
+  surfaceShown,
+  transitionSurface,
+  type SurfaceEvent,
+} from "./surface-machine"
 
 /**
- * The terminals of the routed session's workspace. In the side region each terminal is its own strip tab and `tab`
- * names the one to show; the narrow-screen view has no strip, so it lists the terminals in its own tabs.
+ * The routed session's terminals. In the side region each terminal is its own strip tab and `tab` names the one to
+ * show; the narrow-screen view has no strip, so it lists the terminals in its own tabs.
  */
 export default function TerminalPanel(props: {
   model: TerminalModel
@@ -51,12 +35,16 @@ export default function TerminalPanel(props: {
   const keybinds = plugin.keybinds
   const frame = usePanel()
   const terminal = createMemo(() => props.model.load(props.session))
-  const workspaceKey = () => terminal().key
   const opened = frame.visible
   const present = frame.present
   const mobile = () => frame.placement() === "mobile"
-  const active = () => (mobile() ? terminal().active() : terminal().byTab(props.tab())?.id)
-  let tabList: HTMLDivElement | undefined
+  const active = () => (mobile() ? terminal().active() : terminal().get(props.tab())?.id)
+
+  const failed = () => {
+    const view = terminal().view()
+
+    return view.type === "failed" ? view : undefined
+  }
 
   // Selected output quotes into the composer of the screen showing this panel.
   const quote: TerminalQuoteTarget = {
@@ -77,86 +65,40 @@ export default function TerminalPanel(props: {
 
   onCleanup(() => terminal().cancelFocus())
 
-  const [store, setStore] = createStore<TerminalPanelState>({ recovered: {}, surfaces: [], workspaces: [] })
+  const [surfaceState, setSurfaceState] = createSignal(initialSurfaceState)
+
+  const dispatch = (event: SurfaceEvent) => {
+    const previous = untrack(surfaceState)
+    const next = transitionSurface(previous, event)
+
+    if (next.state !== previous) setSurfaceState(next.state)
+    next.effects.forEach(() => void untrack(terminal).new())
+  }
 
   const newTerminalKeybind = createMemo(() => [...keybinds.keybind("terminal.new")])
-
-  onMount(() => {
-    makeEventListener(document, "focusin", (event) => {
-      if (event.target instanceof Element && event.target.closest("#terminal-panel")) return
-
-      setStore("surfaces", (surface) => surface.focus, "focus", false)
-    })
-  })
-
-  // While the narrow-screen view shows, a workspace first observed empty gets its first terminal, once per workspace in
-  // a row. In the side region the user opens each terminal from the strip.
-  createKeyed(
-    () => opened() && mobile(),
-    () => {
-      const seen = { workspace: "" }
-
-      createKeyed(
-        () => {
-          const workspace = terminal()
-
-          return workspace.ready() ? workspace : undefined
-        },
-        (workspace) => {
-          if (seen.workspace === workspace.key) return
-
-          seen.workspace = workspace.key
-
-          if (workspace.all().length === 0) void workspace.new()
-        },
-      )
-    },
-  )
 
   // Focuses the shown terminal once the panel is visible and a focus request names it.
   createKeyed(
     () => {
       const id = active()
 
-      return opened() && id && terminal().focusRequested(id) ? { id } : undefined
+      return opened() && id ? terminal().focusRequest(id) : undefined
     },
-    (request) =>
-      requestAnimationFrame(() => {
-        if (!opened() || active() !== request.id || !terminal().focusRequested(request.id)) return
+    (request) => {
+      const id = untrack(active)
 
-        focusTerminalById(request.id)
-      }),
-  )
+      const focusFrame = requestAnimationFrame(() => {
+        if (!id || !opened() || active() !== id || terminal().focusRequest(id) !== request) return
 
-  // The titles outlive this instance: after a reload they show until the stored terminals load.
-  createKeyed(
-    () => {
-      if (!props.session.directory || !terminal().ready()) return
+        focusTerminalById(id)
+        const input = document.getElementById(`terminal-wrapper-${id}`)?.querySelector("textarea")
 
-      return {
-        workspace: workspaceKey(),
-        titles: terminal()
-          .all()
-          .map((pty) => terminalTabLabel({ title: pty.title, titleNumber: pty.titleNumber, t: plugin.t })),
-      }
-    },
-    (handoff) => props.model.handoff.set(handoff.workspace, handoff.titles),
-    {
-      // A terminal changing anything but its title keeps the titles.
-      equals: (previous, next) =>
-        previous.workspace === next.workspace &&
-        previous.titles.length === next.titles.length &&
-        previous.titles.every((title, index) => title === next.titles[index]),
+        if (input === document.activeElement) terminal().consumeFocus(id)
+      })
+
+      onCleanup(() => cancelAnimationFrame(focusFrame))
     },
   )
-
-  const handoff = createMemo(() => {
-    const dir = props.session.directory
-
-    if (!dir) return []
-
-    return props.model.handoff.get(workspaceKey()) ?? []
-  })
 
   // Terminals whose tabs the user moved to another pane render there, so this pane lets their screens go.
   const elsewhere = createMemo(
@@ -170,180 +112,122 @@ export default function TerminalPanel(props: {
     { equals: (previous, next) => previous.size === next.size && [...next].every((id) => previous.has(id)) },
   )
 
-  // Keeps each shown terminal mounted for the workspaces shown last, so switching back keeps its screen and session. A
-  // terminal mounts, and connects, once it is shown, not while the panel only holds its tab hidden.
+  // Mounts the terminals the session shows, and their sockets, through the surface machine. The narrow-screen view also
+  // creates the first terminal of a session it finds empty.
   createKeyed(
-    () => ({
-      workspace: workspaceKey(),
-      ready: terminal().ready(),
-      active: opened() ? active() : undefined,
-      ptys: terminal().all(),
-      elsewhere: elsewhere(),
-    }),
-    (current) => {
-      if (!current.ready) return
+    () => {
+      const current = terminal()
 
-      const ids = new Set(current.ptys.map((pty) => pty.id))
-
-      const surfaces = store.surfaces.filter(
-        (surface) =>
-          surface.workspace !== current.workspace ||
-          (ids.has(surface.pty.id) && !current.elsewhere.has(terminalTab(surface.pty))),
-      )
-
-      const pty = current.ptys.find((item) => item.id === current.active)
-      const key = pty ? `${current.workspace}\0${pty.id}` : undefined
-
-      if (pty && key && !surfaces.some((surface) => surface.key === key)) {
-        surfaces.push({
-          key,
-          workspace: current.workspace,
-          pty,
-          ops: terminal(),
-          focus: terminal().focusRequested(pty.id),
-        })
+      return {
+        session: current.key,
+        ready: current.view().type === "ready",
+        connection: current.connection(),
+        opened: opened(),
+        mobile: mobile(),
+        active: active() ?? null,
+        terminals: current.all(),
+        elsewhere: elsewhere(),
       }
-
-      const workspaces = [...store.workspaces.filter((item) => item !== current.workspace), current.workspace].slice(
-        -MAX_CACHED_TERMINAL_WORKSPACES,
-      )
-
-      const keep = new Set(workspaces)
-
-      setStore({ surfaces: surfaces.filter((surface) => keep.has(surface.workspace)), workspaces })
     },
+    (current) =>
+      dispatch({
+        type: "sync",
+        session: current.session,
+        ready: current.ready,
+        connection: current.connection,
+        opened: current.opened,
+        mobile: current.mobile,
+        active: current.active,
+        terminalIDs: current.terminals.map((info) => info.id),
+        elsewhere: current.elsewhere,
+      }),
     {
       equals: (previous, next) =>
-        previous.workspace === next.workspace &&
+        previous.session === next.session &&
         previous.ready === next.ready &&
+        previous.connection === next.connection &&
+        previous.opened === next.opened &&
+        previous.mobile === next.mobile &&
         previous.active === next.active &&
-        previous.ptys === next.ptys &&
+        previous.terminals === next.terminals &&
         previous.elsewhere === next.elsewhere,
     },
   )
 
-  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
-    if (store.recovered[key]) return
-    setStore("recovered", key, true)
-    void clone(id)
-  }
-
-  const markTerminalConnected = (key: string, id: string, trim: (id: string) => void) => {
-    setStore("recovered", key, false)
-    trim(id)
-    const index = store.surfaces.findIndex((surface) => surface.key === key)
-
-    if (!store.surfaces[index]?.focus) return
-    setStore("surfaces", index, "focus", false)
-
-    if (!opened() || active() !== id) return
-    focusTerminalById(id)
-    terminal().consumeFocus(id)
-  }
-
-  const handleTerminalDragEnd = () => {
-    const activeId = terminal().active()
-
-    if (!activeId) return
-    requestAnimationFrame(() => {
-      if (terminal().active() !== activeId) return
-      focusTerminalById(activeId)
-    })
-  }
-
   const surfaces = () => (
     <div class="flex-1 min-h-0 relative">
-      <For each={store.surfaces}>
-        {(surface) => (
-          <div
-            id={`terminal-wrapper-${surface.pty.id}`}
-            class="absolute inset-0"
-            classList={{
-              hidden: !present() || surface.workspace !== workspaceKey() || surface.pty.id !== active(),
-            }}
-          >
-            <Terminal
-              pty={surface.pty}
-              server={surface.ops.server()}
-              directory={surface.ops.directory}
-              ghostty={props.model.ghostty}
-              quote={quote}
-              autoFocus={terminal().focusRequested(surface.pty.id)}
-              onAutoFocus={() => {
-                focusTerminalById(surface.pty.id)
-                terminal().consumeFocus(surface.pty.id)
-              }}
-              class="!px-[14px]"
-              onConnect={() =>
-                markTerminalConnected(surface.key, surface.pty.id, (terminalID) => surface.ops.trim(terminalID))
-              }
-              onCleanup={(terminal) => surface.ops.update(terminal)}
-              onConnectError={() =>
-                recoverTerminal(surface.key, surface.pty.id, (terminalID) => surface.ops.clone(terminalID))
-              }
-            />
-          </div>
-        )}
+      <For each={surfaceMounts(surfaceState())}>
+        {(mount) => {
+          // A mount stays in its session, so its server is the one it mounted with.
+          const session = untrack(terminal)
+
+          return (
+            <Show when={surfaceAt(surfaceState(), mount)}>
+              {(surface) => (
+                <div
+                  id={`terminal-wrapper-${surface().id}`}
+                  class="absolute inset-0"
+                  // Mod+W closes the selected terminal, so the one in use is selected when two panes show terminals.
+                  onFocusIn={() => terminal().select(surface().id)}
+                  onPointerDown={() => terminal().select(surface().id)}
+                  classList={{ hidden: !present() || !surfaceShown(surfaceState(), surface()) }}
+                >
+                  <Terminal
+                    ptyID={surface().id}
+                    server={session.server()}
+                    ghostty={props.model.ghostty}
+                    quote={quote}
+                    autoFocus={terminal().focusRequested(surface().id)}
+                    onAutoFocus={() => terminal().consumeFocus(surface().id)}
+                    onFailure={() => dispatch({ type: "surface.failed", mount })}
+                    class="!px-[14px]"
+                  />
+                </div>
+              )}
+            </Show>
+          )
+        }}
       </For>
     </div>
   )
 
   return (
     <div id="terminal-panel" class="flex flex-col size-full">
-      <Show
-        when={terminal().ready() || store.surfaces.length > 0}
+      <Switch
         fallback={
-          <div class="flex flex-col h-full pointer-events-none">
-            <Show when={mobile()}>
-              <div class="h-10 flex items-center gap-2 px-2 border-b border-v2-border-border-base bg-v2-background-bg-base overflow-hidden">
-                <For each={handoff()}>
-                  {(title) => (
-                    <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
-                      {title}
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-            <div class="flex-1 flex items-center justify-center text-text-weak">{plugin.t("loading")}</div>
+          <div class="flex-1 flex items-center justify-center text-text-weak pointer-events-none">
+            {plugin.t("loading")}
           </div>
         }
       >
-        <Show when={mobile()} fallback={surfaces()}>
-          <DragDropProvider
-            sensors={[
-              PointerSensor.configure({
-                activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
-                preventActivation: (event) =>
-                  event.target instanceof Element &&
-                  !!event.target.closest('[data-slot="tabs-trigger-close-button"], input, [contenteditable="true"]'),
-              }),
-            ]}
-            modifiers={[RestrictToHorizontalAxis, RestrictToElement.configure({ element: () => tabList ?? null })]}
-            plugins={(defaults) => [
-              ...defaults.filter((plugin) => plugin !== Accessibility),
-              AutoScroller.configure({ acceleration: 8, threshold: { x: 0.05, y: 0 } }),
-              Feedback.configure({ dropAnimation: null }),
-            ]}
-            onDragEnd={(event) => {
-              const source = event.operation.source
-
-              if (!event.canceled && isSortable(source) && source.initialIndex !== source.index) {
-                terminal().move(source.id.toString(), source.index)
-              }
-
-              handleTerminalDragEnd()
-            }}
-          >
+        <Match when={failed()}>
+          {(view) => (
+            <div role="alert" class="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
+              <div class="flex flex-col gap-1">
+                <div class="text-13-regular text-text-strong">{plugin.t("list.failed")}</div>
+                <div class="text-12-regular text-text-weak break-words">{view().error}</div>
+              </div>
+              <Button size="small" variant="outline" onClick={() => void terminal().retry()}>
+                {plugin.t("common.retry")}
+              </Button>
+            </div>
+          )}
+        </Match>
+        <Match when={terminal().view().type === "unsupported"}>
+          <div class="flex-1 flex items-center justify-center px-4 text-center text-text-weak pointer-events-none">
+            {plugin.t("unavailable")}
+          </div>
+        </Match>
+        <Match when={terminal().view().type === "ready"}>
+          <Show when={mobile()} fallback={surfaces()}>
             <div class="h-[49px] shrink-0 flex border-b border-v2-border-border-base">
               <Tabs
                 variant="panel"
                 value={terminal().active()}
-                onChange={(id) => terminal().open(id)}
+                onChange={(id) => terminal().select(id)}
                 class="!h-full min-w-0 !flex-1"
               >
                 <Tabs.List
-                  ref={tabList}
                   class="!border-b-0"
                   onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
                     const focused = document.activeElement
@@ -354,7 +238,13 @@ export default function TerminalPanel(props: {
                   }}
                 >
                   <For each={terminal().all()}>
-                    {(pty, index) => <SortableTerminalTab terminal={pty} workspace={terminal()} index={index()} />}
+                    {(info) => (
+                      <TerminalTab
+                        terminal={info}
+                        session={terminal()}
+                        rename={(title) => void terminal().rename(info.id, title)}
+                      />
+                    )}
                   </For>
                   <div class="h-full flex items-center justify-center">
                     <Tooltip
@@ -381,9 +271,9 @@ export default function TerminalPanel(props: {
               </Tabs>
             </div>
             {surfaces()}
-          </DragDropProvider>
-        </Show>
-      </Show>
+          </Show>
+        </Match>
+      </Switch>
     </div>
   )
 }

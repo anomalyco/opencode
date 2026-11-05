@@ -19,6 +19,7 @@ import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
+import { openWithDirection } from "../utils/direction"
 
 const a = { id: "ses_tab_a", title: "Tab A session" }
 
@@ -80,6 +81,42 @@ test("recently closed shows ten sessions and searches older closures in close or
   await expect(items).toHaveCount(10)
   await search.press("Escape")
   await expect(menu).toBeHidden()
+})
+
+test("recently closed keeps the keyboard-focused session in view when the menu overflows", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 360 })
+
+  const sessions = Array.from({ length: 11 }, (_, index) => ({
+    id: `ses_overflow_${index}`,
+    title: `Overflow session ${index}`,
+  }))
+
+  await mockWorkspace(page, {
+    name: "ClosedOverflow",
+    sessions,
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(1).map((item, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: item.id },
+          index,
+          info: { title: item.title, directory: "C:/OpenCode/ClosedOverflow", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText("Overflow session 0")
+  await page.getByRole("button", { name: "New session", exact: true }).click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const last = menu.getByRole("menuitem", { name: "C Overflow session 1", exact: true })
+
+  await expect(menu.getByRole("menuitem")).toHaveCount(10)
+  await menu.getByRole("searchbox", { name: "Search recently closed" }).press("ArrowDown")
+  await page.keyboard.press("End")
+  await expect(last).toBeFocused()
+  await expect(last).toBeInViewport({ ratio: 1 })
 })
 
 test("recently closed fills remaining slots in Home order without open or duplicate sessions", async ({ page }) => {
@@ -242,6 +279,86 @@ test("the browser title names the open session and resets after leaving it", asy
   await expect(page).toHaveTitle("OpenCode")
 })
 
+for (const [tabLayout, direction, label] of [
+  ["horizontal", "ltr", "Close tabs to the right"],
+  ["horizontal", "rtl", "Close tabs to the left"],
+  ["vertical", "ltr", "Close tabs below"],
+] as const) {
+  test(`${tabLayout} ${direction} tab menus bulk close in visible order and reopen sessions`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [a, b, c],
+      seed: {
+        tabs: [a.id, { draft: "draft_bulk_close", directory: "C:/OpenCode/Tabs" }, b.id, c.id],
+        settings: { appearance: { tabLayout } },
+      },
+    })
+    await openWithDirection(page, sessionHref(a.id), direction)
+
+    const titles = page.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
+
+    const draft = page.locator(`a[data-titlebar-tab-link][href="${draftHref("draft_bulk_close")}"]`)
+
+    const tabB = page.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
+
+    const menu = page.getByRole("menu")
+
+    const active = page.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')
+
+    const modifier = await page.evaluate(() => (/Mac/.test(navigator.platform) ? "Meta" : "Control"))
+
+    await expect(titles).toHaveText([a.title, "Session", b.title, c.title])
+    await draft.click({ button: "right" })
+    await expect(menu.getByRole("menuitem")).toHaveText(["Close tab", "Close other tabs", label])
+    await menu.getByRole("menuitem", { name: label, exact: true }).click()
+    await expect(titles).toHaveText([a.title, "Session"])
+    await expect(active).toHaveText(a.title)
+
+    for (const expected of [
+      [a.title, "Session", b.title],
+      [a.title, "Session", b.title, c.title],
+    ]) {
+      await page.keyboard.press(`${modifier}+Shift+t`)
+      await expect(titles).toHaveText(expected)
+    }
+
+    await page.locator(`a[data-titlebar-tab-link][href="${sessionHref(a.id)}"]`).click()
+    await expect(active).toHaveText(a.title)
+    await tabB.click({ button: "right" })
+    await menu.getByRole("menuitem", { name: label, exact: true }).click()
+    await expect(titles).toHaveText([a.title, "Session", b.title])
+    await expect(active).toHaveText(a.title)
+    await page.keyboard.press(`${modifier}+Shift+t`)
+    await expect(titles).toHaveText([a.title, "Session", b.title, c.title])
+
+    await tabB.click({ button: "right" })
+    await expect(menu.getByRole("menuitem")).toHaveText([
+      "Rename",
+      "Close tab",
+      "Close other tabs",
+      label,
+      "Delete session…",
+    ])
+    await menu.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
+    await expect(titles).toHaveText([b.title])
+    await expect(active).toHaveText(b.title)
+    await tabB.click({ button: "right" })
+    await expect(menu.getByRole("menuitem", { name: "Close other tabs", exact: true })).toBeDisabled()
+    await expect(menu.getByRole("menuitem", { name: label, exact: true })).toBeDisabled()
+    await page.keyboard.press("Escape")
+
+    for (const expected of [
+      [a.title, b.title],
+      [a.title, b.title, c.title],
+    ]) {
+      await page.keyboard.press(`${modifier}+Shift+t`)
+      await expect(titles).toHaveText(expected)
+    }
+
+    await expect(draft).toHaveCount(0)
+  })
+}
+
 for (const tabLayout of ["horizontal", "vertical"] as const) {
   test(`a ${tabLayout} tab can be renamed again while its previous rename is still saving`, async ({ page }) => {
     await mockWorkspace(page, { name: "Tabs", sessions: [a, b], seed: { settings: { appearance: { tabLayout } } } })
@@ -278,6 +395,36 @@ for (const tabLayout of ["horizontal", "vertical"] as const) {
     await expect(title).toHaveText("Third name")
   })
 }
+
+test("a tab whose overlapping renames both fail shows its saved title again", async ({ page }) => {
+  await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
+  await page.goto(sessionHref(a.id))
+  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+  const editor = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
+  await expect(title).toHaveText(a.title)
+  const released = Promise.withResolvers<void>()
+  const saves: string[] = []
+  await page.route(new RegExp(`/api/session/${a.id}(\\?|$)`), async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    saves.push(route.request().postDataJSON().title)
+    await released.promise
+    await route.fulfill({ status: 500, json: { message: "Rename failed" } })
+  })
+
+  for (const name of ["First name", "Second name"]) {
+    await title.dblclick()
+    await expect(editor).toBeFocused()
+    await editor.fill(name)
+    await editor.press("Enter")
+    await expect(title).toHaveText(name)
+  }
+
+  await expect.poll(() => saves).toEqual(["First name", "Second name"])
+  released.resolve()
+  // The rollback restores the title the server holds, never the first rename that was never saved.
+  await expect(title).toHaveText(a.title)
+  await expect(page.locator('[data-testid^="toast-v2-"]').filter({ hasText: "Request failed" })).toHaveCount(1)
+})
 
 for (const tabLayout of ["horizontal", "vertical"] as const) {
   test(`a ${tabLayout} tab deletes its session after confirmation`, async ({ page }) => {
@@ -530,8 +677,22 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
   const tabB = sidebar.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
   await expect(sidebar.locator("[data-titlebar-tab-slot]")).toHaveCount(26)
-  await expect(sidebar).toHaveCSS("width", "276px")
+  await expect(sidebar).toHaveCSS("width", "240px")
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+
+  // Actions and session rows share one icon lane, and the resize handle fills only the gap after the rows.
+  const [homeIcon, avatar, row, gutter, chat] = await Promise.all([
+    sidebar.locator('[data-action="vertical-tabs-home"] svg').boundingBox(),
+    sidebar.locator('[data-slot="project-avatar-slot"]').first().boundingBox(),
+    sidebar.locator("[data-titlebar-tab]").first().boundingBox(),
+    sidebar.locator('[data-component="resize-handle"]').boundingBox(),
+    page.locator('[data-slot="session-chat-panel"]').boundingBox(),
+  ])
+
+  if (!homeIcon || !avatar || !row || !gutter || !chat) throw new Error("vertical tabs layout is not rendered")
+  expect(avatar.x).toBe(homeIcon.x)
+  expect(gutter.x).toBe(row.x + row.width)
+  expect(gutter.x + gutter.width).toBe(chat.x)
 
   const actions = await Promise.all(
     ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
@@ -544,7 +705,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   )
 
   const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([4, 4])
+  expect(gaps).toEqual([3, 3])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
@@ -559,7 +720,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
     await expect(sidebar).toHaveCSS("width", width)
   }
 
-  await resize(-80, "196px")
+  await resize(-44, "196px")
   await resize(-40, "156px")
 
   for (const name of ["Home", "New session"]) {
@@ -595,15 +756,55 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
 
   await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
   const home = sidebar.locator('[data-action="vertical-tabs-home"]')
-  const hint = home.locator('span[aria-hidden="true"]')
-  await expect(hint).toHaveText("Ctrl+Alt+H")
-  await expect(hint.getByText("Ctrl+Alt+H", { exact: true })).toHaveCSS("direction", "ltr")
+
+  const hint = home.locator('div[aria-hidden="true"]')
+  await expect(hint.locator('[data-slot="keybind-v2-label"]')).toHaveText(["Ctrl", "Alt", "H"])
+  await expect(hint.locator('[data-component="keybind-v2"]')).toHaveCSS("direction", "ltr")
   await expect(hint).toBeHidden()
   await home.focus()
   await expect(hint).toBeVisible()
 
   await tabB.click()
   await expectPath(page, sessionHref(b.id))
+})
+
+test.describe("vertical tabs on a touch desktop", () => {
+  test.use({ hasTouch: true })
+
+  test("long titles fade out before the always-visible close button", async ({ page }) => {
+    const long = {
+      id: "ses_tab_long",
+      title: "A long session title that would otherwise run underneath the close button",
+    }
+
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [long],
+      seed: { settings: { appearance: { tabLayout: "vertical" } } },
+    })
+    await page.goto(sessionHref(long.id))
+
+    const tab = page.locator('[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab]')
+    await expect(tab).toHaveAttribute("data-title-overflow", "true")
+    await expect(tab.getByRole("button", { name: "Close tab", exact: true })).toHaveCSS("opacity", "1")
+    await expect
+      .poll(() =>
+        tab.evaluate((element) => {
+          const link = element.querySelector('[data-slot="tab-link"]')!.getBoundingClientRect()
+
+          const close = element.querySelector('[data-slot="tab-close"]')!.getBoundingClientRect()
+
+          const stops = [
+            ...getComputedStyle(element.querySelector('[data-slot="tab-link"]')!).maskImage.matchAll(
+              /calc\(100% - ([\d.]+)px\)/g,
+            ),
+          ].map((match) => Number(match[1]))
+
+          return link.right - Math.min(...stops) <= close.left
+        }),
+      )
+      .toBe(true)
+  })
 })
 
 for (const [screen, href] of [
@@ -637,6 +838,47 @@ for (const [screen, href] of [
   })
 }
 
+test("the collapsed sidebar peeks from a resting toggle, Escape cancels a pending peek, and a click docks it", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a],
+    seed: { settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+
+  const toggle = page
+    .locator('[data-slot="collapsed-sidebar-toggle"]')
+    .getByRole("button", { name: "Toggle sidebar", exact: true })
+
+  await expect(sidebar).toHaveAttribute("data-state", "closed")
+  await expect(toggle).toBeVisible()
+  // See "tab preview opens cold": pause at a fixed offset from an explicit install time.
+  const start = Date.now()
+  await page.clock.install({ time: start })
+  await page.clock.pauseAt(start + 10_000)
+
+  // The toggle's 500ms dwell, cut short by Escape, never peeks.
+  await toggle.hover()
+  await page.keyboard.press("Escape")
+  await page.clock.runFor(600)
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+
+  await page.mouse.move(600, 400)
+  await toggle.hover()
+  await page.clock.runFor(600)
+  await expect(sidebar).toHaveAttribute("data-peek", "")
+
+  // Docking from the peek hands the sidebar over, and the peek ends once the dock lands.
+  await toggle.click()
+  await page.clock.runFor(2000)
+  await expect(sidebar).toHaveAttribute("data-state", "open")
+  await expect(sidebar).not.toHaveAttribute("data-peek")
+})
+
 test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
@@ -654,9 +896,9 @@ test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   const lower = await tabC.boundingBox()
 
   if (!upper || !lower) throw new Error("vertical tabs have no bounding boxes")
-  expect(lower.y - upper.y - upper.height).toBe(4)
+  expect(lower.y - upper.y - upper.height).toBe(3)
 
-  const middle = upper.y + upper.height + 2
+  const middle = upper.y + upper.height + 1.5
 
   // The two halves belong to their nearest row; an exact tie belongs to the next row.
   for (const [offset, id] of [
@@ -670,7 +912,7 @@ test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
     )
   }
 
-  await page.mouse.click(upper.x + upper.width / 2, middle + 1)
+  await page.mouse.click(upper.x + upper.width / 2, middle)
   await expectPath(page, sessionHref(c.id))
 
   await page.mouse.move(upper.x + upper.width / 2, middle - 1)
@@ -729,7 +971,8 @@ test("tab preview opens cold, switches immediately between tabs, and closes outs
   const box = await tabB.boundingBox()
 
   if (!box) throw new Error("vertical tab has no bounding box")
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 1)
+  // The 3px gap cannot split evenly into whole pixels; the upper row keeps the first one.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 0.5)
   await page.clock.runFor(1000)
   await expect(preview).toContainText(b.title)
   await tabB.getByRole("button", { name: "Close tab", exact: true }).hover()
@@ -1237,6 +1480,39 @@ test("⌘W past the side panel's last tab keeps the session tab", async ({ page 
   await expect(sessions.alphaTab).toHaveCount(0)
 })
 
+test("⌘W past the side panel's last tab keeps the session tab when focus leaves the panel just after", async ({
+  page,
+}) => {
+  // Stands in for a panel that hands focus back after its close rather than during it.
+  await page.addInitScript(() => {
+    const observer = new MutationObserver((records) => {
+      const hidden = records.some(
+        (record) =>
+          record.target instanceof Element &&
+          record.target.id === "review-panel" &&
+          record.target.getAttribute("aria-hidden") === "true",
+      )
+
+      if (!hidden) return
+      observer.disconnect()
+      document.querySelector<HTMLElement>('[data-component="composer-editor"]')?.focus()
+    })
+
+    observer.observe(document, { subtree: true, attributes: true, attributeFilter: ["aria-hidden"] })
+  })
+
+  const sessions = await emptySidePanel(page)
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  await expect(composer).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+
+  // Only a swallowed press above leaves Beta for this one to land on.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(sessions.beta.id))
+  await expect(sessions.alphaTab).toHaveCount(0)
+})
+
 test("⌘W closes the session tab again once the window loses focus after the side panel empties", async ({ page }) => {
   const sessions = await emptySidePanel(page)
   // ⌘Tab away and back sends no click or key the page sees.
@@ -1294,6 +1570,39 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await paste.click()
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
+
+test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "WindowsMenu",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+
+  const menu = page.getByRole("button", { name: "OpenCode menu", exact: true }).locator("svg")
+
+  const home = page.locator('[data-action="vertical-tabs-home"] svg')
+  await expect(home).toBeVisible()
+  await expect.poll(async () => [(await menu.boundingBox())?.x, (await home.boundingBox())?.x]).toEqual([19, 19])
+})
+
+for (const row of [
+  { name: "left tabs", width: 1280, settings: { appearance: { tabLayout: "vertical" } }, position: { x: 20, y: 25 } },
+  { name: "top tabs", width: 1280, settings: { appearance: { tabLayout: "horizontal" } }, position: { x: 14, y: 15 } },
+  {
+    name: "a bottom titlebar",
+    width: 700,
+    settings: { general: { mobileTitlebarPosition: "bottom" } },
+    position: { x: 14, y: 14 },
+  },
+]) {
+  test(`macOS traffic lights center on the header line with ${row.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: row.width, height: 720 })
+    await mockWorkspace(page, { name: "TrafficLights", sessions: [], seed: { settings: row.settings } })
+    await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, os: "macos" })}`)
+    await expect(page.getByRole("status", { name: "Traffic lights" })).toHaveText(JSON.stringify(row.position))
+  })
+}
 
 // Server A is the default origin; B is a remote that answers only for its own directories.
 async function twoServers(
@@ -1433,36 +1742,406 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   const sessions = Array.from({ length: 24 }, (_, index) => ({
     id: `ses_inbox_${String(index).padStart(2, "0")}`,
     title: `Inbox session ${index}`,
-    time: { created: T0, updated: T0 + index, idle: T0 + index },
+    directory: index === 14 ? "C:/OpenCode/Inbox/worktrees/unopened" : "C:/OpenCode/Inbox",
+    time: { created: T0, updated: T0 + 100 - index, idle: T0 + index, viewed: T0 + 100 },
   }))
 
   await mockWorkspace(page, {
     name: "Inbox",
     sessions,
+    vcs: { current: "dev", default: "dev" },
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       tabs: [],
-      // Every seeded session finished a run after the inbox was first used, so Recent lists them all.
-      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, since: 0 } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
     },
   })
   await page.goto("/")
 
   const list = page.locator('[data-slot="sidebar-inbox-scroll"]')
   const items = list.locator('[data-slot="sidebar-inbox-item"]')
-  const target = items.filter({ hasText: "Inbox session 0" })
-  await expect(items).toHaveCount(sessions.length)
+  const target = items.filter({ hasText: "Inbox session 14" })
+  await expect(items).toHaveCount(10)
+  await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
+  await expect(list.getByText("Recent", { exact: true })).toBeVisible()
   await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(target).toBeInViewport({ ratio: 1 })
+  // Git metadata must load for an unopened worktree, not only after selecting its session.
+  await target.locator('[data-component="tooltip-v2-trigger"]:has(use[href="#opencode-v2-icon-branch"])').hover()
+  await expect(page.getByRole("tooltip")).toHaveText("dev")
   const offset = await list.evaluate((element) => element.scrollTop)
   expect(offset).toBeGreaterThan(0)
   const row = await target.elementHandle()
 
   await target.click()
-  await expectPath(page, sessionHref("ses_inbox_00"))
+  await expectPath(page, sessionHref("ses_inbox_14"))
   await expect(target).toHaveAttribute("data-state", "active")
   // Opening a session loads it into the client, which updates every section.
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   expect(await target.evaluate((element, before) => element === before, row)).toBe(true)
   expect(await list.evaluate((element) => element.scrollTop)).toBe(offset)
 })
+
+test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 41 * 60_000 })
+  await mockWorkspace(page, {
+    name: "ArchivedInbox",
+    sessions: [
+      { id: "ses_archive_active", title: "Active inbox session", time: { created: T0, updated: T0, idle: T0 } },
+      ...["First archived session", "Second archived session"].map((title, index) => ({
+        id: `ses_archive_${index}`,
+        title,
+        time: { created: T0 - 100, updated: T0 + index, idle: index ? T0 - 100 : T0, archived: T0 + 10 },
+      })),
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const archived = inbox.getByRole("button", { name: "Archived", exact: true })
+
+  const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Active inbox session")
+  await expect(archived).toBeVisible()
+  await archived.focus()
+  await archived.press("Enter")
+
+  const dialog = page.getByRole("dialog")
+
+  const search = dialog.getByRole("combobox")
+
+  await expect(search).toBeFocused()
+  await expect(search).toHaveAttribute("placeholder", "Search sessions")
+  await expect(dialog.getByText("Archived sessions", { exact: true })).toBeVisible()
+  await expect(dialog.getByRole("option")).toHaveCount(2)
+  await expect(dialog.getByRole("option", { name: /First archived session/ })).toBeVisible()
+  await expect(dialog.getByRole("option", { name: /Second archived session/ })).toBeVisible()
+  await search.fill("Active inbox session")
+  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
+  await search.fill("First archived")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await expect(dialog.getByRole("option", { name: /First archived session/ })).toHaveAttribute("aria-selected", "true")
+  await search.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expectPath(page, sessionHref("ses_archive_0"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+})
+
+test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
+  await openSession(page, {
+    name: "WorkingInbox",
+    sessions: [{ id: "ses_working_selected", title: "Selected working session" }],
+    sessionStatus: { ses_working_selected: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
+    },
+  })
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+
+  const toggle = shelf.getByRole("button", { name: "Working", exact: true })
+
+  const row = shelf.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(row).toHaveCount(0)
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+  await expectPath(page, sessionHref("ses_working_selected"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await toggle.press("Enter")
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
+})
+
+test("sessions opened from Home and Search get a temporary Current session row without duplicating Recent", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "CurrentInbox",
+    sessions: [
+      { id: "ses_current_home", title: "Older Home session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_current_search",
+        title: "Older Search session",
+        time: { created: T0, updated: T0, idle: T0, viewed: T0 },
+      },
+      {
+        id: "ses_current_recent",
+        title: "Recent inbox session",
+        time: { created: T0, updated: T0 + 2, idle: T0 + 2, viewed: T0 + 2 },
+      },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `ses_current_extra_${index}`,
+        title: `Other recent session ${index}`,
+        time: { created: T0, updated: T0 + 3 + index, idle: T0 + 3 + index, viewed: T0 + 3 + index },
+      })),
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveCount(10)
+  await page.locator('[data-component="home-session-row"]').filter({ hasText: "Older Home session" }).click()
+  await expectPath(page, sessionHref("ses_current_home"))
+  await expect(rows.filter({ hasText: "Older Home session" })).toHaveAttribute("data-state", "active")
+  await expect(inbox.getByText("Current session", { exact: true })).toHaveCount(0)
+  await expect(rows).toHaveCount(11)
+  await rows.filter({ hasText: "Recent inbox session" }).click()
+  await expectPath(page, sessionHref("ses_current_recent"))
+  await expect(rows).toHaveCount(10)
+  await expect(rows.filter({ hasText: "Recent inbox session" })).toHaveAttribute("data-state", "active")
+  await page.getByRole("button", { name: "Search sessions", exact: true }).click()
+
+  const dialog = page.getByRole("dialog")
+
+  const search = dialog.getByRole("combobox")
+
+  await expect(search).toBeFocused()
+  await search.fill("Older Search session")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await search.press("Enter")
+  await expectPath(page, sessionHref("ses_current_search"))
+  await expect(rows.filter({ hasText: "Older Search session" })).toHaveAttribute("data-state", "active")
+  await expect(rows.filter({ hasText: "Older Home session" })).toHaveCount(0)
+  await expect(rows).toHaveCount(11)
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(rows).toHaveCount(10)
+})
+
+test("the inbox keeps every unread result separate from expandable Recent, including never-run sessions", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "InboxSections",
+    sessions: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_unread_${index}`,
+        title: `Unread result ${index}`,
+        outcome: index === 0 ? "failed" : "succeeded",
+        time: { created: T0, updated: T0 + index, idle: T0 + index },
+      })),
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_read_${index}`,
+        title: index === 0 ? "Never-run session" : `Read session ${index}`,
+        time: { created: T0, updated: T0 + 100 - index, idle: index ? T0 + 100 - index : undefined, viewed: T0 + 200 },
+      })),
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const unread = inbox.getByRole("group", { name: "Unread", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(unread).toContainText(Array.from({ length: 12 }, (_, index) => `Unread result ${11 - index}`))
+  await expect(unread.filter({ hasText: "Unread result 0" })).toHaveAttribute("data-status", "failed")
+  await expect(recent).toContainText([
+    "Never-run session",
+    ...Array.from({ length: 9 }, (_, index) => `Read session ${index + 1}`),
+  ])
+  await expect(recent).toHaveCount(10)
+  await expect(inbox.locator('[data-slot="sidebar-inbox-item"][tabindex="0"]')).toHaveCount(1)
+
+  await unread.filter({ hasText: "Unread result 11" }).focus()
+  await page.keyboard.press("ArrowDown")
+  await expect(unread.filter({ hasText: "Unread result 10" })).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(recent.filter({ hasText: "Read session 9" })).toBeFocused()
+  await page.keyboard.press("Home")
+  await expect(unread.filter({ hasText: "Unread result 11" })).toBeFocused()
+
+  await inbox.getByRole("button", { name: "Show more", exact: true }).click()
+  await expect(recent).toHaveCount(12)
+  await expect(recent.filter({ hasText: "Read session 11" })).toHaveCount(1)
+  await expect(unread).toHaveCount(12)
+  await page.reload()
+  await expect(recent).toHaveCount(12)
+  await inbox.getByRole("button", { name: "Show less", exact: true }).click()
+  await expect(recent).toHaveCount(10)
+  await expect(unread).toHaveCount(12)
+})
+
+test("the inbox waits for initial requests and orders attention by waiting age rather than last update", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 10 * 60_000 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "InboxWaiting",
+    sessions: [
+      {
+        id: "ses_waiting_old",
+        title: "Oldest waiting session",
+        time: { created: T0, updated: T0 + 60_000, busy: T0 },
+      },
+      {
+        id: "ses_waiting_new",
+        title: "Newer waiting session",
+        time: { created: T0, updated: T0 + 9 * 60_000, busy: T0 + 5 * 60_000 },
+      },
+      {
+        id: "ses_waiting_live",
+        title: "New live question",
+        time: { created: T0, updated: T0 + 2 * 60_000, busy: T0 + 60_000 },
+      },
+    ],
+    sessionStatus: {
+      ses_waiting_old: { type: "running" },
+      ses_waiting_new: { type: "running" },
+      ses_waiting_live: { type: "running" },
+    },
+    sessionPermissions: {
+      ses_waiting_old: [{ id: "perm_inbox_old", sessionID: "ses_waiting_old", action: "shell", resources: ["build"] }],
+      ses_waiting_new: [{ id: "perm_inbox_new", sessionID: "ses_waiting_new", action: "shell", resources: ["test"] }],
+    },
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+
+  const pending = await holdRoute(page, /\/api\/session\/ses_waiting_old\/permission(?:\?|$)/)
+
+  await page.goto("/")
+  await pending.arrived
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  await expect(inbox).toHaveAttribute("aria-busy", "true")
+  await expect(inbox.getByText("Sessions you work on will appear here", { exact: true })).toHaveCount(0)
+  pending.release()
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session"])
+  await expect(inbox).toHaveAttribute("aria-busy", "false")
+  await expect(inbox.getByRole("status")).toBeEmpty()
+  workspace.push([
+    {
+      id: "evt_inbox_question",
+      type: "form.created",
+      created: T0 + 8 * 60_000,
+      location: { directory: workspace.directory },
+      data: {
+        form: {
+          id: "form_inbox_question",
+          sessionID: "ses_waiting_live",
+          title: "Choose a library",
+          metadata: { kind: "question" },
+          fields: [{ key: "library", type: "string", title: "Library" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+  ])
+  await expect(needs).toContainText(["Oldest waiting session", "Newer waiting session", "New live question"])
+  await expect(needs.filter({ hasText: "New live question" })).toContainText("2m")
+  await expect(inbox.getByRole("status")).toHaveText("New live question has a question.")
+  await expect(inbox.getByRole("status")).toHaveCount(1)
+})
+
+test("an inactive tab shows attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "horizontal")
+  await page.goto(sessionHref(a.id))
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  const dot = tab.locator('[data-mark="attention"]')
+
+  // The first reply proves the client holds the request; auto-accept still owns it, so the tab only shows work.
+  await reply.arrived
+  await expect(tab.locator('[data-mark="busy"]')).toBeVisible()
+  await expect(dot).toBeHidden()
+
+  reply.release()
+  await expect(dot).toBeVisible()
+  await expect(tab.locator('[data-mark="busy"]')).toBeHidden()
+  expect(reply.attempts()).toBe(3)
+})
+
+test("the inbox moves a session to Needs attention once auto-accept gives up on its permission", async ({ page }) => {
+  const reply = await mockGaveUpPermission(page, "inbox")
+  await page.goto(sessionHref(a.id))
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const row = inbox.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: b.title })
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  await reply.arrived
+  await expect(row).toHaveAttribute("data-status", "working")
+  await expect(needs).toHaveCount(0)
+
+  reply.release()
+  await expect(needs).toHaveCount(1)
+  await expect(needs).toContainText(b.title)
+  await expect(needs).toHaveAttribute("data-status", "approval")
+  expect(reply.attempts()).toBe(3)
+})
+
+// Auto-accept is on and every reply to session B's permission fails. The first reply waits for `release()`; then it
+// and both retries fail, and auto-accept gives up.
+async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox") {
+  const permissionID = "permission-gave-up"
+  const released = Promise.withResolvers<void>()
+  const arrived = Promise.withResolvers<void>()
+  const attempts = { count: 0 }
+
+  await mockWorkspace(page, {
+    name: "GaveUp",
+    sessions: [a, b],
+    sessionPermissions: {
+      [b.id]: [
+        { id: permissionID, sessionID: b.id, action: "shell", resources: ["git status"], metadata: {}, save: [] },
+      ],
+    },
+    seed: {
+      settings: { appearance: { tabLayout }, permissions: { autoApprove: true } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.route(new RegExp(`/api/session/${b.id}/permission/${permissionID}/reply(\\?|$)`), async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    attempts.count++
+    arrived.resolve()
+
+    if (attempts.count === 1) await released.promise
+    await route.fulfill({ status: 500, json: { message: "Reply failed" } })
+  })
+
+  return {
+    arrived: arrived.promise,
+    release: () => released.resolve(),
+    attempts: () => attempts.count,
+  }
+}

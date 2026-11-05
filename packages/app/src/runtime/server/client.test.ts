@@ -86,9 +86,10 @@ describe("server event stream", () => {
   })
 })
 
-test("rotates HTTP and PTY clients together", async () => {
+test("rotates the HTTP client with the endpoint", async () => {
   const requests: Array<{ url: string; authorization: string | null }> = []
 
+  // SAFETY: the transport only calls fetch with a request and init; `preconnect` and other statics are never read.
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init)
     requests.push({ url: request.url, authorization: request.headers.get("authorization") })
@@ -106,8 +107,6 @@ test("rotates HTTP and PTY clients together", async () => {
     fetch,
   })
 
-  const initialPty = transport.pty
-
   await transport.api.server.info()
 
   const replacement = transport.update({
@@ -118,7 +117,6 @@ test("rotates HTTP and PTY clients together", async () => {
   await transport.api.server.info()
 
   expect(replacement).toBe(transport.api)
-  expect(transport.pty).not.toBe(initialPty)
   expect(transport.url).toBe("http://127.0.0.1:4200")
   expect(requests).toEqual([
     {
