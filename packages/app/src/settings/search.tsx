@@ -12,6 +12,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { useCommand } from "@/shell/commands/command"
 import { useSettingsServers } from "./servers/inventory"
+import { canIndexServerSettings } from "./servers/machine"
 import { useSettingsSurface } from "./surface"
 import { rankSettings, type SettingsSearchResult } from "./search-results"
 import { settingsSearchIndex } from "./search-index"
@@ -257,11 +258,12 @@ export function createSettingsSearchCatalog() {
 
   const inventory = createMemo(() =>
     servers().map((server) => {
-      const context = server.connection ? global.serverCtx(server.key) : undefined
+      // Indexed exactly while the server's pages can open, so a result never leads to its unavailable state.
+      const context = canIndexServerSettings(server.availability) ? global.serverCtx(server.key) : undefined
 
       return {
         ...server,
-        connected: context?.sdk.connection.status() === "connected",
+        connected: !!context,
         projects: context ? context.projects.list() : [],
       }
     }),

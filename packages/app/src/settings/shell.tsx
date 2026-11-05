@@ -19,7 +19,8 @@ import { SettingsModels } from "./models/models"
 import { SettingsServerGeneral, SettingsServerList } from "./servers/servers"
 import { SettingsServerSwitcher } from "./servers/switcher"
 import { SettingsServerUnavailable } from "./servers/unavailable"
-import { settingsServerReachable, useSettingsServers, useSettingsServersLoaded } from "./servers/inventory"
+import { useSettingsServers, useSettingsServersLoaded } from "./servers/inventory"
+import { serverPagesConnection } from "./servers/machine"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
@@ -128,8 +129,9 @@ export function SettingsScreen() {
     const view = surface.view()
 
     if (view.type !== "project") return undefined
+    const server = connection(view.server)
 
-    return connection(view.server)
+    return server && serverPagesConnection(server.availability)
   })
 
   const targetProject = createMemo(() => {
@@ -138,18 +140,14 @@ export function SettingsScreen() {
 
     if (view.type !== "project" || !server) return undefined
 
-    return server.connection && project(server.connection, view.project)
+    return project(server, view.project)
   })
 
   createEffect(() => {
     const next = settingsViewRedirect({
       view: surface.view(),
       loaded: loaded(),
-      servers: servers().map((item) => ({
-        key: item.key,
-        connected: !!item.connection,
-        starting: item.source?.entry.state === "starting",
-      })),
+      servers: servers().map((item) => ({ key: item.key, availability: item.availability.status })),
     })
 
     if (next) surface.replace(next)
@@ -181,7 +179,7 @@ export function SettingsScreen() {
           <RootSettings />
         </Match>
         <Match when={surface.view().type === "project"}>
-          <Show when={targetServer()?.connection} keyed>
+          <Show when={targetServer()} keyed>
             {(server) => (
               <Show when={targetProject()}>{(project) => <ProjectSettings server={server} project={project()} />}</Show>
             )}
@@ -196,7 +194,6 @@ function RootSettings() {
   const language = useLanguage()
   const dialog = useDialog()
   const surface = useSettingsSurface()
-  const global = useGlobal()
   const inventory = useSettingsServers()
 
   const [state, setState] = createStore<{ worktreeFilterReset: number; modelProvider: string | undefined }>({
@@ -210,7 +207,7 @@ function RootSettings() {
   const reachable = createMemo(() => {
     const entry = surface.server()
 
-    return entry && settingsServerReachable(entry, global.servers.health[entry.key]) ? entry.connection : undefined
+    return entry && serverPagesConnection(entry.availability)
   })
 
   const prefetchWorkspaces = useWorkspacesPrefetch(reachable)
