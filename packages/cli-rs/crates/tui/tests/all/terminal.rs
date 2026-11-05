@@ -3,23 +3,16 @@
 //! mounts, a stored selection whose terminal is gone, and a server without terminals.
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use opencode_api::client::Client;
-use opencode_api::generated::SessionID;
 use opencode_api::memory::{Logged, Memory, Route as MemoryRoute};
 use opencode_api::pty::{self, Incoming, Remote};
-use opencode_local::cli_config::{self, Resolved};
-use opencode_local::paths::Paths;
-use opencode_tui::app::Roots;
-use opencode_tui::{Deps, Route, Tui};
+use opencode_tui::Deps;
 use opentui::keymap::RunResult;
-use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-use crate::support::WAIT;
+use crate::support::{self, Harness, WAIT, deref_harness};
 
 const CHANNEL: &str = "test";
 
@@ -32,12 +25,6 @@ fn terminal() -> Value {
 }
 
 fn routes(persistent_pty: bool) -> Vec<MemoryRoute> {
-    let session = json!({
-        "id": "ses_a", "title": "Fix the parser", "projectID": "proj_test", "cost": 0,
-        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
-        "time": { "created": 1, "updated": 1 },
-        "location": { "directory": "/project" },
-    });
     let mut routes = vec![
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json(
@@ -47,8 +34,6 @@ fn routes(persistent_pty: bool) -> Vec<MemoryRoute> {
             &json!({ "version": "test", "pid": 0, "urls": [], "paths": { "tmp": "/tmp" },
                      "capabilities": { "persistentPty": persistent_pty } }),
         ),
-        MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session })),
-        MemoryRoute::json("GET", "/api/session/ses_a/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/experimental/session/ses_a/terminal", 200, &json!({ "data": [terminal()] })),
         MemoryRoute::json("POST", "/api/experimental/session/ses_a/terminal", 200, &json!({ "data": terminal() })),
         MemoryRoute::json(
@@ -64,25 +49,23 @@ fn routes(persistent_pty: bool) -> Vec<MemoryRoute> {
             &json!({ "data": { "ticket": "tk", "expires_in": 30 } }),
         ),
     ];
-    for list in ["inbox", "permission", "form"] {
-        routes.push(MemoryRoute::json("GET", &format!("/api/session/ses_a/{list}"), 200, &json!({ "data": [] })));
-    }
+    routes.extend(support::session_routes(&support::test_session("ses_a", "Fix the parser")));
     routes
 }
 
-struct Harness {
-    app: TestApp,
-    tui: Rc<Tui>,
+struct Terminal {
+    harness: Harness,
     memory: Memory,
     remotes: Arc<Mutex<Vec<Remote>>>,
     state: PathBuf,
     _home: tempfile::TempDir,
 }
 
-fn mount(persistent_pty: bool, selection: Option<Value>) -> Harness {
+deref_harness!(Terminal);
+
+fn mount(persistent_pty: bool, selection: Option<Value>) -> Terminal {
     let home = tempfile::tempdir().unwrap();
-    let root = home.path().to_owned();
-    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = support::home_paths(home.path());
     let tui_state = paths.state.join(CHANNEL).join("tui");
     std::fs::create_dir_all(&tui_state).unwrap();
     if let Some(selection) = selection {
@@ -90,34 +73,26 @@ fn mount(persistent_pty: bool, selection: Option<Value>) -> Harness {
     }
     let state = paths.state.clone();
     let memory = Memory::new(routes(persistent_pty));
-    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
-    let app = TestApp::new(100, 30);
-    let info = cli_config::decode_text(r#"{"animations":false}"#).unwrap();
-    let tui = opencode_tui::mount(
-        &app,
-        Deps {
-            client,
-            directory: "/project".into(),
-            config: Resolved::new(info, |_| None),
-            roots: Some(Roots { paths, storage_channel: CHANNEL.into() }),
-            route: Route::Session { id: SessionID("ses_a".into()) },
-            continue_: false,
-            events: true,
-        },
-    );
+    let deps = Deps {
+        config: support::config(support::decode(r#"{"animations":false}"#)),
+        roots: support::roots(paths, CHANNEL),
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let harness = support::mount(100, 30, deps);
     let remotes: Arc<Mutex<Vec<Remote>>> = Arc::default();
     let opened = remotes.clone();
-    tui.terminals.set_connector(Arc::new(move |_| {
+    harness.tui.terminals.set_connector(Arc::new(move |_| {
         let (socket, remote) = pty::pair();
         opened.lock().unwrap().push(remote);
         Ok(socket)
     }));
-    let harness = Harness { app, tui, memory, remotes, state, _home: home };
+    let harness = Terminal { harness, memory, remotes, state, _home: home };
     harness.wait(|harness| harness.app.text().contains("Fix the parser"));
     harness
 }
 
-impl Harness {
+impl Terminal {
     fn wait(&self, check: impl Fn(&Self) -> bool) -> bool {
         self.app.wait_until(WAIT, || check(self))
     }
