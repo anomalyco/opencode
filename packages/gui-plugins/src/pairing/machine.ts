@@ -1,6 +1,14 @@
 /** How long one read of the remote access setting may take. */
 export const REMOTE_READ_TIMEOUT_MS = 15_000
 
+/** How many times a failed read of the setting is tried again, as a query's default retries did. */
+export const REMOTE_READ_RETRIES = 3
+
+/** The wait before read retry `failures`: 1, 2, then 4 seconds, a query's default backoff. */
+export function remoteReadDelay(failures: number) {
+  return Math.min(1_000 * 2 ** failures, 30_000)
+}
+
 /** How long turning remote access on or off may take: the first time creates the tunnel, which can take a minute. */
 export const REMOTE_CHANGE_TIMEOUT_MS = 180_000
 
@@ -30,7 +38,14 @@ export type MainStatus =
 export type RemoteState =
   | { readonly status: "pending" }
   | { readonly status: "inactive" }
-  | { readonly status: "loading"; readonly generation: number; readonly attempt: number }
+  | {
+      readonly status: "loading"
+      readonly generation: number
+      readonly attempt: number
+      /** A read runs, or the wait before the next read after a failure. */
+      readonly step: "reading" | "waiting"
+      readonly failures: number
+    }
   | { readonly status: "ready"; readonly generation: number; readonly enabled: boolean }
   | {
       readonly status: "changing"
@@ -102,7 +117,8 @@ export type PairingEvent =
   | { readonly type: "tunnel.found"; readonly attempt: number; readonly tunnel: string }
   /** The server advertises no tunnel yet, or the request failed or timed out. */
   | { readonly type: "tunnel.missing"; readonly attempt: number }
-  | { readonly type: "tunnel.due"; readonly attempt: number }
+  /** A `wait` effect's delay ended. */
+  | { readonly type: "wait.ended"; readonly attempt: number }
   | {
       readonly type: "code.loaded"
       readonly attempt: number
@@ -129,7 +145,8 @@ export type PairingEffect =
       readonly timeoutMs: number
     }
   | { readonly type: "poll-tunnel"; readonly attempt: number; readonly timeoutMs: number }
-  | { readonly type: "wait-tunnel"; readonly attempt: number; readonly delayMs: number }
+  /** Waits before the next read of the setting or the next ask for the tunnel; ends with `wait.ended`. */
+  | { readonly type: "wait"; readonly attempt: number; readonly delayMs: number }
   | { readonly type: "fetch-code"; readonly attempt: number; readonly timeoutMs: number }
   /** Ends an attempt's request and timer. */
   | { readonly type: "abort"; readonly attempt: number }
@@ -172,10 +189,17 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
 
     const attempt = state.issued + 1
 
-    return settle({ ...state, issued: attempt, remote: { status: "loading", generation: main.generation, attempt } }, [
-      ...abortRemote(remote),
-      { type: "read-remote", generation: main.generation, attempt, timeoutMs: REMOTE_READ_TIMEOUT_MS },
-    ])
+    return settle(
+      {
+        ...state,
+        issued: attempt,
+        remote: { status: "loading", generation: main.generation, attempt, step: "reading", failures: 0 },
+      },
+      [
+        ...abortRemote(remote),
+        { type: "read-remote", generation: main.generation, attempt, timeoutMs: REMOTE_READ_TIMEOUT_MS },
+      ],
+    )
   }
 
   if (event.type === "server.changed") {
@@ -185,26 +209,55 @@ export function transitionPairing(state: PairingState, event: PairingEvent): Pai
   }
 
   if (event.type === "read.succeeded" || event.type === "read.failed") {
-    if (remote.status !== "loading" || remote.attempt !== event.attempt) return { state, effects: NONE }
+    if (remote.status !== "loading" || remote.step !== "reading" || remote.attempt !== event.attempt)
+      return { state, effects: NONE }
 
-    return settle(
-      {
+    const effects: readonly PairingEffect[] = [{ type: "abort", attempt: event.attempt }]
+
+    if (event.type === "read.succeeded")
+      return settle(
+        { ...state, remote: { status: "ready", generation: remote.generation, enabled: event.enabled } },
+        effects,
+      )
+
+    if (remote.failures >= REMOTE_READ_RETRIES)
+      return settle(
+        { ...state, remote: { status: "failed", generation: remote.generation, previous: undefined } },
+        effects,
+      )
+
+    const attempt = state.issued + 1
+
+    return {
+      state: {
         ...state,
-        remote:
-          event.type === "read.succeeded"
-            ? { status: "ready", generation: remote.generation, enabled: event.enabled }
-            : { status: "failed", generation: remote.generation, previous: undefined },
+        issued: attempt,
+        remote: { ...remote, attempt, step: "waiting", failures: remote.failures + 1 },
       },
-      [{ type: "abort", attempt: event.attempt }],
-    )
+      effects: [...effects, { type: "wait", attempt, delayMs: remoteReadDelay(remote.failures) }],
+    }
+  }
+
+  if (event.type === "wait.ended" && remote.status === "loading") {
+    if (remote.step !== "waiting" || remote.attempt !== event.attempt) return { state, effects: NONE }
+
+    const attempt = state.issued + 1
+
+    return {
+      state: { ...state, issued: attempt, remote: { ...remote, attempt, step: "reading" } },
+      effects: [
+        { type: "abort", attempt: event.attempt },
+        { type: "read-remote", generation: remote.generation, attempt, timeoutMs: REMOTE_READ_TIMEOUT_MS },
+      ],
+    }
   }
 
   if (event.type === "toggled") {
     if (remote.status === "ready" && remote.enabled !== event.enabled)
       return settle(...change(state, NONE, event.enabled, false))
 
-    if (remote.status === "failed" && remote.previous !== undefined)
-      return settle(...change(state, NONE, event.enabled, false))
+    // A change reads the setting before it writes, so the switch also works after a read that never answered.
+    if (remote.status === "failed") return settle(...change(state, NONE, event.enabled, false))
 
     return { state, effects: NONE }
   }
@@ -286,12 +339,12 @@ function transitionCode(state: PairingState, event: PairingEvent): PairingTransi
       },
       effects: [
         { type: "abort", attempt: event.attempt },
-        { type: "wait-tunnel", attempt, delayMs: TUNNEL_RETRY_DELAY_MS },
+        { type: "wait", attempt, delayMs: TUNNEL_RETRY_DELAY_MS },
       ],
     }
   }
 
-  if (event.type === "tunnel.due") {
+  if (event.type === "wait.ended") {
     if (dialog.status !== "tunnel" || dialog.step !== "waiting" || dialog.attempt !== event.attempt)
       return { state, effects: NONE }
 
@@ -502,6 +555,23 @@ function abortDialog(dialog: DialogState): readonly PairingEffect[] {
   return []
 }
 
+/** The event that reports an effect that threw before it could answer, so its phase still ends. */
+export function pairingEffectFailed(effect: PairingEffect): PairingEvent | undefined {
+  if (effect.type === "read-remote") return { type: "read.failed", attempt: effect.attempt }
+
+  if (effect.type === "set-remote") return { type: "change.failed", attempt: effect.attempt }
+
+  if (effect.type === "poll-tunnel") return { type: "tunnel.missing", attempt: effect.attempt }
+
+  if (effect.type === "wait") return { type: "wait.ended", attempt: effect.attempt }
+
+  if (effect.type === "fetch-code") return { type: "code.failed", attempt: effect.attempt }
+
+  if (effect.type === "open-dialog") return { type: "dialog.closed" }
+
+  return undefined
+}
+
 /** What the pairing settings page shows. */
 export function viewPairingPage(state: PairingState) {
   const remote = state.remote
@@ -514,7 +584,7 @@ export function viewPairingPage(state: PairingState) {
     remoteChecked:
       ((remote.status === "changing" || remote.status === "ready") && remote.enabled) ||
       (remote.status === "failed" && remote.previous === true),
-    remoteDisabled: remote.status !== "ready" && !(remote.status === "failed" && remote.previous !== undefined),
+    remoteDisabled: remote.status !== "ready" && remote.status !== "failed",
     remoteError: remote.status === "failed",
     // Pending main is still starting; anything else that leaves it inactive keeps pairing from turning on.
     unavailable: remote.status === "inactive" || !state.server,

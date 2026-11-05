@@ -85,6 +85,11 @@ export function transitionCopy(state: CopyState, event: CopyEvent): CopyTransiti
   return { state: { status: "idle", attempt: state.attempt }, effects: [{ type: "cancel-timer" }] }
 }
 
+/** The event that reports an effect that threw, so a copy still ends. */
+export function copyEffectFailed(effect: CopyEffect): CopyEvent | undefined {
+  return effect.type === "write" ? { type: "copy.failed", attempt: effect.attempt } : undefined
+}
+
 /** What the copy button shows for the link on screen now. */
 export function viewCopy(state: CopyState, url: string | undefined): CopyView {
   const phase = state.status !== "idle" && state.status !== "disposed" && state.url === url ? state.status : "idle"

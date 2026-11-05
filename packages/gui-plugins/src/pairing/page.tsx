@@ -6,11 +6,13 @@ import { createMemo, createSignal, Match, onCleanup, Show, Switch, untrack, type
 import { renderSVG } from "@opencode/util/qr"
 import { createKeyed, usePlugin, type DialogHandle, type Live, type IpcClient } from "@opencode/plugin/gui"
 import type { Pairing } from "./contract"
-import { createCopyState, transitionCopy, viewCopy, type CopyEffect, type CopyEvent } from "./copy-machine"
+import { copyEffectFailed, createCopyState, transitionCopy, viewCopy, type CopyEffect } from "./copy-machine"
+import { createDispatch } from "./dispatch"
 import type definition from "./index"
 import {
   createPairingState,
   dialogUrl,
+  pairingEffectFailed,
   remainingSeconds,
   transitionPairing,
   viewDialog,
@@ -65,22 +67,14 @@ export default function PairingPage(props: {
   // Each attempt's request and its timeout or retry delay.
   const requests = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
   const opened: OpenedDialog = {}
-  // Effects can answer synchronously; their events wait until the current one has applied.
-  const queue: PairingEvent[] = []
 
-  const dispatch = (event: PairingEvent) => {
-    queue.push(event)
-
-    if (queue.length > 1) return
-
-    while (queue.length > 0) {
-      const next = transitionPairing(untrack(pairingState), queue[0])
-
-      setPairingState(next.state)
-      next.effects.forEach(run)
-      queue.shift()
-    }
-  }
+  const dispatch = createDispatch({
+    read: () => untrack(pairingState),
+    write: setPairingState,
+    transition: transitionPairing,
+    run: (effect: PairingEffect) => run(effect),
+    failed: pairingEffectFailed,
+  })
 
   // Starts an attempt whose timer ends it with `expire`; returns the signal for its request.
   const start = (attempt: number, ms: number, expire: () => void) => {
@@ -132,10 +126,10 @@ export default function PairingPage(props: {
       })().then(() => dispatch({ type: "change.succeeded", attempt }), fail)
     }
 
-    if (effect.type === "wait-tunnel") {
+    if (effect.type === "wait") {
       const attempt = effect.attempt
 
-      return void start(attempt, effect.delayMs, () => dispatch({ type: "tunnel.due", attempt }))
+      return void start(attempt, effect.delayMs, () => dispatch({ type: "wait.ended", attempt }))
     }
 
     const attempt = effect.attempt
@@ -309,12 +303,13 @@ function DialogPairing(props: {
   const copyView = createMemo(() => viewCopy(copyState(), url()))
   const copyTimer: CopyTimer = {}
 
-  const dispatchCopy = (event: CopyEvent) => {
-    const next = transitionCopy(untrack(copyState), event)
-
-    setCopyState(next.state)
-    next.effects.forEach(runCopy)
-  }
+  const dispatchCopy = createDispatch({
+    read: () => untrack(copyState),
+    write: setCopyState,
+    transition: transitionCopy,
+    run: (effect: CopyEffect) => runCopy(effect),
+    failed: copyEffectFailed,
+  })
 
   const runCopy = (effect: CopyEffect) => {
     if (effect.type === "cancel-timer") return clearTimeout(copyTimer.id)
