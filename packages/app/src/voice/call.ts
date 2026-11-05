@@ -69,9 +69,9 @@ export function createVoiceCall(input: {
     gates = new VoiceGates()
 
     const transport = new VoiceTransport({
-      api: input.ctx.sdk.api,
+      voice: input.ctx.sdk.api.experimental.voice,
       event: (event) => {
-        if (connection?.transport === transport && !transport.abort.signal.aborted) eventReceived(attempt, event)
+        if (connection?.transport === transport) eventReceived(attempt, event)
       },
       levels: (mic, speaker) => {
         if (connection?.transport !== transport) return
@@ -88,11 +88,11 @@ export function createVoiceCall(input: {
 
     if (input.platform.requestMicrophone && !(await input.platform.requestMicrophone()))
       throw new VoiceFailure("microphone")
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     await input.platform.setVoiceCallActive?.(true)
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     await transport.join(viewing, tail.lines)
-    transport.abort.signal.throwIfAborted()
+    transport.signal.throwIfAborted()
     transport.mute(muted)
   }
 
@@ -136,6 +136,8 @@ export function createVoiceCall(input: {
       return
     }
 
+    // The transport already dropped the call for a fatal error; any other one rejected a single client event.
+    if (event.type === "error") console.warn("[voice] Live rejected a client event", event.error)
     const next = responseEvent(event)
 
     if (next) dispatch(next)
@@ -158,8 +160,7 @@ export function createVoiceCall(input: {
             type: "delegation.timeout",
             id: effect.id,
             attempt: effect.attempt,
-            // The transport aborts as soon as its data channel closes.
-            channelOpen: !!connection && !connection.transport.abort.signal.aborted,
+            channelOpen: !!connection?.transport.canSend,
           }),
         effect.ms,
       )
@@ -174,7 +175,7 @@ export function createVoiceCall(input: {
       if (!transport) return
       const abort = new AbortController()
       handles.set(effect.id, { ...handles.get(effect.id), abort })
-      void runRound(effect, AbortSignal.any([abort.signal, transport.abort.signal]))
+      void runRound(effect, AbortSignal.any([abort.signal, transport.signal]))
 
       return
     }
@@ -191,7 +192,7 @@ export function createVoiceCall(input: {
         effect.outputs.forEach((output) =>
           transport.send({ type: "response.item.create", item: { type: "function_call_output", ...output } }),
         )
-        transport.send({ type: "response.create" })
+        transport.send({ type: "response.create", event_id: effect.requestID })
         dispatchReply({ type: "sessions.dirty", sessionIDs: tools.replies.sessions })
       })
 
