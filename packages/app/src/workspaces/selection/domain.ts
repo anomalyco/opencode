@@ -123,26 +123,28 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
-export function currentPickerSuggestions<T>(
-  result: { query: string; items: readonly T[] } | undefined,
-  query: string,
-  loading = false,
-) {
-  if (result?.query !== query && !loading) return []
+export type PickerPolicy = ReturnType<typeof pickerMode>
 
-  return result?.items ?? []
+// The folder a typed or chosen path opens, or undefined when the mode does not allow it.
+export function resolvePickerTarget(policy: PickerPolicy, path: string, home: string, base: string) {
+  return policy.navigation(pickerAbsoluteInput(cleanPickerInput(path), home, base))
 }
 
-export function activeTreeNavigation(request: number, current: number) {
-  return request === current
+export function displayInputDirectory(path: string, home: string) {
+  const displayed = displayPickerPath(path, "", home)
+  const separator = displayed.includes("\\") ? "\\" : "/"
+
+  return displayed.endsWith(separator) ? displayed : displayed + separator
 }
 
+// `clear()` drops jobs that have not started and resolves their promises with undefined.
 export function createPriorityTaskQueue<T>(concurrency: number) {
   type Job = {
     key: string
     priority: "user" | "background"
-    promise: Promise<T>
+    promise: Promise<T | undefined>
     run: () => void
+    cancel: () => void
   }
 
   const jobs = new Map<string, Job>()
@@ -169,12 +171,13 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
       return existing.promise
     }
 
-    const deferred = Promise.withResolvers<T>()
+    const deferred = Promise.withResolvers<T | undefined>()
 
     const job: Job = {
       key,
       priority,
       promise: deferred.promise,
+      cancel: () => deferred.resolve(undefined),
       run: () => {
         const complete = () => {
           active--
@@ -216,7 +219,17 @@ export function createPriorityTaskQueue<T>(concurrency: number) {
     user.push(job)
   }
 
-  return { schedule, promote }
+  const clear = () => {
+    const queued = [...user, ...background]
+    user.length = 0
+    background.length = 0
+    queued.forEach((job) => {
+      jobs.delete(job.key)
+      job.cancel()
+    })
+  }
+
+  return { schedule, promote, clear }
 }
 
 export function nextSuggestionIndex(current: number, delta: -1 | 1, count: number) {
@@ -418,7 +431,6 @@ export function createDirectorySearch(args: {
   home: () => string
 }) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
-  let current = 0
 
   const scoped = (value: string) => {
     const raw = normalizePickerDrive(value)
@@ -465,9 +477,8 @@ export function createDirectorySearch(args: {
     return fuzzysort.go(query, items, { key: "name", limit }).map((item) => item.obj.absolute)
   }
 
-  return async (filter: string) => {
-    const token = ++current
-    const active = () => token === current
+  return async (filter: string, options?: { signal?: AbortSignal }) => {
+    const active = () => !options?.signal?.aborted
     const value = cleanPickerInput(filter)
     const input = scoped(value)
     const location = args.location()

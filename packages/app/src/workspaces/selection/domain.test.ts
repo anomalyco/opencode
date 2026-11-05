@@ -1,14 +1,12 @@
 import { expect, test } from "bun:test"
 import {
   absoluteTreePath,
-  activeTreeNavigation,
   nextSuggestionIndex,
   pickerFileSearchQuery,
   pickerMode,
   selectedTreePath,
   treeEntries,
   treePathWithin,
-  currentPickerSuggestions,
   createDirectorySearch,
   createPriorityTaskQueue,
   listPickerDirectory,
@@ -142,13 +140,6 @@ test.each([
   expect(actual).toBe(expected)
 })
 
-test("exposes autocomplete results only for their source query", () => {
-  const result = { query: "/repo/src", items: ["/repo/src/index.ts"] }
-  expect(currentPickerSuggestions(result, "/repo/src")).toEqual(result.items)
-  expect(currentPickerSuggestions(result, "/repo/test")).toEqual([])
-  expect(currentPickerSuggestions(result, "/repo/test", true)).toEqual(result.items)
-})
-
 test("resolves directory autocomplete from the browser root without changing location", async () => {
   const calls: unknown[] = []
   const location = { directory: "/repo", workspace: "workspace_1" }
@@ -261,7 +252,7 @@ test("keeps literal tilde directory names in server listing and search results",
   expect(await search("nested")).toEqual(["/repo/~/nested"])
 })
 
-test("discards stale typed results without changing the request location", async () => {
+test("discards aborted typed results without changing the request location", async () => {
   const location = { directory: "/repo" }
 
   const pending = Promise.withResolvers<{
@@ -288,7 +279,9 @@ test("discards stale typed results without changing the request location", async
     location: () => location,
   })
 
-  const stale = search("old")
+  const aborted = new AbortController()
+  const stale = search("old", { signal: aborted.signal })
+  aborted.abort()
   expect(await search("new")).toEqual(["/repo/new"])
   pending.resolve({ location, data: [{ path: "old/", type: "directory" }] })
   expect(await stale).toEqual([])
@@ -452,11 +445,28 @@ test("limits background tasks and prioritizes newly requested work", async () =>
   expect(maximum).toBe(2)
 })
 
-test.each([
-  [3, 3, true],
-  [2, 3, false],
-])("a tree mutation from navigation %p applies during navigation %p: %p", (request, current, expected) => {
-  expect(activeTreeNavigation(request, current)).toBe(expected)
+test("clearing the queue drops jobs that have not started and lets running ones finish", async () => {
+  const queue = createPriorityTaskQueue<string>(1)
+  const blocker = Promise.withResolvers<void>()
+  const started: string[] = []
+
+  const task = (name: string, wait?: Promise<void>) => async () => {
+    started.push(name)
+    await wait
+
+    return name
+  }
+
+  const running = queue.schedule("running", "user", task("running", blocker.promise))
+  const queued = queue.schedule("queued", "background", task("queued"))
+  await Promise.resolve()
+  queue.clear()
+  expect(await queued).toBeUndefined()
+
+  blocker.resolve()
+  expect(await running).toBe("running")
+  expect(await queue.schedule("next", "user", task("next"))).toBe("next")
+  expect(started).toEqual(["running", "next"])
 })
 
 test("wraps autocomplete keyboard navigation", () => {
