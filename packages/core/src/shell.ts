@@ -34,6 +34,7 @@ export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
 
 type Info = Shell.Info
+export type StopReason = "timeout" | "killed"
 type CreateInput = Shell.CreateInput & {
   shell?: string
 }
@@ -49,10 +50,13 @@ type Active = {
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  stop?: (reason: StopReason) => Effect.Effect<void>
+  // Whether the process can outlive this server (run by the process daemon). Spawned commands cannot.
+  detachable: boolean
 }
 
 type Ended = {
-  status: "exited" | "timeout"
+  status: "exited" | StopReason
   exit?: number
   signal?: string
   completed: number
@@ -82,6 +86,12 @@ export interface Interface {
   // Replaces the running command's timeout from now; zero clears it. Ignored once the command has
   // ended or timed out, even while its process is still being killed or its output captured.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
+  // Stops a running command gracefully (SIGTERM, then SIGKILL after 3 s) without forgetting it: it ends
+  // with the given status and stays observable, file included, until retention evicts it. Returns at
+  // once; `wait` observes the exit. Ignored once the command has ended or is already stopping.
+  readonly stop: (id: Shell.ID, reason: StopReason) => Effect.Effect<Shell.Info, NotFoundError>
+  // Whether the command's process can outlive this server, so a planned shutdown leaves it running.
+  readonly detachable: (id: Shell.ID) => boolean
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
@@ -150,7 +160,8 @@ const layer = () =>
         Effect.gen(function* () {
           for (const command of commands.values()) {
             if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-            // Teardown interrupts pending commands; it is not a terminal command failure.
+            // Teardown interrupts pending commands; it is not a terminal command failure. It never stops or
+            // removes a command itself: a spawned process dies with its handle's scope once `done` settles.
             yield* Deferred.interrupt(command.done)
           }
           commands.clear()
@@ -205,6 +216,15 @@ const layer = () =>
         return command.info
       })
 
+      const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID, reason: StopReason) {
+        const command = yield* require(id)
+        if (command.info.status !== "running" || !command.stop) return command.info
+        yield* command.stop(reason)
+        return command.info
+      })
+
+      const detachable = (id: Shell.ID) => commands.get(id)?.detachable ?? false
+
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
         const command = yield* require(id)
         const cursor = input?.cursor ?? 0
@@ -251,12 +271,11 @@ const layer = () =>
           if (page.output.endsWith("\n")) lines.pop()
           const truncated = latest.size > maxBytes || lines.length > maxLines
           const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-          const total = (yield* require(info.id)).newlines + (page.output.endsWith("\n") ? 0 : 1)
-          const shown = Math.min(lines.length, maxLines)
-          const notice = truncated
-            ? `\n\n[showing lines ${total - shown + 1}-${total} of ${total}; full output saved to ${info.file}]`
-            : ""
-          return { output: `${text || "(no output)"}${notice}`, truncated }
+          const empty = latest.size === 0
+          const total = empty ? 0 : (yield* require(info.id)).newlines + (page.output.endsWith("\n") ? 0 : 1)
+          const shown = empty ? 0 : Math.min(lines.length, maxLines)
+          const notice = truncated ? `\n\n${ShellResult.savedNotice({ shown, total }, info.file)}` : ""
+          return { output: `${text || "(no output)"}${notice}`, truncated, lines: { shown, total } }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })
@@ -327,6 +346,7 @@ const layer = () =>
                 size: 0,
                 newlines: 0,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
+                detachable: false,
               }
               commands.set(id, command)
 
@@ -368,6 +388,15 @@ const layer = () =>
               const end = (outcome: Omit<Ended, "completed">) =>
                 Effect.suspend(() => Deferred.succeed(ended, { ...outcome, completed: Date.now() }))
 
+              // A recorded stop must always kill. The kill runs detached, so interrupting the caller (a timer
+              // being retimed, removed or torn down) neither cancels it nor waits for the process to die.
+              const stop = (reason: StopReason) =>
+                Effect.gen(function* () {
+                  if (!(yield* end({ status: reason }))) return
+                  runFork(handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)))
+                }).pipe(Effect.uninterruptible)
+              command.stop = stop
+
               command.timeout = (duration) =>
                 Effect.gen(function* () {
                   if (Deferred.isDoneUnsafe(ended)) return
@@ -375,18 +404,7 @@ const layer = () =>
                   command.timeoutFiber = undefined
                   if (duration === 0) return
                   command.timeoutFiber = runFork(
-                    Effect.sleep(Duration.millis(duration)).pipe(
-                      // A recorded timeout must always kill. The kill runs detached, so interrupting this
-                      // timer (retime, remove, teardown) neither cancels it nor waits for the process to die.
-                      Effect.andThen(
-                        Effect.gen(function* () {
-                          if (!(yield* end({ status: "timeout" }))) return
-                          runFork(
-                            handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
-                          )
-                        }).pipe(Effect.uninterruptible),
-                      ),
-                    ),
+                    Effect.sleep(Duration.millis(duration)).pipe(Effect.andThen(stop("timeout"))),
                   )
                 })
 
@@ -434,6 +452,7 @@ const layer = () =>
                   // Keep exited history data-only.
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
+                  command.stop = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 }),
@@ -452,7 +471,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, stop, detachable, output, remove })
     }),
   )
 

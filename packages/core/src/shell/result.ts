@@ -2,9 +2,12 @@ export * as ShellResult from "./result.js"
 
 import type { Shell } from "@opencode/schema/shell"
 
+export type Lines = { shown: number; total: number }
+
 export type Result = {
   info: Shell.Info
-  capture: { output: string; truncated: boolean } | undefined
+  // `lines` counts the tail's lines (`shown`) and the file's (`total`), zero for an empty file.
+  capture: { output: string; truncated: boolean; lines?: Lines } | undefined
 }
 
 type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean }
@@ -24,6 +27,25 @@ export function output(result: Result): Output {
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
+  }
+}
+
+export function savedNotice(lines: Lines, file: string) {
+  if (lines.total === 0) return `[no output; output file: ${file}]`
+  return `[showing lines ${lines.total - lines.shown + 1}-${lines.total} of ${lines.total}; full output saved to ${file}]`
+}
+
+// The result of a command stopped because the user interrupted its call. It always names the shell
+// and its output file, which `output` leaves out when the output fits.
+export function interrupted(result: Result): Output {
+  const captured = output(result)
+  const lines = result.capture && !result.capture.truncated ? result.capture.lines : undefined
+  return {
+    ...captured,
+    output: [
+      lines ? `${captured.output.replace(/\n$/, "")}\n\n${savedNotice(lines, result.info.file)}` : captured.output,
+      `Command interrupted by the user (shell ID: ${result.info.id}).`,
+    ].join("\n\n"),
   }
 }
 
