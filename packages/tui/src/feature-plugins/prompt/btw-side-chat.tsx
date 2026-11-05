@@ -43,8 +43,9 @@ type Thread = {
 }
 
 /**
- * Side threads per session. Threads are stored durably until removed; which thread is open and which turns are
- * answering is client memory, so a turn left unanswered by a restart reads as failed and can be retried.
+ * Side threads per session. Threads are stored durably until the user deletes them or their session is deleted;
+ * which thread is open and which turns are answering is client memory, so a turn left unanswered by a restart reads
+ * as failed and can be retried. Returns `dispose`, which the plugin calls on cleanup.
  */
 export function createSideChat(context: Plugin.Context) {
   const [saved, save] = context.storage.store("side-chat", { initial: { threads: [] as Thread[] } })
@@ -57,6 +58,17 @@ export function createSideChat(context: Plugin.Context) {
   const threads = (sessionID: string) => saved.threads.filter((thread) => thread.sessionID === sessionID)
   const active = (sessionID: string) => saved.threads.find((thread) => thread.id === live.active[sessionID])
   const running = (turnID: string) => live.running.includes(turnID)
+  // A deleted session takes its threads with it, so the store only holds threads of sessions that exist.
+  const dispose = context.data.on("session.deleted", (event) => {
+    const sessionID = event.data.sessionID
+    if (!saved.threads.some((thread) => thread.sessionID === sessionID)) return
+    update((draft) => {
+      draft.active[sessionID] = undefined
+    })
+    void save((draft) => {
+      draft.threads = draft.threads.filter((thread) => thread.sessionID !== sessionID)
+    })
+  })
 
   const run = (sessionID: string, threadID: string, turnID: string) => {
     const thread = saved.threads.find((item) => item.id === threadID)
@@ -153,6 +165,7 @@ export function createSideChat(context: Plugin.Context) {
   }
 
   return {
+    dispose,
     threads,
     active,
     running,
@@ -170,7 +183,9 @@ export function createSideChat(context: Plugin.Context) {
     },
     /** Whether a relayed note still waits in the session's inbox, where it can be taken back. */
     waiting: (sessionID: string, note: Turn["note"]) =>
-      !!note?.inboxID && !note.undone && context.data.session.pending.list(sessionID).some((item) => item.id === note.inboxID),
+      !!note?.inboxID &&
+      !note.undone &&
+      context.data.session.pending.list(sessionID).some((item) => item.id === note.inboxID),
     /** Takes back the open thread's latest relayed note while the agent has not read it yet. */
     async undo(sessionID: string) {
       const thread = active(sessionID)
@@ -184,6 +199,19 @@ export function createSideChat(context: Plugin.Context) {
         if (target?.note) target.note.undone = true
       })
       return true
+    },
+    /** Deletes the open thread and opens the session's previous one, if any. */
+    remove(sessionID: string) {
+      const thread = active(sessionID)
+      if (!thread) return
+      const rest = threads(sessionID).filter((item) => item.id !== thread.id)
+      update((draft) => {
+        draft.active[sessionID] = rest.at(-1)?.id
+        draft.running = draft.running.filter((id) => !thread.turns.some((turn) => turn.id === id))
+      })
+      void save((draft) => {
+        draft.threads = draft.threads.filter((item) => item.id !== thread.id)
+      })
     },
     /** Shows the empty state, so the next question starts a new thread. */
     fresh(sessionID: string) {
@@ -330,6 +358,13 @@ export function SideChatPanel(props: { chat: SideChat; context: Plugin.Context; 
         group: "Side chat",
         bind: "ctrl+n",
         run: () => props.chat.fresh(sessionID()),
+      },
+      {
+        id: "btw.delete",
+        title: "Delete side chat",
+        group: "Side chat",
+        bind: "alt+x",
+        run: () => props.chat.remove(sessionID()),
       },
       {
         id: "btw.next",
@@ -554,6 +589,7 @@ export function SideChatPanel(props: { chat: SideChat; context: Plugin.Context; 
         <Show when={unshared() > 0}>{hint("ctrl+s", "share")}</Show>
         <Show when={threads().length > 1}>{hint("alt+, .", "thread")}</Show>
         <Show when={thread()}>{hint("ctrl+n", "new")}</Show>
+        <Show when={thread()}>{hint("alt+x", "delete")}</Show>
         {hint("esc", "close")}
       </box>
     </box>

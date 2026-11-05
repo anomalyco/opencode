@@ -353,6 +353,8 @@ test("with side_chat, follow-ups build on the thread and share it with the agent
     delivery: "steer",
     resume: false,
   })
-  expect(String(synthetics[1]?.body.text)).toContain("<note>\nKeep the fake clock; don't raise the timeout.\n</note>")
+  expect(String(synthetics[1]?.body.text)).toContain(
+    "<side-chat-note>\nKeep the fake clock; don't raise the timeout.\n</side-chat-note>",
+  )
   expect(prompts).toEqual([])
 })

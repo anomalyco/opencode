@@ -119,7 +119,10 @@ export default Plugin.define({
       },
     })
 
-    return stopFlag
+    return () => {
+      stopFlag()
+      chat.dispose()
+    }
   },
 })
 
