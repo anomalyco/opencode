@@ -44,7 +44,9 @@ describe("settings controllers", () => {
       }),
     }))
 
-    await Promise.resolve()
+    // A macrotask lets the read and every promise callback queued behind it settle.
+    const settled = () => new Promise((resolve) => setTimeout(resolve))
+    await settled()
     expect(owned.setting.value()).toBe("/bin/zsh")
 
     owned.setting.select("bash")
@@ -53,13 +55,11 @@ describe("settings controllers", () => {
     expect(writes.map((write) => write.value)).toEqual(["bash"])
 
     writes[0]!.done.resolve()
-    await writes[0]!.done.promise
-    await Promise.resolve()
+    await settled()
     expect(writes.map((write) => write.value)).toEqual(["bash", "fish"])
 
     writes[1]!.done.reject(new Error("boom"))
-    await writes[1]!.done.promise.catch(() => undefined)
-    await Promise.resolve()
+    await settled()
     expect(owned.setting.value()).toBe("bash")
     expect(errors).toEqual(["failed"])
 

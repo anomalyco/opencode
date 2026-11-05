@@ -34,9 +34,9 @@ describe("about copy machine", () => {
     expect(transitionAboutCopy(hidden.state, { type: "tooltip.close-due", attempt: 1 }).state).toBe(hidden.state)
   })
 
-  test.each([
+  test.each<{ name: string; events: AboutCopyEvent[] }>([
     { name: "shown", events: copied },
-    { name: "closing", events: [...copied, { type: "tooltip.close-due", attempt: 1 } as const] },
+    { name: "closing", events: [...copied, { type: "tooltip.close-due", attempt: 1 }] },
   ])("copying again while $name keeps Copied instead of flashing Copy", (row) => {
     const again = replay([{ type: "copy.requested", text: "Version 1.2.3" }], replay(row.events).state)
 
