@@ -1,5 +1,6 @@
-//! Text rules of the autocomplete: where a trigger starts (`prompt/display.ts`), line ranges and slash
-//! heads (`prompt/parse.ts`), and directory completion (`prompt/directory-completion.ts`).
+//! Text rules of the prompt autocomplete, shared by the TUI and mini: where a trigger starts
+//! (`prompt/display.ts`), line ranges and slash heads (`prompt/parse.ts`), and directory completion
+//! (`prompt/directory-completion.ts`).
 //!
 //! Offsets count as the textarea's cursor does: display columns, with one per line break.
 

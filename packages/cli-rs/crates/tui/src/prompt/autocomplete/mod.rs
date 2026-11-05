@@ -9,7 +9,7 @@
 //! (submit, history, shell mode) are off and this module's layer takes the keys.
 
 pub mod cd;
-pub mod parse;
+pub use opencode_ui::prompt_input::parse;
 pub mod parts;
 
 use std::cell::{Cell, OnceCell, RefCell};
