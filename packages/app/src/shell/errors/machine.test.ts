@@ -145,7 +145,8 @@ describe("error page actions", () => {
       expect(selectInstallUpdateDisabled(next.state, undefined)).toBe(true)
 
       // A click meanwhile does not start a second action beside the first.
-      for (const event of [check, install, exportLogs]) expect(transitionErrorPage(next.state, event).state).toBe(next.state)
+      for (const event of [check, install, exportLogs])
+        expect(transitionErrorPage(next.state, event).state).toBe(next.state)
 
       // The running action settles; its timeout and late duplicates then change nothing.
       const failed = transitionErrorPage(next.state, { type: "action.failed", attempt: 1, error: "Install failed" })
@@ -153,8 +154,9 @@ describe("error page actions", () => {
       expect(transitionErrorPage(failed.state, { type: "action.timed-out", attempt: 1, error: "late" }).state).toBe(
         failed.state,
       )
-      expect(transitionErrorPage(next.state, { type: "action.timed-out", attempt: 1, error: "Request failed" }).state)
-        .toMatchObject({ status: "failed", error: "Request failed" })
+      expect(
+        transitionErrorPage(next.state, { type: "action.timed-out", attempt: 1, error: "Request failed" }).state,
+      ).toMatchObject({ status: "failed", error: "Request failed" })
     }
   })
 
