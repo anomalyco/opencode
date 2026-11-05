@@ -62,6 +62,7 @@ describe("draft blob GC machine", () => {
       at: 70_000,
       oldestOrphanAt: 500,
     })
+
     expect(kept).toEqual({
       state: { status: "scheduled", attempt: 4, lastCollectedAt: 70_000, dueAt },
       commands: [{ type: "start-timer", attempt: 4, delayMs: dueAt - 70_000 }],
@@ -80,6 +81,7 @@ describe("draft blob GC machine", () => {
     const burst = [31_000, 32_000, 40_000].map((at) =>
       transitionDraftGc(scheduled, { type: "documents.written", at }),
     )
+
     burst.forEach((next) => expect(next).toEqual({ state: scheduled, commands: [] }))
     burst.forEach((next) => expect(next.state).toBe(scheduled))
     expect(transitionDraftGc(scheduled, { type: "blob.uploaded", at: 41_000 }).state).toBe(scheduled)

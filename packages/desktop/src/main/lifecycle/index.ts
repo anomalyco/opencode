@@ -88,6 +88,7 @@ const runtime = Layer.effect(
       relaunch,
       sessionEnding: () => driver.dispatch({ type: "session.ending" }),
     })
+
     const createWindow = windows.create
     const restoreWindows = windows.restore
 

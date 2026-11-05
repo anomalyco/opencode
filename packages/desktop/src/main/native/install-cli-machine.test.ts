@@ -31,6 +31,7 @@ describe("CLI install machine", () => {
       attempt: 1,
       path: "/Users/me/.opencode/bin/opencode",
     })
+
     const outcome = { ok: true, path: "/Users/me/.opencode/bin/opencode" }
     expect(presenting.state).toEqual({ status: "presenting", attempt: 1, outcome })
     expect(presenting.commands).toEqual([{ type: "show-dialog", attempt: 1, outcome }])
@@ -46,6 +47,7 @@ describe("CLI install machine", () => {
       { type: "install.requested" },
       { type: "install.failed", attempt: 1, error: "CLI installation timed out" },
     ])
+
     const outcome = { ok: false, error: "CLI installation timed out" }
 
     expect(result.state).toEqual({ status: "presenting", attempt: 1, outcome })
@@ -60,7 +62,7 @@ describe("CLI install machine", () => {
   })
 
   test.each([
-    { name: "a result while idle", events: [] as InstallCliEvent[], stale: { type: "install.succeeded", attempt: 1, path: "/x" } },
+    { name: "a result while idle", events: [], stale: { type: "install.succeeded", attempt: 1, path: "/x" } },
     {
       name: "a result from an earlier attempt",
       events: [
@@ -105,6 +107,7 @@ describe("CLI install machine", () => {
         { type: "install.succeeded", attempt: 1, path: "/x" },
         { type: "dialog.dismissed", attempt: 1 },
       ]
+
       late.forEach((event) => expect(transitionInstallCli(disposed.state, event).state).toBe(disposed.state))
     },
   )

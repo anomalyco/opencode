@@ -2,7 +2,21 @@ export * as DesktopLogging from "./logging"
 
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
-import { Cause, Context, Effect, Exit, FiberSet, FileSystem, Layer, Logger, Option, Path, References, Stream } from "effect"
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  FiberSet,
+  FileSystem,
+  Layer,
+  Logger,
+  Option,
+  Path,
+  Predicate,
+  References,
+  Stream,
+} from "effect"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
 import { marks } from "../lifecycle/marks"
@@ -182,14 +196,16 @@ const nativeLogger = Logger.make((options) => {
   try {
     if (!run) return
     const entry = Logger.formatStructured.log(options)
-    const scope = typeof entry.annotations.scope === "string" ? entry.annotations.scope : "main"
+    const scope = Predicate.isString(entry.annotations.scope) ? entry.annotations.scope : "main"
     const annotations = Object.fromEntries(Object.entries(entry.annotations).filter(([key]) => key !== "scope"))
 
-    const context = {
-      ...(Object.keys(annotations).length === 0 ? {} : { annotations }),
-      ...(Object.keys(entry.spans).length === 0 ? {} : { spans: entry.spans }),
-      ...(entry.cause === undefined ? {} : { cause: entry.cause }),
-    }
+    const context = Object.fromEntries(
+      Object.entries({
+        annotations: Object.keys(annotations).length === 0 ? undefined : annotations,
+        spans: Object.keys(entry.spans).length === 0 ? undefined : entry.spans,
+        cause: entry.cause,
+      }).filter(([, value]) => value !== undefined),
+    )
 
     const messages = Array.isArray(options.message) ? options.message : [options.message]
     log
@@ -257,7 +273,7 @@ function writeDebugArchive(fs: FileSystem.FileSystem, path: Path.Path, netLogPat
       ...(yield* collect(fs, path, app.getPath("crashDumps"), "crashpad")),
     ]
 
-    const truncated = files.filter((file) => file.offset > 0).map((file) => file.name)
+    const truncated = files.flatMap((file) => (file.offset > 0 ? [file.name] : []))
     yield* writeZip(fs, output, [
       {
         name: "manifest.json",
@@ -406,8 +422,8 @@ function initConsoleTransport() {
   }
 }
 
-function isBrokenPipe(err: unknown) {
-  return typeof err === "object" && err !== null && "code" in err && err.code === "EPIPE"
+function isBrokenPipe(cause: unknown) {
+  return Predicate.hasProperty(cause, "code") && cause.code === "EPIPE"
 }
 
 export function scoped(name: string, effect: Effect.Effect<void>) {

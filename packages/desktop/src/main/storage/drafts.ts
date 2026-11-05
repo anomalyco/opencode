@@ -15,7 +15,7 @@ export type DraftStore = ReturnType<typeof createDraftStore>
 
 // Every blob id a document references: image parts `{ blob: { id } }` and text chunk lists
 // `{ blob: { kind: "text", ids: [...] } }`. SQLite walks the JSON; nothing parses drafts in JS.
-const referenced = (value: unknown) => sql`
+const referenced = (value: string) => sql`
   SELECT json_extract(node.value, '$.id') AS id
   FROM json_tree(${value}) AS node
   WHERE node.key = 'blob' AND node.type = 'object' AND json_type(node.value, '$.id') = 'text'
@@ -27,7 +27,7 @@ const referenced = (value: unknown) => sql`
 
 export function createDraftStore(
   db: Database,
-  input: { collectDelay?: number; onError?: (error: unknown) => void } = {},
+  input: { collectDelay?: number; onError?: (cause: unknown) => void } = {},
 ) {
   const gc = createDraftGc(db, input)
   const byKey = eq(document.key, sql.placeholder("key"))
@@ -102,7 +102,7 @@ export function createDraftStore(
     getBlob(id: string): Uint8Array<ArrayBuffer> | null {
       const data = db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data
 
-      // node:sqlite allocates a dedicated ArrayBuffer per BLOB column value.
+      // SAFETY: node:sqlite allocates a dedicated ArrayBuffer per BLOB column value.
       return data ? (data as Uint8Array<ArrayBuffer>) : null
     },
     flush: writer.flush,
@@ -118,7 +118,7 @@ function json(value: string) {
   return value.startsWith("{") || value.startsWith("[")
 }
 
-function createDraftGc(db: Database, input: { collectDelay?: number; onError?: (error: unknown) => void }) {
+function createDraftGc(db: Database, input: { collectDelay?: number; onError?: (cause: unknown) => void }) {
   const initial = initialDraftGcTransition(Date.now(), input.collectDelay ?? STARTUP_COLLECT_DELAY_MS)
   const current = { state: initial.state }
   // The armed timer; there is at most one.
