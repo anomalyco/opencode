@@ -10,7 +10,7 @@ use std::rc::{Rc, Weak};
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput,
-    SessionMessageID,
+    SessionInboxUser, SessionMessageID,
 };
 use opencode_store::{Changes, State};
 use opencode_ui::bind;
@@ -32,16 +32,19 @@ pub enum Action {
 
 /// The session's queued prompts in admission order, as `(id, text)` (`queuedPrompts`).
 pub fn prompts(state: &State, session: &SessionID) -> Vec<(String, String)> {
-    state
-        .pending(session)
-        .iter()
-        .filter_map(|item| match item {
-            SessionInboxInfo::User(user) if user.delivery == SessionInboxDelivery::Queue => {
-                Some((user.id.0.clone(), user.payload.text.clone()))
-            }
-            _ => None,
-        })
-        .collect()
+    users(state, session).map(|user| (user.id.0.clone(), user.payload.text.clone())).collect()
+}
+
+/// The IDs of the session's queued prompts, in admission order.
+pub fn ids<'a>(state: &'a State, session: &SessionID) -> impl Iterator<Item = &'a str> + use<'a> {
+    users(state, session).map(|user| user.id.as_str())
+}
+
+fn users<'a>(state: &'a State, session: &SessionID) -> impl Iterator<Item = &'a SessionInboxUser> + use<'a> {
+    state.pending(session).iter().filter_map(|item| match item {
+        SessionInboxInfo::User(user) if user.delivery == SessionInboxDelivery::Queue => Some(user),
+        _ => None,
+    })
 }
 
 /// The delivery of a pending user prompt (`pendingDelivery`).
@@ -221,15 +224,18 @@ impl Inner {
 
     /// `<count> queued · <first prompt on one line>`, or nothing without queued prompts.
     fn update(&self, tui: &Tui) {
-        let queued = tui.data.read(|state| prompts(state, &self.session));
-        self.count.set(queued.len());
-        let Some((_, first)) = queued.first() else {
+        let (count, first) = tui.data.read(|state| {
+            let mut users = users(state, &self.session);
+            let first = users.next().map(|user| user.payload.text.replace('\n', " "));
+            (first.iter().count() + users.count(), first)
+        });
+        self.count.set(count);
+        let Some(first) = first else {
             self.label.set_text("");
             return;
         };
         let theme = tui.page();
-        let first = first.replace('\n', " ");
-        let mut spans = vec![Span::styled(format!("{} queued", queued.len()), Style::new().fg(theme.text.base))];
+        let mut spans = vec![Span::styled(format!("{count} queued"), Style::new().fg(theme.text.base))];
         if !first.is_empty() {
             spans.push(Span::raw(format!(" · {first}")));
         }
@@ -250,7 +256,7 @@ impl Inner {
             return;
         };
         let Some(text) = tui.data.read(|state| {
-            prompts(state, &self.session).into_iter().find_map(|(id, text)| (id == inbox).then_some(text))
+            users(state, &self.session).find(|user| user.id.as_str() == inbox).map(|user| user.payload.text.clone())
         }) else {
             return;
         };
