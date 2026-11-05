@@ -203,6 +203,16 @@ pub fn rows_before(weights: &[usize], end: usize, budget: usize) -> usize {
     index
 }
 
+/// `rowsAfter`: the row after the last one such that the rows from `start` weigh at least `budget`.
+pub fn rows_after(weights: &[usize], start: usize, budget: usize) -> usize {
+    let (mut index, mut spent) = (start, 0);
+    while index < weights.len() && spent < budget {
+        spent += weights[index];
+        index += 1;
+    }
+    index
+}
+
 const EXPLORATION_TOOLS: [&str; 5] = ["read", "glob", "grep", "webfetch", "websearch"];
 
 /// `projectEntries` over `reduce`'s rows: adjacent rows that share a path prefix form groups.
