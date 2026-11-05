@@ -1,0 +1,30 @@
+ ! Simulated session             +
+
+  ┃
+  ┃  Say hello
+  ┃
+
+     I will print the greeting first.
+
+  ┃
+  ┃  ⋯ echo hello
+  ┃
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃  △ Permission required
+  ┃
+  ┃  $ echo hello
+  ┃
+  ┃
+  ┃   Allow once   Always allow   Reject             ctrl+f fullscreen  ⇆ select  enter confirm
+  ┃
+
