@@ -32,10 +32,7 @@ pub enum Auth {
 impl Auth {
     /// Basic credentials with the user name the CLI uses for its local service.
     pub fn password(password: impl Into<String>) -> Self {
-        Self::Basic {
-            username: "opencode".to_owned(),
-            password: password.into(),
-        }
+        Self::Basic { username: "opencode".to_owned(), password: password.into() }
     }
 
     /// `base64(username:password)`, the value of the header after `Basic ` and of `auth_token`.
@@ -51,10 +48,7 @@ impl std::fmt::Debug for Auth {
             Self::Basic { username, .. } => ("Basic", username),
             Self::Query { username, .. } => ("Query", username),
         };
-        write!(
-            f,
-            "Auth::{kind} {{ username: {username:?}, password: <redacted> }}"
-        )
+        write!(f, "Auth::{kind} {{ username: {username:?}, password: <redacted> }}")
     }
 }
 
@@ -96,19 +90,14 @@ impl Client {
     }
 
     pub fn with_transport(base_url: &str, transport: Arc<dyn Transport>) -> Result<Self, Error> {
-        let mut base_url = url::Url::parse(base_url)
-            .map_err(|error| Error::Transport(format!("{base_url}: {error}")))?;
+        let mut base_url =
+            url::Url::parse(base_url).map_err(|error| Error::Transport(format!("{base_url}: {error}")))?;
         // A leading slash would replace any path prefix on the base URL, so paths join relative to it.
         if !base_url.path().ends_with('/') {
             let path = format!("{}/", base_url.path());
             base_url.set_path(&path);
         }
-        Ok(Self {
-            base_url,
-            auth: None,
-            headers: Vec::new(),
-            transport,
-        })
+        Ok(Self { base_url, auth: None, headers: Vec::new(), transport })
     }
 
     pub fn auth(mut self, auth: Auth) -> Self {
@@ -155,17 +144,9 @@ impl Client {
         let url = self.url(&call.path, &query)?;
         let mut headers = Vec::new();
         if let Some(auth @ Auth::Basic { .. }) = &self.auth {
-            headers.push((
-                "authorization".to_owned(),
-                format!("Basic {}", auth.token()),
-            ));
+            headers.push(("authorization".to_owned(), format!("Basic {}", auth.token())));
         }
-        for (name, value) in self
-            .headers
-            .iter()
-            .chain(&call.headers)
-            .chain(&options.headers)
-        {
+        for (name, value) in self.headers.iter().chain(&call.headers).chain(&options.headers) {
             set_header(&mut headers, name.clone(), value.clone());
         }
         let body = match call.body {
@@ -176,28 +157,17 @@ impl Client {
             }
             Some(Body::Json(value)) => {
                 default_header(&mut headers, "content-type", "application/json");
-                Some(Bytes::from(
-                    serde_json::to_vec(&value).map_err(encode_error)?,
-                ))
+                Some(Bytes::from(serde_json::to_vec(&value).map_err(encode_error)?))
             }
         };
-        Ok(Request {
-            method: call.method,
-            url,
-            headers,
-            body,
-        })
+        Ok(Request { method: call.method, url, headers, body })
     }
 
     async fn execute(&self, call: Call, options: &RequestOptions) -> Result<Response, Error> {
         let success = call.success_status;
         let declared = call.declared_statuses;
         let request = self.prepare(call, options)?;
-        let response = self
-            .transport
-            .send(request)
-            .await
-            .map_err(Error::Transport)?;
+        let response = self.transport.send(request).await.map_err(Error::Transport)?;
         if response.status != success {
             return Err(response_error(response, declared).await);
         }
@@ -206,30 +176,19 @@ impl Client {
 
     /// Sends `call` and decodes the JSON body as `T`. Public so a caller can read a response as
     /// `serde_json::Value`, as the TypeScript Promise client returns it, without the typed decode.
-    pub async fn json<T: DeserializeOwned>(
-        &self,
-        call: Call,
-        options: &RequestOptions,
-    ) -> Result<T, Error> {
+    pub async fn json<T: DeserializeOwned>(&self, call: Call, options: &RequestOptions) -> Result<T, Error> {
         let bytes = json_body(self.execute(call, options).await?).await?;
         let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
         // The JSON path of the first failure goes in the message, so a schema mismatch names its field.
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|error| Error::MalformedResponse(error.to_string()))
+        serde_path_to_error::deserialize(&mut deserializer).map_err(|error| Error::MalformedResponse(error.to_string()))
     }
 
-    pub(crate) async fn data<T: DeserializeOwned>(
-        &self,
-        call: Call,
-        options: &RequestOptions,
-    ) -> Result<T, Error> {
+    pub(crate) async fn data<T: DeserializeOwned>(&self, call: Call, options: &RequestOptions) -> Result<T, Error> {
         #[derive(serde::Deserialize)]
         struct Data<T> {
             data: T,
         }
-        self.json::<Data<T>>(call, options)
-            .await
-            .map(|value| value.data)
+        self.json::<Data<T>>(call, options).await.map(|value| value.data)
     }
 
     /// Sends `call` and expects no body. Public so a caller can send a body with its own key order.
@@ -237,25 +196,15 @@ impl Client {
         self.execute(call, options).await.map(|_| ())
     }
 
-    pub(crate) async fn binary(
-        &self,
-        call: Call,
-        options: &RequestOptions,
-    ) -> Result<Bytes, Error> {
+    pub(crate) async fn binary(&self, call: Call, options: &RequestOptions) -> Result<Bytes, Error> {
         let response = self.execute(call, options).await?;
         response.bytes().await.map_err(Error::Transport)
     }
 
-    pub(crate) async fn sse<T>(
-        &self,
-        call: Call,
-        options: &RequestOptions,
-    ) -> Result<SseResponse<T>, Error> {
+    pub(crate) async fn sse<T>(&self, call: Call, options: &RequestOptions) -> Result<SseResponse<T>, Error> {
         let response = self.execute(call, options).await?;
         if !is_content_type(&response, "text/event-stream") {
-            return Err(Error::UnsupportedContentType(
-                response.header("content-type").map(str::to_owned),
-            ));
+            return Err(Error::UnsupportedContentType(response.header("content-type").map(str::to_owned)));
         }
         Ok(SseResponse::new(response))
     }
@@ -280,30 +229,13 @@ pub enum Body {
 }
 
 impl Call {
-    pub fn new(
-        method: &'static str,
-        path: String,
-        success_status: u16,
-        declared_statuses: &'static [u16],
-    ) -> Self {
-        Self {
-            method,
-            path,
-            query: Vec::new(),
-            headers: Vec::new(),
-            body: None,
-            success_status,
-            declared_statuses,
-        }
+    pub fn new(method: &'static str, path: String, success_status: u16, declared_statuses: &'static [u16]) -> Self {
+        Self { method, path, query: Vec::new(), headers: Vec::new(), body: None, success_status, declared_statuses }
     }
 
     /// Adds a query value, bracket-encoded like `appendQuery`.
     pub fn query<T: Serialize + ?Sized>(&mut self, key: &str, value: &T) -> Result<(), Error> {
-        query::append(
-            &mut self.query,
-            key,
-            &serde_json::to_value(value).map_err(encode_error)?,
-        );
+        query::append(&mut self.query, key, &serde_json::to_value(value).map_err(encode_error)?);
         Ok(())
     }
 
@@ -331,9 +263,7 @@ impl Call {
 
     /// Sets the whole JSON body, for payloads that are not flattened into fields.
     pub fn json<T: Serialize + ?Sized>(&mut self, value: &T) -> Result<(), Error> {
-        self.body = Some(Body::Json(
-            serde_json::to_value(value).map_err(encode_error)?,
-        ));
+        self.body = Some(Body::Json(serde_json::to_value(value).map_err(encode_error)?));
         Ok(())
     }
 
@@ -350,11 +280,7 @@ pub fn path_param<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
 
 /// A trailing wildcard path, each segment encoded like `encodeURIComponent`.
 pub fn path_wildcard(value: &str) -> String {
-    value
-        .split('/')
-        .map(|segment| utf8_percent_encode(segment, COMPONENT).to_string())
-        .collect::<Vec<_>>()
-        .join("/")
+    value.split('/').map(|segment| utf8_percent_encode(segment, COMPONENT).to_string()).collect::<Vec<_>>().join("/")
 }
 
 /// The characters `encodeURIComponent` escapes: everything except `A-Z a-z 0-9 - _ . ! ~ * ' ( )`.
@@ -405,9 +331,7 @@ async fn response_error(response: Response, declared: &[u16]) -> Error {
 async fn json_body(response: Response) -> Result<Bytes, Error> {
     let content_type = response.header("content-type").map(str::to_owned);
     if !is_content_type(&response, "application/json")
-        && !content_type
-            .as_deref()
-            .is_some_and(|value| value.contains("+json"))
+        && !content_type.as_deref().is_some_and(|value| value.contains("+json"))
     {
         return Err(Error::UnsupportedContentType(content_type));
     }

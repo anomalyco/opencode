@@ -44,19 +44,9 @@ pub struct Frame {
 impl Frame {
     /// The frame's widgets; [`install`] places them once the TUI exists.
     pub fn new(app: &App, tui: Weak<Tui>) -> Self {
-        let main = View::new(app)
-            .column()
-            .grow(1.0)
-            .basis(Length::Auto)
-            .min_height(0);
+        let main = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0);
         let strip = strip::new(app, tui.clone());
-        let column = View::new(app)
-            .column()
-            .grow(1.0)
-            .min_width(0)
-            .min_height(0)
-            .child(&strip)
-            .child(&main);
+        let column = View::new(app).column().grow(1.0).min_width(0).min_height(0).child(&strip).child(&main);
         let rail = rail::new(app, tui.clone());
         let tabs_resize = PaneResize::new(tabs_rules());
         let pane_resize = PaneResize::new(pane_rules());
@@ -106,11 +96,7 @@ impl Frame {
 
     /// The vertical rail's width while it shows (`verticalTabsWidth` in `SessionFrame`), else 0.
     pub fn rail_width(&self, tui: &Tui) -> u16 {
-        if visible(tui) && vertical(tui) {
-            self.tabs_resize.size(tui)
-        } else {
-            0
-        }
+        if visible(tui) && vertical(tui) { self.tabs_resize.size(tui) } else { 0 }
     }
 
     fn session(&self) -> Option<Rc<SessionState>> {
@@ -154,19 +140,10 @@ pub fn install(tui: &Rc<Tui>, shell: &View) {
 
 /// Rereads `layout` after the storage directory changed.
 pub fn reload(tui: &Tui, storage: &Storage) {
-    let value = storage
-        .load("layout", &json!({}))
-        .unwrap_or_else(|_| json!({}));
-    let width = |key: &str| {
-        value
-            .get(key)
-            .and_then(Value::as_u64)
-            .map(|width| width as u16)
-    };
+    let value = storage.load("layout", &json!({})).unwrap_or_else(|_| json!({}));
+    let width = |key: &str| value.get(key).and_then(Value::as_u64).map(|width| width as u16);
     tui.frame.tabs_resize.set_value(width("verticalTabsWidth"));
-    tui.frame
-        .pane_resize
-        .set_value(width("paneWidth").or_else(|| width("terminalWidth")));
+    tui.frame.pane_resize.set_value(width("paneWidth").or_else(|| width("terminalWidth")));
     *tui.frame.layout.borrow_mut() = value;
     refresh(tui);
 }
@@ -195,9 +172,7 @@ pub fn stored_layout(tui: &Tui) -> Value {
 
 /// `tabsAvailable`: tabs are on, one is open, and the route is not a plugin's.
 fn available(tui: &Tui) -> bool {
-    Tabs::enabled(tui)
-        && !tui.tabs.tabs(tui).is_empty()
-        && !matches!(tui.route(), Route::Plugin { .. })
+    Tabs::enabled(tui) && !tui.tabs.tabs(tui).is_empty() && !matches!(tui.route(), Route::Plugin { .. })
 }
 
 pub(crate) fn fullscreen_panel(tui: &Tui) -> bool {
@@ -221,14 +196,7 @@ pub fn refresh(tui: &Tui) {
     let vertical = vertical(tui);
     let rail_width = frame.tabs_resize.size(tui);
     // The split is measured even while a full-screen panel hides the tabs.
-    tui.panels.set_width(
-        width
-            - if available(tui) && vertical {
-                i64::from(rail_width)
-            } else {
-                0
-            },
-    );
+    tui.panels.set_width(width - if available(tui) && vertical { i64::from(rail_width) } else { 0 });
     // A panel closes when its session is no longer the open one.
     if let Some(panel) = tui.panels.current()
         && !matches!(tui.route(), Route::Session { id } if id.0 == panel.session)
@@ -241,9 +209,7 @@ pub fn refresh(tui: &Tui) {
     frame.rail.visible(visible && vertical);
     frame.rail.width(rail_width);
     frame.rail_handle.visible(visible && vertical);
-    frame
-        .rail_handle
-        .position(Edge::Left, rail_width.saturating_sub(1));
+    frame.rail_handle.position(Edge::Left, rail_width.saturating_sub(1));
     if let Some(session) = frame.session() {
         session.layout(tui);
     }
@@ -298,21 +264,9 @@ impl SessionFrame {
     /// Wraps the session route's column.
     pub fn new(tui: &Tui, session: &SessionID, column: &View) -> Self {
         let app = &tui.app;
-        let pane = View::new(app)
-            .column()
-            .grow(1.0)
-            .basis(0)
-            .min_width(0)
-            .min_height(0)
-            .child(column);
-        let right = View::new(app)
-            .column()
-            .shrink(0.0)
-            .min_width(0)
-            .min_height(0)
-            .visible(false);
-        let handle =
-            resize::handle(app, tui.weak(), tui.frame.pane_resize.clone(), true).visible(false);
+        let pane = View::new(app).column().grow(1.0).basis(0).min_width(0).min_height(0).child(column);
+        let right = View::new(app).column().shrink(0.0).min_width(0).min_height(0).visible(false);
+        let handle = resize::handle(app, tui.weak(), tui.frame.pane_resize.clone(), true).visible(false);
         let root = View::new(app)
             .row()
             .grow(1.0)
@@ -365,18 +319,11 @@ impl SessionFrame {
 impl SessionState {
     /// The right pane and the handle, from the panel state and the room there is.
     fn layout(&self, tui: &Tui) {
-        let panel = tui
-            .panels
-            .current()
-            .filter(|panel| panel.session == self.session.0);
+        let panel = tui.panels.current().filter(|panel| panel.session == self.session.0);
         let fullscreen = panel.is_some() && tui.panels.presentation() == Presentation::Fullscreen;
         let available = (i64::from(tui.app.size().0) - i64::from(tui.frame.rail_width(tui))).max(0);
         let size = tui.frame.pane_resize.size(tui);
-        let host = self
-            .host
-            .borrow()
-            .as_ref()
-            .map(|host| host.target().clone());
+        let host = self.host.borrow().as_ref().map(|host| host.target().clone());
         // A panel that mounts takes the focus (`PanelHost`'s `onTarget`).
         let mut focus = false;
         if host != panel {
@@ -412,11 +359,7 @@ impl SessionState {
             return;
         }
         let terminal = selected.filter(|_| panel.is_none());
-        let current = self
-            .terminal
-            .borrow()
-            .as_ref()
-            .map(|pane| pane.pty().to_owned());
+        let current = self.terminal.borrow().as_ref().map(|pane| pane.pty().to_owned());
         if current != terminal {
             if let Some(old) = self.terminal.borrow_mut().take() {
                 old.dispose();
@@ -439,13 +382,11 @@ impl SessionState {
         }
         let shown = panel.is_some() || terminal.is_some();
         self.right.visible(shown);
-        self.right
-            .width(if fullscreen { available as u16 } else { size });
+        self.right.width(if fullscreen { available as u16 } else { size });
         self.pane.visible(!fullscreen);
         let handle = shown && !fullscreen && available >= 3;
         self.handle.visible(handle);
-        self.handle
-            .position(Edge::Left, (available - i64::from(size) - 1).max(0) as u16);
+        self.handle.position(Edge::Left, (available - i64::from(size) - 1).max(0) as u16);
         // Focus needs the pane shown.
         if fullscreen || focus {
             self.focus_right(tui);
@@ -469,10 +410,7 @@ impl SessionState {
     }
 
     fn focus_session(&self, tui: &Tui) {
-        if tui
-            .panels
-            .current()
-            .is_some_and(|panel| panel.session == self.session.0)
+        if tui.panels.current().is_some_and(|panel| panel.session == self.session.0)
             && tui.panels.presentation() == Presentation::Fullscreen
         {
             return;
@@ -531,10 +469,7 @@ pub(crate) fn right_focused(tui: &Tui) {
 
 /// Whether the session pane owns the input (`useInteractivity`): no right pane has it and no panel is full screen.
 pub(crate) fn session_interactive(tui: &Tui) -> bool {
-    tui.frame
-        .session()
-        .is_none_or(|session| session.active.get() == Pane::Session)
-        && !fullscreen_panel(tui)
+    tui.frame.session().is_none_or(|session| session.active.get() == Pane::Session) && !fullscreen_panel(tui)
 }
 
 /// `focusSession`.
@@ -562,9 +497,10 @@ fn install_commands(tui: &Rc<Tui>) {
         Condition::when(move || {
             weak.upgrade().is_some_and(|tui| {
                 !tui.dialogs.is_open()
-                    && tui.frame.session().is_some_and(|session| {
-                        session.host.borrow().is_some() || session.terminal.borrow().is_some()
-                    })
+                    && tui
+                        .frame
+                        .session()
+                        .is_some_and(|session| session.host.borrow().is_some() || session.terminal.borrow().is_some())
             })
         })
     };
@@ -576,18 +512,13 @@ fn install_commands(tui: &Rc<Tui>) {
         TuiCommand::new("pane.focus.left", run(SessionState::focus_session))
             .title("Focus session pane")
             .enabled(not_fullscreen),
-        TuiCommand::new("pane.focus.right", run(SessionState::focus_right))
-            .title("Focus right pane"),
+        TuiCommand::new("pane.focus.right", run(SessionState::focus_right)).title("Focus right pane"),
     ]
     .into_iter()
     .map(|command| command.bind(Bind::Default))
     .collect();
-    let layer = KeymapLayer {
-        mode: Some(GLOBAL_MODE.to_owned()),
-        enabled: right_pane,
-        commands,
-        ..KeymapLayer::default()
-    };
+    let layer =
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), enabled: right_pane, commands, ..KeymapLayer::default() };
     // The layer lives as long as the keymap, which the TUI owns.
     if let Err(error) = tui.keymap.layer(layer).map(Disposer::forget) {
         log::error!("pane keymap layer: {error}");

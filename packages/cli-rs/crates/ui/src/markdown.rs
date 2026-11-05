@@ -8,9 +8,7 @@ use std::rc::Rc;
 
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
-use opentui::widget::{
-    CodeBlock, Markdown, MarkdownColors, MarkdownTableOptions, MarkdownTableStyle,
-};
+use opentui::widget::{CodeBlock, Markdown, MarkdownColors, MarkdownTableOptions, MarkdownTableStyle};
 
 use crate::theme::Theme;
 
@@ -72,12 +70,7 @@ pub fn view(
             style: MarkdownTableStyle::Grid,
             cell_padding_x: Some(1),
             // Core's table border: the `conceal` scope's color, else this gray.
-            border_color: Some(
-                syntax
-                    .get("conceal")
-                    .and_then(|style| style.fg)
-                    .unwrap_or(Color::hex(0x888888)),
-            ),
+            border_color: Some(syntax.get("conceal").and_then(|style| style.fg).unwrap_or(Color::hex(0x888888))),
             ..MarkdownTableOptions::default()
         })
         .conceal(conceal)

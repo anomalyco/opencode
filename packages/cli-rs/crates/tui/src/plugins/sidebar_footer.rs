@@ -16,20 +16,12 @@ use crate::routes::session::sidebar::{Section, on_click, sync_catalogs};
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.footer", |cx| {
-        let onboarding = Rc::new(Onboarding::load(
-            cx.host(),
-            cx.storage_key("getting-started"),
-        ));
-        cx.slot(
-            Placement::append(slot::SIDEBAR_FOOTER),
-            move |tui, input| {
-                let session = SessionID(input.session_id.clone().unwrap_or_default());
-                let onboarding = onboarding.clone();
-                Box::new(Section::new(tui, move |tui| {
-                    Some(view(tui, &session, &onboarding))
-                }))
-            },
-        );
+        let onboarding = Rc::new(Onboarding::load(cx.host(), cx.storage_key("getting-started")));
+        cx.slot(Placement::append(slot::SIDEBAR_FOOTER), move |tui, input| {
+            let session = SessionID(input.session_id.clone().unwrap_or_default());
+            let onboarding = onboarding.clone();
+            Box::new(Section::new(tui, move |tui| Some(view(tui, &session, &onboarding))))
+        });
     })
 }
 
@@ -42,15 +34,11 @@ fn view(tui: &Tui, session: &SessionID, onboarding: &Rc<Onboarding>) -> View {
             .unwrap_or_else(|| state.default_location().clone());
         let data = state.location(Some(&location));
         let integrations = data.and_then(|data| data.integration.clone());
-        let branch = data
-            .and_then(|data| data.vcs.as_ref())
-            .and_then(|vcs| vcs.branch.current.clone());
+        let branch = data.and_then(|data| data.vcs.as_ref()).and_then(|vcs| vcs.branch.current.clone());
         (location, integrations, branch)
     });
     let root = View::new(&tui.app).gap(1);
-    let connected = integrations
-        .as_ref()
-        .map(|list| list.iter().any(|item| !item.connections.is_empty()));
+    let connected = integrations.as_ref().map(|list| list.iter().any(|item| !item.connections.is_empty()));
     if tui.app.size().1 >= 22 && connected == Some(false) && !onboarding.dismissed.get() {
         root.add(&card(tui, onboarding));
     }
@@ -77,10 +65,7 @@ impl Onboarding {
             .and_then(|storage| storage.load(&key, &json!({ "dismissed": false })).ok())
             .and_then(|value| value.get("dismissed").and_then(serde_json::Value::as_bool))
             .unwrap_or(false);
-        Self {
-            key,
-            dismissed: Cell::new(dismissed),
-        }
+        Self { key, dismissed: Cell::new(dismissed) }
     }
 
     fn dismiss(&self, tui: &Tui) {
@@ -123,11 +108,7 @@ fn card(tui: &Tui, onboarding: &Rc<Onboarding>) -> View {
             tui.keymap.dispatch("provider.connect", None);
         }
     });
-    let muted = |text: &str| {
-        Text::new(app, text)
-            .fg(theme.text.muted)
-            .wrap(WrapMode::Word)
-    };
+    let muted = |text: &str| Text::new(app, text).fg(theme.text.muted).wrap(WrapMode::Word);
     let body = View::new(app)
         .column()
         .grow(1.0)
@@ -139,12 +120,8 @@ fn card(tui: &Tui, onboarding: &Rc<Onboarding>) -> View {
                 .child(&Text::new(app, "Getting started").fg(theme.text.base).bold())
                 .child(&close),
         )
-        .child(&muted(
-            "OpenCode includes free models so you can start immediately.",
-        ))
-        .child(&muted(
-            "Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc",
-        ))
+        .child(&muted("OpenCode includes free models so you can start immediately."))
+        .child(&muted("Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc"))
         .child(&connect);
     View::new(app)
         .row()
@@ -159,13 +136,10 @@ fn card(tui: &Tui, onboarding: &Rc<Onboarding>) -> View {
 /// `FilePath` of the location at most 38 columns wide.
 fn path(tui: &Tui, directory: &str, value: &str) -> View {
     let theme = tui.page();
-    let text = Text::new(
-        &tui.app,
-        crate::dialogs::open::truncate_file_path(value, 38),
-    )
-    .fg(theme.text.muted)
-    .wrap(WrapMode::None)
-    .truncate(true);
+    let text = Text::new(&tui.app, crate::dialogs::open::truncate_file_path(value, 38))
+        .fg(theme.text.muted)
+        .wrap(WrapMode::None)
+        .truncate(true);
     let hover = text.clone();
     let (base, muted) = (theme.text.base, theme.text.muted);
     text.on_hover(move |cx, hovered| {

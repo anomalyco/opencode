@@ -1,8 +1,6 @@
 //! Alert dialog (U.3): `packages/tui/src/ui/dialog-alert.tsx`.
 
-use crate::dialog::{
-    DialogCx, DialogOptions, Dialogs, FooterAction, FooterProps, HeaderProps, header, layout,
-};
+use crate::dialog::{DialogCx, DialogOptions, Dialogs, FooterAction, FooterProps, HeaderProps, header, layout};
 use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;
 use std::rc::Rc;
@@ -29,30 +27,16 @@ pub fn alert(cx: &Rc<DialogCx>, props: AlertProps) -> View {
     };
     let run = confirm.clone();
     cx.layer(KeymapLayer {
-        commands: vec![
-            TuiCommand::inline("return", move |_, _| run())
-                .title("Confirm alert")
-                .group("Dialog"),
-        ],
+        commands: vec![TuiCommand::inline("return", move |_, _| run()).title("Confirm alert").group("Dialog")],
         ..KeymapLayer::default()
     });
     let run = confirm.clone();
     layout(
         cx,
-        &header(
-            cx,
-            HeaderProps {
-                title: props.title,
-                ..HeaderProps::default()
-            },
-        ),
+        &header(cx, HeaderProps { title: props.title, ..HeaderProps::default() }),
         &Text::new(&cx.app, props.message).fg(cx.theme.text.muted),
         Some(FooterProps {
-            primary: vec![
-                FooterAction::new("ok")
-                    .key("enter")
-                    .on_trigger(move || run()),
-            ],
+            primary: vec![FooterAction::new("ok").key("enter").on_trigger(move || run())],
             ..FooterProps::default()
         }),
     )

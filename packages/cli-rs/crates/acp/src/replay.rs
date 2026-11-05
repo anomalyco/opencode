@@ -12,9 +12,7 @@ use crate::content::{PromptPart, ReplayPart, parts_to_content_chunks};
 use crate::error::Failure;
 use crate::permission;
 use crate::sessions::Attached;
-use crate::tools::{
-    DiffSource, completed_tool_update, error_tool_update, pending_tool_call, running_tool_update,
-};
+use crate::tools::{DiffSource, completed_tool_update, error_tool_update, pending_tool_call, running_tool_update};
 use crate::translate::reasoning_message_id;
 
 const PAGE_SIZE: i64 = 200;
@@ -29,24 +27,14 @@ pub async fn history(
     let mut cursor: Option<String> = None;
     loop {
         let page = list(client, &attached.id, cursor.as_deref()).await?;
-        for message in page
-            .get("data")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
+        for message in page.get("data").and_then(Value::as_array).into_iter().flatten() {
             for update in updates(message, &attached.cwd, capabilities) {
                 let source = completed_source(message, &update);
-                let enriched =
-                    permission::with_completed_diffs(update, source.as_ref(), &attached.cwd).await;
+                let enriched = permission::with_completed_diffs(update, source.as_ref(), &attached.cwd).await;
                 connection.session_update(&attached.id, enriched)?;
             }
         }
-        cursor = page
-            .get("cursor")
-            .and_then(|cursor| cursor.get("next"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
+        cursor = page.get("cursor").and_then(|cursor| cursor.get("next")).and_then(Value::as_str).map(str::to_owned);
         if cursor.is_none() {
             return Ok(());
         }
@@ -56,25 +44,13 @@ pub async fn history(
 // The page stays JSON: the generated message types would drop fields the updates forward as they are.
 async fn list(client: &Client, session_id: &str, cursor: Option<&str>) -> Result<Value, Failure> {
     let path = path_param(session_id).map_err(|error| classify(&error))?;
-    let mut call = Call::new(
-        "GET",
-        format!("/api/session/{path}/message"),
-        200,
-        &[400, 401, 404, 500],
-    );
+    let mut call = Call::new("GET", format!("/api/session/{path}/message"), 200, &[400, 401, 404, 500]);
     let query = match cursor {
-        Some(cursor) => call
-            .query("limit", &PAGE_SIZE)
-            .and_then(|()| call.query("cursor", cursor)),
-        None => call
-            .query("limit", &PAGE_SIZE)
-            .and_then(|()| call.query("order", "asc")),
+        Some(cursor) => call.query("limit", &PAGE_SIZE).and_then(|()| call.query("cursor", cursor)),
+        None => call.query("limit", &PAGE_SIZE).and_then(|()| call.query("order", "asc")),
     };
     query.map_err(|error| classify(&error))?;
-    client
-        .json::<Value>(call, &RequestOptions::default())
-        .await
-        .map_err(|error| classify(&error))
+    client.json::<Value>(call, &RequestOptions::default()).await.map_err(|error| classify(&error))
 }
 
 /// The updates that replay one stored message.
@@ -82,9 +58,7 @@ pub fn updates(message: &Value, cwd: &str, capabilities: &Capabilities) -> Vec<V
     let id = message.get("id").cloned().unwrap_or(Value::Null);
     match message.get("type").and_then(Value::as_str) {
         Some("user") => user_updates(message, &id),
-        Some("compaction") => compaction::replay(message, capabilities.compaction)
-            .into_iter()
-            .collect(),
+        Some("compaction") => compaction::replay(message, capabilities.compaction).into_iter().collect(),
         Some("assistant") => assistant_updates(message, &id, cwd),
         _ => Vec::new(),
     }
@@ -99,10 +73,7 @@ fn user_updates(message: &Value, id: &Value) -> Vec<Value> {
         .map(|file| {
             let mime = text(file, "mime");
             let source = file.get("source");
-            let url = match source
-                .and_then(|source| source.get("type"))
-                .and_then(Value::as_str)
-            {
+            let url = match source.and_then(|source| source.get("type")).and_then(Value::as_str) {
                 Some("uri") => text(source.unwrap_or(&Value::Null), "uri"),
                 _ => format!("data:{mime};base64,{}", text(file, "data")),
             };
@@ -132,10 +103,7 @@ fn user_updates(message: &Value, id: &Value) -> Vec<Value> {
 
 fn assistant_updates(message: &Value, id: &Value, cwd: &str) -> Vec<Value> {
     let message_id = id.as_str().unwrap_or_default();
-    let content = message
-        .get("content")
-        .and_then(Value::as_array)
-        .map_or(&[][..], Vec::as_slice);
+    let content = message.get("content").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
     // Live reasoning ordinals count only reasoning parts, not the mixed content array.
     let mut reasoning = 0;
     content
@@ -182,11 +150,7 @@ fn tool_updates(part: &Value, cwd: &str) -> Vec<Value> {
             input,
             content,
             metadata,
-            state
-                .get("error")
-                .and_then(|error| error.get("message"))
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
+            state.get("error").and_then(|error| error.get("message")).and_then(Value::as_str).unwrap_or_default(),
             cwd,
         ),
         _ => return vec![call],
@@ -210,8 +174,7 @@ fn completed_source(message: &Value, update: &Value) -> Option<DiffSource> {
         return None;
     }
     let part = message.get("content")?.as_array()?.iter().find(|item| {
-        item.get("type").and_then(Value::as_str) == Some("tool")
-            && item.get("id") == update.get("toolCallId")
+        item.get("type").and_then(Value::as_str) == Some("tool") && item.get("id") == update.get("toolCallId")
     })?;
     let state = part.get("state")?;
     if state.get("status").and_then(Value::as_str) != Some("completed") {
@@ -225,9 +188,5 @@ fn completed_source(message: &Value, update: &Value) -> Option<DiffSource> {
 }
 
 fn text(value: &Value, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned()
+    value.get(key).and_then(Value::as_str).unwrap_or_default().to_owned()
 }

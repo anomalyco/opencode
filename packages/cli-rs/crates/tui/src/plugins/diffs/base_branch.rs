@@ -46,12 +46,7 @@ pub fn open(viewer: &Viewer) {
     viewer.ensure_base();
     let current = viewer
         .chosen_base(&key)
-        .or_else(|| {
-            viewer
-                .reported_base(&key)
-                .flatten()
-                .map(|base| base.reference)
-        })
+        .or_else(|| viewer.reported_base(&key).flatten().map(|base| base.reference))
         .map(|reference| short(&reference).to_owned());
     let picker = Rc::new(Picker {
         tui: tui.weak(),
@@ -74,11 +69,7 @@ pub fn open(viewer: &Viewer) {
                 "Base branch",
                 Rc::new({
                     let weak = weak.clone();
-                    move |_: &str| {
-                        weak.upgrade()
-                            .map(|picker| picker.options())
-                            .unwrap_or_default()
-                    }
+                    move |_: &str| weak.upgrade().map(|picker| picker.options()).unwrap_or_default()
                 }),
             );
             props.placeholder = Some("Search local and remote branches".to_owned());
@@ -117,30 +108,20 @@ pub fn open(viewer: &Viewer) {
                 let app = cx.app.clone();
                 let theme = cx.theme.clone();
                 move || {
-                    let branches = weak
-                        .upgrade()
-                        .map_or(Branches::Loading, |picker| picker.branches.borrow().clone());
+                    let branches = weak.upgrade().map_or(Branches::Loading, |picker| picker.branches.borrow().clone());
                     let (text, color) = match branches {
                         Branches::Loading => ("Loading branches…", theme.text.muted),
-                        Branches::Failed => (
-                            "Could not load branches. Reopen the picker to try again.",
-                            theme.text.feedback.error.base,
-                        ),
+                        Branches::Failed => {
+                            ("Could not load branches. Reopen the picker to try again.", theme.text.feedback.error.base)
+                        }
                         Branches::Ready(_) => ("No branches found", theme.text.muted),
                     };
-                    View::new(&app)
-                        .padding_x(DIALOG_LIST_INSET)
-                        .child(&Text::new(&app, text).fg(color))
-                        .as_any()
+                    View::new(&app).padding_x(DIALOG_LIST_INSET).child(&Text::new(&app, text).fg(color)).as_any()
                 }
             });
             props.empty_view = Some(empty.clone());
             props.no_match_view = Some(empty);
-            props.footer = Some(
-                Text::new(&cx.app, "Remembered until the TUI exits")
-                    .fg(cx.theme.text.muted)
-                    .as_any(),
-            );
+            props.footer = Some(Text::new(&cx.app, "Remembered until the TUI exits").fg(cx.theme.text.muted).as_any());
             let (view, select) = select::select(cx, props);
             *picker.select.borrow_mut() = Some(select);
             cx.on_close(opentui::keymap::Disposer::new(move || {
@@ -160,10 +141,7 @@ pub fn open(viewer: &Viewer) {
 impl Picker {
     fn options(&self) -> Vec<SelectOption<String>> {
         match &*self.branches.borrow() {
-            Branches::Ready(names) => names
-                .iter()
-                .map(|name| SelectOption::new(name.clone(), name.clone()))
-                .collect(),
+            Branches::Ready(names) => names.iter().map(|name| SelectOption::new(name.clone(), name.clone())).collect(),
             _ => Vec::new(),
         }
     }
@@ -176,13 +154,12 @@ impl Picker {
             tui.app.cancel_timer(timer);
         }
         let weak = Rc::downgrade(self);
-        self.timer
-            .set(Some(tui.app.set_timeout(SEARCH_DEBOUNCE, move |_| {
-                let Some(picker) = weak.upgrade() else { return };
-                picker.timer.set(None);
-                let search = picker.filter.borrow().clone();
-                picker.fetch(search);
-            })));
+        self.timer.set(Some(tui.app.set_timeout(SEARCH_DEBOUNCE, move |_| {
+            let Some(picker) = weak.upgrade() else { return };
+            picker.timer.set(None);
+            let search = picker.filter.borrow().clone();
+            picker.fetch(search);
+        })));
     }
 
     /// `branches`: a resource of the debounced search, read again only when the search changes.
@@ -199,18 +176,10 @@ impl Picker {
         *self.branches.borrow_mut() = Branches::Loading;
         self.refresh();
         let client = tui.data.client().clone();
-        let input = VcsBranchListInput {
-            location: self.location.clone(),
-            search: Some(search),
-            limit: Some(LIMIT),
-        };
+        let input = VcsBranchListInput { location: self.location.clone(), search: Some(search), limit: Some(LIMIT) };
         let weak = Rc::downgrade(self);
         tui.app.spawn(
-            async move {
-                client
-                    .vcs_branch_list(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.vcs_branch_list(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(picker) = weak.upgrade() else { return };
                 if picker.request.get() != request {
@@ -238,10 +207,7 @@ impl Picker {
 
 /// The branch name of a ref, as the list shows it.
 fn short(reference: &str) -> &str {
-    reference
-        .strip_prefix("refs/heads/")
-        .or_else(|| reference.strip_prefix("refs/remotes/"))
-        .unwrap_or(reference)
+    reference.strip_prefix("refs/heads/").or_else(|| reference.strip_prefix("refs/remotes/")).unwrap_or(reference)
 }
 
 #[cfg(test)]

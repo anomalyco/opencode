@@ -50,10 +50,7 @@ struct Before {
 
 impl Before {
     fn of(prompt: &Inner) -> Self {
-        Self {
-            mode: prompt.mode.get(),
-            text: prompt.textarea.text(),
-        }
+        Self { mode: prompt.mode.get(), text: prompt.textarea.text() }
     }
 
     fn changed(&self, prompt: &Inner) -> bool {
@@ -73,10 +70,7 @@ pub fn connect(inner: &Rc<Inner>) {
             from_clipboard(&prompt);
             return;
         }
-        enqueue(
-            &prompt,
-            Job::Text(text.replace("\r\n", "\n").replace('\r', "\n")),
-        );
+        enqueue(&prompt, Job::Text(text.replace("\r\n", "\n").replace('\r', "\n")));
     });
     let weak = Rc::downgrade(inner);
     inner.textarea.on_mouse(move |cx, event| {
@@ -167,17 +161,11 @@ fn error(prompt: &Inner, message: &str) {
 /// Reads the clipboard, or a test sink's queued outcome while one is capturing.
 fn read_clipboard(app: &App, done: impl FnOnce(ClipboardOutcome) + 'static) {
     if let Some(sink) = crate::features::links::testing::sink() {
-        let outcome = sink
-            .clipboard
-            .borrow_mut()
-            .pop_front()
-            .unwrap_or(ClipboardOutcome::Empty);
+        let outcome = sink.clipboard.borrow_mut().pop_front().unwrap_or(ClipboardOutcome::Empty);
         app.defer(move |_| done(outcome));
         return;
     }
-    app.read_clipboard_as(&["image/png", "text/plain"], move |_, outcome| {
-        done(outcome)
-    });
+    app.read_clipboard_as(&["image/png", "text/plain"], move |_, outcome| done(outcome));
 }
 
 /// `pasteInputText`: files attach; long text collapses into a part; anything else is inserted.
@@ -193,12 +181,7 @@ fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
     let weak = Rc::downgrade(prompt);
     let input = pasted.clone();
     prompt.app.spawn(
-        async move {
-            tokio::task::spawn_blocking(move || attach::resolve(&input, windows))
-                .await
-                .ok()
-                .flatten()
-        },
+        async move { tokio::task::spawn_blocking(move || attach::resolve(&input, windows)).await.ok().flatten() },
         move |_, resolved| {
             let Some(prompt) = weak.upgrade() else { return };
             if before.changed(&prompt) {
@@ -210,19 +193,13 @@ fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
                     for file in resolved {
                         let result = match file {
                             Resolved::Text { content, filename } => {
-                                let name = if filename.is_empty() {
-                                    "image"
-                                } else {
-                                    &filename
-                                };
+                                let name = if filename.is_empty() { "image" } else { &filename };
                                 paste_text(&prompt, &content, &format!("[SVG: {name}]"));
                                 Ok(())
                             }
-                            Resolved::File {
-                                uri,
-                                filename,
-                                path,
-                            } => attachment(&prompt, &uri, Some(&filename), Some(&path)),
+                            Resolved::File { uri, filename, path } => {
+                                attachment(&prompt, &uri, Some(&filename), Some(&path))
+                            }
                         };
                         if let Err(message) = result {
                             error(&prompt, &message);
@@ -239,9 +216,10 @@ fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
 /// The text part of `pasteInputText`.
 fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
     let lines = pasted.matches('\n').count() + 1;
-    let compact = prompt.tui.upgrade().is_none_or(|tui| {
-        tui.settings.info().prompt.and_then(|prompt| prompt.paste) != Some(PromptPaste::Full)
-    });
+    let compact = prompt
+        .tui
+        .upgrade()
+        .is_none_or(|tui| tui.settings.info().prompt.and_then(|prompt| prompt.paste) != Some(PromptPaste::Full));
     // `pastedContent.length` counts UTF-16 units.
     if (lines >= 3 || pasted.encode_utf16().count() > 150) && compact {
         // The same text pasted right after its mark expands it.
@@ -249,8 +227,7 @@ fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
         let repeat = prompt.textarea.extmarks().into_iter().find(|mark| {
             (mark.end == cursor || mark.end + 1 == cursor)
                 && prompt.parts.get(mark.id).is_some_and(|(kind, index)| {
-                    kind == Kind::Pasted
-                        && prompt.prompt.borrow()["pasted"][index]["text"].as_str() == Some(pasted)
+                    kind == Kind::Pasted && prompt.prompt.borrow()["pasted"][index]["text"].as_str() == Some(pasted)
                 })
         });
         if let Some(mark) = repeat
@@ -284,16 +261,8 @@ fn paste_text(prompt: &Inner, text: &str, label: &str) {
 }
 
 /// `pasteAttachment`: `[Image N]` or `[PDF N]` at the cursor, marked as a file part with the data URI.
-fn attachment(
-    prompt: &Inner,
-    uri: &str,
-    filename: Option<&str>,
-    path: Option<&str>,
-) -> Result<(), String> {
-    let files = prompt.prompt.borrow()["files"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&str>) -> Result<(), String> {
+    let files = prompt.prompt.borrow()["files"].as_array().cloned().unwrap_or_default();
     let label = attach::label(&files, uri, filename)?;
     let textarea = &prompt.textarea;
     let start = textarea.cursor_offset();
@@ -309,10 +278,7 @@ fn attachment(
     if let Some(path) = path {
         part.insert("path".into(), path.into());
     }
-    part.insert(
-        "mention".into(),
-        json!({ "start": start, "end": end, "text": label }),
-    );
+    part.insert("mention".into(), json!({ "start": start, "end": end, "text": label }));
     {
         let mut info = prompt.prompt.borrow_mut();
         info["text"] = Value::String(textarea.text());
@@ -337,10 +303,7 @@ fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
     let Some((Kind::Pasted, index)) = prompt.parts.get(mark) else {
         return false;
     };
-    let Some(text) = prompt.prompt.borrow()["pasted"][index]["text"]
-        .as_str()
-        .map(str::to_owned)
-    else {
+    let Some(text) = prompt.prompt.borrow()["pasted"][index]["text"].as_str().map(str::to_owned) else {
         return false;
     };
     textarea.remove_extmark(mark);
@@ -357,11 +320,7 @@ pub fn expanded_text(prompt: &Inner) -> String {
         .extmarks()
         .into_iter()
         .filter_map(|mark| match prompt.parts.get(mark.id)? {
-            (Kind::Pasted, index) => Some((
-                mark.start,
-                mark.end,
-                info["pasted"][index]["text"].as_str()?.to_owned(),
-            )),
+            (Kind::Pasted, index) => Some((mark.start, mark.end, info["pasted"][index]["text"].as_str()?.to_owned())),
             _ => None,
         })
         .collect();
@@ -378,13 +337,7 @@ pub fn clipboard_text(tui: &crate::app::Tui, text: &str) -> String {
         return text.to_owned();
     }
     let info = prompt.prompt.borrow();
-    expand_placeholders(
-        text,
-        info["pasted"]
-            .as_array()
-            .map(Vec::as_slice)
-            .unwrap_or_default(),
-    )
+    expand_placeholders(text, info["pasted"].as_array().map(Vec::as_slice).unwrap_or_default())
 }
 
 /// `expandPastedTextPlaceholders`: each paste's label, found in order of where the paste sits, becomes its
@@ -398,8 +351,7 @@ fn expand_placeholders(text: &str, pasted: &[Value]) -> String {
     let mut cursor = 0;
     let mut result = String::new();
     for part in parts {
-        let (Some(label), Some(content)) = (part["source"]["text"].as_str(), part["text"].as_str())
-        else {
+        let (Some(label), Some(content)) = (part["source"]["text"].as_str(), part["text"].as_str()) else {
             continue;
         };
         let Some(index) = text[cursor..].find(label).map(|index| index + cursor) else {
@@ -422,11 +374,7 @@ pub fn expand_prompt(prompt: &Value) -> Value {
         .iter()
         .filter_map(|part| {
             let offset = |key: &str| part["source"][key].as_f64().map(|value| value as u32);
-            Some((
-                offset("start")?,
-                offset("end")?,
-                part["text"].as_str()?.to_owned(),
-            ))
+            Some((offset("start")?, offset("end")?, part["text"].as_str()?.to_owned()))
         })
         .collect();
     let mut next = prompt.clone();
@@ -459,12 +407,10 @@ pub fn expand_prompt(prompt: &Value) -> Value {
 /// stay valid.
 fn expand_tracked(text: &str, mut ranges: Vec<(u32, u32, String)>) -> String {
     ranges.sort_by_key(|range| std::cmp::Reverse(range.0));
-    ranges
-        .into_iter()
-        .fold(text.to_owned(), |result, (start, end, part)| {
-            let (start, end) = (index_at(text, start), index_at(text, end));
-            format!("{}{part}{}", &result[..start], &result[end..])
-        })
+    ranges.into_iter().fold(text.to_owned(), |result, (start, end, part)| {
+        let (start, end) = (index_at(text, start), index_at(text, end));
+        format!("{}{part}{}", &result[..start], &result[end..])
+    })
 }
 
 #[cfg(test)]
@@ -486,10 +432,7 @@ mod tests {
             json!({ "text": "A", "source": { "start": 0, "text": "[Pasted ~3 lines]" } }),
             json!({ "text": "gone", "source": { "start": 40, "text": "[Pasted ~9 lines]" } }),
         ];
-        assert_eq!(
-            expand_placeholders("[Pasted ~3 lines] and [Pasted ~3 lines]!", &pasted),
-            "A and B!"
-        );
+        assert_eq!(expand_placeholders("[Pasted ~3 lines] and [Pasted ~3 lines]!", &pasted), "A and B!");
         assert_eq!(expand_placeholders("plain", &pasted), "plain");
     }
 

@@ -21,11 +21,7 @@ pub struct ConfirmProps {
 pub fn confirm(cx: &Rc<DialogCx>, props: ConfirmProps) -> View {
     let choose = |confirm: bool| {
         let dialogs = cx.dialogs.clone();
-        let run = if confirm {
-            props.on_confirm.clone()
-        } else {
-            props.on_cancel.clone()
-        };
+        let run = if confirm { props.on_confirm.clone() } else { props.on_cancel.clone() };
         move || {
             if let Some(run) = &run {
                 run();
@@ -36,37 +32,21 @@ pub fn confirm(cx: &Rc<DialogCx>, props: ConfirmProps) -> View {
     let (yes, no) = (choose(true), choose(false));
     cx.layer(KeymapLayer {
         commands: vec![
-            TuiCommand::inline("return", move |_, _| yes())
-                .title("Confirm")
-                .group("Dialog"),
-            TuiCommand::inline("escape", move |_, _| no())
-                .title("Cancel")
-                .group("Dialog"),
+            TuiCommand::inline("return", move |_, _| yes()).title("Confirm").group("Dialog"),
+            TuiCommand::inline("escape", move |_, _| no()).title("Cancel").group("Dialog"),
         ],
         ..KeymapLayer::default()
     });
-    let label = |label: &Option<String>, fallback: &str| {
-        label.as_deref().unwrap_or(fallback).to_lowercase()
-    };
+    let label = |label: &Option<String>, fallback: &str| label.as_deref().unwrap_or(fallback).to_lowercase();
     layout(
         cx,
-        &header(
-            cx,
-            HeaderProps {
-                title: props.title.clone(),
-                ..HeaderProps::default()
-            },
-        ),
+        &header(cx, HeaderProps { title: props.title.clone(), ..HeaderProps::default() }),
         &Text::new(&cx.app, props.message.as_str()).fg(cx.theme.text.muted),
         Some(FooterProps {
             // Footer labels are lowercase.
             primary: vec![
-                FooterAction::new(label(&props.cancel_label, "cancel"))
-                    .key("esc")
-                    .on_trigger(choose(false)),
-                FooterAction::new(label(&props.confirm_label, "confirm"))
-                    .key("enter")
-                    .on_trigger(choose(true)),
+                FooterAction::new(label(&props.cancel_label, "cancel")).key("esc").on_trigger(choose(false)),
+                FooterAction::new(label(&props.confirm_label, "confirm")).key("enter").on_trigger(choose(true)),
             ],
             ..FooterProps::default()
         }),
@@ -79,11 +59,7 @@ pub fn titlecase(text: &str) -> String {
     let mut word = false;
     for char in text.chars() {
         let is_word = char.is_ascii_alphanumeric() || char == '_';
-        out.push(if is_word && !word {
-            char.to_ascii_uppercase()
-        } else {
-            char
-        });
+        out.push(if is_word && !word { char.to_ascii_uppercase() } else { char });
         word = is_word;
     }
     out

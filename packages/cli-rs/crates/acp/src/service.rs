@@ -5,9 +5,8 @@ use std::sync::{Arc, Mutex};
 use futures_util::future::BoxFuture;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    AbsolutePath, LocationPublicRef, SessionCreateInput, SessionForkInput, SessionGetInput,
-    SessionID, SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
-    SessionsCursor,
+    AbsolutePath, LocationPublicRef, SessionCreateInput, SessionForkInput, SessionGetInput, SessionID, SessionInfo,
+    SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionsCursor,
 };
 use serde_json::{Map, Value, json};
 
@@ -48,15 +47,9 @@ pub struct Service {
 impl Service {
     pub fn initialize(&self, params: &Value) -> Value {
         let client = params.get("clientCapabilities");
-        *self
-            .capabilities
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = capabilities::parse(client);
+        *self.capabilities.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = capabilities::parse(client);
         let mut auth = Map::new();
-        auth.insert(
-            "description".to_owned(),
-            json!("Run `opencode auth login` in the terminal"),
-        );
+        auth.insert("description".to_owned(), json!("Run `opencode auth login` in the terminal"));
         auth.insert("name".to_owned(), json!("Login with opencode"));
         auth.insert("id".to_owned(), json!(AUTH_METHOD_ID));
         let terminal = client
@@ -68,9 +61,7 @@ impl Service {
             auth.insert("type".to_owned(), json!("terminal"));
             auth.insert("args".to_owned(), json!(["--login"]));
         }
-        if client
-            .and_then(|client| client.get("_meta"))
-            .and_then(|meta| meta.get("terminal-auth"))
+        if client.and_then(|client| client.get("_meta")).and_then(|meta| meta.get("terminal-auth"))
             == Some(&Value::Bool(true))
         {
             auth.insert(
@@ -103,9 +94,7 @@ impl Service {
 
     pub fn authenticate(&self, method_id: &str) -> Result<Value, Failure> {
         if method_id != AUTH_METHOD_ID {
-            return Err(Failure::UnknownAuthMethod {
-                method_id: method_id.to_owned(),
-            });
+            return Err(Failure::UnknownAuthMethod { method_id: method_id.to_owned() });
         }
         Ok(json!({}))
     }
@@ -120,9 +109,7 @@ impl Service {
             self.client
                 .session_create(
                     &SessionCreateInput {
-                        location: Some(Some(LocationPublicRef {
-                            directory: AbsolutePath(setup.cwd.clone()),
-                        })),
+                        location: Some(Some(LocationPublicRef { directory: AbsolutePath(setup.cwd.clone()) })),
                         permissions: permissions.map(Some),
                         metadata: metadata.map(Some),
                         ..SessionCreateInput::default()
@@ -131,10 +118,7 @@ impl Service {
                 )
                 .await,
         )?;
-        let (attached, options) = self
-            .sessions
-            .attach(&created, &setup.cwd, &mcp_servers, responded)
-            .await?;
+        let (attached, options) = self.sessions.attach(&created, &setup.cwd, &mcp_servers, responded).await?;
         Ok(json!({ "sessionId": attached.id, "configOptions": options }))
     }
 
@@ -143,19 +127,9 @@ impl Service {
         let mcp_servers = supported_mcp_servers(&setup.mcp_servers)?;
         let session = self.get_session(&setup.session_id, &setup.cwd).await?;
         directories::activate(&self.client, &session, &directories).await?;
-        let (attached, _) = self
-            .sessions
-            .attach(
-                &session,
-                &session.location.directory.0,
-                &mcp_servers,
-                responded,
-            )
-            .await?;
-        let capabilities = *self
-            .capabilities
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (attached, _) =
+            self.sessions.attach(&session, &session.location.directory.0, &mcp_servers, responded).await?;
+        let capabilities = *self.capabilities.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let loaded = async {
             replay::history(&self.client, &self.connection, &attached, &capabilities).await?;
             self.current_options(&attached).await
@@ -170,14 +144,8 @@ impl Service {
         }
     }
 
-    pub async fn list_sessions(
-        &self,
-        cwd: Option<String>,
-        cursor: Option<String>,
-    ) -> Result<Value, Failure> {
-        let directory = cwd
-            .map(|cwd| directories::parse_cwd(&cwd).map(AbsolutePath))
-            .transpose()?;
+    pub async fn list_sessions(&self, cwd: Option<String>, cursor: Option<String>) -> Result<Value, Failure> {
+        let directory = cwd.map(|cwd| directories::parse_cwd(&cwd).map(AbsolutePath)).transpose()?;
         let page = check(
             self.client
                 .session_list(
@@ -185,9 +153,7 @@ impl Service {
                         directory,
                         order: Some(SessionListInputOrder::Desc),
                         limit: Some(100),
-                        cursor: cursor
-                            .filter(|cursor| !cursor.is_empty())
-                            .map(SessionsCursor),
+                        cursor: cursor.filter(|cursor| !cursor.is_empty()).map(SessionsCursor),
                         ..SessionListInput::default()
                     },
                     &RequestOptions::default(),
@@ -212,11 +178,8 @@ impl Service {
             .collect();
         let mut response = Map::new();
         response.insert("sessions".to_owned(), json!(sessions));
-        if let Some(Some(next)) = page
-            .cursor
-            .next
-            .as_ref()
-            .filter(|next| next.as_ref().is_some_and(|next| !next.0.is_empty()))
+        if let Some(Some(next)) =
+            page.cursor.next.as_ref().filter(|next| next.as_ref().is_some_and(|next| !next.0.is_empty()))
         {
             response.insert("nextCursor".to_owned(), json!(next.0));
         }
@@ -228,12 +191,7 @@ impl Service {
         if let Ok(id) = decode_session_id(session_id) {
             let result = self
                 .client
-                .session_remove(
-                    &SessionRemoveInput {
-                        session_id: SessionID(id),
-                    },
-                    &RequestOptions::default(),
-                )
+                .session_remove(&SessionRemoveInput { session_id: SessionID(id) }, &RequestOptions::default())
                 .await;
             match result {
                 Err(error) if is_declared(&error, "SessionNotFoundError") => {}
@@ -244,24 +202,13 @@ impl Service {
         Ok(json!({}))
     }
 
-    pub async fn resume_session(
-        &self,
-        setup: Setup,
-        responded: Responded,
-    ) -> Result<Value, Failure> {
+    pub async fn resume_session(&self, setup: Setup, responded: Responded) -> Result<Value, Failure> {
         let directories = directories::parse(&setup.cwd, &setup.additional_directories)?;
         let mcp_servers = supported_mcp_servers(&setup.mcp_servers)?;
         let session = self.get_session(&setup.session_id, &setup.cwd).await?;
         directories::activate(&self.client, &session, &directories).await?;
-        let (_, options) = self
-            .sessions
-            .attach(
-                &session,
-                &session.location.directory.0,
-                &mcp_servers,
-                responded,
-            )
-            .await?;
+        let (_, options) =
+            self.sessions.attach(&session, &session.location.directory.0, &mcp_servers, responded).await?;
         Ok(json!({ "configOptions": options }))
     }
 
@@ -278,39 +225,22 @@ impl Service {
         let forked = check(
             self.client
                 .session_fork(
-                    &SessionForkInput {
-                        session_id: session.id.clone(),
-                        before: None,
-                    },
+                    &SessionForkInput { session_id: session.id.clone(), before: None },
                     &RequestOptions::default(),
                 )
                 .await,
         )?;
         // Forks inherit the source's grants; replace them with this request's.
         directories::activate(&self.client, &forked, &directories).await?;
-        let (attached, options) = self
-            .sessions
-            .attach(
-                &forked,
-                &forked.location.directory.0,
-                &mcp_servers,
-                responded,
-            )
-            .await?;
+        let (attached, options) =
+            self.sessions.attach(&forked, &forked.location.directory.0, &mcp_servers, responded).await?;
         Ok(json!({ "sessionId": attached.id, "configOptions": options }))
     }
 
-    pub async fn set_config_option(
-        &self,
-        session_id: &str,
-        config_id: &str,
-        value: &Value,
-    ) -> Result<Value, Failure> {
+    pub async fn set_config_option(&self, session_id: &str, config_id: &str, value: &Value) -> Result<Value, Failure> {
         let attached = self.sessions.require(session_id)?;
         let Some(value) = value.as_str() else {
-            return Err(Failure::InvalidConfigOption {
-                config_id: config_id.to_owned(),
-            });
+            return Err(Failure::InvalidConfigOption { config_id: config_id.to_owned() });
         };
         self.with_reload(&attached, config_id, value).await?;
         Ok(json!({ "configOptions": self.current_options(&attached).await? }))
@@ -333,10 +263,7 @@ impl Service {
         match self.turns.start(session_id, prompt, cancel, responded) {
             Ok(result) => Box::pin(async move {
                 result.await.unwrap_or_else(|_| {
-                    Err(Failure::Defect {
-                        name: None,
-                        detail: "ACP turn ended without a response".to_owned(),
-                    })
+                    Err(Failure::Defect { name: None, detail: "ACP turn ended without a response".to_owned() })
                 })
             }),
             Err(failure) => Box::pin(async move { Err(failure) }),
@@ -344,24 +271,12 @@ impl Service {
     }
 
     async fn current_options(&self, attached: &Attached) -> Result<Vec<Value>, Failure> {
-        Ok(config_options(
-            &self.catalogs.get(&attached.cwd).await?,
-            &attached.selection(),
-        ))
+        Ok(config_options(&self.catalogs.get(&attached.cwd).await?, &attached.selection()))
     }
 
-    async fn with_reload(
-        &self,
-        attached: &Attached,
-        config_id: &str,
-        value: &str,
-    ) -> Result<(), Failure> {
+    async fn with_reload(&self, attached: &Attached, config_id: &str, value: &str) -> Result<(), Failure> {
         match self.select(attached, config_id, value).await {
-            Err(
-                Failure::InvalidModel { .. }
-                | Failure::InvalidMode { .. }
-                | Failure::InvalidEffort { .. },
-            ) => {
+            Err(Failure::InvalidModel { .. } | Failure::InvalidMode { .. } | Failure::InvalidEffort { .. }) => {
                 self.catalogs.reload(&attached.cwd).await?;
                 self.select(attached, config_id, value).await
             }
@@ -369,12 +284,7 @@ impl Service {
         }
     }
 
-    async fn select(
-        &self,
-        attached: &Attached,
-        config_id: &str,
-        value: &str,
-    ) -> Result<(), Failure> {
+    async fn select(&self, attached: &Attached, config_id: &str, value: &str) -> Result<(), Failure> {
         let catalog = self.catalogs.get(&attached.cwd).await?;
         let change = resolve_change(&catalog, &attached.selection(), config_id, value)?;
         self.sessions.select(attached, change).await
@@ -383,20 +293,10 @@ impl Service {
     async fn get_session(&self, session_id: &str, cwd: &str) -> Result<SessionInfo, Failure> {
         let id = decode_session_id(session_id)?;
         let session = check(
-            self.client
-                .session_get(
-                    &SessionGetInput {
-                        session_id: SessionID(id),
-                    },
-                    &RequestOptions::default(),
-                )
-                .await,
+            self.client.session_get(&SessionGetInput { session_id: SessionID(id) }, &RequestOptions::default()).await,
         )?;
         if fs_resolve(cwd) != fs_resolve(&session.location.directory.0) {
-            return Err(Failure::SessionDirectoryMismatch {
-                session_id: session_id.to_owned(),
-                cwd: cwd.to_owned(),
-            });
+            return Err(Failure::SessionDirectoryMismatch { session_id: session_id.to_owned(), cwd: cwd.to_owned() });
         }
         Ok(session)
     }
@@ -412,10 +312,7 @@ fn supported_mcp_servers(servers: &[Value]) -> Result<Vec<Value>, Failure> {
         .cloned()
         .collect();
     if supported.len() < servers.len() {
-        return Err(Failure::invalid_request(
-            "Only stdio and HTTP MCP servers are supported",
-            Some("mcpServers"),
-        ));
+        return Err(Failure::invalid_request("Only stdio and HTTP MCP servers are supported", Some("mcpServers")));
     }
     Ok(supported)
 }
@@ -425,11 +322,7 @@ fn title(session: &SessionInfo) -> String {
     if let Some(title) = &session.title {
         return title.clone();
     }
-    let kind = if session.parent_id.is_some() {
-        "Child"
-    } else {
-        "New"
-    };
+    let kind = if session.parent_id.is_some() { "Child" } else { "New" };
     format!("{kind} session - {}", iso(session.time.created))
 }
 

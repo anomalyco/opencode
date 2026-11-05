@@ -54,13 +54,8 @@ pub fn forward() -> StartError {
 
 /// Starts `command` with `args` as a child that shares this process's stdio. The caller waits for it, so
 /// a signal can wait for the child to finish its own teardown first.
-pub fn spawn(
-    command: &TsCommand,
-    args: impl IntoIterator<Item = OsString>,
-) -> Result<Child, StartError> {
-    build(command, args)
-        .spawn()
-        .map_err(|source| start_error(command, source))
+pub fn spawn(command: &TsCommand, args: impl IntoIterator<Item = OsString>) -> Result<Child, StartError> {
+    build(command, args).spawn().map_err(|source| start_error(command, source))
 }
 
 /// Turns remote access on through `opencode service set remote true`: it creates the device's
@@ -69,10 +64,7 @@ pub fn spawn(
 /// (`packages/cli/src/services/service-config.ts:261-270`). Returns the started child; on failure it
 /// prints its own error before it exits.
 pub fn enable_remote(command: &TsCommand) -> Result<Child, StartError> {
-    spawn(
-        command,
-        ["service", "set", "remote", "true"].map(OsString::from),
-    )
+    spawn(command, ["service", "set", "remote", "true"].map(OsString::from))
 }
 
 /// The remote hostname of `route`, `<route>.<tunnel hostname>`, or `None` until the tunnel's
@@ -89,10 +81,7 @@ pub fn tunnel_hostname(paths: &Paths, route: &str) -> io::Result<Option<String>>
         let content = read_optional(&root.join(name))?;
         // The SDK accepts an empty chain but no empty token, key, or certificate.
         if content.is_none_or(|content| content.is_empty() && name != "chain.pem") {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Incomplete tunnel identity for default",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Incomplete tunnel identity for default"));
         }
     }
     let hostname = serde_json::from_str::<serde_json::Value>(&metadata)
@@ -122,10 +111,7 @@ fn build(command: &TsCommand, args: impl IntoIterator<Item = OsString>) -> Comma
 }
 
 fn start_error(command: &TsCommand, source: io::Error) -> StartError {
-    StartError {
-        program: command.program.to_string_lossy().into_owned(),
-        source,
-    }
+    StartError { program: command.program.to_string_lossy().into_owned(), source }
 }
 
 fn read_optional(path: &Path) -> io::Result<Option<String>> {
@@ -152,16 +138,10 @@ mod tests {
     fn the_child_gets_the_arguments_and_reports_its_exit_code() {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("args");
-        let command = script(
-            dir.path(),
-            &format!("printf '%s\\n' \"$@\" > '{}'\nexit 3", log.display()),
-        );
+        let command = script(dir.path(), &format!("printf '%s\\n' \"$@\" > '{}'\nexit 3", log.display()));
         let status = enable_remote(&command).unwrap().wait().unwrap();
         assert_eq!(exit_code(status), 3);
-        assert_eq!(
-            std::fs::read_to_string(&log).unwrap(),
-            "service\nset\nremote\ntrue\n"
-        );
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "service\nset\nremote\ntrue\n");
         let killed = script(dir.path(), "kill -9 $$");
         let status = spawn(&killed, []).unwrap().wait().unwrap();
         assert_eq!(exit_code(status), 128 + 9);
@@ -171,14 +151,12 @@ mod tests {
     fn a_missing_binary_names_the_variable() {
         let error = spawn(&TsCommand::new("/nonexistent/opencode"), []).unwrap_err();
         assert!(
-            error
-                .to_string()
-                .starts_with("Failed to start /nonexistent/opencode: No such file or directory"),
+            error.to_string().starts_with("Failed to start /nonexistent/opencode: No such file or directory"),
             "{error}"
         );
-        assert!(error.to_string().ends_with(
-            "Install opencode or set OPENCODE_TS_BIN to the TypeScript opencode binary."
-        ));
+        assert!(
+            error.to_string().ends_with("Install opencode or set OPENCODE_TS_BIN to the TypeScript opencode binary.")
+        );
         let error = exec(&TsCommand::new("/nonexistent/opencode"), []);
         assert!(error.to_string().starts_with("Failed to start"));
     }
@@ -205,9 +183,6 @@ mod tests {
             std::fs::write(root.join(name), "x").unwrap();
         }
         std::fs::write(root.join("chain.pem"), "").unwrap();
-        assert_eq!(
-            tunnel_hostname(&paths, "r1").unwrap().as_deref(),
-            Some("r1.abc.opentunnel.dev")
-        );
+        assert_eq!(tunnel_hostname(&paths, "r1").unwrap().as_deref(), Some("r1.abc.opentunnel.dev"));
     }
 }

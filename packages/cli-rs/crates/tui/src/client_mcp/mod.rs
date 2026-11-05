@@ -10,9 +10,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use opencode_api::client::Auth;
-use opencode_api::client_mcp::{
-    self, Connection, Connector, Options, Tool, ToolResult, Tungstenite,
-};
+use opencode_api::client_mcp::{self, Connection, Connector, Options, Tool, ToolResult, Tungstenite};
 use opencode_api::generated::{SessionID, V2Event};
 use serde_json::{Map, Value, json};
 use tokio::sync::oneshot;
@@ -74,12 +72,7 @@ pub fn install(tui: &Rc<Tui>) {
                 })
             }),
             Kind::Write => {
-                let Some(text) = call
-                    .text
-                    .as_ref()
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                else {
+                let Some(text) = call.text.as_ref().and_then(Value::as_str).map(str::to_owned) else {
                     done(ToolResult::error("text must be a string"));
                     return;
                 };
@@ -112,19 +105,11 @@ pub fn sync(tui: &Tui) {
     let client = tui.data.client();
     let directory = crate::features::location::current(tui)
         .map(|location| location.directory)
-        .unwrap_or_else(|| {
-            tui.data
-                .read(|state| state.default_location().directory.clone())
-        });
+        .unwrap_or_else(|| tui.data.read(|state| state.default_location().directory.clone()));
     // A managed service that restarted has a new port and password; the transport knows them.
-    let (base, auth) = client
-        .transport()
-        .endpoint(client.base_url().clone(), client.credentials());
+    let (base, auth) = client.transport().endpoint(client.base_url().clone(), client.credentials());
     let (url, headers) = endpoint(&base, auth.as_ref());
-    let key = tui
-        .settings
-        .experiment(EXPERIMENT)
-        .then(|| json!([url.as_str(), headers, directory]).to_string());
+    let key = tui.settings.experiment(EXPERIMENT).then(|| json!([url.as_str(), headers, directory]).to_string());
     let state = &tui.client_mcp;
     if *state.key.borrow() == key {
         return;
@@ -134,20 +119,10 @@ pub fn sync(tui: &Tui) {
     if key.is_none() {
         return;
     }
-    let connector = state
-        .connector
-        .borrow()
-        .clone()
-        .unwrap_or_else(|| Arc::new(Tungstenite));
+    let connector = state.connector.borrow().clone().unwrap_or_else(|| Arc::new(Tungstenite));
     let _guard = tui.app.runtime().enter();
     let connection = client_mcp::connect(
-        Options {
-            url,
-            name: "tui".to_owned(),
-            directory: Some(directory),
-            headers,
-            tools: tools(tui.app.proxy()),
-        },
+        Options { url, name: "tui".to_owned(), directory: Some(directory), headers, tools: tools(tui.app.proxy()) },
         connector,
     );
     *state.connection.borrow_mut() = Some(connection);
@@ -157,16 +132,9 @@ pub fn sync(tui: &Tui) {
 fn endpoint(base: &url::Url, auth: Option<&Auth>) -> (url::Url, Vec<(String, String)>) {
     let mut url = base.clone();
     match auth {
-        Some(auth @ Auth::Basic { .. }) => (
-            url,
-            vec![(
-                "authorization".to_owned(),
-                format!("Basic {}", auth.token()),
-            )],
-        ),
+        Some(auth @ Auth::Basic { .. }) => (url, vec![("authorization".to_owned(), format!("Basic {}", auth.token()))]),
         Some(auth @ Auth::Query { .. }) => {
-            url.query_pairs_mut()
-                .append_pair("auth_token", &auth.token());
+            url.query_pairs_mut().append_pair("auth_token", &auth.token());
             (url, Vec::new())
         }
         None => (url, Vec::new()),
@@ -180,24 +148,20 @@ fn tools(proxy: opentui::prelude::AppProxy) -> Vec<Tool> {
             name: name.to_owned(),
             description: Some(description.to_owned()),
             input_schema: schema.as_object().cloned().unwrap_or_default(),
-            handler: Arc::new(
-                move |args: Map<String, Value>, context: client_mcp::Context| {
-                    let (reply, result) = oneshot::channel();
-                    let call = Call {
-                        tool: kind,
-                        session: context.session_id,
-                        text: args.get("text").cloned(),
-                        reply: Mutex::new(Some(reply)),
-                    };
-                    let sent = proxy.send(call).map_err(|error| error.to_string());
-                    Box::pin(async move {
-                        sent?;
-                        result
-                            .await
-                            .map_err(|_| "Unable to load terminal".to_owned())
-                    })
-                },
-            ),
+            handler: Arc::new(move |args: Map<String, Value>, context: client_mcp::Context| {
+                let (reply, result) = oneshot::channel();
+                let call = Call {
+                    tool: kind,
+                    session: context.session_id,
+                    text: args.get("text").cloned(),
+                    reply: Mutex::new(Some(reply)),
+                };
+                let sent = proxy.send(call).map_err(|error| error.to_string());
+                Box::pin(async move {
+                    sent?;
+                    result.await.map_err(|_| "Unable to load terminal".to_owned())
+                })
+            }),
         }
     };
     vec![
@@ -226,11 +190,7 @@ type Done = Box<dyn FnOnce(&Tui, Result<String, ToolResult>)>;
 
 /// The terminal `open_terminal` shows for the calling session (the selected one, else the newest, else a new one),
 /// or a tool failure.
-fn terminal_for(
-    tui: &Tui,
-    called_by: Option<String>,
-    done: impl FnOnce(&Tui, Result<String, ToolResult>) + 'static,
-) {
+fn terminal_for(tui: &Tui, called_by: Option<String>, done: impl FnOnce(&Tui, Result<String, ToolResult>) + 'static) {
     let done: Done = Box::new(done);
     let Some(called_by) = called_by.map(SessionID) else {
         return done(tui, Err(ToolResult::error("Unknown session")));
@@ -241,10 +201,7 @@ fn terminal_for(
         }
         // The server's answer to `/api/info` arrives on connect, long before a model can call the tool.
         if !tui.terminals.available() {
-            return done(
-                tui,
-                Err(ToolResult::error("This server does not support terminals")),
-            );
+            return done(tui, Err(ToolResult::error("This server does not support terminals")));
         }
         let (root, routed_root) = tui.data.read(|state| {
             let routed = match tui.route() {
@@ -256,9 +213,7 @@ fn terminal_for(
         // Terminal panes render for the routed session; tabs hold root sessions, which become routed when selected.
         let target = match routed_root {
             Some((routed, routed_root)) if routed_root == root => Some(routed),
-            _ if crate::tabs::Tabs::enabled(tui) && tui.tabs.open_ids(tui).contains(&root.0) => {
-                Some(root)
-            }
+            _ if crate::tabs::Tabs::enabled(tui) && tui.tabs.open_ids(tui).contains(&root.0) => Some(root),
             _ => None,
         };
         let Some(target) = target else {
@@ -269,12 +224,9 @@ fn terminal_for(
             crate::terminal::refresh(tui, &target, false, move |tui| {
                 // The agent opened it, so don't move the user's keyboard focus into a live shell.
                 let selected = tui.terminals.selected_id(&session.0);
-                let existing = selected.clone().or_else(|| {
-                    tui.terminals
-                        .list(&session.0)
-                        .last()
-                        .map(|terminal| terminal.id.0.clone())
-                });
+                let existing = selected
+                    .clone()
+                    .or_else(|| tui.terminals.list(&session.0).last().map(|terminal| terminal.id.0.clone()));
                 match existing {
                     Some(id) => {
                         if selected.as_ref() != Some(&id) {
@@ -282,12 +234,10 @@ fn terminal_for(
                         }
                         done(tui, Ok(id));
                     }
-                    None => {
-                        crate::terminal::create(tui, &session, false, move |tui, id| match id {
-                            Some(id) => done(tui, Ok(id)),
-                            None => done(tui, Err(ToolResult::error("Unable to load terminal"))),
-                        })
-                    }
+                    None => crate::terminal::create(tui, &session, false, move |tui, id| match id {
+                        Some(id) => done(tui, Ok(id)),
+                        None => done(tui, Err(ToolResult::error("Unable to load terminal"))),
+                    }),
                 }
             });
         });
@@ -300,10 +250,9 @@ fn known(tui: &Tui, session: SessionID, then: impl FnOnce(&Tui) + 'static) {
         return then(tui);
     }
     let weak = tui.weak();
-    tui.app
-        .spawn(tui.data.session_sync(&session, false), move |_, _| {
-            if let Some(tui) = weak.upgrade() {
-                then(&tui);
-            }
-        });
+    tui.app.spawn(tui.data.session_sync(&session, false), move |_, _| {
+        if let Some(tui) = weak.upgrade() {
+            then(&tui);
+        }
+    });
 }

@@ -16,7 +16,8 @@ use serde_json::{Value, json};
 const DIRECTORY: &str = "/project";
 
 fn routes() -> Vec<MemoryRoute> {
-    let location = json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
+    let location =
+        json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
     let agent = json!({
         "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
@@ -36,48 +37,18 @@ fn routes() -> Vec<MemoryRoute> {
     };
     vec![
         MemoryRoute::json("GET", "/api/location", 200, &location),
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([agent]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([model]))),
-        MemoryRoute::json(
-            "POST",
-            "/api/session",
-            200,
-            &json!({ "data": session("ses_new") }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_new",
-            200,
-            &json!({ "data": session("ses_new") }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_b",
-            200,
-            &json!({ "data": session("ses_b") }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("POST", "/api/session", 200, &json!({ "data": session("ses_new") })),
+        MemoryRoute::json("GET", "/api/session/ses_new", 200, &json!({ "data": session("ses_new") })),
+        MemoryRoute::json("GET", "/api/session/ses_b", 200, &json!({ "data": session("ses_b") })),
+        MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/session/:id/inbox", 200, &json!({ "data": [] })),
         MemoryRoute::body("PUT", "/api/session/:id/environment", 204, None, ""),
         MemoryRoute::body("POST", "/api/session/:id/agent", 204, None, ""),
         MemoryRoute::body("POST", "/api/session/:id/model", 204, None, ""),
-        MemoryRoute::json(
-            "POST",
-            "/api/session/ses_new/prompt",
-            200,
-            &inbox("ses_new"),
-        ),
+        MemoryRoute::json("POST", "/api/session/ses_new/prompt", 200, &inbox("ses_new")),
     ]
 }
 
@@ -94,12 +65,7 @@ fn environment() -> IndexMap<String, String> {
     IndexMap::from([("TERM_PROGRAM".to_owned(), "parity".to_owned())])
 }
 
-fn mount(
-    app: &TestApp,
-    memory: &Memory,
-    route: Route,
-    args: Args,
-) -> std::rc::Rc<opencode_tui::Tui> {
+fn mount(app: &TestApp, memory: &Memory, route: Route, args: Args) -> std::rc::Rc<opencode_tui::Tui> {
     let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).unwrap();
     opencode_tui::mount_with(
         app,
@@ -127,8 +93,7 @@ fn writes(memory: &Memory) -> Vec<String> {
 }
 
 fn find<'a>(log: &'a [Logged], method: &str, path: &str) -> Option<&'a Logged> {
-    log.iter()
-        .find(|logged| logged.method == method && logged.path == path)
+    log.iter().find(|logged| logged.method == method && logged.path == path)
 }
 
 #[test]
@@ -160,12 +125,8 @@ fn a_new_session_gets_the_environment_before_its_first_prompt() {
     );
     assert!(create < upload && upload < prompt, "{writes:?}");
     let log = memory.requests();
-    let body = find(&log, "PUT", "/api/session/ses_new/environment")
-        .and_then(|logged| logged.body.clone());
-    assert_eq!(
-        body,
-        Some(json!({ "variables": { "TERM_PROGRAM": "parity" } }))
-    );
+    let body = find(&log, "PUT", "/api/session/ses_new/environment").and_then(|logged| logged.body.clone());
+    assert_eq!(body, Some(json!({ "variables": { "TERM_PROGRAM": "parity" } })));
     drop(tui);
 }
 
@@ -177,14 +138,8 @@ fn an_opened_session_gets_the_environment_only_on_a_local_server() {
         let tui = mount(
             &app,
             &memory,
-            Route::Session {
-                id: SessionID("ses_b".into()),
-            },
-            Args {
-                local: environment.is_some(),
-                environment,
-                ..Args::default()
-            },
+            Route::Session { id: SessionID("ses_b".into()) },
+            Args { local: environment.is_some(), environment, ..Args::default() },
         );
         let uploaded = app.wait_until(Duration::from_secs(if uploads { 5 } else { 1 }), || {
             find(&memory.requests(), "PUT", "/api/session/ses_b/environment").is_some()

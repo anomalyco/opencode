@@ -11,9 +11,7 @@ use crate::routes::session::sidebar::Section;
 
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.sidebar.limit", |cx| {
-        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, _| {
-            Box::new(Section::new(tui, view))
-        });
+        cx.slot(Placement::append(slot::SIDEBAR_CONTENT), |tui, _| Box::new(Section::new(tui, view)));
     })
 }
 
@@ -26,17 +24,11 @@ fn view(tui: &Tui) -> Option<View> {
     let danger = matches!(level(&usage, &model), Level::Out | Level::Reached);
     let theme = tui.page();
     let app = &tui.app;
-    Some(
-        View::new(app)
-            .child(&Text::new(app, "Limit").fg(theme.text.base).bold())
-            .child(
-                &Text::new(app, format!("{} remaining", format_dollars(usage.left))).fg(
-                    if danger {
-                        theme.text.feedback.error.base
-                    } else {
-                        theme.text.muted
-                    },
-                ),
-            ),
-    )
+    Some(View::new(app).child(&Text::new(app, "Limit").fg(theme.text.base).bold()).child(
+        &Text::new(app, format!("{} remaining", format_dollars(usage.left))).fg(if danger {
+            theme.text.feedback.error.base
+        } else {
+            theme.text.muted
+        }),
+    ))
 }

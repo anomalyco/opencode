@@ -14,12 +14,8 @@ use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_store::{Data, Options};
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
-use opencode_ui::keymap::{
-    Bind, COMMAND_PALETTE_COMMAND, GLOBAL_MODE, Keybinds, KeymapLayer, Slash, TuiCommand,
-};
-use opencode_ui::theme::{
-    Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions,
-};
+use opencode_ui::keymap::{Bind, COMMAND_PALETTE_COMMAND, GLOBAL_MODE, Keybinds, KeymapLayer, Slash, TuiCommand};
+use opencode_ui::theme::{Effect, ModeSetting, TerminalColors, Theme, ThemeMode, ThemeState, ThemeStateOptions};
 use opencode_ui::toast::Toasts;
 use opencode_ui::{help, palette};
 use opentui::keymap::{Condition, Disposer};
@@ -257,14 +253,10 @@ impl Tui {
             self.toasts.theme_error(error);
         }
         if let Some(files) = self.files.clone() {
-            let effects: Vec<Effect> = effects
-                .into_iter()
-                .filter(|effect| !matches!(effect, Effect::ProbePalette))
-                .collect();
+            let effects: Vec<Effect> =
+                effects.into_iter().filter(|effect| !matches!(effect, Effect::ProbePalette)).collect();
             if !effects.is_empty() {
-                self.app
-                    .runtime()
-                    .spawn_blocking(move || persist(&files, effects));
+                self.app.runtime().spawn_blocking(move || persist(&files, effects));
             }
         }
         let theme = self.page();
@@ -291,11 +283,7 @@ impl Tui {
         if self.view.borrow().is_none() {
             return;
         }
-        let prompt = self
-            .textarea
-            .borrow()
-            .as_ref()
-            .is_some_and(|textarea| is_focused(&self.app, textarea));
+        let prompt = self.textarea.borrow().as_ref().is_some_and(|textarea| is_focused(&self.app, textarea));
         self.navigate(self.route());
         let textarea = self.textarea.borrow().clone();
         if let Some(textarea) = textarea.filter(|_| prompt && !self.dialogs.is_open()) {
@@ -315,10 +303,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let _guard = runtime.enter();
     let data = Data::with_runtime(
         deps.client.clone(),
-        Options {
-            directory: deps.directory.clone(),
-            ..Options::default()
-        },
+        Options { directory: deps.directory.clone(), ..Options::default() },
         runtime.clone(),
     );
     let files = deps.roots.as_ref().map(|roots| Files {
@@ -331,11 +316,10 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let theme = ThemeState::new(theme_options(app, &deps.config.info, files.as_ref()));
 
     let textarea: Rc<RefCell<Option<Textarea>>> = Rc::default();
-    let keybinds =
-        Keybinds::resolve(&deps.config.keybinds(), !cfg!(windows)).unwrap_or_else(|error| {
-            log::warn!("invalid keybinds config: {error}");
-            Keybinds::defaults()
-        });
+    let keybinds = Keybinds::resolve(&deps.config.keybinds(), !cfg!(windows)).unwrap_or_else(|error| {
+        log::warn!("invalid keybinds config: {error}");
+        Keybinds::defaults()
+    });
     let keymap = Rc::new(DialogKeymap::new(
         keybinds,
         opencode_ui::keymap::Options {
@@ -360,20 +344,14 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
-    let local_files = deps
-        .roots
-        .as_ref()
-        .map(|roots| crate::dialogs::model::Files {
-            state: roots.paths.state.clone(),
-            storage: files.as_ref().and_then(|files| files.storage.clone()),
-        });
+    let local_files = deps.roots.as_ref().map(|roots| crate::dialogs::model::Files {
+        state: roots.paths.state.clone(),
+        storage: files.as_ref().and_then(|files| files.storage.clone()),
+    });
 
     let plugins = crate::plugins::host::registry(&deps.config.info);
-    let settings = crate::dialogs::settings::Live::new(
-        deps.config,
-        args.auto,
-        files.as_ref().map(|files| files.config.clone()),
-    );
+    let settings =
+        crate::dialogs::settings::Live::new(deps.config, args.auto, files.as_ref().map(|files| files.config.clone()));
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
         local: crate::dialogs::model::Local::new(
             app,
@@ -392,10 +370,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         theme: RefCell::new(theme),
         directory: deps.directory,
         textarea,
-        prompt: crate::prompt::editor::Shared::new(
-            app,
-            deps.roots.as_ref().map(|roots| roots.paths.state.clone()),
-        ),
+        prompt: crate::prompt::editor::Shared::new(app, deps.roots.as_ref().map(|roots| roots.paths.state.clone())),
         settings,
         startup: Startup::new(args),
         plugins,
@@ -477,8 +452,7 @@ pub fn options() -> AppOptions {
 /// Runs the TUI on the terminal until it quits.
 pub fn run(launch: Launch) -> opentui::Result<()> {
     let mut options = options();
-    options.host.terminal.mouse =
-        crate::features::system_commands::mouse_tracking(&launch.deps.config);
+    options.host.terminal.mouse = crate::features::system_commands::mouse_tracking(&launch.deps.config);
     if let Some(manifest) = crate::features::drive::manifest() {
         return crate::features::drive::run(manifest?, options, launch);
     }
@@ -486,11 +460,7 @@ pub fn run(launch: Launch) -> opentui::Result<()> {
 }
 
 /// Runs the TUI on `app` until it quits; `started` runs once the TUI is mounted.
-pub fn run_on(
-    app: App,
-    launch: Launch,
-    started: impl FnOnce(&Rc<Tui>) -> opentui::Result<()>,
-) -> opentui::Result<()> {
+pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentui::Result<()>) -> opentui::Result<()> {
     let tui = mount_with(&app, launch.deps, launch.args);
     if let Some(external) = launch.plugins {
         crate::plugins::host::external(&tui, external);
@@ -528,14 +498,11 @@ fn install_keys(tui: &Rc<Tui>) {
             return;
         };
         let weak = tui.weak();
-        timer.set(Some(cx.set_timeout(
-            deadline.saturating_duration_since(cx.now()),
-            move |cx| {
-                if let Some(tui) = weak.upgrade() {
-                    tui.keymap.expire_leader(cx.now());
-                }
-            },
-        )));
+        timer.set(Some(cx.set_timeout(deadline.saturating_duration_since(cx.now()), move |cx| {
+            if let Some(tui) = weak.upgrade() {
+                tui.keymap.expire_leader(cx.now());
+            }
+        })));
     });
 
     // As `app.tsx:1303-1335`: the commands live in a global layer without bindings, so the palette
@@ -601,9 +568,10 @@ fn install_keys(tui: &Rc<Tui>) {
             let app = tui.app.clone();
             let textarea = tui.textarea.clone();
             Condition::when(move || {
-                textarea.borrow().as_ref().is_none_or(|textarea| {
-                    !is_focused(&app, textarea) || textarea.text().is_empty()
-                })
+                textarea
+                    .borrow()
+                    .as_ref()
+                    .is_none_or(|textarea| !is_focused(&app, textarea) || textarea.text().is_empty())
             })
         },
         ..bindings(None, &["app.exit"])
@@ -611,15 +579,9 @@ fn install_keys(tui: &Rc<Tui>) {
     let layers = [
         commands,
         // Part of `appBindingCommands` (`app.tsx:150-186`); E.20 binds its own commands.
-        bindings(
-            None,
-            &[COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"],
-        ),
+        bindings(None, &[COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"]),
         // `appGlobalBindingCommands` (`app.tsx:117`).
-        bindings(
-            Some(GLOBAL_MODE),
-            &["session.list", "session.new", "open.menu"],
-        ),
+        bindings(Some(GLOBAL_MODE), &["session.list", "session.new", "open.menu"]),
         exit,
     ];
     for layer in layers {
@@ -714,8 +676,7 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
     if !connect {
         return;
     }
-    let (connection, _task) =
-        opencode_store::connection::connect(&tui.data, events::Options::default());
+    let (connection, _task) = opencode_store::connection::connect(&tui.data, events::Options::default());
     let mut state = connection.watch();
     let proxy = tui.app.proxy();
     tui.app.runtime().spawn(async move {
@@ -732,32 +693,23 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) {
 fn textarea_focused(app: &App, textarea: &Rc<RefCell<Option<Textarea>>>) -> Condition {
     let app = app.clone();
     let textarea = textarea.clone();
-    Condition::when(move || {
-        textarea
-            .borrow()
-            .as_ref()
-            .is_some_and(|textarea| is_focused(&app, textarea))
-    })
+    Condition::when(move || textarea.borrow().as_ref().is_some_and(|textarea| is_focused(&app, textarea)))
 }
 
 fn is_focused(app: &App, textarea: &Textarea) -> bool {
-    app.focused()
-        .is_some_and(|widget| widget.id() == textarea.id())
+    app.focused().is_some_and(|widget| widget.id() == textarea.id())
 }
 
 fn route_is_session(tui: &Weak<Tui>) -> Condition {
     let weak = tui.clone();
     Condition::When(Rc::new(move || {
-        weak.upgrade()
-            .is_some_and(|tui| matches!(*tui.route.borrow(), Route::Session { .. }))
+        weak.upgrade().is_some_and(|tui| matches!(*tui.route.borrow(), Route::Session { .. }))
     }))
 }
 
 fn has_sessions(tui: &Weak<Tui>) -> Condition {
     let weak = tui.clone();
-    Condition::When(Rc::new(move || {
-        weak.upgrade().is_some_and(|tui| tui.has_sessions.get())
-    }))
+    Condition::When(Rc::new(move || weak.upgrade().is_some_and(|tui| tui.has_sessions.get())))
 }
 
 fn slash(name: &str, aliases: &[&str]) -> Slash {

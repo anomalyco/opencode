@@ -50,15 +50,8 @@ pub fn apply(event: &Value, tracked: &Tracked, standard_updates: bool) -> (Track
         let Some(current) = current else {
             return (remaining, Vec::new());
         };
-        let completed = Compaction {
-            reason,
-            ..compaction(
-                &current,
-                Status::Completed {
-                    summary: text(data, "text"),
-                },
-            )
-        };
+        let completed =
+            Compaction { reason, ..compaction(&current, Status::Completed { summary: text(data, "text") }) };
         return (remaining, vec![update(&completed, standard_updates)]);
     }
     // Auto compaction can fail without a started event; open it first for standard clients.
@@ -66,19 +59,11 @@ pub fn apply(event: &Value, tracked: &Tracked, standard_updates: bool) -> (Track
     let started = current.unwrap_or_else(|| open(event));
     let failed = Compaction {
         reason,
-        ..compaction(
-            &started,
-            Status::Failed {
-                error: data.get("error").cloned().unwrap_or(Value::Null),
-            },
-        )
+        ..compaction(&started, Status::Failed { error: data.get("error").cloned().unwrap_or(Value::Null) })
     };
     let mut updates = Vec::new();
     if opened && standard_updates {
-        updates.push(update(
-            &compaction(&started, Status::Started),
-            standard_updates,
-        ));
+        updates.push(update(&compaction(&started, Status::Started), standard_updates));
     }
     updates.push(update(&failed, standard_updates));
     (remaining, updates)
@@ -97,10 +82,7 @@ pub fn chunk(started: Option<&Started>, text: &str, standard_updates: bool) -> O
 /// The update that ends a compaction a cancelled turn left open.
 pub fn abandon(started: &Started, standard_updates: bool) -> Option<Value> {
     let error = json!({ "type": "aborted", "message": "Compaction cancelled" });
-    Some(update(
-        &compaction(started, Status::Failed { error }),
-        standard_updates,
-    ))
+    Some(update(&compaction(started, Status::Failed { error }), standard_updates))
 }
 
 /// The update for a stored compaction message. A running one is skipped: nothing on this connection
@@ -108,49 +90,30 @@ pub fn abandon(started: &Started, standard_updates: bool) -> Option<Value> {
 pub fn replay(message: &Value, standard_updates: bool) -> Option<Value> {
     let status = match message.get("status").and_then(Value::as_str) {
         Some("running") => return None,
-        Some("failed") => Status::Failed {
-            error: message.get("error").cloned().unwrap_or(Value::Null),
-        },
-        _ => Status::Completed {
-            summary: text(message, "summary"),
-        },
+        Some("failed") => Status::Failed { error: message.get("error").cloned().unwrap_or(Value::Null) },
+        _ => Status::Completed { summary: text(message, "summary") },
     };
     Some(update(
-        &Compaction {
-            message_id: text(message, "id"),
-            reason: text(message, "reason"),
-            status,
-        },
+        &Compaction { message_id: text(message, "id"), reason: text(message, "reason"), status },
         standard_updates,
     ))
 }
 
 fn compaction(started: &Started, status: Status) -> Compaction {
-    Compaction {
-        message_id: started.message_id.clone(),
-        reason: started.reason.clone(),
-        status,
-    }
+    Compaction { message_id: started.message_id.clone(), reason: started.reason.clone(), status }
 }
 
 // Matches core's compaction message ID, so live and replayed compactions line up.
 fn open(event: &Value) -> Started {
     let data = event.get("data").unwrap_or(&Value::Null);
-    let message_id = data
-        .get("inputID")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .unwrap_or_else(|| {
-            let id = text(event, "id");
-            match id.strip_prefix("evt_") {
-                Some(rest) => format!("msg_{rest}"),
-                None => id,
-            }
-        });
-    Started {
-        message_id,
-        reason: text(data, "reason"),
-    }
+    let message_id = data.get("inputID").and_then(Value::as_str).map(str::to_owned).unwrap_or_else(|| {
+        let id = text(event, "id");
+        match id.strip_prefix("evt_") {
+            Some(rest) => format!("msg_{rest}"),
+            None => id,
+        }
+    });
+    Started { message_id, reason: text(data, "reason") }
 }
 
 fn update(compaction: &Compaction, standard_updates: bool) -> Value {
@@ -175,15 +138,11 @@ fn update(compaction: &Compaction, standard_updates: bool) -> Value {
             json!({ "sessionUpdate": "compaction_update", "compactionId": id, "status": "in_progress" })
         }
         Status::Completed { summary } => {
-            let summary =
-                (!summary.is_empty()).then(|| json!([{ "type": "text", "text": summary }]));
+            let summary = (!summary.is_empty()).then(|| json!([{ "type": "text", "text": summary }]));
             json!({ "sessionUpdate": "compaction_update", "compactionId": id, "status": "completed", "summary": summary })
         }
         Status::Failed { error } => {
-            if matches!(
-                error.get("type").and_then(Value::as_str),
-                Some("aborted" | "compaction.interrupted")
-            ) {
+            if matches!(error.get("type").and_then(Value::as_str), Some("aborted" | "compaction.interrupted")) {
                 return json!({ "sessionUpdate": "compaction_update", "compactionId": id, "status": "cancelled", "summary": null });
             }
             json!({
@@ -197,8 +156,7 @@ fn update(compaction: &Compaction, standard_updates: bool) -> Value {
 // Core reports a defect as `compaction.failed` with a multi-line pretty-printed cause.
 fn display_error(error: &Value) -> String {
     let message = text(error, "message");
-    let defect = error.get("type").and_then(Value::as_str) == Some("compaction.failed")
-        && message.contains('\n');
+    let defect = error.get("type").and_then(Value::as_str) == Some("compaction.failed") && message.contains('\n');
     if message.is_empty() || defect {
         return "Compaction failed".to_owned();
     }
@@ -206,9 +164,5 @@ fn display_error(error: &Value) -> String {
 }
 
 fn text(value: &Value, key: &str) -> String {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned()
+    value.get(key).and_then(Value::as_str).unwrap_or_default().to_owned()
 }

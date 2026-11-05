@@ -5,9 +5,7 @@
 use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{
-    AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput,
-};
+use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
 use opencode_ui::keymap::{Slash, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
@@ -29,11 +27,7 @@ pub fn command(prompt: Weak<Inner>) -> TuiCommand {
         true
     })
     .title("Change working directory")
-    .slash(Slash {
-        name: "cd".to_owned(),
-        aliases: Vec::new(),
-        arguments: true,
-    })
+    .slash(Slash { name: "cd".to_owned(), aliases: Vec::new(), arguments: true })
 }
 
 /// The project whose recents `/cd` keeps: the session's, else the default location's
@@ -42,18 +36,13 @@ pub fn project(tui: &Tui, prompt: &Inner) -> Option<String> {
     if let Some(session) = prompt.session_info(tui) {
         return Some(session.project_id.0);
     }
-    tui.data.read(|state| {
-        state
-            .location(None)
-            .and_then(|data| data.info.as_ref())
-            .map(|info| info.project.id.0.clone())
-    })
+    tui.data
+        .read(|state| state.location(None).and_then(|data| data.info.as_ref()).map(|info| info.project.id.0.clone()))
 }
 
 fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     if input.trim().is_empty() {
-        tui.toasts
-            .show(ToastOptions::new(Variant::Error, "Directory is required"));
+        tui.toasts.show(ToastOptions::new(Variant::Error, "Directory is required"));
         return;
     }
     let project = project(tui, prompt);
@@ -70,21 +59,12 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
     let client = tui.data.client().clone();
     let weak = prompt.this.clone();
     let failed = |tui: &Tui, error: String| {
-        tui.toasts
-            .show(ToastOptions::new(Variant::Error, error).title("Failed to change directory"));
+        tui.toasts.show(ToastOptions::new(Variant::Error, error).title("Failed to change directory"));
     };
     let Some(session) = prompt.session.clone() else {
-        let input = LocationGetInput {
-            location: Some(LocationQueryInput {
-                directory: Some(directory),
-            }),
-        };
+        let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
         tui.app.spawn(
-            async move {
-                client
-                    .location_get(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.location_get(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(prompt) = weak.upgrade() else { return };
                 let Some(tui) = prompt.tui.upgrade() else {
@@ -96,10 +76,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
                         if let Some(project) = &project {
                             tui.prompt.complete.touch(&tui, project, &info.directory.0);
                         }
-                        crate::features::location::set(
-                            &tui,
-                            opencode_store::Location::new(info.directory.0),
-                        );
+                        crate::features::location::set(&tui, opencode_store::Location::new(info.directory.0));
                         prompt.relocate(&tui);
                     }
                 }
@@ -108,30 +85,19 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
         return;
     };
     // TS sends the argument as typed; the server resolves it against the session.
-    let request = SessionMoveInput {
-        session_id: session,
-        directory: AbsolutePath(input.to_owned()),
-        delivery: None,
-    };
-    tui.app.spawn(
-        async move {
-            client
-                .session_move(&request, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let Some(prompt) = weak.upgrade() else { return };
-            let Some(tui) = prompt.tui.upgrade() else {
-                return;
-            };
-            match result {
-                Err(error) => failed(&tui, error.to_string()),
-                Ok(()) => {
-                    if let Some(project) = &project {
-                        tui.prompt.complete.touch(&tui, project, &directory);
-                    }
+    let request = SessionMoveInput { session_id: session, directory: AbsolutePath(input.to_owned()), delivery: None };
+    tui.app.spawn(async move { client.session_move(&request, &RequestOptions::default()).await }, move |_, result| {
+        let Some(prompt) = weak.upgrade() else { return };
+        let Some(tui) = prompt.tui.upgrade() else {
+            return;
+        };
+        match result {
+            Err(error) => failed(&tui, error.to_string()),
+            Ok(()) => {
+                if let Some(project) = &project {
+                    tui.prompt.complete.touch(&tui, project, &directory);
                 }
             }
-        },
-    );
+        }
+    });
 }

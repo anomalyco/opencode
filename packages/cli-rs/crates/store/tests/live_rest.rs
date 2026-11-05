@@ -12,10 +12,7 @@ use opencode_store::target::{Prepared, TargetInput, resolve_session_target};
 use opencode_store::{Data, Options};
 
 fn command(args: &[&str]) -> String {
-    let output = std::process::Command::new("opencode")
-        .args(args)
-        .output()
-        .expect("opencode runs");
+    let output = std::process::Command::new("opencode").args(args).output().expect("opencode runs");
     assert!(output.status.success(), "opencode {args:?} failed");
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
@@ -26,34 +23,21 @@ async fn live_store_reads_locations_and_resolves_a_session() {
         return;
     }
     let server = command(&["service", "status"]);
-    let client = Client::new(&server)
-        .unwrap()
-        .auth(Auth::password(command(&["service", "get", "password"])));
+    let client = Client::new(&server).unwrap().auth(Auth::password(command(&["service", "get", "password"])));
     let directory = std::env::current_dir().unwrap().display().to_string();
-    let data = Data::new(
-        client.clone(),
-        Options {
-            directory,
-            ..Default::default()
-        },
-    );
+    let data = Data::new(client.clone(), Options { directory, ..Default::default() });
     data.on_error(|error| eprintln!("live: refresh failed: {error}"));
-    let (connection, _task) =
-        opencode_store::connection::connect(&data, events::Options::default());
+    let (connection, _task) = opencode_store::connection::connect(&data, events::Options::default());
     let mut state = connection.watch();
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        state.wait_for(|state| state.status == Status::Connected),
-    )
-    .await
-    .expect("connects within 5 s")
-    .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), state.wait_for(|state| state.status == Status::Connected))
+        .await
+        .expect("connects within 5 s")
+        .unwrap();
 
     let rehydrated = || {
         data.read(|state| {
             let location = state.location(None);
-            location.is_some_and(|data| data.info.is_some() && data.vcs.is_some())
-                && !state.projects().is_empty()
+            location.is_some_and(|data| data.info.is_some() && data.vcs.is_some()) && !state.projects().is_empty()
         })
     };
     let started = std::time::Instant::now();
@@ -98,13 +82,7 @@ async fn live_store_reads_locations_and_resolves_a_session() {
     });
 
     let page = client
-        .session_list(
-            &SessionListInput {
-                limit: Some(1),
-                ..Default::default()
-            },
-            &RequestOptions::default(),
-        )
+        .session_list(&SessionListInput { limit: Some(1), ..Default::default() }, &RequestOptions::default())
         .await
         .unwrap();
     let Some(latest) = page.data.first() else {
@@ -113,16 +91,8 @@ async fn live_store_reads_locations_and_resolves_a_session() {
     };
     let target = resolve_session_target(
         &client,
-        TargetInput {
-            session: Some(latest.id.clone()),
-            ..Default::default()
-        },
-        |preparation| async move {
-            Ok(Prepared {
-                model: preparation.model,
-                agent: preparation.agent,
-            })
-        },
+        TargetInput { session: Some(latest.id.clone()), ..Default::default() },
+        |preparation| async move { Ok(Prepared { model: preparation.model, agent: preparation.agent }) },
     )
     .await
     .unwrap();

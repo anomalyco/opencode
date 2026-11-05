@@ -24,13 +24,11 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
             let weak = tui.weak();
             let session = session.clone();
             let message = id.clone();
-            SelectOption::new(title, id)
-                .footer(time(created))
-                .on_select(move |_| {
-                    if let Some(tui) = weak.upgrade() {
-                        crate::dialogs::message::show(&tui, session.clone(), message.clone());
-                    }
-                })
+            SelectOption::new(title, id).footer(time(created)).on_select(move |_| {
+                if let Some(tui) = weak.upgrade() {
+                    crate::dialogs::message::show(&tui, session.clone(), message.clone());
+                }
+            })
         })
         .collect();
     let weak = tui.weak();
@@ -47,10 +45,7 @@ pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
             select::select(cx, props).0
         },
         None,
-        DialogOptions {
-            size: DialogSize::Large,
-            ..DialogOptions::default()
-        },
+        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
     );
 }
 
@@ -59,11 +54,9 @@ pub(crate) fn prompts(messages: &[SessionMessageInfo]) -> Vec<(String, String, f
     messages
         .iter()
         .filter_map(|message| match message {
-            SessionMessageInfo::User(user) => Some((
-                user.id.0.clone(),
-                user.text.replace('\n', " "),
-                user.time.created,
-            )),
+            SessionMessageInfo::User(user) => {
+                Some((user.id.0.clone(), user.text.replace('\n', " "), user.time.created))
+            }
             _ => None,
         })
         .collect()

@@ -17,7 +17,6 @@ impl Grep {
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let matches = finite(props.metadata.get("matches"));
-        self.0
-            .set(search(cx, props, "Grep", "Searching content…", matches));
+        self.0.set(search(cx, props, "Grep", "Searching content…", matches));
     }
 }

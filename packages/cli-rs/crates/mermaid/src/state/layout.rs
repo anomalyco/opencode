@@ -5,17 +5,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use indexmap::IndexMap;
 
-use super::routing::{
-    Boxes, RenderOptions, RenderPlan, is_horizontal_feedback, measure_label, render_plans,
-};
+use super::routing::{Boxes, RenderOptions, RenderPlan, is_horizontal_feedback, measure_label, render_plans};
 use super::{
-    Composite, Diagram, Note, NoteConnector, NoteSide, Rect, SearchBounds, SearchSpace, State,
-    StateKind, Transition, manhattan_path, note_connector, search_space,
+    Composite, Diagram, Note, NoteConnector, NoteSide, Rect, SearchBounds, SearchSpace, State, StateKind, Transition,
+    manhattan_path, note_connector, search_space,
 };
 use crate::core::geometry::{Bounds, Point, orthogonal_path_points};
-use crate::core::spatial::{
-    Clearance, ClearancePolicy, Policy, Role, SpatialIndex, path_claim, rect_claim,
-};
+use crate::core::spatial::{Clearance, ClearancePolicy, Policy, Role, SpatialIndex, path_claim, rect_claim};
 use crate::core::text::{js_trim, measure_text_box, split_lines, width};
 
 const MAX_STRICT_NOTE_PLACEMENTS: usize = 24;
@@ -45,13 +41,7 @@ pub fn note_connector_of(note: &NoteBox, target: &Bounds) -> NoteConnector {
 }
 
 fn rect(b: &Bounds) -> Rect {
-    Rect {
-        left: b.left,
-        top: b.top,
-        width: b.width,
-        height: b.height,
-        center_y: b.center_y,
-    }
+    Rect { left: b.left, top: b.top, width: b.width, height: b.height, center_y: b.center_y }
 }
 
 pub struct Layout {
@@ -73,20 +63,12 @@ impl Layout {
 
     /// The bounds map routing reads.
     pub fn boxes(&self) -> Boxes {
-        self.bounds
-            .iter()
-            .map(|(id, &index)| (id.clone(), self.arena[index]))
-            .collect()
+        self.bounds.iter().map(|(id, &index)| (id.clone(), self.arena[index])).collect()
     }
 
     fn referenced(&self) -> Vec<usize> {
         let mut seen = HashSet::new();
-        self.bounds
-            .values()
-            .chain(self.composites.values())
-            .copied()
-            .filter(|index| seen.insert(*index))
-            .collect()
+        self.bounds.values().chain(self.composites.values()).copied().filter(|index| seen.insert(*index)).collect()
     }
 
     fn shift(&mut self, boxes: &[usize], notes: &[usize], dx: i32, dy: i32) {
@@ -117,10 +99,7 @@ impl Layout {
         if boxes.is_empty() && self.notes.is_empty() {
             return;
         }
-        let connectors = self
-            .notes
-            .iter()
-            .flat_map(|n| n.connector.iter().flat_map(|c| c.points.iter().copied()));
+        let connectors = self.notes.iter().flat_map(|n| n.connector.iter().flat_map(|c| c.points.iter().copied()));
         let min_x = boxes
             .iter()
             .map(|&i| self.arena[i].left)
@@ -149,11 +128,7 @@ impl<'a> Lookup<'a> {
     fn new(diagram: &'a Diagram) -> Self {
         Self {
             states: diagram.states.iter().map(|s| (s.id.as_str(), s)).collect(),
-            composites: diagram
-                .composites
-                .iter()
-                .map(|c| (c.id.as_str(), c))
-                .collect(),
+            composites: diagram.composites.iter().map(|c| (c.id.as_str(), c)).collect(),
         }
     }
 
@@ -170,10 +145,7 @@ impl<'a> Lookup<'a> {
             if current == composite {
                 return true;
             }
-            parent = self
-                .composites
-                .get(current)
-                .and_then(|c| c.parent_id.as_deref());
+            parent = self.composites.get(current).and_then(|c| c.parent_id.as_deref());
         }
         false
     }
@@ -183,10 +155,7 @@ impl<'a> Lookup<'a> {
         let mut parent = self.parent(id);
         while let Some(current) = parent {
             ids.push(current);
-            parent = self
-                .composites
-                .get(current)
-                .and_then(|c| c.parent_id.as_deref());
+            parent = self.composites.get(current).and_then(|c| c.parent_id.as_deref());
         }
         ids
     }
@@ -198,12 +167,8 @@ fn compute_ranks(diagram: &Diagram) -> IndexMap<String, i32> {
     for t in &diagram.transitions {
         outgoing.entry(&t.from).or_default().push(&t.to);
     }
-    let first = diagram
-        .states
-        .iter()
-        .find(|s| s.kind == StateKind::Start)
-        .or(diagram.states.first())
-        .map(|s| s.id.clone());
+    let first =
+        diagram.states.iter().find(|s| s.kind == StateKind::Start).or(diagram.states.first()).map(|s| s.id.clone());
     let Some(first) = first else {
         return ranks;
     };
@@ -211,11 +176,7 @@ fn compute_ranks(diagram: &Diagram) -> IndexMap<String, i32> {
     let mut queue = VecDeque::from([first]);
     while let Some(id) = queue.pop_front() {
         let rank = ranks.get(&id).copied().unwrap_or(0);
-        for &to in outgoing
-            .get(id.as_str())
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-        {
+        for &to in outgoing.get(id.as_str()).map(Vec::as_slice).unwrap_or_default() {
             if ranks.get(to).is_some_and(|&existing| existing <= rank + 1) {
                 continue;
             }
@@ -242,11 +203,7 @@ fn reaches(outgoing: &HashMap<&str, Vec<&Transition>>, from: &str, target: &str)
         if !visited.insert(id.clone()) {
             continue;
         }
-        for t in outgoing
-            .get(id.as_str())
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-        {
+        for t in outgoing.get(id.as_str()).map(Vec::as_slice).unwrap_or_default() {
             stack.push(t.to.clone());
         }
     }
@@ -259,12 +216,7 @@ fn main_path(diagram: &Diagram) -> Vec<String> {
         outgoing.entry(&t.from).or_default().push(t);
     }
     let lookup = Lookup::new(diagram);
-    let Some(start) = diagram
-        .states
-        .iter()
-        .find(|s| s.kind == StateKind::Start)
-        .or(diagram.states.first())
-    else {
+    let Some(start) = diagram.states.iter().find(|s| s.kind == StateKind::Start).or(diagram.states.first()) else {
         return Vec::new();
     };
     let mut path = vec![start.id.clone()];
@@ -285,32 +237,13 @@ fn main_path(diagram: &Diagram) -> Vec<String> {
         let parent = |id: &str| lookup.states.get(id).and_then(|s| s.parent_id.as_deref());
         let next = candidates
             .iter()
-            .find(|t| {
-                lookup
-                    .states
-                    .get(t.to.as_str())
-                    .is_some_and(|s| s.kind == StateKind::End)
-            })
+            .find(|t| lookup.states.get(t.to.as_str()).is_some_and(|s| s.kind == StateKind::End))
+            .or_else(|| candidates.iter().find(|t| !reaches(&outgoing, &t.to, &current)))
+            .or_else(|| candidates.iter().find(|t| !super::routing::has_reverse(diagram, t)))
             .or_else(|| {
-                candidates
-                    .iter()
-                    .find(|t| !reaches(&outgoing, &t.to, &current))
+                candidates.iter().find(|t| matches!((parent(&current), parent(&t.to)), (Some(a), Some(b)) if a != b))
             })
-            .or_else(|| {
-                candidates
-                    .iter()
-                    .find(|t| !super::routing::has_reverse(diagram, t))
-            })
-            .or_else(|| {
-                candidates.iter().find(
-                    |t| matches!((parent(&current), parent(&t.to)), (Some(a), Some(b)) if a != b),
-                )
-            })
-            .or(if candidates.len() == 1 {
-                candidates.first()
-            } else {
-                None
-            });
+            .or(if candidates.len() == 1 { candidates.first() } else { None });
         let Some(next) = next else {
             break;
         };
@@ -324,41 +257,20 @@ fn main_path(diagram: &Diagram) -> Vec<String> {
 
 fn state_size(state: &State) -> Size {
     if state.kind != StateKind::State {
-        return Size {
-            width: 1,
-            height: 1,
-            lines: vec![state.label.clone()],
-        };
+        return Size { width: 1, height: 1, lines: vec![state.label.clone()] };
     }
     let text = measure_text_box(&state.label, 2, 1, 1);
-    Size {
-        width: text.width,
-        height: text.height,
-        lines: text.lines,
-    }
+    Size { width: text.width, height: text.height, lines: text.lines }
 }
 
 fn note_size(note: &Note) -> Size {
-    let mut lines: Vec<String> = note
-        .lines
-        .iter()
-        .flat_map(|line| split_lines(line))
-        .map(|line| js_trim(&line).to_string())
-        .collect();
+    let mut lines: Vec<String> =
+        note.lines.iter().flat_map(|line| split_lines(line)).map(|line| js_trim(&line).to_string()).collect();
     if lines.is_empty() {
         lines.push(String::new());
     }
-    let inner = lines
-        .iter()
-        .map(|line| width(line))
-        .max()
-        .unwrap_or(0)
-        .max(1);
-    Size {
-        width: inner + 4,
-        height: lines.len() as i32 + 2,
-        lines,
-    }
+    let inner = lines.iter().map(|line| width(line)).max().unwrap_or(0).max(1);
+    Size { width: inner + 4, height: lines.len() as i32 + 2, lines }
 }
 
 fn intersects(left: i32, top: i32, w: i32, h: i32, b: &Bounds, padding: i32) -> bool {
@@ -374,11 +286,7 @@ fn place(arena: &mut Vec<Bounds>, map: &mut IndexMap<String, usize>, id: &str, b
 }
 
 pub fn create(diagram: &Diagram, min_gap: i32, budget: &mut i64) -> Result<Layout, String> {
-    let layout = if diagram.direction.horizontal() {
-        horizontal(diagram, min_gap)
-    } else {
-        vertical(diagram, min_gap)
-    };
+    let layout = if diagram.direction.horizontal() { horizontal(diagram, min_gap) } else { vertical(diagram, min_gap) };
     finalize(diagram, layout, budget)
 }
 
@@ -388,20 +296,12 @@ fn vertical(diagram: &Diagram, min_gap: i32) -> Layout {
     let mut by_rank: IndexMap<i32, Vec<&State>> = IndexMap::new();
     for state in &diagram.states {
         let rank = ranks.get(&state.id).copied().unwrap_or(0);
-        let rank = if diagram.direction == super::StateDirection::BT {
-            max_rank - rank
-        } else {
-            rank
-        };
+        let rank = if diagram.direction == super::StateDirection::BT { max_rank - rank } else { rank };
         by_rank.entry(rank).or_default().push(state);
     }
     let mut keys: Vec<i32> = by_rank.keys().copied().collect();
     keys.sort_unstable();
-    let sizes: IndexMap<String, Size> = diagram
-        .states
-        .iter()
-        .map(|s| (s.id.clone(), state_size(s)))
-        .collect();
+    let sizes: IndexMap<String, Size> = diagram.states.iter().map(|s| (s.id.clone(), state_size(s))).collect();
     let mut label_rows: HashMap<&str, i32> = HashMap::new();
     let mut self_counts: HashMap<&str, i32> = HashMap::new();
     for t in &diagram.transitions {
@@ -424,71 +324,31 @@ fn vertical(diagram: &Diagram, min_gap: i32) -> Layout {
     let mut y = 0;
     for rank in keys {
         let states = &by_rank[&rank];
-        let row_height = states
-            .iter()
-            .map(|s| sizes[&s.id].height)
-            .max()
-            .unwrap_or(0);
+        let row_height = states.iter().map(|s| sizes[&s.id].height).max().unwrap_or(0);
         let mut x = 0;
         for state in states {
             let size = &sizes[&state.id];
             let top = y + (row_height - size.height).div_euclid(2);
-            let left = if states.len() == 1 {
-                single_center - size.width.div_euclid(2)
-            } else {
-                x
-            };
-            place(
-                &mut arena,
-                &mut bounds,
-                &state.id,
-                Bounds::rect(left, top, size.width, size.height),
-            );
+            let left = if states.len() == 1 { single_center - size.width.div_euclid(2) } else { x };
+            place(&mut arena, &mut bounds, &state.id, Bounds::rect(left, top, size.width, size.height));
             x += size.width + min_gap + 8;
         }
-        let rows = states
-            .iter()
-            .map(|s| label_rows.get(s.id.as_str()).copied().unwrap_or(0))
-            .fold(0, i32::max);
-        let self_rows = states
-            .iter()
-            .map(|s| self_counts.get(s.id.as_str()).copied().unwrap_or(0) * 3 + 1)
-            .fold(0, i32::max);
-        let choice = if states.iter().any(|s| s.kind == StateKind::Choice) {
-            2
-        } else {
-            0
-        };
+        let rows = states.iter().map(|s| label_rows.get(s.id.as_str()).copied().unwrap_or(0)).fold(0, i32::max);
+        let self_rows =
+            states.iter().map(|s| self_counts.get(s.id.as_str()).copied().unwrap_or(0) * 3 + 1).fold(0, i32::max);
+        let choice = if states.iter().any(|s| s.kind == StateKind::Choice) { 2 } else { 0 };
         y += row_height + 4.max(rows + 3).max(self_rows) + choice;
     }
-    Layout {
-        arena,
-        bounds,
-        sizes,
-        composites: IndexMap::new(),
-        notes: Vec::new(),
-    }
+    Layout { arena, bounds, sizes, composites: IndexMap::new(), notes: Vec::new() }
 }
 
 fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
-    let sizes: IndexMap<String, Size> = diagram
-        .states
-        .iter()
-        .map(|s| (s.id.clone(), state_size(s)))
-        .collect();
+    let sizes: IndexMap<String, Size> = diagram.states.iter().map(|s| (s.id.clone(), state_size(s))).collect();
     let lookup = Lookup::new(diagram);
     let path = main_path(diagram);
     let main: HashSet<&str> = path.iter().map(String::as_str).collect();
-    let main_index: HashMap<&str, usize> = path
-        .iter()
-        .enumerate()
-        .map(|(i, id)| (id.as_str(), i))
-        .collect();
-    let baseline = diagram
-        .transitions
-        .iter()
-        .map(|t| measure_label(&t.label).height)
-        .fold(1, i32::max);
+    let main_index: HashMap<&str, usize> = path.iter().enumerate().map(|(i, id)| (id.as_str(), i)).collect();
+    let baseline = diagram.transitions.iter().map(|t| measure_label(&t.label).height).fold(1, i32::max);
     let gap = min_gap + 8;
     let mut arena: Vec<Bounds> = Vec::new();
     let mut bounds: IndexMap<String, usize> = IndexMap::new();
@@ -497,17 +357,8 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
         let (Some(state), Some(size)) = (lookup.states.get(id.as_str()), sizes.get(id)) else {
             continue;
         };
-        let top = if state.kind == StateKind::State {
-            baseline - size.height.div_euclid(2)
-        } else {
-            baseline
-        };
-        place(
-            &mut arena,
-            &mut bounds,
-            id,
-            Bounds::rect(x, top, size.width, size.height),
-        );
+        let top = if state.kind == StateKind::State { baseline - size.height.div_euclid(2) } else { baseline };
+        place(&mut arena, &mut bounds, id, Bounds::rect(x, top, size.width, size.height));
         let next = path.get(index + 1);
         let adjacent = diagram
             .transitions
@@ -516,14 +367,8 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             .map(|t| measure_label(&t.label).width)
             .fold(0, i32::max);
         let crosses = next.is_some_and(|next| {
-            lookup
-                .states
-                .get(id.as_str())
-                .and_then(|s| s.parent_id.as_deref())
-                != lookup
-                    .states
-                    .get(next.as_str())
-                    .and_then(|s| s.parent_id.as_deref())
+            lookup.states.get(id.as_str()).and_then(|s| s.parent_id.as_deref())
+                != lookup.states.get(next.as_str()).and_then(|s| s.parent_id.as_deref())
         });
         x += size.width + gap.max(adjacent + if crosses { 6 } else { 2 });
     }
@@ -542,8 +387,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             continue;
         };
         let branch_sizes: Vec<&Size> = branch_ids.iter().filter_map(|id| sizes.get(*id)).collect();
-        let total = branch_sizes.iter().map(|s| s.width).sum::<i32>()
-            + 0.max(branch_sizes.len() as i32 - 1) * gap;
+        let total = branch_sizes.iter().map(|s| s.width).sum::<i32>() + 0.max(branch_sizes.len() as i32 - 1) * gap;
         let parent_index = main_index.get(parent_id).copied();
         let joins: Vec<Option<&str>> = branch_ids
             .iter()
@@ -554,23 +398,14 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
                     .find(|t| {
                         t.from == *id
                             && main.contains(t.to.as_str())
-                            && parent_index.is_some_and(|p| {
-                                main_index.get(t.to.as_str()).is_some_and(|&j| j > p + 1)
-                            })
+                            && parent_index.is_some_and(|p| main_index.get(t.to.as_str()).is_some_and(|&j| j > p + 1))
                     })
                     .map(|t| t.to.as_str())
             })
             .collect();
-        let common = joins
-            .first()
-            .copied()
-            .flatten()
-            .filter(|first| joins.iter().all(|j| *j == Some(first)));
+        let common = joins.first().copied().flatten().filter(|first| joins.iter().all(|j| *j == Some(first)));
         let lane = match (common, parent_index) {
-            (Some(_), Some(p)) => path
-                .get(p + 1)
-                .and_then(|id| bounds.get(id))
-                .map(|&i| arena[i]),
+            (Some(_), Some(p)) => path.get(p + 1).and_then(|id| bounds.get(id)).map(|&i| arena[i]),
             _ => None,
         };
         let mut left = lane.map_or(parent.center_x, |l| l.center_x) - total.div_euclid(2);
@@ -583,27 +418,15 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             };
             let existing: Vec<Bounds> = bounds.values().map(|&i| arena[i]).collect();
             let mut top = baseline + if lane.is_some() { 6 } else { 5 };
-            while let Some(collision) = existing
-                .iter()
-                .find(|b| intersects(left, top, size.width, size.height, b, 0))
-            {
+            while let Some(collision) = existing.iter().find(|b| intersects(left, top, size.width, size.height, b, 0)) {
                 top = collision.top + collision.height + 3;
             }
-            place(
-                &mut arena,
-                &mut bounds,
-                id,
-                Bounds::rect(left, top, size.width, size.height),
-            );
+            place(&mut arena, &mut bounds, id, Bounds::rect(left, top, size.width, size.height));
             left += size.width + gap;
         }
     }
     let ranks = compute_ranks(diagram);
-    let mut fallback: Vec<&State> = diagram
-        .states
-        .iter()
-        .filter(|s| !bounds.contains_key(&s.id))
-        .collect();
+    let mut fallback: Vec<&State> = diagram.states.iter().filter(|s| !bounds.contains_key(&s.id)).collect();
     fallback.sort_by_key(|s| ranks.get(&s.id).copied().unwrap_or(0));
     for state in fallback {
         let size = &sizes[&state.id];
@@ -622,12 +445,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             };
             left = collision.left + collision.width + gap;
         }
-        place(
-            &mut arena,
-            &mut bounds,
-            &state.id,
-            Bounds::rect(left, top, size.width, size.height),
-        );
+        place(&mut arena, &mut bounds, &state.id, Bounds::rect(left, top, size.width, size.height));
     }
     let min_x = bounds.values().map(|&i| arena[i].left).fold(0, i32::min);
     if min_x < 0 {
@@ -637,10 +455,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
         }
     }
     if diagram.direction == super::StateDirection::RL {
-        let right = bounds
-            .values()
-            .map(|&i| arena[i].left + arena[i].width)
-            .fold(0, i32::max);
+        let right = bounds.values().map(|&i| arena[i].left + arena[i].width).fold(0, i32::max);
         for &i in bounds.values() {
             let b = &mut arena[i];
             b.left = right - b.left - b.width;
@@ -661,13 +476,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             }
         }
     }
-    Layout {
-        arena,
-        bounds,
-        sizes,
-        composites: IndexMap::new(),
-        notes: Vec::new(),
-    }
+    Layout { arena, bounds, sizes, composites: IndexMap::new(), notes: Vec::new() }
 }
 
 fn add_composite_bounds(diagram: &Diagram, layout: &mut Layout) {
@@ -675,11 +484,7 @@ fn add_composite_bounds(diagram: &Diagram, layout: &mut Layout) {
         if let Some(existing) = layout.composite(&composite.id) {
             return Some(existing);
         }
-        for child in diagram
-            .composites
-            .iter()
-            .filter(|c| c.parent_id.as_deref() == Some(&composite.id))
-        {
+        for child in diagram.composites.iter().filter(|c| c.parent_id.as_deref() == Some(&composite.id)) {
             add(diagram, layout, child);
         }
         let ids = diagram
@@ -723,14 +528,7 @@ fn add_composite_bounds(diagram: &Diagram, layout: &mut Layout) {
 }
 
 fn set_box(b: &mut Bounds, left: i32, top: i32, w: i32, h: i32) {
-    *b = Bounds {
-        left,
-        top,
-        width: w,
-        height: h,
-        center_x: left + w.div_euclid(2),
-        center_y: top + h.div_euclid(2),
-    };
+    *b = Bounds { left, top, width: w, height: h, center_x: left + w.div_euclid(2), center_y: top + h.div_euclid(2) };
 }
 
 fn expand_for_notes(diagram: &Diagram, layout: &mut Layout) {
@@ -739,29 +537,16 @@ fn expand_for_notes(diagram: &Diagram, layout: &mut Layout) {
         let Some(&index) = layout.composites.get(&composite.id) else {
             continue;
         };
-        let notes: Vec<&NoteBox> = layout
-            .notes
-            .iter()
-            .filter(|n| lookup.belongs(&n.note.target, &composite.id))
-            .collect();
+        let notes: Vec<&NoteBox> =
+            layout.notes.iter().filter(|n| lookup.belongs(&n.note.target, &composite.id)).collect();
         if notes.is_empty() {
             continue;
         }
-        let points: Vec<Point> = notes
-            .iter()
-            .flat_map(|n| n.connector.iter().flat_map(|c| c.points.iter().copied()))
-            .collect();
+        let points: Vec<Point> =
+            notes.iter().flat_map(|n| n.connector.iter().flat_map(|c| c.points.iter().copied())).collect();
         let b = layout.arena[index];
-        let left = notes
-            .iter()
-            .map(|n| n.bounds.left - 2)
-            .chain(points.iter().map(|p| p.x - 1))
-            .fold(b.left, i32::min);
-        let top = notes
-            .iter()
-            .map(|n| n.bounds.top - 1)
-            .chain(points.iter().map(|p| p.y - 1))
-            .fold(b.top, i32::min);
+        let left = notes.iter().map(|n| n.bounds.left - 2).chain(points.iter().map(|p| p.x - 1)).fold(b.left, i32::min);
+        let top = notes.iter().map(|n| n.bounds.top - 1).chain(points.iter().map(|p| p.y - 1)).fold(b.top, i32::min);
         let right = notes
             .iter()
             .map(|n| n.bounds.left + n.bounds.width + 2)
@@ -792,16 +577,9 @@ fn expand_for_internal_routing(diagram: &Diagram, layout: &mut Layout) {
                 return false;
             }
             let target: HashSet<&str> = lookup.containers(&t.to).into_iter().collect();
-            lookup
-                .containers(&t.from)
-                .into_iter()
-                .find(|id| target.contains(id))
-                == Some(composite.id.as_str())
+            lookup.containers(&t.from).into_iter().find(|id| target.contains(id)) == Some(composite.id.as_str())
         });
-        let nested = diagram
-            .composites
-            .iter()
-            .any(|c| c.parent_id.as_deref() == Some(&composite.id));
+        let nested = diagram.composites.iter().any(|c| c.parent_id.as_deref() == Some(&composite.id));
         let mut occurrences: HashMap<(&str, &str), i32> = HashMap::new();
         let side_routes: Vec<&Transition> = internal
             .filter(|t| {
@@ -839,10 +617,7 @@ fn expand_for_internal_routing(diagram: &Diagram, layout: &mut Layout) {
                     .filter_map(|c| layout.composite(&c.id).map(|c| c.left + c.width)),
             )
             .fold(i32::MIN, i32::max);
-        let label_width = side_routes
-            .iter()
-            .map(|t| measure_label(&t.label).width)
-            .fold(i32::MIN, i32::max);
+        let label_width = side_routes.iter().map(|t| measure_label(&t.label).width).fold(i32::MIN, i32::max);
         let right = child_right + label_width + side_routes.len() as i32 * 3 + 6;
         if right <= b.left + b.width {
             continue;
@@ -869,21 +644,9 @@ fn enforce_margins(diagram: &Diagram, layout: &mut Layout) {
         }
         let left = children.iter().map(|c| c.left - 2).fold(b.left, i32::min);
         let top = children.iter().map(|c| c.top - 2).fold(b.top, i32::min);
-        let right = children
-            .iter()
-            .map(|c| c.left + c.width + 2)
-            .fold(b.left + b.width, i32::max);
-        let bottom = children
-            .iter()
-            .map(|c| c.top + c.height + 2)
-            .fold(b.top + b.height, i32::max);
-        set_box(
-            &mut layout.arena[index],
-            left,
-            top,
-            right - left,
-            bottom - top,
-        );
+        let right = children.iter().map(|c| c.left + c.width + 2).fold(b.left + b.width, i32::max);
+        let bottom = children.iter().map(|c| c.top + c.height + 2).fold(b.top + b.height, i32::max);
+        set_box(&mut layout.arena[index], left, top, right - left, bottom - top);
         Some(layout.arena[index])
     }
     for composite in diagram.composites.iter().filter(|c| c.parent_id.is_none()) {
@@ -905,14 +668,7 @@ pub fn separate_external(diagram: &Diagram, layout: &mut Layout) -> bool {
             let Some(bound) = layout.get(&state.id) else {
                 continue;
             };
-            if !intersects(
-                bound.left,
-                bound.top,
-                bound.width,
-                bound.height,
-                &composite_bound,
-                0,
-            ) {
+            if !intersects(bound.left, bound.top, bound.width, bound.height, &composite_bound, 0) {
                 continue;
             }
             let dx = composite_bound.left + composite_bound.width + 4 - bound.left;
@@ -942,12 +698,7 @@ pub fn separate_external(diagram: &Diagram, layout: &mut Layout) -> bool {
                 }
             }
             let notes: Vec<usize> = (0..layout.notes.len())
-                .filter(|&i| {
-                    layout
-                        .bounds
-                        .get(&layout.notes[i].note.target)
-                        .is_some_and(|t| boxes.contains(t))
-                })
+                .filter(|&i| layout.bounds.get(&layout.notes[i].note.target).is_some_and(|t| boxes.contains(t)))
                 .collect();
             let mut seen = HashSet::new();
             boxes.retain(|i| seen.insert(*i));
@@ -982,11 +733,7 @@ pub fn expand_for_feedback(diagram: &Diagram, layout: &mut Layout, lane_y: i32) 
     }
 }
 
-pub fn expand_for_internal_transitions(
-    diagram: &Diagram,
-    layout: &mut Layout,
-    plans: &[RenderPlan],
-) {
+pub fn expand_for_internal_transitions(diagram: &Diagram, layout: &mut Layout, plans: &[RenderPlan]) {
     let lookup = Lookup::new(diagram);
     for composite in &diagram.composites {
         let Some(&index) = layout.composites.get(&composite.id) else {
@@ -994,17 +741,14 @@ pub fn expand_for_internal_transitions(
         };
         let mut occupied: Vec<(i32, i32)> = Vec::new();
         for plan in plans {
-            if !lookup.belongs(&plan.route.from_id, &composite.id)
-                || !lookup.belongs(&plan.route.to_id, &composite.id)
+            if !lookup.belongs(&plan.route.from_id, &composite.id) || !lookup.belongs(&plan.route.to_id, &composite.id)
             {
                 continue;
             }
             occupied.extend(plan.cells.iter().map(|c| (c.x, c.y)));
             if let Some(label) = &plan.label {
                 for (row, line) in label.lines.iter().enumerate() {
-                    occupied.extend(
-                        (0..width(line)).map(|column| (label.x + column, label.y + row as i32)),
-                    );
+                    occupied.extend((0..width(line)).map(|column| (label.x + column, label.y + row as i32)));
                 }
             }
         }
@@ -1012,21 +756,11 @@ pub fn expand_for_internal_transitions(
             continue;
         }
         let b = layout.arena[index];
-        let left = b
-            .left
-            .min(occupied.iter().map(|p| p.0).min().unwrap_or(0) - 1);
-        let top = b
-            .top
-            .min(occupied.iter().map(|p| p.1).min().unwrap_or(0) - 1);
+        let left = b.left.min(occupied.iter().map(|p| p.0).min().unwrap_or(0) - 1);
+        let top = b.top.min(occupied.iter().map(|p| p.1).min().unwrap_or(0) - 1);
         let right = (b.left + b.width).max(occupied.iter().map(|p| p.0).max().unwrap_or(0) + 2);
         let bottom = (b.top + b.height).max(occupied.iter().map(|p| p.1).max().unwrap_or(0) + 2);
-        set_box(
-            &mut layout.arena[index],
-            left,
-            top,
-            right - left,
-            bottom - top,
-        );
+        set_box(&mut layout.arena[index], left, top, right - left, bottom - top);
     }
     enforce_margins(diagram, layout);
 }
@@ -1046,11 +780,7 @@ fn finalize(diagram: &Diagram, mut layout: Layout, budget: &mut i64) -> Result<L
             diagram,
             &boxes,
             bottom,
-            &RenderOptions {
-                feedback_top_y: Some(top),
-                notes: &[],
-                repair: false,
-            },
+            &RenderOptions { feedback_top_y: Some(top), notes: &[], repair: false },
             budget,
         )?;
         place_notes(diagram, &mut layout, &plans, budget)?;
@@ -1072,58 +802,22 @@ fn note_box(note: &Note, index: usize, left: i32, top: i32, size: &Size) -> Note
     }
 }
 
-fn find_connector(
-    search: &SearchSpace,
-    note: &NoteBox,
-    target: &Bounds,
-    budget: &mut i64,
-) -> Option<NoteConnector> {
+fn find_connector(search: &SearchSpace, note: &NoteBox, target: &Bounds, budget: &mut i64) -> Option<NoteConnector> {
     let b = &note.bounds;
     let right = note.note.side == NoteSide::Right;
     let connector_y = (b.top + 1).max(target.center_y.min(b.top + b.height - 2));
-    let end = Point {
-        x: if right { b.left - 1 } else { b.left + b.width },
-        y: connector_y,
-    };
-    let goal = Point {
-        x: end.x + if right { -1 } else { 1 },
-        y: end.y,
-    };
-    let target_x = if right {
-        target.left + target.width
-    } else {
-        target.left - 1
-    };
+    let end = Point { x: if right { b.left - 1 } else { b.left + b.width }, y: connector_y };
+    let goal = Point { x: end.x + if right { -1 } else { 1 }, y: end.y };
+    let target_x = if right { target.left + target.width } else { target.left - 1 };
     let mut starts = vec![
-        Point {
-            x: target_x,
-            y: target.center_y,
-        },
-        Point {
-            x: target_x,
-            y: target.top - 1,
-        },
-        Point {
-            x: target_x,
-            y: target.top + target.height,
-        },
+        Point { x: target_x, y: target.center_y },
+        Point { x: target_x, y: target.top - 1 },
+        Point { x: target_x, y: target.top + target.height },
     ];
-    starts.extend((0..target.height).map(|o| Point {
-        x: target.left - 1,
-        y: target.top + o,
-    }));
-    starts.extend((0..target.height).map(|o| Point {
-        x: target.left + target.width,
-        y: target.top + o,
-    }));
-    starts.extend((0..target.width).map(|o| Point {
-        x: target.left + o,
-        y: target.top - 1,
-    }));
-    starts.extend((0..target.width).map(|o| Point {
-        x: target.left + o,
-        y: target.top + target.height,
-    }));
+    starts.extend((0..target.height).map(|o| Point { x: target.left - 1, y: target.top + o }));
+    starts.extend((0..target.height).map(|o| Point { x: target.left + target.width, y: target.top + o }));
+    starts.extend((0..target.width).map(|o| Point { x: target.left + o, y: target.top - 1 }));
+    starts.extend((0..target.width).map(|o| Point { x: target.left + o, y: target.top + target.height }));
     let is_free = |p: Point| {
         p.x >= 0
             && !search.blocked.contains(&p)
@@ -1134,30 +828,11 @@ fn find_connector(
     }
     for &start in starts.iter().filter(|&&p| is_free(p)) {
         for points in [
-            vec![
-                start,
-                Point {
-                    x: start.x,
-                    y: goal.y,
-                },
-                goal,
-                end,
-            ],
-            vec![
-                start,
-                Point {
-                    x: goal.x,
-                    y: start.y,
-                },
-                goal,
-                end,
-            ],
+            vec![start, Point { x: start.x, y: goal.y }, goal, end],
+            vec![start, Point { x: goal.x, y: start.y }, goal, end],
         ] {
             if orthogonal_path_points(&points).into_iter().all(is_free) {
-                return Some(NoteConnector {
-                    connector_y,
-                    points,
-                });
+                return Some(NoteConnector { connector_y, points });
             }
         }
     }
@@ -1165,29 +840,15 @@ fn find_connector(
     let area = SearchBounds {
         min_x: 0,
         min_y: target.top.min(b.top).min(search.min_y) - margin,
-        max_x: (target.left + target.width)
-            .max(b.left + b.width)
-            .max(search.max_x)
-            + margin,
-        max_y: (target.top + target.height)
-            .max(b.top + b.height)
-            .max(search.max_y)
-            + margin,
+        max_x: (target.left + target.width).max(b.left + b.width).max(search.max_x) + margin,
+        max_y: (target.top + target.height).max(b.top + b.height).max(search.max_y) + margin,
     };
     let mut path = manhattan_path(&starts, goal, &area, budget, is_free)?;
     path.push(end);
-    Some(NoteConnector {
-        connector_y,
-        points: path,
-    })
+    Some(NoteConnector { connector_y, points: path })
 }
 
-fn place_notes(
-    diagram: &Diagram,
-    layout: &mut Layout,
-    plans: &[RenderPlan],
-    budget: &mut i64,
-) -> Result<(), String> {
+fn place_notes(diagram: &Diagram, layout: &mut Layout, plans: &[RenderPlan], budget: &mut i64) -> Result<(), String> {
     let composite_ids: HashSet<&str> = diagram.composites.iter().map(|c| c.id.as_str()).collect();
     let boxes = layout.boxes();
     let mut note_space = SpatialIndex::default().add(
@@ -1196,11 +857,7 @@ fn place_notes(
             .filter(|(id, _)| !composite_ids.contains(id.as_str()))
             .map(|(id, b)| rect_claim(format!("state:{id}"), format!("state:{id}"), Role::Body, b)),
     );
-    let points = |path: &[(i32, i32)]| {
-        path.iter()
-            .map(|&(x, y)| Point { x, y })
-            .collect::<Vec<_>>()
-    };
+    let points = |path: &[(i32, i32)]| path.iter().map(|&(x, y)| Point { x, y }).collect::<Vec<_>>();
     let mut reserved = note_space.add(plans.iter().enumerate().flat_map(|(i, plan)| {
         let n = plan.path.len();
         [
@@ -1219,12 +876,8 @@ fn place_notes(
         ]
     }));
     let mut space = reserved.add(plans.iter().enumerate().flat_map(|(i, plan)| {
-        let mut claims = vec![path_claim(
-            format!("transition:{i}"),
-            format!("transition:{i}"),
-            Role::Route,
-            &points(&plan.path),
-        )];
+        let mut claims =
+            vec![path_claim(format!("transition:{i}"), format!("transition:{i}"), Role::Route, &points(&plan.path))];
         if let Some(label) = &plan.label {
             let w = label.lines.iter().map(|l| width(l)).max().unwrap_or(0);
             claims.push(rect_claim(
@@ -1236,10 +889,7 @@ fn place_notes(
         }
         claims
     }));
-    let body_policy = Policy {
-        contacts: Vec::new(),
-        clearance: ClearancePolicy::All(Clearance { x: 1, y: 1 }),
-    };
+    let body_policy = Policy { contacts: Vec::new(), clearance: ClearancePolicy::All(Clearance { x: 1, y: 1 }) };
     let mut placed: Vec<NoteBox> = Vec::new();
     for (index, note) in diagram.notes.iter().enumerate() {
         let Some(target) = boxes.get(&note.target).copied() else {
@@ -1247,17 +897,9 @@ fn place_notes(
         };
         let size = note_size(note);
         let right = note.side == NoteSide::Right;
-        let base_left = if right {
-            target.left + target.width + 4
-        } else {
-            target.left - size.width - 4
-        };
+        let base_left = if right { target.left + target.width + 4 } else { target.left - size.width - 4 };
         let base_top = target.center_y - size.height.div_euclid(2);
-        let mut tops = vec![
-            base_top,
-            target.top - size.height - 2,
-            target.top + target.height + 2,
-        ];
+        let mut tops = vec![base_top, target.top - size.height - 2, target.top + target.height + 2];
         for distance in 0..12 {
             tops.extend([base_top - distance - 1, base_top + distance + 1]);
         }
@@ -1269,36 +911,24 @@ fn place_notes(
             .map(|(left, top)| note_box(note, index, left, top, &size))
             .collect();
         let owner = format!("note:{index}");
-        let find =
-            |candidate_space: &SpatialIndex, limit: usize, budget: &mut i64| -> Option<NoteBox> {
-                let search = search_space(
-                    candidate_space,
-                    |role| if role == Role::Label { 1 } else { 0 },
-                );
-                for bound in candidates.iter().take(limit) {
-                    if bound.bounds.left < 0 {
-                        continue;
-                    }
-                    if !candidate_space.is_free(
-                        &rect_claim(
-                            format!("{owner}:body"),
-                            owner.clone(),
-                            Role::Body,
-                            &bound.bounds,
-                        ),
-                        &body_policy,
-                    ) {
-                        continue;
-                    }
-                    if let Some(connector) = find_connector(&search, bound, &target, budget) {
-                        return Some(NoteBox {
-                            connector: Some(connector),
-                            ..bound.clone()
-                        });
-                    }
+        let find = |candidate_space: &SpatialIndex, limit: usize, budget: &mut i64| -> Option<NoteBox> {
+            let search = search_space(candidate_space, |role| if role == Role::Label { 1 } else { 0 });
+            for bound in candidates.iter().take(limit) {
+                if bound.bounds.left < 0 {
+                    continue;
                 }
-                None
-            };
+                if !candidate_space.is_free(
+                    &rect_claim(format!("{owner}:body"), owner.clone(), Role::Body, &bound.bounds),
+                    &body_policy,
+                ) {
+                    continue;
+                }
+                if let Some(connector) = find_connector(&search, bound, &target, budget) {
+                    return Some(NoteBox { connector: Some(connector), ..bound.clone() });
+                }
+            }
+            None
+        };
         let placement = match find(&space, 1, budget)
             .or_else(|| find(&note_space, 1, budget))
             .or_else(|| find(&space, MAX_STRICT_NOTE_PLACEMENTS, budget))
@@ -1308,21 +938,12 @@ fn place_notes(
             None => outside_placement(&note_space, note, index, &target, &size)?,
         };
         let claims = [
-            rect_claim(
-                format!("{owner}:body"),
-                owner.clone(),
-                Role::Body,
-                &placement.bounds,
-            ),
+            rect_claim(format!("{owner}:body"), owner.clone(), Role::Body, &placement.bounds),
             path_claim(
                 format!("{owner}:connector"),
                 owner.clone(),
                 Role::Boundary,
-                &placement
-                    .connector
-                    .as_ref()
-                    .map(|c| c.points.clone())
-                    .unwrap_or_default(),
+                &placement.connector.as_ref().map(|c| c.points.clone()).unwrap_or_default(),
             ),
         ];
         note_space = note_space.add(claims.clone());
@@ -1344,250 +965,91 @@ fn outside_placement(
     let search = search_space(space, |_| 0);
     let top = search.max_y + 4;
     let owner = format!("note:{index}:outside");
-    let body_policy = Policy {
-        contacts: Vec::new(),
-        clearance: ClearancePolicy::All(Clearance { x: 1, y: 1 }),
-    };
+    let body_policy = Policy { contacts: Vec::new(), clearance: ClearancePolicy::All(Clearance { x: 1, y: 1 }) };
     let fits = |bound: &NoteBox, points: &[Point]| {
-        space.is_free(
-            &rect_claim(
-                format!("{owner}:body"),
-                owner.clone(),
-                Role::Body,
-                &bound.bounds,
-            ),
-            &body_policy,
-        ) && space.is_free(
-            &path_claim(
-                format!("{owner}:connector"),
-                owner.clone(),
-                Role::Boundary,
-                points,
-            ),
-            &Policy::default(),
-        )
+        space.is_free(&rect_claim(format!("{owner}:body"), owner.clone(), Role::Body, &bound.bounds), &body_policy)
+            && space.is_free(
+                &path_claim(format!("{owner}:connector"), owner.clone(), Role::Boundary, points),
+                &Policy::default(),
+            )
     };
-    let other = if note.side == NoteSide::Left {
-        NoteSide::Right
-    } else {
-        NoteSide::Left
-    };
+    let other = if note.side == NoteSide::Left { NoteSide::Right } else { NoteSide::Left };
     for side in [note.side, other] {
-        let sided = Note {
-            side,
-            ..note.clone()
-        };
+        let sided = Note { side, ..note.clone() };
         let left_side = side == NoteSide::Left;
         let aligned = note_box(
             &sided,
             index,
-            if left_side {
-                search.min_x - size.width - 4
-            } else {
-                search.max_x + 4
-            },
+            if left_side { search.min_x - size.width - 4 } else { search.max_x + 4 },
             target.center_y - size.height.div_euclid(2),
             size,
         );
         let ab = aligned.bounds;
-        let note_x = if left_side {
-            ab.left + ab.width
-        } else {
-            ab.left - 1
-        };
+        let note_x = if left_side { ab.left + ab.width } else { ab.left - 1 };
         let connector_y = (ab.top + 1).max(target.center_y.min(ab.top + ab.height - 2));
-        let target_x = if left_side {
-            target.left - 1
-        } else {
-            target.left + target.width
-        };
-        let points = vec![
-            Point {
-                x: target_x,
-                y: target.center_y,
-            },
-            Point {
-                x: note_x,
-                y: connector_y,
-            },
-        ];
+        let target_x = if left_side { target.left - 1 } else { target.left + target.width };
+        let points = vec![Point { x: target_x, y: target.center_y }, Point { x: note_x, y: connector_y }];
         if fits(&aligned, &points) {
-            return Ok(NoteBox {
-                connector: Some(NoteConnector {
-                    connector_y,
-                    points,
-                }),
-                ..aligned
-            });
+            return Ok(NoteBox { connector: Some(NoteConnector { connector_y, points }), ..aligned });
         }
-        let rail_x = if left_side {
-            search.min_x - 2
-        } else {
-            search.max_x + 2
-        };
-        let bound = note_box(
-            &sided,
-            index,
-            if left_side {
-                rail_x - size.width - 2
-            } else {
-                rail_x + 3
-            },
-            top,
-            size,
-        );
+        let rail_x = if left_side { search.min_x - 2 } else { search.max_x + 2 };
+        let bound = note_box(&sided, index, if left_side { rail_x - size.width - 2 } else { rail_x + 3 }, top, size);
         let bb = bound.bounds;
-        let note_x = if left_side {
-            bb.left + bb.width
-        } else {
-            bb.left - 1
-        };
+        let note_x = if left_side { bb.left + bb.width } else { bb.left - 1 };
         let connector_y = bb.top + 1;
-        let side_x = if left_side {
-            target.left - 1
-        } else {
-            target.left + target.width
-        };
-        let mut escapes: Vec<Vec<Point>> =
-            [target.top, target.center_y, target.top + target.height - 1]
-                .into_iter()
-                .map(|y| vec![Point { x: side_x, y }, Point { x: rail_x, y }])
-                .collect();
+        let side_x = if left_side { target.left - 1 } else { target.left + target.width };
+        let mut escapes: Vec<Vec<Point>> = [target.top, target.center_y, target.top + target.height - 1]
+            .into_iter()
+            .map(|y| vec![Point { x: side_x, y }, Point { x: rail_x, y }])
+            .collect();
+        escapes.push(vec![Point { x: target.center_x, y: target.top - 1 }, Point { x: rail_x, y: target.top - 1 }]);
         escapes.push(vec![
-            Point {
-                x: target.center_x,
-                y: target.top - 1,
-            },
-            Point {
-                x: rail_x,
-                y: target.top - 1,
-            },
-        ]);
-        escapes.push(vec![
-            Point {
-                x: target.center_x,
-                y: target.top + target.height,
-            },
-            Point {
-                x: rail_x,
-                y: target.top + target.height,
-            },
+            Point { x: target.center_x, y: target.top + target.height },
+            Point { x: rail_x, y: target.top + target.height },
         ]);
         for escape in escapes {
             let mut points = escape;
-            points.extend([
-                Point {
-                    x: rail_x,
-                    y: connector_y,
-                },
-                Point {
-                    x: note_x,
-                    y: connector_y,
-                },
-            ]);
+            points.extend([Point { x: rail_x, y: connector_y }, Point { x: note_x, y: connector_y }]);
             if fits(&bound, &points) {
-                return Ok(NoteBox {
-                    connector: Some(NoteConnector {
-                        connector_y,
-                        points,
-                    }),
-                    ..bound
-                });
+                return Ok(NoteBox { connector: Some(NoteConnector { connector_y, points }), ..bound });
             }
         }
     }
     for below in [true, false] {
-        let rail_y = if below {
-            search.max_y + 2
-        } else {
-            search.min_y - 2
-        };
+        let rail_y = if below { search.max_y + 2 } else { search.min_y - 2 };
         let left_side = note.side == NoteSide::Left;
         let bound = note_box(
             note,
             index,
-            if left_side {
-                search.min_x - size.width - 4
-            } else {
-                search.max_x + 4
-            },
-            if below {
-                rail_y + 2
-            } else {
-                rail_y - size.height - 2
-            },
+            if left_side { search.min_x - size.width - 4 } else { search.max_x + 4 },
+            if below { rail_y + 2 } else { rail_y - size.height - 2 },
             size,
         );
         let bb = bound.bounds;
-        let note_x = if left_side {
-            bb.left + bb.width
-        } else {
-            bb.left - 1
-        };
+        let note_x = if left_side { bb.left + bb.width } else { bb.left - 1 };
         let connector_y = bb.top + 1;
-        let target_y = if below {
-            target.top + target.height
-        } else {
-            target.top - 1
-        };
-        let mut escapes: Vec<Vec<Point>> =
-            [target.left, target.center_x, target.left + target.width - 1]
-                .into_iter()
-                .map(|x| vec![Point { x, y: target_y }, Point { x, y: rail_y }])
-                .collect();
+        let target_y = if below { target.top + target.height } else { target.top - 1 };
+        let mut escapes: Vec<Vec<Point>> = [target.left, target.center_x, target.left + target.width - 1]
+            .into_iter()
+            .map(|x| vec![Point { x, y: target_y }, Point { x, y: rail_y }])
+            .collect();
         escapes.push(vec![
-            Point {
-                x: target.left,
-                y: target_y,
-            },
-            Point {
-                x: target.left - 1,
-                y: target_y,
-            },
-            Point {
-                x: target.left - 1,
-                y: rail_y,
-            },
+            Point { x: target.left, y: target_y },
+            Point { x: target.left - 1, y: target_y },
+            Point { x: target.left - 1, y: rail_y },
         ]);
         escapes.push(vec![
-            Point {
-                x: target.left + target.width - 1,
-                y: target_y,
-            },
-            Point {
-                x: target.left + target.width,
-                y: target_y,
-            },
-            Point {
-                x: target.left + target.width,
-                y: rail_y,
-            },
+            Point { x: target.left + target.width - 1, y: target_y },
+            Point { x: target.left + target.width, y: target_y },
+            Point { x: target.left + target.width, y: rail_y },
         ]);
         for escape in escapes {
             let mut points = escape;
-            points.extend([
-                Point {
-                    x: note_x,
-                    y: rail_y,
-                },
-                Point {
-                    x: note_x,
-                    y: connector_y,
-                },
-            ]);
+            points.extend([Point { x: note_x, y: rail_y }, Point { x: note_x, y: connector_y }]);
             if fits(&bound, &points) {
-                return Ok(NoteBox {
-                    connector: Some(NoteConnector {
-                        connector_y,
-                        points,
-                    }),
-                    ..bound
-                });
+                return Ok(NoteBox { connector: Some(NoteConnector { connector_y, points }), ..bound });
             }
         }
     }
-    Err(format!(
-        "State {} has no exterior note corridor",
-        note.target
-    ))
+    Err(format!("State {} has no exterior note corridor", note.target))
 }

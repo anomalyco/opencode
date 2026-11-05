@@ -50,18 +50,12 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
     });
     let mini = config.mini.clone().unwrap_or_default();
     // The TUI's tasks need a multi-threaded runtime: `App::runtime` uses the one it runs inside.
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("opencode-mini")
-        .build()?;
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("opencode-mini").build()?;
     let server = runtime.block_on(connect(context))?;
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let input = Input {
         client: server.client.clone(),
-        theme_directories: opencode_ui::theme::config_directories(
-            &paths.config,
-            std::path::Path::new(&directory),
-        ),
+        theme_directories: opencode_ui::theme::config_directories(&paths.config, std::path::Path::new(&directory)),
         home: paths.home.clone(),
         trace: Trace::from_env(&paths.log, &directory, &argv),
         target: TargetInput {
@@ -71,17 +65,12 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
             fork: args.fork,
             model,
             agent: args.agent.clone(),
-            environment: server
-                .is_service()
-                .then(opencode_store::environment::session_environment),
+            environment: server.is_service().then(opencode_store::environment::session_environment),
         },
         directory,
         initial_input,
         replay: args.replay().or(mini.replay).unwrap_or(true),
-        replay_limit: args
-            .replay_limit
-            .map(|limit| limit as u32)
-            .or(mini.replay_limit.map(|limit| limit.0 as u32)),
+        replay_limit: args.replay_limit.map(|limit| limit as u32).or(mini.replay_limit.map(|limit| limit.0 as u32)),
         config,
         version: crate::help::VERSION.to_owned(),
         start,

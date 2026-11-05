@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectListInput, SessionID,
-    SessionInfo, SessionListInput, SessionListInputOrder, SessionRemoveInput,
+    LocationGetInput, LocationPublicInfo, LocationQueryInput, Project, ProjectListInput, SessionID, SessionInfo,
+    SessionListInput, SessionListInputOrder, SessionRemoveInput,
 };
 use opencode_local::cli_config::TabsScope;
 use opencode_store::SessionStatus;
@@ -21,9 +21,7 @@ use opencode_store::state::State as Store;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogOptions, DialogSize};
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::motion::Spinner;
-use opencode_ui::select::{
-    self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps,
-};
+use opencode_ui::select::{self, FooterHint, Gutter, Select, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::Theme;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
@@ -118,10 +116,7 @@ pub fn show(tui: &Tui) {
                     });
                 }
             }));
-            let tabs = list
-                .tui
-                .upgrade()
-                .is_some_and(|tui| tui.config().tabs.enabled);
+            let tabs = list.tui.upgrade().is_some_and(|tui| tui.config().tabs.enabled);
             props.actions = vec![
                 SelectAction {
                     hidden: tabs,
@@ -168,11 +163,7 @@ pub fn show(tui: &Tui) {
                         }
                     }
                 })
-                .title(if all_projects {
-                    "Show current directory sessions"
-                } else {
-                    "Show all project sessions"
-                })
+                .title(if all_projects { "Show current directory sessions" } else { "Show all project sessions" })
                 .group("Dialog"),
             ];
             props.dynamic_hints = Some(Rc::new({
@@ -184,10 +175,7 @@ pub fn show(tui: &Tui) {
                 let app = cx.app.clone();
                 let theme = cx.theme.clone();
                 move || {
-                    let (message, error) = weak
-                        .upgrade()
-                        .map(|list| list.search_state())
-                        .unwrap_or_default();
+                    let (message, error) = weak.upgrade().map(|list| list.search_state()).unwrap_or_default();
                     View::new(&app)
                         .padding_x(DIALOG_LIST_INSET)
                         .child(&Text::new(&app, message).fg(if error {
@@ -213,10 +201,7 @@ pub fn show(tui: &Tui) {
             view
         },
         None,
-        DialogOptions {
-            size: DialogSize::Large,
-            key: None,
-        },
+        DialogOptions { size: DialogSize::Large, key: None },
     );
     list.load();
 }
@@ -269,11 +254,7 @@ impl List {
         let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move {
-                let input = LocationGetInput {
-                    location: Some(LocationQueryInput {
-                        directory: Some(directory),
-                    }),
-                };
+                let input = LocationGetInput { location: Some(LocationQueryInput { directory: Some(directory) }) };
                 let options = RequestOptions::default();
                 let (location, projects) = futures_util::future::join(
                     client.location_get(&input, &options),
@@ -303,12 +284,7 @@ impl List {
             let mut state = self.state.borrow_mut();
             state.request += 1;
             state.loading = true;
-            (
-                state.search.trim().to_owned(),
-                state.all_projects,
-                state.location.clone(),
-                state.request,
-            )
+            (state.search.trim().to_owned(), state.all_projects, state.location.clone(), state.request)
         };
         self.refresh();
         let client = tui.data.client().clone();
@@ -345,24 +321,23 @@ impl List {
             app.cancel_timer(timer);
         }
         let weak = Rc::downgrade(self);
-        self.timer
-            .set(Some(app.set_timeout(SEARCH_DEBOUNCE, move |_| {
-                let Some(list) = weak.upgrade() else { return };
-                list.timer.set(None);
-                let changed = {
-                    let mut state = list.state.borrow_mut();
-                    let next = state.filter.clone();
-                    let changed = next.trim() != state.search.trim();
-                    state.search = next;
-                    changed
-                };
-                // A resource refetches only when its source changes; the trimmed query is the source.
-                if changed {
-                    list.fetch();
-                    return;
-                }
-                list.refresh();
-            })));
+        self.timer.set(Some(app.set_timeout(SEARCH_DEBOUNCE, move |_| {
+            let Some(list) = weak.upgrade() else { return };
+            list.timer.set(None);
+            let changed = {
+                let mut state = list.state.borrow_mut();
+                let next = state.filter.clone();
+                let changed = next.trim() != state.search.trim();
+                state.search = next;
+                changed
+            };
+            // A resource refetches only when its source changes; the trimmed query is the source.
+            if changed {
+                list.fetch();
+                return;
+            }
+            list.refresh();
+        })));
     }
 
     fn toggle_all_projects(self: &Rc<Self>) {
@@ -407,18 +382,12 @@ impl List {
             return;
         }
         let client = tui.data.client().clone();
-        let input = SessionRemoveInput {
-            session_id: id.clone(),
-        };
+        let input = SessionRemoveInput { session_id: id.clone() };
         let weak = Rc::downgrade(self);
         let toasts = tui.weak();
         let id = id.clone();
         tui.app.spawn(
-            async move {
-                client
-                    .session_remove(&input, &RequestOptions::default())
-                    .await
-            },
+            async move { client.session_remove(&input, &RequestOptions::default()).await },
             move |_, result| {
                 let Some(list) = weak.upgrade() else { return };
                 match result {
@@ -431,11 +400,8 @@ impl List {
                         list.state.borrow_mut().to_delete = None;
                         if let Some(tui) = toasts.upgrade() {
                             tui.toasts.show(
-                                ToastOptions::new(
-                                    Variant::Error,
-                                    format!("Failed to delete session: {error}"),
-                                )
-                                .duration(Duration::from_millis(5000)),
+                                ToastOptions::new(Variant::Error, format!("Failed to delete session: {error}"))
+                                    .duration(Duration::from_millis(5000)),
                             );
                         }
                     }
@@ -469,12 +435,10 @@ impl List {
     fn render_title(&self, theme: &Theme) {
         let Some(app) = self.app() else { return };
         self.title.clear();
-        self.title
-            .add(&Text::new(&app, "Sessions").fg(theme.text.base).bold());
+        self.title.add(&Text::new(&app, "Sessions").fg(theme.text.base).bold());
         let name = self.project_name();
         if !self.state.borrow().all_projects && !name.is_empty() {
-            self.title
-                .add(&Text::new(&app, format!(" for {name}")).fg(theme.text.muted));
+            self.title.add(&Text::new(&app, format!(" for {name}")).fg(theme.text.muted));
         }
         let select = self.select.borrow().clone();
         if let Some(select) = select {
@@ -497,10 +461,7 @@ impl List {
         let Some(current) = &state.location else {
             return String::new();
         };
-        let project = state
-            .projects
-            .iter()
-            .find(|project| project.id == current.project.id);
+        let project = state.projects.iter().find(|project| project.id == current.project.id);
         project_name(project).unwrap_or_default()
     }
 
@@ -510,24 +471,13 @@ impl List {
         let query = state.filter.trim();
         let local = || local_sessions(store, &state, query);
         if query != state.search.trim() {
-            return state
-                .results
-                .as_ref()
-                .map_or_else(local, |results| results.sessions.clone());
+            return state.results.as_ref().map_or_else(local, |results| results.sessions.clone());
         }
         if state.loading {
-            return state
-                .results
-                .as_ref()
-                .map(|results| results.sessions.clone())
-                .unwrap_or_default();
+            return state.results.as_ref().map(|results| results.sessions.clone()).unwrap_or_default();
         }
         match &state.results {
-            Some(results)
-                if results.query == query
-                    && results.all_projects == state.all_projects
-                    && !results.error =>
-            {
+            Some(results) if results.query == query && results.all_projects == state.all_projects && !results.error => {
                 results.sessions.clone()
             }
             _ => local(),
@@ -539,11 +489,7 @@ impl List {
         let state = self.state.borrow();
         let query = state.filter.trim();
         if query != state.search.trim() || state.loading {
-            let message = if query.is_empty() {
-                "Loading sessions…"
-            } else {
-                "Searching sessions…"
-            };
+            let message = if query.is_empty() { "Loading sessions…" } else { "Searching sessions…" };
             return (message.into(), false);
         }
         if let Some(results) = &state.results
@@ -557,23 +503,14 @@ impl List {
             };
             return (message.into(), true);
         }
-        let message = if query.is_empty() {
-            "No sessions available"
-        } else {
-            "No sessions found"
-        };
+        let message = if query.is_empty() { "No sessions available" } else { "No sessions found" };
         (message.into(), false)
     }
 
     fn hints(&self) -> Vec<FooterHint> {
         let all = self.state.borrow().all_projects;
         vec![FooterHint {
-            title: if all {
-                "current directory"
-            } else {
-                "all projects"
-            }
-            .into(),
+            title: if all { "current directory" } else { "all projects" }.into(),
             label: "ctrl+a".into(),
             group: None,
         }]
@@ -590,11 +527,7 @@ impl List {
         let slots: HashMap<SessionID, usize> = if tabs {
             HashMap::new()
         } else {
-            pins::slots(&tui)
-                .into_iter()
-                .enumerate()
-                .map(|(index, id)| (id, index + 1))
-                .collect()
+            pins::slots(&tui).into_iter().enumerate().map(|(index, id)| (id, index + 1)).collect()
         };
         let delete_key = tui.keymap.shortcut("session.delete").unwrap_or_default();
         let state = self.state.borrow();
@@ -602,32 +535,18 @@ impl List {
         let projects = state.projects.clone();
         drop(state);
         tui.data.read(|store| {
-            let sessions: Vec<SessionInfo> = self
-                .sessions(store)
-                .into_iter()
-                .filter(|session| session.parent_id.is_none())
-                .collect();
-            let by_id: HashMap<&SessionID, &SessionInfo> = sessions
-                .iter()
-                .map(|session| (&session.id, session))
-                .collect();
-            let pinned: Vec<&SessionID> = pinned_ids
-                .iter()
-                .filter(|id| by_id.contains_key(id))
-                .collect();
+            let sessions: Vec<SessionInfo> =
+                self.sessions(store).into_iter().filter(|session| session.parent_id.is_none()).collect();
+            let by_id: HashMap<&SessionID, &SessionInfo> =
+                sessions.iter().map(|session| (&session.id, session)).collect();
+            let pinned: Vec<&SessionID> = pinned_ids.iter().filter(|id| by_id.contains_key(id)).collect();
             let pinned_set: HashSet<&SessionID> = pinned.iter().copied().collect();
             let today = date_string(now_ms());
             let option = |session: &SessionInfo, category: String| {
-                let project = projects
-                    .iter()
-                    .find(|project| project.id == session.project_id);
+                let project = projects.iter().find(|project| project.id == session.project_id);
                 let deleting = to_delete.as_ref() == Some(&session.id);
                 let mut option = SelectOption::new(
-                    if deleting {
-                        format!("Press {delete_key} again to confirm")
-                    } else {
-                        title(session)
-                    },
+                    if deleting { format!("Press {delete_key} again to confirm") } else { title(session) },
                     session.id.clone(),
                 )
                 .category(category);
@@ -644,26 +563,18 @@ impl List {
                     attention.is_none() && running(store, &session.id),
                     slot.map(|slot| {
                         let color = theme.accent().step(200);
-                        Rc::new(move |app: &App, _: Color| {
-                            Text::new(app, slot.to_string()).fg(color).as_any()
-                        }) as Gutter
+                        Rc::new(move |app: &App, _: Color| Text::new(app, slot.to_string()).fg(color).as_any())
+                            as Gutter
                     }),
                 );
                 option
             };
-            let mut options: Vec<SelectOption<SessionID>> = pinned
-                .iter()
-                .map(|id| option(by_id[id], "Pinned".into()))
-                .collect();
-            options.extend(
-                sessions
-                    .iter()
-                    .filter(|session| !pinned_set.contains(&session.id))
-                    .map(|session| {
-                        let date = date_string(session.time.updated);
-                        option(session, if date == today { "Today".into() } else { date })
-                    }),
-            );
+            let mut options: Vec<SelectOption<SessionID>> =
+                pinned.iter().map(|id| option(by_id[id], "Pinned".into())).collect();
+            options.extend(sessions.iter().filter(|session| !pinned_set.contains(&session.id)).map(|session| {
+                let date = date_string(session.time.updated);
+                option(session, if date == today { "Today".into() } else { date })
+            }));
             options
         })
     }
@@ -684,13 +595,11 @@ fn local_sessions(store: &Store, state: &State, query: &str) -> Vec<SessionInfo>
             session.time.archived.is_none()
                 && (state.all_projects
                     || state.location.as_ref().is_some_and(|current| {
-                        session.project_id == current.project.id
-                            && session.location.directory == current.directory
+                        session.project_id == current.project.id && session.location.directory == current.directory
                     }))
         })
         .filter(|session| {
-            query.is_empty()
-                || (session.parent_id.is_none() && title(session).to_lowercase().contains(&query))
+            query.is_empty() || (session.parent_id.is_none() && title(session).to_lowercase().contains(&query))
         })
         .cloned()
         .collect()
@@ -714,33 +623,21 @@ fn list_input(location: &LocationPublicInfo, query: &str, all_projects: bool) ->
         return input;
     }
     input.project = Some(location.project.id.clone());
-    input.subpath = Some(
-        relative(
-            location.project.directory.as_str(),
-            location.directory.as_str(),
-        )
-        .replace('\\', "/")
-        .into(),
-    );
+    input.subpath =
+        Some(relative(location.project.directory.as_str(), location.directory.as_str()).replace('\\', "/").into());
     input
 }
 
 async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionInfo>> {
-    client
-        .session_list(input, &RequestOptions::default())
-        .await
-        .map(|response| response.data)
-        .ok()
+    client.session_list(input, &RequestOptions::default()).await.map(|response| response.data).ok()
 }
 
 /// `pickerLocation()`: the open session's location, else the default location.
 fn picker_directory(tui: &Tui) -> String {
     let session = match tui.route() {
-        Route::Session { id } => tui.data.read(|state| {
-            state
-                .session(&id)
-                .map(|session| session.location.directory.0.clone())
-        }),
+        Route::Session { id } => {
+            tui.data.read(|state| state.session(&id).map(|session| session.location.directory.0.clone()))
+        }
         _ => None,
     };
     session.unwrap_or_else(|| tui.directory.clone())
@@ -767,8 +664,7 @@ fn footer(session: &SessionInfo, project: Option<&Project>) -> Option<String> {
     };
     let from = project.map_or(root.as_str(), |project| project.canonical.as_str());
     let relative = relative(from, &root);
-    (relative.starts_with("..") || relative.starts_with('/'))
-        .then(|| select::truncate(basename(&relative), 25))
+    (relative.starts_with("..") || relative.starts_with('/')).then(|| select::truncate(basename(&relative), 25))
 }
 
 /// `withTimestampedFallback`: the title, else `New session - <ISO time>`.
@@ -776,11 +672,7 @@ pub fn title(session: &SessionInfo) -> String {
     if let Some(title) = &session.title {
         return title.clone();
     }
-    let kind = if session.parent_id.is_some() {
-        "Child"
-    } else {
-        "New"
-    };
+    let kind = if session.parent_id.is_some() { "Child" } else { "New" };
     let created = chrono::DateTime::from_timestamp_millis(session.time.created as i64)
         .unwrap_or_default()
         .format("%Y-%m-%dT%H:%M:%S%.3fZ");
@@ -804,22 +696,13 @@ pub fn project_name(project: Option<&Project>) -> Option<String> {
 pub fn attention(store: &Store, id: &SessionID) -> Option<char> {
     let root = store.root(id);
     let mut members = std::iter::once(&root).chain(store.family(&root));
-    members
-        .any(|member| {
-            store
-                .permissions(member)
-                .is_some_and(|list| !list.is_empty())
-        })
-        .then_some('!')
+    members.any(|member| store.permissions(member).is_some_and(|list| !list.is_empty())).then_some('!')
 }
 
 /// The session or a family member is running.
 pub fn running(store: &Store, id: &SessionID) -> bool {
     store.status(id) == SessionStatus::Running
-        || store
-            .family(id)
-            .iter()
-            .any(|member| store.status(member) == SessionStatus::Running)
+        || store.family(id).iter().any(|member| store.status(member) == SessionStatus::Running)
 }
 
 /// `sessionStatusGutter`.
@@ -830,21 +713,13 @@ pub fn status_gutter(
     fallback: Option<Gutter>,
 ) -> Option<Gutter> {
     if let Some(mark) = attention {
-        let (focused, warning) = (
-            theme.text.action.primary.focused,
-            theme.text.feedback.warning.base,
-        );
+        let (focused, warning) = (theme.text.action.primary.focused, theme.text.feedback.warning.base);
         return Some(Rc::new(move |app: &App, color: Color| {
-            Text::new(app, mark.to_string())
-                .fg(if color == focused { color } else { warning })
-                .bold()
-                .as_any()
+            Text::new(app, mark.to_string()).fg(if color == focused { color } else { warning }).bold().as_any()
         }));
     }
     if running {
-        return Some(Rc::new(|app: &App, color: Color| {
-            Spinner::new(app).color(color).as_any()
-        }));
+        return Some(Rc::new(|app: &App, color: Color| Spinner::new(app).color(color).as_any()));
     }
     fallback
 }
@@ -859,9 +734,7 @@ pub fn date_string(ms: f64) -> String {
 }
 
 pub fn now_ms() -> f64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0.0, |elapsed| elapsed.as_millis() as f64)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |elapsed| elapsed.as_millis() as f64)
 }
 
 /// `path.basename` (POSIX).
@@ -872,10 +745,7 @@ pub fn basename(path: &str) -> &str {
 
 /// `path.resolve(directory, "..", …)` with `ups` parent steps (POSIX).
 fn resolve_up(directory: &str, ups: usize) -> String {
-    let mut parts: Vec<&str> = directory
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
+    let mut parts: Vec<&str> = directory.split('/').filter(|part| !part.is_empty()).collect();
     for _ in 0..ups {
         parts.pop();
     }
@@ -885,10 +755,7 @@ fn resolve_up(directory: &str, ups: usize) -> String {
 /// `path.relative(from, to)` for absolute POSIX paths.
 fn relative(from: &str, to: &str) -> String {
     let split = |path: &str| -> Vec<String> {
-        path.split('/')
-            .filter(|part| !part.is_empty() && *part != ".")
-            .map(str::to_owned)
-            .collect()
+        path.split('/').filter(|part| !part.is_empty() && *part != ".").map(str::to_owned).collect()
     };
     let (from, to) = (split(from), split(to));
     let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
@@ -936,11 +803,7 @@ pub mod pins {
         tui.data.read(|state| {
             pinned
                 .into_iter()
-                .filter(|id| {
-                    state
-                        .session(id)
-                        .is_some_and(|session| session.parent_id.is_none())
-                })
+                .filter(|id| state.session(id).is_some_and(|session| session.parent_id.is_none()))
                 .take(9)
                 .collect()
         })
@@ -968,13 +831,11 @@ pub mod pins {
         let Some(state) = key else { return };
         let id = id.0.clone();
         static WRITER: OnceLock<Serial> = OnceLock::new();
-        WRITER
-            .get_or_init(|| Serial::new("session.json"))
-            .run(move || {
-                if let Err(error) = opencode_local::pins::set(&state, &id, pinned) {
-                    log::warn!("failed to save session.json: {error}");
-                }
-            });
+        WRITER.get_or_init(|| Serial::new("session.json")).run(move || {
+            if let Err(error) = opencode_local::pins::set(&state, &id, pinned) {
+                log::warn!("failed to save session.json: {error}");
+            }
+        });
     }
 }
 

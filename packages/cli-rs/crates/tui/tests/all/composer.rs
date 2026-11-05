@@ -77,24 +77,9 @@ fn routes() -> Vec<MemoryRoute> {
             200,
             &json!({ "data": [session("ses_a", None, "Fix the parser", 3), session("ses_c", Some("ses_a"), "Scan (@explore subagent)", 2)], "cursor": {} }),
         ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/active",
-            200,
-            &json!({ "data": { "ses_c": { "type": "running" } } }),
-        ),
-        MemoryRoute::json(
-            "POST",
-            "/api/session/ses_c/interrupt",
-            200,
-            &json!({ "interrupted": true }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("GET", "/api/session/active", 200, &json!({ "data": { "ses_c": { "type": "running" } } })),
+        MemoryRoute::json("POST", "/api/session/ses_c/interrupt", 200, &json!({ "interrupted": true })),
+        MemoryRoute::json("GET", "/api/session/ses_a/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json(
             "GET",
             "/api/session/ses_a/inbox",
@@ -102,24 +87,9 @@ fn routes() -> Vec<MemoryRoute> {
             &json!({ "data": [{ "id": "msg_q", "sessionID": "ses_a", "type": "user", "payload": { "text": "Later" },
                                 "delivery": "queue", "time": { "created": 5 } }] }),
         ),
-        MemoryRoute::json(
-            "GET",
-            "/api/experimental/session/ses_a/terminal",
-            200,
-            &json!({ "data": [terminal()] }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/shell",
-            200,
-            &json!({ "location": location, "data": [shell()] }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/shell/sh_1",
-            200,
-            &json!({ "location": location, "data": shell() }),
-        ),
+        MemoryRoute::json("GET", "/api/experimental/session/ses_a/terminal", 200, &json!({ "data": [terminal()] })),
+        MemoryRoute::json("GET", "/api/shell", 200, &json!({ "location": location, "data": [shell()] })),
+        MemoryRoute::json("GET", "/api/shell/sh_1", 200, &json!({ "location": location, "data": shell() })),
         MemoryRoute::json(
             "GET",
             "/api/shell/sh_1/output",
@@ -129,12 +99,7 @@ fn routes() -> Vec<MemoryRoute> {
         ),
     ];
     for list in ["permission", "form"] {
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/ses_a/{list}"),
-            200,
-            &json!({ "data": [] }),
-        ));
+        routes.push(MemoryRoute::json("GET", &format!("/api/session/ses_a/{list}"), 200, &json!({ "data": [] })));
     }
     routes
 }
@@ -178,15 +143,11 @@ impl Transport for Moving {
 fn mount_with(endpoint: Option<Endpoint>) -> Harness {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
-    let paths =
-        Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     let state = paths.state.clone();
     let memory = Memory::new(routes());
     let transport: Arc<dyn Transport> = match endpoint {
-        Some(endpoint) => Arc::new(Moving {
-            memory: memory.clone(),
-            endpoint,
-        }),
+        Some(endpoint) => Arc::new(Moving { memory: memory.clone(), endpoint }),
         None => Arc::new(memory.clone()),
     };
     let client = Client::with_transport("http://opencode.local", transport).unwrap();
@@ -198,13 +159,8 @@ fn mount_with(endpoint: Option<Endpoint>) -> Harness {
             client,
             directory: "/project".into(),
             config: Resolved::new(info, |_| None),
-            roots: Some(Roots {
-                paths,
-                storage_channel: CHANNEL.into(),
-            }),
-            route: Route::Session {
-                id: SessionID("ses_a".into()),
-            },
+            roots: Some(Roots { paths, storage_channel: CHANNEL.into() }),
+            route: Route::Session { id: SessionID("ses_a".into()) },
             continue_: false,
             events: true,
         },
@@ -217,31 +173,16 @@ fn mount_with(endpoint: Option<Endpoint>) -> Harness {
     }));
     let opened: Opened = Arc::default();
     let record = opened.clone();
-    tui.client_mcp.set_connector(Arc::new(
-        move |url: url::Url, headers: Vec<(String, String)>| {
-            let (socket, remote) = client_mcp::pair();
-            record
-                .lock()
-                .unwrap()
-                .push((url.to_string(), headers, remote));
-            Ok(socket)
-        },
-    ));
-    let harness = Harness {
-        app,
-        tui,
-        memory,
-        opened,
-        state,
-        next: std::cell::Cell::new(0),
-        _home: home,
-    };
-    assert!(harness.wait(|harness| harness.app.text().contains("1 queued")));
-    assert!(harness.wait(|harness| {
-        !harness
-            .requests("GET", "/api/experimental/session/ses_a/terminal")
-            .is_empty()
+    tui.client_mcp.set_connector(Arc::new(move |url: url::Url, headers: Vec<(String, String)>| {
+        let (socket, remote) = client_mcp::pair();
+        record.lock().unwrap().push((url.to_string(), headers, remote));
+        Ok(socket)
     }));
+    let harness = Harness { app, tui, memory, opened, state, next: std::cell::Cell::new(0), _home: home };
+    assert!(harness.wait(|harness| harness.app.text().contains("1 queued")));
+    assert!(
+        harness.wait(|harness| { !harness.requests("GET", "/api/experimental/session/ses_a/terminal").is_empty() })
+    );
     harness
 }
 
@@ -259,32 +200,17 @@ impl Harness {
     }
 
     fn requests(&self, method: &str, path: &str) -> Vec<Logged> {
-        self.memory
-            .requests()
-            .into_iter()
-            .filter(|logged| logged.method == method && logged.path == path)
-            .collect()
+        self.memory.requests().into_iter().filter(|logged| logged.method == method && logged.path == path).collect()
     }
 
     fn selection(&self) -> Value {
-        let path = self
-            .state
-            .join(CHANNEL)
-            .join("tui")
-            .join("session-terminal-selection.json");
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or(Value::Null)
+        let path = self.state.join(CHANNEL).join("tui").join("session-terminal-selection.json");
+        std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or(Value::Null)
     }
 
     fn experiment(&self, on: bool) {
         opencode_tui::dialogs::settings::update(&self.tui, move |value| {
-            opencode_tui::dialogs::settings::set_path(
-                value,
-                &["experimental", "client-mcp"],
-                json!(on),
-            );
+            opencode_tui::dialogs::settings::set_path(value, &["experimental", "client-mcp"], json!(on));
         });
     }
 
@@ -293,18 +219,8 @@ impl Harness {
         let id = self.next.get() + 1;
         self.next.set(id);
         let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        let deliver = self
-            .opened
-            .lock()
-            .unwrap()
-            .last()
-            .unwrap()
-            .2
-            .deliver
-            .clone();
-        deliver
-            .try_send(Incoming::Text(message.to_string()))
-            .unwrap();
+        let deliver = self.opened.lock().unwrap().last().unwrap().2.deliver.clone();
+        deliver.try_send(Incoming::Text(message.to_string())).unwrap();
         let reply = std::cell::RefCell::new(None);
         self.app.wait_until(wait::WAIT, || {
             let mut opened = self.opened.lock().unwrap();
@@ -330,10 +246,7 @@ impl Harness {
 }
 
 fn text(result: &Value) -> (&str, bool) {
-    (
-        result["content"][0]["text"].as_str().unwrap_or_default(),
-        result["isError"] == json!(true),
-    )
+    (result["content"][0]["text"].as_str().unwrap_or_default(), result["isError"] == json!(true))
 }
 
 #[test]
@@ -349,30 +262,16 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
         let opened = harness.opened.lock().unwrap();
         (opened[0].0.clone(), opened[0].1.clone())
     };
-    assert_eq!(
-        url,
-        "ws://opencode.local/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui"
-    );
+    assert_eq!(url, "ws://opencode.local/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui");
     assert!(headers.is_empty());
 
     let tools = harness.request("tools/list", json!({}))["result"]["tools"].clone();
-    let names: Vec<&str> = tools
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|tool| tool["name"].as_str().unwrap())
-        .collect();
+    let names: Vec<&str> = tools.as_array().unwrap().iter().map(|tool| tool["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["open_terminal", "write_terminal"]);
     assert_eq!(tools[1]["inputSchema"]["required"], json!(["text"]));
 
-    assert_eq!(
-        text(&harness.call("open_terminal", json!({}), None)),
-        ("Unknown session", true)
-    );
-    assert_eq!(
-        text(&harness.call("open_terminal", json!({}), Some("ses_missing"))),
-        ("Unknown session", true)
-    );
+    assert_eq!(text(&harness.call("open_terminal", json!({}), None)), ("Unknown session", true));
+    assert_eq!(text(&harness.call("open_terminal", json!({}), Some("ses_missing"))), ("Unknown session", true));
     assert_eq!(
         text(&harness.call("open_terminal", json!({}), Some("ses_other"))),
         ("session not open in this TUI", true)
@@ -382,19 +281,14 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
         ("text must be a string", true)
     );
     // A subagent's call opens its family's terminal: the newest one, shown without focus.
-    assert_eq!(
-        text(&harness.call("open_terminal", json!({}), Some("ses_c"))),
-        ("Opened terminal pty_1", false)
-    );
+    assert_eq!(text(&harness.call("open_terminal", json!({}), Some("ses_c"))), ("Opened terminal pty_1", false));
     assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
     assert_eq!(
         text(&harness.call("write_terminal", json!({ "text": "ls\n" }), Some("ses_a"))),
         ("Wrote to terminal pty_1", false)
     );
     assert!(
-        harness
-            .requests("POST", "/api/experimental/session/ses_a/terminal")
-            .is_empty(),
+        harness.requests("POST", "/api/experimental/session/ses_a/terminal").is_empty(),
         "an existing terminal is reused"
     );
 
@@ -404,10 +298,7 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
         let mut opened = harness.opened.lock().unwrap();
         let remote = &mut opened[0].2;
         harness.app.wait_until(wait::WAIT, || {
-            matches!(
-                remote.sent.try_recv(),
-                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
-            )
+            matches!(remote.sent.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Disconnected))
         })
     };
     assert!(closed, "turning the experiment off closes the socket");
@@ -415,38 +306,21 @@ fn the_client_mcp_experiment_serves_the_terminal_tools() {
 
 #[test]
 fn the_client_mcp_socket_follows_a_restarted_service() {
-    let at = |url: &str, password: &str| {
-        (
-            url::Url::parse(url).unwrap(),
-            Some(Auth::password(password)),
-        )
-    };
+    let at = |url: &str, password: &str| (url::Url::parse(url).unwrap(), Some(Auth::password(password)));
     let endpoint = Arc::new(Mutex::new(at("http://127.0.0.1:4096/", "old")));
     let harness = mount_with(Some(endpoint.clone()));
     harness.experiment(true);
     assert!(harness.wait(|harness| harness.opened.lock().unwrap().len() == 1));
     // The service restarts on a new port with a new password, and the event stream reconnects to it.
     *endpoint.lock().unwrap() = at("http://127.0.0.1:5000/", "new");
-    harness
-        .memory
-        .emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
+    harness.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
     assert!(harness.wait(|harness| harness.opened.lock().unwrap().len() == 2));
-    let opened: Vec<_> = harness
-        .opened
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|(url, headers, _)| (url.clone(), headers.clone()))
-        .collect();
+    let opened: Vec<_> =
+        harness.opened.lock().unwrap().iter().map(|(url, headers, _)| (url.clone(), headers.clone())).collect();
     let socket = |port: u16, password: &str| {
         (
-            format!(
-                "ws://127.0.0.1:{port}/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui"
-            ),
-            vec![(
-                "authorization".to_owned(),
-                format!("Basic {}", Auth::password(password).token()),
-            )],
+            format!("ws://127.0.0.1:{port}/api/experimental/client-mcp?location%5Bdirectory%5D=%2Fproject&name=tui"),
+            vec![("authorization".to_owned(), format!("Basic {}", Auth::password(password).token()))],
         )
     };
     assert_eq!(opened, [socket(4096, "old"), socket(5000, "new")]);
@@ -459,19 +333,9 @@ fn the_subagents_tab_interrupts_a_running_subagent_and_hides_the_queued_dock() {
     assert!(harness.wait(|harness| harness.app.text().contains("Explore: Scan ()")));
     let text = harness.app.text();
     assert!(text.contains("interrupt ctrl+d"), "{text}");
-    assert!(
-        !text.contains("1 queued"),
-        "the dock hides under the composer"
-    );
-    harness
-        .tui
-        .keymap
-        .dispatch("composer.subagent.interrupt", None);
-    assert!(harness.wait(|harness| {
-        !harness
-            .requests("POST", "/api/session/ses_c/interrupt")
-            .is_empty()
-    }));
+    assert!(!text.contains("1 queued"), "the dock hides under the composer");
+    harness.tui.keymap.dispatch("composer.subagent.interrupt", None);
+    assert!(harness.wait(|harness| { !harness.requests("POST", "/api/session/ses_c/interrupt").is_empty() }));
     // Escape closes the composer, and the dock and the prompt come back.
     harness.app.press("escape");
     assert!(harness.wait(|harness| harness.app.text().contains("1 queued")));
@@ -483,10 +347,7 @@ fn terminal_select_opens_the_terminal_list_and_enter_shows_the_terminal() {
     let harness = mount();
     harness.tui.keymap.dispatch("terminal.select", None);
     assert!(harness.wait(|harness| harness.app.text().contains("+ New terminal")));
-    assert!(
-        harness.app.text().contains("vim"),
-        "the foreground process names the terminal"
-    );
+    assert!(harness.app.text().contains("vim"), "the foreground process names the terminal");
     harness.app.press("down");
     harness.app.press("enter");
     assert!(harness.wait(|harness| harness.selection()["sessions"]["ses_a"] == "pty_1"));
@@ -507,27 +368,13 @@ fn the_shell_output_dialog_shows_the_output_without_escapes() {
     harness.app.press("enter");
     assert!(harness.wait(|harness| harness.app.text().contains("hello red")));
     let text = harness.app.text();
-    assert!(
-        text.contains("Shell output") && text.contains("Running"),
-        "{text}"
-    );
+    assert!(text.contains("Shell output") && text.contains("Running"), "{text}");
     assert!(text.contains("world"));
     assert!(!text.contains("Earlier output omitted"));
     let outputs = harness.requests("GET", "/api/shell/sh_1/output");
-    let query = |logged: &Logged, name: &str| {
-        logged
-            .query
-            .get(name)
-            .and_then(|values| values.first().cloned())
-    };
-    assert_eq!(
-        query(&outputs[0], "cursor").as_deref(),
-        Some("9007199254740991")
-    );
+    let query = |logged: &Logged, name: &str| logged.query.get(name).and_then(|values| values.first().cloned());
+    assert_eq!(query(&outputs[0], "cursor").as_deref(), Some("9007199254740991"));
     assert_eq!(query(&outputs[1], "cursor").as_deref(), Some("0"));
     assert_eq!(query(&outputs[1], "limit").as_deref(), Some("65536"));
-    assert_eq!(
-        query(&outputs[1], "location[directory]").as_deref(),
-        Some("/project")
-    );
+    assert_eq!(query(&outputs[1], "location[directory]").as_deref(), Some("/project"));
 }

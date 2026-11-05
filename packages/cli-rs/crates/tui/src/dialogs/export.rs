@@ -5,13 +5,9 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use opencode_ui::dialog::{
-    DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout_with,
-};
+use opencode_ui::dialog::{DIALOG_INSET, DialogOptions, FooterAction, FooterProps, HeaderProps, header, layout_with};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
-use opencode_ui::select::{
-    self, ActionRun, FooterHint, Group, SelectAction, SelectOption, SelectProps,
-};
+use opencode_ui::select::{self, ActionRun, FooterHint, Group, SelectAction, SelectOption, SelectProps};
 use opentui::prelude::*;
 
 use crate::app::Tui;
@@ -91,10 +87,7 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
                 Rc::new(move || {
                     let choice = |row: Row, title: &str, value: &str| {
                         let mut option = SelectOption::new(title, row);
-                        option.choice = Some(select::Choice {
-                            value: value.to_owned(),
-                            open: false,
-                        });
+                        option.choice = Some(select::Choice { value: value.to_owned(), open: false });
                         option
                     };
                     let include = |value: bool| if value { "include" } else { "exclude" };
@@ -109,18 +102,12 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
                     )];
                     match format {
                         Format::Markdown => options.extend([
-                            choice(Row::Thinking, "Thinking", include(state.thinking.get()))
-                                .category("Options"),
-                            choice(Row::Tools, "Tools", include(state.tools.get()))
-                                .category("Options"),
+                            choice(Row::Thinking, "Thinking", include(state.thinking.get())).category("Options"),
+                            choice(Row::Tools, "Tools", include(state.tools.get())).category("Options"),
                         ]),
                         Format::Json => options.push(
-                            choice(
-                                Row::Sanitize,
-                                "Sanitize",
-                                if state.sanitize.get() { "on" } else { "off" },
-                            )
-                            .category("Options"),
+                            choice(Row::Sanitize, "Sanitize", if state.sanitize.get() { "on" } else { "off" })
+                                .category("Options"),
                         ),
                     }
                     options
@@ -152,9 +139,7 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
             };
             let binding = |key: &str, title: &str| {
                 let change = change.clone();
-                TuiCommand::inline(key, move |_, _| change())
-                    .title(title)
-                    .group("Dialog")
+                TuiCommand::inline(key, move |_, _| change()).title(title).group("Dialog")
             };
             let mut props = SelectProps::new("Export session", options());
             props.render_filter = false;
@@ -180,11 +165,8 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
                 })),
                 ..SelectAction::new("dialog.export.copy", "copy", |_| {})
             }];
-            props.footer_hints = vec![FooterHint {
-                title: "save to file".into(),
-                label: "enter".into(),
-                group: Some(Group::Primary),
-            }];
+            props.footer_hints =
+                vec![FooterHint { title: "save to file".into(), label: "enter".into(), group: Some(Group::Primary) }];
             props.bindings = vec![
                 binding("left", "Previous value"),
                 binding("right", "Next value"),
@@ -252,10 +234,7 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
                 Span::styled(path.clone(), Style::new().fg(theme.text.muted).underline()),
             ]);
             let action = if copied {
-                FooterAction {
-                    color: Some(theme.text.feedback.success.base),
-                    ..FooterAction::new("copied").key("✓")
-                }
+                FooterAction { color: Some(theme.text.feedback.success.base), ..FooterAction::new("copied").key("✓") }
             } else {
                 FooterAction::new("copy path").key("c")
             };
@@ -263,17 +242,10 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
                 cx,
                 &header(
                     cx,
-                    HeaderProps {
-                        title: "Session exported".into(),
-                        on_close: Some(close),
-                        ..HeaderProps::default()
-                    },
+                    HeaderProps { title: "Session exported".into(), on_close: Some(close), ..HeaderProps::default() },
                 ),
                 &body,
-                Some(FooterProps {
-                    primary: vec![action.on_trigger(move || copy())],
-                    ..FooterProps::default()
-                }),
+                Some(FooterProps { primary: vec![action.on_trigger(move || copy())], ..FooterProps::default() }),
                 DIALOG_INSET,
                 2,
             )

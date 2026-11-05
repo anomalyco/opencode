@@ -51,8 +51,7 @@ pub fn colors() -> bool {
     static COLORS: OnceLock<bool> = OnceLock::new();
     *COLORS.get_or_init(|| {
         use std::io::IsTerminal;
-        std::io::stdout().is_terminal()
-            && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
+        std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
     })
 }
 
@@ -71,9 +70,7 @@ pub fn log(text: &str) {
 
 fn write(text: &str) {
     let mut stdout = std::io::stdout().lock();
-    let _ = stdout
-        .write_all(text.as_bytes())
-        .and_then(|()| stdout.flush());
+    let _ = stdout.write_all(text.as_bytes()).and_then(|()| stdout.flush());
 }
 
 fn columns() -> usize {
@@ -138,10 +135,7 @@ fn erase_text(text: &str, columns: usize) -> String {
     if columns == 0 {
         return format!("{ERASE_LINE}\x1b[1G");
     }
-    let rows: usize = text
-        .split('\n')
-        .map(|line| 1 + length(line).saturating_sub(1) / columns)
-        .sum();
+    let rows: usize = text.split('\n').map(|line| 1 + length(line).saturating_sub(1) / columns).sum();
     erase_lines(rows)
 }
 
@@ -162,10 +156,7 @@ fn erase_lines(rows: usize) -> String {
 fn lines(text: &str, columns: usize) -> usize {
     match columns {
         0 => text.split('\n').count(),
-        _ => text
-            .split('\n')
-            .map(|line| length(line).div_ceil(columns))
-            .sum(),
+        _ => text.split('\n').map(|line| length(line).div_ceil(columns)).sum(),
     }
 }
 
@@ -189,14 +180,8 @@ fn render_error(error: Option<&str>, plain: bool) -> String {
     if plain {
         return separate(POINTER_SMALL, &lines.join("\n"));
     }
-    let lines: Vec<String> = lines
-        .iter()
-        .map(|line| annotate(line, &[ITALIC, ERROR]))
-        .collect();
-    format!(
-        "{SAVE}\n{}{RESTORE}",
-        separate(&symbol(POINTER_SMALL, &[ERROR]), &lines.join("\n"))
-    )
+    let lines: Vec<String> = lines.iter().map(|line| annotate(line, &[ITALIC, ERROR])).collect();
+    format!("{SAVE}\n{}{RESTORE}", separate(&symbol(POINTER_SMALL, &[ERROR]), &lines.join("\n")))
 }
 
 enum Action<S, O> {
@@ -317,20 +302,12 @@ impl Prompt for Select {
 
     fn next(&self, state: &usize) -> String {
         let (leading, trailing) = active_symbols();
-        format!(
-            "{HIDE}{}\n{}",
-            self.header(&leading, &trailing, false),
-            self.choices(*state, false)
-        )
+        format!("{HIDE}{}\n{}", self.header(&leading, &trailing, false), self.choices(*state, false))
     }
 
     fn submitted(&self, state: &usize, _: &usize) -> String {
         let (leading, trailing) = submitted_symbols();
-        format!(
-            "{} {}\n",
-            self.header(&leading, &trailing, false),
-            annotate(&self.choices[*state].0, &[SUBMITTED])
-        )
+        format!("{} {}\n", self.header(&leading, &trailing, false), annotate(&self.choices[*state].0, &[SUBMITTED]))
     }
 
     fn process(&self, press: &Press, state: &usize) -> Action<usize, usize> {
@@ -345,19 +322,13 @@ impl Prompt for Select {
     }
 
     fn clear(&self, state: &usize, columns: usize) -> String {
-        let text = format!(
-            "{}\n{}",
-            self.header(PREFIX, POINTER_SMALL, true),
-            self.choices(*state, true)
-        );
+        let text = format!("{}\n{}", self.header(PREFIX, POINTER_SMALL, true), self.choices(*state, true));
         erase_text(&text, columns) + ERASE_LINE + CURSOR_LEFT
     }
 }
 
 fn entries_to_display(cursor: usize, total: usize, max: usize) -> (usize, usize) {
-    let start = (total as i64 - max as i64)
-        .min(cursor as i64 - (max / 2) as i64)
-        .max(0) as usize;
+    let start = (total as i64 - max as i64).min(cursor as i64 - (max / 2) as i64).max(0) as usize;
     (start, (start + max).min(total))
 }
 
@@ -370,11 +341,7 @@ pub struct Confirm {
 impl Confirm {
     /// `Confirm` with its default labels and `initial: false`.
     pub fn new(message: String) -> Confirm {
-        Confirm {
-            message,
-            labels: ("yes", "no"),
-            placeholders: ("(Y/n)", "(y/N)"),
-        }
+        Confirm { message, labels: ("yes", "no"), placeholders: ("(Y/n)", "(y/N)") }
     }
 
     pub fn prompt(&self) -> Result<bool, Quit> {
@@ -388,16 +355,9 @@ impl Prompt for Confirm {
 
     fn next(&self, state: &bool) -> String {
         let (leading, trailing) = active_symbols();
-        let placeholder = if *state {
-            self.placeholders.0
-        } else {
-            self.placeholders.1
-        };
+        let placeholder = if *state { self.placeholders.0 } else { self.placeholders.1 };
         let value = annotate(placeholder, &[MUTED]);
-        format!(
-            "{HIDE}{}",
-            render_prompt(&value, &self.message, &leading, &trailing, false)
-        )
+        format!("{HIDE}{}", render_prompt(&value, &self.message, &leading, &trailing, false))
     }
 
     fn submitted(&self, _: &bool, value: &bool) -> String {
@@ -418,11 +378,7 @@ impl Prompt for Confirm {
     }
 
     fn clear(&self, state: &bool, columns: usize) -> String {
-        let placeholder = if *state {
-            self.placeholders.0
-        } else {
-            self.placeholders.1
-        };
+        let placeholder = if *state { self.placeholders.0 } else { self.placeholders.1 };
         let text = render_prompt(placeholder, &self.message, PREFIX, POINTER_SMALL, true);
         erase_text(&text, columns) + ERASE_LINE + CURSOR_LEFT
     }
@@ -458,21 +414,12 @@ impl Prompt for Toggle {
     fn next(&self, state: &bool) -> String {
         let (leading, trailing) = active_symbols();
         let toggle = self.toggle(*state, false);
-        format!(
-            "{HIDE}{}",
-            render_prompt(&toggle, &self.message, &leading, &trailing, false)
-        )
+        format!("{HIDE}{}", render_prompt(&toggle, &self.message, &leading, &trailing, false))
     }
 
     fn submitted(&self, state: &bool, _: &bool) -> String {
         let (leading, trailing) = submitted_symbols();
-        render_prompt(
-            &self.toggle(*state, true),
-            &self.message,
-            &leading,
-            &trailing,
-            false,
-        ) + "\n"
+        render_prompt(&self.toggle(*state, true), &self.message, &leading, &trailing, false) + "\n"
     }
 
     fn process(&self, press: &Press, state: &bool) -> Action<bool, bool> {
@@ -487,11 +434,7 @@ impl Prompt for Toggle {
     }
 
     fn clear(&self, _: &bool, columns: usize) -> String {
-        let toggle = format!(
-            "{} {}",
-            self.active,
-            separate(TOGGLE_SEPARATOR, self.inactive)
-        );
+        let toggle = format!("{} {}", self.active, separate(TOGGLE_SEPARATOR, self.inactive));
         let text = render_prompt(&toggle, &self.message, PREFIX, POINTER_SMALL, true);
         erase_text(&text, columns) + ERASE_LINE + CURSOR_LEFT
     }
@@ -506,19 +449,11 @@ struct Field {
 
 impl Field {
     fn new(value: String) -> Field {
-        Field {
-            cursor: value.chars().count(),
-            value,
-            error: None,
-        }
+        Field { cursor: value.chars().count(), value, error: None }
     }
 
     fn with(&self, value: String) -> Field {
-        Field {
-            value,
-            error: None,
-            ..self.clone()
-        }
+        Field { value, error: None, ..self.clone() }
     }
 }
 
@@ -531,21 +466,11 @@ pub struct Int {
 
 impl Int {
     pub fn prompt(&self) -> Result<i64, Quit> {
-        let initial = self
-            .default
-            .map(|value| value.to_string())
-            .unwrap_or_default();
+        let initial = self.default.map(|value| value.to_string()).unwrap_or_default();
         run(self, Field::new(initial))
     }
 
-    fn output(
-        &self,
-        state: &Field,
-        leading: &str,
-        trailing: &str,
-        plain: bool,
-        submitted: bool,
-    ) -> String {
+    fn output(&self, state: &Field, leading: &str, trailing: &str, plain: bool, submitted: bool) -> String {
         let value = match submitted || plain {
             true => state.value.clone(),
             false if state.error.is_some() => annotate(&state.value, &[ERROR]),
@@ -561,8 +486,7 @@ impl Prompt for Int {
 
     fn next(&self, state: &Field) -> String {
         let (leading, trailing) = active_symbols();
-        self.output(state, &leading, &trailing, false, false)
-            + &render_error(state.error.as_deref(), false)
+        self.output(state, &leading, &trailing, false, false) + &render_error(state.error.as_deref(), false)
     }
 
     fn submitted(&self, state: &Field, _: &i64) -> String {
@@ -599,19 +523,12 @@ impl Prompt for Int {
                     });
                 };
                 let error = match (self.min, self.max) {
-                    (Some(min), _) if value < min => {
-                        Some(format!("{value} must be greater than or equal to {min}"))
-                    }
-                    (_, Some(max)) if value > max => {
-                        Some(format!("{value} must be less than or equal to {max}"))
-                    }
+                    (Some(min), _) if value < min => Some(format!("{value} must be greater than or equal to {min}")),
+                    (_, Some(max)) if value > max => Some(format!("{value} must be less than or equal to {max}")),
                     _ => None,
                 };
                 match error {
-                    Some(error) => Action::Next(Field {
-                        error: Some(error),
-                        ..state.clone()
-                    }),
+                    Some(error) => Action::Next(Field { error: Some(error), ..state.clone() }),
                     None => Action::Submit(value),
                 }
             }
@@ -657,14 +574,7 @@ impl Text {
         run(self, Field::new(String::new()))
     }
 
-    fn output(
-        &self,
-        state: &Field,
-        leading: &str,
-        trailing: &str,
-        plain: bool,
-        submitted: bool,
-    ) -> String {
+    fn output(&self, state: &Field, leading: &str, trailing: &str, plain: bool, submitted: bool) -> String {
         let value = match plain || state.value.is_empty() {
             true => state.value.clone(),
             false if state.error.is_some() => annotate(&state.value, &[ERROR]),
@@ -687,9 +597,7 @@ impl Prompt for Text {
             offset if offset > 0 => format!("\x1b[{offset}C"),
             offset => format!("\x1b[{}D", -offset),
         };
-        self.output(state, &leading, &trailing, false, false)
-            + &render_error(state.error.as_deref(), false)
-            + &moved
+        self.output(state, &leading, &trailing, false, false) + &render_error(state.error.as_deref(), false) + &moved
     }
 
     fn submitted(&self, state: &Field, _: &String) -> String {
@@ -698,11 +606,7 @@ impl Prompt for Text {
     }
 
     fn process(&self, press: &Press, state: &Field) -> Action<Field, String> {
-        let at = |field: &Field, cursor: usize| Field {
-            cursor,
-            error: None,
-            ..field.clone()
-        };
+        let at = |field: &Field, cursor: usize| Field { cursor, error: None, ..field.clone() };
         let length = state.value.chars().count();
         if press.key.ctrl {
             return match name(press) {
@@ -718,11 +622,7 @@ impl Prompt for Text {
                 cursor => {
                     let mut chars: Vec<char> = state.value.chars().collect();
                     chars.remove(cursor - 1);
-                    Action::Next(Field {
-                        cursor: cursor - 1,
-                        value: chars.into_iter().collect(),
-                        error: None,
-                    })
+                    Action::Next(Field { cursor: cursor - 1, value: chars.into_iter().collect(), error: None })
                 }
             },
             "left" => match state.cursor {
@@ -786,29 +686,16 @@ mod tests {
     #[test]
     fn select_pages_like_effect() {
         // entriesToDisplay(cursor, total, 10)
-        let cases = [
-            (0, 3, (0, 3)),
-            (0, 12, (0, 10)),
-            (5, 12, (0, 10)),
-            (6, 12, (1, 11)),
-            (11, 12, (2, 12)),
-        ];
+        let cases = [(0, 3, (0, 3)), (0, 12, (0, 10)), (5, 12, (0, 10)), (6, 12, (1, 11)), (11, 12, (2, 12))];
         for (cursor, total, expected) in cases {
-            assert_eq!(
-                entries_to_display(cursor, total, 10),
-                expected,
-                "cursor {cursor} of {total}"
-            );
+            assert_eq!(entries_to_display(cursor, total, 10), expected, "cursor {cursor} of {total}");
         }
     }
 
     #[test]
     fn erase_counts_wrapped_rows() {
         assert_eq!(erase_text("abc", 0), "\x1b[2K\x1b[1G");
-        assert_eq!(
-            erase_text("abcd\nx", 2),
-            "\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[G"
-        );
+        assert_eq!(erase_text("abcd\nx", 2), "\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[G");
         assert_eq!(lines("abc\n\nx", 2), 3);
     }
 }

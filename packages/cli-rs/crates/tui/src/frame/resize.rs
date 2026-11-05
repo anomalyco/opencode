@@ -60,10 +60,7 @@ impl PaneResize {
 
     /// `size`: the preferred size, clamped to the room there is now.
     pub fn size(&self, tui: &Tui) -> u16 {
-        let preferred = self
-            .preferred
-            .get()
-            .unwrap_or_else(|| (self.rules.default)(tui));
+        let preferred = self.preferred.get().unwrap_or_else(|| (self.rules.default)(tui));
         (self.rules.clamp)(tui, i64::from(preferred))
     }
 
@@ -74,12 +71,7 @@ impl PaneResize {
     fn commit(&self, tui: &Tui, value: i64) {
         let next = (self.rules.clamp)(tui, value);
         self.preferred.set(Some(next));
-        if self
-            .requested
-            .get()
-            .unwrap_or_else(|| (self.rules.default)(tui))
-            == next
-        {
+        if self.requested.get().unwrap_or_else(|| (self.rules.default)(tui)) == next {
             return;
         }
         self.requested.set(Some(next));
@@ -87,11 +79,7 @@ impl PaneResize {
     }
 
     fn down(&self, tui: &Tui, now: Instant) {
-        if self
-            .last_click
-            .take()
-            .is_some_and(|click| now.duration_since(click) < DOUBLE_CLICK)
-        {
+        if self.last_click.take().is_some_and(|click| now.duration_since(click) < DOUBLE_CLICK) {
             self.resizing.set(false);
             self.commit(tui, i64::from((self.rules.default)(tui)));
             return;
@@ -106,10 +94,7 @@ impl PaneResize {
         }
         self.moved.set(true);
         self.last_click.set(None);
-        self.preferred.set(Some((self.rules.clamp)(
-            tui,
-            (self.rules.from_mouse)(tui, x),
-        )));
+        self.preferred.set(Some((self.rules.clamp)(tui, (self.rules.from_mouse)(tui, x))));
     }
 
     fn finish(&self, tui: &Tui, x: u16, now: Instant) {
@@ -117,11 +102,7 @@ impl PaneResize {
             return;
         }
         let moved = self.moved.get();
-        let next = if moved {
-            (self.rules.from_mouse)(tui, x)
-        } else {
-            i64::from(self.size(tui))
-        };
+        let next = if moved { (self.rules.from_mouse)(tui, x) } else { i64::from(self.size(tui)) };
         self.last_click.set((!moved).then_some(now));
         self.commit(tui, next);
     }
@@ -136,20 +117,12 @@ pub struct Handle {
 }
 
 pub fn handle(app: &App, tui: Weak<Tui>, resize: Rc<PaneResize>, right: bool) -> Custom<Handle> {
-    let handle = Custom::new(
-        app,
-        Handle {
-            tui,
-            resize,
-            right,
-            hovered: false,
-        },
-    )
-    .absolute()
-    .position(Edge::Top, 0)
-    .width(2)
-    .height(Length::Percent(100.0))
-    .z_index(10);
+    let handle = Custom::new(app, Handle { tui, resize, right, hovered: false })
+        .absolute()
+        .position(Edge::Top, 0)
+        .width(2)
+        .height(Length::Percent(100.0))
+        .z_index(10);
     let weak = handle.clone();
     handle.on_hover(move |_, hovered| weak.update(|handle| handle.hovered = hovered))
 }

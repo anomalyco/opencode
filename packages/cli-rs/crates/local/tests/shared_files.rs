@@ -24,22 +24,13 @@ const WRITES: usize = 20;
 fn ts_root() -> PathBuf {
     std::env::var_os("OPENCODE_TS_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../..")
-                .canonicalize()
-                .unwrap()
-        })
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap())
 }
 
 fn available() -> bool {
-    let present = ts_root().join("node_modules").is_dir()
-        && Command::new("bun").arg("--version").output().is_ok();
+    let present = ts_root().join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
     if !present {
-        eprintln!(
-            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            ts_root().display()
-        );
+        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", ts_root().display());
     }
     present
 }
@@ -56,10 +47,7 @@ fn typescript(args: &[&str]) -> Oracle {
         .arg(script)
         .arg(ts_root())
         .args(args)
-        .env(
-            "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
-            std::env::temp_dir().join("opencode-rs-f5-bun-cache"),
-        )
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -180,10 +168,7 @@ fn session_json_under_contention() {
     // TypeScript reads what Rust wrote, byte for byte as it would write it.
     let read_back = read(&dir);
     assert_eq!(read_back["pinned"], json!(written));
-    assert_eq!(
-        std::fs::read_to_string(pins::file(&dir)).unwrap(),
-        json!({ "pinned": written }).to_string()
-    );
+    assert_eq!(std::fs::read_to_string(pins::file(&dir)).unwrap(), json!({ "pinned": written }).to_string());
     eprintln!(
         "session.json: {reads} reads, all whole; TS ended with {} pins, {} of its {WRITES} survived the race",
         typescript_saw["pinned"].as_array().map_or(0, Vec::len),
@@ -209,33 +194,17 @@ fn prompt_history_under_contention() {
     assert_all(&history, "a");
 
     // Fill to the limit, so every Rust save rewrites.
-    let full: String = (0..jsonl::MAX_HISTORY_ENTRIES)
-        .map(|n| format!("{{\"text\":\"old-{n}\",\"pasted\":[]}}\n"))
-        .collect();
+    let full: String =
+        (0..jsonl::MAX_HISTORY_ENTRIES).map(|n| format!("{{\"text\":\"old-{n}\",\"pasted\":[]}}\n")).collect();
     std::fs::write(&file, full).unwrap();
     let at = race(&dir, "b", jsonl::MAX_HISTORY_ENTRIES);
     let text = std::fs::read_to_string(&file).unwrap();
     let history = read(&dir)["history"].clone();
-    assert_eq!(
-        history.as_array().unwrap().len(),
-        jsonl::MAX_HISTORY_ENTRIES
-    );
+    assert_eq!(history.as_array().unwrap().len(), jsonl::MAX_HISTORY_ENTRIES);
     assert_all(&history, "b");
     let loaded = jsonl::History::load(&dir);
-    assert_eq!(
-        std::fs::read_to_string(&file).unwrap().lines().count(),
-        jsonl::MAX_HISTORY_ENTRIES
-    );
-    assert_eq!(
-        json!(
-            loaded
-                .entries()
-                .iter()
-                .map(|entry| &entry["text"])
-                .collect::<Vec<_>>()
-        ),
-        history
-    );
+    assert_eq!(std::fs::read_to_string(&file).unwrap().lines().count(), jsonl::MAX_HISTORY_ENTRIES);
+    assert_eq!(json!(loaded.entries().iter().map(|entry| &entry["text"]).collect::<Vec<_>>()), history);
     assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
     eprintln!(
         "prompt-history.jsonl: {below} reads below the limit, {at} past it, all whole; {} lines before the load trimmed it",
@@ -284,16 +253,11 @@ fn frecency_at_the_limit_under_contention() {
     let lines = std::fs::read_to_string(&file).unwrap().lines().count();
     let loaded = jsonl::Frecency::load(&dir, Path::new("/w"));
     assert_eq!(loaded.data().len(), jsonl::MAX_FRECENCY_ENTRIES);
-    let rust_read: serde_json::Map<String, Value> = loaded
-        .data()
-        .iter()
-        .map(|(path, visit)| (path.clone(), json!(visit.frequency as i64)))
-        .collect();
+    let rust_read: serde_json::Map<String, Value> =
+        loaded.data().iter().map(|(path, visit)| (path.clone(), json!(visit.frequency as i64))).collect();
     assert_eq!(Value::Object(rust_read), typescript_read);
     assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
-    eprintln!(
-        "frecency.jsonl: {reads} reads, all whole; {lines} lines before the load trimmed it to 1000"
-    );
+    eprintln!("frecency.jsonl: {reads} reads, all whole; {lines} lines before the load trimmed it to 1000");
 }
 
 /// `prompt-stash.jsonl`: the TypeScript TUI stashes while Rust does, and then Rust pops its own entries.
@@ -327,38 +291,21 @@ fn prompt_stash_under_contention() {
     stop.store(true, Ordering::SeqCst);
     let reads = reader.join().unwrap();
 
-    let texts: HashSet<String> = read(&dir)["stash"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|text| text.as_str().map(str::to_owned))
-        .collect();
+    let texts: HashSet<String> =
+        read(&dir)["stash"].as_array().unwrap().iter().filter_map(|text| text.as_str().map(str::to_owned)).collect();
     for i in 0..WRITES {
-        assert!(
-            texts.contains(&format!("ts-{i}")),
-            "ts-{i} was lost: {texts:?}"
-        );
-        assert_eq!(
-            texts.contains(&format!("rs-{i}")),
-            i < WRITES / 2,
-            "rs-{i}: {texts:?}"
-        );
+        assert!(texts.contains(&format!("ts-{i}")), "ts-{i} was lost: {texts:?}");
+        assert_eq!(texts.contains(&format!("rs-{i}")), i < WRITES / 2, "rs-{i}: {texts:?}");
     }
     assert!(leftovers(&dir).is_empty(), "{:?}", leftovers(&dir));
-    eprintln!(
-        "prompt-stash.jsonl: {reads} reads, all whole; {} entries",
-        texts.len()
-    );
+    eprintln!("prompt-stash.jsonl: {reads} reads, all whole; {} entries", texts.len());
 }
 
 fn whole_lines(text: &str) -> Result<(), String> {
     if !text.is_empty() && !text.ends_with('\n') {
         return Err("a partial line".into());
     }
-    match text
-        .lines()
-        .find(|line| serde_json::from_str::<Value>(line).is_err())
-    {
+    match text.lines().find(|line| serde_json::from_str::<Value>(line).is_err()) {
         Some(line) => Err(format!("a broken line {line:?}")),
         None => Ok(()),
     }
@@ -367,32 +314,20 @@ fn whole_lines(text: &str) -> Result<(), String> {
 /// TypeScript and Rust each write [`WRITES`] entries `<round>-ts-<i>` and `<round>-rs-<i>` at once.
 fn race(dir: &Path, round: &str, minimum: usize) -> usize {
     let stop = Arc::new(AtomicBool::new(false));
-    let reader = watch(
-        dir.join("prompt-history.jsonl"),
-        stop.clone(),
-        move |text| {
-            if !text.is_empty() && !text.ends_with('\n') {
-                return Err("a partial line".into());
-            }
-            if let Some(line) = text
-                .lines()
-                .find(|line| serde_json::from_str::<Value>(line).is_err())
-            {
-                return Err(format!("a broken line {line:?}"));
-            }
-            let count = text.lines().count();
-            if count < minimum {
-                return Err(format!("{count} lines"));
-            }
-            Ok(())
-        },
-    );
-    let mut ts = typescript(&[
-        "history",
-        dir.to_str().unwrap(),
-        &format!("{round}-ts"),
-        &WRITES.to_string(),
-    ]);
+    let reader = watch(dir.join("prompt-history.jsonl"), stop.clone(), move |text| {
+        if !text.is_empty() && !text.ends_with('\n') {
+            return Err("a partial line".into());
+        }
+        if let Some(line) = text.lines().find(|line| serde_json::from_str::<Value>(line).is_err()) {
+            return Err(format!("a broken line {line:?}"));
+        }
+        let count = text.lines().count();
+        if count < minimum {
+            return Err(format!("{count} lines"));
+        }
+        Ok(())
+    });
+    let mut ts = typescript(&["history", dir.to_str().unwrap(), &format!("{round}-ts"), &WRITES.to_string()]);
     ts.go();
     for i in 0..WRITES {
         let entry = json!({ "text": format!("{round}-rs-{i}"), "pasted": [] });
@@ -405,12 +340,7 @@ fn race(dir: &Path, round: &str, minimum: usize) -> usize {
 }
 
 fn assert_all(history: &Value, round: &str) {
-    let texts: HashSet<&str> = history
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(Value::as_str)
-        .collect();
+    let texts: HashSet<&str> = history.as_array().unwrap().iter().filter_map(Value::as_str).collect();
     for side in ["ts", "rs"] {
         for i in 0..WRITES {
             let text = format!("{round}-{side}-{i}");

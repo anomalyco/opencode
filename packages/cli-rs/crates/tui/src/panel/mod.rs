@@ -66,18 +66,12 @@ impl Panels {
     }
 
     pub fn presentation(&self) -> Presentation {
-        if self.can_split() {
-            self.requested.get()
-        } else {
-            Presentation::Fullscreen
-        }
+        if self.can_split() { self.requested.get() } else { Presentation::Fullscreen }
     }
 
     /// Registers the builder of `plugin`'s panel `name`.
     pub fn register(&self, plugin: &str, name: &str, builder: Builder) {
-        self.builders
-            .borrow_mut()
-            .insert((plugin.to_owned(), name.to_owned()), builder);
+        self.builders.borrow_mut().insert((plugin.to_owned(), name.to_owned()), builder);
     }
 
     pub fn open(&self, tui: &Tui, target: Target, presentation: Presentation) {
@@ -96,12 +90,7 @@ impl Panels {
 
     /// Closes `plugin`'s panel, when it is open.
     pub fn release(&self, tui: &Tui, plugin: &str) {
-        if self
-            .current
-            .borrow()
-            .as_ref()
-            .is_some_and(|target| target.plugin == plugin)
-        {
+        if self.current.borrow().as_ref().is_some_and(|target| target.plugin == plugin) {
             self.close(tui);
         }
     }
@@ -118,10 +107,7 @@ impl Panels {
     }
 
     fn builder(&self, target: &Target) -> Option<Builder> {
-        self.builders
-            .borrow()
-            .get(&(target.plugin.clone(), target.name.clone()))
-            .cloned()
+        self.builders.borrow().get(&(target.plugin.clone(), target.name.clone())).cloned()
     }
 }
 
@@ -136,33 +122,16 @@ impl Host {
     pub fn new(tui: &Tui, target: Target, input_width: u16, focused: bool) -> Self {
         let presentation = tui.panels.presentation();
         let theme = tui.page();
-        let root = View::new(&tui.app)
-            .column()
-            .grow(1.0)
-            .min_width(0)
-            .min_height(0)
-            .focusable(true)
-            .bg(match presentation {
+        let root =
+            View::new(&tui.app).column().grow(1.0).min_width(0).min_height(0).focusable(true).bg(match presentation {
                 Presentation::Panel => theme.background.raised.base,
                 Presentation::Fullscreen => theme.background.base,
             });
-        let content = tui.panels.builder(&target).map(|builder| {
-            builder(
-                tui,
-                &root,
-                &Input {
-                    target: &target,
-                    width: input_width,
-                    presentation,
-                    focused,
-                },
-            )
-        });
-        Self {
-            root,
-            target,
-            _content: content,
-        }
+        let content = tui
+            .panels
+            .builder(&target)
+            .map(|builder| builder(tui, &root, &Input { target: &target, width: input_width, presentation, focused }));
+        Self { root, target, _content: content }
     }
 
     pub fn target(&self) -> &Target {

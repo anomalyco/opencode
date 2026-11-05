@@ -26,11 +26,8 @@ fn fixture_script() -> PathBuf {
 }
 
 fn bun() -> bool {
-    let found = Command::new("bun")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success());
+    let found =
+        Command::new("bun").arg("--version").stdout(Stdio::null()).status().is_ok_and(|status| status.success());
     if !found {
         eprintln!("skipped: bun is not on PATH");
     }
@@ -42,15 +39,9 @@ fn fast() -> Timing {
     Timing {
         poll: Duration::from_millis(20),
         request: Duration::from_millis(100),
-        delays: Delays {
-            spawn: Duration::from_millis(200),
-            max_spawn: Duration::from_millis(1_200),
-        },
+        delays: Delays { spawn: Duration::from_millis(200), max_spawn: Duration::from_millis(1_200) },
         deadline: Duration::from_millis(3_000),
-        stop: Poll {
-            interval: Duration::from_millis(5),
-            attempts: 100,
-        },
+        stop: Poll { interval: Duration::from_millis(5), attempts: 100 },
     }
 }
 
@@ -69,24 +60,14 @@ impl Fixture {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let registration = dir.path().join("service.json");
-        Self {
-            dir,
-            registration,
-            children: Vec::new(),
-            pids: Vec::new(),
-        }
+        Self { dir, registration, children: Vec::new(), pids: Vec::new() }
     }
 
     fn command_for(&self, registration: &Path, mode: &str, args: &[&str]) -> Vec<OsString> {
-        [
-            OsString::from("bun"),
-            fixture_script().into(),
-            registration.into(),
-            mode.into(),
-        ]
-        .into_iter()
-        .chain(args.iter().map(OsString::from))
-        .collect()
+        [OsString::from("bun"), fixture_script().into(), registration.into(), mode.into()]
+            .into_iter()
+            .chain(args.iter().map(OsString::from))
+            .collect()
     }
 
     fn command(&self, mode: &str, args: &[&str]) -> Vec<OsString> {
@@ -112,11 +93,7 @@ impl Fixture {
     // still answers `kill(pid, 0)`.
     fn spawn_unreaped(&mut self, mode: &str, args: &[&str]) -> u32 {
         let command = self.command(mode, args);
-        self.start(
-            Command::new("sh")
-                .args(["-c", "\"$@\" & exec sleep 60", "sh"])
-                .args(&command),
-        )
+        self.start(Command::new("sh").args(["-c", "\"$@\" & exec sleep 60", "sh"]).args(&command))
     }
 
     fn start(&mut self, command: &mut Command) -> u32 {
@@ -207,15 +184,9 @@ impl Drop for Fixture {
             .into_iter()
             .chain(self.pids.iter().copied())
             .chain(self.children.iter().map(|(pid, _)| *pid))
-            .chain(
-                std::fs::read_to_string(&self.registration)
-                    .ok()
-                    .and_then(|text| {
-                        serde_json::from_str::<serde_json::Value>(&text).ok()?["pid"]
-                            .as_u64()
-                            .map(|pid| pid as u32)
-                    }),
-            )
+            .chain(std::fs::read_to_string(&self.registration).ok().and_then(|text| {
+                serde_json::from_str::<serde_json::Value>(&text).ok()?["pid"].as_u64().map(|pid| pid as u32)
+            }))
             .chain(named(self.dir.path()))
             .collect();
         for pid in &pids {
@@ -234,10 +205,7 @@ fn named(dir: &Path) -> Vec<u32> {
         .filter_map(|entry| {
             let pid: u32 = entry.file_name().to_str()?.parse().ok()?;
             let cmdline = std::fs::read(entry.path().join("cmdline")).ok()?;
-            cmdline
-                .windows(needle.len())
-                .any(|window| window == needle)
-                .then_some(pid)
+            cmdline.windows(needle.len()).any(|window| window == needle).then_some(pid)
         })
         .collect()
 }
@@ -323,10 +291,7 @@ async fn reuses_a_registered_service() {
     let existing = fixture.spawn("compatible", &[]);
     fixture.wait_for_file(&fixture.registration).await;
     let (endpoint, starts) = run_counting(&fixture.options(Vec::new())).await;
-    assert_eq!(
-        endpoint.unwrap().service.endpoint.url,
-        fixture.info()["url"]
-    );
+    assert_eq!(endpoint.unwrap().service.endpoint.url, fixture.info()["url"]);
     assert_eq!(starts, 0);
     assert!(fixture.running(existing));
 }
@@ -339,8 +304,7 @@ async fn uses_a_service_of_another_version_and_leaves_it_running() {
     let mut fixture = Fixture::new();
     let existing = fixture.spawn("incompatible", &[]);
     fixture.wait_for_file(&fixture.registration).await;
-    let (ensured, starts) =
-        run_counting(&fixture.options(fixture.command("delayed-compatible", &["10"]))).await;
+    let (ensured, starts) = run_counting(&fixture.options(fixture.command("delayed-compatible", &["10"]))).await;
     let ensured = ensured.unwrap();
     assert_eq!(ensured.service.version.as_deref(), Some("1.9.0"));
     assert_eq!(starts, 0);
@@ -353,21 +317,12 @@ async fn adds_configured_environment_variables_when_starting_a_service() {
     needs_bun!();
     let mut fixture = Fixture::new();
     let mut options = fixture.options(fixture.command("environment", &[]));
-    options.env = vec![(
-        "OPENCODE_SERVICE_ENV_TEST".to_owned(),
-        "configured".to_owned(),
-    )];
+    options.env = vec![("OPENCODE_SERVICE_ENV_TEST".to_owned(), "configured".to_owned())];
     let ensured = run(&options).await.unwrap();
     fixture.pids.push(fixture.pid());
     assert_eq!(ensured.service.endpoint.url, fixture.info()["url"]);
-    assert_eq!(
-        std::fs::read_to_string(fixture.file(".environment")).unwrap(),
-        "configured"
-    );
-    assert_eq!(
-        std::fs::read_to_string(fixture.file(".handoff")).unwrap(),
-        "null"
-    );
+    assert_eq!(std::fs::read_to_string(fixture.file(".environment")).unwrap(), "configured");
+    assert_eq!(std::fs::read_to_string(fixture.file(".handoff")).unwrap(), "null");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -378,15 +333,10 @@ async fn waits_for_a_registered_service_to_finish_starting() {
     fixture.wait_for_file(&fixture.registration).await;
     let options = fixture.options(Vec::new());
     let result = tokio::spawn(async move { run(&options).await });
-    fixture
-        .wait_for_file(&fixture.file(".status-request"))
-        .await;
+    fixture.wait_for_file(&fixture.file(".status-request")).await;
     assert!(fixture.running(process));
     std::fs::write(fixture.file(".release"), "").unwrap();
-    assert_eq!(
-        result.await.unwrap().unwrap().service.endpoint.url,
-        fixture.info()["url"]
-    );
+    assert_eq!(result.await.unwrap().unwrap().service.endpoint.url, fixture.info()["url"]);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -397,12 +347,8 @@ async fn recovers_when_the_starting_service_it_waits_for_is_stopped() {
     fixture.wait_for_file(&fixture.registration).await;
     let options = fixture.options(fixture.command("delayed", &["10"]));
     let result = tokio::spawn(async move { run(&options).await });
-    fixture
-        .wait_for_file(&fixture.file(".status-request"))
-        .await;
-    stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop)
-        .await
-        .unwrap();
+    fixture.wait_for_file(&fixture.file(".status-request")).await;
+    stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop).await.unwrap();
     let ensured = result.await.unwrap().unwrap();
     let replacement = fixture.pid();
     fixture.pids.push(replacement);
@@ -419,8 +365,7 @@ async fn starts_a_service_when_the_registration_names_a_dead_process() {
     fixture.wait_for_file(&fixture.registration).await;
     signal(crashed, Signal::KILL);
     fixture.exited(crashed).await;
-    let (ensured, starts) =
-        run_counting(&fixture.options(fixture.command("delayed", &["10"]))).await;
+    let (ensured, starts) = run_counting(&fixture.options(fixture.command("delayed", &["10"]))).await;
     let replacement = fixture.pid();
     fixture.pids.push(replacement);
     assert_ne!(replacement, crashed);
@@ -448,19 +393,11 @@ async fn leaves_an_unresponsive_service_it_did_not_start_running() {
     let mut fixture = Fixture::new();
     let existing = fixture.spawn("hanging", &[]);
     fixture.wait_for_file(&fixture.registration).await;
-    let error = run(&fixture.options(fixture.command("delayed", &["10"])))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = run(&fixture.options(fixture.command("delayed", &["10"]))).await.unwrap_err().to_string();
     assert!(error.contains("is not responding"), "{error}");
     assert!(error.contains(&format!("(pid {existing})")), "{error}");
     // The fake service logs a request after it arrives; the third may still be on its way.
-    let requests = || {
-        std::fs::read_to_string(fixture.file(".requests"))
-            .unwrap_or_default()
-            .lines()
-            .count()
-    };
+    let requests = || std::fs::read_to_string(fixture.file(".requests")).unwrap_or_default().lines().count();
     until(|| requests() >= 3, "three requests").await;
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(requests(), 3);
@@ -474,19 +411,9 @@ async fn stop_signals_an_unresponsive_registered_service() {
     let mut fixture = Fixture::new();
     let process = fixture.spawn("hanging", &[]);
     fixture.wait_for_file(&fixture.registration).await;
-    stop::stop(
-        transport(),
-        &fixture.registration,
-        Pty::Clear,
-        Poll::default(),
-    )
-    .await
-    .unwrap();
+    stop::stop(transport(), &fixture.registration, Pty::Clear, Poll::default()).await.unwrap();
     fixture.exited(process).await;
-    assert_eq!(
-        std::fs::read_to_string(fixture.file(".signal")).unwrap(),
-        "SIGTERM"
-    );
+    assert_eq!(std::fs::read_to_string(fixture.file(".signal")).unwrap(), "SIGTERM");
     assert!(!fixture.registration.exists());
 }
 
@@ -497,13 +424,8 @@ async fn stop_escalates_when_the_registration_disappears_before_the_process_exit
     let existing = fixture.spawn("lingering", &["5000"]);
     fixture.wait_for_file(&fixture.registration).await;
     let pid = fixture.pid();
-    stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop)
-        .await
-        .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(fixture.file(".signal")).unwrap(),
-        "SIGTERM"
-    );
+    stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop).await.unwrap();
+    assert_eq!(std::fs::read_to_string(fixture.file(".signal")).unwrap(), "SIGTERM");
     fixture.exited(existing).await;
     assert!(!alive(pid));
     assert!(!fixture.registration.exists());
@@ -516,17 +438,9 @@ async fn stop_fails_when_the_process_survives_sigkill() {
     fixture.spawn_unreaped("lingering", &["60000"]);
     fixture.wait_for_file(&fixture.registration).await;
     let pid = fixture.pid();
-    let error = stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop)
-        .await
-        .unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        format!("Server process {pid} is still running")
-    );
-    assert_eq!(
-        std::fs::read_to_string(fixture.file(".signal")).unwrap(),
-        "SIGTERM"
-    );
+    let error = stop::stop(transport(), &fixture.registration, Pty::Clear, fast().stop).await.unwrap_err();
+    assert_eq!(error.to_string(), format!("Server process {pid} is still running"));
+    assert_eq!(std::fs::read_to_string(fixture.file(".signal")).unwrap(), "SIGTERM");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -538,10 +452,7 @@ async fn stop_waits_for_the_original_process_while_preserving_a_newly_registered
     let original = fixture.info();
     let file = fixture.registration.clone();
     // Default timing keeps the grace period open long enough for the successor to register first.
-    let stopping =
-        tokio::spawn(
-            async move { stop::stop(transport(), &file, Pty::Clear, Poll::default()).await },
-        );
+    let stopping = tokio::spawn(async move { stop::stop(transport(), &file, Pty::Clear, Poll::default()).await });
     fixture.wait_for_file(&fixture.file(".unregistered")).await;
     let successor = fixture.spawn("graceful", &[]);
     fixture.wait_for_file(&fixture.registration).await;
@@ -551,10 +462,7 @@ async fn stop_waits_for_the_original_process_while_preserving_a_newly_registered
     stopping.await.unwrap().unwrap();
     assert!(!alive(original["pid"].as_u64().unwrap() as u32));
     assert_eq!(fixture.info(), replacement);
-    assert_eq!(
-        status(replacement["url"].as_str().unwrap()).await["pid"],
-        successor
-    );
+    assert_eq!(status(replacement["url"].as_str().unwrap()).await["pid"], successor);
     assert!(fixture.running(successor));
 }
 
@@ -562,9 +470,7 @@ async fn stop_waits_for_the_original_process_while_preserving_a_newly_registered
 async fn waits_for_a_slow_winner_while_bounding_lock_probes() {
     needs_bun!();
     let mut fixture = Fixture::new();
-    let ensured = run(&fixture.options(fixture.command("coordinated", &[])))
-        .await
-        .unwrap();
+    let ensured = run(&fixture.options(fixture.command("coordinated", &[]))).await.unwrap();
     fixture.pids.push(fixture.pid());
     assert_eq!(ensured.service.endpoint.url, fixture.info()["url"]);
     assert_eq!(fixture.starts().len(), 2);
@@ -574,9 +480,7 @@ async fn waits_for_a_slow_winner_while_bounding_lock_probes() {
 async fn waits_for_a_live_contender_when_another_contender_fails() {
     needs_bun!();
     let mut fixture = Fixture::new();
-    let ensured = run(&fixture.options(fixture.command("coordinated-failed-loser", &["300"])))
-        .await
-        .unwrap();
+    let ensured = run(&fixture.options(fixture.command("coordinated-failed-loser", &["300"]))).await.unwrap();
     fixture.pids.push(fixture.pid());
     assert_eq!(ensured.service.endpoint.url, fixture.info()["url"]);
 }
@@ -585,27 +489,15 @@ async fn waits_for_a_live_contender_when_another_contender_fails() {
 async fn reports_a_contender_that_fails_to_start() {
     needs_bun!();
     let fixture = Fixture::new();
-    let error = run(&fixture.options(fixture.command("failed", &[])))
-        .await
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains("Server process exited with code 1"),
-        "{error}"
-    );
+    let error = run(&fixture.options(fixture.command("failed", &[]))).await.unwrap_err().to_string();
+    assert!(error.contains("Server process exited with code 1"), "{error}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn reports_a_missing_typescript_binary_at_once() {
     let fixture = Fixture::new();
-    let error = run(&fixture.options(vec!["/nonexistent/opencode".into()]))
-        .await
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.starts_with("Failed to start server: /nonexistent/opencode: "),
-        "{error}"
-    );
+    let error = run(&fixture.options(vec!["/nonexistent/opencode".into()])).await.unwrap_err().to_string();
+    assert!(error.starts_with("Failed to start server: /nonexistent/opencode: "), "{error}");
     assert!(error.contains("OPENCODE_TS_BIN"), "{error}");
 }
 
@@ -623,10 +515,7 @@ async fn reports_overlapping_contender_failures_without_recruiting_replacements(
     fixture.release(starts[1], "fail").await;
     let error = pending.await.unwrap().unwrap_err().to_string();
     assert!(started.elapsed() < Duration::from_secs(3));
-    assert!(
-        error.contains("Server process exited with code 23"),
-        "{error}"
-    );
+    assert!(error.contains("Server process exited with code 23"), "{error}");
     assert!(error.contains("storage initialization denied"), "{error}");
     assert_eq!(fixture.starts().len(), 2);
 }
@@ -642,10 +531,7 @@ async fn retains_a_contender_failure_until_the_deadline_while_its_survivor_stall
     fixture.release(starts[0], "fail").await;
     let error = pending.await.unwrap().unwrap_err().to_string();
     assert!(started.elapsed() >= Duration::from_secs(3));
-    assert!(
-        error.contains("Server process exited with code 23"),
-        "{error}"
-    );
+    assert!(error.contains("Server process exited with code 23"), "{error}");
     assert!(error.contains("storage initialization denied"), "{error}");
     assert_eq!(fixture.starts().len(), 2);
     assert!(alive(starts[1]));
@@ -690,10 +576,7 @@ async fn recovers_when_its_own_unresponsive_contender_is_evicted_after_a_prior_f
 async fn reports_a_bounded_contender_stderr_tail() {
     needs_bun!();
     let fixture = Fixture::new();
-    let error = run(&fixture.options(fixture.command("stderr-failed", &[])))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = run(&fixture.options(fixture.command("stderr-failed", &[]))).await.unwrap_err().to_string();
     assert!(error.contains("actionable startup failure"), "{error}");
     assert!(error.len() < 9_000);
 }
@@ -702,10 +585,7 @@ async fn reports_a_bounded_contender_stderr_tail() {
 async fn reports_a_contender_terminated_by_a_signal() {
     needs_bun!();
     let fixture = Fixture::new();
-    let error = run(&fixture.options(fixture.command("signal", &[])))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = run(&fixture.options(fixture.command("signal", &[]))).await.unwrap_err().to_string();
     assert!(
         error.starts_with("Server process terminated by SIGKILL")
             || error.starts_with("Server process exited with code"),
@@ -717,14 +597,8 @@ async fn reports_a_contender_terminated_by_a_signal() {
 async fn reports_a_slow_contender_that_eventually_fails() {
     needs_bun!();
     let fixture = Fixture::new();
-    let error = run(&fixture.options(fixture.command("delayed-failed", &["500"])))
-        .await
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains("Server process exited with code 1"),
-        "{error}"
-    );
+    let error = run(&fixture.options(fixture.command("delayed-failed", &["500"]))).await.unwrap_err().to_string();
+    assert!(error.contains("Server process exited with code 1"), "{error}");
 }
 
 // TS replaces an incompatible owner that appears during startup. Rust uses it.
@@ -740,10 +614,7 @@ async fn uses_an_owner_of_another_version_that_appears_during_startup() {
     assert!(fixture.running(old));
     let pid = ensured.service.registration.pid;
     fixture.pids.push(pid);
-    assert!(
-        pid == old || ensured.service.version.as_deref() == Some("test"),
-        "{ensured:?}"
-    );
+    assert!(pid == old || ensured.service.version.as_deref() == Some("test"), "{ensured:?}");
 }
 
 // The TS binary registers under its own build channel. A contender that writes another file in
@@ -758,10 +629,7 @@ async fn finds_a_started_service_registered_under_another_channel() {
     fixture.pids.push(ensured.service.registration.pid);
     assert_eq!(ensured.file, other);
     assert!(!fixture.registration.exists());
-    assert_eq!(
-        status(&ensured.service.endpoint.url).await["pid"],
-        ensured.service.registration.pid
-    );
+    assert_eq!(status(&ensured.service.endpoint.url).await["pid"], ensured.service.registration.pid);
 }
 
 // A fake `OPENCODE_TS_BIN` of the channel `oc-y`: it logs its pid to `spawns` and serves `mode`
@@ -781,11 +649,7 @@ fn channel_build(fixture: &Fixture, mode: &str) -> (Options, PathBuf, PathBuf) {
         ),
     )
     .unwrap();
-    std::fs::set_permissions(
-        &program,
-        std::os::unix::fs::PermissionsExt::from_mode(0o755),
-    )
-    .unwrap();
+    std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     let ts = TsCommand::from_vars(|name| (name == TsCommand::VAR).then(|| program.clone().into()));
     let mut options = Options::new(fixture.registration.clone(), root.to_owned(), &ts);
     options.timing = fast();
@@ -793,10 +657,7 @@ fn channel_build(fixture: &Fixture, mode: &str) -> (Options, PathBuf, PathBuf) {
 }
 
 fn spawned(spawns: &Path) -> usize {
-    std::fs::read_to_string(spawns)
-        .unwrap_or_default()
-        .lines()
-        .count()
+    std::fs::read_to_string(spawns).unwrap_or_default().lines().count()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -825,8 +686,7 @@ async fn reports_its_failed_service_registered_under_another_channel_at_once() {
     assert_eq!(error, "Background service failed to start");
     assert!(started.elapsed() < fast().deadline, "{:?}", started.elapsed());
     assert_eq!(spawned(&spawns), 1, "a second contender was started");
-    let pid: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&other).unwrap()).unwrap();
+    let pid: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&other).unwrap()).unwrap();
     assert!(alive(pid["pid"].as_u64().unwrap() as u32));
 }
 
@@ -836,21 +696,12 @@ async fn a_restart_hands_persistent_terminals_to_the_next_service() {
     let mut fixture = Fixture::new();
     let old = fixture.spawn("handoff", &[]);
     fixture.wait_for_file(&fixture.registration).await;
-    stop::stop(
-        transport(),
-        &fixture.registration,
-        Pty::Handoff,
-        fast().stop,
-    )
-    .await
-    .unwrap();
+    stop::stop(transport(), &fixture.registration, Pty::Handoff, fast().stop).await.unwrap();
     fixture.exited(old).await;
     let prepared: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(fixture.file(".prepared")).unwrap()).unwrap();
     assert!(handoff::sidecar(&fixture.registration).exists());
-    let ensured = run(&fixture.options(fixture.command("environment", &[])))
-        .await
-        .unwrap();
+    let ensured = run(&fixture.options(fixture.command("environment", &[]))).await.unwrap();
     fixture.pids.push(ensured.service.registration.pid);
     let adopted: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(fixture.file(".handoff")).unwrap()).unwrap();
@@ -872,26 +723,12 @@ async fn a_standalone_server_reports_its_url_and_ends_with_its_lease() {
     needs_bun!();
     let dir = tempfile::tempdir().unwrap();
     let record = dir.path().join("password");
-    let command: Vec<OsString> = vec![
-        "bun".into(),
-        "-e".into(),
-        STANDALONE.into(),
-        record.clone().into(),
-    ];
-    let server = standalone::start(&command, dir.path(), false)
-        .await
-        .unwrap();
-    assert!(
-        server.endpoint.url.starts_with("http://"),
-        "{:?}",
-        server.endpoint
-    );
+    let command: Vec<OsString> = vec!["bun".into(), "-e".into(), STANDALONE.into(), record.clone().into()];
+    let server = standalone::start(&command, dir.path(), false).await.unwrap();
+    assert!(server.endpoint.url.starts_with("http://"), "{:?}", server.endpoint);
     let password = std::fs::read_to_string(&record).unwrap();
     assert_eq!(password.len(), 43);
-    assert_eq!(
-        server.endpoint.auth,
-        Some(opencode_api::client::Auth::password(password))
-    );
+    assert_eq!(server.endpoint.auth, Some(opencode_api::client::Auth::password(password)));
     let pid = server.pid;
     drop(server);
     until(|| !alive(pid), "standalone exit").await;
@@ -900,13 +737,8 @@ async fn a_standalone_server_reports_its_url_and_ends_with_its_lease() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_standalone_server_that_exits_early_is_an_error() {
     let dir = tempfile::tempdir().unwrap();
-    let error = standalone::start(&["true".into()], dir.path(), false)
-        .await
-        .unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "Standalone server exited before reporting readiness"
-    );
+    let error = standalone::start(&["true".into()], dir.path(), false).await.unwrap_err();
+    assert_eq!(error.to_string(), "Standalone server exited before reporting readiness");
 }
 
 // `connect::resolve` and the managed client (review carbon-4), on private XDG directories: the
@@ -943,30 +775,13 @@ impl Channel {
             ),
         )
         .unwrap();
-        std::fs::set_permissions(
-            &program,
-            std::os::unix::fs::PermissionsExt::from_mode(0o755),
-        )
-        .unwrap();
-        let env = Env {
-            ts_bin: Some(program.to_string_lossy().into_owned()),
-            ..Env::default()
-        };
-        Self {
-            fixture,
-            paths,
-            env,
-        }
+        std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let env = Env { ts_bin: Some(program.to_string_lossy().into_owned()), ..Env::default() };
+        Self { fixture, paths, env }
     }
 
     async fn resolve(&self) -> Result<Connection, connect::Error> {
-        connect::resolve(
-            transport(),
-            &self.paths,
-            &self.env,
-            &connect::Options::default(),
-        )
-        .await
+        connect::resolve(transport(), &self.paths, &self.env, &connect::Options::default()).await
     }
 
     fn spawned(&self) -> bool {
@@ -979,17 +794,11 @@ async fn connect_waits_for_a_starting_service_of_another_channel() {
     needs_bun!();
     let mut channel = Channel::new();
     let process = channel.fixture.spawn("starting", &[]);
-    channel
-        .fixture
-        .wait_for_file(&channel.fixture.registration)
-        .await;
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
     let channel = Arc::new(channel);
     let resolving = channel.clone();
     let result = tokio::spawn(async move { resolving.resolve().await });
-    channel
-        .fixture
-        .wait_for_file(&channel.fixture.file(".status-request"))
-        .await;
+    channel.fixture.wait_for_file(&channel.fixture.file(".status-request")).await;
     std::fs::write(channel.fixture.file(".release"), "").unwrap();
     let connection = result.await.unwrap().unwrap();
     assert_eq!(connection.endpoint.url, channel.fixture.info()["url"]);
@@ -1002,10 +811,7 @@ async fn connect_reports_a_failed_service_of_another_channel() {
     needs_bun!();
     let mut channel = Channel::new();
     let process = channel.fixture.spawn("failed-owner", &[]);
-    channel
-        .fixture
-        .wait_for_file(&channel.fixture.registration)
-        .await;
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
     let error = channel.resolve().await.unwrap_err();
     assert_eq!(error.to_string(), "Background service failed to start");
     assert!(!channel.spawned(), "a second service was started");
@@ -1017,30 +823,18 @@ async fn a_managed_client_follows_a_restarted_service() {
     needs_bun!();
     let mut channel = Channel::new();
     let first = channel.fixture.spawn("compatible", &[]);
-    channel
-        .fixture
-        .wait_for_file(&channel.fixture.registration)
-        .await;
+    channel.fixture.wait_for_file(&channel.fixture.registration).await;
     let connection = channel.resolve().await.unwrap();
     let client = follow::client(transport(), &connection, &channel.paths, &channel.env).unwrap();
     let request = RequestOptions::default();
-    assert_eq!(
-        client.server_info(&request).await.unwrap().pid,
-        i64::from(first)
-    );
+    assert_eq!(client.server_info(&request).await.unwrap().pid, i64::from(first));
     // A restart: the service is gone, and its successor registers a new port.
     signal(first, Signal::KILL);
     channel.fixture.exited(first).await;
     let second = channel.fixture.spawn("compatible", &[]);
-    until(
-        || channel.fixture.registration.exists() && channel.fixture.pid() == second,
-        "the successor's registration",
-    )
-    .await;
+    until(|| channel.fixture.registration.exists() && channel.fixture.pid() == second, "the successor's registration")
+        .await;
     assert!(client.server_info(&request).await.is_err());
-    assert_eq!(
-        client.server_info(&request).await.unwrap().pid,
-        i64::from(second)
-    );
+    assert_eq!(client.server_info(&request).await.unwrap().pid, i64::from(second));
     assert!(!channel.spawned(), "the client started a service");
 }

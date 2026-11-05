@@ -99,11 +99,7 @@ pub fn with_keys<R>(read: impl FnOnce(&mut Keys) -> R) -> R {
 }
 
 /// Runs a prompt until it is submitted or cancelled.
-pub fn run(
-    prompt: &mut dyn Prompt,
-    output: Output,
-    initial_input: Option<&str>,
-) -> Result<(), Cancelled> {
+pub fn run(prompt: &mut dyn Prompt, output: Output, initial_input: Option<&str>) -> Result<(), Cancelled> {
     let _raw = Raw::enable(output);
     let mut base = Base {
         state: State::Initial,
@@ -187,11 +183,7 @@ fn keypress(prompt: &mut dyn Prompt, base: &mut Base, press: Press) {
             base.state = State::Submit;
         }
     }
-    if [char, key.name.as_deref(), Some(key.sequence.as_str())]
-        .into_iter()
-        .flatten()
-        .any(is_cancel)
-    {
+    if [char, key.name.as_deref(), Some(key.sequence.as_str())].into_iter().flatten().any(is_cancel) {
         base.state = State::Cancel;
     }
     finish(prompt, base);
@@ -243,9 +235,8 @@ fn render(prompt: &dyn Prompt, base: &mut Base) {
     } else {
         let previous: Vec<&str> = base.previous.split('\n').collect();
         let lines: Vec<&str> = frame.split('\n').collect();
-        let diff: Vec<usize> = (0..previous.len().max(lines.len()))
-            .filter(|index| previous.get(*index) != lines.get(*index))
-            .collect();
+        let diff: Vec<usize> =
+            (0..previous.len().max(lines.len())).filter(|index| previous.get(*index) != lines.get(*index)).collect();
         let height = wrap(&base.previous, columns).split('\n').count() as i64 - 1;
         base.write(&move_cursor(-999, -height));
         if let [line] = diff[..] {

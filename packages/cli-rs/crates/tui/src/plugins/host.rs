@@ -44,8 +44,7 @@ impl opencode_plugin::Host for Tui {
 
     fn storage_write(&self, key: &str, json: &str) -> Result<(), String> {
         let storage = self.storage().ok_or("this TUI has no storage")?;
-        let value: serde_json::Value =
-            serde_json::from_str(json).map_err(|error| error.to_string())?;
+        let value: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
         storage
             .update(key, &serde_json::json!({}), |stored| *stored = value)
             .map(|_| ())
@@ -68,10 +67,7 @@ impl opencode_plugin::Host for Tui {
 
     fn open_route(&self, id: &str, name: &str) {
         self.dialogs.clear();
-        self.navigate(Route::Plugin {
-            id: id.to_owned(),
-            name: name.to_owned(),
-        });
+        self.navigate(Route::Plugin { id: id.to_owned(), name: name.to_owned() });
     }
 
     fn remount(&self) {
@@ -129,36 +125,17 @@ struct PluginsChanged;
 /// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 pub fn external(tui: &Rc<Tui>, external: External) {
     let options = |target: &str| {
-        tui.config()
-            .info
-            .plugins
-            .iter()
-            .flatten()
-            .find_map(|plugin| match plugin {
-                opencode_local::cli_config::Plugin::Package {
-                    package,
-                    options: Some(options),
-                } if package == target => {
-                    Some(serde_json::Value::Object(options.clone()).to_string())
-                }
-                _ => None,
-            })
-    };
-    let configured = tui
-        .plugins
-        .skipped()
-        .into_iter()
-        .map(|target| Configured {
-            options: options(&target),
-            target,
+        tui.config().info.plugins.iter().flatten().find_map(|plugin| match plugin {
+            opencode_local::cli_config::Plugin::Package { package, options: Some(options) } if package == target => {
+                Some(serde_json::Value::Object(options.clone()).to_string())
+            }
+            _ => None,
         })
-        .collect();
-    let loader = Rc::new(Loader::new(
-        Rc::new(Native) as Rc<dyn Backend<Tui>>,
-        external.config_dir,
-        external.cwd,
-        configured,
-    ));
+    };
+    let configured =
+        tui.plugins.skipped().into_iter().map(|target| Configured { options: options(&target), target }).collect();
+    let loader =
+        Rc::new(Loader::new(Rc::new(Native) as Rc<dyn Backend<Tui>>, external.config_dir, external.cwd, configured));
     loader.reconcile(tui, &tui.plugins);
     let watches: Rc<RefCell<Vec<(PathBuf, opencode_local::watch::Watch)>>> = Rc::default();
     watch(tui, &loader, &watches);
@@ -172,11 +149,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
 
 /// Watches the loader's directories that are not watched yet. A watch that stops seeing its directory costs a
 /// handle until the TUI exits, as in TS.
-fn watch(
-    tui: &Tui,
-    loader: &Loader<Tui>,
-    watches: &RefCell<Vec<(PathBuf, opencode_local::watch::Watch)>>,
-) {
+fn watch(tui: &Tui, loader: &Loader<Tui>, watches: &RefCell<Vec<(PathBuf, opencode_local::watch::Watch)>>) {
     for dir in loader.watch_dirs() {
         if watches.borrow().iter().any(|(known, _)| *known == dir) {
             continue;
@@ -204,13 +177,7 @@ pub fn add(tui: &Rc<Tui>, plugin: Definition<Tui>) {
 }
 
 /// Mounts slot `path` with the host's `content` into `parent`. The view that owns the slot syncs the result.
-pub fn slot(
-    tui: &Tui,
-    parent: &View,
-    path: &str,
-    input: &SlotInput,
-    content: impl FnOnce(&View),
-) -> SlotMount<Tui> {
+pub fn slot(tui: &Tui, parent: &View, path: &str, input: &SlotInput, content: impl FnOnce(&View)) -> SlotMount<Tui> {
     tui.plugins.mount(tui, parent, path, input, content)
 }
 

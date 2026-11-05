@@ -15,9 +15,7 @@ use crate::app::Tui;
 pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.home.footer", |cx| {
         // Append keeps the path open to additive plugin claims; an external replace still takes it over.
-        cx.slot(Placement::append(slot::HOME_FOOTER), |tui, _| {
-            Box::new(Footer::new(tui))
-        });
+        cx.slot(Placement::append(slot::HOME_FOOTER), |tui, _| Box::new(Footer::new(tui)));
     })
 }
 
@@ -39,9 +37,7 @@ struct Model {
 impl Footer {
     fn new(tui: &Tui) -> Self {
         let inner = Rc::new(Inner {
-            root: View::new(&tui.app)
-                .width(Length::percent(100.0))
-                .shrink(0.0),
+            root: View::new(&tui.app).width(Length::percent(100.0)).shrink(0.0),
             shown: RefCell::default(),
             status: RefCell::default(),
         });
@@ -61,17 +57,11 @@ impl Footer {
 impl Inner {
     fn refresh(&self, tui: &Tui) {
         let mcp = tui.data.read(|state| {
-            let list = state
-                .location(None)
-                .and_then(|data| data.mcp_server.as_deref())
-                .unwrap_or_default();
+            let list = state.location(None).and_then(|data| data.mcp_server.as_deref()).unwrap_or_default();
             let count = |tag: &str| list.iter().filter(|item| item.status.tag() == tag).count();
             (list.len(), count("connected"), count("failed"))
         });
-        let model = Model {
-            size: tui.app.size(),
-            mcp,
-        };
+        let model = Model { size: tui.app.size(), mcp };
         if self.shown.borrow().as_ref() == Some(&model) {
             return;
         }
@@ -89,35 +79,18 @@ impl Inner {
             return SlotMount::default();
         }
         let padding = if height < 16 { 0 } else { 1 };
-        let row = View::new(app)
-            .row()
-            .width(Length::percent(100.0))
-            .padding_y(padding)
-            .padding_x(2)
-            .gap(2)
-            .shrink(0.0);
+        let row = View::new(app).row().width(Length::percent(100.0)).padding_y(padding).padding_x(2).gap(2).shrink(0.0);
         let (servers, connected, failed) = model.mcp;
         if servers > 0 {
             let spans = if failed > 0 {
-                vec![
-                    "⊙ ".fg(theme.text.feedback.error.base),
-                    format!("{failed} MCP failed").fg(theme.text.base),
-                ]
+                vec!["⊙ ".fg(theme.text.feedback.error.base), format!("{failed} MCP failed").fg(theme.text.base)]
             } else {
                 vec![
-                    "⊙ ".fg(if connected > 0 {
-                        theme.text.feedback.success.base
-                    } else {
-                        theme.text.muted
-                    }),
+                    "⊙ ".fg(if connected > 0 { theme.text.feedback.success.base } else { theme.text.muted }),
                     format!("{connected} MCP").fg(theme.text.base),
                 ]
             };
-            let mcp = View::new(app)
-                .row()
-                .gap(1)
-                .shrink(0.0)
-                .child(&Text::new(app, spans).fg(theme.text.base));
+            let mcp = View::new(app).row().gap(1).shrink(0.0).child(&Text::new(app, spans).fg(theme.text.base));
             if width >= 64 {
                 mcp.add(&Text::new(app, "/mcps").fg(theme.text.muted));
             }
@@ -132,13 +105,7 @@ impl Inner {
             row.add(&mcp);
         }
         // Failed plugins: built-ins do not fail, and server plugins are read from P.4 on.
-        let status = crate::plugins::host::slot(
-            tui,
-            &row,
-            slot::HOME_FOOTER_STATUS,
-            &Default::default(),
-            |_| {},
-        );
+        let status = crate::plugins::host::slot(tui, &row, slot::HOME_FOOTER_STATUS, &Default::default(), |_| {});
         row.add(&View::new(app).grow(1.0));
         if width >= 64 {
             row.add(

@@ -33,9 +33,7 @@ pub struct Memory {
 
 impl Default for Memory {
     fn default() -> Self {
-        Self {
-            active: Cell::new(true),
-        }
+        Self { active: Cell::new(true) }
     }
 }
 
@@ -93,17 +91,10 @@ impl Composer {
     pub fn new(tui: &Tui, session: &SessionID, on_toggle: OnToggle) -> Self {
         let app = &tui.app;
         let theme = tui.page();
-        let header = View::new(app)
-            .row()
-            .justify(Justify::SpaceBetween)
-            .padding_edge(Edge::Left, 1);
+        let header = View::new(app).row().justify(Justify::SpaceBetween).padding_edge(Edge::Left, 1);
         // A tab's scroll box takes all of its `maxHeight`, whatever the rows.
         let body = View::new(app).column().shrink(0.0).height(ROWS as u32);
-        let footer = View::new(app)
-            .row()
-            .gap(2)
-            .padding_edge(Edge::Left, 1)
-            .shrink(0.0);
+        let footer = View::new(app).row().gap(2).padding_edge(Edge::Left, 1).shrink(0.0);
         let panel = View::new(app)
             .column()
             .border_sides(Sides::LEFT)
@@ -114,19 +105,8 @@ impl Composer {
             .padding_edge(Edge::Right, 2)
             .padding_edge(Edge::Top, 1)
             .padding_edge(Edge::Bottom, 1)
-            .child(
-                &View::new(app)
-                    .column()
-                    .gap(1)
-                    .child(&header)
-                    .child(&body)
-                    .child(&footer),
-            );
-        let root = View::new(app)
-            .column()
-            .shrink(0.0)
-            .visible(false)
-            .child(&panel);
+            .child(&View::new(app).column().gap(1).child(&header).child(&body).child(&footer));
+        let root = View::new(app).column().shrink(0.0).visible(false).child(&panel);
         let inner = Rc::new(Inner {
             tui: tui.weak(),
             session: session.clone(),
@@ -179,11 +159,7 @@ impl Composer {
     /// form; `muted` is whether the right pane has focus, which closes the composer (`promptMuted`).
     pub fn sync(&self, tui: &Tui, forms: bool, muted: bool) {
         let inner = &self.0;
-        let child = tui.data.read(|state| {
-            state
-                .session(&inner.session)
-                .is_some_and(|info| info.parent_id.is_some())
-        });
+        let child = tui.data.read(|state| state.session(&inner.session).is_some_and(|info| info.parent_id.is_some()));
         inner.child.set(child);
         inner.forms.set(forms);
         if muted {
@@ -244,12 +220,8 @@ impl Inner {
                     TuiCommand::inline("right", run(|inner, tui| inner.switch(tui, 1)))
                         .title("Next tab")
                         .group("Composer"),
-                    TuiCommand::inline("escape", run(Inner::close))
-                        .title("Close composer")
-                        .group("Composer"),
-                    TuiCommand::inline("ctrl+c", run(Inner::close))
-                        .title("Close composer")
-                        .group("Composer"),
+                    TuiCommand::inline("escape", run(Inner::close)).title("Close composer").group("Composer"),
+                    TuiCommand::inline("ctrl+c", run(Inner::close)).title("Close composer").group("Composer"),
                 ],
                 ..KeymapLayer::default()
             },
@@ -257,15 +229,8 @@ impl Inner {
             tab(Tab::Shell, shell::commands(self)),
             tab(Tab::Terminals, terminals::commands(self)),
             // The session route's command list and its base-mode binding (`routes/session/index.tsx:1399-1407`).
-            KeymapLayer {
-                mode: Some(GLOBAL_MODE.to_owned()),
-                commands: vec![child_first],
-                ..KeymapLayer::default()
-            },
-            KeymapLayer {
-                bindings: vec!["session.child.first".to_owned()],
-                ..KeymapLayer::default()
-            },
+            KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![child_first], ..KeymapLayer::default() },
+            KeymapLayer { bindings: vec!["session.child.first".to_owned()], ..KeymapLayer::default() },
         ];
         for layer in layers {
             match tui.keymap.layer(layer) {
@@ -301,11 +266,7 @@ impl Inner {
 
     /// `onClose`: a child session goes to its parent; otherwise the composer closes.
     fn close(self: &Rc<Self>, tui: &Tui) {
-        let parent = tui.data.read(|state| {
-            state
-                .session(&self.session)
-                .and_then(|info| info.parent_id.clone())
-        });
+        let parent = tui.data.read(|state| state.session(&self.session).and_then(|info| info.parent_id.clone()));
         if let Some(parent) = parent {
             tui.navigate(crate::routes::Route::Session { id: parent });
             return;
@@ -319,10 +280,7 @@ impl Inner {
         if tabs.len() <= 1 {
             return;
         }
-        let index = tabs
-            .iter()
-            .position(|tab| *tab == self.active.get())
-            .unwrap_or(0) as isize;
+        let index = tabs.iter().position(|tab| *tab == self.active.get()).unwrap_or(0) as isize;
         let next = (index + direction).rem_euclid(tabs.len() as isize) as usize;
         self.active.set(tabs[next]);
         self.refresh(tui);
@@ -339,16 +297,11 @@ impl Inner {
         if tui.terminals.available() {
             tabs.push(Tab::Terminals);
         }
-        let default = self
-            .tab
-            .get()
-            .or_else(|| self.child.get().then_some(Tab::Subagents));
+        let default = self.tab.get().or_else(|| self.child.get().then_some(Tab::Subagents));
         // The effect that picks the default tab runs when the composer opens, its tabs change, or the default changes.
-        let reset = open
-            && (!self.open.get() || *self.tabs.borrow() != tabs || self.default.get() != default);
+        let reset = open && (!self.open.get() || *self.tabs.borrow() != tabs || self.default.get() != default);
         if reset {
-            self.active
-                .set(default.filter(|tab| tabs.contains(tab)).unwrap_or(tabs[0]));
+            self.active.set(default.filter(|tab| tabs.contains(tab)).unwrap_or(tabs[0]));
         }
         *self.tabs.borrow_mut() = tabs;
         self.default.set(default);
@@ -402,11 +355,7 @@ impl Inner {
             let labels = View::new(app).row().gap(2);
             for tab in &tabs {
                 let active = *tab == self.active.get();
-                let label = Text::new(app, tab.label()).fg(if active {
-                    theme.text.base
-                } else {
-                    theme.text.muted
-                });
+                let label = Text::new(app, tab.label()).fg(if active { theme.text.base } else { theme.text.muted });
                 if active {
                     label.bold();
                 }
@@ -415,8 +364,7 @@ impl Inner {
             self.header.add(&labels);
         } else {
             let label = tabs.first().map_or("", |tab| tab.label());
-            self.header
-                .add(&Text::new(app, label).fg(theme.text.base).bold());
+            self.header.add(&Text::new(app, label).fg(theme.text.base).bold());
         }
         let esc = Text::new(app, "esc").fg(theme.text.muted);
         let weak = Rc::downgrade(self);
@@ -490,23 +438,11 @@ fn row(
 ) -> View {
     let app = &tui.app;
     let (background, foreground) = match state {
-        RowState::Focused => (
-            theme.background.action.primary.focused,
-            theme.text.action.primary.focused,
-        ),
-        RowState::Selected => (
-            theme.background.action.primary.selected,
-            theme.text.action.primary.selected,
-        ),
-        RowState::Base => (
-            theme.background.action.primary.base,
-            theme.text.action.primary.base,
-        ),
+        RowState::Focused => (theme.background.action.primary.focused, theme.text.action.primary.focused),
+        RowState::Selected => (theme.background.action.primary.selected, theme.text.action.primary.selected),
+        RowState::Base => (theme.background.action.primary.base, theme.text.action.primary.base),
     };
-    let text = Text::new(app, label.text)
-        .fg(foreground)
-        .wrap(WrapMode::None)
-        .truncate(label.truncate);
+    let text = Text::new(app, label.text).fg(foreground).wrap(WrapMode::None).truncate(label.truncate);
     if state == RowState::Focused {
         text.bold();
     }
@@ -519,11 +455,7 @@ fn row(
     if let Some(status) = label.status {
         view.add(
             &Text::new(app, status)
-                .fg(if state == RowState::Focused {
-                    theme.text.action.primary.focused
-                } else {
-                    theme.text.muted
-                })
+                .fg(if state == RowState::Focused { theme.text.action.primary.focused } else { theme.text.muted })
                 .wrap(WrapMode::None),
         );
     }

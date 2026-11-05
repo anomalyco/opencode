@@ -112,11 +112,7 @@ impl Output {
     }
 
     pub fn outro(self, message: &str) {
-        self.write(&format!(
-            "{}\n{}  {message}\n\n",
-            gray(S_BAR()),
-            gray(S_BAR_END())
-        ));
+        self.write(&format!("{}\n{}  {message}\n\n", gray(S_BAR()), gray(S_BAR_END())));
     }
 
     pub fn cancel(self, message: &str) {
@@ -129,11 +125,7 @@ impl Output {
         let mut parts = vec![bar.clone()];
         for (index, line) in message.split('\n').enumerate() {
             let lead = if index == 0 { symbol } else { bar.as_str() };
-            parts.push(if line.is_empty() {
-                lead.to_string()
-            } else {
-                format!("{lead}  {line}")
-            });
+            parts.push(if line.is_empty() { lead.to_string() } else { format!("{lead}  {line}") });
         }
         self.write(&format!("{}\n", parts.join("\n")));
     }
@@ -155,39 +147,19 @@ pub fn note_with(message: &str, title: &str, format: impl Fn(&str) -> String) {
         .chain(std::iter::once(String::new()))
         .collect();
     let title_length = length(title);
-    let width = lines
-        .iter()
-        .map(|line| length(line))
-        .max()
-        .unwrap_or(0)
-        .max(title_length)
-        + 2;
+    let width = lines.iter().map(|line| length(line)).max().unwrap_or(0).max(title_length) + 2;
     let body: Vec<String> = lines
         .iter()
-        .map(|line| {
-            format!(
-                "{}  {line}{}{}",
-                gray(S_BAR()),
-                " ".repeat(width - length(line)),
-                gray(S_BAR())
-            )
-        })
+        .map(|line| format!("{}  {line}{}{}", gray(S_BAR()), " ".repeat(width - length(line)), gray(S_BAR())))
         .collect();
     Output::Stdout.write(&format!(
         "{}\n{}  {} {}\n{}\n{}\n",
         gray(S_BAR()),
         green(S_STEP_SUBMIT()),
         reset(title),
-        gray(
-            &(S_BAR_H().repeat(width.saturating_sub(title_length + 1).max(1))
-                + S_CORNER_TOP_RIGHT())
-        ),
+        gray(&(S_BAR_H().repeat(width.saturating_sub(title_length + 1).max(1)) + S_CORNER_TOP_RIGHT())),
         body.join("\n"),
-        gray(
-            &(S_CONNECT_LEFT().to_string()
-                + &S_BAR_H().repeat(width + 2)
-                + S_CORNER_BOTTOM_RIGHT())
-        ),
+        gray(&(S_CONNECT_LEFT().to_string() + &S_BAR_H().repeat(width + 2) + S_CORNER_BOTTOM_RIGHT())),
     ));
 }
 

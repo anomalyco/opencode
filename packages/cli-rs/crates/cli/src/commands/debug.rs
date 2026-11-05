@@ -36,12 +36,7 @@ fn agents(context: &Context) -> anyhow::Result<()> {
         get_located(&server.client, "/api/agent", &[400, 401, 404, 503]).await
     })??;
     let mut agents = super::models::data(&response).to_vec();
-    agents.sort_by(|a, b| {
-        locale_compare(
-            a["id"].as_str().unwrap_or_default(),
-            b["id"].as_str().unwrap_or_default(),
-        )
-    });
+    agents.sort_by(|a, b| locale_compare(a["id"].as_str().unwrap_or_default(), b["id"].as_str().unwrap_or_default()));
     print(&pretty(&Value::Array(agents))?)
 }
 
@@ -56,22 +51,16 @@ fn config(context: &Context) -> anyhow::Result<()> {
 // Redact only the debug output; the resolved configuration must remain usable by providers
 // (`debug/redact.ts`).
 static SECRET_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)(?:api.?key|secret|password|token$|authorization$|cookie$|credential|private.?key)",
-    )
-    .expect("valid pattern")
+    Regex::new(r"(?i)(?:api.?key|secret|password|token$|authorization$|cookie$|credential|private.?key)")
+        .expect("valid pattern")
 });
 
 fn redact(value: &Value, headers: bool) -> Value {
     match value {
-        Value::Array(items) => {
-            Value::Array(items.iter().map(|item| redact(item, headers)).collect())
+        Value::Array(items) => Value::Array(items.iter().map(|item| redact(item, headers)).collect()),
+        Value::Object(map) => {
+            Value::Object(map.iter().map(|(key, item)| (key.clone(), redact_entry(key, item, headers))).collect())
         }
-        Value::Object(map) => Value::Object(
-            map.iter()
-                .map(|(key, item)| (key.clone(), redact_entry(key, item, headers)))
-                .collect(),
-        ),
         value => value.clone(),
     }
 }
@@ -89,9 +78,7 @@ fn redact_entry(key: &str, item: &Value, headers: bool) -> Value {
             };
             if !url.username().is_empty()
                 || url.password().is_some()
-                || url
-                    .query_pairs()
-                    .any(|(name, _)| SECRET_NAME.is_match(&name))
+                || url.query_pairs().any(|(name, _)| SECRET_NAME.is_match(&name))
             {
                 return hidden();
             }
@@ -120,19 +107,11 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
     // one passes through untouched, which keeps a POSIX path for a remote server intact on Windows.
     let directory = match &args.directory {
         Some(value) if Path::new(value).is_absolute() => Some(value.clone()),
-        Some(value) => Some(normalize(
-            &format!("{}/{value}", std::env::current_dir()?.display()),
-            false,
-        )),
+        Some(value) => Some(normalize(&format!("{}/{value}", std::env::current_dir()?.display()), false)),
         None => None,
     };
     let snapshot = client
-        .debug_heap_dump(
-            &DebugHeapDumpInput {
-                directory: directory.clone(),
-            },
-            &RequestOptions::default(),
-        )
+        .debug_heap_dump(&DebugHeapDumpInput { directory: directory.clone() }, &RequestOptions::default())
         .await
         .map_err(|error| match error {
             ApiError::UnexpectedStatus { status: 404 } => anyhow::anyhow!(
@@ -146,19 +125,14 @@ async fn capture(context: &Context, args: &HeapDumpArgs) -> anyhow::Result<()> {
     if let Some(directory) = directory
         && !written_in(&snapshot.path, &directory)
     {
-        eprintln!(
-            "The server ignored --directory. Update and restart it to choose where snapshots go."
-        );
+        eprintln!("The server ignored --directory. Update and restart it to choose where snapshots go.");
     }
     print(&format!("{}\n", snapshot.path))
 }
 
 // A fresh server has nothing worth capturing, so only an already-running one is used: never
 // start, replace, or restart the background service.
-async fn running(
-    transport: Arc<dyn Transport>,
-    server: Option<String>,
-) -> anyhow::Result<Endpoint> {
+async fn running(transport: Arc<dyn Transport>, server: Option<String>) -> anyhow::Result<Endpoint> {
     let paths = Paths::from_env()?;
     let env = Env::from_env();
     if server.is_some() {
@@ -169,9 +143,7 @@ async fn running(
             standalone_fallback: false,
             on_start: None,
         };
-        return Ok(connect::resolve(transport, &paths, &env, &options)
-            .await?
-            .endpoint);
+        return Ok(connect::resolve(transport, &paths, &env, &options).await?.endpoint);
     }
     match discover::discover(transport.as_ref(), &paths, env.channel.as_deref()).await {
         Ok(found) => Ok(found.service.endpoint),
@@ -183,14 +155,10 @@ async fn running(
 
 /// Whether the server joined `directory` and the snapshot's file name into `path`.
 fn written_in(path: &str, directory: &str) -> bool {
-    let windows = path.starts_with("\\\\")
-        || path.as_bytes().get(1) == Some(&b':') && path.as_bytes()[0].is_ascii_alphabetic();
+    let windows =
+        path.starts_with("\\\\") || path.as_bytes().get(1) == Some(&b':') && path.as_bytes()[0].is_ascii_alphabetic();
     let separators: &[char] = if windows { &['/', '\\'] } else { &['/'] };
-    let name = path
-        .trim_end_matches(separators)
-        .rsplit(separators)
-        .next()
-        .unwrap_or_default();
+    let name = path.trim_end_matches(separators).rsplit(separators).next().unwrap_or_default();
     let separator = if windows { '\\' } else { '/' };
     normalize(&format!("{directory}{separator}{name}"), windows) == path
 }
@@ -199,11 +167,7 @@ fn written_in(path: &str, directory: &str) -> bool {
 /// paths keep their drive or UNC prefix and use `\`.
 pub(super) fn normalize(path: &str, windows: bool) -> String {
     let separator = if windows { '\\' } else { '/' };
-    let path = if windows {
-        path.replace('/', "\\")
-    } else {
-        path.to_owned()
-    };
+    let path = if windows { path.replace('/', "\\") } else { path.to_owned() };
     let (prefix, rest) = match windows && path.as_bytes().get(1) == Some(&b':') {
         true => path.split_at(2),
         false => ("", path.as_str()),
@@ -211,10 +175,7 @@ pub(super) fn normalize(path: &str, windows: bool) -> String {
     let unc = windows && rest.starts_with("\\\\");
     let rooted = rest.starts_with(separator);
     let mut parts: Vec<&str> = Vec::new();
-    for part in rest
-        .split(separator)
-        .filter(|part| !part.is_empty() && *part != ".")
-    {
+    for part in rest.split(separator).filter(|part| !part.is_empty() && *part != ".") {
         match part {
             ".." if parts.last().is_some_and(|last| *last != "..") => {
                 parts.pop();
@@ -239,15 +200,7 @@ pub(super) fn normalize(path: &str, windows: bool) -> String {
 fn paths(args: &PathsArgs) -> anyhow::Result<()> {
     let mut paths = Paths::from_env()?;
     // The TS `Global` layer creates the directories and resolves tmp before any command runs.
-    for directory in [
-        &paths.data,
-        &paths.config,
-        &paths.state,
-        &paths.log,
-        &paths.bin,
-        &paths.repos,
-        &paths.tmp,
-    ] {
+    for directory in [&paths.data, &paths.config, &paths.state, &paths.log, &paths.bin, &paths.repos, &paths.tmp] {
         std::fs::create_dir_all(directory)?;
     }
     paths.tmp = paths.tmp.canonicalize()?;
@@ -266,12 +219,7 @@ fn paths(args: &PathsArgs) -> anyhow::Result<()> {
         ("db", db),
     ];
     let Some(name) = args.name else {
-        return print(
-            &entries
-                .iter()
-                .map(|(key, value)| format!("{key:<10} {value}\n"))
-                .collect::<String>(),
-        );
+        return print(&entries.iter().map(|(key, value)| format!("{key:<10} {value}\n")).collect::<String>());
     };
     let key = match name {
         PathName::Db => "db",
@@ -285,11 +233,7 @@ fn paths(args: &PathsArgs) -> anyhow::Result<()> {
         PathName::Log => "log",
         PathName::Repos => "repos",
     };
-    let value = entries
-        .iter()
-        .find(|(entry, _)| *entry == key)
-        .map(|(_, value)| value.as_str())
-        .unwrap_or_default();
+    let value = entries.iter().find(|(entry, _)| *entry == key).map(|(_, value)| value.as_str()).unwrap_or_default();
     print(&format!("{value}\n"))
 }
 
@@ -298,26 +242,16 @@ fn paths(args: &PathsArgs) -> anyhow::Result<()> {
 fn database(data: &Path) -> String {
     let filename = std::env::var("OPENCODE_DB").unwrap_or_else(|_| {
         let channel = Channels::from_env().channel;
-        let disabled = matches!(
-            std::env::var("OPENCODE_DISABLE_CHANNEL_DB").as_deref(),
-            Ok("1" | "true")
-        );
-        if disabled
-            || matches!(
-                channel.as_str(),
-                "latest" | "dev" | "beta" | "next" | "prod"
-            )
-        {
+        let disabled = matches!(std::env::var("OPENCODE_DISABLE_CHANNEL_DB").as_deref(), Ok("1" | "true"));
+        if disabled || matches!(channel.as_str(), "latest" | "dev" | "beta" | "next" | "prod") {
             return "opencode.db".to_owned();
         }
         let safe: String = channel
             .chars()
-            .map(
-                |c| match c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
-                    true => c,
-                    false => '-',
-                },
-            )
+            .map(|c| match c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                true => c,
+                false => '-',
+            })
             .collect();
         format!("opencode-{safe}.db")
     });

@@ -175,12 +175,7 @@ pub fn compare_sockets(
 ) -> Result<(), String> {
     let mut report = String::new();
     if opened.len() != recording.sockets.len() {
-        let _ = writeln!(
-            report,
-            "opened {} sockets, the TS TUI {}",
-            opened.len(),
-            recording.sockets.len()
-        );
+        let _ = writeln!(report, "opened {} sockets, the TS TUI {}", opened.len(), recording.sockets.len());
     }
     for (index, socket) in recording.sockets.iter().enumerate() {
         if let Some((path, query)) = opened.get(index)
@@ -193,22 +188,12 @@ pub fn compare_sockets(
             );
         }
         let expected: Vec<&Vec<u8>> = socket.sent.iter().map(|sent| &sent.frame).collect();
-        let actual: Vec<&Vec<u8>> = sent
-            .get(index)
-            .map(|frames| frames.iter().collect())
-            .unwrap_or_default();
+        let actual: Vec<&Vec<u8>> = sent.get(index).map(|frames| frames.iter().collect()).unwrap_or_default();
         if expected != actual {
-            let _ = writeln!(
-                report,
-                "socket {index}: sent {actual:?}, the TS TUI {expected:?}"
-            );
+            let _ = writeln!(report, "socket {index}: sent {actual:?}, the TS TUI {expected:?}");
         }
     }
-    if report.is_empty() {
-        Ok(())
-    } else {
-        Err(report)
-    }
+    if report.is_empty() { Ok(()) } else { Err(report) }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -234,7 +219,10 @@ pub enum Mask {
         reason: String,
     },
     /// Blanks every match of the regex on every row.
-    Line { line: String, reason: String },
+    Line {
+        line: String,
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -271,8 +259,7 @@ pub struct Exchange {
 impl Recording {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
-        let text = std::fs::read_to_string(path)
-            .map_err(|error| format!("{}: {error}", path.display()))?;
+        let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
         serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
     }
 
@@ -288,14 +275,8 @@ impl Recording {
             .filter(|path| path.to_string_lossy().ends_with(".app.json"))
             .collect();
         paths.sort();
-        let recordings = paths
-            .iter()
-            .map(Self::load)
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(recordings
-            .into_iter()
-            .filter(|recording| only.is_none_or(|only| recording.scenario == only))
-            .collect())
+        let recordings = paths.iter().map(Self::load).collect::<Result<Vec<_>, _>>()?;
+        Ok(recordings.into_iter().filter(|recording| only.is_none_or(|only| recording.scenario == only)).collect())
     }
 }
 
@@ -313,13 +294,7 @@ fn masked() -> Cell {
 pub fn apply_masks(fixture: &mut Fixture, masks: &[Mask]) -> Result<(), String> {
     for mask in masks {
         match mask {
-            Mask::Rect {
-                x,
-                y,
-                width,
-                height,
-                ..
-            } => {
+            Mask::Rect { x, y, width, height, .. } => {
                 for row in *y..y + height {
                     for column in *x..x + width {
                         if let Some(cell) = fixture.cell_mut(column, row) {
@@ -329,14 +304,9 @@ pub fn apply_masks(fixture: &mut Fixture, masks: &[Mask]) -> Result<(), String> 
                 }
             }
             Mask::Line { line, .. } => {
-                let pattern =
-                    regex::Regex::new(line).map_err(|error| format!("mask {line:?}: {error}"))?;
+                let pattern = regex::Regex::new(line).map_err(|error| format!("mask {line:?}: {error}"))?;
                 for row in 0..fixture.height {
-                    let symbols: Vec<String> = fixture
-                        .row(row)
-                        .iter()
-                        .map(|cell| cell.symbol.clone())
-                        .collect();
+                    let symbols: Vec<String> = fixture.row(row).iter().map(|cell| cell.symbol.clone()).collect();
                     // The byte offset where each cell starts, so a match maps back to cells.
                     let starts: Vec<usize> = symbols
                         .iter()
@@ -369,25 +339,16 @@ pub struct CheckpointResult {
 }
 
 /// Masks the capture and compares it with the checkpoint's recorded cells.
-pub fn compare_checkpoint(
-    checkpoint: &Checkpoint,
-    actual: Fixture,
-) -> Result<CheckpointResult, String> {
+pub fn compare_checkpoint(checkpoint: &Checkpoint, actual: Fixture) -> Result<CheckpointResult, String> {
     let expected = Fixture::load(fixtures_dir().join(format!("{}.json", checkpoint.fixture)))?;
     let mut actual = actual;
     apply_masks(&mut actual, &checkpoint.masks)?;
-    Ok(CheckpointResult {
-        comparison: compare(&expected, &actual),
-        actual: actual.to_json(),
-    })
+    Ok(CheckpointResult { comparison: compare(&expected, &actual), actual: actual.to_json() })
 }
 
 /// Whether `parity/deviations/<name>.md` exists.
 pub fn deviation_exists(name: &str) -> bool {
-    fixtures_dir()
-        .join("../deviations")
-        .join(format!("{name}.md"))
-        .is_file()
+    fixtures_dir().join("../deviations").join(format!("{name}.md")).is_file()
 }
 
 /// P-REQ: writes must match in order (method, path, body); every Rust read must have been answered. TS reads
@@ -416,41 +377,20 @@ pub fn is_read(method: &str, path: &str) -> bool {
 
 /// `actual` holds every Rust request in order; `unmatched` the ones no route answered. Bodies are compared
 /// with client-minted IDs normalized (plan 7.5).
-pub fn compare_requests(
-    recording: &Recording,
-    actual: &[Sent],
-    unmatched: &[Sent],
-) -> RequestComparison {
+pub fn compare_requests(recording: &Recording, actual: &[Sent], unmatched: &[Sent]) -> RequestComparison {
     let writes: Vec<(&str, &str, Option<Value>)> = actual
         .iter()
         .filter(|sent| !is_read(&sent.method, &sent.path))
-        .map(|sent| {
-            (
-                sent.method.as_str(),
-                sent.path.as_str(),
-                sent.body.as_ref().map(minted),
-            )
-        })
+        .map(|sent| (sent.method.as_str(), sent.path.as_str(), sent.body.as_ref().map(minted)))
         .collect();
     let expected: Vec<(&str, &str, Option<Value>)> = recording
         .requests
         .writes
         .iter()
-        .map(|sent| {
-            (
-                sent.method.as_str(),
-                sent.path.as_str(),
-                sent.body.as_ref().map(minted),
-            )
-        })
+        .map(|sent| (sent.method.as_str(), sent.path.as_str(), sent.body.as_ref().map(minted)))
         .collect();
     let line = |(method, path, body): &(&str, &str, Option<Value>)| {
-        format!(
-            "{method} {path}{}",
-            body.as_ref()
-                .map(|body| format!(" {body}"))
-                .unwrap_or_default()
-        )
+        format!("{method} {path}{}", body.as_ref().map(|body| format!(" {body}")).unwrap_or_default())
     };
     let writes_differ = (writes != expected).then(|| {
         let mut out = String::from("writes differ\n");
@@ -466,20 +406,13 @@ pub fn compare_requests(
         .requests
         .reads
         .iter()
-        .filter(|read| {
-            !actual
-                .iter()
-                .any(|sent| sent.method == read.method && sent.path == read.path)
-        })
+        .filter(|read| !actual.iter().any(|sent| sent.method == read.method && sent.path == read.path))
         .map(|read| format!("{} {}", read.method, read.path))
         .collect();
     not_sent.dedup();
     RequestComparison {
         writes_differ,
-        unmatched: unmatched
-            .iter()
-            .map(|sent| format!("{} {}", sent.method, sent.path))
-            .collect(),
+        unmatched: unmatched.iter().map(|sent| format!("{} {}", sent.method, sent.path)).collect(),
         not_sent,
     }
 }
@@ -500,12 +433,9 @@ fn minted(value: &Value) -> Value {
             _ => value.clone(),
         },
         Value::Array(items) => Value::Array(items.iter().map(minted).collect()),
-        Value::Object(fields) => Value::Object(
-            fields
-                .iter()
-                .map(|(key, value)| (key.clone(), minted(value)))
-                .collect(),
-        ),
+        Value::Object(fields) => {
+            Value::Object(fields.iter().map(|(key, value)| (key.clone(), minted(value))).collect())
+        }
         _ => value.clone(),
     }
 }
@@ -525,46 +455,22 @@ mod tests {
                 attributes: Attributes::NONE,
             })
             .collect();
-        Fixture {
-            width: rows[0].chars().count() as u32,
-            height: rows.len() as u32,
-            cells,
-        }
+        Fixture { width: rows[0].chars().count() as u32, height: rows.len() as u32, cells }
     }
 
     fn text(fixture: &Fixture) -> Vec<String> {
-        (0..fixture.height)
-            .map(|y| {
-                fixture
-                    .row(y)
-                    .iter()
-                    .map(|cell| cell.symbol.as_str())
-                    .collect()
-            })
-            .collect()
+        (0..fixture.height).map(|y| fixture.row(y).iter().map(|cell| cell.symbol.as_str()).collect()).collect()
     }
 
     #[test]
     fn line_and_rect_masks_blank_cells() {
         let mut fixture = grid(&["Ask anything… \"x\" ab", "took 12ms here      "]);
         let masks = [
-            Mask::Line {
-                line: "Ask anything… \".*\"".into(),
-                reason: "random".into(),
-            },
-            Mask::Rect {
-                x: 5,
-                y: 1,
-                width: 4,
-                height: 1,
-                reason: "duration".into(),
-            },
+            Mask::Line { line: "Ask anything… \".*\"".into(), reason: "random".into() },
+            Mask::Rect { x: 5, y: 1, width: 4, height: 1, reason: "duration".into() },
         ];
         apply_masks(&mut fixture, &masks).unwrap();
-        assert_eq!(
-            text(&fixture),
-            ["                  ab", "took      here      "]
-        );
+        assert_eq!(text(&fixture), ["                  ab", "took      here      "]);
         assert_eq!(*fixture.cell(0, 0).unwrap(), masked());
         assert_ne!(*fixture.cell(18, 0).unwrap(), masked());
     }
@@ -590,9 +496,7 @@ mod tests {
         let result = compare_requests(&recording, &same, &[]);
         assert!(result.is_equal());
         assert_eq!(
-            minted(
-                &serde_json::json!({ "id": "msg_1a849dc25001uU3OEwVPj4ND1G", "s": ["ses_new", "a_b"] })
-            ),
+            minted(&serde_json::json!({ "id": "msg_1a849dc25001uU3OEwVPj4ND1G", "s": ["ses_new", "a_b"] })),
             serde_json::json!({ "id": "<msg>", "s": ["ses_new", "a_b"] })
         );
         assert_eq!(result.not_sent, ["GET /api/vcs"]);
@@ -600,12 +504,7 @@ mod tests {
         let other = [sent("POST", "/api/a", Some(serde_json::json!({ "n": 2 })))];
         let missing = [sent("GET", "/api/nope", None)];
         let result = compare_requests(&recording, &other, &missing);
-        assert!(
-            result
-                .writes_differ
-                .unwrap()
-                .contains("+ rs | POST /api/a {\"n\":2}")
-        );
+        assert!(result.writes_differ.unwrap().contains("+ rs | POST /api/a {\"n\":2}"));
         assert_eq!(result.unmatched, ["GET /api/nope"]);
 
         assert!(is_read("POST", "/api/rpc/opencode.goal/get"));

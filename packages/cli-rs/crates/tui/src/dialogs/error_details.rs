@@ -89,13 +89,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             copy_action.on_trigger = Some(copy.clone());
             actions.push(copy_action);
             slot.clear();
-            slot.add(&footer(
-                &cx,
-                FooterProps {
-                    primary: actions,
-                    ..FooterProps::default()
-                },
-            ));
+            slot.add(&footer(&cx, FooterProps { primary: actions, ..FooterProps::default() }));
         })
     };
     draw();
@@ -103,11 +97,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
 
     let scroll = ScrollBox::new(app).scrollbars(false).max_height(20);
     scroll.content_view().min_height(0);
-    scroll.add(
-        &Text::new(app, props.error.clone())
-            .fg(theme.text.base)
-            .wrap(WrapMode::Word),
-    );
+    scroll.add(&Text::new(app, props.error.clone()).fg(theme.text.base).wrap(WrapMode::Word));
     let body = View::new(app).child(&scroll);
     if let Some(reference) = &props.diagnostic_ref {
         body.add(&Text::new(app, format!("Reference: {reference}")).fg(theme.text.muted));
@@ -125,15 +115,9 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let bottom = scroll.clone();
     cx.layer(KeymapLayer {
         commands: vec![
-            TuiCommand::inline("escape", move |_, _| on_back())
-                .title("Back")
-                .group("Dialog"),
-            TuiCommand::inline("c", move |_, _| copy_key())
-                .title("Copy details")
-                .group("Dialog"),
-            TuiCommand::inline("i", move |_, _| investigate_key())
-                .title("Investigate error")
-                .group("Dialog"),
+            TuiCommand::inline("escape", move |_, _| on_back()).title("Back").group("Dialog"),
+            TuiCommand::inline("c", move |_, _| copy_key()).title("Copy details").group("Dialog"),
+            TuiCommand::inline("i", move |_, _| investigate_key()).title("Investigate error").group("Dialog"),
             TuiCommand::inline("up", scroll_by(-1.0)).group("Dialog"),
             TuiCommand::inline("down", scroll_by(1.0)).group("Dialog"),
             TuiCommand::inline("pageup", scroll_by(-20.0)).group("Dialog"),
@@ -176,23 +160,13 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             .min(u32::from(cx.width()).saturating_sub(2))
             .saturating_sub(2 * opencode_ui::dialog::DIALOG_INSET);
         head.add(
-            &Text::new(
-                app,
-                super::open::truncate_file_path(source, i64::from(width)),
-            )
-            .fg(theme.text.muted)
-            .wrap(WrapMode::None)
-            .truncate(true),
+            &Text::new(app, super::open::truncate_file_path(source, i64::from(width)))
+                .fg(theme.text.muted)
+                .wrap(WrapMode::None)
+                .truncate(true),
         );
     }
-    opencode_ui::dialog::layout_view(
-        cx,
-        &head,
-        &body,
-        Some(&slot),
-        opencode_ui::dialog::DIALOG_INSET,
-        1,
-    )
+    opencode_ui::dialog::layout_view(cx, &head, &body, Some(&slot), opencode_ui::dialog::DIALOG_INSET, 1)
 }
 
 /// `errorDetails`: the copied text and the investigation prompt.
@@ -205,25 +179,15 @@ pub fn details(props: &Props) -> Details {
     let mut lines = vec![props.title.clone()];
     lines.extend(props.context.clone());
     lines.push(format!("Error: {}", props.error));
-    lines.extend(
-        props
-            .diagnostic_ref
-            .as_ref()
-            .map(|reference| format!("Reference: {reference}")),
-    );
+    lines.extend(props.diagnostic_ref.as_ref().map(|reference| format!("Reference: {reference}")));
     let text = lines.join("\n");
-    let mut prompt = vec![
-        "Investigate why this OpenCode component failed in the current project.".to_owned(),
-        text.clone(),
-    ];
+    let mut prompt =
+        vec!["Investigate why this OpenCode component failed in the current project.".to_owned(), text.clone()];
     prompt.extend(props.diagnostic_ref.as_ref().map(|reference| {
         format!(
             "Find the server log entry matching reference {reference} and inspect its original cause. If the server logs are not accessible from this session, say so and ask for the matching log entry; do not infer the cause from the reference alone."
         )
     }));
     prompt.push("Inspect the relevant project and global OpenCode configuration, startup or loading behavior, required environment variables or credentials, dependencies, and logs. Identify the root cause and recommend a fix. Do not expose credentials.".to_owned());
-    Details {
-        text,
-        prompt: prompt.join("\n\n"),
-    }
+    Details { text, prompt: prompt.join("\n\n") }
 }

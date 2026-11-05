@@ -18,7 +18,8 @@ use serde_json::{Value, json};
 const DIRECTORY: &str = "/project";
 
 fn routes() -> Vec<MemoryRoute> {
-    let location = json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
+    let location =
+        json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
     let session = json!({
         "id": "ses_a", "title": "Review", "projectID": "proj", "cost": 0,
@@ -34,39 +35,14 @@ fn routes() -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/location", 200, &location),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([]))),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a",
-            200,
-            &json!({ "data": session }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a/diff",
-            200,
-            &json!({ "data": [diff] }),
-        ),
+        MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session })),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/ses_a/diff", 200, &json!({ "data": [diff] })),
         MemoryRoute::json("GET", "/api/vcs/base", 200, &list(Value::Null)),
         MemoryRoute::json("GET", "/api/vcs/diff", 200, &list(json!([diff]))),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/session/:id/inbox", 200, &json!({ "data": [] })),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/permission",
-            200,
-            &json!({ "data": [] }),
-        ),
+        MemoryRoute::json("GET", "/api/session/:id/permission", 200, &json!({ "data": [] })),
     ]
 }
 
@@ -95,19 +71,12 @@ fn mount(route: Route) -> Harness {
             events: true,
         },
     );
-    Harness {
-        app,
-        tui,
-        memory,
-        turns: Cell::new(0),
-    }
+    Harness { app, tui, memory, turns: Cell::new(0) }
 }
 
 impl Harness {
     fn wait_for(&self, what: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(what));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(what));
         let screen = self.app.text();
         assert!(found, "{what} never showed:\n{screen}");
         screen
@@ -116,14 +85,9 @@ impl Harness {
     /// Right-clicks the file's header, and waits for its menu.
     fn open_menu(&self) {
         let screen = self.wait_for("src/main.rs");
-        let (y, line) = screen
-            .lines()
-            .enumerate()
-            .find(|(_, line)| line.contains("src/main.rs"))
-            .unwrap();
+        let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains("src/main.rs")).unwrap();
         let x = line[..line.find("src/main.rs").unwrap()].chars().count() as u16;
-        self.app
-            .mouse(MouseEventKind::Down(MouseButton::Right), x, y as u16);
+        self.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y as u16);
         self.wait_for("Mark complete");
         assert_eq!(self.tui.keymap.mode(), "menu");
     }
@@ -132,10 +96,7 @@ impl Harness {
     fn assert_menu_closed(&self) {
         self.app.advance(Duration::from_millis(1));
         let screen = self.app.text();
-        assert!(
-            !screen.contains("Mark complete"),
-            "the menu stayed:\n{screen}"
-        );
+        assert!(!screen.contains("Mark complete"), "the menu stayed:\n{screen}");
         assert_ne!(self.tui.keymap.mode(), "menu", "the menu kept its mode");
     }
 
@@ -161,9 +122,8 @@ impl Harness {
                 "data": { "sessionID": "ses_a" },
             }));
             let id = SessionID("ses_a".into());
-            let seen = self.app.wait_until(Duration::from_secs(5), || {
-                self.tui.data.read(|state| state.status(&id)) == status
-            });
+            let seen =
+                self.app.wait_until(Duration::from_secs(5), || self.tui.data.read(|state| state.status(&id)) == status);
             assert!(seen, "{kind} did not set the status");
         }
     }
@@ -171,18 +131,14 @@ impl Harness {
 
 #[test]
 fn closing_the_panel_ends_its_file_menu_and_turn_watch() {
-    let h = mount(Route::Session {
-        id: SessionID("ses_a".into()),
-    });
+    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
     h.wait_for("Review");
     h.tui.keymap.dispatch("diff.open", None);
     h.wait_for("src/main.rs");
     // While the panel is open, an ended turn loads the diff again.
     let reads = h.diff_reads();
     h.turn();
-    let found = h
-        .app
-        .wait_until(Duration::from_secs(5), || h.diff_reads() > reads);
+    let found = h.app.wait_until(Duration::from_secs(5), || h.diff_reads() > reads);
     assert!(found, "an ended turn did not load the diff again");
     h.open_menu();
     h.tui.panels.close(&h.tui);
@@ -191,11 +147,7 @@ fn closing_the_panel_ends_its_file_menu_and_turn_watch() {
     let reads = h.diff_reads();
     h.turn();
     h.app.advance(Duration::from_millis(200));
-    assert_eq!(
-        h.diff_reads(),
-        reads,
-        "the closed viewer loaded the turn again"
-    );
+    assert_eq!(h.diff_reads(), reads, "the closed viewer loaded the turn again");
 }
 
 #[test]

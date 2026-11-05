@@ -49,19 +49,11 @@ pub fn find_boundary(
                 }
                 _ => return None,
             };
-            Some(Boundary {
-                id: id.clone(),
-                y: *y,
-                top,
-            })
+            Some(Boundary { id: id.clone(), y: *y, top })
         })
         .collect();
     if let Some(index) = current.and_then(|id| visible.iter().position(|item| item.id == id)) {
-        let target = if next {
-            index.checked_add(1)
-        } else {
-            index.checked_sub(1)
-        };
+        let target = if next { index.checked_add(1) } else { index.checked_sub(1) };
         return target.and_then(|index| visible.get(index)).cloned();
     }
     if next {
@@ -96,14 +88,7 @@ impl Inner {
             let anchors = inner.transcript.anchors();
             let current = inner.navigation.borrow().clone();
             let target = tui.data.read(|state| {
-                find_boundary(
-                    next,
-                    &anchors,
-                    state.messages(&session),
-                    top,
-                    current.as_deref(),
-                    user_only,
-                )
+                find_boundary(next, &anchors, state.messages(&session), top, current.as_deref(), user_only)
             });
             if let Some(target) = target {
                 inner.align(tui, target.id, target.top);
@@ -122,9 +107,7 @@ impl Inner {
                         return;
                     };
                     match result {
-                        Ok(()) => after_layout(&tui.app.clone(), move || {
-                            inner.to_message(&tui, next, user_only)
-                        }),
+                        Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
                         Err(error) => tui.toasts.error(error.to_string()),
                     }
                 },
@@ -138,16 +121,10 @@ impl Inner {
             return;
         };
         let id = tui.data.read(|state| {
-            state
-                .messages(&session)
-                .iter()
-                .rev()
-                .find_map(|message| match message {
-                    SessionMessageInfo::User(user) if !user.text.trim().is_empty() => {
-                        Some(user.id.0.clone())
-                    }
-                    _ => None,
-                })
+            state.messages(&session).iter().rev().find_map(|message| match message {
+                SessionMessageInfo::User(user) if !user.text.trim().is_empty() => Some(user.id.0.clone()),
+                _ => None,
+            })
         });
         if let Some(id) = id {
             self.jump(tui, id);
@@ -163,18 +140,14 @@ impl Inner {
             let Some(session) = inner.transcript.session() else {
                 return;
             };
-            let Some(&(_, y)) = inner
-                .transcript
-                .anchors()
-                .iter()
-                .find(|(message, _)| *message == id)
-            else {
+            let Some(&(_, y)) = inner.transcript.anchors().iter().find(|(message, _)| *message == id) else {
                 return;
             };
             let assistant = tui.data.read(|state| {
-                state.messages(&session).iter().any(|message| {
-                    message.id() == id && matches!(message, SessionMessageInfo::Assistant(_))
-                })
+                state
+                    .messages(&session)
+                    .iter()
+                    .any(|message| message.id() == id && matches!(message, SessionMessageInfo::Assistant(_)))
             });
             let top = (y - if assistant { 1.0 } else { 0.0 }).max(0.0);
             inner.align(tui, id, top);
@@ -240,51 +213,24 @@ mod tests {
             { "id": "msg_4", "type": "user", "text": "two", "time": { "created": 4 } },
         ]))
         .unwrap();
-        let anchors: Vec<(String, f64)> = [
-            ("msg_1", 1.0),
-            ("msg_2", 5.0),
-            ("msg_2", 7.0),
-            ("msg_3", 9.0),
-            ("msg_4", 12.0),
-        ]
-        .iter()
-        .map(|(id, y)| ((*id).to_owned(), *y))
-        .collect();
+        let anchors: Vec<(String, f64)> =
+            [("msg_1", 1.0), ("msg_2", 5.0), ("msg_2", 7.0), ("msg_3", 9.0), ("msg_4", 12.0)]
+                .iter()
+                .map(|(id, y)| ((*id).to_owned(), *y))
+                .collect();
         let id = |boundary: Option<Boundary>| boundary.map(|boundary| (boundary.id, boundary.top));
         // From the view's top; an assistant aligns one row above its first row.
-        assert_eq!(
-            id(find_boundary(true, &anchors, &messages, 2.0, None, false)),
-            Some(("msg_2".into(), 4.0))
-        );
-        assert_eq!(
-            id(find_boundary(false, &anchors, &messages, 12.0, None, false)),
-            Some(("msg_2".into(), 4.0))
-        );
+        assert_eq!(id(find_boundary(true, &anchors, &messages, 2.0, None, false)), Some(("msg_2".into(), 4.0)));
+        assert_eq!(id(find_boundary(false, &anchors, &messages, 12.0, None, false)), Some(("msg_2".into(), 4.0)));
         // User only skips the reply; a message without text never counts.
-        assert_eq!(
-            id(find_boundary(true, &anchors, &messages, 2.0, None, true)),
-            Some(("msg_4".into(), 12.0))
-        );
+        assert_eq!(id(find_boundary(true, &anchors, &messages, 2.0, None, true)), Some(("msg_4".into(), 12.0)));
         // From the last jump, whatever the view.
         assert_eq!(
-            id(find_boundary(
-                true,
-                &anchors,
-                &messages,
-                0.0,
-                Some("msg_2"),
-                false
-            )),
+            id(find_boundary(true, &anchors, &messages, 0.0, Some("msg_2"), false)),
             Some(("msg_4".into(), 12.0))
         );
-        assert_eq!(
-            find_boundary(true, &anchors, &messages, 0.0, Some("msg_4"), false),
-            None
-        );
-        assert_eq!(
-            find_boundary(false, &anchors, &messages, 0.0, Some("msg_1"), false),
-            None
-        );
+        assert_eq!(find_boundary(true, &anchors, &messages, 0.0, Some("msg_4"), false), None);
+        assert_eq!(find_boundary(false, &anchors, &messages, 0.0, Some("msg_1"), false), None);
         assert_eq!(slack(30.0, 20.0, 40.0, 0.0), 10.0);
         assert_eq!(slack(30.0, 20.0, 50.0, 10.0), 10.0);
         assert_eq!(slack(5.0, 20.0, 40.0, 0.0), 0.0);

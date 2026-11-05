@@ -68,23 +68,13 @@ pub struct Input {
 
 /// `footerStatuslinePolicy`: the groups that fit, in display order.
 pub fn policy(input: &Input) -> Vec<Group> {
-    let group = |id, text: &str, tone| Group {
-        id,
-        parts: vec![(text.to_owned(), tone)],
-    };
+    let group = |id, text: &str, tone| Group { id, parts: vec![(text.to_owned(), tone)] };
     let action = |id, value: &Action, expanded: bool| Group {
         id,
         parts: vec![
             (value.key.clone(), Tone::Text),
             (
-                format!(
-                    " {}",
-                    if expanded {
-                        value.expanded.as_ref().unwrap_or(&value.label)
-                    } else {
-                        &value.label
-                    }
-                ),
+                format!(" {}", if expanded { value.expanded.as_ref().unwrap_or(&value.label) } else { &value.label }),
                 Tone::Muted,
             ),
         ],
@@ -97,10 +87,7 @@ pub fn policy(input: &Input) -> Vec<Group> {
         } else {
             name.clone()
         };
-        let variant = variant
-            .as_ref()
-            .map(|variant| format!(" [{variant}]"))
-            .unwrap_or_default();
+        let variant = variant.as_ref().map(|variant| format!(" [{variant}]")).unwrap_or_default();
         Some(group(Id::Model, &format!("{text}{variant}"), Tone::Text))
     };
     let mut selected = BTreeMap::new();
@@ -127,31 +114,13 @@ pub fn policy(input: &Input) -> Vec<Group> {
         .map(|(id, item)| Some(action(*id, item, false)))
         .chain([
             identity(8),
-            input
-                .agent
-                .as_ref()
-                .map(|agent| group(Id::Agent, agent, Tone::Agent)),
-            input
-                .context
-                .as_ref()
-                .map(|(compact, _)| group(Id::Context, compact, Tone::Muted)),
+            input.agent.as_ref().map(|agent| group(Id::Agent, agent, Tone::Agent)),
+            input.context.as_ref().map(|(compact, _)| group(Id::Context, compact, Tone::Muted)),
             identity(24),
-            input
-                .context
-                .as_ref()
-                .map(|(_, full)| group(Id::Context, full, Tone::Muted)),
-            input
-                .cost
-                .as_ref()
-                .map(|cost| group(Id::Cost, cost, Tone::Muted)),
-            input
-                .provider
-                .as_ref()
-                .map(|provider| group(Id::Provider, provider, Tone::Muted)),
-            input
-                .menu
-                .as_ref()
-                .map(|menu| action(Id::Menu, menu, false)),
+            input.context.as_ref().map(|(_, full)| group(Id::Context, full, Tone::Muted)),
+            input.cost.as_ref().map(|cost| group(Id::Cost, cost, Tone::Muted)),
+            input.provider.as_ref().map(|provider| group(Id::Provider, provider, Tone::Muted)),
+            input.menu.as_ref().map(|menu| action(Id::Menu, menu, false)),
             identity(usize::MAX),
         ])
         .chain(
@@ -204,11 +173,7 @@ pub fn mono_shortcut(value: &str, mono: bool) -> String {
     if !mono {
         return value.to_owned();
     }
-    value
-        .replace('→', "right")
-        .replace('←', "left")
-        .replace('↑', "up")
-        .replace('↓', "down")
+    value.replace('→', "right").replace('←', "left").replace('↑', "up").replace('↓', "down")
 }
 
 /// `formatContextUsage`: `Locale.number` of the tokens, then the percent.
@@ -248,22 +213,14 @@ mod tests {
     }
 
     fn action(key: &str, label: &str, expanded: Option<&str>) -> Action {
-        Action {
-            key: key.into(),
-            label: label.into(),
-            expanded: expanded.map(str::to_owned),
-        }
+        Action { key: key.into(), label: label.into(), expanded: expanded.map(str::to_owned) }
     }
 
     fn running(width: usize, queued: bool) -> Input {
         Input {
             width,
             status: Some(("esc stop".into(), Some("esc interrupt".into()))),
-            work: if queued {
-                vec![(Id::Queued, action("ctrl+x q", "2 pending", None))]
-            } else {
-                Vec::new()
-            },
+            work: if queued { vec![(Id::Queued, action("ctrl+x q", "2 pending", None))] } else { Vec::new() },
             model: Some(("model".into(), None)),
             agent: Some("build".into()),
             provider: Some("demo".into()),
@@ -276,19 +233,10 @@ mod tests {
     #[test]
     fn stages_fill_the_width_in_order() {
         // The lines TS mini shows at 60 columns (`parity/scenarios/M.2/queue.pty.ts`).
-        assert_eq!(
-            line(&running(60, false)),
-            "▪ esc interrupt · build · model · demo · ctrl+p menu"
-        );
-        assert_eq!(
-            line(&running(60, true)),
-            "▪ esc stop · ctrl+x q 2 pending · build · model · demo"
-        );
+        assert_eq!(line(&running(60, false)), "▪ esc interrupt · build · model · demo · ctrl+p menu");
+        assert_eq!(line(&running(60, true)), "▪ esc stop · ctrl+x q 2 pending · build · model · demo");
         // Narrower: the model shortens to eight cells first, and nothing after a stage that does not fit.
-        let narrow = Input {
-            model: Some(("claude-sonnet-4-5".into(), Some("high".into()))),
-            ..running(40, false)
-        };
+        let narrow = Input { model: Some(("claude-sonnet-4-5".into(), Some("high".into()))), ..running(40, false) };
         assert_eq!(line(&narrow), "▪ esc stop · build · claude-s… [high]");
         // Required groups that do not fit stay whole.
         assert_eq!(line(&running(4, false)), "▪ esc stop");

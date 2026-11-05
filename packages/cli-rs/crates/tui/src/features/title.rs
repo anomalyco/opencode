@@ -33,11 +33,7 @@ impl Title {
 
     /// The title of `id` when it was the last session shown.
     pub fn active(&self, id: &SessionID) -> Option<String> {
-        self.active
-            .borrow()
-            .as_ref()
-            .filter(|(active, _)| active == id)
-            .and_then(|(_, title)| title.clone())
+        self.active.borrow().as_ref().filter(|(active, _)| active == id).and_then(|(_, title)| title.clone())
     }
 }
 
@@ -47,10 +43,9 @@ pub fn install(tui: &Tui) {
 
 pub fn route_changed(tui: &Tui) {
     let session = match tui.route() {
-        Route::Session { id } => tui
-            .data
-            .read(|state| state.session(&id).map(|session| session.title.clone()))
-            .map(|title| (id, title)),
+        Route::Session { id } => {
+            tui.data.read(|state| state.session(&id).map(|session| session.title.clone())).map(|title| (id, title))
+        }
         _ => None,
     };
     if let Some(session) = &session {
@@ -61,9 +56,7 @@ pub fn route_changed(tui: &Tui) {
     }
     let title = match tui.route() {
         Route::Home => "OpenCode".to_owned(),
-        Route::Session { .. } => {
-            session_title(session.as_ref().and_then(|(_, title)| title.as_deref()))
-        }
+        Route::Session { .. } => session_title(session.as_ref().and_then(|(_, title)| title.as_deref())),
         Route::Plugin { name, .. } => format!("OC | {name}"),
     };
     tui.title.set(tui, title);
@@ -103,22 +96,16 @@ fn session_title(title: Option<&str>) -> String {
 
 /// `isFallbackTitle`: `New session - <ISO>` or `Child session - <ISO>`.
 fn is_fallback(title: &str) -> bool {
-    let Some(stamp) = title
-        .strip_prefix("New session - ")
-        .or_else(|| title.strip_prefix("Child session - "))
-    else {
+    let Some(stamp) = title.strip_prefix("New session - ").or_else(|| title.strip_prefix("Child session - ")) else {
         return false;
     };
     // `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z`
     let shape = b"dddd-dd-ddTdd:dd:dd.dddZ";
     stamp.len() == shape.len()
-        && stamp
-            .bytes()
-            .zip(shape)
-            .all(|(byte, expected)| match expected {
-                b'd' => byte.is_ascii_digit(),
-                other => byte == *other,
-            })
+        && stamp.bytes().zip(shape).all(|(byte, expected)| match expected {
+            b'd' => byte.is_ascii_digit(),
+            other => byte == *other,
+        })
 }
 
 #[cfg(test)]
@@ -128,27 +115,12 @@ mod tests {
     #[test]
     fn titles_follow_the_tui() {
         assert_eq!(session_title(None), "OpenCode");
-        assert_eq!(
-            session_title(Some("New session - 2026-03-01T12:00:00.000Z")),
-            "OpenCode"
-        );
-        assert_eq!(
-            session_title(Some("Child session - 2026-03-01T12:00:00.000Z")),
-            "OpenCode"
-        );
-        assert_eq!(
-            session_title(Some("New session - yesterday")),
-            "OC | New session - yesterday"
-        );
+        assert_eq!(session_title(Some("New session - 2026-03-01T12:00:00.000Z")), "OpenCode");
+        assert_eq!(session_title(Some("Child session - 2026-03-01T12:00:00.000Z")), "OpenCode");
+        assert_eq!(session_title(Some("New session - yesterday")), "OC | New session - yesterday");
         assert_eq!(session_title(Some("Fix the parser")), "OC | Fix the parser");
         let long = "a".repeat(41);
-        assert_eq!(
-            session_title(Some(&long)),
-            format!("OC | {}…", "a".repeat(37))
-        );
-        assert_eq!(
-            session_title(Some(&"a".repeat(40))),
-            format!("OC | {}", "a".repeat(40))
-        );
+        assert_eq!(session_title(Some(&long)), format!("OC | {}…", "a".repeat(37)));
+        assert_eq!(session_title(Some(&"a".repeat(40))), format!("OC | {}", "a".repeat(40)));
     }
 }

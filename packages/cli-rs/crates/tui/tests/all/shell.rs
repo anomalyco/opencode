@@ -30,10 +30,7 @@ impl Transport for Fixture {
                 json!({ "directory": "/project", "project": { "id": "project", "directory": "/project", "canonical": "/project" } }),
             ),
             ("GET", "/api/project") => (200, json!([])),
-            ("GET", "/api/session/ses_b") => (
-                200,
-                json!({ "data": session("ses_b", "Fix the parser", 2) }),
-            ),
+            ("GET", "/api/session/ses_b") => (200, json!({ "data": session("ses_b", "Fix the parser", 2) })),
             ("GET", "/api/session/ses_b/message") => (
                 200,
                 json!({
@@ -108,23 +105,13 @@ fn the_session_list_opens_a_session_and_its_transcript_streams() {
     let home = wait_for(&app, "Fix the parser");
     assert!(home.contains("Write docs"), "{home}");
     // Most recently updated first.
-    assert!(
-        home.find("Fix the parser") < home.find("Write docs"),
-        "{home}"
-    );
+    assert!(home.find("Fix the parser") < home.find("Write docs"), "{home}");
 
     app.press("enter");
     let session = wait_for(&app, "The parser drops the last token.");
     assert!(session.contains("Why does the parser fail?"), "{session}");
-    assert!(
-        session.find("Why does the parser fail?") < session.find("The parser drops"),
-        "{session}"
-    );
-    assert!(
-        matches!(tui.route(), Route::Session { id } if id.0 == "ses_b"),
-        "{:?}",
-        tui.route()
-    );
+    assert!(session.find("Why does the parser fail?") < session.find("The parser drops"), "{session}");
+    assert!(matches!(tui.route(), Route::Session { id } if id.0 == "ses_b"), "{:?}", tui.route());
 
     // A streamed delta updates the open row in place.
     let delta: V2Event = serde_json::from_value(json!({
@@ -164,11 +151,7 @@ fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
     app.press("ctrl+x");
     app.event(Event::ThemeMode(opentui::theme::ThemeMode::Light));
     app.press("l");
-    assert!(
-        tui.dialogs.is_open(),
-        "the session list did not open:\n{}",
-        app.text()
-    );
+    assert!(tui.dialogs.is_open(), "the session list did not open:\n{}", app.text());
     wait_for(&app, "Search sessions");
     app.press("escape");
     assert!(!tui.dialogs.is_open());
@@ -186,15 +169,7 @@ fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
 #[test]
 fn session_flag_opens_the_session_directly() {
     let app = TestApp::new(80, 20);
-    let _tui = mount(
-        &app,
-        Route::Session {
-            id: opencode_api::generated::SessionID("ses_b".into()),
-        },
-    );
+    let _tui = mount(&app, Route::Session { id: opencode_api::generated::SessionID("ses_b".into()) });
     let screen = wait_for(&app, "Why does the parser fail?");
-    assert!(
-        screen.contains("Fix the parser"),
-        "the header shows the title:\n{screen}"
-    );
+    assert!(screen.contains("Fix the parser"), "the header shows the title:\n{screen}");
 }

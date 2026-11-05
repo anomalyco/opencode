@@ -35,10 +35,7 @@ impl Selection {
     /// The effect that keeps the selection inside `count` items (`reconcileSelection`, `revealSelectionOffset`).
     pub fn reconcile(self, count: usize, limit: usize) -> Self {
         let selected = self.selected.min(count.saturating_sub(1));
-        Self {
-            selected,
-            offset: reveal(self.offset, count, limit.max(1), selected),
-        }
+        Self { selected, offset: reveal(self.offset, count, limit.max(1), selected) }
     }
 
     /// `move`: clamped, with a margin of up to two rows (`moveSelectionOffset`).
@@ -47,11 +44,7 @@ impl Selection {
         if count == 0 {
             return Self::default();
         }
-        let selected = if down {
-            (self.selected + 1).min(count - 1)
-        } else {
-            self.selected.saturating_sub(1)
-        };
+        let selected = if down { (self.selected + 1).min(count - 1) } else { self.selected.saturating_sub(1) };
         let max = count.saturating_sub(limit);
         let margin = ((limit - 1) / 2).min(2);
         let offset = if !down && selected < self.offset + margin {
@@ -84,11 +77,7 @@ pub fn fit(text: &str, width: usize, mono: bool) -> String {
     if width == 0 {
         return String::new();
     }
-    let suffix = if mono {
-        ".".repeat(width.min(3))
-    } else {
-        "…".to_owned()
-    };
+    let suffix = if mono { ".".repeat(width.min(3)) } else { "…".to_owned() };
     take_width(text, width - suffix.width()) + &suffix
 }
 
@@ -115,11 +104,7 @@ impl Menu {
     pub fn new(app: &App) -> Self {
         Self {
             app: app.clone(),
-            root: View::new(app)
-                .column()
-                .shrink(0.0)
-                .width(Length::percent(100.0))
-                .visible(false),
+            root: View::new(app).column().shrink(0.0).width(Length::percent(100.0)).visible(false),
         }
     }
 
@@ -132,15 +117,7 @@ impl Menu {
     }
 
     /// Shows `rows` items from the selection's offset.
-    pub fn show(
-        &self,
-        items: &[Item],
-        selection: Selection,
-        rows: usize,
-        width: u16,
-        theme: &FooterTheme,
-        mono: bool,
-    ) {
+    pub fn show(&self, items: &[Item], selection: Selection, rows: usize, width: u16, theme: &FooterTheme, mono: bool) {
         let app = &self.app;
         let pad = if width < COMPACT_WIDTH { 1 } else { 2 };
         let available = usize::from(width.saturating_sub(pad * 2));
@@ -154,22 +131,16 @@ impl Menu {
         self.root.height(rows as u32).visible(true);
         if items.is_empty() {
             self.root.add(
-                &View::new(app).height(1).padding_x(u32::from(pad)).child(
-                    &Text::new(app, "No matching items")
-                        .fg(theme.muted)
-                        .wrap(WrapMode::None)
-                        .truncate(true),
-                ),
+                &View::new(app)
+                    .height(1)
+                    .padding_x(u32::from(pad))
+                    .child(&Text::new(app, "No matching items").fg(theme.muted).wrap(WrapMode::None).truncate(true)),
             );
             return;
         }
         for (index, item) in items.iter().enumerate().skip(selection.offset).take(rows) {
             let active = index == selection.selected;
-            let fg = if active {
-                theme.action_focused_text
-            } else {
-                theme.formfield_text
-            };
+            let fg = if active { theme.action_focused_text } else { theme.formfield_text };
             let mut display = fit(&item.display, available, mono).fg(fg);
             if active {
                 display = display.bold();
@@ -180,19 +151,11 @@ impl Menu {
             let mut spans = vec![display];
             let description = item.description.as_deref().and_then(|description| {
                 let remaining = available.saturating_sub(column);
-                (remaining >= description.width().min(12))
-                    .then(|| fit(description, remaining, mono))
+                (remaining >= description.width().min(12)).then(|| fit(description, remaining, mono))
             });
             if let Some(description) = description {
-                let muted = if active {
-                    theme.action_focused_text
-                } else {
-                    theme.muted
-                };
-                spans.push(
-                    " ".repeat(column.saturating_sub(item.display.width()).max(1))
-                        .fg(muted),
-                );
+                let muted = if active { theme.action_focused_text } else { theme.muted };
+                spans.push(" ".repeat(column.saturating_sub(item.display.width()).max(1)).fg(muted));
                 spans.push(description.fg(muted));
             }
             let row = View::new(app)
@@ -219,77 +182,27 @@ mod tests {
         for _ in 0..5 {
             selection = selection.step(10, 8, true);
         }
-        assert_eq!(
-            selection,
-            Selection {
-                selected: 5,
-                offset: 0
-            }
-        );
+        assert_eq!(selection, Selection { selected: 5, offset: 0 });
         selection = selection.step(10, 8, true);
-        assert_eq!(
-            selection,
-            Selection {
-                selected: 6,
-                offset: 1
-            }
-        );
+        assert_eq!(selection, Selection { selected: 6, offset: 1 });
         for _ in 0..10 {
             selection = selection.step(10, 8, true);
         }
-        assert_eq!(
-            selection,
-            Selection {
-                selected: 9,
-                offset: 2
-            }
-        );
-        selection = selection
-            .step(10, 8, false)
-            .step(10, 8, false)
-            .step(10, 8, false)
-            .step(10, 8, false)
-            .step(10, 8, false);
-        assert_eq!(
-            selection,
-            Selection {
-                selected: 4,
-                offset: 2
-            }
-        );
+        assert_eq!(selection, Selection { selected: 9, offset: 2 });
+        selection =
+            selection.step(10, 8, false).step(10, 8, false).step(10, 8, false).step(10, 8, false).step(10, 8, false);
+        assert_eq!(selection, Selection { selected: 4, offset: 2 });
         selection = selection.step(10, 8, false);
-        assert_eq!(
-            selection,
-            Selection {
-                selected: 3,
-                offset: 1
-            }
-        );
-        assert_eq!(
-            Selection {
-                selected: 9,
-                offset: 2
-            }
-            .reconcile(3, 8),
-            Selection {
-                selected: 2,
-                offset: 0
-            }
-        );
+        assert_eq!(selection, Selection { selected: 3, offset: 1 });
+        assert_eq!(Selection { selected: 9, offset: 2 }.reconcile(3, 8), Selection { selected: 2, offset: 0 });
         assert_eq!(Selection::rows(0, 8), 1);
         assert_eq!(Selection::rows(20, 8), 8);
     }
 
     #[test]
     fn text_fits_its_width() {
-        assert_eq!(
-            fit("compose in your external editor", 10, false),
-            "compose i…"
-        );
-        assert_eq!(
-            fit("compose in your external editor", 10, true),
-            "compose..."
-        );
+        assert_eq!(fit("compose in your external editor", 10, false), "compose i…");
+        assert_eq!(fit("compose in your external editor", 10, true), "compose...");
         assert_eq!(fit("short", 10, false), "short");
     }
 }

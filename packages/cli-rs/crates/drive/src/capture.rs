@@ -18,19 +18,11 @@ pub fn frame(capture: &Capture) -> Value {
                 let bg = rgba(cell.bg);
                 let attributes = cell.attributes.bits();
                 match spans.last_mut() {
-                    Some(span)
-                        if span.fg == fg && span.bg == bg && span.attributes == attributes =>
-                    {
+                    Some(span) if span.fg == fg && span.bg == bg && span.attributes == attributes => {
                         span.text.push_str(&cell.symbol);
                         span.width += 1;
                     }
-                    _ => spans.push(Span {
-                        text: cell.symbol.clone(),
-                        fg,
-                        bg,
-                        attributes,
-                        width: 1,
-                    }),
+                    _ => spans.push(Span { text: cell.symbol.clone(), fg, bg, attributes, width: 1 }),
                 }
             }
             json!({ "spans": spans.into_iter().map(Span::json).collect::<Vec<_>>() })
@@ -48,12 +40,7 @@ pub fn frame(capture: &Capture) -> Value {
 /// Whether the frame's text contains `text`. Rows are joined without line breaks, as Core's `getRealCharBytes`
 /// returns them, so a match may run across a row's end.
 pub fn matches(capture: &Capture, text: &str) -> bool {
-    capture
-        .cells
-        .iter()
-        .map(|cell| cell.symbol.as_str())
-        .collect::<String>()
-        .contains(text)
+    capture.cells.iter().map(|cell| cell.symbol.as_str()).collect::<String>().contains(text)
 }
 
 struct Span {
@@ -81,12 +68,7 @@ mod tests {
     use opentui::style::{Attributes, Color};
 
     fn cell(symbol: &str, fg: Color, attributes: Attributes) -> Cell {
-        Cell {
-            symbol: symbol.into(),
-            fg,
-            bg: Color::rgb(0, 0, 0),
-            attributes,
-        }
+        Cell { symbol: symbol.into(), fg, bg: Color::rgb(0, 0, 0), attributes }
     }
 
     #[test]

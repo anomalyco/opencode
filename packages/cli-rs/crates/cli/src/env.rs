@@ -8,10 +8,7 @@ const LOOPBACK: &str = "127.0.0.1,localhost,::1";
 /// both. Call it before any thread starts.
 #[allow(unsafe_code)]
 pub fn apply_no_proxy() {
-    let value = no_proxy(
-        std::env::var("NO_PROXY").ok().as_deref(),
-        std::env::var("no_proxy").ok().as_deref(),
-    );
+    let value = no_proxy(std::env::var("NO_PROXY").ok().as_deref(), std::env::var("no_proxy").ok().as_deref());
     // SAFETY: `main` calls this first, before any other thread exists.
     unsafe {
         std::env::set_var("NO_PROXY", &value);
@@ -51,21 +48,9 @@ mod tests {
         let cases: [(Option<&str>, Option<&str>, &str); 6] = [
             (None, None, "127.0.0.1,localhost,::1"),
             (Some(""), Some(" , "), "127.0.0.1,localhost,::1"),
-            (
-                Some("corp.example, .internal"),
-                None,
-                "corp.example,.internal,127.0.0.1,localhost,::1",
-            ),
-            (
-                None,
-                Some("lower.example"),
-                "lower.example,127.0.0.1,localhost,::1",
-            ),
-            (
-                Some("a,localhost"),
-                Some("b, a"),
-                "a,localhost,b,127.0.0.1,::1",
-            ),
+            (Some("corp.example, .internal"), None, "corp.example,.internal,127.0.0.1,localhost,::1"),
+            (None, Some("lower.example"), "lower.example,127.0.0.1,localhost,::1"),
+            (Some("a,localhost"), Some("b, a"), "a,localhost,b,127.0.0.1,::1"),
             (Some("*"), Some("*"), "*,127.0.0.1,localhost,::1"),
         ];
         for (upper, lower, expected) in cases {

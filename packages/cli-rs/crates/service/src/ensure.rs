@@ -39,10 +39,7 @@ impl Default for Timing {
         Self {
             poll: Duration::from_millis(25),
             request: probe::REQUEST_TIMEOUT,
-            delays: Delays {
-                spawn: Duration::from_secs(5),
-                max_spawn: Duration::from_secs(30),
-            },
+            delays: Delays { spawn: Duration::from_secs(5), max_spawn: Duration::from_secs(30) },
             deadline: Duration::from_secs(120),
             stop: Poll::default(),
         }
@@ -65,13 +62,7 @@ pub struct Options {
 
 impl Options {
     pub fn new(file: PathBuf, state: PathBuf, ts: &TsCommand) -> Self {
-        Self {
-            file,
-            state,
-            command: ts.service(),
-            env: Vec::new(),
-            timing: Timing::default(),
-        }
+        Self { file, state, command: ts.service(), env: Vec::new(), timing: Timing::default() }
     }
 }
 
@@ -113,10 +104,11 @@ pub async fn ensure(
             Ok(None) => {}
         }
         if start.elapsed() >= options.timing.deadline {
-            break Err(Error(run.pool.failure().map_or_else(
-                || "Timed out waiting for the background service to start".to_owned(),
-                str::to_owned,
-            )));
+            break Err(Error(
+                run.pool
+                    .failure()
+                    .map_or_else(|| "Timed out waiting for the background service to start".to_owned(), str::to_owned),
+            ));
         }
         tokio::time::sleep(options.timing.poll).await;
     };
@@ -139,13 +131,8 @@ impl Run<'_> {
         let file = &self.options.file;
         let info = registration::read(file);
         let probe = match &info {
-            Some(info) => {
-                probe::probe(self.transport.as_ref(), info, self.options.timing.request).await
-            }
-            None => Probe {
-                service: None,
-                timed_out: false,
-            },
+            Some(info) => probe::probe(self.transport.as_ref(), info, self.options.timing.request).await,
+            None => Probe { service: None, timed_out: false },
         };
         match (&info, probe.timed_out) {
             (Some(info), true) => self.unresponsive(info).await?,
@@ -153,9 +140,7 @@ impl Run<'_> {
         }
         let answered = match probe.service {
             Some(service) => Some((service, file.clone())),
-            None if self.spawned => {
-                started_elsewhere(self.transport.as_ref(), self.options, &self.pool).await
-            }
+            None if self.spawned => started_elsewhere(self.transport.as_ref(), self.options, &self.pool).await,
             None => None,
         };
         if let Some((service, file)) = answered {
@@ -235,34 +220,22 @@ async fn started_elsewhere(
     let files = discover::scan(&options.state, std::slice::from_ref(&options.file));
     let probes = files.into_iter().map(|file| async move {
         let info = registration::read(&file)?;
-        let service = probe::probe(transport, &info, options.timing.request)
-            .await
-            .service?;
+        let service = probe::probe(transport, &info, options.timing.request).await.service?;
         Some((service, file))
     });
     let mut answered: Vec<_> = join_all(probes).await.into_iter().flatten().collect();
-    let ready = answered
-        .iter()
-        .position(|(service, _)| probe::decide(service, None) == Decision::Reuse);
-    let owned = answered
-        .iter()
-        .position(|(service, _)| pool.owns(service.registration.pid));
+    let ready = answered.iter().position(|(service, _)| probe::decide(service, None) == Decision::Reuse);
+    let owned = answered.iter().position(|(service, _)| pool.owns(service.registration.pid));
     ready.or(owned).map(|index| answered.swap_remove(index))
 }
 
 fn reuse(service: LocalService, file: &Path) -> Ensured {
     handoff::complete(file, &service.registration);
-    Ensured {
-        service,
-        file: file.to_owned(),
-    }
+    Ensured { service, file: file.to_owned() }
 }
 
 fn spawn_error(command: &[OsString], error: &std::io::Error) -> String {
-    let program = command
-        .first()
-        .map(|program| program.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let program = command.first().map(|program| program.to_string_lossy().into_owned()).unwrap_or_default();
     format!(
         "Failed to start server: {program}: {error}. Install opencode or set {} to the TypeScript opencode binary.",
         TsCommand::VAR

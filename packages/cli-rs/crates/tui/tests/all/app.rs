@@ -33,34 +33,23 @@ const SETTLE: Duration = Duration::from_secs(3);
 fn scenarios() {
     let only = std::env::var("PARITY_SCENARIO").ok();
     let recordings = Recording::all(only.as_deref()).unwrap_or_else(|error| panic!("{error}"));
-    assert!(
-        !recordings.is_empty(),
-        "no P-APP recording matches {only:?}"
-    );
+    assert!(!recordings.is_empty(), "no P-APP recording matches {only:?}");
     let mut failed = Vec::new();
     for recording in &recordings {
         let (passed, report) = run(recording);
-        eprintln!(
-            "{} {}\n{report}",
-            if passed { "ok  " } else { "FAIL" },
-            recording.scenario
-        );
+        eprintln!("{} {}\n{report}", if passed { "ok  " } else { "FAIL" }, recording.scenario);
         if !passed {
             failed.push(recording.scenario.clone());
         }
     }
-    assert!(
-        failed.is_empty(),
-        "P-APP scenarios failed: {failed:?} (reports above)"
-    );
+    assert!(failed.is_empty(), "P-APP scenarios failed: {failed:?} (reports above)");
 }
 
 /// Runs one recording; returns whether it passed and its report.
 fn run(recording: &Recording) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
-    let client =
-        Client::with_transport("http://opencode.local", Arc::new(memory.clone())).expect("client");
+    let client = Client::with_transport("http://opencode.local", Arc::new(memory.clone())).expect("client");
     let config = cli_config::decode_text(&recording.config.to_string()).unwrap_or_default();
     let args = &recording.args;
     // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
@@ -97,11 +86,7 @@ fn run(recording: &Recording) -> (bool, String) {
         },
     );
     // The Rust twins of the TS test plugins under parity/plugins, which the Rust TUI lists as skipped (P.1).
-    if recording
-        .env
-        .get("OPENCODE_PARITY_PLUGIN")
-        .is_some_and(|plugin| plugin == "slot")
-    {
+    if recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "slot") {
         opencode_tui::plugins::host::add(&tui, slot_plugin());
     }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
@@ -137,18 +122,14 @@ fn run(recording: &Recording) -> (bool, String) {
             Step::Type { text } => app.type_text(text),
             Step::Paste { paste } => app.paste(paste),
             Step::Click { click } => app.click(click[0], click[1]),
-            Step::RightClick {
-                right_click: [x, y],
-            } => {
+            Step::RightClick { right_click: [x, y] } => {
                 app.mouse(MouseEventKind::Down(MouseButton::Right), *x, *y);
                 app.mouse(MouseEventKind::Up(MouseButton::Right), *x, *y);
             }
             Step::Event { event } => memory.emit(event),
             Step::Drag { drag: [from, to] } => app.drag((from[0], from[1]), (to[0], to[1])),
             Step::Ide { ide: message } => {
-                let ide = ide
-                    .as_ref()
-                    .expect("an ide step needs `ide` in the scenario");
+                let ide = ide.as_ref().expect("an ide step needs `ide` in the scenario");
                 app.wait_until(UNTIL, || ide.initialized());
                 ide.send(message);
             }
@@ -170,20 +151,14 @@ fn run(recording: &Recording) -> (bool, String) {
                     let _ = writeln!(report, "  checkpoint {}: {line}", checkpoint.checkpoint);
                     continue;
                 }
-                let path = std::env::temp_dir()
-                    .join("opencode-parity")
-                    .join(format!("{}.json", checkpoint.fixture));
+                let path = std::env::temp_dir().join("opencode-parity").join(format!("{}.json", checkpoint.fixture));
                 let written = path
                     .parent()
                     .map_or(Ok(()), std::fs::create_dir_all)
                     .and_then(|()| std::fs::write(&path, &result.actual));
                 let full = result.comparison.to_string();
                 let summary = full.lines().next().unwrap_or_default();
-                let _ = writeln!(
-                    report,
-                    "  checkpoint {}: {summary}; {line}",
-                    checkpoint.checkpoint
-                );
+                let _ = writeln!(report, "  checkpoint {}: {summary}; {line}", checkpoint.checkpoint);
                 // An allowed difference prints its summary only, unless PARITY_VERBOSE is set.
                 if !ok || std::env::var_os("PARITY_VERBOSE").is_some() {
                     let _ = writeln!(report, "{}", indent(&full));
@@ -197,11 +172,7 @@ fn run(recording: &Recording) -> (bool, String) {
 
     let log = memory.requests();
     let all: Vec<Sent> = log.iter().map(sent).collect();
-    let unmatched: Vec<Sent> = log
-        .iter()
-        .filter(|logged| logged.unmatched)
-        .map(sent)
-        .collect();
+    let unmatched: Vec<Sent> = log.iter().filter(|logged| logged.unmatched).map(sent).collect();
     let requests = app::compare_requests(recording, &all, &unmatched);
     let deviation: Vec<String> = recording.deviation.iter().cloned().collect();
     let (ok, line) = verdict(requests.is_equal(), &deviation);
@@ -222,20 +193,13 @@ fn run(recording: &Recording) -> (bool, String) {
         );
     }
     if let (Some(expected), Some(ide)) = (&recording.ide, &ide) {
-        let (ok, line) = verdict(
-            handshake(expected) == handshake(&ide.received.lock().unwrap()),
-            &[],
-        );
+        let (ok, line) = verdict(handshake(expected) == handshake(&ide.received.lock().unwrap()), &[]);
         passed &= ok;
         let _ = writeln!(report, "  ide: {line}");
     }
     if !recording.sockets.is_empty() {
         let opened = sockets.opened.lock().unwrap().clone();
-        let sent: Vec<Vec<Vec<u8>>> = sockets
-            .sent
-            .iter()
-            .map(|frames| frames.lock().unwrap().clone())
-            .collect();
+        let sent: Vec<Vec<Vec<u8>>> = sockets.sent.iter().map(|frames| frames.lock().unwrap().clone()).collect();
         match app::compare_sockets(recording, &opened, &sent) {
             Ok(()) => {
                 let _ = writeln!(report, "  sockets: equal");
@@ -291,11 +255,7 @@ impl pty::Connector for Sockets {
         let query = url
             .query_pairs()
             .map(|(key, value)| {
-                let value = if key == "attachment_id" {
-                    "<attachment>".to_owned()
-                } else {
-                    value.into_owned()
-                };
+                let value = if key == "attachment_id" { "<attachment>".to_owned() } else { value.into_owned() };
                 (key.into_owned(), value)
             })
             .collect();
@@ -325,9 +285,7 @@ impl pty::Connector for Sockets {
                     let message = match received.message {
                         app::SocketMessage::Text { text } => pty::Incoming::Text(text),
                         app::SocketMessage::Binary { binary } => pty::Incoming::Binary(
-                            base64::engine::general_purpose::STANDARD
-                                .decode(binary)
-                                .unwrap_or_default(),
+                            base64::engine::general_purpose::STANDARD.decode(binary).unwrap_or_default(),
                         ),
                         app::SocketMessage::Close { .. } => pty::Incoming::Closed,
                     };
@@ -362,39 +320,23 @@ fn slot_plugin() -> Definition<Tui> {
 fn routes(recording: &Recording) -> Vec<MemoryRoute> {
     let scenario = recording.routes.iter().map(|route| {
         let method = route.method.as_deref().unwrap_or("GET");
-        let status = route.status.unwrap_or(
-            if route.json.is_some() || route.body.is_some() || route.base64.is_some() {
-                200
-            } else {
-                204
-            },
-        );
+        let status = route
+            .status
+            .unwrap_or(if route.json.is_some() || route.body.is_some() || route.base64.is_some() { 200 } else { 204 });
         match (&route.json, &route.body) {
             (Some(json), _) => MemoryRoute::json(method, &route.path, status, json),
             (None, None) if let Some(bytes) = &route.base64 => MemoryRoute::body(
                 method,
                 &route.path,
                 status,
-                Some(
-                    route
-                        .headers
-                        .get("content-type")
-                        .map_or("application/octet-stream", String::as_str),
-                ),
-                base64::engine::general_purpose::STANDARD
-                    .decode(bytes)
-                    .expect("a base64 route body"),
+                Some(route.headers.get("content-type").map_or("application/octet-stream", String::as_str)),
+                base64::engine::general_purpose::STANDARD.decode(bytes).expect("a base64 route body"),
             ),
             (None, Some(body)) => MemoryRoute::body(
                 method,
                 &route.path,
                 status,
-                Some(
-                    route
-                        .headers
-                        .get("content-type")
-                        .map_or("text/plain", String::as_str),
-                ),
+                Some(route.headers.get("content-type").map_or("text/plain", String::as_str)),
                 body.clone(),
             ),
             (None, None) => MemoryRoute::body(method, &route.path, status, None, ""),
@@ -410,13 +352,7 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
             text.clone().unwrap_or_default(),
         ),
     };
-    let exchanges = || {
-        recording
-            .requests
-            .reads
-            .iter()
-            .chain(&recording.requests.writes)
-    };
+    let exchanges = || recording.requests.reads.iter().chain(&recording.requests.writes);
     scenario
         .chain(exchanges().map(|entry| recorded(entry).with_query(entry.query.clone())))
         .chain(exchanges().map(recorded))
@@ -427,18 +363,14 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
 /// are equal (bounded by [`SETTLE`]).
 fn settle(app: &TestApp, memory: &Memory, until: Option<&str>) -> Fixture {
     if let Some(until) = until {
-        app.wait_until(UNTIL, || {
-            memory.in_flight() == 0 && app.text().contains(until)
-        });
+        app.wait_until(UNTIL, || memory.in_flight() == 0 && app.text().contains(until));
     }
     let deadline = Instant::now() + SETTLE;
     let mut previous = None;
     loop {
         app.wait_until(Duration::from_millis(25), || false);
         let capture = Fixture::from_capture(&app.render());
-        if memory.in_flight() == 0 && previous.as_ref() == Some(&capture)
-            || Instant::now() >= deadline
-        {
+        if memory.in_flight() == 0 && previous.as_ref() == Some(&capture) || Instant::now() >= deadline {
             return capture;
         }
         previous = Some(capture);
@@ -447,10 +379,7 @@ fn settle(app: &TestApp, memory: &Memory, until: Option<&str>) -> Fixture {
 
 /// Whether a comparison passes, and the line that says why.
 fn verdict(equal: bool, deviation: &[String]) -> (bool, String) {
-    let missing: Vec<&String> = deviation
-        .iter()
-        .filter(|name| !app::deviation_exists(name))
-        .collect();
+    let missing: Vec<&String> = deviation.iter().filter(|name| !app::deviation_exists(name)).collect();
     if !missing.is_empty() {
         return (false, format!("deviation files missing: {missing:?}"));
     }
@@ -472,8 +401,5 @@ fn sent(logged: &opencode_api::memory::Logged) -> Sent {
 }
 
 fn indent(text: &str) -> String {
-    text.lines()
-        .map(|line| format!("    {line}"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    text.lines().map(|line| format!("    {line}")).collect::<Vec<_>>().join("\n")
 }

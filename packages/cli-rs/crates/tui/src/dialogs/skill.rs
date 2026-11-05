@@ -20,13 +20,8 @@ pub type OnSelect = Rc<dyn Fn(&Tui, &SkillID)>;
 
 /// Opens the dialog for `location` (the default one for `None`).
 pub fn show(tui: &Tui, location: Option<Location>, on_select: OnSelect) {
-    let location =
-        location.unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()));
-    let cached = tui.data.read(|state| {
-        state
-            .location(Some(&location))
-            .and_then(|data| data.skill.clone())
-    });
+    let location = location.unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()));
+    let cached = tui.data.read(|state| state.location(Some(&location)).and_then(|data| data.skill.clone()));
     if let Some(skills) = cached {
         open(tui, Load::Loaded(skills), on_select);
         return;
@@ -34,26 +29,21 @@ pub fn show(tui: &Tui, location: Option<Location>, on_select: OnSelect) {
     let open_now = open(tui, Load::Loading, on_select.clone());
     let weak = tui.weak();
     let read = location.clone();
-    tui.app.spawn(
-        tui.data.catalog_sync(Catalog::Skill, Some(&location)),
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            // Closed meanwhile: reopening it would surprise.
-            if !open_now.get() {
-                return;
-            }
-            let load = match result {
-                Ok(()) => Load::Loaded(tui.data.read(|state| {
-                    state
-                        .location(Some(&read))
-                        .and_then(|data| data.skill.clone())
-                        .unwrap_or_default()
-                })),
-                Err(error) => Load::Failed(error.to_string()),
-            };
-            open(&tui, load, on_select);
-        },
-    );
+    tui.app.spawn(tui.data.catalog_sync(Catalog::Skill, Some(&location)), move |_, result| {
+        let Some(tui) = weak.upgrade() else { return };
+        // Closed meanwhile: reopening it would surprise.
+        if !open_now.get() {
+            return;
+        }
+        let load = match result {
+            Ok(()) => Load::Loaded(
+                tui.data
+                    .read(|state| state.location(Some(&read)).and_then(|data| data.skill.clone()).unwrap_or_default()),
+            ),
+            Err(error) => Load::Failed(error.to_string()),
+        };
+        open(&tui, load, on_select);
+    });
 }
 
 enum Load {
@@ -96,42 +86,22 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
             };
             let empty = match &load {
                 Load::Failed(error) => inset(vec![
-                    Text::new(&app, "Could not load skills")
-                        .fg(theme.text.feedback.error.base)
-                        .bold()
-                        .as_any(),
+                    Text::new(&app, "Could not load skills").fg(theme.text.feedback.error.base).bold().as_any(),
                     Text::new(&app, error.clone()).fg(theme.text.muted).as_any(),
-                    Text::new(&app, "Close and reopen Skills to try again.")
-                        .fg(theme.text.muted)
-                        .as_any(),
+                    Text::new(&app, "Close and reopen Skills to try again.").fg(theme.text.muted).as_any(),
                 ]),
-                Load::Loading => inset(vec![
-                    Text::new(&app, "Loading skills…")
-                        .fg(theme.text.muted)
-                        .as_any(),
-                ]),
-                Load::Loaded(_) => inset(vec![
-                    Text::new(&app, "No skills available")
-                        .fg(theme.text.muted)
-                        .as_any(),
-                ]),
+                Load::Loading => inset(vec![Text::new(&app, "Loading skills…").fg(theme.text.muted).as_any()]),
+                Load::Loaded(_) => inset(vec![Text::new(&app, "No skills available").fg(theme.text.muted).as_any()]),
             };
             props.empty_view = Some(Rc::new(move || empty.clone()));
-            let no_match = inset(vec![
-                Text::new(&app, "No skills found")
-                    .fg(theme.text.muted)
-                    .as_any(),
-            ]);
+            let no_match = inset(vec![Text::new(&app, "No skills found").fg(theme.text.muted).as_any()]);
             props.no_match_view = Some(Rc::new(move || no_match.clone()));
             let (view, _) = select::select(cx, props);
             cx.on_close(opentui::keymap::Disposer::new(move || flag.set(false)));
             view
         },
         None,
-        DialogOptions {
-            size: DialogSize::Large,
-            key: None,
-        },
+        DialogOptions { size: DialogSize::Large, key: None },
     );
     alive
 }
@@ -139,16 +109,11 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
 /// The rows: names padded to the longest, descriptions on one line.
 fn options(skills: &[SkillInfo]) -> Vec<SelectOption<SkillID>> {
     // `padEnd` counts UTF-16 units; skill names are ASCII identifiers.
-    let width = skills
-        .iter()
-        .map(|skill| skill.name.0.chars().count())
-        .max()
-        .unwrap_or(0);
+    let width = skills.iter().map(|skill| skill.name.0.chars().count()).max().unwrap_or(0);
     skills
         .iter()
         .map(|skill| {
-            let mut option =
-                SelectOption::new(format!("{:<width$}", skill.name.0), skill.id.clone());
+            let mut option = SelectOption::new(format!("{:<width$}", skill.name.0), skill.id.clone());
             option.description = skill
                 .description
                 .as_deref()

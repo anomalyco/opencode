@@ -36,11 +36,7 @@ impl Transport for Server {
             "/api/location/reload" => (204, Value::Null),
             _ => (404, json!({})),
         };
-        let body = if body.is_null() {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if body.is_null() { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -63,10 +59,7 @@ fn keybinds() -> Value {
 }
 
 fn info(extra: Value) -> Info {
-    merge(&[
-        Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })),
-        Some(extra),
-    ])
+    merge(&[Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })), Some(extra)])
 }
 
 fn mount(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
@@ -140,11 +133,7 @@ fn a_drag_inside_a_dialog_copies_and_keeps_it_open() {
 fn manual_copy_waits_for_ctrl_c_or_a_right_click_and_escape_clears() {
     let capture = testing::capture();
     let app = TestApp::new(100, 30);
-    let _tui = mount(
-        &app,
-        info(json!({ "terminal": { "copy": "manual" } })),
-        None,
-    );
+    let _tui = mount(&app, info(json!({ "terminal": { "copy": "manual" } })), None);
     let (x, y) = find(&app, "/project");
     app.drag((x, y), (x + 7, y));
     assert!(capture.0.copied.borrow().is_empty());
@@ -167,11 +156,7 @@ fn copies_drop_nul() {
     let capture = testing::capture();
     let app = TestApp::new(80, 24);
     let tui = mount(&app, info(json!({})), None);
-    assert!(opencode_tui::features::selection::copy(
-        &tui,
-        "a\0b",
-        "Copied to clipboard"
-    ));
+    assert!(opencode_tui::features::selection::copy(&tui, "a\0b", "Copied to clipboard"));
     assert_eq!(*capture.0.copied.borrow(), ["ab"]);
 }
 
@@ -183,13 +168,7 @@ fn the_location_opens_the_working_directory_dialog() {
     let (x, y) = find(&app, "/project");
     app.click(x + 2, y);
     let dialog = wait_for(&app, "Working directory");
-    for row in [
-        "Copy path",
-        "Open folder",
-        "in system file manager",
-        "Workspaces",
-        "to another working directory",
-    ] {
+    for row in ["Copy path", "Open folder", "in system file manager", "Workspaces", "to another working directory"] {
         assert!(dialog.contains(row), "{row}: {dialog}");
     }
     app.press("return");
@@ -220,10 +199,7 @@ fn a_plain_click_opens_a_link_and_modified_clicks_and_drags_do_not() {
     link.set_text(vec![Span::raw("docs").link("https://opencode.ai/docs")]);
     app.app().root().add(&link);
     let screen = app.text();
-    let y = screen
-        .lines()
-        .position(|line| line.starts_with("docs"))
-        .unwrap() as u16;
+    let y = screen.lines().position(|line| line.starts_with("docs")).unwrap() as u16;
     app.event(Event::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         x: 1,
@@ -233,10 +209,7 @@ fn a_plain_click_opens_a_link_and_modified_clicks_and_drags_do_not() {
     app.mouse(MouseEventKind::Up(MouseButton::Left), 1, y);
     app.drag((0, y), (3, y));
     assert!(capture.0.opened.borrow().is_empty());
-    assert_eq!(
-        opencode_tui::features::links::link_at(app.app(), 1, y).as_deref(),
-        Some("https://opencode.ai/docs")
-    );
+    assert_eq!(opencode_tui::features::links::link_at(app.app(), 1, y).as_deref(), Some("https://opencode.ai/docs"));
     // A plain click opens it.
     app.advance(Duration::from_millis(600));
     app.click(1, y);
@@ -289,9 +262,7 @@ fn ctrl_y_in_the_console_copies_its_selection() {
     let capture = testing::capture();
     let app = TestApp::new(100, 30);
     let tui = mount(&app, info(json!({})), None);
-    app.app()
-        .console()
-        .log(opentui::console::LogLevel::Info, "hello from the console");
+    app.app().console().log(opentui::console::LogLevel::Info, "hello from the console");
     tui.keymap.dispatch("app.console", None);
     assert!(app.app().console().is_visible());
     let (x, y) = find(&app, "hello from the console");
@@ -306,10 +277,7 @@ fn ctrl_y_in_the_console_copies_its_selection() {
 // P-FILE ------------------------------------------------------------------------------------------------------
 
 fn ts_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../..")
-        .canonicalize()
-        .unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap()
 }
 
 fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
@@ -324,19 +292,13 @@ fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
 
 fn paths(home: &Path) -> Paths {
     let vars = env(home);
-    Paths::from_vars(|name| {
-        vars.iter()
-            .find(|(key, _)| *key == name)
-            .map(|(_, value)| value.clone().into_os_string())
-    })
-    .unwrap()
+    Paths::from_vars(|name| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string()))
+        .unwrap()
 }
 
 /// One op of the F.5 oracle's `config` command in `home`, or `None` without bun and `node_modules`.
 fn ts_config(home: &Path, op: Value) -> Option<Value> {
-    if !ts_root().join("node_modules").is_dir()
-        || Command::new("bun").arg("--version").output().is_err()
-    {
+    if !ts_root().join("node_modules").is_dir() || Command::new("bun").arg("--version").output().is_err() {
         eprintln!("skipped the TypeScript side: needs bun and node_modules");
         return None;
     }
@@ -350,10 +312,7 @@ fn ts_config(home: &Path, op: Value) -> Option<Value> {
         .arg("config")
         .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
         .env_remove("OPENCODE_CONFIG_DIR")
-        .env(
-            "BUN_RUNTIME_TRANSPILER_CACHE_PATH",
-            std::env::temp_dir().join("opencode-rs-f5-bun-cache"),
-        )
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -361,18 +320,9 @@ fn ts_config(home: &Path, op: Value) -> Option<Value> {
         command.env(name, value);
     }
     let mut child = command.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(json!([op]).to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(json!([op]).to_string().as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
     let mut results: Vec<Value> = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     Some(results.remove(0))
@@ -393,10 +343,7 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
     let tui = mount(
         &app,
         CliConfig::new(&paths).get().unwrap(),
-        Some(Roots {
-            paths: paths.clone(),
-            storage_channel: "test".into(),
-        }),
+        Some(Roots { paths: paths.clone(), storage_channel: "test".into() }),
     );
     wait_for(&app, "/project");
     // One write at a time: the settings writer ignores a change while one is in flight, as TS does.
@@ -440,7 +387,7 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
 
     // A second press turns each back.
     app.press("f6");
-    assert!(app.wait_until(Duration::from_secs(5), || {
-        tui.settings.info().to_value()["diffs"]["wrap"] == json!("word")
-    }));
+    assert!(
+        app.wait_until(Duration::from_secs(5), || { tui.settings.info().to_value()["diffs"]["wrap"] == json!("word") })
+    );
 }

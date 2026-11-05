@@ -41,24 +41,23 @@ fn options(tui: &Rc<Tui>, directory: &str) -> Vec<SelectOption<String>> {
         }
     };
     vec![
-        SelectOption::new("Copy path", "location.copy".to_owned())
-            .description(directory)
-            .on_select(action(|tui, directory| {
+        SelectOption::new("Copy path", "location.copy".to_owned()).description(directory).on_select(action(
+            |tui, directory| {
                 // TS closes the dialog only once the write succeeded.
                 if crate::features::selection::write(tui, directory) {
                     tui.dialogs.clear();
-                    tui.toasts
-                        .show(ToastOptions::new(Variant::Info, "Path copied to clipboard"));
+                    tui.toasts.show(ToastOptions::new(Variant::Info, "Path copied to clipboard"));
                 }
-            })),
-        SelectOption::new("Open folder", "location.open".to_owned())
-            .description("in system file manager")
-            .on_select(action(|tui, directory| {
+            },
+        )),
+        SelectOption::new("Open folder", "location.open".to_owned()).description("in system file manager").on_select(
+            action(|tui, directory| {
                 tui.dialogs.clear();
                 if let Err(error) = crate::features::links::open_path(directory) {
                     tui.toasts.error(error);
                 }
-            })),
+            }),
+        ),
         // The prompt always passes `onMove`: its `session.move` command (E.11b).
         SelectOption::new("Workspaces", "session.move".to_owned())
             .description("to another working directory")

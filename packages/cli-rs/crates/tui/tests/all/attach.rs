@@ -38,16 +38,10 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), path.clone(), body.clone()));
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
         let location = json!({ "directory": "/project" });
         let (status, body) = match (request.method, path.as_str()) {
             ("GET", "/api/session") => (200, json!({ "data": [session()], "cursor": {} })),
@@ -79,9 +73,7 @@ impl Transport for Fixture {
                 | "/api/skill"
                 | "/api/reference",
             ) => (200, json!({ "location": location, "data": [] })),
-            ("GET", path) if path.ends_with("/form") || path.ends_with("/permission") => {
-                (200, json!({ "data": [] }))
-            }
+            ("GET", path) if path.ends_with("/form") || path.ends_with("/permission") => (200, json!({ "data": [] })),
             ("GET", "/api/config") => (200, json!([])),
             ("POST", path) if path.ends_with("/prompt") => (
                 200,
@@ -90,16 +82,10 @@ impl Transport for Fixture {
                     "payload": { "text": body["text"] }, "delivery": "steer",
                 } }),
             ),
-            ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => {
-                (204, Value::Null)
-            }
+            ("POST", path) if path.ends_with("/model") || path.ends_with("/agent") => (204, Value::Null),
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -134,11 +120,7 @@ impl Setup {
 
     fn with(home: tempfile::TempDir, info: Info, local: bool) -> Self {
         let seen = Seen::default();
-        let client = Client::with_transport(
-            "http://opencode.local",
-            Arc::new(Fixture { seen: seen.clone() }),
-        )
-        .unwrap();
+        let client = Client::with_transport("http://opencode.local", Arc::new(Fixture { seen: seen.clone() })).unwrap();
         let app = TestApp::new(90, 30);
         let tui = opencode_tui::app::mount_with(
             &app,
@@ -146,44 +128,27 @@ impl Setup {
                 client,
                 directory: "/project".into(),
                 config: Resolved::new(info, |_| None),
-                roots: Some(Roots {
-                    paths: paths(home.path()),
-                    storage_channel: "latest".into(),
-                }),
-                route: Route::Session {
-                    id: SessionID("ses_a".into()),
-                },
+                roots: Some(Roots { paths: paths(home.path()), storage_channel: "latest".into() }),
+                route: Route::Session { id: SessionID("ses_a".into()) },
                 continue_: false,
                 events: false,
             },
-            Args {
-                local,
-                ..Args::default()
-            },
+            Args { local, ..Args::default() },
         );
-        let setup = Self {
-            app,
-            tui,
-            seen,
-            home,
-        };
+        let setup = Self { app, tui, seen, home };
         setup.wait_for("Model M");
         setup
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
         assert!(found, "{text:?} never showed:\n{screen}");
         screen
     }
 
     fn wait_gone(&self, text: &str) {
-        let gone = self
-            .app
-            .wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
+        let gone = self.app.wait_until(Duration::from_secs(5), || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
@@ -192,18 +157,14 @@ impl Setup {
     }
 
     fn wait_text(&self, text: &str) {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.text() == text);
+        let found = self.app.wait_until(Duration::from_secs(5), || self.text() == text);
         assert!(found, "prompt is {:?}, not {text:?}", self.text());
     }
 
     fn submit(&self) -> Value {
         let before = self.prompts().len();
         self.app.press("return");
-        let sent = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.prompts().len() > before);
+        let sent = self.app.wait_until(Duration::from_secs(5), || self.prompts().len() > before);
         assert!(sent, "no prompt sent: {:?}", self.seen.lock().unwrap());
         self.prompts().pop().unwrap()
     }
@@ -237,14 +198,11 @@ impl Setup {
     }
 
     fn stash_file(&self) -> String {
-        std::fs::read_to_string(self.home.path().join("state/prompt-stash.jsonl"))
-            .unwrap_or_default()
+        std::fs::read_to_string(self.home.path().join("state/prompt-stash.jsonl")).unwrap_or_default()
     }
 
     fn wait_stash_file(&self, check: impl Fn(&str) -> bool) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || check(&self.stash_file()));
+        let found = self.app.wait_until(Duration::from_secs(5), || check(&self.stash_file()));
         assert!(found, "prompt-stash.jsonl is {:?}", self.stash_file());
         self.stash_file()
     }
@@ -265,14 +223,7 @@ fn paths(home: &Path) -> Paths {
 }
 
 fn prompt_config(paste: Option<PromptPaste>, image_preview: bool) -> Info {
-    Info {
-        prompt: Some(Prompt {
-            paste,
-            image_preview: Some(image_preview),
-            ..Prompt::default()
-        }),
-        ..Info::default()
-    }
+    Info { prompt: Some(Prompt { paste, image_preview: Some(image_preview), ..Prompt::default() }), ..Info::default() }
 }
 
 #[test]
@@ -329,9 +280,7 @@ fn copying_a_selection_over_a_paste_copies_its_text() {
     let (x, y) = setup.find("see [Pasted");
     // From "see" (not on the label, whose press would expand it) to the label's last cell.
     setup.app.drag((x, y), (x + 20, y));
-    let copied = setup.app.wait_until(Duration::from_secs(5), || {
-        !capture.0.copied.borrow().is_empty()
-    });
+    let copied = setup.app.wait_until(Duration::from_secs(5), || !capture.0.copied.borrow().is_empty());
     assert!(copied, "nothing copied:\n{}", setup.app.text());
     assert_eq!(capture.0.copied.borrow().last().unwrap(), "see a\nb\nc");
 }
@@ -342,11 +291,7 @@ fn short_pastes_go_in_as_they_are_and_full_turns_compaction_off() {
     setup.app.paste("short \u{1b}[31mred\u{1b}[0m\rpaste");
     setup.wait_text("short red\npaste");
 
-    let full = Setup::with(
-        tempfile::tempdir().unwrap(),
-        prompt_config(Some(PromptPaste::Full), false),
-        false,
-    );
+    let full = Setup::with(tempfile::tempdir().unwrap(), prompt_config(Some(PromptPaste::Full), false), false);
     full.app.paste("a\nb\nc\nd");
     full.wait_text("a\nb\nc\nd");
 }
@@ -354,18 +299,9 @@ fn short_pastes_go_in_as_they_are_and_full_turns_compaction_off() {
 #[test]
 fn clipboard_images_attach_preview_and_open_in_the_dialog() {
     let capture = testing::capture();
-    let png = base64::engine::general_purpose::STANDARD
-        .decode(PNG)
-        .unwrap();
-    let setup = Setup::with(
-        tempfile::tempdir().unwrap(),
-        prompt_config(None, true),
-        false,
-    );
-    let read = || ClipboardOutcome::Read {
-        mime_type: "image/png".into(),
-        data: png.clone(),
-    };
+    let png = base64::engine::general_purpose::STANDARD.decode(PNG).unwrap();
+    let setup = Setup::with(tempfile::tempdir().unwrap(), prompt_config(None, true), false);
+    let read = || ClipboardOutcome::Read { mime_type: "image/png".into(), data: png.clone() };
     capture.0.clipboard.borrow_mut().extend([read(), read()]);
     setup.app.press("ctrl+v");
     setup.wait_text("[Image 1] ");
@@ -399,10 +335,7 @@ fn clipboard_text_pastes_and_read_errors_toast() {
     let capture = testing::capture();
     let setup = Setup::new();
     capture.0.clipboard.borrow_mut().extend([
-        ClipboardOutcome::Read {
-            mime_type: "text/plain".into(),
-            data: b"one\ntwo\nthree".to_vec(),
-        },
+        ClipboardOutcome::Read { mime_type: "text/plain".into(), data: b"one\ntwo\nthree".to_vec() },
         ClipboardOutcome::TimedOut,
         ClipboardOutcome::Empty,
     ]);
@@ -421,24 +354,12 @@ fn clipboard_text_pastes_and_read_errors_toast() {
 fn pasted_paths_attach_files_and_svgs_paste_their_text() {
     let files = tempfile::tempdir().unwrap();
     let png = files.path().join("shot one.png");
-    std::fs::write(
-        &png,
-        base64::engine::general_purpose::STANDARD
-            .decode(PNG)
-            .unwrap(),
-    )
-    .unwrap();
+    std::fs::write(&png, base64::engine::general_purpose::STANDARD.decode(PNG).unwrap()).unwrap();
     let svg = files.path().join("logo.svg");
     std::fs::write(&svg, "<svg/>").unwrap();
-    let setup = Setup::with(
-        tempfile::tempdir().unwrap(),
-        prompt_config(None, true),
-        true,
-    );
+    let setup = Setup::with(tempfile::tempdir().unwrap(), prompt_config(None, true), true);
     // A dragged path arrives quoted or escaped; both attach.
-    setup
-        .app
-        .paste(&format!("'{}'", png.display()).replace(' ', "\\ "));
+    setup.app.paste(&format!("'{}'", png.display()).replace(' ', "\\ "));
     setup.wait_text("[Image 1] ");
     setup.app.paste(&format!("{}", svg.display()));
     setup.wait_text("[Image 1] [SVG: logo.svg] ");
@@ -466,11 +387,7 @@ fn previews_show_above_the_prompt_and_a_click_opens_the_dialog() {
     let files = tempfile::tempdir().unwrap();
     let bad = files.path().join("bad.png");
     std::fs::write(&bad, b"not a png").unwrap();
-    let setup = Setup::with(
-        tempfile::tempdir().unwrap(),
-        prompt_config(None, true),
-        false,
-    );
+    let setup = Setup::with(tempfile::tempdir().unwrap(), prompt_config(None, true), false);
     setup.app.paste(&bad.display().to_string());
     setup.wait_text("[Image 1] ");
     let (x, y) = setup.find("No preview");
@@ -501,10 +418,7 @@ fn stash_pushes_pops_and_lists_with_delete_confirm() {
     setup.dispatch("prompt.stash");
     setup.wait_text("");
     let file = setup.wait_stash_file(|file| file.lines().count() == 2);
-    let entries: Vec<Value> = file
-        .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect();
+    let entries: Vec<Value> = file.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
     assert_eq!(entries[0]["prompt"]["text"], "first idea");
     assert_eq!(entries[1]["prompt"]["pasted"][0]["text"], "x\ny\nz");
     assert!(entries[1]["timestamp"].is_number());
@@ -519,10 +433,7 @@ fn stash_pushes_pops_and_lists_with_delete_confirm() {
     // The list shows the newest first; Ctrl+D twice deletes; Enter takes one out.
     setup.dispatch("prompt.stash.list");
     let screen = setup.wait_for("Stash");
-    let (newest, oldest) = (
-        screen.find("[Pasted ~3 lines] second").unwrap(),
-        screen.find("first idea").unwrap(),
-    );
+    let (newest, oldest) = (screen.find("[Pasted ~3 lines] second").unwrap(), screen.find("first idea").unwrap());
     assert!(newest < oldest, "{screen}");
     assert!(screen.contains("just now"), "{screen}");
     setup.app.press("ctrl+d");
@@ -547,8 +458,7 @@ fn stash_file_is_shared_with_typescript() {
     let rust = setup.wait_stash_file(|file| file.lines().count() == 2);
     let state = setup.home.path().join("state");
 
-    let typescript =
-        json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [] });
+    let typescript = json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [] });
     let results = run_typescript(
         &root,
         &state,
@@ -556,11 +466,7 @@ fn stash_file_is_shared_with_typescript() {
     );
     assert_eq!(
         results,
-        json!([
-            ["from rust", "[Pasted ~3 lines] "],
-            "[Pasted ~3 lines] ",
-            ["from rust", "from typescript"],
-        ])
+        json!([["from rust", "[Pasted ~3 lines] "], "[Pasted ~3 lines] ", ["from rust", "from typescript"],])
     );
     // TypeScript's load rewrote the Rust lines as it serializes them, unchanged.
     let file = std::fs::read_to_string(state.join("prompt-stash.jsonl")).unwrap();
@@ -571,15 +477,9 @@ fn stash_file_is_shared_with_typescript() {
     // A new Rust TUI reads the TypeScript file: pop gives the TypeScript entry, then the Rust one.
     let home = tempfile::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
-    std::fs::copy(
-        state.join("prompt-stash.jsonl"),
-        home.path().join("state/prompt-stash.jsonl"),
-    )
-    .unwrap();
+    std::fs::copy(state.join("prompt-stash.jsonl"), home.path().join("state/prompt-stash.jsonl")).unwrap();
     let again = Setup::with(home, Info::default(), false);
-    let loaded = again.app.wait_until(Duration::from_secs(5), || {
-        !again.tui.prompt.stash.is_empty()
-    });
+    let loaded = again.app.wait_until(Duration::from_secs(5), || !again.tui.prompt.stash.is_empty());
     assert!(loaded);
     again.dispatch("prompt.stash.pop");
     again.wait_text("from typescript");
@@ -631,10 +531,7 @@ fn a_stash_made_while_the_stash_loads_is_kept() {
     text.push_str(&"broken\n".repeat(2_000_000));
     std::fs::write(&file, text).unwrap();
     let setup = Setup::with(home, Info::default(), false);
-    assert!(
-        setup.tui.prompt.stash.is_empty(),
-        "the load finished too early for this test"
-    );
+    assert!(setup.tui.prompt.stash.is_empty(), "the load finished too early for this test");
     // Without advancing the app: the load finishes on its thread, but the UI has not taken its result.
     let healed = (0..500).any(|_| {
         std::thread::sleep(Duration::from_millis(10));
@@ -654,9 +551,7 @@ fn a_stash_made_while_the_stash_loads_is_kept() {
             .map(|entry| entry["prompt"]["text"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>()
     };
-    let merged = setup
-        .app
-        .wait_until(Duration::from_secs(5), || texts() == ["old", "early"]);
+    let merged = setup.app.wait_until(Duration::from_secs(5), || texts() == ["old", "early"]);
     assert!(merged, "the stash is {:?}", texts());
     setup.wait_stash_file(|file| file.lines().count() == 2 && file.contains("\"early\""));
 }
@@ -666,16 +561,10 @@ fn ts_root() -> Option<std::path::PathBuf> {
     let root = std::env::var_os("OPENCODE_TS_ROOT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.."));
-    let present = root.join("node_modules").is_dir()
-        && std::process::Command::new("bun")
-            .arg("--version")
-            .output()
-            .is_ok();
+    let present =
+        root.join("node_modules").is_dir() && std::process::Command::new("bun").arg("--version").output().is_ok();
     if !present {
-        eprintln!(
-            "skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            root.display()
-        );
+        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", root.display());
     }
     present.then_some(root)
 }
@@ -696,18 +585,9 @@ fn run_typescript(root: &Path, state: &Path, ops: Value) -> Value {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(ops.to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(ops.to_string().as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
 }

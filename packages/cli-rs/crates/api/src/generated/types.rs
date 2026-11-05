@@ -12,11 +12,7 @@ pub struct ServerInfoPaths {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ServerInfoCapabilities {
-    #[serde(
-        rename = "persistentPty",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "persistentPty", default, skip_serializing_if = "Option::is_none")]
     pub persistent_pty: Option<bool>,
 }
 
@@ -281,10 +277,7 @@ impl ProviderCompaction {
         match self {
             Self::Summary(value) => value.r#type.as_str(),
             Self::Native(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -446,17 +439,9 @@ impl<'de> Deserialize<'de> for ProviderEncoding {
 pub struct ProviderSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout: Option<ProviderSettingsTimeout>,
-    #[serde(
-        rename = "headerTimeout",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "headerTimeout", default, skip_serializing_if = "Option::is_none")]
     pub header_timeout: Option<ProviderSettingsTimeout>,
-    #[serde(
-        rename = "chunkTimeout",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "chunkTimeout", default, skip_serializing_if = "Option::is_none")]
     pub chunk_timeout: Option<ProviderSettingsTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<ProviderCompaction>,
@@ -738,10 +723,7 @@ impl PluginSource {
             Self::Package(value) => value.r#type.as_str(),
             Self::Local(value) => value.r#type.as_str(),
             Self::Sdk(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -798,10 +780,7 @@ impl PluginState {
         match self {
             Self::Active(value) => value.status.as_str(),
             Self::Failed(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -1072,10 +1051,7 @@ impl SessionForkBoundary {
         match self {
             Self::Before(value) => value.r#type.as_str(),
             Self::Through(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -1158,29 +1134,13 @@ pub struct SessionInfoTime {
     pub created: f64,
     #[serde(serialize_with = "crate::ser::number")]
     pub updated: f64,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub busy: Option<f64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub idle: Option<f64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub viewed: Option<f64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub archived: Option<f64>,
 }
 
@@ -1316,17 +1276,9 @@ pub struct SessionInfo {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionsResponseCursor {
-    #[serde(
-        default,
-        deserialize_with = "crate::de::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
     pub previous: Option<Option<SessionsCursor>>,
-    #[serde(
-        default,
-        deserialize_with = "crate::de::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
     pub next: Option<Option<SessionsCursor>>,
 }
 
@@ -1499,10 +1451,7 @@ impl PromptFileSource {
         match self {
             Self::Inline(value) => value.r#type.as_str(),
             Self::Uri(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -1854,11 +1803,7 @@ pub struct SessionMessageLocationSwitched {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subpath: Option<RelativePath>,
     pub location: LocationPublicRef,
-    #[serde(
-        default,
-        deserialize_with = "crate::de::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
     pub previous: Option<Option<SessionMessageLocationSwitchedPrevious>>,
 }
 
@@ -1918,11 +1863,7 @@ pub struct SessionMessageSkill {
 pub struct SessionMessageShellTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub completed: Option<f64>,
 }
 
@@ -2052,17 +1993,9 @@ pub struct SessionMessageShell {
 pub struct SessionMessageAssistantTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub streamed: Option<f64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub completed: Option<f64>,
 }
 
@@ -2111,11 +2044,7 @@ pub struct ToolFileContent {
     pub r#type: String,
     pub uri: String,
     pub mime: String,
-    #[serde(
-        default,
-        deserialize_with = "crate::de::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
     pub name: Option<Option<String>>,
 }
 
@@ -2146,10 +2075,7 @@ impl ToolContent {
         match self {
             Self::Text(value) => value.r#type.as_str(),
             Self::File(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -2176,11 +2102,7 @@ pub struct SessionStructuredError {
     pub status: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<SessionStructuredErrorResponse>,
-    #[serde(
-        rename = "retryAfterMs",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "retryAfterMs", default, skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<i64>,
 }
 
@@ -2227,10 +2149,7 @@ impl SessionMessageAssistantToolState {
             Self::Running(value) => value.status.as_str(),
             Self::Completed(value) => value.status.as_str(),
             Self::Error(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -2239,17 +2158,9 @@ impl SessionMessageAssistantToolState {
 pub struct SessionMessageAssistantToolTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub ran: Option<f64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub completed: Option<f64>,
 }
 
@@ -2295,10 +2206,7 @@ impl SessionMessageAssistantContentItem {
             Self::Text(value) => value.r#type.as_str(),
             Self::Reasoning(value) => value.r#type.as_str(),
             Self::Tool(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -2391,11 +2299,7 @@ pub struct SessionMessageAssistant {
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -2471,11 +2375,7 @@ pub struct SessionMessageCompactionCompleted {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
     pub summary: String,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -2491,11 +2391,7 @@ pub struct SessionMessageCompactionFailed {
     pub status: String,
     pub reason: SessionMessageCompactionRunningReason,
     pub error: SessionStructuredError,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -2531,10 +2427,7 @@ impl SessionMessageCompaction {
             Self::Running(value) => value.status.as_str(),
             Self::Completed(value) => value.status.as_str(),
             Self::Failed(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -2605,10 +2498,7 @@ impl SessionMessageInfo {
             Self::Assistant(value) => value.r#type.as_str(),
             Self::Compaction(_) => "compaction",
             Self::Idle(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -2687,10 +2577,7 @@ impl SessionInboxInfo {
             Self::Synthetic(value) => value.r#type.as_str(),
             Self::Compaction(value) => value.r#type.as_str(),
             Self::Move(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -3090,10 +2977,7 @@ impl FormField {
             Self::Boolean(value) => value.r#type.as_str(),
             Self::Multiselect(value) => value.r#type.as_str(),
             Self::External(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -3217,10 +3101,7 @@ impl FormState {
             Self::Pending(value) => value.status.as_str(),
             Self::Answered(value) => value.status.as_str(),
             Self::Cancelled(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -3403,10 +3284,7 @@ impl SessionStatsTools {
             Self::None(value) => value.mode.as_str(),
             Self::Summary(value) => value.mode.as_str(),
             Self::Detail(value) => value.mode.as_str(),
-            Self::Unknown(value) => value
-                .get("mode")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("mode").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -3627,11 +3505,7 @@ impl From<&str> for WorkspaceID {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocationRef {
     pub directory: AbsolutePath,
-    #[serde(
-        rename = "workspaceID",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "workspaceID", default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<WorkspaceID>,
 }
 
@@ -3934,11 +3808,7 @@ pub struct SessionForkedData {
     pub boundary: SessionForkBoundary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<IndexMap<String, InstructionHash>>,
-    #[serde(
-        rename = "instructionEntries",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "instructionEntries", default, skip_serializing_if = "Option::is_none")]
     pub instruction_entries: Option<InstructionEntrySnapshot>,
 }
 
@@ -4048,10 +3918,7 @@ impl SessionInboxItem {
             Self::Synthetic(value) => value.r#type.as_str(),
             Self::Compaction(value) => value.r#type.as_str(),
             Self::Move(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -4307,11 +4174,7 @@ pub struct SessionSkillActivated {
 pub struct ShellInfoTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub started: f64,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub completed: Option<f64>,
 }
 
@@ -4325,11 +4188,7 @@ pub struct ShellInfo {
     pub file: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<i64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub exit: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<String>,
@@ -4476,11 +4335,7 @@ pub struct SessionStepFailedData {
     pub raw_finish: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -4785,11 +4640,7 @@ pub struct SessionCompactionEndedData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<SessionMessageNative>,
     pub text: String,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -4817,11 +4668,7 @@ pub struct SessionCompactionFailedData {
     pub error: SessionStructuredError,
     #[serde(rename = "inputID", default, skip_serializing_if = "Option::is_none")]
     pub input_id: Option<SessionMessageID>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<TokenUsageInfo>,
@@ -4991,10 +4838,7 @@ impl SessionMessageAssistantContentEncoded {
             Self::Text(value) => value.r#type.as_str(),
             Self::Reasoning(value) => value.r#type.as_str(),
             Self::Tool(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -5082,105 +4926,51 @@ impl<'de> Deserialize<'de> for SessionEventDurable {
         let value = serde_json::Value::deserialize(deserializer)?;
         match value.get("type").and_then(serde_json::Value::as_str) {
             Some("session.created") => crate::de::variant(value).map(Self::SessionCreated),
-            Some("session.agent.selected") => {
-                crate::de::variant(value).map(Self::SessionAgentSelected)
-            }
-            Some("session.model.selected") => {
-                crate::de::variant(value).map(Self::SessionModelSelected)
-            }
+            Some("session.agent.selected") => crate::de::variant(value).map(Self::SessionAgentSelected),
+            Some("session.model.selected") => crate::de::variant(value).map(Self::SessionModelSelected),
             Some("session.moved") => crate::de::variant(value).map(Self::SessionMoved),
             Some("session.renamed") => crate::de::variant(value).map(Self::SessionRenamed),
-            Some("session.metadata.updated") => {
-                crate::de::variant(value).map(Self::SessionMetadataUpdated)
-            }
+            Some("session.metadata.updated") => crate::de::variant(value).map(Self::SessionMetadataUpdated),
             Some("session.permissions") => crate::de::variant(value).map(Self::SessionPermissions),
             Some("session.viewed") => crate::de::variant(value).map(Self::SessionViewed),
             Some("session.archived") => crate::de::variant(value).map(Self::SessionArchived),
             Some("session.unarchived") => crate::de::variant(value).map(Self::SessionUnarchived),
             Some("session.deleted") => crate::de::variant(value).map(Self::SessionDeleted),
             Some("session.forked") => crate::de::variant(value).map(Self::SessionForked),
-            Some("session.inbox.delivered") => {
-                crate::de::variant(value).map(Self::SessionInboxDelivered)
-            }
-            Some("session.inbox.enqueued") => {
-                crate::de::variant(value).map(Self::SessionInboxEnqueued)
-            }
-            Some("session.inbox.cancelled") => {
-                crate::de::variant(value).map(Self::SessionInboxCancelled)
-            }
-            Some("session.inbox.delivery.changed") => {
-                crate::de::variant(value).map(Self::SessionInboxDeliveryChanged)
-            }
-            Some("session.execution.started") => {
-                crate::de::variant(value).map(Self::SessionExecutionStarted)
-            }
-            Some("session.execution.succeeded") => {
-                crate::de::variant(value).map(Self::SessionExecutionSucceeded)
-            }
-            Some("session.execution.failed") => {
-                crate::de::variant(value).map(Self::SessionExecutionFailed)
-            }
-            Some("session.execution.interrupted") => {
-                crate::de::variant(value).map(Self::SessionExecutionInterrupted)
-            }
-            Some("session.instructions.updated") => {
-                crate::de::variant(value).map(Self::SessionInstructionsUpdated)
-            }
+            Some("session.inbox.delivered") => crate::de::variant(value).map(Self::SessionInboxDelivered),
+            Some("session.inbox.enqueued") => crate::de::variant(value).map(Self::SessionInboxEnqueued),
+            Some("session.inbox.cancelled") => crate::de::variant(value).map(Self::SessionInboxCancelled),
+            Some("session.inbox.delivery.changed") => crate::de::variant(value).map(Self::SessionInboxDeliveryChanged),
+            Some("session.execution.started") => crate::de::variant(value).map(Self::SessionExecutionStarted),
+            Some("session.execution.succeeded") => crate::de::variant(value).map(Self::SessionExecutionSucceeded),
+            Some("session.execution.failed") => crate::de::variant(value).map(Self::SessionExecutionFailed),
+            Some("session.execution.interrupted") => crate::de::variant(value).map(Self::SessionExecutionInterrupted),
+            Some("session.instructions.updated") => crate::de::variant(value).map(Self::SessionInstructionsUpdated),
             Some("session.synthetic") => crate::de::variant(value).map(Self::SessionSynthetic),
-            Some("session.skill.activated") => {
-                crate::de::variant(value).map(Self::SessionSkillActivated)
-            }
-            Some("session.shell.started") => {
-                crate::de::variant(value).map(Self::SessionShellStarted)
-            }
+            Some("session.skill.activated") => crate::de::variant(value).map(Self::SessionSkillActivated),
+            Some("session.shell.started") => crate::de::variant(value).map(Self::SessionShellStarted),
             Some("session.shell.ended") => crate::de::variant(value).map(Self::SessionShellEnded),
             Some("session.step.started") => crate::de::variant(value).map(Self::SessionStepStarted),
-            Some("session.step.streamed") => {
-                crate::de::variant(value).map(Self::SessionStepStreamed)
-            }
+            Some("session.step.streamed") => crate::de::variant(value).map(Self::SessionStepStreamed),
             Some("session.step.ended") => crate::de::variant(value).map(Self::SessionStepEnded),
             Some("session.step.failed") => crate::de::variant(value).map(Self::SessionStepFailed),
             Some("session.text.started") => crate::de::variant(value).map(Self::SessionTextStarted),
             Some("session.text.ended") => crate::de::variant(value).map(Self::SessionTextEnded),
-            Some("session.reasoning.started") => {
-                crate::de::variant(value).map(Self::SessionReasoningStarted)
-            }
-            Some("session.reasoning.ended") => {
-                crate::de::variant(value).map(Self::SessionReasoningEnded)
-            }
-            Some("session.tool.input.started") => {
-                crate::de::variant(value).map(Self::SessionToolInputStarted)
-            }
-            Some("session.tool.input.ended") => {
-                crate::de::variant(value).map(Self::SessionToolInputEnded)
-            }
+            Some("session.reasoning.started") => crate::de::variant(value).map(Self::SessionReasoningStarted),
+            Some("session.reasoning.ended") => crate::de::variant(value).map(Self::SessionReasoningEnded),
+            Some("session.tool.input.started") => crate::de::variant(value).map(Self::SessionToolInputStarted),
+            Some("session.tool.input.ended") => crate::de::variant(value).map(Self::SessionToolInputEnded),
             Some("session.tool.called") => crate::de::variant(value).map(Self::SessionToolCalled),
             Some("session.tool.success") => crate::de::variant(value).map(Self::SessionToolSuccess),
             Some("session.tool.failed") => crate::de::variant(value).map(Self::SessionToolFailed),
-            Some("session.retry.scheduled") => {
-                crate::de::variant(value).map(Self::SessionRetryScheduled)
-            }
-            Some("session.compaction.started") => {
-                crate::de::variant(value).map(Self::SessionCompactionStarted)
-            }
-            Some("session.compaction.ended") => {
-                crate::de::variant(value).map(Self::SessionCompactionEnded)
-            }
-            Some("session.compaction.failed") => {
-                crate::de::variant(value).map(Self::SessionCompactionFailed)
-            }
-            Some("session.revert.staged") => {
-                crate::de::variant(value).map(Self::SessionRevertStaged)
-            }
-            Some("session.revert.cleared") => {
-                crate::de::variant(value).map(Self::SessionRevertCleared)
-            }
-            Some("session.revert.committed") => {
-                crate::de::variant(value).map(Self::SessionRevertCommitted)
-            }
-            Some("session.usage.recorded") => {
-                crate::de::variant(value).map(Self::SessionUsageRecorded)
-            }
+            Some("session.retry.scheduled") => crate::de::variant(value).map(Self::SessionRetryScheduled),
+            Some("session.compaction.started") => crate::de::variant(value).map(Self::SessionCompactionStarted),
+            Some("session.compaction.ended") => crate::de::variant(value).map(Self::SessionCompactionEnded),
+            Some("session.compaction.failed") => crate::de::variant(value).map(Self::SessionCompactionFailed),
+            Some("session.revert.staged") => crate::de::variant(value).map(Self::SessionRevertStaged),
+            Some("session.revert.cleared") => crate::de::variant(value).map(Self::SessionRevertCleared),
+            Some("session.revert.committed") => crate::de::variant(value).map(Self::SessionRevertCommitted),
+            Some("session.usage.recorded") => crate::de::variant(value).map(Self::SessionUsageRecorded),
             Some("session.message.content.updated") => {
                 crate::de::variant(value).map(Self::SessionMessageContentUpdated)
             }
@@ -5240,10 +5030,7 @@ impl SessionEventDurable {
             Self::SessionRevertCommitted(value) => value.r#type.as_str(),
             Self::SessionUsageRecorded(value) => value.r#type.as_str(),
             Self::SessionMessageContentUpdated(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -5317,9 +5104,7 @@ impl<'de> Deserialize<'de> for SessionLogItem {
             | Some("session.revert.cleared")
             | Some("session.revert.committed")
             | Some("session.usage.recorded")
-            | Some("session.message.content.updated") => {
-                crate::de::variant(value).map(Self::Durable)
-            }
+            | Some("session.message.content.updated") => crate::de::variant(value).map(Self::Durable),
             Some("log.synced") => crate::de::variant(value).map(Self::LogSynced),
             _ => Ok(Self::Unknown(value)),
         }
@@ -5332,10 +5117,7 @@ impl SessionLogItem {
         match self {
             Self::Durable(value) => value.tag(),
             Self::LogSynced(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -5462,17 +5244,9 @@ pub struct MessageListInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionMessagesResponseCursor {
-    #[serde(
-        default,
-        deserialize_with = "crate::de::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
     pub previous: Option<Option<String>>,
-    #[serde(
-        default,
-        deserialize_with = "crate::de::double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, deserialize_with = "crate::de::double_option", skip_serializing_if = "Option::is_none")]
     pub next: Option<Option<String>>,
 }
 
@@ -5620,71 +5394,27 @@ impl<'de> Deserialize<'de> for ModelMediaInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelCompatibility {
-    #[serde(
-        rename = "reasoningField",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "reasoningField", default, skip_serializing_if = "Option::is_none")]
     pub reasoning_field: Option<String>,
-    #[serde(
-        rename = "requireReasoning",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "requireReasoning", default, skip_serializing_if = "Option::is_none")]
     pub require_reasoning: Option<bool>,
-    #[serde(
-        rename = "maxTokensField",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "maxTokensField", default, skip_serializing_if = "Option::is_none")]
     pub max_tokens_field: Option<ModelMaxTokensField>,
-    #[serde(
-        rename = "requireFinishReason",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "requireFinishReason", default, skip_serializing_if = "Option::is_none")]
     pub require_finish_reason: Option<bool>,
-    #[serde(
-        rename = "requireAssistantAfterTool",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "requireAssistantAfterTool", default, skip_serializing_if = "Option::is_none")]
     pub require_assistant_after_tool: Option<bool>,
-    #[serde(
-        rename = "supportsPromptCacheKey",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "supportsPromptCacheKey", default, skip_serializing_if = "Option::is_none")]
     pub supports_prompt_cache_key: Option<bool>,
-    #[serde(
-        rename = "streamUsage",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "streamUsage", default, skip_serializing_if = "Option::is_none")]
     pub stream_usage: Option<bool>,
-    #[serde(
-        rename = "cacheFormat",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "cacheFormat", default, skip_serializing_if = "Option::is_none")]
     pub cache_format: Option<ModelCacheFormat>,
-    #[serde(
-        rename = "supportsThinkingBlockBinding",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "supportsThinkingBlockBinding", default, skip_serializing_if = "Option::is_none")]
     pub supports_thinking_block_binding: Option<bool>,
-    #[serde(
-        rename = "supportsEffortUpdates",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "supportsEffortUpdates", default, skip_serializing_if = "Option::is_none")]
     pub supports_effort_updates: Option<bool>,
-    #[serde(
-        rename = "mediaInput",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "mediaInput", default, skip_serializing_if = "Option::is_none")]
     pub media_input: Option<ModelMediaInput>,
 }
 
@@ -5941,17 +5671,9 @@ pub struct GenerateImageOutput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateUsage {
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub input: Option<f64>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub output: Option<f64>,
 }
 
@@ -5961,11 +5683,7 @@ pub type GenerateNative = IndexMap<String, serde_json::Value>;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateImageResult {
     pub images: Vec<GenerateImageOutput>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<GenerateUsage>,
@@ -6027,10 +5745,7 @@ impl GenerateDecisionPart {
             Self::Text(value) => value.r#type.as_str(),
             Self::Json(value) => value.r#type.as_str(),
             Self::File(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -6125,10 +5840,7 @@ impl GenerateDecisionQuestion {
             Self::Predicate(value) => value.r#type.as_str(),
             Self::Choice(value) => value.r#type.as_str(),
             Self::Score(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -6227,10 +5939,7 @@ impl GenerateDecisionAnswer {
             Self::Choice(value) => value.r#type.as_str(),
             Self::Score(value) => value.r#type.as_str(),
             Self::Error(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -6238,11 +5947,7 @@ impl GenerateDecisionAnswer {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateDecisionResult {
     pub answers: Vec<GenerateDecisionAnswer>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub cost: Option<MoneyUSD>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<GenerateUsage>,
@@ -6313,11 +6018,7 @@ pub struct ExperimentalVoiceModelsOutput {
 pub struct VoiceWebRTCTransportInput {
     pub r#type: String,
     pub sdp: String,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub dcid: Option<f64>,
 }
 
@@ -6353,10 +6054,7 @@ impl VoiceTransportInput {
         match self {
             Self::Webrtc(value) => value.r#type.as_str(),
             Self::Websocket(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -6411,10 +6109,7 @@ impl VoiceTransport {
         match self {
             Self::Webrtc(value) => value.r#type.as_str(),
             Self::Websocket(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -6504,59 +6199,23 @@ impl<'de> Deserialize<'de> for ProviderInfoActivation {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderCompatibility {
-    #[serde(
-        rename = "reasoningField",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "reasoningField", default, skip_serializing_if = "Option::is_none")]
     pub reasoning_field: Option<String>,
-    #[serde(
-        rename = "requireReasoning",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "requireReasoning", default, skip_serializing_if = "Option::is_none")]
     pub require_reasoning: Option<bool>,
-    #[serde(
-        rename = "maxTokensField",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "maxTokensField", default, skip_serializing_if = "Option::is_none")]
     pub max_tokens_field: Option<ModelMaxTokensField>,
-    #[serde(
-        rename = "requireFinishReason",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "requireFinishReason", default, skip_serializing_if = "Option::is_none")]
     pub require_finish_reason: Option<bool>,
-    #[serde(
-        rename = "requireAssistantAfterTool",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "requireAssistantAfterTool", default, skip_serializing_if = "Option::is_none")]
     pub require_assistant_after_tool: Option<bool>,
-    #[serde(
-        rename = "supportsPromptCacheKey",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "supportsPromptCacheKey", default, skip_serializing_if = "Option::is_none")]
     pub supports_prompt_cache_key: Option<bool>,
-    #[serde(
-        rename = "streamUsage",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "streamUsage", default, skip_serializing_if = "Option::is_none")]
     pub stream_usage: Option<bool>,
-    #[serde(
-        rename = "cacheFormat",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "cacheFormat", default, skip_serializing_if = "Option::is_none")]
     pub cache_format: Option<ModelCacheFormat>,
-    #[serde(
-        rename = "mediaInput",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "mediaInput", default, skip_serializing_if = "Option::is_none")]
     pub media_input: Option<ModelMediaInput>,
 }
 
@@ -6565,11 +6224,7 @@ pub struct ProviderInfo {
     pub id: ProviderID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical: Option<ProviderID>,
-    #[serde(
-        rename = "integrationID",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "integrationID", default, skip_serializing_if = "Option::is_none")]
     pub integration_id: Option<IntegrationID>,
     pub name: String,
     pub activation: ProviderInfoActivation,
@@ -6715,10 +6370,7 @@ impl IntegrationMethod {
             Self::Key(value) => value.r#type.as_str(),
             Self::External(value) => value.r#type.as_str(),
             Self::Env(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -6848,10 +6500,7 @@ impl ConnectionInfo {
         match self {
             Self::Credential(value) => value.r#type.as_str(),
             Self::Env(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -7074,10 +6723,7 @@ impl IntegrationAttemptStatus {
             Self::Complete(value) => value.status.as_str(),
             Self::Failed(value) => value.status.as_str(),
             Self::Expired(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -7201,10 +6847,7 @@ impl IntegrationCommandAttemptStatus {
             Self::Complete(value) => value.status.as_str(),
             Self::Failed(value) => value.status.as_str(),
             Self::Expired(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -7298,10 +6941,7 @@ impl McpServerStatus {
             Self::Disabled(value) => value.status.as_str(),
             Self::Failed(value) => value.status.as_str(),
             Self::NeedsAuth(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -7312,11 +6952,7 @@ pub struct McpServer {
     pub status: McpServerStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(
-        rename = "integrationID",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "integrationID", default, skip_serializing_if = "Option::is_none")]
     pub integration_id: Option<IntegrationID>,
 }
 
@@ -7521,10 +7157,7 @@ impl ExperimentalMcpAddInputConfig {
         match self {
             Self::Local(value) => value.r#type.as_str(),
             Self::Remote(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -7637,10 +7270,7 @@ impl CredentialValue {
             Self::Oauth(value) => value.r#type.as_str(),
             Self::Key(value) => value.r#type.as_str(),
             Self::External(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -8987,11 +8617,7 @@ pub struct ShellCreated {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShellExitedData {
     pub id: ShellID,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub exit: Option<f64>,
     pub status: SessionMessageShellStatus,
 }
@@ -9179,10 +8805,7 @@ impl SessionStatus {
             Self::Idle(value) => value.r#type.as_str(),
             Self::Retry(value) => value.r#type.as_str(),
             Self::Busy(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -9564,118 +9187,56 @@ impl<'de> Deserialize<'de> for V2Event {
             Some("model.updated") => crate::de::variant(value).map(Self::ModelUpdated),
             Some("agent.updated") => crate::de::variant(value).map(Self::AgentUpdated),
             Some("session.created") => crate::de::variant(value).map(Self::SessionCreated),
-            Some("session.agent.selected") => {
-                crate::de::variant(value).map(Self::SessionAgentSelected)
-            }
-            Some("session.model.selected") => {
-                crate::de::variant(value).map(Self::SessionModelSelected)
-            }
+            Some("session.agent.selected") => crate::de::variant(value).map(Self::SessionAgentSelected),
+            Some("session.model.selected") => crate::de::variant(value).map(Self::SessionModelSelected),
             Some("session.moved") => crate::de::variant(value).map(Self::SessionMoved),
             Some("session.renamed") => crate::de::variant(value).map(Self::SessionRenamed),
-            Some("session.metadata.updated") => {
-                crate::de::variant(value).map(Self::SessionMetadataUpdated)
-            }
+            Some("session.metadata.updated") => crate::de::variant(value).map(Self::SessionMetadataUpdated),
             Some("session.permissions") => crate::de::variant(value).map(Self::SessionPermissions),
             Some("session.viewed") => crate::de::variant(value).map(Self::SessionViewed),
             Some("session.archived") => crate::de::variant(value).map(Self::SessionArchived),
             Some("session.unarchived") => crate::de::variant(value).map(Self::SessionUnarchived),
-            Some("session.usage.updated") => {
-                crate::de::variant(value).map(Self::SessionUsageUpdated)
-            }
+            Some("session.usage.updated") => crate::de::variant(value).map(Self::SessionUsageUpdated),
             Some("session.deleted") => crate::de::variant(value).map(Self::SessionDeleted),
             Some("session.forked") => crate::de::variant(value).map(Self::SessionForked),
-            Some("session.inbox.delivered") => {
-                crate::de::variant(value).map(Self::SessionInboxDelivered)
-            }
-            Some("session.inbox.enqueued") => {
-                crate::de::variant(value).map(Self::SessionInboxEnqueued)
-            }
-            Some("session.inbox.cancelled") => {
-                crate::de::variant(value).map(Self::SessionInboxCancelled)
-            }
-            Some("session.inbox.delivery.changed") => {
-                crate::de::variant(value).map(Self::SessionInboxDeliveryChanged)
-            }
-            Some("session.execution.started") => {
-                crate::de::variant(value).map(Self::SessionExecutionStarted)
-            }
-            Some("session.execution.succeeded") => {
-                crate::de::variant(value).map(Self::SessionExecutionSucceeded)
-            }
-            Some("session.execution.failed") => {
-                crate::de::variant(value).map(Self::SessionExecutionFailed)
-            }
-            Some("session.execution.interrupted") => {
-                crate::de::variant(value).map(Self::SessionExecutionInterrupted)
-            }
-            Some("session.instructions.updated") => {
-                crate::de::variant(value).map(Self::SessionInstructionsUpdated)
-            }
+            Some("session.inbox.delivered") => crate::de::variant(value).map(Self::SessionInboxDelivered),
+            Some("session.inbox.enqueued") => crate::de::variant(value).map(Self::SessionInboxEnqueued),
+            Some("session.inbox.cancelled") => crate::de::variant(value).map(Self::SessionInboxCancelled),
+            Some("session.inbox.delivery.changed") => crate::de::variant(value).map(Self::SessionInboxDeliveryChanged),
+            Some("session.execution.started") => crate::de::variant(value).map(Self::SessionExecutionStarted),
+            Some("session.execution.succeeded") => crate::de::variant(value).map(Self::SessionExecutionSucceeded),
+            Some("session.execution.failed") => crate::de::variant(value).map(Self::SessionExecutionFailed),
+            Some("session.execution.interrupted") => crate::de::variant(value).map(Self::SessionExecutionInterrupted),
+            Some("session.instructions.updated") => crate::de::variant(value).map(Self::SessionInstructionsUpdated),
             Some("session.synthetic") => crate::de::variant(value).map(Self::SessionSynthetic),
-            Some("session.skill.activated") => {
-                crate::de::variant(value).map(Self::SessionSkillActivated)
-            }
-            Some("session.shell.started") => {
-                crate::de::variant(value).map(Self::SessionShellStarted)
-            }
+            Some("session.skill.activated") => crate::de::variant(value).map(Self::SessionSkillActivated),
+            Some("session.shell.started") => crate::de::variant(value).map(Self::SessionShellStarted),
             Some("session.shell.ended") => crate::de::variant(value).map(Self::SessionShellEnded),
             Some("session.step.started") => crate::de::variant(value).map(Self::SessionStepStarted),
-            Some("session.step.streamed") => {
-                crate::de::variant(value).map(Self::SessionStepStreamed)
-            }
+            Some("session.step.streamed") => crate::de::variant(value).map(Self::SessionStepStreamed),
             Some("session.step.ended") => crate::de::variant(value).map(Self::SessionStepEnded),
             Some("session.step.failed") => crate::de::variant(value).map(Self::SessionStepFailed),
             Some("session.text.started") => crate::de::variant(value).map(Self::SessionTextStarted),
             Some("session.text.delta") => crate::de::variant(value).map(Self::SessionTextDelta),
             Some("session.text.ended") => crate::de::variant(value).map(Self::SessionTextEnded),
-            Some("session.reasoning.started") => {
-                crate::de::variant(value).map(Self::SessionReasoningStarted)
-            }
-            Some("session.reasoning.delta") => {
-                crate::de::variant(value).map(Self::SessionReasoningDelta)
-            }
-            Some("session.reasoning.ended") => {
-                crate::de::variant(value).map(Self::SessionReasoningEnded)
-            }
-            Some("session.tool.input.started") => {
-                crate::de::variant(value).map(Self::SessionToolInputStarted)
-            }
-            Some("session.tool.input.delta") => {
-                crate::de::variant(value).map(Self::SessionToolInputDelta)
-            }
-            Some("session.tool.input.ended") => {
-                crate::de::variant(value).map(Self::SessionToolInputEnded)
-            }
+            Some("session.reasoning.started") => crate::de::variant(value).map(Self::SessionReasoningStarted),
+            Some("session.reasoning.delta") => crate::de::variant(value).map(Self::SessionReasoningDelta),
+            Some("session.reasoning.ended") => crate::de::variant(value).map(Self::SessionReasoningEnded),
+            Some("session.tool.input.started") => crate::de::variant(value).map(Self::SessionToolInputStarted),
+            Some("session.tool.input.delta") => crate::de::variant(value).map(Self::SessionToolInputDelta),
+            Some("session.tool.input.ended") => crate::de::variant(value).map(Self::SessionToolInputEnded),
             Some("session.tool.called") => crate::de::variant(value).map(Self::SessionToolCalled),
-            Some("session.tool.progress") => {
-                crate::de::variant(value).map(Self::SessionToolProgress)
-            }
+            Some("session.tool.progress") => crate::de::variant(value).map(Self::SessionToolProgress),
             Some("session.tool.success") => crate::de::variant(value).map(Self::SessionToolSuccess),
             Some("session.tool.failed") => crate::de::variant(value).map(Self::SessionToolFailed),
-            Some("session.retry.scheduled") => {
-                crate::de::variant(value).map(Self::SessionRetryScheduled)
-            }
-            Some("session.compaction.started") => {
-                crate::de::variant(value).map(Self::SessionCompactionStarted)
-            }
-            Some("session.compaction.delta") => {
-                crate::de::variant(value).map(Self::SessionCompactionDelta)
-            }
-            Some("session.compaction.ended") => {
-                crate::de::variant(value).map(Self::SessionCompactionEnded)
-            }
-            Some("session.compaction.failed") => {
-                crate::de::variant(value).map(Self::SessionCompactionFailed)
-            }
-            Some("session.revert.staged") => {
-                crate::de::variant(value).map(Self::SessionRevertStaged)
-            }
-            Some("session.revert.cleared") => {
-                crate::de::variant(value).map(Self::SessionRevertCleared)
-            }
-            Some("session.revert.committed") => {
-                crate::de::variant(value).map(Self::SessionRevertCommitted)
-            }
+            Some("session.retry.scheduled") => crate::de::variant(value).map(Self::SessionRetryScheduled),
+            Some("session.compaction.started") => crate::de::variant(value).map(Self::SessionCompactionStarted),
+            Some("session.compaction.delta") => crate::de::variant(value).map(Self::SessionCompactionDelta),
+            Some("session.compaction.ended") => crate::de::variant(value).map(Self::SessionCompactionEnded),
+            Some("session.compaction.failed") => crate::de::variant(value).map(Self::SessionCompactionFailed),
+            Some("session.revert.staged") => crate::de::variant(value).map(Self::SessionRevertStaged),
+            Some("session.revert.cleared") => crate::de::variant(value).map(Self::SessionRevertCleared),
+            Some("session.revert.committed") => crate::de::variant(value).map(Self::SessionRevertCommitted),
             Some("filesystem.changed") => crate::de::variant(value).map(Self::FilesystemChanged),
             Some("reference.updated") => crate::de::variant(value).map(Self::ReferenceUpdated),
             Some("permission.asked") => crate::de::variant(value).map(Self::PermissionAsked),
@@ -9692,12 +9253,8 @@ impl<'de> Deserialize<'de> for V2Event {
             Some("pty.exited") => crate::de::variant(value).map(Self::PtyExited),
             Some("pty.deleted") => crate::de::variant(value).map(Self::PtyDeleted),
             Some("persistent-pty.added") => crate::de::variant(value).map(Self::PersistentPtyAdded),
-            Some("persistent-pty.removed") => {
-                crate::de::variant(value).map(Self::PersistentPtyRemoved)
-            }
-            Some("persistent-pty.updated") => {
-                crate::de::variant(value).map(Self::PersistentPtyUpdated)
-            }
+            Some("persistent-pty.removed") => crate::de::variant(value).map(Self::PersistentPtyRemoved),
+            Some("persistent-pty.updated") => crate::de::variant(value).map(Self::PersistentPtyUpdated),
             Some("shell.created") => crate::de::variant(value).map(Self::ShellCreated),
             Some("shell.exited") => crate::de::variant(value).map(Self::ShellExited),
             Some("shell.deleted") => crate::de::variant(value).map(Self::ShellDeleted),
@@ -9712,17 +9269,11 @@ impl<'de> Deserialize<'de> for V2Event {
             Some("tui.command.execute") => crate::de::variant(value).map(Self::TuiCommandExecute),
             Some("tui.toast.show") => crate::de::variant(value).map(Self::TuiToastShow),
             Some("tui.session.select") => crate::de::variant(value).map(Self::TuiSessionSelect),
-            Some("installation.updated") => {
-                crate::de::variant(value).map(Self::InstallationUpdated)
-            }
-            Some("installation.update-available") => {
-                crate::de::variant(value).map(Self::InstallationUpdateAvailable)
-            }
+            Some("installation.updated") => crate::de::variant(value).map(Self::InstallationUpdated),
+            Some("installation.update-available") => crate::de::variant(value).map(Self::InstallationUpdateAvailable),
             Some("vcs.branch.updated") => crate::de::variant(value).map(Self::VcsBranchUpdated),
             Some("mcp.status.changed") => crate::de::variant(value).map(Self::McpStatusChanged),
-            Some("mcp.resources.changed") => {
-                crate::de::variant(value).map(Self::McpResourcesChanged)
-            }
+            Some("mcp.resources.changed") => crate::de::variant(value).map(Self::McpResourcesChanged),
             Some("server.connected") => crate::de::variant(value).map(Self::ServerConnected),
             Some(tag) if tag.starts_with("rpc.") => crate::de::variant(value).map(Self::Rpc),
             _ => Ok(Self::Unknown(value)),
@@ -9832,10 +9383,7 @@ impl V2Event {
             Self::McpResourcesChanged(value) => value.r#type.as_str(),
             Self::Rpc(value) => value.r#type.as_str(),
             Self::ServerConnected(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -10337,10 +9885,7 @@ impl ScheduleWhen {
             Self::At(value) => value.r#type.as_str(),
             Self::Every(value) => value.r#type.as_str(),
             Self::Cron(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -10390,10 +9935,7 @@ impl ScheduleCondition {
         match self {
             Self::Shell(value) => value.r#type.as_str(),
             Self::Code(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -10533,11 +10075,7 @@ pub struct ScheduleInfo {
         skip_serializing_if = "Option::is_none"
     )]
     pub ends_at: Option<f64>,
-    #[serde(
-        rename = "remainingRuns",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "remainingRuns", default, skip_serializing_if = "Option::is_none")]
     pub remaining_runs: Option<i64>,
     #[serde(rename = "runCount")]
     pub run_count: i64,
@@ -10548,17 +10086,9 @@ pub struct ScheduleInfo {
         skip_serializing_if = "Option::is_none"
     )]
     pub last_fired_at: Option<f64>,
-    #[serde(
-        rename = "lastOutcome",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "lastOutcome", default, skip_serializing_if = "Option::is_none")]
     pub last_outcome: Option<ScheduleOutcome>,
-    #[serde(
-        rename = "lastOutput",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "lastOutput", default, skip_serializing_if = "Option::is_none")]
     pub last_output: Option<String>,
     pub time: PermissionSavedInfoTime,
 }
@@ -10939,11 +10469,7 @@ pub struct ExperimentalJobListInput {
 pub struct JobTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub started: f64,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub completed: Option<f64>,
 }
 
@@ -11022,10 +10548,7 @@ impl JobInfo {
             Self::Shell(value) => value.kind.as_str(),
             Self::Subagent(value) => value.kind.as_str(),
             Self::Image(value) => value.kind.as_str(),
-            Self::Unknown(value) => value
-                .get("kind")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("kind").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -11143,10 +10666,7 @@ impl ReferenceSource {
         match self {
             Self::Local(value) => value.r#type.as_str(),
             Self::Git(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -11582,10 +11102,7 @@ impl ExperimentalMigrationV1StatusOutput2 {
             Self::Variant1(value) => value.status.as_str(),
             Self::Running(value) => value.status.as_str(),
             Self::Error(value) => value.status.as_str(),
-            Self::Unknown(value) => value
-                .get("status")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -11650,11 +11167,7 @@ pub struct WebsearchQueryInput {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebSearchResultTime {
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub published: Option<f64>,
 }
 
@@ -11839,11 +11352,7 @@ pub struct UsageLimitsBudgetModel {
     #[serde(rename = "modelID")]
     pub model_id: String,
     pub name: String,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub spent: Option<MoneyUSD>,
 }
 
@@ -12516,17 +12025,9 @@ impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoWarming {
 pub struct ConfigProviderSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout: Option<ProviderSettingsTimeout>,
-    #[serde(
-        rename = "headerTimeout",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "headerTimeout", default, skip_serializing_if = "Option::is_none")]
     pub header_timeout: Option<ProviderSettingsTimeout>,
-    #[serde(
-        rename = "chunkTimeout",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "chunkTimeout", default, skip_serializing_if = "Option::is_none")]
     pub chunk_timeout: Option<ProviderSettingsTimeout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<ProviderCompaction>,
@@ -12634,17 +12135,9 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValueVariantsItem {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoProvidersValueModelsValueCostObjectCache {
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub read: Option<MoneyUSDPerMillionTokens>,
-    #[serde(
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
     pub write: Option<MoneyUSDPerMillionTokens>,
 }
 
@@ -12702,11 +12195,7 @@ pub struct ConfigEntryDocumentInfoProvidersValueModelsValue {
     pub family: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(
-        rename = "releaseDate",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "releaseDate", default, skip_serializing_if = "Option::is_none")]
     pub release_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility: Option<ModelCompatibility>,
@@ -12909,10 +12398,7 @@ impl ConfigEntry {
         match self {
             Self::Document(value) => value.r#type.as_str(),
             Self::Directory(value) => value.r#type.as_str(),
-            Self::Unknown(value) => value
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
@@ -13284,11 +12770,7 @@ pub struct ProviderRequestError {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<i64>,
-    #[serde(
-        rename = "retryAfterMs",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "retryAfterMs", default, skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<i64>,
 }
 
@@ -13546,11 +13028,7 @@ impl crate::error::TaggedError for ShellNotFoundError {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WorktreeErrorData {
     pub message: String,
-    #[serde(
-        rename = "forceRequired",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "forceRequired", default, skip_serializing_if = "Option::is_none")]
     pub force_required: Option<bool>,
 }
 

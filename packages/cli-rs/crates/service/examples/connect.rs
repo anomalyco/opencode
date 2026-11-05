@@ -17,24 +17,16 @@ async fn main() -> anyhow::Result<()> {
     let mut env = Env::from_env();
     env.print_logs |= args.iter().any(|arg| arg == "--print-logs");
     let options = Options {
-        server: args
-            .iter()
-            .position(|arg| arg == "--server")
-            .and_then(|index| args.get(index + 1).cloned()),
+        server: args.iter().position(|arg| arg == "--server").and_then(|index| args.get(index + 1).cloned()),
         standalone: args.iter().any(|arg| arg == "--standalone"),
         client_version: "local".to_owned(),
         standalone_fallback: args.iter().any(|arg| arg == "--no-autostart"),
         on_start: Some(|| eprintln!("Starting background server...")),
     };
     let transport = Arc::new(Reqwest::default());
-    let connection =
-        connect::resolve(transport.clone(), &Paths::from_env()?, &env, &options).await?;
+    let connection = connect::resolve(transport.clone(), &Paths::from_env()?, &env, &options).await?;
     // A second, typed request through the generated client, with the endpoint's credentials.
-    let info = connection
-        .endpoint
-        .client(transport)?
-        .server_info(&RequestOptions::default())
-        .await?;
+    let info = connection.endpoint.client(transport)?.server_info(&RequestOptions::default()).await?;
     println!("source:  {:?}", connection.source);
     println!("url:     {}", connection.endpoint.url);
     println!("version: {}", info.version);

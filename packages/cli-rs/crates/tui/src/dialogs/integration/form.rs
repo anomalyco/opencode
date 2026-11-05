@@ -8,12 +8,11 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use opencode_api::generated::{
-    FormAnswer, FormBooleanField, FormExternalField, FormField, FormMultiselectField,
-    FormStringField, FormValue, FormWhen, FormWhenOp, FormWhenValue,
+    FormAnswer, FormBooleanField, FormExternalField, FormField, FormMultiselectField, FormStringField, FormValue,
+    FormWhen, FormWhenOp, FormWhenValue,
 };
 use opencode_ui::dialog::{
-    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header,
-    layout_view,
+    DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::prompt::{PromptProps, prompt};
@@ -22,9 +21,7 @@ use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 
 use crate::dialogs::model::Local;
-use crate::routes::session::form::{
-    initial_values, label, rows, selected_row, toggle_multiselect, validate,
-};
+use crate::routes::session::form::{initial_values, label, rows, selected_row, toggle_multiselect, validate};
 
 type Done = Box<dyn FnOnce(Option<FormAnswer>)>;
 
@@ -73,10 +70,7 @@ impl Run {
             }
             if hidden(&field) {
                 let key = crate::routes::session::form::key(&field).to_owned();
-                if let Some(value) = initial_values(std::slice::from_ref(&field))
-                    .0
-                    .shift_remove(&key)
-                {
+                if let Some(value) = initial_values(std::slice::from_ref(&field)).0.shift_remove(&key) {
                     self.answer.borrow_mut().insert(key, value);
                 }
                 self.index.set(self.index.get() + 1);
@@ -115,11 +109,7 @@ impl Run {
         });
         let title = {
             let label = label(&field);
-            if label.is_empty() {
-                self.title.clone()
-            } else {
-                label
-            }
+            if label.is_empty() { self.title.clone() } else { label }
         };
         match field {
             FormField::External(field) => external(&self.local, title, field, false, resolve),
@@ -127,9 +117,7 @@ impl Run {
                 let selected = field.default.clone().unwrap_or_default();
                 multiselect(&self.local, title, Rc::new(field), selected, resolve);
             }
-            FormField::String(string)
-                if string.options.is_some() && string.custom == Some(true) =>
-            {
+            FormField::String(string) if string.options.is_some() && string.custom == Some(true) => {
                 string_choice(&self.local, title, string, resolve);
             }
             FormField::Boolean(boolean) => select_boolean(&self.local, title, boolean, resolve),
@@ -206,11 +194,7 @@ fn when_string(value: &FormWhenValue) -> String {
 /// Replaces the dialog; closing it cancels the step.
 fn replace(local: &Local, resolve: &Resolve, build: impl FnOnce(&Rc<DialogCx>) -> View + 'static) {
     let cancel = resolve.clone();
-    local.dialogs.replace(
-        build,
-        Some(Box::new(move || cancel(Outcome::Cancel))),
-        DialogOptions::default(),
-    );
+    local.dialogs.replace(build, Some(Box::new(move || cancel(Outcome::Cancel))), DialogOptions::default());
 }
 
 /// A list of answers, each with its value, plus "Skip" unless the field is required.
@@ -246,11 +230,7 @@ fn select_values(
 }
 
 fn select_boolean(local: &Local, title: String, field: FormBooleanField, resolve: Resolve) {
-    let order = if field.default == Some(false) {
-        [false, true]
-    } else {
-        [true, false]
-    };
+    let order = if field.default == Some(false) { [false, true] } else { [true, false] };
     let choices = order
         .into_iter()
         .map(|value| {
@@ -258,54 +238,25 @@ fn select_boolean(local: &Local, title: String, field: FormBooleanField, resolve
             (title.to_owned(), None, FormValue::Bool(value))
         })
         .collect();
-    select_values(
-        local,
-        title,
-        choices,
-        field.required != Some(true),
-        None,
-        resolve,
-    );
+    select_values(local, title, choices, field.required != Some(true), None, resolve);
 }
 
 fn select_string(local: &Local, title: String, field: FormStringField, resolve: Resolve) {
     let options = field.options.clone().unwrap_or_default();
-    let current = field
-        .default
-        .as_ref()
-        .and_then(|default| options.iter().position(|option| option.value == *default));
-    let choices = options
-        .into_iter()
-        .map(|option| {
-            (
-                option.label,
-                option.description,
-                FormValue::String(option.value),
-            )
-        })
-        .collect();
-    select_values(
-        local,
-        title,
-        choices,
-        field.required != Some(true),
-        current,
-        resolve,
-    );
+    let current = field.default.as_ref().and_then(|default| options.iter().position(|option| option.value == *default));
+    let choices =
+        options.into_iter().map(|option| (option.label, option.description, FormValue::String(option.value))).collect();
+    select_values(local, title, choices, field.required != Some(true), current, resolve);
 }
 
 /// `textAnswer`: typed text for a string, number, or integer, checked before it is accepted.
 fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
-    let initial = initial_values(std::slice::from_ref(&field))
-        .0
-        .into_values()
-        .next()
-        .map(|value| match value {
-            FormValue::String(text) => text,
-            FormValue::Number(number) if number.fract() == 0.0 => format!("{number:.0}"),
-            FormValue::Number(number) => number.to_string(),
-            other => format!("{other:?}"),
-        });
+    let initial = initial_values(std::slice::from_ref(&field)).0.into_values().next().map(|value| match value {
+        FormValue::String(text) => text,
+        FormValue::Number(number) if number.fract() == 0.0 => format!("{number:.0}"),
+        FormValue::Number(number) => number.to_string(),
+        other => format!("{other:?}"),
+    });
     let placeholder = match &field {
         FormField::String(field) => field.placeholder.clone(),
         _ => None,
@@ -330,11 +281,7 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
                 Some(FormValue::String(text.to_owned()))
             } else {
                 // `Number(text)`: blank is 0, anything else unparsable is NaN.
-                Some(FormValue::Number(if text.is_empty() {
-                    0.0
-                } else {
-                    text.parse().unwrap_or(f64::NAN)
-                }))
+                Some(FormValue::Number(if text.is_empty() { 0.0 } else { text.parse().unwrap_or(f64::NAN) }))
             };
             if let Some(invalid) = validate(&field, value.as_ref()) {
                 set_error(invalid);
@@ -384,10 +331,7 @@ fn multiselect(
                 Pick::Item(option.value.clone()),
             );
             row.description = option.description.clone();
-            row.disabled = !checked
-                && field
-                    .max_items
-                    .is_some_and(|max| selected.len() as i64 >= max);
+            row.disabled = !checked && field.max_items.is_some_and(|max| selected.len() as i64 >= max);
             row
         })
         .collect();
@@ -418,23 +362,10 @@ fn multiselect(
                 match &option.value {
                     Pick::Submit => pick(Outcome::Value(Some(FormValue::Array(selected.clone())))),
                     Pick::Item(item) => {
-                        let next =
-                            toggle_multiselect(Some(&FormValue::Array(selected.clone())), item);
-                        multiselect(
-                            &local_pick,
-                            title.clone(),
-                            field.clone(),
-                            next,
-                            pick.clone(),
-                        );
+                        let next = toggle_multiselect(Some(&FormValue::Array(selected.clone())), item);
+                        multiselect(&local_pick, title.clone(), field.clone(), next, pick.clone());
                     }
-                    Pick::Custom => custom(
-                        &local_pick,
-                        title.clone(),
-                        field.clone(),
-                        selected.clone(),
-                        pick.clone(),
-                    ),
+                    Pick::Custom => custom(&local_pick, title.clone(), field.clone(), selected.clone(), pick.clone()),
                 }
             }));
             select::select(cx, props).0
@@ -445,13 +376,7 @@ fn multiselect(
 }
 
 /// `customAnswer`: one typed answer for a multiselect, then back to the list.
-fn custom(
-    local: &Rc<Local>,
-    title: String,
-    field: Rc<FormMultiselectField>,
-    selected: Vec<String>,
-    resolve: Resolve,
-) {
+fn custom(local: &Rc<Local>, title: String, field: Rc<FormMultiselectField>, selected: Vec<String>, resolve: Resolve) {
     let done = Rc::new(Cell::new(false));
     let guard = done.clone();
     let cancel = resolve.clone();
@@ -468,13 +393,7 @@ fn custom(
                 if !next.iter().any(|item| item == value) {
                     next.push(value.to_owned());
                 }
-                multiselect(
-                    &back,
-                    confirm_title.clone(),
-                    field.clone(),
-                    next,
-                    resolve.clone(),
-                );
+                multiselect(&back, confirm_title.clone(), field.clone(), next, resolve.clone());
             });
             prompt(
                 cx,
@@ -497,21 +416,8 @@ fn custom(
 }
 
 /// `externalAnswer`: open the field's link, then confirm once it was opened.
-fn external(
-    local: &Rc<Local>,
-    title: String,
-    field: FormExternalField,
-    opened: bool,
-    resolve: Resolve,
-) {
-    let mut open = SelectOption::new(
-        if opened {
-            "Open link again"
-        } else {
-            "Open link"
-        },
-        true,
-    );
+fn external(local: &Rc<Local>, title: String, field: FormExternalField, opened: bool, resolve: Resolve) {
+    let mut open = SelectOption::new(if opened { "Open link again" } else { "Open link" }, true);
     open.description = Some(field.url.clone());
     let mut finished = SelectOption::new("I finished", false);
     finished.description = field.description.clone();
@@ -529,13 +435,7 @@ fn external(
                     return;
                 }
                 step.set(true);
-                opening(
-                    &again,
-                    title.clone(),
-                    field.clone(),
-                    opened,
-                    resolve.clone(),
-                );
+                opening(&again, title.clone(), field.clone(), opened, resolve.clone());
             }));
             select::select(cx, props).0
         },
@@ -549,13 +449,7 @@ fn external(
 }
 
 /// "Opening link…" while the browser starts, then the link list again.
-fn opening(
-    local: &Rc<Local>,
-    title: String,
-    field: FormExternalField,
-    opened: bool,
-    resolve: Resolve,
-) {
+fn opening(local: &Rc<Local>, title: String, field: FormExternalField, opened: bool, resolve: Resolve) {
     let closed = Rc::new(Cell::new(false));
     let shown = closed.clone();
     let cancel = resolve.clone();
@@ -609,10 +503,7 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
     let count = rows.len() + if string.required == Some(true) { 1 } else { 2 };
     let default = string.default.clone().map(FormValue::String);
     let selected = selected_row(Some(&field), default.as_ref());
-    let text = initial_values(std::slice::from_ref(&field))
-        .1
-        .remove(&string.key)
-        .unwrap_or_default();
+    let text = initial_values(std::slice::from_ref(&field)).1.remove(&string.key).unwrap_or_default();
     let resolve_build = resolve.clone();
     replace(local, &resolve, move |cx| {
         let app = &cx.app;
@@ -628,12 +519,7 @@ fn string_choice(local: &Local, title: String, string: FormStringField, resolve:
             .wrap(WrapMode::None)
             .grow(1.0)
             .basis(Length::Auto)
-            .placeholder(
-                string
-                    .placeholder
-                    .as_deref()
-                    .unwrap_or("Type your own answer"),
-            )
+            .placeholder(string.placeholder.as_deref().unwrap_or("Type your own answer"))
             .placeholder_color(theme.text.muted)
             .colors(focused, Color::TRANSPARENT)
             .focused_colors(focused, Color::TRANSPARENT)
@@ -706,15 +592,9 @@ impl Choice {
         self.cx.layer(KeymapLayer {
             enabled: not_editing,
             commands: vec![
-                command("dialog.select.prev", "Previous answer", |state| {
-                    state.move_by(state.count - 1)
-                }),
-                command("dialog.select.next", "Next answer", |state| {
-                    state.move_by(1)
-                }),
-                command("dialog.select.submit", "Select answer", |state| {
-                    state.select(state.selected.get())
-                }),
+                command("dialog.select.prev", "Previous answer", |state| state.move_by(state.count - 1)),
+                command("dialog.select.next", "Next answer", |state| state.move_by(1)),
+                command("dialog.select.submit", "Select answer", |state| state.select(state.selected.get())),
             ],
             ..KeymapLayer::default()
         });
@@ -738,8 +618,7 @@ impl Choice {
     }
 
     fn move_by(self: &Rc<Self>, delta: usize) {
-        self.selected
-            .set((self.selected.get() + delta) % self.count);
+        self.selected.set((self.selected.get() + delta) % self.count);
         self.render();
     }
 
@@ -790,19 +669,14 @@ impl Choice {
         let theme = &self.cx.theme;
         let selected = self.selected.get();
         let fg = |index: usize| {
-            if selected == index {
-                theme.text.formfield.focused
-            } else {
-                theme.text.formfield.base
-            }
+            if selected == index { theme.text.formfield.focused } else { theme.text.formfield.base }
         };
         let content = self.list.content_view();
         // The textarea moves into the new custom row when it is added again.
         content.clear();
         let mut rows: Vec<View> = Vec::new();
         for (index, row) in self.rows.iter().enumerate() {
-            let view = View::new(app)
-                .child(&Text::new(app, format!("{}. {}", index + 1, row.label)).fg(fg(index)));
+            let view = View::new(app).child(&Text::new(app, format!("{}. {}", index + 1, row.label)).fg(fg(index)));
             if let Some(description) = &row.description {
                 view.add(
                     &View::new(app)
@@ -813,26 +687,17 @@ impl Choice {
             rows.push(view);
         }
         let own = self.rows.len();
-        let custom = View::new(app)
-            .row()
-            .gap(1)
-            .child(&Text::new(app, format!("{}.", own + 1)).fg(fg(own)));
+        let custom = View::new(app).row().gap(1).child(&Text::new(app, format!("{}.", own + 1)).fg(fg(own)));
         if self.editing.get() {
             custom.add(&self.textarea);
         } else {
             let text = self.text.borrow();
-            let shown = if text.is_empty() {
-                "Type your own answer".to_owned()
-            } else {
-                text.clone()
-            };
+            let shown = if text.is_empty() { "Type your own answer".to_owned() } else { text.clone() };
             custom.add(&Text::new(app, shown).fg(fg(own)));
         }
         rows.push(custom);
         if self.count > own + 1 {
-            rows.push(
-                View::new(app).child(&Text::new(app, format!("{}. Skip", own + 2)).fg(fg(own + 1))),
-            );
+            rows.push(View::new(app).child(&Text::new(app, format!("{}. Skip", own + 2)).fg(fg(own + 1))));
         }
         for (index, row) in rows.iter().enumerate() {
             let weak = Rc::downgrade(self);
@@ -857,13 +722,7 @@ impl Choice {
     // one line plus its description, with one blank line between rows.
     fn scroll_to_selected(&self) {
         let selected = self.selected.get();
-        let height = |index: usize| {
-            1 + usize::from(
-                self.rows
-                    .get(index)
-                    .is_some_and(|row| row.description.is_some()),
-            )
-        };
+        let height = |index: usize| 1 + usize::from(self.rows.get(index).is_some_and(|row| row.description.is_some()));
         let top: usize = (0..selected).map(|index| height(index) + 1).sum();
         let bottom = top + height(selected);
         let view = self.height.get();
@@ -886,26 +745,15 @@ impl Choice {
             })
         };
         let secondary = if self.editing.get() {
-            vec![
-                action("submit", "enter", Choice::submit_text),
-                action("back", "esc", Choice::back),
-            ]
+            vec![action("submit", "enter", Choice::submit_text), action("back", "esc", Choice::back)]
         } else {
             vec![
                 FooterAction::new("select").key("↑/↓"),
-                action("confirm", "enter", |state| {
-                    state.select(state.selected.get())
-                }),
+                action("confirm", "enter", |state| state.select(state.selected.get())),
                 action("cancel", "esc", |state| state.cx.dialogs.clear()),
             ]
         };
         self.footer.clear();
-        self.footer.add(&footer(
-            &self.cx,
-            FooterProps {
-                secondary,
-                ..FooterProps::default()
-            },
-        ));
+        self.footer.add(&footer(&self.cx, FooterProps { secondary, ..FooterProps::default() }));
     }
 }

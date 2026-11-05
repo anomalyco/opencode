@@ -88,21 +88,13 @@ pub struct Definition<H: Host> {
 
 impl<H: Host> Clone for Definition<H> {
     fn clone(&self) -> Self {
-        Self {
-            id: self.id.clone(),
-            setup: self.setup.clone(),
-            external: self.external.clone(),
-        }
+        Self { id: self.id.clone(), setup: self.setup.clone(), external: self.external.clone() }
     }
 }
 
 impl<H: Host> Definition<H> {
     pub fn new(id: impl Into<String>, setup: impl Fn(&mut Setup<'_, H>) + 'static) -> Self {
-        Self {
-            id: id.into(),
-            setup: Rc::new(setup),
-            external: None,
-        }
+        Self { id: id.into(), setup: Rc::new(setup), external: None }
     }
 
     /// Marks an external plugin loaded from `target`; `error` reports its failure while it is active.
@@ -140,11 +132,7 @@ impl<H: Host> Setup<'_, H> {
     }
 
     /// Claims a place in the slot tree (TS `ui.slot`).
-    pub fn slot(
-        &mut self,
-        placement: Placement,
-        render: impl Fn(&H, &SlotInput) -> Box<dyn Slotted<H>> + 'static,
-    ) {
+    pub fn slot(&mut self, placement: Placement, render: impl Fn(&H, &SlotInput) -> Box<dyn Slotted<H>> + 'static) {
         self.registration.claims.push((placement, Rc::new(render)));
     }
 
@@ -157,14 +145,8 @@ impl<H: Host> Setup<'_, H> {
     }
 
     /// Registers the route `Route::Plugin { id, name }` shows (TS `ui.router.register`).
-    pub fn route(
-        &mut self,
-        name: impl Into<String>,
-        render: impl Fn(&H) -> Box<dyn Slotted<H>> + 'static,
-    ) {
-        self.registration
-            .routes
-            .push((name.into(), Rc::new(render)));
+    pub fn route(&mut self, name: impl Into<String>, render: impl Fn(&H) -> Box<dyn Slotted<H>> + 'static) {
+        self.registration.routes.push((name.into(), Rc::new(render)));
     }
 
     /// Renders Markdown fences of `language` (TS `markdown.registerCodeBlockRenderer`).
@@ -173,9 +155,7 @@ impl<H: Host> Setup<'_, H> {
         language: impl Into<String>,
         render: impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> + 'static,
     ) {
-        self.registration
-            .code_blocks
-            .push((language.into(), Rc::new(render)));
+        self.registration.code_blocks.push((language.into(), Rc::new(render)));
     }
 
     /// Runs `cleanup` when the plugin deactivates (the cleanup TS `setup` returns).
@@ -207,10 +187,7 @@ impl<H: Host> Default for Registration<H> {
 impl<H: Host> Registration<H> {
     fn dispose(self) {
         self.disposers.into_iter().rev().for_each(Disposer::dispose);
-        self.cleanups
-            .into_iter()
-            .rev()
-            .for_each(|cleanup| cleanup());
+        self.cleanups.into_iter().rev().for_each(|cleanup| cleanup());
     }
 }
 
@@ -270,18 +247,10 @@ pub struct Registry<H: Host> {
 impl<H: Host> Registry<H> {
     /// The built-ins, enabled unless a `cli.json` `plugins` entry disables them (`plugin/context.tsx:313-330`).
     /// Every entry that names no built-in is a TypeScript plugin; it is listed as skipped.
-    pub fn new<'a>(
-        builtins: Vec<Definition<H>>,
-        targets: impl IntoIterator<Item = &'a str>,
-    ) -> Self {
+    pub fn new<'a>(builtins: Vec<Definition<H>>, targets: impl IntoIterator<Item = &'a str>) -> Self {
         let mut plugins: Vec<Plugin<H>> = builtins
             .into_iter()
-            .map(|definition| Plugin {
-                definition,
-                source: Source::Builtin,
-                enabled: true,
-                active: None,
-            })
+            .map(|definition| Plugin { definition, source: Source::Builtin, enabled: true, active: None })
             .collect();
         let mut skipped = Vec::new();
         let directives: Vec<String> = targets.into_iter().map(str::to_owned).collect();
@@ -293,10 +262,7 @@ impl<H: Host> Registry<H> {
                     .for_each(|plugin| plugin.enabled = false);
                 continue;
             }
-            let mut selected = plugins
-                .iter_mut()
-                .filter(|plugin| matches(target, &plugin.definition.id))
-                .peekable();
+            let mut selected = plugins.iter_mut().filter(|plugin| matches(target, &plugin.definition.id)).peekable();
             let named = selected.peek().is_some();
             selected.for_each(|plugin| plugin.enabled = true);
             if named || target == "*" || target.ends_with(".*") || target.starts_with("opencode.") {
@@ -306,22 +272,12 @@ impl<H: Host> Registry<H> {
                 skipped.push((target.to_owned(), Status::Skipped(SKIPPED.to_owned())));
             }
         }
-        Self {
-            plugins: RefCell::new(plugins),
-            unloaded: RefCell::new(skipped),
-            directives,
-            activations: Cell::new(0),
-        }
+        Self { plugins: RefCell::new(plugins), unloaded: RefCell::new(skipped), directives, activations: Cell::new(0) }
     }
 
     /// Adds an enabled plugin after the others; [`Registry::activate`] starts it.
     pub fn add(&self, definition: Definition<H>) {
-        self.plugins.borrow_mut().push(Plugin {
-            definition,
-            source: Source::Added,
-            enabled: true,
-            active: None,
-        });
+        self.plugins.borrow_mut().push(Plugin { definition, source: Source::Added, enabled: true, active: None });
     }
 
     /// The entries that were skipped.
@@ -358,10 +314,7 @@ impl<H: Host> Registry<H> {
         self.set_unloaded(&target, None);
         let previous = {
             let mut plugins = self.plugins.borrow_mut();
-            match plugins
-                .iter_mut()
-                .find(|plugin| plugin.definition.target() == Some(target.as_str()))
-            {
+            match plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target.as_str())) {
                 Some(plugin) => {
                     plugin.definition = definition;
                     Some(plugin.active.take())
@@ -369,27 +322,16 @@ impl<H: Host> Registry<H> {
                 None => {
                     // Like TS, the directives after the plugin's own entry (all of them, for a discovered
                     // plugin) decide whether it starts enabled.
-                    let after = self
-                        .directives
-                        .iter()
-                        .position(|directive| *directive == target)
-                        .map_or(0, |index| index + 1);
-                    let enabled =
-                        self.directives[after..]
-                            .iter()
-                            .fold(true, |enabled, directive| {
-                                match directive.strip_prefix('-') {
-                                    Some(selector) if matches(selector, &definition.id) => false,
-                                    None if matches(directive, &definition.id) => true,
-                                    _ => enabled,
-                                }
-                            });
-                    plugins.push(Plugin {
-                        definition,
-                        source: Source::External,
-                        enabled,
-                        active: None,
+                    let after =
+                        self.directives.iter().position(|directive| *directive == target).map_or(0, |index| index + 1);
+                    let enabled = self.directives[after..].iter().fold(true, |enabled, directive| {
+                        match directive.strip_prefix('-') {
+                            Some(selector) if matches(selector, &definition.id) => false,
+                            None if matches(directive, &definition.id) => true,
+                            _ => enabled,
+                        }
                     });
+                    plugins.push(Plugin { definition, source: Source::External, enabled, active: None });
                     None
                 }
             }
@@ -399,13 +341,11 @@ impl<H: Host> Registry<H> {
         }
         // A `plugins` entry that names the plugin enables it; it is not a plugin of its own.
         if let Some(id) = self.with_target(&target, |plugin| plugin.definition.id.clone()) {
-            self.unloaded.borrow_mut().retain(|(known, status)| {
-                !(matches!(status, Status::Skipped(_)) && matches(known, &id))
-            });
+            self.unloaded
+                .borrow_mut()
+                .retain(|(known, status)| !(matches!(status, Status::Skipped(_)) && matches(known, &id)));
         }
-        let started = self.with_target(&target, |plugin| {
-            plugin.enabled.then(|| plugin.definition.id.clone())
-        });
+        let started = self.with_target(&target, |plugin| plugin.enabled.then(|| plugin.definition.id.clone()));
         if let Some(Some(id)) = started {
             self.start(host, &id);
         }
@@ -413,10 +353,7 @@ impl<H: Host> Registry<H> {
 
     /// Whether `target` is a selector of a plugin, rather than a plugin to load.
     pub fn selects(&self, target: &str) -> bool {
-        self.plugins
-            .borrow()
-            .iter()
-            .any(|plugin| matches(target, &plugin.definition.id))
+        self.plugins.borrow().iter().any(|plugin| matches(target, &plugin.definition.id))
     }
 
     /// Whether a plugin other than the one loaded from `target` has ID `id`.
@@ -431,9 +368,7 @@ impl<H: Host> Registry<H> {
     pub fn unload(&self, target: &str) {
         let removed = {
             let mut plugins = self.plugins.borrow_mut();
-            let index = plugins
-                .iter()
-                .position(|plugin| plugin.definition.target() == Some(target));
+            let index = plugins.iter().position(|plugin| plugin.definition.target() == Some(target));
             index.map(|index| plugins.remove(index))
         };
         if let Some((_, registration)) = removed.and_then(|plugin| plugin.active) {
@@ -474,11 +409,7 @@ impl<H: Host> Registry<H> {
         let failed = self.with_plugin(id, |plugin| {
             plugin.enabled = true;
             let failed = plugin.active.is_some()
-                && plugin
-                    .definition
-                    .external
-                    .as_ref()
-                    .is_some_and(|(_, error)| error().is_some());
+                && plugin.definition.external.as_ref().is_some_and(|(_, error)| error().is_some());
             failed.then(|| plugin.active.take()).flatten()
         });
         if let Some((_, registration)) = failed.flatten() {
@@ -550,11 +481,7 @@ impl<H: Host> Registry<H> {
     pub fn route(&self, host: &H, id: &str, name: &str) -> Option<Box<dyn Slotted<H>>> {
         let render = self.with_plugin(id, |plugin| {
             let (_, registration) = plugin.active.as_ref()?;
-            registration
-                .routes
-                .iter()
-                .find(|(route, _)| route == name)
-                .map(|(_, render)| render.clone())
+            registration.routes.iter().find(|(route, _)| route == name).map(|(_, render)| render.clone())
         })??;
         Some(render(host))
     }
@@ -567,10 +494,7 @@ impl<H: Host> Registry<H> {
             for (language, render) in &registration.code_blocks {
                 let render = render.clone();
                 let theme = theme.clone();
-                renderers.register(
-                    language.clone(),
-                    Rc::new(move |block| render(block, &theme)),
-                );
+                renderers.register(language.clone(), Rc::new(move |block| render(block, &theme)));
             }
         }
         renderers
@@ -578,48 +502,33 @@ impl<H: Host> Registry<H> {
 
     /// Runs `setup` for plugin `id` unless it is active.
     fn start(&self, host: &Rc<H>, id: &str) {
-        let Some(Some(definition)) = self.with_plugin(id, |plugin| {
-            plugin.active.is_none().then(|| plugin.definition.clone())
-        }) else {
+        let Some(Some(definition)) =
+            self.with_plugin(id, |plugin| plugin.active.is_none().then(|| plugin.definition.clone()))
+        else {
             return;
         };
         // Setup runs without the registry borrowed, so it may read the registry through the host.
-        let mut setup = Setup {
-            host,
-            id,
-            registration: Registration::default(),
-        };
+        let mut setup = Setup { host, id, registration: Registration::default() };
         (definition.setup)(&mut setup);
         let order = self.activations.get();
         self.activations.set(order + 1);
         let registration = setup.registration;
-        self.with_plugin(id, move |plugin| {
-            plugin.active = Some((order, registration))
-        });
+        self.with_plugin(id, move |plugin| plugin.active = Some((order, registration)));
     }
 
     fn with_target<T>(&self, target: &str, f: impl FnOnce(&mut Plugin<H>) -> T) -> Option<T> {
         let mut plugins = self.plugins.borrow_mut();
-        plugins
-            .iter_mut()
-            .find(|plugin| plugin.definition.target() == Some(target))
-            .map(f)
+        plugins.iter_mut().find(|plugin| plugin.definition.target() == Some(target)).map(f)
     }
 
     fn with_plugin<T>(&self, id: &str, f: impl FnOnce(&mut Plugin<H>) -> T) -> Option<T> {
         let mut plugins = self.plugins.borrow_mut();
-        plugins
-            .iter_mut()
-            .find(|plugin| plugin.definition.id == id)
-            .map(f)
+        plugins.iter_mut().find(|plugin| plugin.definition.id == id).map(f)
     }
 
     /// Every active claim in activation order, and its renders.
     fn claims(&self) -> (Vec<Placement>, Vec<SlotRender<H>>) {
-        self.by_activation()
-            .into_iter()
-            .flat_map(|(_, registration)| registration.claims.clone())
-            .unzip()
+        self.by_activation().into_iter().flat_map(|(_, registration)| registration.claims.clone()).unzip()
     }
 
     fn by_activation(&self) -> Vec<(u64, RegistrationView<H>)> {
@@ -661,9 +570,7 @@ impl<H: Host> Default for SlotMount<H> {
 
 impl<H: Host> SlotMount<H> {
     pub fn sync(&self, host: &H, changes: &H::Changes) {
-        self.claims
-            .iter()
-            .for_each(|claim| claim.sync(host, changes));
+        self.claims.iter().for_each(|claim| claim.sync(host, changes));
     }
 
     pub fn is_empty(&self) -> bool {
@@ -675,9 +582,7 @@ impl<H: Host> SlotMount<H> {
 pub fn matches(selector: &str, id: &str) -> bool {
     selector == "*"
         || selector == id
-        || selector
-            .strip_suffix('*')
-            .is_some_and(|prefix| prefix.ends_with('.') && id.starts_with(prefix))
+        || selector.strip_suffix('*').is_some_and(|prefix| prefix.ends_with('.') && id.starts_with(prefix))
 }
 
 #[cfg(test)]

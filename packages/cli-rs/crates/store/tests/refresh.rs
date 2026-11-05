@@ -67,9 +67,7 @@ async fn config_reads_and_update_refreshes_are_opt_in() {
                         "directory": "/project",
                         "project": { "id": "project", "directory": "/project", "canonical": "/project" },
                     })),
-                    "/api/config" => {
-                        ok(json!([{ "type": "document", "info": { "model": model } }]))
-                    }
+                    "/api/config" => ok(json!([{ "type": "document", "info": { "model": model } }])),
                     "/api/mcp/resource" => ok(json!({
                         "location": location(), "data": { "resources": [], "templates": [] },
                     })),
@@ -80,14 +78,9 @@ async fn config_reads_and_update_refreshes_are_opt_in() {
         }),
         Options::default(),
     );
-    let config_reads = || {
-        requests
-            .get()
-            .iter()
-            .filter(|path| *path == "/api/config")
-            .count()
-    };
-    let event = json!({ "id": "evt_config", "created": 1, "type": "config.updated", "location": location(), "data": {} });
+    let config_reads = || requests.get().iter().filter(|path| *path == "/api/config").count();
+    let event =
+        json!({ "id": "evt_config", "created": 1, "type": "config.updated", "location": location(), "data": {} });
 
     data.location_sync(None).await.unwrap();
     emit(&data, event.clone());
@@ -147,10 +140,7 @@ async fn event_refreshes_report_failures_remain_retryable_and_preserve_explicit_
     offline.store(false, Ordering::SeqCst);
     emit(&data, viewed);
     data.session_sync(&target, false).await.unwrap();
-    assert_eq!(
-        data.read(|state| state.session(&target).unwrap().title.clone()),
-        Some("Recovered".into())
-    );
+    assert_eq!(data.read(|state| state.session(&target).unwrap().title.clone()), Some("Recovered".into()));
     assert_eq!(requests.load(Ordering::SeqCst), 3);
 }
 
@@ -216,13 +206,7 @@ async fn a_burst_of_mcp_status_changed_events_refetches_the_server_list_once_it_
         }),
         Options::default(),
     );
-    let reads = || {
-        requests
-            .get()
-            .iter()
-            .filter(|path| *path == "/api/mcp")
-            .count()
-    };
+    let reads = || requests.get().iter().filter(|path| *path == "/api/mcp").count();
     data.catalog_sync(Catalog::McpServer, None).await.unwrap();
     assert_eq!(reads(), 1);
     for server in ["a", "b", "c", "d", "e"] {
@@ -267,9 +251,7 @@ async fn invalidations_that_land_before_a_queued_reload_starts_are_absorbed_by_i
     slot(0).resolve(ok(json!({ "location": location(), "data": [] })));
     first.await.unwrap();
     wait(|| count() == 2).await;
-    slot(1).resolve(ok(
-        json!({ "location": location(), "data": [agent("reviewer")] }),
-    ));
+    slot(1).resolve(ok(json!({ "location": location(), "data": [agent("reviewer")] })));
     second.await.unwrap();
     third.await.unwrap();
     assert_eq!(count(), 2);
@@ -321,13 +303,8 @@ async fn delayed_metadata_and_family_reads_do_not_resurrect_sessions_deleted_whi
     let family_started = Slot::<()>::default();
     let family_release = Slot::<()>::default();
     let child_reads = Arc::new(AtomicUsize::new(0));
-    let (own_signal, own_wait, family_signal, family_wait, reads) = (
-        own_started.clone(),
-        own_release.clone(),
-        family_started.clone(),
-        family_release.clone(),
-        child_reads.clone(),
-    );
+    let (own_signal, own_wait, family_signal, family_wait, reads) =
+        (own_started.clone(), own_release.clone(), family_started.clone(), family_release.clone(), child_reads.clone());
     let data = data(
         handler(move |req: Req| {
             let path = req.path.clone();
@@ -395,16 +372,8 @@ async fn delayed_metadata_and_family_reads_do_not_resurrect_sessions_deleted_whi
     family_release.resolve(());
     family.await.unwrap();
     assert!(data.read(|state| state.session(&child).is_none()));
-    assert_eq!(
-        data.read(|state| state.family(&root).to_vec()),
-        std::slice::from_ref(&root)
-    );
-    let error = tokio::time::timeout(Duration::from_secs(2), data.session_sync(&child, false))
-        .await
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(
-        error.declared().unwrap().tag.as_deref(),
-        Some("SessionNotFoundError")
-    );
+    assert_eq!(data.read(|state| state.family(&root).to_vec()), std::slice::from_ref(&root));
+    let error =
+        tokio::time::timeout(Duration::from_secs(2), data.session_sync(&child, false)).await.unwrap().unwrap_err();
+    assert_eq!(error.declared().unwrap().tag.as_deref(), Some("SessionNotFoundError"));
 }

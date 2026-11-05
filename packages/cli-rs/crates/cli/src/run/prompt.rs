@@ -127,19 +127,14 @@ pub async fn run(input: Input) -> Result<(), String> {
 impl Run {
     async fn execute(
         self: Rc<Self>,
-        stream: std::pin::Pin<
-            Box<impl futures_util::Stream<Item = Result<Value, ApiError>> + 'static>,
-        >,
+        stream: std::pin::Pin<Box<impl futures_util::Stream<Item = Result<Value, ApiError>> + 'static>>,
     ) -> Result<(), String> {
         let client = &self.input.client;
         let session = SessionID(self.input.session_id.clone());
         if let Some(agent) = &self.input.agent {
             client
                 .session_switch_agent(
-                    &SessionSwitchAgentInput {
-                        session_id: session.clone(),
-                        agent: AgentID(agent.clone()),
-                    },
+                    &SessionSwitchAgentInput { session_id: session.clone(), agent: AgentID(agent.clone()) },
                     &RequestOptions::default(),
                 )
                 .await
@@ -159,10 +154,7 @@ impl Run {
                 ("variant", model.variant.clone().map(Value::from)),
             ]) }))
             .map_err(|error| error.error_message())?;
-            client
-                .empty(call, &RequestOptions::default())
-                .await
-                .map_err(|error| error.error_message())?;
+            client.empty(call, &RequestOptions::default()).await.map_err(|error| error.error_message())?;
         }
         self.flags.borrow_mut().submitted = true;
         tokio::task::spawn_local({
@@ -201,10 +193,8 @@ impl Run {
             "delivery": "steer",
         }))
         .map_err(|error| error.error_message())?;
-        let admitted = client
-            .json::<Value>(call, &RequestOptions::default())
-            .await
-            .map_err(|error| error.error_message());
+        let admitted =
+            client.json::<Value>(call, &RequestOptions::default()).await.map_err(|error| error.error_message());
         if let Err(error) = admitted {
             self.abort.send_replace(true);
             let _ = self.wait_completed().await;
@@ -214,20 +204,9 @@ impl Run {
             return Err(error);
         }
 
-        let permissions = self
-            .data(
-                &format!("/api/session/{}/permission", path(&self.input.session_id)),
-                &[],
-            )
-            .await
-            .ok();
-        let forms = self
-            .data(
-                &format!("/api/session/{}/form", path(&self.input.session_id)),
-                &[],
-            )
-            .await
-            .ok();
+        let permissions =
+            self.data(&format!("/api/session/{}/permission", path(&self.input.session_id)), &[]).await.ok();
+        let forms = self.data(&format!("/api/session/{}/form", path(&self.input.session_id)), &[]).await.ok();
         for permission in array(permissions.as_ref()) {
             self.reply_permission(permission).await;
         }
@@ -257,9 +236,7 @@ impl Run {
                 .borrow()
                 .pre_promotion_error
                 .clone()
-                .unwrap_or_else(
-                    || json!({ "type": "unknown", "message": "Prompt was not promoted" }),
-                );
+                .unwrap_or_else(|| json!({ "type": "unknown", "message": "Prompt was not promoted" }));
             self.fail(&error, &now());
         }
         Ok(())
@@ -282,9 +259,7 @@ impl Run {
         self.input
             .client
             .experimental_session_wait(
-                &ExperimentalSessionWaitInput {
-                    session_id: SessionID(self.input.session_id.clone()),
-                },
+                &ExperimentalSessionWaitInput { session_id: SessionID(self.input.session_id.clone()) },
                 &RequestOptions::default(),
             )
             .await
@@ -339,8 +314,7 @@ impl Run {
             self.reply_permission(data).await;
             return Ok(Flow::Next);
         }
-        if kind == "form.created" && submitted && self.owns(text(&data["form"]["sessionID"])).await
-        {
+        if kind == "form.created" && submitted && self.owns(text(&data["form"]["sessionID"])).await {
             self.cancel_form(&data["form"]).await?;
             return Ok(Flow::Next);
         }
@@ -352,9 +326,7 @@ impl Run {
             if self.flags.borrow().waiting_for_background
                 && matches!(
                     kind,
-                    "session.execution.succeeded"
-                        | "session.execution.failed"
-                        | "session.execution.interrupted"
+                    "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted"
                 )
                 && self.owns(text(session)).await
                 && !self.pending_background().await
@@ -373,26 +345,16 @@ impl Run {
         }
         {
             let mut flags = self.flags.borrow_mut();
-            if kind == "session.execution.interrupted"
-                && data["reason"] == "user"
-                && flags.form_cancelled
-            {
+            if kind == "session.execution.interrupted" && data["reason"] == "user" && flags.form_cancelled {
                 return Ok(Flow::Done);
             }
             if !flags.promoted && kind == "session.execution.failed" {
                 flags.pre_promotion_error = Some(data["error"].clone());
-                return Ok(if flags.finalizing {
-                    Flow::Done
-                } else {
-                    Flow::Next
-                });
+                return Ok(if flags.finalizing { Flow::Done } else { Flow::Next });
             }
             if !flags.promoted
                 && flags.finalizing
-                && matches!(
-                    kind,
-                    "session.execution.succeeded" | "session.execution.interrupted"
-                )
+                && matches!(kind, "session.execution.succeeded" | "session.execution.interrupted")
             {
                 return Ok(Flow::Done);
             }
@@ -418,20 +380,15 @@ impl Run {
                 self.steps.borrow_mut().insert(message, false);
                 if !self.emit("step_start", &time, [("part", part)]) {
                     ui::empty();
-                    ui::println(&[&format!(
-                        "> {} · {}",
-                        text(&data["agent"]),
-                        text(&data["model"]["id"])
-                    )]);
+                    ui::println(&[&format!("> {} · {}", text(&data["agent"]), text(&data["model"]["id"]))]);
                     ui::empty();
                 }
             }
             "session.text.started" | "session.reasoning.started" => {
                 let prefix = kind.split('.').nth(1).unwrap_or_default();
-                self.starts.borrow_mut().insert(
-                    format!("{prefix}\0{}", content_key(&message, &data["ordinal"])),
-                    (part_id, time),
-                );
+                self.starts
+                    .borrow_mut()
+                    .insert(format!("{prefix}\0{}", content_key(&message, &data["ordinal"])), (part_id, time));
             }
             "session.text.ended" => {
                 let key = content_key(&message, &data["ordinal"]);
@@ -445,17 +402,12 @@ impl Run {
                     ("text", Some(data["text"].clone())),
                     ("time", Some(json!({ "start": start, "end": time }))),
                 ]);
-                self.rendered_text
-                    .borrow_mut()
-                    .insert(key, text(&data["text"]).to_owned());
+                self.rendered_text.borrow_mut().insert(key, text(&data["text"]).to_owned());
                 self.write_text(part, &time);
             }
             "session.reasoning.ended" if self.input.thinking => {
                 let key = content_key(&message, &data["ordinal"]);
-                let started = self
-                    .starts
-                    .borrow_mut()
-                    .remove(&format!("reasoning\0{key}"));
+                let started = self.starts.borrow_mut().remove(&format!("reasoning\0{key}"));
                 let (id, start) = started.unwrap_or((part_id, time.clone()));
                 let part = object([
                     ("id", Some(id.into())),
@@ -466,9 +418,7 @@ impl Run {
                     ("metadata", data.get("native").cloned()),
                     ("time", Some(json!({ "start": start, "end": time }))),
                 ]);
-                self.rendered_reasoning
-                    .borrow_mut()
-                    .insert(key, text(&data["text"]).to_owned());
+                self.rendered_reasoning.borrow_mut().insert(key, text(&data["text"]).to_owned());
                 self.write_reasoning(part, &time);
             }
             "session.tool.input.started" => {
@@ -487,11 +437,7 @@ impl Run {
                 );
             }
             "session.tool.input.ended" | "session.tool.input.delta" => {
-                if let Some(current) = self
-                    .tools
-                    .borrow_mut()
-                    .get_mut(&tool_key(&message, text(&data["id"])))
-                {
+                if let Some(current) = self.tools.borrow_mut().get_mut(&tool_key(&message, text(&data["id"]))) {
                     current.raw = Some(if kind.ends_with("ended") {
                         text(&data["text"]).to_owned()
                     } else {
@@ -503,22 +449,14 @@ impl Run {
                 let key = tool_key(&message, text(&data["id"]));
                 let mut tools = self.tools.borrow_mut();
                 let current = tools.remove(&key);
-                let provider = object([
-                    ("executed", data.get("executed").cloned()),
-                    ("state", data.get("native").cloned()),
-                ]);
+                let provider =
+                    object([("executed", data.get("executed").cloned()), ("state", data.get("native").cloned())]);
                 tools.insert(
                     key,
                     ToolState {
-                        id: current
-                            .as_ref()
-                            .map_or(part_id, |current| current.id.clone()),
-                        timestamp: current
-                            .as_ref()
-                            .map_or(time, |current| current.timestamp.clone()),
-                        tool: current
-                            .as_ref()
-                            .map_or("tool".to_owned(), |current| current.tool.clone()),
+                        id: current.as_ref().map_or(part_id, |current| current.id.clone()),
+                        timestamp: current.as_ref().map_or(time, |current| current.timestamp.clone()),
+                        tool: current.as_ref().map_or("tool".to_owned(), |current| current.tool.clone()),
                         input: data["input"].clone(),
                         raw: current.and_then(|current| current.raw),
                         provider: Some(provider),
@@ -528,23 +466,12 @@ impl Run {
                 );
             }
             "session.tool.progress" => {
-                if let Some(current) = self
-                    .tools
-                    .borrow_mut()
-                    .get_mut(&tool_key(&message, text(&data["id"])))
-                {
+                if let Some(current) = self.tools.borrow_mut().get_mut(&tool_key(&message, text(&data["id"]))) {
                     current.metadata = data["metadata"].clone();
                 }
             }
             "session.tool.success" | "session.tool.failed" => {
-                self.tool_ended(
-                    kind == "session.tool.success",
-                    event,
-                    &message,
-                    part_id,
-                    &time,
-                )
-                .await;
+                self.tool_ended(kind == "session.tool.success", event, &message, part_id, &time).await;
             }
             "session.step.ended" => {
                 self.steps.borrow_mut().insert(message.clone(), true);
@@ -603,14 +530,7 @@ impl Run {
         Ok(Flow::Next)
     }
 
-    async fn tool_ended(
-        &self,
-        success: bool,
-        event: &Value,
-        message: &str,
-        part_id: String,
-        time: &Value,
-    ) {
+    async fn tool_ended(&self, success: bool, event: &Value, message: &str, part_id: String, time: &Value) {
         let data = &event["data"];
         let id = text(&data["id"]);
         let key = tool_key(message, id);
@@ -634,12 +554,9 @@ impl Run {
             (Some(next), _) if !next.is_null() => Some(next.clone()),
             (_, previous) => previous.clone(),
         };
-        let provider_result = object([
-            ("executed", data.get("executed").cloned()),
-            ("state", data.get("native").cloned()),
-        ]);
-        let tool_time =
-            json!({ "created": current.timestamp, "ran": current.timestamp, "completed": time });
+        let provider_result =
+            object([("executed", data.get("executed").cloned()), ("state", data.get("native").cloned())]);
+        let tool_time = json!({ "created": current.timestamp, "ran": current.timestamp, "completed": time });
         let part_time = json!({ "start": current.timestamp, "end": time });
         let tool = |state: Value| {
             object([
@@ -671,10 +588,7 @@ impl Run {
                     Some(object([
                         ("status", Some("completed".into())),
                         ("input", Some(current.input.clone())),
-                        (
-                            "output",
-                            Some(output_text(&current.tool, data.get("content")).into()),
-                        ),
+                        ("output", Some(output_text(&current.tool, data.get("content")).into())),
                         ("title", Some(current.tool.clone().into())),
                         (
                             "metadata",
@@ -696,10 +610,7 @@ impl Run {
             return;
         }
         let error = &data["error"];
-        let metadata = data
-            .get("metadata")
-            .cloned()
-            .unwrap_or(current.metadata.clone());
+        let metadata = data.get("metadata").cloned().unwrap_or(current.metadata.clone());
         // `nonEmptyToolContent(current.content)`: the live state never holds content.
         let content = data.get("content").cloned();
         let part = object([
@@ -730,11 +641,7 @@ impl Run {
         if self.emit("tool_use", time, [("part", part)]) {
             return;
         }
-        if content.is_some()
-            && !output_text(&current.tool, content.as_ref())
-                .trim()
-                .is_empty()
-        {
+        if content.is_some() && !output_text(&current.tool, content.as_ref()).trim().is_empty() {
             self.render_tool(&tool(object([
                 ("status", Some("completed".into())),
                 ("input", Some(current.input.clone())),
@@ -773,13 +680,7 @@ impl Run {
                     ("sessionID", Some(self.input.session_id.clone().into())),
                     ("messageID", Some(id.into())),
                     ("type", Some("step-start".into())),
-                    (
-                        "snapshot",
-                        message
-                            .get("snapshot")
-                            .and_then(|s| s.get("start"))
-                            .cloned(),
-                    ),
+                    ("snapshot", message.get("snapshot").and_then(|s| s.get("start")).cloned()),
                 ]);
                 self.emit("step_start", &created, [("part", part)]);
             }
@@ -789,22 +690,14 @@ impl Run {
                 let item_type = text(&item["type"]);
                 if item_type == "text" || item_type == "reasoning" {
                     let reasoning = item_type == "reasoning";
-                    let ordinal = if reasoning {
-                        &mut reasoning_ordinal
-                    } else {
-                        &mut text_ordinal
-                    };
+                    let ordinal = if reasoning { &mut reasoning_ordinal } else { &mut text_ordinal };
                     let current = *ordinal;
                     *ordinal += 1;
                     if reasoning && !self.input.thinking {
                         continue;
                     }
                     let key = content_key(id, &Value::from(current));
-                    let rendered_map = if reasoning {
-                        &self.rendered_reasoning
-                    } else {
-                        &self.rendered_text
-                    };
+                    let rendered_map = if reasoning { &self.rendered_reasoning } else { &self.rendered_text };
                     let rendered = rendered_map.borrow().get(&key).cloned().unwrap_or_default();
                     let full = text(&item["text"]);
                     if rendered == full || !full.starts_with(&rendered) {
@@ -812,22 +705,12 @@ impl Run {
                     }
                     let rest = &full[rendered.len()..];
                     let part = object([
-                        (
-                            "id",
-                            Some(projected_part_id(id, &format!("{item_type}-{current}")).into()),
-                        ),
+                        ("id", Some(projected_part_id(id, &format!("{item_type}-{current}")).into())),
                         ("sessionID", Some(self.input.session_id.clone().into())),
                         ("messageID", Some(id.into())),
                         ("type", Some(item_type.into())),
                         ("text", Some(rest.into())),
-                        (
-                            "metadata",
-                            if reasoning {
-                                item.get("native").cloned()
-                            } else {
-                                None
-                            },
-                        ),
+                        ("metadata", if reasoning { item.get("native").cloned() } else { None }),
                         ("time", Some(json!({ "start": created, "end": timestamp }))),
                     ]);
                     rendered_map.borrow_mut().insert(key, full.to_owned());
@@ -842,10 +725,7 @@ impl Run {
                 let item_id = text(&item["id"]);
                 let key = tool_key(id, item_id);
                 let status = text(&item["state"]["status"]);
-                if self.rendered_tools.borrow().contains(&key)
-                    || status == "streaming"
-                    || status == "running"
-                {
+                if self.rendered_tools.borrow().contains(&key) || status == "streaming" || status == "running" {
                     continue;
                 }
                 let name = text(&item["name"]);
@@ -858,18 +738,13 @@ impl Run {
                     Value::Null => timestamp.clone(),
                     completed => completed.clone(),
                 };
-                let metadata = object([
-                    ("metadata", state.get("metadata").cloned()),
-                    ("content", state.get("content").cloned()),
-                ]);
+                let metadata =
+                    object([("metadata", state.get("metadata").cloned()), ("content", state.get("content").cloned())]);
                 let projected = if status == "completed" {
                     object([
                         ("status", Some("completed".into())),
                         ("input", state.get("input").cloned()),
-                        (
-                            "output",
-                            Some(output_text(name, state.get("content")).into()),
-                        ),
+                        ("output", Some(output_text(name, state.get("content")).into())),
                         ("title", Some(name.into())),
                         ("metadata", Some(metadata)),
                         ("time", Some(json!({ "start": start, "end": end }))),
@@ -884,10 +759,7 @@ impl Run {
                     ])
                 };
                 let part = object([
-                    (
-                        "partID",
-                        Some(projected_part_id(id, &format!("tool-{item_id}")).into()),
-                    ),
+                    ("partID", Some(projected_part_id(id, &format!("tool-{item_id}")).into())),
                     ("sessionID", Some(self.input.session_id.clone().into())),
                     ("messageID", Some(id.into())),
                     ("type", Some("tool".into())),
@@ -903,9 +775,7 @@ impl Run {
                     self.render_tool(item);
                     continue;
                 }
-                if state
-                    .get("content")
-                    .is_some_and(|content| !content.is_null())
+                if state.get("content").is_some_and(|content| !content.is_null())
                     && !output_text(name, state.get("content")).trim().is_empty()
                 {
                     let mut completed = item.clone();
@@ -928,10 +798,7 @@ impl Run {
                     ("messageID", Some(id.into())),
                     ("type", Some("step-finish".into())),
                     ("reason", message.get("finish").cloned()),
-                    (
-                        "snapshot",
-                        message.get("snapshot").and_then(|s| s.get("end")).cloned(),
-                    ),
+                    ("snapshot", message.get("snapshot").and_then(|s| s.get("end")).cloned()),
                     (
                         "cost",
                         Some(match &message["cost"] {
@@ -954,9 +821,7 @@ impl Run {
                 self.fail(&message["error"], &timestamp);
             }
         }
-        let responded = messages
-            .iter()
-            .any(|message| message["type"] == "assistant");
+        let responded = messages.iter().any(|message| message["type"] == "assistant");
         Ok((found, responded))
     }
 
@@ -971,8 +836,7 @@ impl Run {
                 200,
                 &[400, 401, 404, 500],
             );
-            call.query("limit", &200)
-                .map_err(|error| error.error_message())?;
+            call.query("limit", &200).map_err(|error| error.error_message())?;
             match &cursor {
                 Some(cursor) => call.query("cursor", cursor),
                 None => call.query("order", "desc"),
@@ -991,10 +855,7 @@ impl Run {
                 }
                 messages.push(message.clone());
             }
-            match page["cursor"]["next"]
-                .as_str()
-                .filter(|next| !next.is_empty())
-            {
+            match page["cursor"]["next"].as_str().filter(|next| !next.is_empty()) {
                 Some(next) => cursor = Some(next.to_owned()),
                 None => return Ok((false, Vec::new())),
             }
@@ -1009,10 +870,7 @@ impl Run {
         let jobs = self
             .data(
                 "/api/experimental/job",
-                &[
-                    ("sessionID", Value::from(self.input.session_id.clone())),
-                    ("descendants", Value::from(true)),
-                ],
+                &[("sessionID", Value::from(self.input.session_id.clone())), ("descendants", Value::from(true))],
             )
             .await
             .unwrap_or_else(|_| json!([]));
@@ -1027,25 +885,16 @@ impl Run {
         }
         // A finished job wakes its session before its row is removed, so a wake that raced the list above
         // shows up as a queued inbox item or an active session in the tree.
-        let active = self
-            .data("/api/session/active", &[])
-            .await
-            .unwrap_or_else(|_| json!({}));
+        let active = self.data("/api/session/active", &[]).await.unwrap_or_else(|_| json!({}));
         let sessions = self.job_sessions.borrow().clone();
         for session in sessions {
-            let inbox = self
-                .data(&format!("/api/session/{}/inbox", path(&session)), &[])
-                .await
-                .unwrap_or_else(|_| json!([]));
+            let inbox =
+                self.data(&format!("/api/session/{}/inbox", path(&session)), &[]).await.unwrap_or_else(|_| json!([]));
             if !array(Some(&inbox)).is_empty() {
                 return true;
             }
         }
-        for session in active
-            .as_object()
-            .into_iter()
-            .flat_map(|active| active.keys())
-        {
+        for session in active.as_object().into_iter().flat_map(|active| active.keys()) {
             if self.owns(session).await {
                 return true;
             }
@@ -1070,10 +919,7 @@ impl Run {
             let result = if session == GLOBAL_FORM_SESSION_ID {
                 false
             } else {
-                match self
-                    .data(&format!("/api/session/{}", path(session)), &[])
-                    .await
-                {
+                match self.data(&format!("/api/session/{}", path(session)), &[]).await {
                     Ok(info) => match info["parentID"].as_str() {
                         Some(parent) if !parent.is_empty() => self.owns(parent).await,
                         _ => false,
@@ -1091,13 +937,8 @@ impl Run {
     async fn reply_permission(&self, request: &Value) {
         let auto = self.input.auto;
         if !auto {
-            let resources = request["resources"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(text)
-                .collect::<Vec<_>>()
-                .join(", ");
+            let resources =
+                request["resources"].as_array().into_iter().flatten().map(text).collect::<Vec<_>>().join(", ");
             ui::println(&[
                 &format!("{}!", ui::TEXT_WARNING_BOLD),
                 &format!(
@@ -1114,11 +955,7 @@ impl Run {
                 &PermissionReplyInput {
                     session_id: SessionID(text(&request["sessionID"]).to_owned()),
                     request_id: PermissionID(text(&request["id"]).to_owned()),
-                    decision: if auto {
-                        PermissionReply::Once
-                    } else {
-                        PermissionReply::Reject
-                    },
+                    decision: if auto { PermissionReply::Once } else { PermissionReply::Reject },
                     message: (!auto).then(|| PERMISSION_REJECTED_FEEDBACK.to_owned()),
                 },
                 &RequestOptions::default(),
@@ -1143,9 +980,8 @@ impl Run {
             )
             .await;
         if let Err(error) = result {
-            let settled = error
-                .declared()
-                .is_some_and(|declared| declared.tag.as_deref() == Some("FormAlreadySettledError"));
+            let settled =
+                error.declared().is_some_and(|declared| declared.tag.as_deref() == Some("FormAlreadySettledError"));
             if !settled {
                 return Err(error.error_message());
             }
@@ -1164,15 +1000,8 @@ impl Run {
         for (key, value) in query {
             call.query(key, value)?;
         }
-        let mut value: Value = self
-            .input
-            .client
-            .json(call, &RequestOptions::default())
-            .await?;
-        Ok(value
-            .get_mut("data")
-            .map(Value::take)
-            .unwrap_or(Value::Null))
+        let mut value: Value = self.input.client.json(call, &RequestOptions::default()).await?;
+        Ok(value.get_mut("data").map(Value::take).unwrap_or(Value::Null))
     }
 
     /// A step or execution error: exit code 1, then the error line or JSON event.
@@ -1184,12 +1013,7 @@ impl Run {
         }
     }
 
-    fn emit<const N: usize>(
-        &self,
-        kind: &str,
-        timestamp: &Value,
-        data: [(&str, Value); N],
-    ) -> bool {
+    fn emit<const N: usize>(&self, kind: &str, timestamp: &Value, data: [(&str, Value); N]) -> bool {
         if !self.input.json {
             return false;
         }
@@ -1235,11 +1059,7 @@ impl Run {
             return;
         }
         ui::empty();
-        ui::println(&[&format!(
-            "{}\x1b[3m{line}\x1b[0m{}",
-            ui::TEXT_DIM,
-            ui::TEXT_NORMAL
-        )]);
+        ui::println(&[&format!("{}\x1b[3m{line}\x1b[0m{}", ui::TEXT_DIM, ui::TEXT_NORMAL)]);
         ui::empty();
     }
 
@@ -1249,10 +1069,7 @@ impl Run {
         };
         if info.block {
             ui::empty();
-            ui::println(&[
-                &format!("{}{}", ui::TEXT_NORMAL, info.icon),
-                &format!("{}{}", ui::TEXT_NORMAL, info.title),
-            ]);
+            ui::println(&[&format!("{}{}", ui::TEXT_NORMAL, info.icon), &format!("{}{}", ui::TEXT_NORMAL, info.title)]);
             if let Some(body) = info.body.filter(|body| !body.trim().is_empty()) {
                 ui::println(&[&body]);
             }
@@ -1275,10 +1092,7 @@ impl Run {
         let Some(info) = inline(part, &self.input.directory) else {
             return;
         };
-        ui::println(&[
-            &format!("{}✗", ui::TEXT_NORMAL),
-            &format!("{}{} failed", ui::TEXT_NORMAL, info.title),
-        ]);
+        ui::println(&[&format!("{}✗", ui::TEXT_NORMAL), &format!("{}{} failed", ui::TEXT_NORMAL, info.title)]);
     }
 }
 
@@ -1286,23 +1100,13 @@ impl Run {
 /// `session.interrupt` while Effect tears the run down.
 fn interrupt_on_shutdown(client: Client, session: String) -> crate::signals::Registration {
     crate::signals::on_shutdown("interrupt the session", move || {
-        let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        else {
+        let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
             return;
         };
-        let call = Call::new(
-            "POST",
-            format!("/api/session/{}/interrupt", path(&session)),
-            200,
-            &[400, 401, 404],
-        );
+        let call = Call::new("POST", format!("/api/session/{}/interrupt", path(&session)), 200, &[400, 401, 404]);
         let options = RequestOptions::default();
         let request = client.json::<Value>(call, &options);
-        let _ = runtime.block_on(async {
-            tokio::time::timeout(std::time::Duration::from_secs(5), request).await
-        });
+        let _ = runtime.block_on(async { tokio::time::timeout(std::time::Duration::from_secs(5), request).await });
     })
 }
 
@@ -1330,20 +1134,14 @@ fn inline(part: &Value, directory: &str) -> Option<opencode_ui::tool_info::ToolI
 }
 
 fn output_text(name: &str, content: Option<&Value>) -> String {
-    let content: Vec<ToolContent> = content
-        .and_then(|content| serde_json::from_value(content.clone()).ok())
-        .unwrap_or_default();
+    let content: Vec<ToolContent> =
+        content.and_then(|content| serde_json::from_value(content.clone()).ok()).unwrap_or_default();
     tool_output_text(name, &content)
 }
 
 /// An object of the fields that are present: `undefined` fields vanish from `JSON.stringify`.
 fn object<const N: usize>(fields: [(&str, Option<Value>); N]) -> Value {
-    Value::Object(
-        fields
-            .into_iter()
-            .filter_map(|(key, value)| value.map(|value| (key.to_owned(), value)))
-            .collect(),
-    )
+    Value::Object(fields.into_iter().filter_map(|(key, value)| value.map(|value| (key.to_owned(), value))).collect())
 }
 
 fn array(value: Option<&Value>) -> &[Value] {
@@ -1381,10 +1179,7 @@ fn part_id(event_id: &str) -> String {
 }
 
 fn projected_part_id(message_id: &str, part: &str) -> String {
-    format!(
-        "prt_{}_{part}",
-        message_id.strip_prefix("msg_").unwrap_or(message_id)
-    )
+    format!("prt_{}_{part}", message_id.strip_prefix("msg_").unwrap_or(message_id))
 }
 
 fn tool_key(message_id: &str, id: &str) -> String {

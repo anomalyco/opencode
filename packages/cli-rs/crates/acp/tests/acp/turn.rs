@@ -5,9 +5,8 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::wire::{
-    Reply, WireOptions, assert_matches, child_created, delivered, durable_event, ephemeral_event,
-    events, lock, permission_asked, start_session, succeeded, text_delta, tool_called,
-    tool_started, tool_succeeded, turn,
+    Reply, WireOptions, assert_matches, child_created, delivered, durable_event, ephemeral_event, events, lock,
+    permission_asked, start_session, succeeded, text_delta, tool_called, tool_started, tool_succeeded, turn,
 };
 
 fn child_work() -> WireOptions {
@@ -22,17 +21,10 @@ fn child_work() -> WireOptions {
                 &call.id,
                 vec![
                     child_created("ses_child", session, "Explore code"),
-                    durable_event(
-                        "session.execution.started",
-                        json!({ "sessionID": "ses_child" }),
-                    ),
+                    durable_event("session.execution.started", json!({ "sessionID": "ses_child" })),
                     child_created("ses_grandchild", "ses_child", "Deeper"),
                     tool_started("ses_grandchild", "call_read", "read"),
-                    tool_called(
-                        "ses_grandchild",
-                        "call_read",
-                        json!({ "path": "/workspace/src/index.ts" }),
-                    ),
+                    tool_called("ses_grandchild", "call_read", json!({ "path": "/workspace/src/index.ts" })),
                     permission_asked(
                         "ses_grandchild",
                         "perm_child",
@@ -53,22 +45,14 @@ fn child_work() -> WireOptions {
 }
 
 async fn child_sessions(child_session_updates: bool, parent: Value, child: Value) {
-    let acp = start_session(
-        child_work(),
-        json!({ "_meta": { "opencode/child-session-updates": child_session_updates } }),
-    )
-    .await;
+    let acp =
+        start_session(child_work(), json!({ "_meta": { "opencode/child-session-updates": child_session_updates } }))
+            .await;
 
-    assert_eq!(
-        acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"], "end_turn");
     let responded = acp.turn_updates().len();
     acp.server.send(&[
-        durable_event(
-            "session.execution.started",
-            json!({ "sessionID": "ses_background" }),
-        ),
+        durable_event("session.execution.started", json!({ "sessionID": "ses_background" })),
         permission_asked(
             "ses_background",
             "perm_background",
@@ -76,27 +60,13 @@ async fn child_sessions(child_session_updates: bool, parent: Value, child: Value
         ),
         text_delta("ses_background", "msg_background", "late", 0),
         succeeded("ses_background"),
-        permission_asked(
-            "ses_background",
-            "perm_after_end",
-            json!({ "action": "read" }),
-        ),
+        permission_asked("ses_background", "perm_after_end", json!({ "action": "read" })),
     ]);
-    acp.until("child permission replies", || {
-        (acp.server.state().replies.len() == 2).then_some(())
-    })
-    .await;
+    acp.until("child permission replies", || (acp.server.state().replies.len() == 2).then_some(())).await;
     assert_eq!(acp.turn_updates().len(), responded);
-    assert_eq!(
-        acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "again").await.unwrap()["stopReason"], "end_turn");
 
-    let parents: Vec<Value> = acp
-        .turn_updates()
-        .into_iter()
-        .map(|item| item["update"].clone())
-        .collect();
+    let parents: Vec<Value> = acp.turn_updates().into_iter().map(|item| item["update"].clone()).collect();
     assert_matches(&json!(parents), &parent);
     assert_matches(&json!(lock(&acp.child_updates).clone()), &child);
     let grandchild = json!({ "opencode/child-session": { "id": "ses_grandchild", "parentID": "ses_child", "depth": 2, "title": "Deeper" } });
@@ -182,10 +152,7 @@ async fn cancels_unsupported_session_forms_so_execution_can_continue() {
             on_form_cancel: Some(Arc::new(|(session, form): (String, String)| {
                 Box::pin(async move {
                     vec![
-                        ephemeral_event(
-                            "form.cancelled",
-                            json!({ "sessionID": session, "id": form }),
-                        ),
+                        ephemeral_event("form.cancelled", json!({ "sessionID": session, "id": form })),
                         succeeded(&session),
                     ]
                 })
@@ -196,10 +163,7 @@ async fn cancels_unsupported_session_forms_so_execution_can_continue() {
     )
     .await;
 
-    assert_eq!(
-        acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"],
-        "end_turn"
-    );
+    assert_eq!(acp.prompt(&acp.session_id, "hello").await.unwrap()["stopReason"], "end_turn");
     assert_eq!(
         acp.server.state().cancelled_forms,
         vec![json!({

@@ -9,8 +9,8 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use opencode_api::client::{Client, RequestOptions};
 use opencode_api::generated::{
-    AgentInfoMode, AgentListInput, CommandInfo, CommandListInput, LocationQueryInput,
-    ModelDefaultInput, ModelInfo, ModelListInput, ModelRef, PluginListInput,
+    AgentInfoMode, AgentListInput, CommandInfo, CommandListInput, LocationQueryInput, ModelDefaultInput, ModelInfo,
+    ModelListInput, ModelRef, PluginListInput,
 };
 use serde_json::Value;
 use tokio::sync::{OnceCell, watch};
@@ -28,14 +28,10 @@ pub enum Start {
 }
 
 /// Commands the agent handles itself: name, description, and what they start.
-pub const BUILTIN_COMMANDS: &[(&str, &str, Start)] =
-    &[("compact", "Compact the session", Start::Compaction)];
+pub const BUILTIN_COMMANDS: &[(&str, &str, Start)] = &[("compact", "Compact the session", Start::Compaction)];
 
 pub fn builtin(name: &str) -> Option<Start> {
-    BUILTIN_COMMANDS
-        .iter()
-        .find(|(builtin, _, _)| *builtin == name)
-        .map(|(_, _, start)| *start)
+    BUILTIN_COMMANDS.iter().find(|(builtin, _, _)| *builtin == name).map(|(_, _, start)| *start)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,9 +51,7 @@ pub struct Catalog {
 }
 
 pub fn find_model<'a>(models: &'a [ModelInfo], model: &ModelRef) -> Option<&'a ModelInfo> {
-    models
-        .iter()
-        .find(|item| item.provider_id == model.provider_id && item.id == model.id)
+    models.iter().find(|item| item.provider_id == model.provider_id && item.id == model.id)
 }
 
 struct Entry {
@@ -85,12 +79,7 @@ impl Catalogs {
     /// lost.
     pub fn new(client: Client, scope: CancellationToken) -> Arc<Self> {
         let (connected_sender, connected) = watch::channel(false);
-        let catalogs = Arc::new(Self {
-            client,
-            entries: Mutex::default(),
-            connected,
-            scope: scope.clone(),
-        });
+        let catalogs = Arc::new(Self { client, entries: Mutex::default(), connected, scope: scope.clone() });
         let events = catalogs.clone();
         tokio::spawn(async move {
             tokio::select! {
@@ -120,23 +109,15 @@ impl Catalogs {
             if !matches!(kind, "model.updated" | "agent.updated" | "command.updated") {
                 continue;
             }
-            let directory = event
-                .get("location")
-                .and_then(|location| location.get("directory"))
-                .and_then(Value::as_str);
+            let directory =
+                event.get("location").and_then(|location| location.get("directory")).and_then(Value::as_str);
             let targets: Vec<(String, Slot)> = {
                 let entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
                 match directory {
-                    None => entries
-                        .iter()
-                        .map(|(key, slot)| (key.clone(), slot.clone()))
-                        .collect(),
+                    None => entries.iter().map(|(key, slot)| (key.clone(), slot.clone())).collect(),
                     Some(directory) => {
                         let key = fs_resolve(directory);
-                        entries
-                            .get(&key)
-                            .map(|slot| vec![(key, slot.clone())])
-                            .unwrap_or_default()
+                        entries.get(&key).map(|slot| vec![(key, slot.clone())]).unwrap_or_default()
                     }
                 }
             };
@@ -172,22 +153,12 @@ impl Catalogs {
     }
 
     fn has_slot(&self, slot: &Slot) -> bool {
-        self.entries
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .values()
-            .any(|item| Arc::ptr_eq(item, slot))
+        self.entries.lock().unwrap_or_else(|p| p.into_inner()).values().any(|item| Arc::ptr_eq(item, slot))
     }
 
     async fn entry(&self, cwd: &str) -> Result<Arc<Entry>, Failure> {
         let key = fs_resolve(cwd);
-        let slot = self
-            .entries
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .entry(key.clone())
-            .or_default()
-            .clone();
+        let slot = self.entries.lock().unwrap_or_else(|p| p.into_inner()).entry(key.clone()).or_default().clone();
         let result = slot
             .get_or_try_init(|| async {
                 let mut connected = self.connected.clone();
@@ -205,10 +176,7 @@ impl Catalogs {
             .cloned();
         if result.is_err() {
             let mut entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
-            if entries
-                .get(&key)
-                .is_some_and(|item| Arc::ptr_eq(item, &slot))
-            {
+            if entries.get(&key).is_some_and(|item| Arc::ptr_eq(item, &slot)) {
                 entries.remove(&key);
             }
         }
@@ -247,23 +215,11 @@ impl Catalogs {
 
 // A cold Location lists no plugins until activation finishes, and providers may still discover models after that.
 async fn load(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
-    let location = || {
-        Some(LocationQueryInput {
-            directory: Some(cwd.to_owned()),
-        })
-    };
+    let location = || Some(LocationQueryInput { directory: Some(cwd.to_owned()) });
     let options = RequestOptions::default();
     let start = Instant::now();
     loop {
-        match client
-            .plugin_list(
-                &PluginListInput {
-                    location: location(),
-                },
-                &options,
-            )
-            .await
-        {
+        match client.plugin_list(&PluginListInput { location: location() }, &options).await {
             Ok(plugins) if plugins.data.is_empty() && start.elapsed() < POLL_FOR => {
                 tokio::time::sleep(POLL).await;
             }
@@ -282,25 +238,12 @@ async fn load(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
 }
 
 async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
-    let location = || {
-        Some(LocationQueryInput {
-            directory: Some(cwd.to_owned()),
-        })
-    };
+    let location = || Some(LocationQueryInput { directory: Some(cwd.to_owned()) });
     let options = RequestOptions::default();
-    let model_input = ModelListInput {
-        location: location(),
-        ..ModelListInput::default()
-    };
-    let default_input = ModelDefaultInput {
-        location: location(),
-    };
-    let agent_input = AgentListInput {
-        location: location(),
-    };
-    let command_input = CommandListInput {
-        location: location(),
-    };
+    let model_input = ModelListInput { location: location(), ..ModelListInput::default() };
+    let default_input = ModelDefaultInput { location: location() };
+    let agent_input = AgentListInput { location: location() };
+    let command_input = CommandListInput { location: location() };
     let (models, default, agents, commands) = tokio::join!(
         client.model_list(&model_input, &options),
         client.model_default(&default_input, &options),
@@ -308,12 +251,7 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
         client.command_list(&command_input, &options),
     );
     let load = |error| Failure::CatalogLoad(Arc::new(error));
-    let models: Vec<ModelInfo> = models
-        .map_err(load)?
-        .data
-        .into_iter()
-        .filter(|model| model.enabled)
-        .collect();
+    let models: Vec<ModelInfo> = models.map_err(load)?.data.into_iter().filter(|model| model.enabled).collect();
     let preferred = default.map_err(load)?.data;
     let agents = agents.map_err(load)?.data;
     let commands = commands.map_err(load)?.data;
@@ -321,11 +259,7 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
     let default_model = match &preferred {
         Some(preferred) => find_model(
             &models,
-            &ModelRef {
-                id: preferred.id.clone(),
-                provider_id: preferred.provider_id.clone(),
-                variant: None,
-            },
+            &ModelRef { id: preferred.id.clone(), provider_id: preferred.provider_id.clone(), variant: None },
         ),
         None => models.first(),
     }
@@ -333,17 +267,11 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
     let modes: Vec<Mode> = agents
         .into_iter()
         .filter(|agent| agent.mode != AgentInfoMode::Subagent && !agent.hidden)
-        .map(|agent| Mode {
-            id: agent.id.0,
-            name: agent.name,
-            description: agent.description,
-        })
+        .map(|agent| Mode { id: agent.id.0, name: agent.name, description: agent.description })
         .collect();
     // Core lists its resolved default agent first, the same one a new session runs.
-    let default_mode_id = modes
-        .first()
-        .map(|mode| mode.id.clone())
-        .ok_or(Failure::CatalogNotReady(NotReady::Agents))?;
+    let default_mode_id =
+        modes.first().map(|mode| mode.id.clone()).ok_or(Failure::CatalogNotReady(NotReady::Agents))?;
     Ok(Catalog {
         default_model: ModelRef {
             id: default_model.id.clone(),
@@ -357,9 +285,6 @@ async fn read(client: &Client, cwd: &str) -> Result<Catalog, Failure> {
         models,
         modes,
         default_mode_id,
-        commands: commands
-            .into_iter()
-            .filter(|command| builtin(&command.name).is_none())
-            .collect(),
+        commands: commands.into_iter().filter(|command| builtin(&command.name).is_none()).collect(),
     })
 }

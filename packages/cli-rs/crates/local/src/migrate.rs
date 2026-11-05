@@ -34,8 +34,7 @@ pub fn run(file: &Path, config: &Path, state: &Path) -> io::Result<Option<Migrat
         };
         return Ok(Some(persist(file, &updated, info.to_value())));
     }
-    let legacy =
-        read_json(&config.join("tui.json")).and_then(|value| V1::decode(&Value::Object(value)));
+    let legacy = read_json(&config.join("tui.json")).and_then(|value| V1::decode(&Value::Object(value)));
     let kv = read_json(&state.join("kv.json")).unwrap_or_default();
     let values = migrate_v1(legacy.as_ref(), &kv);
     if values.is_empty() {
@@ -54,13 +53,8 @@ pub fn run(file: &Path, config: &Path, state: &Path) -> io::Result<Option<Migrat
 }
 
 fn persist(file: &Path, text: &str, info: Value) -> Migration {
-    let temp = Path::new(&format!(
-        "{}.{}.{}.tmp",
-        file.display(),
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ))
-    .to_path_buf();
+    let temp =
+        Path::new(&format!("{}.{}.{}.tmp", file.display(), std::process::id(), uuid::Uuid::new_v4())).to_path_buf();
     let cause = cli_config::write_private(file, &temp, text).err();
     let _ = fs::remove_file(&temp);
     Migration { info, cause }
@@ -68,9 +62,7 @@ fn persist(file: &Path, text: &str, info: Value) -> Migration {
 
 // `readJson`: a JSONC object, or `None`.
 fn read_json(file: &Path) -> Option<Map<String, Value>> {
-    jsonc::parse(&fs::read_to_string(file).ok()?)?
-        .as_object()
-        .cloned()
+    jsonc::parse(&fs::read_to_string(file).ok()?)?.as_object().cloned()
 }
 
 /// The in-place rewrite of an existing `cli.json`, or `None` when nothing changes.
@@ -78,9 +70,7 @@ fn rewrite(text: &str) -> Option<String> {
     let config = jsonc::parse(text)?;
     let config = config.as_object()?;
     let terminal = config.get("terminal").and_then(Value::as_object);
-    let legacy_copy = terminal
-        .and_then(|t| t.get("copy_on_select"))
-        .and_then(Value::as_bool);
+    let legacy_copy = terminal.and_then(|t| t.get("copy_on_select")).and_then(Value::as_bool);
     let renamed = match legacy_copy {
         None => text.to_string(),
         Some(copy) => {
@@ -90,12 +80,10 @@ fn rewrite(text: &str) -> Option<String> {
                 edits.push((["terminal", "copy"], Some(value)));
             }
             edits.push((["terminal", "copy_on_select"], None));
-            edits
-                .iter()
-                .try_fold(text.to_string(), |text, (path, value)| {
-                    let path: Vec<Segment> = path.iter().map(|&k| Segment::from(k)).collect();
-                    jsonc::modify(&text, &path, value.as_ref()).ok()
-                })?
+            edits.iter().try_fold(text.to_string(), |text, (path, value)| {
+                let path: Vec<Segment> = path.iter().map(|&k| Segment::from(k)).collect();
+                jsonc::modify(&text, &path, value.as_ref()).ok()
+            })?
         }
     };
     let updated = match config.get("keybinds").and_then(Value::as_object) {
@@ -110,9 +98,7 @@ fn rewrite(text: &str) -> Option<String> {
                     None => text,
                 }
             });
-            keybinds
-                .keys()
-                .fold(deduped, |text, name| rename_keybind(&text, name, keybinds))
+            keybinds.keys().fold(deduped, |text, name| rename_keybind(&text, name, keybinds))
         }
     };
     (updated != text).then_some(updated)
@@ -120,8 +106,7 @@ fn rewrite(text: &str) -> Option<String> {
 
 fn rename_keybind(text: &str, name: &str, keybinds: &Map<String, Value>) -> String {
     let target = v1_target(name).or_else(|| {
-        (KEYBIND_NAMES.contains(&name) || V1_COMMAND_MAP.iter().any(|(_, to)| *to == name))
-            .then_some(name)
+        (KEYBIND_NAMES.contains(&name) || V1_COMMAND_MAP.iter().any(|(_, to)| *to == name)).then_some(name)
     });
     let Some(target) = target else {
         return text.to_string();
@@ -131,14 +116,9 @@ fn rename_keybind(text: &str, name: &str, keybinds: &Map<String, Value>) -> Stri
     if properties.is_empty() {
         return text.to_string();
     }
-    let remove =
-        !KEYBIND_NAMES.contains(&target) || (target != name && keybinds.contains_key(target));
+    let remove = !KEYBIND_NAMES.contains(&target) || (target != name && keybinds.contains_key(target));
     // The parser gives the final duplicate precedence, so remove earlier properties before renaming it.
-    let drop = if remove {
-        properties.len()
-    } else {
-        properties.len() - 1
-    };
+    let drop = if remove { properties.len() } else { properties.len() - 1 };
     let cleaned = (0..drop).fold(text.to_string(), |text, _| {
         let tree = jsonc::parse_tree(&text);
         match keybind_properties(&tree, name).first() {
@@ -150,9 +130,7 @@ fn rename_keybind(text: &str, name: &str, keybinds: &Map<String, Value>) -> Stri
         return cleaned;
     }
     let tree = jsonc::parse_tree(&cleaned);
-    let Some(key) = keybind_properties(&tree, name)
-        .first()
-        .and_then(|&p| tree.node(p).children.first().copied())
+    let Some(key) = keybind_properties(&tree, name).first().and_then(|&p| tree.node(p).children.first().copied())
     else {
         return text.to_string();
     };
@@ -166,10 +144,7 @@ fn rename_keybind(text: &str, name: &str, keybinds: &Map<String, Value>) -> Stri
 }
 
 fn v1_target(name: &str) -> Option<&'static str> {
-    V1_COMMAND_MAP
-        .iter()
-        .find(|(from, _)| *from == name)
-        .map(|(_, to)| *to)
+    V1_COMMAND_MAP.iter().find(|(from, _)| *from == name).map(|(_, to)| *to)
 }
 
 fn property_key(tree: &Tree, property: usize) -> Option<&str> {
@@ -190,18 +165,11 @@ fn keybind_objects(tree: &Tree) -> Vec<usize> {
 }
 
 fn keybind_properties(tree: &Tree, name: &str) -> Vec<usize> {
-    let Some(object) = keybind_objects(tree)
-        .last()
-        .and_then(|&property| tree.node(property).children.get(1).copied())
+    let Some(object) = keybind_objects(tree).last().and_then(|&property| tree.node(property).children.get(1).copied())
     else {
         return Vec::new();
     };
-    tree.node(object)
-        .children
-        .iter()
-        .copied()
-        .filter(|&property| property_key(tree, property) == Some(name))
-        .collect()
+    tree.node(object).children.iter().copied().filter(|&property| property_key(tree, property) == Some(name)).collect()
 }
 
 // `removeProperty`: cuts the property and one neighboring comma, keeping everything else.
@@ -216,31 +184,16 @@ fn remove_property(text: &str, tree: &Tree, property: usize) -> String {
     if let Some(&next) = siblings.get(index + 1)
         && let Some(comma) = find_comma(text, end, tree.node(next).offset)
     {
-        return format!(
-            "{}{}{}",
-            &text[..node.offset],
-            &text[end..comma],
-            &text[comma + 1..]
-        );
+        return format!("{}{}{}", &text[..node.offset], &text[end..comma], &text[comma + 1..]);
     }
     if index > 0 {
         let previous = tree.node(siblings[index - 1]);
         if let Some(comma) = find_comma(text, previous.offset + previous.length, node.offset) {
-            return format!(
-                "{}{}{}",
-                &text[..comma],
-                &text[comma + 1..node.offset],
-                &text[end..]
-            );
+            return format!("{}{}{}", &text[..comma], &text[comma + 1..node.offset], &text[end..]);
         }
     }
     if let Some(comma) = find_comma(text, end, parent.offset + parent.length) {
-        return format!(
-            "{}{}{}",
-            &text[..node.offset],
-            &text[end..comma],
-            &text[comma + 1..]
-        );
+        return format!("{}{}{}", &text[..node.offset], &text[end..comma], &text[comma + 1..]);
     }
     format!("{}{}", &text[..node.offset], &text[end..])
 }
@@ -270,10 +223,7 @@ section!(V1Attention {
     sound_pack: String,
     sounds: cli_config::AttentionSounds,
 });
-section!(V1Prompt {
-    max_height: PositiveInt,
-    max_width: PromptWidth
-});
+section!(V1Prompt { max_height: PositiveInt, max_width: PromptWidth });
 
 /// `prompt.max_width`: a positive integer or `"auto"`.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
@@ -320,9 +270,7 @@ pub struct ScrollAcceleration {
 
 impl Decode for ScrollAcceleration {
     fn decode(value: &Value) -> Option<Self> {
-        Some(Self {
-            enabled: bool::decode(value.as_object()?.get("enabled")?)?,
-        })
+        Some(Self { enabled: bool::decode(value.as_object()?.get("enabled")?)? })
     }
 }
 
@@ -375,10 +323,8 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
         }
     };
     let object = |entries: Vec<(&str, Option<Value>)>| {
-        let map: Map<String, Value> = entries
-            .into_iter()
-            .filter_map(|(key, value)| Some((key.to_string(), value?)))
-            .collect();
+        let map: Map<String, Value> =
+            entries.into_iter().filter_map(|(key, value)| Some((key.to_string(), value?))).collect();
         Value::Object(map)
     };
 
@@ -392,34 +338,22 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
                 serde_json::json!({ "package": name, "options": options })
             }
         })
-        .chain(legacy.plugin_enabled.iter().flatten().map(|(id, enabled)| {
-            Value::String(if *enabled {
-                id.clone()
-            } else {
-                format!("-{id}")
-            })
-        }))
+        .chain(
+            legacy
+                .plugin_enabled
+                .iter()
+                .flatten()
+                .map(|(id, enabled)| Value::String(if *enabled { id.clone() } else { format!("-{id}") })),
+        )
         .collect();
     let theme_name = nullish(legacy.theme.clone().map(Value::String), kv("theme"));
     let theme_mode = kv("theme_mode_lock");
     let sound_pack = kv("attention_sound_pack");
     let stacked = legacy.diff_style == Some(DiffStyle::Stacked);
-    let diff_view = nullish(
-        kv("diff_viewer_view"),
-        stacked.then(|| Value::String("unified".into())),
-    );
+    let diff_view = nullish(kv("diff_viewer_view"), stacked.then(|| Value::String("unified".into())));
     let thinking = nullish(
         kv("thinking_mode"),
-        kv("thinking_visibility").map(|v| {
-            Value::String(
-                if cli_config::truthy(&v) {
-                    "show"
-                } else {
-                    "hide"
-                }
-                .into(),
-            )
-        }),
+        kv("thinking_visibility").map(|v| Value::String(if cli_config::truthy(&v) { "show" } else { "hide" }.into())),
     );
     let keybinds = legacy.keybinds.as_ref().map(|keybinds| {
         let map: Map<String, Value> = keybinds
@@ -427,39 +361,23 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
             .iter()
             .filter_map(|(name, value)| {
                 let target = v1_target(name).unwrap_or(name);
-                KEYBIND_NAMES
-                    .contains(&target)
-                    .then(|| (target.to_string(), value.clone()))
+                KEYBIND_NAMES.contains(&target).then(|| (target.to_string(), value.clone()))
             })
             .collect();
         Value::Object(map)
     });
 
     if theme_name.is_some() || theme_mode.is_some() {
-        put(
-            "theme",
-            Some(object(vec![("name", theme_name), ("mode", theme_mode)])),
-        );
+        put("theme", Some(object(vec![("name", theme_name), ("mode", theme_mode)])));
     }
     put("keybinds", keybinds);
-    put(
-        "plugins",
-        (!plugins.is_empty()).then_some(Value::Array(plugins)),
-    );
-    put(
-        "leader",
-        legacy
-            .leader_timeout
-            .map(|t| serde_json::json!({ "timeout": t.0 })),
-    );
+    put("plugins", (!plugins.is_empty()).then_some(Value::Array(plugins)));
+    put("leader", legacy.leader_timeout.map(|t| serde_json::json!({ "timeout": t.0 })));
     let acceleration = legacy.scroll_acceleration.map(|a| Value::Bool(a.enabled));
     if legacy.scroll_speed.is_some() || acceleration.is_some() {
         put(
             "scroll",
-            Some(object(vec![
-                ("speed", legacy.scroll_speed.map(|s| json(&s.0))),
-                ("acceleration", acceleration),
-            ])),
+            Some(object(vec![("speed", legacy.scroll_speed.map(|s| json(&s.0))), ("acceleration", acceleration)])),
         );
     }
     if legacy.attention.is_some() || sound_pack.is_some() {
@@ -481,24 +399,13 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
     if legacy.diff_style.is_some() || diffs.iter().any(|(_, v)| v.is_some()) {
         put("diffs", Some(object(diffs.into())));
     }
-    put(
-        "terminal",
-        kv("terminal_title_enabled").map(|title| object(vec![("title", Some(title))])),
-    );
+    put("terminal", kv("terminal_title_enabled").map(|title| object(vec![("title", Some(title))])));
     let prompt = [
         ("editor", kv("file_context_enabled")),
         (
             "paste",
-            kv("paste_summary_enabled").map(|v| {
-                Value::String(
-                    if cli_config::truthy(&v) {
-                        "compact"
-                    } else {
-                        "full"
-                    }
-                    .into(),
-                )
-            }),
+            kv("paste_summary_enabled")
+                .map(|v| Value::String(if cli_config::truthy(&v) { "compact" } else { "full" }.into())),
         ),
     ];
     if prompt.iter().any(|(_, v)| v.is_some()) {
@@ -510,16 +417,8 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
         ("thinking", thinking),
         (
             "grouping",
-            kv("exploration_grouping").map(|v| {
-                Value::String(
-                    if cli_config::truthy(&v) {
-                        "auto"
-                    } else {
-                        "none"
-                    }
-                    .into(),
-                )
-            }),
+            kv("exploration_grouping")
+                .map(|v| Value::String(if cli_config::truthy(&v) { "auto" } else { "none" }.into())),
         ),
     ];
     if session.iter().any(|(_, v)| v.is_some()) {

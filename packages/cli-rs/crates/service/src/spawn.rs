@@ -30,15 +30,9 @@ impl Contender {
     /// Starts `command` (program first) with `env` added to the inherited environment. A variable
     /// with no value is removed, as `undefined` is in a Node `env`.
     pub fn spawn(command: &[OsString], env: &[(String, Option<String>)]) -> std::io::Result<Self> {
-        let (program, args) = command
-            .split_first()
-            .ok_or_else(|| std::io::Error::other("Missing service command"))?;
+        let (program, args) = command.split_first().ok_or_else(|| std::io::Error::other("Missing service command"))?;
         let mut process = Command::new(program);
-        process
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped());
+        process.args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
         for (name, value) in env {
             match value {
                 Some(value) => process.env(name, value),
@@ -50,10 +44,7 @@ impl Contender {
         std::os::unix::process::CommandExt::process_group(&mut process, 0);
         let mut child = process.spawn()?;
         let mut stderr = child.stderr.take().expect("stderr is piped");
-        let contender = Self {
-            pid: child.id(),
-            state: Arc::default(),
-        };
+        let contender = Self { pid: child.id(), state: Arc::default() };
         let state = contender.state.clone();
         // One thread drains stderr, then reaps the process. A detached thread keeps draining after
         // release, so the service never blocks on a full pipe.
@@ -83,9 +74,7 @@ impl Contender {
 
     /// The stderr tail, trimmed.
     pub fn stderr(&self) -> String {
-        String::from_utf8_lossy(&self.state.lock().unwrap().stderr)
-            .trim()
-            .to_owned()
+        String::from_utf8_lossy(&self.state.lock().unwrap().stderr).trim().to_owned()
     }
 
     /// Stops keeping stderr; it is still drained.
@@ -125,10 +114,8 @@ mod tests {
 
     #[test]
     fn keeps_a_bounded_stderr_tail_and_the_exit_code() {
-        let contender = sh(
-            "head -c 16384 /dev/zero | tr '\\0' x >&2; echo; echo 'actionable failure' >&2; exit 3",
-            &[],
-        );
+        let contender =
+            sh("head -c 16384 /dev/zero | tr '\\0' x >&2; echo; echo 'actionable failure' >&2; exit 3", &[]);
         assert_eq!(finished(&contender).code(), Some(3));
         let stderr = contender.stderr();
         assert!(stderr.ends_with("actionable failure"), "{stderr}");
@@ -139,19 +126,13 @@ mod tests {
     fn adds_and_removes_environment_variables_in_its_own_group() {
         let contender = sh(
             "echo \"$OPENCODE_A-${HOME:-unset}\" >&2; ps -o pgid= -p $$ >&2",
-            &[
-                ("OPENCODE_A".to_owned(), Some("set".to_owned())),
-                ("HOME".to_owned(), None),
-            ],
+            &[("OPENCODE_A".to_owned(), Some("set".to_owned())), ("HOME".to_owned(), None)],
         );
         assert!(finished(&contender).success());
         let stderr = contender.stderr();
         let mut lines = stderr.lines();
         assert_eq!(lines.next(), Some("set-unset"));
-        assert_eq!(
-            lines.next().map(str::trim),
-            Some(contender.pid.to_string().as_str())
-        );
+        assert_eq!(lines.next().map(str::trim), Some(contender.pid.to_string().as_str()));
     }
 
     #[test]

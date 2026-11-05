@@ -33,20 +33,14 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
         let full = match request.url.query() {
             Some(query) => format!("{path}?{query}"),
             None => path.clone(),
         };
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), full, body.clone()));
+        self.seen.lock().unwrap().push((request.method.to_owned(), full, body.clone()));
         let location = json!({ "directory": LOCATION });
         let id = self.session["id"].as_str().unwrap().to_owned();
         let base = format!("/api/session/{id}");
@@ -67,10 +61,9 @@ impl Transport for Fixture {
                     None => (200, json!({ "data": session(other, json!({})) })),
                 }
             }
-            ("GET", p) if p == format!("/api/experimental/session/{id}/export") => (
-                200,
-                json!({ "data": { "info": self.session, "messages": self.messages } }),
-            ),
+            ("GET", p) if p == format!("/api/experimental/session/{id}/export") => {
+                (200, json!({ "data": { "info": self.session, "messages": self.messages } }))
+            }
             ("GET", "/api/agent") => (
                 200,
                 json!({ "location": location, "data": [{
@@ -87,14 +80,11 @@ impl Transport for Fixture {
                     "enabled": true, "limit": { "context": 1000, "output": 100 },
                 }] }),
             ),
-            ("GET", "/api/provider" | "/api/command") => {
-                (200, json!({ "location": location, "data": [] }))
-            }
+            ("GET", "/api/provider" | "/api/command") => (200, json!({ "location": location, "data": [] })),
             ("PATCH", p) if p == base => (204, Value::Null),
-            ("POST", p) if p == format!("{base}/fork") => (
-                200,
-                json!({ "data": session("ses_fork", json!({ "title": "Forked" })) }),
-            ),
+            ("POST", p) if p == format!("{base}/fork") => {
+                (200, json!({ "data": session("ses_fork", json!({ "title": "Forked" })) }))
+            }
             ("POST", p) if p == format!("{base}/compact") => (
                 200,
                 json!({ "data": {
@@ -102,12 +92,8 @@ impl Transport for Fixture {
                     "delivery": "steer", "payload": {},
                 } }),
             ),
-            ("POST", p) if p == format!("{base}/interrupt") => {
-                (200, json!({ "interrupted": true }))
-            }
-            ("POST", p) if p == format!("/api/experimental/session/{id}/wait") => {
-                (204, Value::Null)
-            }
+            ("POST", p) if p == format!("{base}/interrupt") => (200, json!({ "interrupted": true })),
+            ("POST", p) if p == format!("/api/experimental/session/{id}/wait") => (204, Value::Null),
             ("POST", p) if p == format!("{base}/revert/stage") => {
                 (200, json!({ "data": { "messageID": body["messageID"] } }))
             }
@@ -124,11 +110,7 @@ impl Transport for Fixture {
             ("POST", p) if p.ends_with("/model") || p.ends_with("/agent") => (204, Value::Null),
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -187,11 +169,7 @@ fn turns() -> Vec<Value> {
             ]),
         ),
         user("msg_03", 1_772_539_260_000, "Fix the bug\nin parse"),
-        assistant(
-            "msg_04",
-            1_772_539_261_000,
-            json!([{ "type": "text", "id": "t2", "text": "Fixed it." }]),
-        ),
+        assistant("msg_04", 1_772_539_261_000, json!([{ "type": "text", "id": "t2", "text": "Fixed it." }])),
     ]
 }
 
@@ -206,13 +184,7 @@ impl Kit {
         Self::sized(100, 30, session, messages, inbox)
     }
 
-    fn sized(
-        width: u16,
-        height: u16,
-        session: Value,
-        messages: Vec<Value>,
-        inbox: Vec<Value>,
-    ) -> Self {
+    fn sized(width: u16, height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Self {
         for message in &messages {
             if let Err(error) = serde_json::from_value::<SessionMessageInfo>(message.clone()) {
                 panic!("{message} does not decode: {error}");
@@ -220,12 +192,7 @@ impl Kit {
         }
         let seen = Seen::default();
         let id = SessionID(session["id"].as_str().unwrap().to_owned());
-        let fixture = Fixture {
-            session,
-            messages,
-            inbox,
-            seen: seen.clone(),
-        };
+        let fixture = Fixture { session, messages, inbox, seen: seen.clone() };
         let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
         let app = TestApp::new(width, height);
         let tui = opencode_tui::mount(
@@ -233,13 +200,7 @@ impl Kit {
             Deps {
                 client,
                 directory: LOCATION.into(),
-                config: Resolved::new(
-                    Info {
-                        animations: Some(false),
-                        ..Info::default()
-                    },
-                    |_| None,
-                ),
+                config: Resolved::new(Info { animations: Some(false), ..Info::default() }, |_| None),
                 roots: None,
                 route: Route::Session { id },
                 continue_: false,
@@ -250,15 +211,9 @@ impl Kit {
     }
 
     fn wait_for(&self, text: &str) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.app.text().contains(text));
+        let found = self.app.wait_until(Duration::from_secs(5), || self.app.text().contains(text));
         let screen = self.app.text();
-        assert!(
-            found,
-            "{text:?} never showed:\n{screen}\nrequests: {:?}",
-            self.seen.lock().unwrap()
-        );
+        assert!(found, "{text:?} never showed:\n{screen}\nrequests: {:?}", self.seen.lock().unwrap());
         screen
     }
 
@@ -280,33 +235,19 @@ impl Kit {
             .unwrap()
             .iter()
             // The goal footer's RPC `get` is a read, as P-REQ counts it.
-            .filter(|(method, path, _)| {
-                method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get"))
-            })
+            .filter(|(method, path, _)| method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get")))
             .map(|(method, path, body)| format!("{method} {path} {body}"))
             .collect()
     }
 
     fn wait_writes(&self, count: usize) -> Vec<String> {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || self.writes().len() >= count);
-        assert!(
-            found,
-            "expected {count} writes: {:?}\n{}",
-            self.writes(),
-            self.app.text()
-        );
+        let found = self.app.wait_until(Duration::from_secs(5), || self.writes().len() >= count);
+        assert!(found, "expected {count} writes: {:?}\n{}", self.writes(), self.app.text());
         self.writes()
     }
 
     fn reads(&self, path: &str) -> usize {
-        self.seen
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(method, seen, _)| method == "GET" && seen == path)
-            .count()
+        self.seen.lock().unwrap().iter().filter(|(method, seen, _)| method == "GET" && seen == path).count()
     }
 
     fn clear(&self) {
@@ -314,12 +255,7 @@ impl Kit {
     }
 
     fn prompt_text(&self) -> String {
-        self.tui
-            .textarea
-            .borrow()
-            .as_ref()
-            .map(|textarea| textarea.text())
-            .unwrap_or_default()
+        self.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default()
     }
 
     fn only_dialog(&self) {
@@ -338,41 +274,27 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
     kit.ready();
     kit.app.press("ctrl+r");
     kit.wait_for("Rename session");
-    assert!(
-        kit.app.text().contains("Fix the parser"),
-        "{}",
-        kit.app.text()
-    );
+    assert!(kit.app.text().contains("Fix the parser"), "{}", kit.app.text());
     kit.app.press("escape");
     assert!(!kit.tui.dialogs.is_open());
 
     kit.app.type_text("/rename Ship docs");
     kit.app.press("return");
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"PATCH /api/session/ses_a {"title":"Ship docs"}"#]
-    );
+    assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a {"title":"Ship docs"}"#]);
 
     // A bare `/rename` asks for a generated title, then reads the session back.
     kit.clear();
     kit.app.type_text("/rename");
     // The first Enter takes the slash completion, as in TS; the second submits.
     kit.app.press("return");
-    let completed = kit
-        .app
-        .wait_until(Duration::from_secs(5), || kit.prompt_text() != "/rename");
+    let completed = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() != "/rename");
     assert!(completed, "{:?}", kit.prompt_text());
     if kit.writes().is_empty() {
         kit.app.press("return");
     }
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"PATCH /api/session/ses_a {"title":""}"#]
-    );
+    assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a {"title":""}"#]);
     assert!(
-        kit.app
-            .wait_until(Duration::from_secs(5), || kit.reads("/api/session/ses_a")
-                == 1),
+        kit.app.wait_until(Duration::from_secs(5), || kit.reads("/api/session/ses_a") == 1),
         "{:?}",
         kit.seen.lock().unwrap()
     );
@@ -382,14 +304,8 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
 fn timeline_lists_prompts_newest_first_and_moving_jumps_the_transcript() {
     // Long replies, so a jump scrolls.
     let long = |id: &str, created: u64| {
-        let text: Vec<String> = (1..=30)
-            .map(|line| format!("Line {line} of {id}."))
-            .collect();
-        assistant(
-            id,
-            created,
-            json!([{ "type": "text", "id": id, "text": text.join("\n\n") }]),
-        )
+        let text: Vec<String> = (1..=30).map(|line| format!("Line {line} of {id}.")).collect();
+        assistant(id, created, json!([{ "type": "text", "id": id, "text": text.join("\n\n") }]))
     };
     let messages = vec![
         user("msg_01", 1_772_539_200_000, "First question"),
@@ -401,21 +317,14 @@ fn timeline_lists_prompts_newest_first_and_moving_jumps_the_transcript() {
     kit.wait_for("Line 30 of msg_04.");
     kit.leader("g");
     let screen = kit.wait_for("Search timeline");
-    let (second, first) = (
-        screen.find("Second question").unwrap(),
-        screen.find("First question").unwrap(),
-    );
+    let (second, first) = (screen.find("Second question").unwrap(), screen.find("First question").unwrap());
     assert!(second < first, "{screen}");
 
     kit.app.press("down");
     kit.app.press("escape");
     let found = kit.app.wait_until(Duration::from_secs(5), || {
         // Below the tab strip: the bar row above the prompt, then the prompt.
-        kit.app
-            .text()
-            .lines()
-            .nth(2)
-            .is_some_and(|line| line.contains("First question"))
+        kit.app.text().lines().nth(2).is_some_and(|line| line.contains("First question"))
     });
     assert!(found, "{}", kit.app.text());
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
@@ -430,20 +339,12 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     // The dialog's rows; the transcript above it shows the same prompts.
     let screen = &screen[screen.find("Fork session").unwrap()..];
     let order = ["Full session", "Fix the bug in parse", "Read the parser"];
-    let positions: Vec<_> = order
-        .iter()
-        .map(|text| screen.find(text).unwrap())
-        .collect();
+    let positions: Vec<_> = order.iter().map(|text| screen.find(text).unwrap()).collect();
     assert!(positions.is_sorted(), "{screen}");
     kit.app.press("return");
     assert_eq!(kit.wait_writes(1), ["POST /api/session/ses_a/fork {}"]);
     kit.wait_for("Forked session");
-    assert_eq!(
-        kit.tui.route(),
-        Route::Session {
-            id: SessionID("ses_fork".into())
-        }
-    );
+    assert_eq!(kit.tui.route(), Route::Session { id: SessionID("ses_fork".into()) });
 
     let kit = Kit::new(session("ses_a", json!({})), turns(), vec![]);
     kit.ready();
@@ -451,15 +352,10 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     kit.wait_for("Full session");
     kit.app.press("down");
     kit.app.press("return");
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"POST /api/session/ses_a/fork {"before":"msg_03"}"#]
-    );
+    assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/fork {"before":"msg_03"}"#]);
     kit.wait_for("Forked session");
     // The fork's composer holds the prompt it was forked before.
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
-        kit.prompt_text() == "Fix the bug\nin parse"
-    });
+    let found = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() == "Fix the bug\nin parse");
     assert!(found, "{:?}\n{}", kit.prompt_text(), kit.app.text());
 }
 
@@ -468,23 +364,17 @@ fn compact_commits_the_model_then_admits_one_compaction() {
     let kit = Kit::new(session("ses_a", json!({})), turns(), vec![]);
     kit.ready();
     kit.leader("c");
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
-        kit.writes().iter().any(|write| write.contains("/compact"))
-    });
+    let found =
+        kit.app.wait_until(Duration::from_secs(5), || kit.writes().iter().any(|write| write.contains("/compact")));
     let writes = kit.writes();
     assert!(found, "{writes:?}");
-    let compact = writes
-        .iter()
-        .position(|write| write.contains("/compact"))
-        .unwrap();
-    assert!(
-        writes[compact].starts_with("POST /api/session/ses_a/compact {\"id\":\"msg_"),
-        "{writes:?}"
-    );
+    let compact = writes.iter().position(|write| write.contains("/compact")).unwrap();
+    assert!(writes[compact].starts_with("POST /api/session/ses_a/compact {\"id\":\"msg_"), "{writes:?}");
     // The only other write is the model the prompt shows, committed first.
     assert!(
-        writes[..compact].iter().all(|write| write
-            == r#"POST /api/session/ses_a/model {"model":{"id":"m","providerID":"p"}}"#),
+        writes[..compact]
+            .iter()
+            .all(|write| write == r#"POST /api/session/ses_a/model {"model":{"id":"m","providerID":"p"}}"#),
         "{writes:?}"
     );
     assert_eq!(writes.len(), compact + 1, "{writes:?}");
@@ -503,17 +393,11 @@ fn undo_reverts_to_the_last_prompt_and_puts_it_back_in_the_prompt() {
             r#"POST /api/session/ses_a/revert/stage {"messageID":"msg_03"}"#,
         ]
     );
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
-        kit.prompt_text() == "Fix the bug\nin parse"
-    });
+    let found = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() == "Fix the bug\nin parse");
     assert!(found, "{:?}", kit.prompt_text());
 
     // Nothing before the staged revert: nothing to undo, and no request.
-    let kit = Kit::new(
-        session("ses_a", json!({ "revert": { "messageID": "msg_01" } })),
-        turns(),
-        vec![],
-    );
+    let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_01" } })), turns(), vec![]);
     kit.wait_for("Model M");
     kit.clear();
     kit.leader("u");
@@ -532,13 +416,8 @@ fn undo_cancels_a_prompt_still_in_the_inbox() {
     kit.wait_for("Queued question");
     kit.app.type_text("draft");
     kit.leader("u");
-    assert_eq!(
-        kit.wait_writes(1),
-        ["DELETE /api/session/ses_a/inbox/msg_05 null"]
-    );
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
-        kit.prompt_text() == "draft\n\nQueued question"
-    });
+    assert_eq!(kit.wait_writes(1), ["DELETE /api/session/ses_a/inbox/msg_05 null"]);
+    let found = kit.app.wait_until(Duration::from_secs(5), || kit.prompt_text() == "draft\n\nQueued question");
     assert!(found, "{:?}", kit.prompt_text());
 }
 
@@ -550,55 +429,36 @@ fn redo_clears_a_staged_revert_and_is_off_without_one() {
     kit.app.advance(Duration::from_millis(50));
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
 
-    let kit = Kit::new(
-        session("ses_a", json!({ "revert": { "messageID": "msg_03" } })),
-        turns(),
-        vec![],
-    );
+    let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
     kit.wait_for("1 message reverted");
     kit.wait_for("ctrl+x r or /redo to restore");
     kit.leader("r");
-    assert_eq!(
-        kit.wait_writes(1),
-        ["DELETE /api/session/ses_a/revert null"]
-    );
+    assert_eq!(kit.wait_writes(1), ["DELETE /api/session/ses_a/revert null"]);
 }
 
 #[test]
 fn a_prompt_commits_a_staged_revert_before_it_is_sent() {
-    let kit = Kit::new(
-        session("ses_a", json!({ "revert": { "messageID": "msg_03" } })),
-        turns(),
-        vec![],
-    );
+    let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
     kit.wait_for("1 message reverted");
     kit.wait_for("Model M");
     kit.app.type_text("Try again");
     kit.app.press("return");
-    let found = kit.app.wait_until(Duration::from_secs(5), || {
-        kit.writes().iter().any(|write| write.contains("/prompt"))
-    });
+    let found =
+        kit.app.wait_until(Duration::from_secs(5), || kit.writes().iter().any(|write| write.contains("/prompt")));
     let writes = kit.writes();
     assert!(found, "{writes:?}");
     let commit = writes
         .iter()
         .position(|write| write == "POST /api/session/ses_a/revert/commit null")
         .unwrap_or_else(|| panic!("no commit: {writes:?}"));
-    let prompt = writes
-        .iter()
-        .position(|write| write.contains("/prompt"))
-        .unwrap();
+    let prompt = writes.iter().position(|write| write.contains("/prompt")).unwrap();
     assert!(commit < prompt, "{writes:?}");
 }
 
 #[test]
 fn copies_and_the_parent_report_their_outcome() {
     // Without a terminal, every copy fails, as TS reports a rejected clipboard write.
-    let kit = Kit::new(
-        session("ses_a", json!({ "parentID": "ses_p" })),
-        turns(),
-        vec![],
-    );
+    let kit = Kit::new(session("ses_a", json!({ "parentID": "ses_p" })), turns(), vec![]);
     kit.ready();
     // A child session shows the composer, whose mode leaves the base-mode keys out (E.13b).
     kit.tui.keymap.dispatch("messages.copy", None);
@@ -610,18 +470,9 @@ fn copies_and_the_parent_report_their_outcome() {
     assert_eq!(kit.reads("/api/experimental/session/ses_a/export"), 1);
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
     kit.tui.keymap.dispatch("session.parent", None);
-    assert_eq!(
-        kit.tui.route(),
-        Route::Session {
-            id: SessionID("ses_p".into())
-        }
-    );
+    assert_eq!(kit.tui.route(), Route::Session { id: SessionID("ses_p".into()) });
 
-    let kit = Kit::new(
-        session("ses_a", json!({})),
-        vec![user("msg_01", 1_772_539_200_000, "Hello")],
-        vec![],
-    );
+    let kit = Kit::new(session("ses_a", json!({})), vec![user("msg_01", 1_772_539_200_000, "Hello")], vec![]);
     kit.wait_for("Hello");
     kit.leader("y");
     kit.wait_for("No assistant messages found");
@@ -652,10 +503,7 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     // Markdown with thinking and tools by default; Enter saves to a file.
     kit.app.press("return");
     kit.wait_for("Session exported");
-    assert_eq!(
-        kit.reads("/api/experimental/session/ses_export_md/export"),
-        1
-    );
+    assert_eq!(kit.reads("/api/experimental/session/ses_export_md/export"), 1);
     let markdown = take_export(".md", "ses_export_md").expect("the Markdown export");
     let created = markdown.lines().nth(3).unwrap().to_owned();
     assert!(created.starts_with("**Created:** 3/3/2026, "), "{markdown}");
@@ -724,20 +572,14 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     kit.wait_for("‹ on ›");
     kit.app.press("return");
     kit.wait_for("Session exported");
-    assert_eq!(
-        kit.reads("/api/experimental/session/ses_export_js/export?sanitize=true"),
-        1
-    );
+    assert_eq!(kit.reads("/api/experimental/session/ses_export_js/export?sanitize=true"), 1);
     let text = take_export(".json", "ses_export_js").expect("the JSON export");
     assert!(text.ends_with("}\n"), "{text}");
     let value: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(value["info"]["id"], "ses_export_js");
     assert_eq!(value["messages"].as_array().unwrap().len(), 4);
     // Pretty-printed with two spaces and the server's key order.
-    assert!(
-        text.starts_with("{\n  \"info\": {\n    \"id\": \"ses_export_js\",\n"),
-        "{text}"
-    );
+    assert!(text.starts_with("{\n  \"info\": {\n    \"id\": \"ses_export_js\",\n"), "{text}");
 }
 
 /// The fixtures are the `new-designs` dialogs, the only design the Rust TUI draws.
@@ -747,13 +589,7 @@ fn dialogs_match_typescript() {
     // The TS fixtures render in UTC; the Rust footers use local time, so shift the prompts by the local offset.
     let offset = {
         use chrono::{Local, Offset, TimeZone};
-        Local
-            .timestamp_millis_opt(1_772_539_200_000)
-            .unwrap()
-            .offset()
-            .fix()
-            .local_minus_utc() as i64
-            * 1000
+        Local.timestamp_millis_opt(1_772_539_200_000).unwrap().offset().fix().local_minus_utc() as i64 * 1000
     };
     let shifted: Vec<Value> = turns()
         .into_iter()
@@ -764,13 +600,7 @@ fn dialogs_match_typescript() {
         })
         .collect();
     let open = |route: &str| {
-        let kit = Kit::sized(
-            100,
-            30,
-            session("ses_a", json!({})),
-            shifted.clone(),
-            vec![],
-        );
+        let kit = Kit::sized(100, 30, session("ses_a", json!({})), shifted.clone(), vec![]);
         kit.ready();
         kit.tui.keymap.dispatch(route, None);
         kit
@@ -791,18 +621,9 @@ fn dialogs_match_typescript() {
     kit.only_dialog();
     check(&mut failed, &kit, "E.10a/rename");
 
-    let kit = Kit::sized(
-        100,
-        30,
-        session("ses_a", json!({})),
-        shifted.clone(),
-        vec![],
-    );
+    let kit = Kit::sized(100, 30, session("ses_a", json!({})), shifted.clone(), vec![]);
     kit.ready();
-    opencode_tui::dialogs::export::result(
-        &kit.tui,
-        "/tmp/session-0b6c1f62-3d4e-4b7a-9f1e-2a5c8d7e6f40.md".into(),
-    );
+    opencode_tui::dialogs::export::result(&kit.tui, "/tmp/session-0b6c1f62-3d4e-4b7a-9f1e-2a5c8d7e6f40.md".into());
     kit.wait_for("Session exported");
     kit.only_dialog();
     check(&mut failed, &kit, "E.10a/export-result");
@@ -820,9 +641,7 @@ fn dialogs_match_typescript() {
 /// Compares the screen with a fixture and records a mismatch, so one run reports every dialog.
 fn check(failed: &mut Vec<&'static str>, kit: &Kit, fixture: &'static str) {
     let cells = kit.app.render();
-    let compared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        assert_fixture(&cells, fixture)
-    }));
+    let compared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| assert_fixture(&cells, fixture)));
     if compared.is_err() {
         failed.push(fixture);
     }

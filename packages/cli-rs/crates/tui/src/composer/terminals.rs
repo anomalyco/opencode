@@ -25,9 +25,7 @@ pub(super) struct State {
 pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
     let session = &inner.session.0;
     let entries = tui.terminals.list(session);
-    let visible = crate::frame::terminal_shown(tui)
-        .then(|| tui.terminals.selected(session))
-        .flatten();
+    let visible = crate::frame::terminal_shown(tui).then(|| tui.terminals.selected(session)).flatten();
     let mut state = inner.terminals.borrow_mut();
     state.entries = entries;
     state.visible = visible;
@@ -36,19 +34,9 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         return;
     }
     // The effect selects the shown terminal when the tab shows and whenever the list or the shown one changes.
-    let seen = (
-        state
-            .entries
-            .iter()
-            .map(|terminal| terminal.id.0.clone())
-            .collect(),
-        state.visible.clone(),
-    );
+    let seen = (state.entries.iter().map(|terminal| terminal.id.0.clone()).collect(), state.visible.clone());
     if state.seen.as_ref() != Some(&seen) {
-        state.selected = state
-            .entries
-            .iter()
-            .position(|terminal| Some(&terminal.id.0) == state.visible.as_ref());
+        state.selected = state.entries.iter().position(|terminal| Some(&terminal.id.0) == state.visible.as_ref());
         state.seen = Some(seen);
     }
 }
@@ -92,10 +80,7 @@ fn select(inner: &Rc<Inner>, tui: &Tui) {
     let terminal = {
         let state = inner.terminals.borrow();
         let Some(index) = state.selected else { return };
-        state
-            .entries
-            .get(index)
-            .map(|terminal| terminal.id.0.clone())
+        state.entries.get(index).map(|terminal| terminal.id.0.clone())
     };
     let session: SessionID = inner.session.clone();
     inner.close(tui);
@@ -124,10 +109,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
             RowState::Base
         };
         let label = match terminal {
-            Some(terminal) => terminal
-                .foreground_process
-                .clone()
-                .unwrap_or_else(|| terminal.title.clone()),
+            Some(terminal) => terminal.foreground_process.clone().unwrap_or_else(|| terminal.title.clone()),
             None => "+ New terminal".to_owned(),
         };
         let hover = {
@@ -159,18 +141,7 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
                 });
             }
         };
-        inner.body.add(&row(
-            tui,
-            theme,
-            state,
-            Label {
-                text: label,
-                status: None,
-                truncate: true,
-            },
-            hover,
-            click,
-        ));
+        inner.body.add(&row(tui, theme, state, Label { text: label, status: None, truncate: true }, hover, click));
     }
     Vec::new()
 }

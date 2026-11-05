@@ -52,11 +52,7 @@ pub fn install(tui: &Rc<Tui>) {
 
 /// Whether releasing a selection copies it: `terminal.copy`, else `"select"` outside Windows.
 pub fn copy_on_select(tui: &Tui) -> bool {
-    let configured = tui
-        .settings
-        .info()
-        .terminal
-        .and_then(|terminal| terminal.copy);
+    let configured = tui.settings.info().terminal.and_then(|terminal| terminal.copy);
     match configured {
         Some(mode) => mode == TerminalCopy::Select,
         None => !cfg!(windows),
@@ -69,11 +65,7 @@ pub fn copy_selection(tui: &Tui) -> bool {
     let Some(text) = tui.app.selected_text() else {
         return false;
     };
-    copy(
-        tui,
-        &crate::prompt::paste::clipboard_text(tui, &text),
-        "Copied to clipboard",
-    );
+    copy(tui, &crate::prompt::paste::clipboard_text(tui, &text), "Copied to clipboard");
     true
 }
 
@@ -112,10 +104,7 @@ fn handle_key(tui: &Tui, cx: &mut Cx<'_>, key: &KeyEvent) {
     // TS checks that the focused editor is part of the mouse selection; a keyboard selection in the prompt
     // ends the mouse selection here, so the prompt's own selection is the one that counts.
     let editing = tui.textarea.borrow().as_ref().is_some_and(|textarea| {
-        tui.app
-            .focused()
-            .is_some_and(|widget| widget.id() == textarea.id())
-            && !textarea.selected_text().is_empty()
+        tui.app.focused().is_some_and(|widget| widget.id() == textarea.id()) && !textarea.selected_text().is_empty()
     });
     // Shortcuts match Kitty's base-layout key, so a non-Latin layout's C counts too.
     if key.matches("ctrl+c") {
@@ -123,11 +112,7 @@ fn handle_key(tui: &Tui, cx: &mut Cx<'_>, key: &KeyEvent) {
             tui.app.clear_selection();
             return;
         }
-        copy(
-            tui,
-            &crate::prompt::paste::clipboard_text(tui, &text),
-            "Copied to clipboard",
-        );
+        copy(tui, &crate::prompt::paste::clipboard_text(tui, &text), "Copied to clipboard");
         cx.prevent_default();
         cx.stop_propagation();
         return;

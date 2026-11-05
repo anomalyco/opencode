@@ -26,10 +26,7 @@ const REPORT_CELLS: usize = 40;
 
 /// `parity/fixtures` in this package.
 pub fn fixtures_dir() -> PathBuf {
-    PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../parity/fixtures"
-    ))
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../parity/fixtures"))
 }
 
 /// Compares a capture with `parity/fixtures/<name>.json` cell by cell. On a difference it writes the capture to
@@ -37,16 +34,13 @@ pub fn fixtures_dir() -> PathBuf {
 /// report.
 #[track_caller]
 pub fn assert_fixture(capture: &Capture, name: &str) {
-    let expected = Fixture::load(fixtures_dir().join(format!("{name}.json")))
-        .unwrap_or_else(|error| panic!("{error}"));
+    let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap_or_else(|error| panic!("{error}"));
     let actual = Fixture::from_capture(capture);
     let comparison = compare(&expected, &actual);
     if comparison.is_equal() {
         return;
     }
-    let path = std::env::temp_dir()
-        .join("opencode-parity")
-        .join(format!("{name}.json"));
+    let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
     let written = path
         .parent()
         .map_or(Ok(()), std::fs::create_dir_all)
@@ -76,12 +70,7 @@ pub fn compare(expected: &Fixture, actual: &Fixture) -> Comparison {
         .filter(|(_, (expected, actual))| expected != actual)
         .map(|(index, _)| (index as u32 % expected.width, index as u32 / expected.width))
         .collect();
-    Comparison {
-        expected: expected.clone(),
-        actual: actual.clone(),
-        differences,
-        size_differs: false,
-    }
+    Comparison { expected: expected.clone(), actual: actual.clone(), differences, size_differs: false }
 }
 
 /// The result of [`compare`]. Its `Display` is the report: each differing row from both sides with a marker under
@@ -129,8 +118,7 @@ impl fmt::Display for Comparison {
             .filter(|&&(x, y)| {
                 let (want, got) = (expected.cell(x, y), actual.cell(x, y));
                 want.zip(got).is_some_and(|(want, got)| {
-                    want.symbol == got.symbol
-                        && (want.bg != got.bg || (want.symbol != " " && want.fg != got.fg))
+                    want.symbol == got.symbol && (want.bg != got.bg || (want.symbol != " " && want.fg != got.fg))
                 })
             })
             .count();
@@ -141,33 +129,19 @@ impl fmt::Display for Comparison {
         let mut rows: Vec<u32> = self.differences.iter().map(|&(_, y)| y).collect();
         rows.dedup();
         for &y in &rows {
-            let marker: String = (0..expected.width)
-                .map(|x| {
-                    if self.differences.contains(&(x, y)) {
-                        '^'
-                    } else {
-                        ' '
-                    }
-                })
-                .collect();
+            let marker: String =
+                (0..expected.width).map(|x| if self.differences.contains(&(x, y)) { '^' } else { ' ' }).collect();
             writeln!(out, "row {y}")?;
             writeln!(out, "  expected |{}|", text(expected.row(y)))?;
             writeln!(out, "  actual   |{}|", text(actual.row(y)))?;
             writeln!(out, "            {}", marker.trim_end())?;
         }
         for &(x, y) in self.differences.iter().take(REPORT_CELLS) {
-            let (want, got) = (
-                expected.cell(x, y).expect("in range"),
-                actual.cell(x, y).expect("in range"),
-            );
+            let (want, got) = (expected.cell(x, y).expect("in range"), actual.cell(x, y).expect("in range"));
             writeln!(out, "({x},{y}) {}", fields(want, got).join(", "))?;
         }
         if self.differences.len() > REPORT_CELLS {
-            writeln!(
-                out,
-                "... and {} more cells",
-                self.differences.len() - REPORT_CELLS
-            )?;
+            writeln!(out, "... and {} more cells", self.differences.len() - REPORT_CELLS)?;
         }
         Ok(())
     }
@@ -175,15 +149,7 @@ impl fmt::Display for Comparison {
 
 // A row as it shows in a terminal; control characters become '?', so the markers stay aligned.
 fn text(row: &[Cell]) -> String {
-    row.iter()
-        .map(|cell| {
-            if cell.symbol.chars().any(char::is_control) {
-                "?"
-            } else {
-                cell.symbol.as_str()
-            }
-        })
-        .collect()
+    row.iter().map(|cell| if cell.symbol.chars().any(char::is_control) { "?" } else { cell.symbol.as_str() }).collect()
 }
 
 fn fields(want: &Cell, got: &Cell) -> Vec<String> {
@@ -192,25 +158,13 @@ fn fields(want: &Cell, got: &Cell) -> Vec<String> {
         fields.push(format!("symbol {:?} -> {:?}", want.symbol, got.symbol));
     }
     if want.fg != got.fg {
-        fields.push(format!(
-            "fg {} -> {}",
-            fixture::format_color(want.fg),
-            fixture::format_color(got.fg)
-        ));
+        fields.push(format!("fg {} -> {}", fixture::format_color(want.fg), fixture::format_color(got.fg)));
     }
     if want.bg != got.bg {
-        fields.push(format!(
-            "bg {} -> {}",
-            fixture::format_color(want.bg),
-            fixture::format_color(got.bg)
-        ));
+        fields.push(format!("bg {} -> {}", fixture::format_color(want.bg), fixture::format_color(got.bg)));
     }
     if want.attributes != got.attributes {
-        fields.push(format!(
-            "attributes {} -> {}",
-            attributes(want.attributes),
-            attributes(got.attributes)
-        ));
+        fields.push(format!("attributes {} -> {}", attributes(want.attributes), attributes(got.attributes)));
     }
     fields
 }
@@ -226,14 +180,6 @@ fn attributes(value: Attributes) -> String {
         (Attributes::HIDDEN, "hidden"),
         (Attributes::STRIKETHROUGH, "strikethrough"),
     ];
-    let names: Vec<&str> = NAMES
-        .iter()
-        .filter(|(flag, _)| value.contains(*flag))
-        .map(|(_, name)| *name)
-        .collect();
-    if names.is_empty() {
-        "none".to_owned()
-    } else {
-        names.join("+")
-    }
+    let names: Vec<&str> = NAMES.iter().filter(|(flag, _)| value.contains(*flag)).map(|(_, name)| *name).collect();
+    if names.is_empty() { "none".to_owned() } else { names.join("+") }
 }

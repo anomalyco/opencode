@@ -9,9 +9,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionGenerateInput, SessionID};
 use opencode_plugin::{Definition, Placement, Slotted, slot};
 use opencode_store::Changes;
-use opencode_ui::dialog::{
-    self, DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
-};
+use opencode_ui::dialog::{self, DIALOG_INSET, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::prompt::{PromptProps, prompt};
@@ -33,10 +31,9 @@ pub fn plugin() -> Definition<Tui> {
     Definition::new("opencode.btw", |cx| {
         let pending = Rc::new(Cell::new(0u32));
         let shown = pending.clone();
-        cx.slot(
-            Placement::append(slot::PROMPT_FOOTER_STATUS),
-            move |tui, _| Box::new(Pending::new(tui, shown.clone())),
-        );
+        cx.slot(Placement::append(slot::PROMPT_FOOTER_STATUS), move |tui, _| {
+            Box::new(Pending::new(tui, shown.clone()))
+        });
         let weak = Rc::downgrade(cx.host());
         cx.layer(KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),
@@ -47,16 +44,10 @@ pub fn plugin() -> Definition<Tui> {
                     }
                 })
                 .title("Ask a side question")
-                .description(
-                    "One-shot answer from the session's context without adding to the conversation",
-                )
+                .description("One-shot answer from the session's context without adding to the conversation")
                 .group("Session")
                 .palette()
-                .slash(Slash {
-                    name: "btw".to_owned(),
-                    aliases: Vec::new(),
-                    arguments: true,
-                })
+                .slash(Slash { name: "btw".to_owned(), aliases: Vec::new(), arguments: true })
                 .bind(Bind::Default),
             ],
             ..KeymapLayer::default()
@@ -76,10 +67,7 @@ impl Pending {
             .color(tui.page().interactive().step(200))
             .label("/btw")
             .animations(opencode_ui::motion::enabled(tui.config().info.animations));
-        let root = View::new(&tui.app)
-            .shrink(0.0)
-            .child(&spinner)
-            .visible(count.get() > 0);
+        let root = View::new(&tui.app).shrink(0.0).child(&spinner).visible(count.get() > 0);
         Self { root, count }
     }
 }
@@ -97,8 +85,7 @@ impl Slotted<Tui> for Pending {
 /// `session.aside`: asks the question given with `/btw`, or prompts for one.
 fn aside(tui: &Tui, pending: &Rc<Cell<u32>>, input: Option<&str>) {
     let Route::Session { id } = tui.route() else {
-        tui.toasts
-            .show(ToastOptions::new(Variant::Warning, "Open a session first"));
+        tui.toasts.show(ToastOptions::new(Variant::Warning, "Open a session first"));
         return;
     };
     let question = input.map(str::trim).unwrap_or_default();
@@ -138,18 +125,11 @@ fn ask(tui: &Tui, pending: &Rc<Cell<u32>>, session: SessionID, question: String)
     pending.set(pending.get() + 1);
     tui.resync();
     let client = tui.data.client().clone();
-    let input = SessionGenerateInput {
-        session_id: session,
-        prompt: format!("{INSTRUCTIONS}\n\n{question}"),
-    };
+    let input = SessionGenerateInput { session_id: session, prompt: format!("{INSTRUCTIONS}\n\n{question}") };
     let weak = tui.weak();
     let pending = pending.clone();
     tui.app.spawn(
-        async move {
-            client
-                .session_generate(&input, &RequestOptions::default())
-                .await
-        },
+        async move { client.session_generate(&input, &RequestOptions::default()).await },
         move |_, result| {
             pending.set(pending.get().saturating_sub(1));
             let Some(tui) = weak.upgrade() else { return };
@@ -183,15 +163,10 @@ fn answer(tui: &Tui, question: String, text: String) {
             let height = app.size().1;
             let max = (u32::from(height) * 6 / 10).max(8);
             let syntax = opencode_ui::code::syntax_theme(&page);
-            let markdown =
-                opencode_ui::markdown::view(app, &page, &syntax, &renderers, conceal, false);
+            let markdown = opencode_ui::markdown::view(app, &page, &syntax, &renderers, conceal, false);
             markdown.set_markdown(&text);
             let scroll = ScrollBox::new(app).scrollbars(false).height(1);
-            let content = View::new(app)
-                .shrink(0.0)
-                .padding_x(DIALOG_INSET)
-                .padding_y(1)
-                .child(&markdown);
+            let content = View::new(app).shrink(0.0).padding_x(DIALOG_INSET).padding_y(1).child(&markdown);
             // `maxHeight`: the box is as high as the answer and its padding, up to 60% of the screen.
             let fit = scroll.clone();
             markdown.on_resize(move |cx, rect| {
@@ -220,42 +195,24 @@ fn answer(tui: &Tui, question: String, text: String) {
                             .gap(2)
                             .grow(1.0)
                             .min_width(0)
+                            .child(&Text::new(app, "/btw").fg(theme.text.base).bold().shrink(0.0))
                             .child(
-                                &Text::new(app, "/btw")
-                                    .fg(theme.text.base)
-                                    .bold()
-                                    .shrink(0.0),
-                            )
-                            .child(
-                                &Text::new(
-                                    app,
-                                    question.split_whitespace().collect::<Vec<_>>().join(" "),
-                                )
-                                .fg(theme.text.muted)
-                                .wrap(WrapMode::None)
-                                .truncate(true)
-                                .grow(1.0),
+                                &Text::new(app, question.split_whitespace().collect::<Vec<_>>().join(" "))
+                                    .fg(theme.text.muted)
+                                    .wrap(WrapMode::None)
+                                    .truncate(true)
+                                    .grow(1.0),
                             )
                             .as_any(),
                     ),
                     ..HeaderProps::default()
                 },
             );
-            let action = FooterAction::new("copy response")
-                .key("c")
-                .on_trigger(trigger.clone());
+            let action = FooterAction::new("copy response").key("c").on_trigger(trigger.clone());
             // `DialogBleed`: the answer's background reaches the dialog's edges.
-            let body = View::new(app)
-                .margin_x(-(DIALOG_INSET as i32))
-                .bg(page.background.raised.high)
-                .child(&scroll);
-            let footer = View::new(app).child(&dialog::footer(
-                cx,
-                FooterProps {
-                    primary: vec![action],
-                    ..FooterProps::default()
-                },
-            ));
+            let body = View::new(app).margin_x(-(DIALOG_INSET as i32)).bg(page.background.raised.high).child(&scroll);
+            let footer = View::new(app)
+                .child(&dialog::footer(cx, FooterProps { primary: vec![action], ..FooterProps::default() }));
             let layout = dialog::layout_view(cx, &header, &body, Some(&footer), DIALOG_INSET, 1);
             {
                 let footer_cx = cx.clone();
@@ -275,10 +232,7 @@ fn answer(tui: &Tui, question: String, text: String) {
                     footer.clear();
                     footer.add(&dialog::footer(
                         &footer_cx,
-                        FooterProps {
-                            primary: vec![done],
-                            ..FooterProps::default()
-                        },
+                        FooterProps { primary: vec![done], ..FooterProps::default() },
                     ));
                     tui.app.request_redraw();
                 }));
@@ -320,10 +274,7 @@ fn answer(tui: &Tui, question: String, text: String) {
             layout
         },
         None,
-        DialogOptions {
-            size: DialogSize::Large,
-            ..DialogOptions::default()
-        },
+        DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
     );
     tui.dialogs.set_centered(true);
 }

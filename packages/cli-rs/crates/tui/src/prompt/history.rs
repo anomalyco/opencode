@@ -37,10 +37,7 @@ impl History {
         let Some(state) = state else {
             return Self::default();
         };
-        let memory = Arc::new(Mutex::new(Memory {
-            early: Some(Vec::new()),
-            ..Memory::default()
-        }));
+        let memory = Arc::new(Mutex::new(Memory { early: Some(Vec::new()), ..Memory::default() }));
         let writer = Serial::new("prompt-history.jsonl");
         let slot = memory.clone();
         let file = state.clone();
@@ -52,10 +49,7 @@ impl History {
             }
             memory.history = history;
         });
-        Self {
-            memory,
-            file: Some((state, writer)),
-        }
+        Self { memory, file: Some((state, writer)) }
     }
 
     /// `move(direction, input)`.
@@ -108,10 +102,7 @@ pub fn next(prompt: &Inner, history: &History) -> bool {
     let textarea = &prompt.textarea;
     let end = prompt.text_end();
     if textarea.cursor_offset() != end {
-        let last = textarea
-            .view()
-            .info(false)
-            .map_or(0, |info| info.total_virtual_line_count.saturating_sub(1));
+        let last = textarea.view().info(false).map_or(0, |info| info.total_virtual_line_count.saturating_sub(1));
         if visual_row(textarea) == last {
             textarea.set_cursor_offset(end);
             return true;
@@ -131,8 +122,5 @@ pub fn next(prompt: &Inner, history: &History) -> bool {
 fn visual_row(textarea: &Textarea) -> u32 {
     let view = textarea.view();
     let scroll = view.viewport().map_or(0, |viewport| viewport.y);
-    scroll
-        + view
-            .position(EditorQuery::Cursor)
-            .map_or(0, |position| position.visual_row)
+    scroll + view.position(EditorQuery::Cursor).map_or(0, |position| position.visual_row)
 }

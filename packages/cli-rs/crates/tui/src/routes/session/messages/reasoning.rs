@@ -58,34 +58,21 @@ enum Painted {
 impl Reasoning {
     pub fn new(cx: &Context<'_>) -> Self {
         let border = cx.theme.decrease(&cx.theme.background.base, 1);
-        let header = View::new(cx.app)
-            .border(BorderStyle::Heavy)
-            .border_sides(Sides::NONE)
-            .border_color(border);
-        let markdown = opencode_ui::markdown::view(
-            cx.app,
-            cx.theme,
-            cx.thinking_syntax,
-            cx.renderers,
-            cx.conceal,
-            true,
-        )
-        .colors(opentui::widget::MarkdownColors {
-            text: cx.theme.text.muted,
-            ..opencode_ui::markdown::colors(cx.theme)
-        });
+        let header = View::new(cx.app).border(BorderStyle::Heavy).border_sides(Sides::NONE).border_color(border);
+        let markdown =
+            opencode_ui::markdown::view(cx.app, cx.theme, cx.thinking_syntax, cx.renderers, cx.conceal, true).colors(
+                opentui::widget::MarkdownColors {
+                    text: cx.theme.text.muted,
+                    ..opencode_ui::markdown::colors(cx.theme)
+                },
+            );
         let body = View::new(cx.app)
             .margin_edge(Edge::Top, 1)
             .border(BorderStyle::Heavy)
             .border_sides(Sides::LEFT)
             .border_color(border)
             .child(&markdown);
-        let root = View::new(cx.app)
-            .column()
-            .padding_edge(Edge::Left, 3)
-            .shrink(0.0)
-            .child(&header)
-            .child(&body);
+        let root = View::new(cx.app).column().padding_edge(Edge::Left, 3).shrink(0.0).child(&header).child(&body);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -122,19 +109,11 @@ impl Reasoning {
         &self.0.root
     }
 
-    pub fn update(
-        &self,
-        cx: &Context<'_>,
-        message: &SessionMessageAssistant,
-        part: &SessionMessageAssistantReasoning,
-    ) {
+    pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning) {
         let content = content(part);
         let time = part.time.as_ref();
-        let done =
-            time.and_then(|time| time.completed).is_some() || message.time.completed.is_some();
-        let end = time
-            .and_then(|time| time.completed)
-            .or(message.time.completed);
+        let done = time.and_then(|time| time.completed).is_some() || message.time.completed.is_some();
+        let end = time.and_then(|time| time.completed).or(message.time.completed);
         let start = time.map_or(message.time.created, |time| time.created);
         let mut state = self.0.state.borrow_mut();
         if state.content != content {
@@ -159,15 +138,12 @@ impl Inner {
             .border_sides(if open { Sides::LEFT } else { Sides::NONE })
             .padding_edge(Edge::Left, if open { 1 } else { 0 });
         self.body.visible(open);
-        self.body
-            .padding_edge(Edge::Left, if state.hide { 3 } else { 1 });
+        self.body.padding_edge(Edge::Left, if state.hide { 3 } else { 1 });
         let header = Header {
             done: state.done,
             open,
             toggleable: state.hide,
-            title: (state.hide && !self.expanded.get())
-                .then(|| summary(&state.content))
-                .flatten(),
+            title: (state.hide && !self.expanded.get()).then(|| summary(&state.content)).flatten(),
             duration: state.duration.clone(),
         };
         let warning = self.theme.text.feedback.warning.base;
@@ -198,12 +174,7 @@ impl Inner {
             let mut texts = Vec::new();
             // Hide mode's header is an `InlineToolRow`: the icon in its own two cells.
             if header.toggleable {
-                texts.push(
-                    Text::new(&self.app, if header.open { "-" } else { "+" })
-                        .width(2)
-                        .shrink(0.0)
-                        .fg(fg),
-                );
+                texts.push(Text::new(&self.app, if header.open { "-" } else { "+" }).width(2).shrink(0.0).fg(fg));
             }
             let mut text = "Thought".to_owned();
             if header.title.is_some() || header.duration.is_some() {
@@ -229,10 +200,7 @@ impl Inner {
                 Some(title) => format!("Thinking: {title}"),
                 None => "Thinking".to_owned(),
             };
-            let spinner = Spinner::new(&self.app)
-                .color(fg)
-                .label(label)
-                .animations(self.animations);
+            let spinner = Spinner::new(&self.app).color(fg).label(label).animations(self.animations);
             self.header.add(&View::new(&self.app).row().child(&spinner));
             *self.painted.borrow_mut() = Painted::Thinking(spinner);
         }
@@ -268,10 +236,7 @@ mod tests {
 
     #[test]
     fn summary_takes_a_leading_bold_block() {
-        assert_eq!(
-            summary("**Inspecting PR workflow**\n\nbody").as_deref(),
-            Some("Inspecting PR workflow")
-        );
+        assert_eq!(summary("**Inspecting PR workflow**\n\nbody").as_deref(), Some("Inspecting PR workflow"));
         assert_eq!(summary("**Done**").as_deref(), Some("Done"));
         assert_eq!(summary("**Title** and more"), None);
         assert_eq!(summary("**Title**\nbody"), None);

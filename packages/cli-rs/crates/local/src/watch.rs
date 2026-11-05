@@ -41,11 +41,7 @@ pub fn watch(
     let (tx, rx) = mpsc::channel::<()>();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         let Ok(event) = event else { return };
-        if event
-            .paths
-            .iter()
-            .any(|path| path.file_name().is_some_and(&filter))
-        {
+        if event.paths.iter().any(|path| path.file_name().is_some_and(&filter)) {
             let _ = tx.send(());
         }
     })
@@ -53,12 +49,7 @@ pub fn watch(
     .ok()?;
     watcher
         .watch(dir, RecursiveMode::NonRecursive)
-        .inspect_err(|error| {
-            log::error!(
-                "Failed to watch path, live-reload disabled: {}: {error}",
-                dir.display()
-            )
-        })
+        .inspect_err(|error| log::error!("Failed to watch path, live-reload disabled: {}: {error}", dir.display()))
         .ok()?;
     // Ends when the watcher, and with it the sender, is dropped.
     thread::spawn(move || {
@@ -84,19 +75,11 @@ mod tests {
     #[test]
     fn disable_switches_follow_typescript() {
         let env = |pairs: &'static [(&'static str, &'static str)]| {
-            move |name: &str| {
-                pairs
-                    .iter()
-                    .find(|(key, _)| *key == name)
-                    .map(|(_, value)| value.to_string())
-            }
+            move |name: &str| pairs.iter().find(|(key, _)| *key == name).map(|(_, value)| value.to_string())
         };
         assert!(disabled(env(&[("OPENCODE_FILEWATCHER_DISABLE", "1")])));
         assert!(disabled(env(&[("OPENCODE_DISABLE_FILEWATCHER", "TRUE")])));
-        assert!(!disabled(env(&[
-            ("OPENCODE_FILEWATCHER_DISABLE", "0"),
-            ("OPENCODE_DISABLE_FILEWATCHER", "1")
-        ])));
+        assert!(!disabled(env(&[("OPENCODE_FILEWATCHER_DISABLE", "0"), ("OPENCODE_DISABLE_FILEWATCHER", "1")])));
         assert!(!disabled(env(&[])));
     }
 
@@ -104,13 +87,7 @@ mod tests {
     fn a_burst_of_writes_gives_one_callback() {
         let dir = tempfile::tempdir().unwrap();
         let (tx, rx) = mpsc::channel();
-        let _watch = watch(
-            dir.path(),
-            |name| name == "a.json",
-            DEBOUNCE,
-            move || tx.send(()).unwrap(),
-        )
-        .unwrap();
+        let _watch = watch(dir.path(), |name| name == "a.json", DEBOUNCE, move || tx.send(()).unwrap()).unwrap();
         for index in 0..5 {
             std::fs::write(dir.path().join("a.json"), index.to_string()).unwrap();
         }

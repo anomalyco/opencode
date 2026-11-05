@@ -35,16 +35,15 @@ impl Transport for Server {
             Ok(Response {
                 status: 200,
                 headers: vec![("content-type".into(), "application/json".into())],
-                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(
-                    serde_json::to_vec(&body).unwrap(),
-                ))])),
+                body: Box::pin(futures_util::stream::iter([Ok(Bytes::from(serde_json::to_vec(&body).unwrap()))])),
             })
         })
     }
 }
 
 fn routes() -> Vec<MemoryRoute> {
-    let location = json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
+    let location =
+        json!({ "directory": DIRECTORY, "project": { "id": "proj", "directory": DIRECTORY, "canonical": DIRECTORY } });
     let list = |data: Value| json!({ "location": location, "data": data });
     let agent = json!({
         "id": "build", "name": "build", "mode": "primary", "hidden": false, "permissions": [],
@@ -63,49 +62,14 @@ fn routes() -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/location", 200, &location),
         MemoryRoute::json("GET", "/api/agent", 200, &list(json!([agent]))),
         MemoryRoute::json("GET", "/api/model", 200, &list(json!([model]))),
-        MemoryRoute::json(
-            "POST",
-            "/api/session",
-            200,
-            &json!({ "data": session("ses_new", DIRECTORY) }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_new",
-            200,
-            &json!({ "data": session("ses_new", DIRECTORY) }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a",
-            200,
-            &json!({ "data": session("ses_a", DIRECTORY) }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_gone",
-            200,
-            &json!({ "data": session("ses_gone", GONE) }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("POST", "/api/session", 200, &json!({ "data": session("ses_new", DIRECTORY) })),
+        MemoryRoute::json("GET", "/api/session/ses_new", 200, &json!({ "data": session("ses_new", DIRECTORY) })),
+        MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": session("ses_a", DIRECTORY) })),
+        MemoryRoute::json("GET", "/api/session/ses_gone", 200, &json!({ "data": session("ses_gone", GONE) })),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/session/:id/inbox", 200, &json!({ "data": [] })),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/permission",
-            200,
-            &json!({ "data": [] }),
-        ),
+        MemoryRoute::json("GET", "/api/session/:id/permission", 200, &json!({ "data": [] })),
     ]
 }
 
@@ -129,10 +93,7 @@ struct Harness {
 }
 
 fn mount(route: Route) -> Harness {
-    let server = Arc::new(Server {
-        memory: Memory::new(routes()),
-        permissions: Mutex::default(),
-    });
+    let server = Arc::new(Server { memory: Memory::new(routes()), permissions: Mutex::default() });
     let client = Client::with_transport("http://opencode.local", server.clone()).unwrap();
     let app = TestApp::new(100, 30);
     let tui = opencode_tui::mount_with(
@@ -153,9 +114,7 @@ fn mount(route: Route) -> Harness {
 
 impl Harness {
     fn wait_for(&self, what: &str, check: impl Fn(&str) -> bool) -> String {
-        let found = self
-            .app
-            .wait_until(Duration::from_secs(5), || check(&self.app.text()));
+        let found = self.app.wait_until(Duration::from_secs(5), || check(&self.app.text()));
         let screen = self.app.text();
         let gets: Vec<_> = self
             .server
@@ -179,12 +138,7 @@ impl Harness {
     }
 
     fn commands(&self) -> Vec<String> {
-        self.tui
-            .keymap
-            .commands()
-            .into_iter()
-            .map(|command| command.id)
-            .collect()
+        self.tui.keymap.commands().into_iter().map(|command| command.id).collect()
     }
 
     fn prompt_focused(&self) -> bool {
@@ -196,44 +150,25 @@ impl Harness {
 
 #[test]
 fn leaving_a_missing_location_session_gives_enter_back_to_the_prompt() {
-    let h = mount(Route::Session {
-        id: SessionID("ses_gone".into()),
-    });
-    h.wait_for("the location view", |screen| {
-        screen.contains("Session location unavailable")
-    });
+    let h = mount(Route::Session { id: SessionID("ses_gone".into()) });
+    h.wait_for("the location view", |screen| screen.contains("Session location unavailable"));
     h.tui.navigate(Route::Home);
     h.app.advance(Duration::from_millis(1));
     let commands = h.commands();
-    for leaked in [
-        "session.toggle.thinking",
-        "session.verbosity.cycle",
-        "session.first",
-    ] {
-        assert!(
-            !commands.contains(&leaked.to_owned()),
-            "{leaked} outlived its session"
-        );
+    for leaked in ["session.toggle.thinking", "session.verbosity.cycle", "session.first"] {
+        assert!(!commands.contains(&leaked.to_owned()), "{leaked} outlived its session");
     }
     h.app.type_text("hello");
     h.app.press("return");
     h.app.advance(Duration::from_millis(1));
-    assert!(
-        !h.app.text().contains("Choose directory"),
-        "enter opened the location dialog:\n{}",
-        h.app.text()
-    );
-    let sent = h.app.wait_until(Duration::from_secs(5), || {
-        h.writes().contains(&"POST /api/session".to_owned())
-    });
+    assert!(!h.app.text().contains("Choose directory"), "enter opened the location dialog:\n{}", h.app.text());
+    let sent = h.app.wait_until(Duration::from_secs(5), || h.writes().contains(&"POST /api/session".to_owned()));
     assert!(sent, "the home prompt did not submit: {:?}", h.writes());
 }
 
 #[test]
 fn keymap_queries_do_not_lock_the_store() {
-    let h = mount(Route::Session {
-        id: SessionID("ses_a".into()),
-    });
+    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
     h.wait_for("the session", |screen| screen.contains("Review"));
     // `session.list`'s `suggested` and the prompt's `running` conditions run inside `commands`.
     let commands = h.tui.data.read(|_| h.commands());
@@ -242,33 +177,23 @@ fn keymap_queries_do_not_lock_the_store() {
 
 #[test]
 fn a_reconnect_reads_permissions_again() {
-    let h = mount(Route::Session {
-        id: SessionID("ses_a".into()),
-    });
+    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
     h.wait_for("the session", |screen| screen.contains("Review"));
     h.app.advance(Duration::from_millis(50));
     // Asked while the stream was down: only the read after the reconnect can see it.
     h.server.permissions.lock().unwrap().push(permission());
-    h.server
-        .memory
-        .emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
-    h.wait_for("the permission prompt", |screen| {
-        screen.contains("Permission required")
-    });
+    h.server.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
+    h.wait_for("the permission prompt", |screen| screen.contains("Permission required"));
 }
 
 #[test]
 fn a_resolved_permission_leaves_an_open_dialog_focused() {
-    let h = mount(Route::Session {
-        id: SessionID("ses_a".into()),
-    });
+    let h = mount(Route::Session { id: SessionID("ses_a".into()) });
     h.wait_for("the session", |screen| screen.contains("Review"));
     h.server.memory.emit(&json!({
         "id": "evt_asked", "created": 1, "type": "permission.asked", "data": permission(),
     }));
-    h.wait_for("the permission prompt", |screen| {
-        screen.contains("Permission required")
-    });
+    h.wait_for("the permission prompt", |screen| screen.contains("Permission required"));
     h.tui.keymap.dispatch("help.show", None);
     h.app.advance(Duration::from_millis(1));
     assert!(h.tui.dialogs.is_open());
@@ -276,9 +201,7 @@ fn a_resolved_permission_leaves_an_open_dialog_focused() {
         "id": "evt_replied", "created": 2, "type": "permission.replied",
         "data": { "sessionID": "ses_a", "requestID": "per_1", "reply": "once" },
     }));
-    h.wait_for("the permission to close", |screen| {
-        !screen.contains("Permission required")
-    });
+    h.wait_for("the permission to close", |screen| !screen.contains("Permission required"));
     assert!(!h.prompt_focused(), "the prompt took the dialog's focus");
     h.tui.dialogs.clear();
     h.app.advance(Duration::from_millis(1));

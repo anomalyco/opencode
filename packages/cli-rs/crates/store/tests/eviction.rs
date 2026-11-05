@@ -75,13 +75,7 @@ fn fixture(read: Option<Read>) -> Data {
 }
 
 fn messages(data: &Data, session: &str) -> Vec<String> {
-    data.read(|state| {
-        state
-            .messages(&id(session))
-            .iter()
-            .map(|item| item.id().to_owned())
-            .collect()
-    })
+    data.read(|state| state.messages(&id(session)).iter().map(|item| item.id().to_owned()).collect())
 }
 
 #[tokio::test]
@@ -113,15 +107,9 @@ async fn evicts_a_whole_family_while_preserving_metadata_and_attention() {
             assert!(state.inputs(&session).is_empty());
             assert_eq!(state.session(&session).map(|info| &info.id), Some(&session));
         }
-        assert_eq!(
-            state.family(&id("ses_parent")),
-            [id("ses_parent"), id("ses_child"), id("ses_grandchild")]
-        );
+        assert_eq!(state.family(&id("ses_parent")), [id("ses_parent"), id("ses_child"), id("ses_grandchild")]);
         assert_eq!(state.status(&id("ses_child")), SessionStatus::Running);
-        assert_eq!(
-            state.permissions(&id("ses_child")).unwrap()[0].id.0,
-            "per_test"
-        );
+        assert_eq!(state.permissions(&id("ses_child")).unwrap()[0].id.0, "per_test");
     });
     assert_eq!(messages(&data, "ses_other").len(), 2);
 
@@ -133,10 +121,7 @@ async fn evicts_a_whole_family_while_preserving_metadata_and_attention() {
             "data": { "sessionID": "ses_parent", "agent": "build" },
         }),
     );
-    assert_eq!(
-        data.read(|state| state.messages(&id("ses_parent"))[0].tag().to_owned()),
-        "agent-switched"
-    );
+    assert_eq!(data.read(|state| state.messages(&id("ses_parent"))[0].tag().to_owned()), "agent-switched");
     data.message_sync(&id("ses_parent")).await.unwrap();
     assert_eq!(messages(&data, "ses_parent"), ["msg_page"]);
     data.message_sync(&id("ses_grandchild")).await.unwrap();
@@ -217,10 +202,7 @@ async fn preserves_optimistic(mode: &'static str) {
     let _ = request.await;
     let expected = if mode == "echo" { 1 } else { 0 };
     assert_eq!(messages(&data, "ses_child").len(), expected);
-    assert_eq!(
-        data.read(|state| state.pending(&id("ses_child")).len()),
-        expected
-    );
+    assert_eq!(data.read(|state| state.pending(&id("ses_child")).len()), expected);
 }
 
 #[tokio::test]

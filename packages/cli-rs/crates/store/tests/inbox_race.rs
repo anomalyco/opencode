@@ -70,11 +70,7 @@ async fn consumed(action: &str) {
     response.resolve(ok(json!({ "data": [item()] })));
     reading.await.unwrap();
     assert!(!data.read(|state| state.has_input(&session(), "msg_remote")));
-    let created = data.read(|state| {
-        state
-            .message(&session(), "msg_remote")
-            .map(|message| message.created())
-    });
+    let created = data.read(|state| state.message(&session(), "msg_remote").map(|message| message.created()));
     match action {
         "cancelled" => assert_eq!(created, None),
         _ => assert_eq!(created, Some(2.0)),
@@ -164,11 +160,7 @@ async fn hydration_preserves_submission_order_across_optimistic_admissions() {
     response.resolve(ok(json!({ "data": [] })));
     reading.await.unwrap();
     assert_eq!(
-        data.read(|state| state
-            .inputs(&session())
-            .into_iter()
-            .map(str::to_owned)
-            .collect::<Vec<_>>()),
+        data.read(|state| state.inputs(&session()).into_iter().map(str::to_owned).collect::<Vec<_>>()),
         ["msg_first", "msg_second"]
     );
     gate.resolve(());

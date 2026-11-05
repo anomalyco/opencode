@@ -27,10 +27,7 @@ pub fn split_hunks(patch: &str) -> Vec<Hunk> {
         })
         .collect();
     if starts.len() <= 1 {
-        return vec![Hunk {
-            header: None,
-            patch: patch.to_owned(),
-        }];
+        return vec![Hunk { header: None, patch: patch.to_owned() }];
     }
     let prefix = &patch[..starts[0]];
     starts
@@ -39,10 +36,7 @@ pub fn split_hunks(patch: &str) -> Vec<Hunk> {
         .map(|(index, &start)| {
             let end = starts.get(index + 1).copied().unwrap_or(patch.len());
             let line_end = patch[start..end].find('\n').map_or(end, |at| start + at);
-            Hunk {
-                header: Some(patch[start..line_end].to_owned()),
-                patch: format!("{prefix}{}", &patch[start..end]),
-            }
+            Hunk { header: Some(patch[start..line_end].to_owned()), patch: format!("{prefix}{}", &patch[start..end]) }
         })
         .collect()
 }
@@ -108,17 +102,13 @@ pub fn view(
     gutter_padding: u32,
 ) -> View {
     crate::grammars::register();
-    let gutter = DiffGutter {
-        padding_left: 1 + gutter_padding,
-        min_digits: Some(last_line(patch).to_string().len() as u32),
-    };
+    let gutter =
+        DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(last_line(patch).to_string().len() as u32) };
     let column = View::new(app).width(Length::Percent(100.0));
     for (index, hunk) in split_hunks(patch).into_iter().enumerate() {
         if index > 0 {
             let header = format!(" {}", hunk.header.unwrap_or_default());
-            let header = Text::new(app, header)
-                .fg(theme.diff.text.hunk_header)
-                .bg(theme.diff.background.context);
+            let header = Text::new(app, header).fg(theme.diff.text.hunk_header).bg(theme.diff.background.context);
             column.add(
                 &View::new(app)
                     .width(Length::Percent(100.0))
@@ -171,10 +161,7 @@ mod tests {
         assert_eq!(
             split_hunks(patch),
             [
-                Hunk {
-                    header: Some("@@ -1 +1 @@ fn".into()),
-                    patch: "--- a\n+++ a\n@@ -1 +1 @@ fn\n-a\n+b\n".into(),
-                },
+                Hunk { header: Some("@@ -1 +1 @@ fn".into()), patch: "--- a\n+++ a\n@@ -1 +1 @@ fn\n-a\n+b\n".into() },
                 Hunk {
                     header: Some("@@ -9,2 +9,3 @@".into()),
                     patch: "--- a\n+++ a\n@@ -9,2 +9,3 @@\n x\n+y\n".into(),
@@ -182,13 +169,7 @@ mod tests {
             ]
         );
         let single = "@@ -1 +1 @@\n-a\n+b";
-        assert_eq!(
-            split_hunks(single),
-            [Hunk {
-                header: None,
-                patch: single.into()
-            }]
-        );
+        assert_eq!(split_hunks(single), [Hunk { header: None, patch: single.into() }]);
         for line in ["@@ -1, +1 @@", "@@ -a +1 @@", "@@ -1 +1@@", " @@ -1 +1 @@"] {
             assert!(!is_hunk_header(line), "{line}");
         }
@@ -196,10 +177,7 @@ mod tests {
 
     #[test]
     fn last_line_is_the_largest_hunk_end() {
-        assert_eq!(
-            last_line("@@ -1,4 +1,4 @@\n a\n@@ -10,3 +98,4 @@ fn\n b\n"),
-            101
-        );
+        assert_eq!(last_line("@@ -1,4 +1,4 @@\n a\n@@ -10,3 +98,4 @@ fn\n b\n"), 101);
         assert_eq!(last_line("@@ -7 +7 @@\n-a\n+b\n"), 7);
         assert_eq!(last_line("@@ -0,0 +0,0 @@\n"), 1);
         assert_eq!(last_line("no hunks"), 1);

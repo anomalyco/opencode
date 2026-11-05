@@ -10,9 +10,7 @@ use std::rc::{Rc, Weak};
 use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
-use opencode_api::generated::{
-    AbsolutePath, ProjectID, SessionID, SessionMoveInput, WorktreeCreateInput,
-};
+use opencode_api::generated::{AbsolutePath, ProjectID, SessionID, SessionMoveInput, WorktreeCreateInput};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::Disposer;
@@ -31,18 +29,8 @@ pub struct LocationMissing {
 
 impl LocationMissing {
     pub fn new(tui: &Tui, session: &SessionID) -> Self {
-        let root = View::new(&tui.app)
-            .column()
-            .shrink(0.0)
-            .max_height(15)
-            .visible(false);
-        Self {
-            tui: tui.weak(),
-            session: session.clone(),
-            root,
-            active: Cell::new(false),
-            layer: RefCell::new(None),
-        }
+        let root = View::new(&tui.app).column().shrink(0.0).max_height(15).visible(false);
+        Self { tui: tui.weak(), session: session.clone(), root, active: Cell::new(false), layer: RefCell::new(None) }
     }
 
     pub fn root(&self) -> &View {
@@ -55,14 +43,10 @@ impl LocationMissing {
 
     /// Shows the view while the location error names the session's directory.
     pub fn sync(&self, tui: &Tui) {
-        let directory = tui.data.read(|state| {
-            state
-                .session(&self.session)
-                .map(|session| session.location.directory.0.clone())
-        });
+        let directory =
+            tui.data.read(|state| state.session(&self.session).map(|session| session.location.directory.0.clone()));
         let missing = directory.filter(|directory| {
-            crate::features::location::error(tui)
-                .is_some_and(|location| location.directory == *directory)
+            crate::features::location::error(tui).is_some_and(|location| location.directory == *directory)
         });
         if missing.is_some() == self.active.get() {
             return;
@@ -120,10 +104,7 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
     let app = &tui.app;
     let theme = tui.page();
     let home = std::env::var("HOME").unwrap_or_default();
-    let shown = opencode_ui::select::truncate_middle(
-        &opencode_ui::path::abbreviate_home(directory, &home),
-        72,
-    );
+    let shown = opencode_ui::select::truncate_middle(&opencode_ui::path::abbreviate_home(directory, &home), 72);
     let header = View::new(app)
         .row()
         .gap(1)
@@ -136,10 +117,7 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
         .padding_edge(Edge::Left, 1)
         .gap(1)
         .child(&Text::new(app, shown).fg(theme.text.muted))
-        .child(
-            &Text::new(app, "Choose another directory to continue this session.")
-                .fg(theme.text.base),
-        );
+        .child(&Text::new(app, "Choose another directory to continue this session.").fg(theme.text.base));
     let content = View::new(app)
         .column()
         .gap(1)
@@ -164,11 +142,7 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
     );
     let narrow = app.size().0 < 80;
     let footer = View::new(app)
-        .direction(if narrow {
-            FlexDirection::Column
-        } else {
-            FlexDirection::Row
-        })
+        .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
         .shrink(0.0)
         .gap(1)
         .padding_edge(Edge::Top, 1)
@@ -176,11 +150,7 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
         .padding_edge(Edge::Right, 3)
         .padding_edge(Edge::Bottom, 1)
         .bg(theme.decrease(&theme.background.raised.base, 1))
-        .justify(if narrow {
-            Justify::Start
-        } else {
-            Justify::SpaceBetween
-        })
+        .justify(if narrow { Justify::Start } else { Justify::SpaceBetween })
         .align_items(if narrow { Align::Start } else { Align::Center })
         .child(&actions)
         .child(&hints);
@@ -205,12 +175,9 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
 /// where the session moves.
 fn choose(tui: &Tui, session: SessionID, directory: String) {
     let Some((project, subdirectory)) = tui.data.read(|state| {
-        state.session(&session).map(|info| {
-            (
-                info.project_id.clone(),
-                info.subpath.as_ref().is_some_and(|sub| !sub.0.is_empty()),
-            )
-        })
+        state
+            .session(&session)
+            .map(|info| (info.project_id.clone(), info.subpath.as_ref().is_some_and(|sub| !sub.0.is_empty())))
     }) else {
         return;
     };
@@ -219,16 +186,11 @@ fn choose(tui: &Tui, session: SessionID, directory: String) {
         crate::dialogs::worktrees::Props {
             project_id: project.clone(),
             location: Some(opencode_store::Location::new(directory.clone())),
-            current: Some(Selection::Directory {
-                directory,
-                subdirectory,
-            }),
+            current: Some(Selection::Directory { directory, subdirectory }),
             on_select: Rc::new(move |tui, selection| {
                 tui.dialogs.clear();
                 match selection {
-                    Selection::Directory { directory, .. } => {
-                        move_session(tui, session.clone(), directory)
-                    }
+                    Selection::Directory { directory, .. } => move_session(tui, session.clone(), directory),
                     Selection::New { name } => create(tui, session.clone(), project.clone(), name),
                 }
             }),
@@ -240,59 +202,37 @@ fn choose(tui: &Tui, session: SessionID, directory: String) {
 /// A new worktree for the session, then the move.
 fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
     let client = tui.data.client().clone();
-    let input = WorktreeCreateInput {
-        project_id: project,
-        name: Some(name),
-        ..WorktreeCreateInput::default()
-    };
+    let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .worktree_create(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
-            match result.map(|created| created.directory.0) {
-                Ok(directory) if !directory.is_empty() => move_session(&tui, session, directory),
-                result => tui.toasts.show(
-                    ToastOptions::new(
-                        Variant::Error,
-                        result.map_or_else(
-                            |error| crate::dialogs::worktrees::error_message(&error),
-                            |_| "No worktree directory returned".to_owned(),
-                        ),
-                    )
-                    .title("Creating workspace failed"),
-                ),
-            }
-        },
-    );
+    tui.app.spawn(async move { client.worktree_create(&input, &RequestOptions::default()).await }, move |_, result| {
+        let Some(tui) = weak.upgrade() else { return };
+        match result.map(|created| created.directory.0) {
+            Ok(directory) if !directory.is_empty() => move_session(&tui, session, directory),
+            result => tui.toasts.show(
+                ToastOptions::new(
+                    Variant::Error,
+                    result.map_or_else(
+                        |error| crate::dialogs::worktrees::error_message(&error),
+                        |_| "No worktree directory returned".to_owned(),
+                    ),
+                )
+                .title("Creating workspace failed"),
+            ),
+        }
+    });
 }
 
 fn move_session(tui: &Tui, session: SessionID, directory: String) {
     let client = tui.data.client().clone();
-    let input = SessionMoveInput {
-        session_id: session,
-        directory: AbsolutePath(directory),
-        delivery: None,
-    };
+    let input = SessionMoveInput { session_id: session, directory: AbsolutePath(directory), delivery: None };
     let weak = tui.weak();
-    tui.app.spawn(
-        async move {
-            client
-                .session_move(&input, &RequestOptions::default())
-                .await
-        },
-        move |_, result| {
-            if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
-                tui.toasts.show(
-                    ToastOptions::new(Variant::Error, error.to_string())
-                        .title("Failed to move session")
-                        .duration(Duration::from_millis(5000)),
-                );
-            }
-        },
-    );
+    tui.app.spawn(async move { client.session_move(&input, &RequestOptions::default()).await }, move |_, result| {
+        if let (Err(error), Some(tui)) = (result, weak.upgrade()) {
+            tui.toasts.show(
+                ToastOptions::new(Variant::Error, error.to_string())
+                    .title("Failed to move session")
+                    .duration(Duration::from_millis(5000)),
+            );
+        }
+    });
 }

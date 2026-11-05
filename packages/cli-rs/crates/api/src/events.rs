@@ -45,9 +45,7 @@ pub trait Event: Clone + Send + 'static {
 
 impl Event for serde_json::Value {
     fn kind(&self) -> &str {
-        self.get("type")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
+        self.get("type").and_then(serde_json::Value::as_str).unwrap_or_default()
     }
 }
 
@@ -55,13 +53,10 @@ impl Event for serde_json::Value {
 pub type Activity = Arc<dyn Fn() + Send + Sync>;
 
 /// Opens one upstream event stream. The token is cancelled when the stream is no longer wanted.
-pub type Connect<E, X> =
-    Arc<dyn Fn(CancellationToken, Activity) -> BoxStream<'static, Result<E, X>> + Send + Sync>;
+pub type Connect<E, X> = Arc<dyn Fn(CancellationToken, Activity) -> BoxStream<'static, Result<E, X>> + Send + Sync>;
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -94,10 +89,7 @@ pub struct SharedEvents<E, X> {
 
 impl<E, X> Clone for SharedEvents<E, X> {
     fn clone(&self) -> Self {
-        Self {
-            hub: self.hub.clone(),
-            connect: self.connect.clone(),
-        }
+        Self { hub: self.hub.clone(), connect: self.connect.clone() }
     }
 }
 
@@ -128,10 +120,8 @@ struct Inbox<E, X> {
 impl<E: Event, X> Subscriber<E, X> {
     /// Queues `event` if selected; returns false when the subscriber overflowed and must be removed.
     fn push(&self, event: &E) -> bool {
-        let selected = self
-            .types
-            .as_ref()
-            .is_none_or(|types| event.kind() == CONNECTED || types.contains(event.kind()));
+        let selected =
+            self.types.as_ref().is_none_or(|types| event.kind() == CONNECTED || types.contains(event.kind()));
         let mut inbox = lock(&self.state);
         if inbox.completion.is_some() || !selected {
             return true;
@@ -164,35 +154,20 @@ impl<E: Event, X> Subscriber<E, X> {
 
 impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
     pub fn new(connect: Connect<E, X>) -> Self {
-        Self {
-            hub: Arc::new(Mutex::new(Hub {
-                next: 0,
-                current: None,
-                upstreams: HashMap::new(),
-            })),
-            connect,
-        }
+        Self { hub: Arc::new(Mutex::new(Hub { next: 0, current: None, upstreams: HashMap::new() })), connect }
     }
 
     /// A lazy subscription: nothing opens until its first [`Subscription::next`]. With `types`, only
     /// those events and `server.connected` come through.
-    pub fn subscribe(
-        &self,
-        types: Option<&[&str]>,
-        activity: Option<Activity>,
-    ) -> Subscription<E, X> {
-        let types = types
-            .filter(|types| !types.is_empty())
-            .map(|types| types.iter().map(|kind| (*kind).to_owned()).collect());
+    pub fn subscribe(&self, types: Option<&[&str]>, activity: Option<Activity>) -> Subscription<E, X> {
+        let types =
+            types.filter(|types| !types.is_empty()).map(|types| types.iter().map(|kind| (*kind).to_owned()).collect());
         Subscription {
             shared: self.clone(),
             subscriber: Arc::new(Subscriber {
                 types,
                 activity,
-                state: Mutex::new(Inbox {
-                    queue: VecDeque::new(),
-                    completion: None,
-                }),
+                state: Mutex::new(Inbox { queue: VecDeque::new(), completion: None }),
                 notify: Notify::new(),
             }),
             upstream: None,
@@ -210,19 +185,12 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
                 hub.current = Some(id);
                 hub.upstreams.insert(
                     id,
-                    Upstream {
-                        cancel: CancellationToken::new(),
-                        subscribers: Vec::new(),
-                        connected: None,
-                    },
+                    Upstream { cancel: CancellationToken::new(), subscribers: Vec::new(), connected: None },
                 );
                 id
             }
         };
-        let upstream = hub
-            .upstreams
-            .get_mut(&id)
-            .expect("the current upstream is registered");
+        let upstream = hub.upstreams.get_mut(&id).expect("the current upstream is registered");
         upstream.subscribers.push(subscriber.clone());
         if let Some(connected) = &upstream.connected {
             subscriber.push(connected);
@@ -243,11 +211,7 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
                 .upstreams
                 .get(&id)
                 .map(|upstream| {
-                    upstream
-                        .subscribers
-                        .iter()
-                        .filter_map(|subscriber| subscriber.activity.clone())
-                        .collect::<Vec<_>>()
+                    upstream.subscribers.iter().filter_map(|subscriber| subscriber.activity.clone()).collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
             callbacks.iter().for_each(|callback| callback());
@@ -269,9 +233,7 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
                     if event.kind() == CONNECTED {
                         upstream.connected = Some(event.clone());
                     }
-                    upstream
-                        .subscribers
-                        .retain(|subscriber| subscriber.push(&event));
+                    upstream.subscribers.retain(|subscriber| subscriber.push(&event));
                     if upstream.subscribers.is_empty() {
                         Self::stop(&mut hub, id);
                     }
@@ -281,15 +243,10 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
         let subscribers = {
             let mut hub = lock(&self.hub);
             Self::stop(&mut hub, id);
-            hub.upstreams
-                .remove(&id)
-                .map(|upstream| upstream.subscribers)
-                .unwrap_or_default()
+            hub.upstreams.remove(&id).map(|upstream| upstream.subscribers).unwrap_or_default()
         };
         drop(stream);
-        subscribers
-            .iter()
-            .for_each(|subscriber| subscriber.finish(completion.clone(), false));
+        subscribers.iter().for_each(|subscriber| subscriber.finish(completion.clone(), false));
     }
 
     /// Detaches an upstream: new subscriptions open a replacement while this one winds down.
@@ -309,9 +266,7 @@ impl<E: Event, X: Send + Sync + 'static> SharedEvents<E, X> {
             return;
         };
         let before = upstream.subscribers.len();
-        upstream
-            .subscribers
-            .retain(|other| !Arc::ptr_eq(other, subscriber));
+        upstream.subscribers.retain(|other| !Arc::ptr_eq(other, subscriber));
         if before != upstream.subscribers.len() && upstream.subscribers.is_empty() {
             Self::stop(&mut hub, id);
         }
@@ -481,24 +436,14 @@ impl Drop for Connection {
 
 /// Starts the connection loop on the current tokio runtime. Batches arrive on the returned receiver;
 /// dropping the receiver stops the loop.
-pub fn connect<E: Event, S: Source<E>>(
-    source: S,
-    options: Options,
-) -> (Connection, mpsc::Receiver<Vec<E>>) {
+pub fn connect<E: Event, S: Source<E>>(source: S, options: Options) -> (Connection, mpsc::Receiver<Vec<E>>) {
     let (batches, receiver) = mpsc::channel(options.queue.max(1));
-    let (state, watcher) = watch::channel(State {
-        status: Status::Connecting,
-        attempt: 0,
-        error: None,
-    });
+    let (state, watcher) = watch::channel(State { status: Status::Connecting, attempt: 0, error: None });
     let connection = Connection {
         cancel: CancellationToken::new(),
         state: watcher,
         history: Arc::new(Mutex::new(VecDeque::new())),
-        resync: Arc::new(Resync {
-            reason: Mutex::new(None),
-            notify: Notify::new(),
-        }),
+        resync: Arc::new(Resync { reason: Mutex::new(None), notify: Notify::new() }),
     };
     let runner = Runner {
         source,
@@ -541,19 +486,10 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
         let mut attempt = 0;
         loop {
             self.state.send_modify(|state| {
-                state.status = if attempt == 0 {
-                    Status::Connecting
-                } else {
-                    Status::Reconnecting
-                };
+                state.status = if attempt == 0 { Status::Connecting } else { Status::Reconnecting };
                 state.attempt = attempt;
             });
-            let End::Failed {
-                error,
-                connected_at,
-                forced,
-            } = self.stream(attempt).await
-            else {
+            let End::Failed { error, connected_at, forced } = self.stream(attempt).await else {
                 return;
             };
             if connected_at.is_some_and(|at| at.elapsed() >= self.options.reconnect_delay) {
@@ -562,11 +498,7 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
             attempt += 1;
             self.record(RecordStatus::Disconnected, attempt, Some(error.clone()));
             log::info!("event stream disconnected: attempt {attempt}: {error}");
-            self.state.send_replace(State {
-                status: Status::Reconnecting,
-                attempt,
-                error: Some(error),
-            });
+            self.state.send_replace(State { status: Status::Reconnecting, attempt, error: Some(error) });
 
             let resolved = tokio::select! {
                 _ = self.cancel.cancelled() => return,
@@ -585,36 +517,25 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
     async fn stream(&mut self, attempt: u32) -> End {
         let activity = Arc::new(Notify::new());
         let touch = activity.clone();
-        self.record(
-            if attempt == 0 {
-                RecordStatus::Connecting
-            } else {
-                RecordStatus::Reconnecting
-            },
-            attempt,
-            None,
-        );
+        self.record(if attempt == 0 { RecordStatus::Connecting } else { RecordStatus::Reconnecting }, attempt, None);
         log::info!("event stream connecting: attempt {attempt}");
         // A reader that panics ends its stream like a failed one, so the loop reconnects.
-        let mut stream = AssertUnwindSafe(self.source.open(Arc::new(move || touch.notify_one())))
-            .catch_unwind()
-            .map(|item| match item {
-                Ok(item) => item.map_err(|error| error.to_string()),
-                Err(payload) => {
-                    let message = payload
-                        .downcast_ref::<&str>()
-                        .map(|message| message.to_string())
-                        .or_else(|| payload.downcast_ref::<String>().cloned())
-                        .unwrap_or_default();
-                    log::error!("event stream reader panicked: {message}");
-                    Err(format!("Event stream reader panicked: {message}"))
+        let mut stream =
+            AssertUnwindSafe(self.source.open(Arc::new(move || touch.notify_one()))).catch_unwind().map(|item| {
+                match item {
+                    Ok(item) => item.map_err(|error| error.to_string()),
+                    Err(payload) => {
+                        let message = payload
+                            .downcast_ref::<&str>()
+                            .map(|message| message.to_string())
+                            .or_else(|| payload.downcast_ref::<String>().cloned())
+                            .unwrap_or_default();
+                        log::error!("event stream reader panicked: {message}");
+                        Err(format!("Event stream reader panicked: {message}"))
+                    }
                 }
             });
-        let failed = |error: &str, connected_at| End::Failed {
-            error: error.to_owned(),
-            connected_at,
-            forced: false,
-        };
+        let failed = |error: &str, connected_at| End::Failed { error: error.to_owned(), connected_at, forced: false };
 
         let first = tokio::select! {
             _ = self.cancel.cancelled() => return End::Stopped,
@@ -632,11 +553,7 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
         self.record(RecordStatus::Connected, attempt, None);
         let connected_at = Some(Instant::now());
         log::info!("event stream connected");
-        self.state.send_replace(State {
-            status: Status::Connected,
-            attempt: 0,
-            error: None,
-        });
+        self.state.send_replace(State { status: Status::Connected, attempt: 0, error: None });
         // A resync requested before this stream connected is stale.
         lock(&self.resync.reason).take();
         let mut idle = Instant::now() + self.options.idle_timeout;
@@ -693,25 +610,16 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
         match self.batches.try_send(batch) {
             Ok(()) => None,
             Err(mpsc::error::TrySendError::Closed(_)) => Some(End::Stopped),
-            Err(mpsc::error::TrySendError::Full(_)) => Some(End::Failed {
-                error: "Event queue full".to_owned(),
-                connected_at,
-                forced: false,
-            }),
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                Some(End::Failed { error: "Event queue full".to_owned(), connected_at, forced: false })
+            }
         }
     }
 
     fn record(&self, status: RecordStatus, attempt: u32, error: Option<String>) {
-        let created = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.as_millis() as i64);
+        let created = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as i64);
         let mut history = lock(&self.history);
-        history.push_back(Record {
-            created,
-            status,
-            attempt,
-            error,
-        });
+        history.push_back(Record { created, status, attempt, error });
         if history.len() > HISTORY_LIMIT {
             history.pop_front();
         }
@@ -731,19 +639,11 @@ mod tests {
     }
 
     fn ev(kind: &'static str, value: i64) -> Ev {
-        Ev {
-            kind,
-            value,
-            text: String::new(),
-        }
+        Ev { kind, value, text: String::new() }
     }
 
     fn delta(value: i64, text: &str) -> Ev {
-        Ev {
-            kind: "session.text.delta",
-            value,
-            text: text.to_owned(),
-        }
+        Ev { kind: "session.text.delta", value, text: text.to_owned() }
     }
 
     impl Event for Ev {
@@ -752,10 +652,7 @@ mod tests {
         }
 
         fn merge(&mut self, next: &Self) -> bool {
-            if self.kind != "session.text.delta"
-                || next.kind != self.kind
-                || next.value != self.value
-            {
+            if self.kind != "session.text.delta" || next.kind != self.kind || next.value != self.value {
                 return false;
             }
             self.text.push_str(&next.text);
@@ -816,20 +713,11 @@ mod tests {
     }
 
     impl Fake {
-        fn open(
-            &self,
-            cancel: CancellationToken,
-            activity: Activity,
-        ) -> BoxStream<'static, Result<Ev, Failure>> {
+        fn open(&self, cancel: CancellationToken, activity: Activity) -> BoxStream<'static, Result<Ev, Failure>> {
             let (sender, receiver) = mpsc::unbounded_channel();
             let dropped = Arc::new(AtomicBool::new(false));
             let flag = DropFlag(dropped.clone());
-            lock(&self.opened).push(Arc::new(Upstream {
-                sender: Mutex::new(Some(sender)),
-                activity,
-                cancel,
-                dropped,
-            }));
+            lock(&self.opened).push(Arc::new(Upstream { sender: Mutex::new(Some(sender)), activity, cancel, dropped }));
             futures_util::stream::unfold((receiver, flag), |(mut receiver, flag)| async move {
                 receiver.recv().await.map(|item| (item, (receiver, flag)))
             })
@@ -846,9 +734,7 @@ mod tests {
 
         fn shared(&self) -> SharedEvents<Ev, Failure> {
             let fake = self.clone();
-            SharedEvents::new(Arc::new(move |cancel, activity| {
-                fake.open(cancel, activity)
-            }))
+            SharedEvents::new(Arc::new(move |cancel, activity| fake.open(cancel, activity)))
         }
     }
 
@@ -878,10 +764,7 @@ mod tests {
         panic!("timed out waiting for condition");
     }
 
-    type Read = tokio::task::JoinHandle<(
-        Subscription<Ev, Failure>,
-        Option<Result<Ev, SubscribeError<Failure>>>,
-    )>;
+    type Read = tokio::task::JoinHandle<(Subscription<Ev, Failure>, Option<Result<Ev, SubscribeError<Failure>>>)>;
 
     /// Starts a read in the background, as an unawaited `next()` promise in the TS tests.
     fn read(mut subscription: Subscription<Ev, Failure>) -> Read {
@@ -891,12 +774,8 @@ mod tests {
         })
     }
 
-    async fn next(
-        subscription: &mut Subscription<Ev, Failure>,
-    ) -> Option<Result<Ev, SubscribeError<Failure>>> {
-        tokio::time::timeout(Duration::from_secs(1), subscription.next())
-            .await
-            .expect("next() hung")
+    async fn next(subscription: &mut Subscription<Ev, Failure>) -> Option<Result<Ev, SubscribeError<Failure>>> {
+        tokio::time::timeout(Duration::from_secs(1), subscription.next()).await.expect("next() hung")
     }
 
     fn value(item: Option<Result<Ev, SubscribeError<Failure>>>) -> Ev {
@@ -940,11 +819,7 @@ mod tests {
         let fake = Fake::default();
         let shared = fake.shared();
         let (mut first, mut second) = (shared.subscribe(None, None), shared.subscribe(None, None));
-        for event in [
-            ev(CONNECTED, 0),
-            ev("session.updated", 0),
-            ev("rpc.example.updated", 1),
-        ] {
+        for event in [ev(CONNECTED, 0), ev("session.updated", 0), ev("rpc.example.updated", 1)] {
             let reads = (read(first), read(second));
             settle().await;
             fake.at(0).push(event.clone());
@@ -973,12 +848,7 @@ mod tests {
         let mut filtered = fake.shared().subscribe(Some(&["session.updated"]), None);
         let connected = read(filtered);
         settle().await;
-        for kind in [
-            CONNECTED,
-            "permission.asked",
-            "rpc.example.updated",
-            "session.updated",
-        ] {
+        for kind in [CONNECTED, "permission.asked", "rpc.example.updated", "session.updated"] {
             fake.at(0).push(ev(kind, 0));
         }
         let item;
@@ -1022,10 +892,7 @@ mod tests {
         until(|| fake.at(0).dropped()).await;
         let error = next(&mut idle).await.unwrap().unwrap_err();
         assert!(matches!(error, SubscribeError::Overflow));
-        assert_eq!(
-            error.to_string(),
-            "Event subscriber exceeded its 4096-event capacity"
-        );
+        assert_eq!(error.to_string(), "Event subscriber exceeded its 4096-event capacity");
     }
 
     #[tokio::test]
@@ -1066,10 +933,7 @@ mod tests {
         let pending = read(idle);
         settle().await;
         fake.at(0).push(ev("rpc.example.updated", 4));
-        assert_eq!(
-            value(pending.await.unwrap().1),
-            ev("rpc.example.updated", 4)
-        );
+        assert_eq!(value(pending.await.unwrap().1), ev("rpc.example.updated", 4));
         assert_eq!(fake.count(), 1);
     }
 
@@ -1118,10 +982,7 @@ mod tests {
     async fn source_eof_finishes_all_consumers_and_permits_a_fresh_subscription() {
         let fake = Fake::default();
         let shared = fake.shared();
-        let reads = (
-            read(shared.subscribe(None, None)),
-            read(shared.subscribe(None, None)),
-        );
+        let reads = (read(shared.subscribe(None, None)), read(shared.subscribe(None, None)));
         settle().await;
         fake.at(0).push(ev(CONNECTED, 1));
         let (mut first, _) = reads.0.await.unwrap();
@@ -1144,23 +1005,17 @@ mod tests {
     async fn source_failures_reach_every_consumer_as_the_same_error() {
         let fake = Fake::default();
         let shared = fake.shared();
-        let reads = (
-            read(shared.subscribe(None, None)),
-            read(shared.subscribe(None, None)),
-        );
+        let reads = (read(shared.subscribe(None, None)), read(shared.subscribe(None, None)));
         settle().await;
         fake.at(0).fail("actual source failure");
         let (mut first, a) = reads.0.await.unwrap();
         let (_second, b) = reads.1.await.unwrap();
-        let (Some(Err(SubscribeError::Source(a))), Some(Err(SubscribeError::Source(b)))) = (a, b)
-        else {
+        let (Some(Err(SubscribeError::Source(a))), Some(Err(SubscribeError::Source(b)))) = (a, b) else {
             panic!("both consumers fail");
         };
         assert!(Arc::ptr_eq(&a, &b));
         assert_eq!(*a, Failure("actual source failure"));
-        let Some(Err(SubscribeError::Source(again))) = next(&mut first).await else {
-            panic!("the failure repeats")
-        };
+        let Some(Err(SubscribeError::Source(again))) = next(&mut first).await else { panic!("the failure repeats") };
         assert!(Arc::ptr_eq(&a, &again));
         assert_eq!(fake.count(), 1);
 
@@ -1185,10 +1040,7 @@ mod tests {
         settle().await;
         assert_eq!(lock(&attempts).len(), 1);
         assert!(lock(&attempts)[0].is_cancelled());
-        assert!(matches!(
-            next(&mut shared.subscribe(None, None)).await,
-            Some(Err(_))
-        ));
+        assert!(matches!(next(&mut shared.subscribe(None, None)).await, Some(Err(_))));
         assert_eq!(lock(&attempts).len(), 2);
     }
 
@@ -1217,11 +1069,7 @@ mod tests {
     // Ports of packages/client/test/solid-connection.test.ts, plus the A09 batching and queue rules.
 
     fn options(idle: u64) -> Options {
-        Options {
-            flush_interval: Duration::ZERO,
-            idle_timeout: Duration::from_millis(idle),
-            ..Options::default()
-        }
+        Options { flush_interval: Duration::ZERO, idle_timeout: Duration::from_millis(idle), ..Options::default() }
     }
 
     fn disconnected(attempt: u32, error: &str) -> (RecordStatus, u32, Option<String>) {
@@ -1229,11 +1077,7 @@ mod tests {
     }
 
     fn records(connection: &Connection) -> Vec<(RecordStatus, u32, Option<String>)> {
-        connection
-            .history()
-            .into_iter()
-            .map(|record| (record.status, record.attempt, record.error))
-            .collect()
+        connection.history().into_iter().map(|record| (record.status, record.attempt, record.error)).collect()
     }
 
     async fn drain(receiver: &mut mpsc::Receiver<Vec<Ev>>, events: &mut Vec<Ev>) {
@@ -1306,10 +1150,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn a_stream_the_server_closes_or_fails_reconnects_and_reports_the_disconnect() {
-        for (fail, message) in [
-            (false, "Event stream disconnected"),
-            (true, "Transport: contract failure"),
-        ] {
+        for (fail, message) in [(false, "Event stream disconnected"), (true, "Transport: contract failure")] {
             let fake = Fake::default();
             let (connection, _batches) = connect(fake.clone(), options(10_000));
             until(|| fake.count() == 1).await;
@@ -1325,10 +1166,7 @@ mod tests {
             assert_eq!(connection.state().error.as_deref(), Some(message));
             let disconnected_at = Instant::now();
             until(|| fake.count() == 2).await;
-            assert!(
-                disconnected_at.elapsed() >= Duration::from_secs(1),
-                "reconnects after the delay"
-            );
+            assert!(disconnected_at.elapsed() >= Duration::from_secs(1), "reconnects after the delay");
         }
     }
 
@@ -1351,10 +1189,8 @@ mod tests {
                     .boxed()
             }
         }
-        for (panic, error) in [
-            (true, "Event stream reader panicked: reader bug"),
-            (false, "Transport: reader failure"),
-        ] {
+        for (panic, error) in [(true, "Event stream reader panicked: reader bug"), (false, "Transport: reader failure")]
+        {
             let fake = Fake::default();
             let (connection, mut batches) = connect(Panicking(fake.clone()), options(10_000));
             until(|| fake.count() == 1).await;
@@ -1376,12 +1212,7 @@ mod tests {
             drain(&mut batches, &mut events).await;
             assert_eq!(
                 events,
-                vec![
-                    ev(CONNECTED, 1),
-                    ev("session.updated", 1),
-                    ev(CONNECTED, 2),
-                    ev("session.updated", 2)
-                ],
+                vec![ev(CONNECTED, 1), ev("session.updated", 1), ev(CONNECTED, 2), ev("session.updated", 2)],
                 "{error}"
             );
         }
@@ -1392,54 +1223,29 @@ mod tests {
         let fake = Fake::default();
         let (connection, _batches) = connect(fake.clone(), options(10_000));
         until(|| fake.count() == 2).await;
-        assert_eq!(
-            records(&connection)[1],
-            disconnected(1, "Timed out connecting to server")
-        );
+        assert_eq!(records(&connection)[1], disconnected(1, "Timed out connecting to server"));
 
         fake.at(1).push(ev("session.updated", 0));
         until(|| fake.count() == 3).await;
-        assert_eq!(
-            records(&connection)[3],
-            disconnected(2, "Event stream did not start with server.connected")
-        );
+        assert_eq!(records(&connection)[3], disconnected(2, "Event stream did not start with server.connected"));
         assert_eq!(connection.state().attempt, 2);
     }
 
     #[tokio::test(start_paused = true)]
     async fn batches_merge_adjacent_deltas() {
         let fake = Fake::default();
-        let (connection, mut batches) = connect(
-            fake.clone(),
-            Options {
-                flush_interval: Duration::from_millis(10),
-                ..Options::default()
-            },
-        );
+        let (connection, mut batches) =
+            connect(fake.clone(), Options { flush_interval: Duration::from_millis(10), ..Options::default() });
         until(|| fake.count() == 1).await;
-        for event in [
-            ev(CONNECTED, 0),
-            delta(1, "a"),
-            delta(1, "b"),
-            delta(2, "c"),
-            ev("session.updated", 0),
-            delta(1, "d"),
-        ] {
+        for event in
+            [ev(CONNECTED, 0), delta(1, "a"), delta(1, "b"), delta(2, "c"), ev("session.updated", 0), delta(1, "d")]
+        {
             fake.at(0).push(event);
         }
-        let batch = tokio::time::timeout(Duration::from_secs(1), batches.recv())
-            .await
-            .unwrap()
-            .unwrap();
+        let batch = tokio::time::timeout(Duration::from_secs(1), batches.recv()).await.unwrap().unwrap();
         assert_eq!(
             batch,
-            vec![
-                ev(CONNECTED, 0),
-                delta(1, "ab"),
-                delta(2, "c"),
-                ev("session.updated", 0),
-                delta(1, "d")
-            ]
+            vec![ev(CONNECTED, 0), delta(1, "ab"), delta(2, "c"), ev("session.updated", 0), delta(1, "d")]
         );
         assert_eq!(connection.state().status, Status::Connected);
     }
@@ -1447,13 +1253,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn a_full_queue_drops_the_stream_and_reconnects() {
         let fake = Fake::default();
-        let (connection, mut batches) = connect(
-            fake.clone(),
-            Options {
-                queue: 1,
-                ..options(10_000)
-            },
-        );
+        let (connection, mut batches) = connect(fake.clone(), Options { queue: 1, ..options(10_000) });
         until(|| fake.count() == 1).await;
         fake.at(0).push(ev(CONNECTED, 0));
         until(|| connection.state().status == Status::Connected).await;
@@ -1480,8 +1280,7 @@ mod tests {
         }
         let fake = Fake::default();
         let resolved = Arc::new(AtomicUsize::new(0));
-        let (connection, _batches) =
-            connect(Resolving(fake.clone(), resolved.clone()), options(10_000));
+        let (connection, _batches) = connect(Resolving(fake.clone(), resolved.clone()), options(10_000));
         until(|| fake.count() == 1).await;
         fake.at(0).push(ev(CONNECTED, 0));
         until(|| connection.state().status == Status::Connected).await;
@@ -1491,11 +1290,7 @@ mod tests {
         until(|| fake.count() == 2).await;
         assert!(closed.elapsed() < Duration::from_millis(100));
         assert_eq!(resolved.load(Ordering::SeqCst), 1);
-        assert_eq!(
-            connection.state().attempt,
-            1,
-            "a stream that stayed up resets the attempt count"
-        );
+        assert_eq!(connection.state().attempt, 1, "a stream that stayed up resets the attempt count");
     }
 
     #[tokio::test(start_paused = true)]
@@ -1520,10 +1315,7 @@ mod tests {
             return;
         }
         let command = |args: &[&str]| {
-            let output = std::process::Command::new("opencode")
-                .args(args)
-                .output()
-                .expect("opencode runs");
+            let output = std::process::Command::new("opencode").args(args).output().expect("opencode runs");
             assert!(output.status.success(), "opencode {args:?} failed");
             String::from_utf8(output.stdout).unwrap().trim().to_owned()
         };
@@ -1537,24 +1329,17 @@ mod tests {
         }
         impl Source<serde_json::Value> for Live {
             type Error = crate::sse::Error;
-            fn open(
-                &mut self,
-                activity: Activity,
-            ) -> BoxStream<'static, Result<serde_json::Value, Self::Error>> {
-                let request = self
-                    .client
-                    .get(&self.url)
-                    .basic_auth("opencode", Some(&self.password))
-                    .send();
+            fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<serde_json::Value, Self::Error>> {
+                let request = self.client.get(&self.url).basic_auth("opencode", Some(&self.password)).send();
                 futures_util::stream::once(async move {
                     match request.await.and_then(reqwest::Response::error_for_status) {
-                        Ok(response) => {
-                            crate::sse::events(response.bytes_stream(), move || activity()).boxed()
+                        Ok(response) => crate::sse::events(response.bytes_stream(), move || activity()).boxed(),
+                        Err(error) => {
+                            futures_util::stream::once(
+                                async move { Err(crate::sse::Error::Transport(error.to_string())) },
+                            )
+                            .boxed()
                         }
-                        Err(error) => futures_util::stream::once(async move {
-                            Err(crate::sse::Error::Transport(error.to_string()))
-                        })
-                        .boxed(),
                     }
                 })
                 .flatten()
@@ -1562,14 +1347,8 @@ mod tests {
             }
         }
         let url = format!("{}/api/event", server.trim_end_matches('/'));
-        let (connection, mut batches) = connect(
-            Live {
-                client: reqwest::Client::new(),
-                url,
-                password,
-            },
-            Options::default(),
-        );
+        let (connection, mut batches) =
+            connect(Live { client: reqwest::Client::new(), url, password }, Options::default());
         let mut kinds = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(20);
         while kinds.len() < 5 {
@@ -1579,10 +1358,7 @@ mod tests {
             kinds.extend(batch.iter().map(|event| event.kind().to_owned()));
         }
         println!("live: {server} state {:?}", connection.state());
-        println!(
-            "live: event types {}",
-            serde_json::to_string(&kinds).unwrap()
-        );
+        println!("live: event types {}", serde_json::to_string(&kinds).unwrap());
         assert_eq!(kinds.first().map(String::as_str), Some(CONNECTED));
     }
 }

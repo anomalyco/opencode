@@ -63,47 +63,25 @@ mod tests {
 
     #[test]
     fn clipboard_outcomes_map_as_typescript_reads_them() {
-        let read = |mime: &str, data: &[u8]| ClipboardOutcome::Read {
-            mime_type: mime.into(),
-            data: data.to_vec(),
-        };
+        let read = |mime: &str, data: &[u8]| ClipboardOutcome::Read { mime_type: mime.into(), data: data.to_vec() };
         assert_eq!(
             content(read("image/png", b"\x89PNG")),
-            Ok(Some(Content::Image {
-                mime: "image/png".into(),
-                data: "iVBORw==".into()
-            }))
+            Ok(Some(Content::Image { mime: "image/png".into(), data: "iVBORw==".into() }))
         );
         assert_eq!(
             content(read("text/plain", "\u{feff}hé\u{ff}".as_bytes())),
             Ok(Some(Content::Text("hé\u{ff}".into())))
         );
         assert_eq!(content(read("text/plain", b"")), Ok(None));
-        assert_eq!(
-            content(read("text/plain", b"a\xffb")),
-            Ok(Some(Content::Text("a\u{fffd}b".into())))
-        );
-        assert_eq!(
-            content(read("text/html", b"<b>")),
-            Err("Unexpected clipboard MIME type: text/html".into())
-        );
-        assert_eq!(
-            content(ClipboardOutcome::TimedOut),
-            Err("Clipboard read timed out".into())
-        );
+        assert_eq!(content(read("text/plain", b"a\xffb")), Ok(Some(Content::Text("a\u{fffd}b".into()))));
+        assert_eq!(content(read("text/html", b"<b>")), Err("Unexpected clipboard MIME type: text/html".into()));
+        assert_eq!(content(ClipboardOutcome::TimedOut), Err("Clipboard read timed out".into()));
         assert!(content(ClipboardOutcome::LimitExceeded).is_err());
         assert_eq!(
-            content(ClipboardOutcome::Failed {
-                code: 1,
-                message: "no display".into()
-            }),
+            content(ClipboardOutcome::Failed { code: 1, message: "no display".into() }),
             Err("no display".into())
         );
-        for quiet in [
-            ClipboardOutcome::Empty,
-            ClipboardOutcome::Unsupported,
-            ClipboardOutcome::Cancelled,
-        ] {
+        for quiet in [ClipboardOutcome::Empty, ClipboardOutcome::Unsupported, ClipboardOutcome::Cancelled] {
             assert_eq!(content(quiet), Ok(None));
         }
     }

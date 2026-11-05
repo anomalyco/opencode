@@ -24,18 +24,11 @@ impl TsCommand {
     /// `OPENCODE_TS_BIN` (one executable path; an empty value counts as unset), else `opencode`,
     /// found on `PATH` when it runs.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> Self {
-        Self::new(
-            var(Self::VAR)
-                .filter(|program| !program.is_empty())
-                .unwrap_or_else(|| "opencode".into()),
-        )
+        Self::new(var(Self::VAR).filter(|program| !program.is_empty()).unwrap_or_else(|| "opencode".into()))
     }
 
     pub fn new(program: impl Into<OsString>) -> Self {
-        Self {
-            program: program.into(),
-            args: Vec::new(),
-        }
+        Self { program: program.into(), args: Vec::new() }
     }
 
     /// `opencode serve --service`.
@@ -76,9 +69,6 @@ mod tests {
         let mut command = TsCommand::new("bun");
         command.args.push("cli.ts".into());
         assert_eq!(command.service(), ["bun", "cli.ts", "serve", "--service"]);
-        assert_eq!(
-            command.standalone(),
-            ["bun", "cli.ts", "serve", "--stdio", "--port", "0"]
-        );
+        assert_eq!(command.standalone(), ["bun", "cli.ts", "serve", "--stdio", "--port", "0"]);
     }
 }

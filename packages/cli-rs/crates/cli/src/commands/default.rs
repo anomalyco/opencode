@@ -22,10 +22,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     };
     let paths = Paths::from_env()?;
     crate::panic::install();
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("opencode-tui")
-        .build()?;
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("opencode-tui").build()?;
     let transport = Arc::new(Reqwest::default());
     let env = Env::from_env();
     let connection = runtime.block_on(connect::resolve(
@@ -75,19 +72,14 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     let tui_args = Args {
         version: crate::help::VERSION.to_owned(),
         prompt: args.prompt.clone(),
-        new_session_id: session
-            .as_ref()
-            .and_then(|(id, found)| (!found).then(|| id.clone())),
+        new_session_id: session.as_ref().and_then(|(id, found)| (!found).then(|| id.clone())),
         local,
         managed: matches!(connection.source, Source::Service { .. }),
         auto: args.permissions.auto(),
         environment: local.then(opencode_store::environment::session_environment),
         ..Args::default()
     };
-    let plugins = External {
-        config_dir: paths.config.clone(),
-        cwd: directory.clone(),
-    };
+    let plugins = External { config_dir: paths.config.clone(), cwd: directory.clone() };
     // The TUI's tasks run on this runtime: `App::runtime` uses the multi-threaded runtime it starts in.
     let _guard = runtime.enter();
     opencode_tui::run(Launch {
@@ -95,10 +87,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
             client,
             directory: directory.to_string_lossy().into_owned(),
             config,
-            roots: Some(Roots {
-                paths,
-                storage_channel: Channels::from_env().storage,
-            }),
+            roots: Some(Roots { paths, storage_channel: Channels::from_env().storage }),
             route,
             // With `--session` too, TS opens that session, then the continued one replaces it.
             continue_: args.continue_,

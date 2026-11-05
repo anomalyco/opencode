@@ -1,14 +1,11 @@
 //! `translate.test.ts`: the rows for the turn fold, the compaction rows, and the replay rows.
 
-use opencode_acp::translate::{
-    self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState,
-};
+use opencode_acp::translate::{self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState};
 use serde_json::{Value, json};
 
 use crate::wire::{
-    assert_matches, child_created, delivered, durable_event, failed, reasoning_delta, step_ended,
-    succeeded, text_delta, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded,
-    usage,
+    assert_matches, child_created, delivered, durable_event, failed, reasoning_delta, step_ended, succeeded,
+    text_delta, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, usage,
 };
 
 const ROOT: &str = "ses_root";
@@ -17,10 +14,7 @@ fn ctx(child_updates: bool) -> TurnContext {
     TurnContext {
         session_id: ROOT.to_owned(),
         cwd: "/workspace".to_owned(),
-        start: TurnStart {
-            kind: StartKind::Input,
-            id: "msg_input".to_owned(),
-        },
+        start: TurnStart { kind: StartKind::Input, id: "msg_input".to_owned() },
         child_updates,
         compaction: false,
     }
@@ -39,11 +33,7 @@ struct Run {
 }
 
 fn run(events: &[Value], ctx: &TurnContext) -> Run {
-    let mut result = Run {
-        state: TurnState::default(),
-        outputs: Vec::new(),
-        terminal: None,
-    };
+    let mut result = Run { state: TurnState::default(), outputs: Vec::new(), terminal: None };
     for (index, event) in events.iter().enumerate() {
         let mut event = event.clone();
         event["id"] = json!(format!("evt_{}", index + 1));
@@ -118,11 +108,7 @@ fn turn_translation() {
         (
             "ignores a session's events until its own input is delivered",
             false,
-            vec![
-                text_delta(ROOT, "msg_early", "early", 0),
-                delivered(ROOT, "msg_other_input"),
-                succeeded(ROOT),
-            ],
+            vec![text_delta(ROOT, "msg_early", "early", 0), delivered(ROOT, "msg_other_input"), succeeded(ROOT)],
             json!({ "updates": [], "terminal": null }),
         ),
         (
@@ -152,37 +138,25 @@ fn turn_translation() {
         (
             "ends a normal turn with end_turn",
             false,
-            live(vec![
-                step_ended(ROOT, "msg_1", "stop", usage(1, 1, 0, 0, 0)),
-                succeeded(ROOT),
-            ]),
+            live(vec![step_ended(ROOT, "msg_1", "stop", usage(1, 1, 0, 0, 0)), succeeded(ROOT)]),
             json!({ "response": { "stopReason": "end_turn", "usage": { "inputTokens": 1, "outputTokens": 1, "totalTokens": 2 } } }),
         ),
         (
             "ends a length-limited step with max_tokens",
             false,
-            live(vec![
-                step_ended(ROOT, "msg_1", "length", usage(1, 1, 0, 0, 0)),
-                succeeded(ROOT),
-            ]),
+            live(vec![step_ended(ROOT, "msg_1", "length", usage(1, 1, 0, 0, 0)), succeeded(ROOT)]),
             json!({ "response": { "stopReason": "max_tokens" } }),
         ),
         (
             "ends a content-filtered step with refusal",
             false,
-            live(vec![
-                step_ended(ROOT, "msg_1", "content-filter", usage(1, 1, 0, 0, 0)),
-                succeeded(ROOT),
-            ]),
+            live(vec![step_ended(ROOT, "msg_1", "content-filter", usage(1, 1, 0, 0, 0)), succeeded(ROOT)]),
             json!({ "response": { "stopReason": "refusal" } }),
         ),
         (
             "ends a content-filter failure with refusal and no error",
             false,
-            live(vec![failed(
-                ROOT,
-                json!({ "type": "provider.content-filter", "message": "blocked" }),
-            )]),
+            live(vec![failed(ROOT, json!({ "type": "provider.content-filter", "message": "blocked" }))]),
             json!({ "response": { "stopReason": "refusal" }, "failure": null }),
         ),
         (
@@ -197,40 +171,25 @@ fn turn_translation() {
         (
             "ends an aborted execution with cancelled and no error",
             false,
-            live(vec![failed(
-                ROOT,
-                json!({ "type": "aborted", "message": "interrupted" }),
-            )]),
+            live(vec![failed(ROOT, json!({ "type": "aborted", "message": "interrupted" }))]),
             json!({ "response": { "stopReason": "cancelled" }, "failure": null }),
         ),
         (
             "fails an execution auth failure as auth required",
             false,
-            live(vec![failed(
-                ROOT,
-                json!({ "type": "provider.auth", "message": "missing key" }),
-            )]),
+            live(vec![failed(ROOT, json!({ "type": "provider.auth", "message": "missing key" }))]),
             json!({ "failure": "ACPAuthRequiredError" }),
         ),
         (
             "fails a step auth failure as auth required even when the execution succeeds",
             false,
-            live(vec![
-                step_failed(
-                    json!({ "type": "provider.auth", "message": "expired" }),
-                    None,
-                ),
-                succeeded(ROOT),
-            ]),
+            live(vec![step_failed(json!({ "type": "provider.auth", "message": "expired" }), None), succeeded(ROOT)]),
             json!({ "terminal": "succeeded", "failure": "ACPAuthRequiredError" }),
         ),
         (
             "fails other execution failures as service failures",
             false,
-            live(vec![failed(
-                ROOT,
-                json!({ "type": "provider.rate-limit", "message": "slow down" }),
-            )]),
+            live(vec![failed(ROOT, json!({ "type": "provider.rate-limit", "message": "slow down" }))]),
             json!({ "failure": "ACPServiceFailureError" }),
         ),
         (
@@ -293,11 +252,7 @@ fn turn_translation() {
             false,
             live(vec![
                 tool_started(ROOT, "call_ok", "shell"),
-                tool_called(
-                    ROOT,
-                    "call_ok",
-                    json!({ "command": "printf done", "workdir": "sub" }),
-                ),
+                tool_called(ROOT, "call_ok", json!({ "command": "printf done", "workdir": "sub" })),
                 tool_progress(ROOT, "call_ok", json!({ "phase": 1 })),
                 tool_succeeded(ROOT, "call_ok", json!({ "exit": 0 }), "done"),
             ]),
@@ -321,11 +276,7 @@ fn turn_translation() {
             false,
             live(vec![
                 tool_started(ROOT, "call_fail", "read"),
-                tool_called(
-                    ROOT,
-                    "call_fail",
-                    json!({ "path": "/workspace/missing.ts" }),
-                ),
+                tool_called(ROOT, "call_fail", json!({ "path": "/workspace/missing.ts" })),
                 tool_failed(
                     ROOT,
                     "call_fail",
@@ -353,10 +304,7 @@ fn turn_translation() {
         (
             "projects a child's tool call onto the parent with its ID and title prefixed",
             false,
-            live(vec![
-                child_created("ses_child", ROOT, "Explore"),
-                tool_started("ses_child", "call_1", "read"),
-            ]),
+            live(vec![child_created("ses_child", ROOT, "Explore"), tool_started("ses_child", "call_1", "read")]),
             json!({
                 "updates": [{
                     "sessionUpdate": "tool_call", "toolCallId": "ses_child:call_1", "title": "Explore: read",
@@ -385,15 +333,9 @@ fn turn_translation() {
             true,
             live(vec![
                 child_created("ses_child", ROOT, "Explore"),
-                durable_event(
-                    "session.execution.started",
-                    json!({ "sessionID": "ses_child" }),
-                ),
+                durable_event("session.execution.started", json!({ "sessionID": "ses_child" })),
                 text_delta("ses_child", "msg_child", "nested", 0),
-                failed(
-                    "ses_child",
-                    json!({ "type": "tool.error", "message": "boom" }),
-                ),
+                failed("ses_child", json!({ "type": "tool.error", "message": "boom" })),
             ]),
             json!({
                 "updates": [],
@@ -427,10 +369,7 @@ fn turn_translation() {
     ];
     for (name, child_updates, events, expected) in rows {
         let actual = translated(&events, &ctx(child_updates));
-        assert!(
-            crate::wire::matches(&actual, &expected),
-            "{name}\n  actual:   {actual}\n  expected: {expected}"
-        );
+        assert!(crate::wire::matches(&actual, &expected), "{name}\n  actual:   {actual}\n  expected: {expected}");
     }
 }
 
@@ -454,10 +393,7 @@ fn reports_a_pending_retry_and_clears_it_when_the_next_step_starts() {
     let cleared = run(
         &live(vec![
             retry,
-            durable_event(
-                "session.step.started",
-                json!({ "sessionID": ROOT, "assistantMessageID": "msg_2" }),
-            ),
+            durable_event("session.step.started", json!({ "sessionID": ROOT, "assistantMessageID": "msg_2" })),
         ]),
         &ctx(false),
     );
@@ -465,10 +401,7 @@ fn reports_a_pending_retry_and_clears_it_when_the_next_step_starts() {
         updates(&cleared.outputs)[1],
         json!({ "sessionUpdate": "session_info_update", "_meta": { "opencode/retry": null } })
     );
-    assert_eq!(
-        translate::response(&cleared.state, ROOT, Terminal::Succeeded)["_meta"],
-        json!({})
-    );
+    assert_eq!(translate::response(&cleared.state, ROOT, Terminal::Succeeded)["_meta"], json!({}));
 }
 
 fn compaction_started(session: &str) -> Value {
@@ -479,24 +412,15 @@ fn compaction_started(session: &str) -> Value {
 }
 
 fn compaction_delta(text: &str, session: &str) -> Value {
-    crate::wire::ephemeral_event(
-        "session.compaction.delta",
-        json!({ "sessionID": session, "text": text }),
-    )
+    crate::wire::ephemeral_event("session.compaction.delta", json!({ "sessionID": session, "text": text }))
 }
 
 fn compaction_ended(text: &str, session: &str) -> Value {
-    durable_event(
-        "session.compaction.ended",
-        json!({ "sessionID": session, "reason": "manual", "text": text }),
-    )
+    durable_event("session.compaction.ended", json!({ "sessionID": session, "reason": "manual", "text": text }))
 }
 
 fn compaction_failed(error: Value, reason: &str) -> Value {
-    durable_event(
-        "session.compaction.failed",
-        json!({ "sessionID": ROOT, "reason": reason, "error": error }),
-    )
+    durable_event("session.compaction.failed", json!({ "sessionID": ROOT, "reason": reason, "error": error }))
 }
 
 fn marker(value: Value) -> Value {
@@ -529,12 +453,8 @@ fn tool_location_and_compaction_rows() {
         json!({ "path": "/workspace/a.ts", "oldString": "a", "newString": "b" }),
         "/workspace/a.ts",
     );
-    let (write_events, write_expected) = edit(
-        "call_write",
-        "write",
-        json!({ "path": "/workspace/b.ts", "content": "b" }),
-        "/workspace/b.ts",
-    );
+    let (write_events, write_expected) =
+        edit("call_write", "write", json!({ "path": "/workspace/b.ts", "content": "b" }), "/workspace/b.ts");
     let (patch_events, patch_expected) = edit(
         "call_patch",
         "patch",
@@ -548,27 +468,9 @@ fn tool_location_and_compaction_rows() {
     };
     // (name, compaction, child updates, events, expected)
     let rows: Vec<(&str, bool, bool, Vec<Value>, Value)> = vec![
-        (
-            "locates the file of an edit tool",
-            false,
-            false,
-            edit_events,
-            edit_expected,
-        ),
-        (
-            "locates the file of a write tool",
-            false,
-            false,
-            write_events,
-            write_expected,
-        ),
-        (
-            "locates the files of a patch tool",
-            false,
-            false,
-            patch_events,
-            patch_expected,
-        ),
+        ("locates the file of an edit tool", false, false, edit_events, edit_expected),
+        ("locates the file of a write tool", false, false, write_events, write_expected),
+        ("locates the files of a patch tool", false, false, patch_events, patch_expected),
         (
             "cancels the compaction a cancelled turn left open",
             true,
@@ -621,10 +523,7 @@ fn tool_location_and_compaction_rows() {
             false,
             live(vec![
                 compaction_started(ROOT),
-                compaction_failed(
-                    json!({ "type": "compaction.failed", "message": "Output limit" }),
-                    "manual",
-                ),
+                compaction_failed(json!({ "type": "compaction.failed", "message": "Output limit" }), "manual"),
             ]),
             json!({ "updates": [{ "status": "in_progress" }, { "status": "failed", "error": "Output limit" }] }),
         ),
@@ -647,10 +546,7 @@ fn tool_location_and_compaction_rows() {
             false,
             live(vec![
                 compaction_started(ROOT),
-                compaction_failed(
-                    json!({ "type": "compaction.interrupted", "message": "interrupted" }),
-                    "manual",
-                ),
+                compaction_failed(json!({ "type": "compaction.interrupted", "message": "interrupted" }), "manual"),
             ]),
             json!({ "updates": [{ "status": "in_progress" }, { "status": "cancelled", "summary": null }] }),
         ),
@@ -660,10 +556,7 @@ fn tool_location_and_compaction_rows() {
             false,
             live(vec![
                 compaction_started(ROOT),
-                compaction_failed(
-                    json!({ "type": "aborted", "message": "Compaction cancelled" }),
-                    "manual",
-                ),
+                compaction_failed(json!({ "type": "aborted", "message": "Compaction cancelled" }), "manual"),
             ]),
             json!({ "updates": [{ "status": "in_progress" }, { "status": "cancelled", "summary": null }] }),
         ),
@@ -703,21 +596,14 @@ fn tool_location_and_compaction_rows() {
             "marks a compaction without forwarding its summary when the client lacks the capability",
             false,
             false,
-            live(vec![
-                compaction_started(ROOT),
-                compaction_delta("Summary", ROOT),
-                compaction_ended("Summary", ROOT),
-            ]),
+            live(vec![compaction_started(ROOT), compaction_delta("Summary", ROOT), compaction_ended("Summary", ROOT)]),
             json!({ "updates": [marker(json!({ "status": "started" })), marker(json!({ "status": "completed" }))] }),
         ),
         (
             "marks a failed compaction with the full error",
             false,
             false,
-            live(vec![
-                compaction_started(ROOT),
-                compaction_failed(provider_error(), "manual"),
-            ]),
+            live(vec![compaction_started(ROOT), compaction_failed(provider_error(), "manual")]),
             json!({ "updates": [
                 marker(json!({ "status": "started" })),
                 marker(json!({ "status": "failed", "error": provider_error() })),
@@ -766,10 +652,7 @@ fn tool_location_and_compaction_rows() {
         let mut context = ctx(child_updates);
         context.compaction = compaction;
         let actual = translated(&events, &context);
-        assert!(
-            crate::wire::matches(&actual, &expected),
-            "{name}\n  actual:   {actual}\n  expected: {expected}"
-        );
+        assert!(crate::wire::matches(&actual, &expected), "{name}\n  actual:   {actual}\n  expected: {expected}");
     }
 }
 
@@ -788,10 +671,7 @@ fn replay_rows() {
         (
             "replays a completed compaction as one terminal update",
             true,
-            vec![compaction_message(
-                "completed",
-                json!({ "summary": "Summary" }),
-            )],
+            vec![compaction_message("completed", json!({ "summary": "Summary" }))],
             json!([{ "compactionId": "msg_compaction", "status": "completed", "summary": [{ "type": "text", "text": "Summary" }] }]),
         ),
         (
@@ -803,10 +683,7 @@ fn replay_rows() {
         (
             "replays a failed compaction with its error",
             true,
-            vec![compaction_message(
-                "failed",
-                json!({ "error": provider_error() }),
-            )],
+            vec![compaction_message("failed", json!({ "error": provider_error() }))],
             json!([{ "status": "failed", "summary": null, "error": "summary request failed" }]),
         ),
         (
@@ -827,10 +704,7 @@ fn replay_rows() {
         (
             "replays a compaction as a marker when the client lacks the capability",
             false,
-            vec![compaction_message(
-                "completed",
-                json!({ "summary": "Summary" }),
-            )],
+            vec![compaction_message("completed", json!({ "summary": "Summary" }))],
             json!([{
                 "sessionUpdate": "session_info_update",
                 "_meta": { "opencode/compaction": { "status": "completed", "messageId": "msg_compaction", "reason": "auto" } },
@@ -863,16 +737,9 @@ fn replay_rows() {
         let actual = json!(
             messages
                 .iter()
-                .flat_map(|message| opencode_acp::replay::updates(
-                    message,
-                    "/workspace",
-                    &capabilities
-                ))
+                .flat_map(|message| opencode_acp::replay::updates(message, "/workspace", &capabilities))
                 .collect::<Vec<_>>()
         );
-        assert!(
-            crate::wire::matches(&actual, &expected),
-            "{name}\n  actual:   {actual}\n  expected: {expected}"
-        );
+        assert!(crate::wire::matches(&actual, &expected), "{name}\n  actual:   {actual}\n  expected: {expected}");
     }
 }

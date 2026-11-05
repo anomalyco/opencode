@@ -71,11 +71,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Self {
-            display: true,
-            compact_scripts: true,
-            color: None,
-        }
+        Self { display: true, compact_scripts: true, color: None }
     }
 }
 
@@ -83,10 +79,7 @@ pub fn layout(node: &Node, options: &Options) -> Layout {
     let context = Context {
         display: options.display,
         compact: options.compact_scripts,
-        style: Style {
-            color: options.color.clone(),
-            ..Style::default()
-        },
+        style: Style { color: options.color.clone(), ..Style::default() },
         variant: None,
     };
     let block = layout_node(node, &context);
@@ -121,30 +114,19 @@ fn layout_node(node: &Node, context: &Context) -> Block {
             text_box(&apply_variant(value, context.variant), &context.style)
         }
         Node::Space(width) => blank(*width as i32, 1, 0),
-        Node::Fraction {
-            numerator,
-            denominator,
-            bar,
-            align,
-        } => layout_fraction(numerator, denominator, *bar, *align, context),
+        Node::Fraction { numerator, denominator, bar, align } => {
+            layout_fraction(numerator, denominator, *bar, *align, context)
+        }
         Node::Root { body, index } => layout_root(body, index.as_deref(), context),
-        Node::Scripts {
-            base,
-            superscript,
-            subscript,
-        } => layout_scripts(base, superscript.as_deref(), subscript.as_deref(), context),
+        Node::Scripts { base, superscript, subscript } => {
+            layout_scripts(base, superscript.as_deref(), subscript.as_deref(), context)
+        }
         Node::Delimited { left, body, right } => layout_delimited(left, body, right, context),
-        Node::Matrix {
-            rows,
-            environment,
-            columns,
-        } => layout_matrix(rows, *environment, columns.as_deref(), context),
+        Node::Matrix { rows, environment, columns } => layout_matrix(rows, *environment, columns.as_deref(), context),
         Node::Brace { body, over } => layout_brace(body, *over, context),
         Node::Accent { accent, body } => layout_accent(*accent, body, context),
         Node::Variant { variant, body } => layout_node(body, &with_variant(context, *variant)),
-        Node::OverUnder { base, over, under } => {
-            layout_over_under(base, over.as_deref(), under.as_deref(), context)
-        }
+        Node::OverUnder { base, over, under } => layout_over_under(base, over.as_deref(), under.as_deref(), context),
         Node::Color { color, body } => {
             let mut context = context.clone();
             context.style.color = Some(color.clone());
@@ -160,11 +142,7 @@ fn layout_row(nodes: &[Node], context: &Context) -> Block {
     let mut blocks = Vec::new();
     let mut previous: Option<Role> = None;
     for (index, node) in nodes.iter().enumerate() {
-        let role = normalize_binary(
-            node_role(node),
-            previous,
-            next_significant_role(&nodes[index + 1..]),
-        );
+        let role = normalize_binary(node_role(node), previous, next_significant_role(&nodes[index + 1..]));
         if needs_space(previous, role, blocks.len()) {
             blocks.push(blank(1, 1, 0));
         }
@@ -176,13 +154,7 @@ fn layout_row(nodes: &[Node], context: &Context) -> Block {
     hpack(blocks)
 }
 
-fn layout_fraction(
-    numerator: &Node,
-    denominator: &Node,
-    bar: bool,
-    align: Option<Align>,
-    context: &Context,
-) -> Block {
+fn layout_fraction(numerator: &Node, denominator: &Node, bar: bool, align: Option<Align>, context: &Context) -> Block {
     let numerator = layout_node(numerator, context);
     let denominator = layout_node(denominator, context);
     let width = numerator.width.max(denominator.width) + 2;
@@ -202,12 +174,7 @@ fn layout_fraction(
     if bar {
         draw_horizontal(&mut result, numerator.height, 0, width, "─", &context.style);
     }
-    overlay(
-        &mut result,
-        &denominator,
-        (width - denominator.width) / 2,
-        numerator.height + gap,
-    );
+    overlay(&mut result, &denominator, (width - denominator.width) / 2, numerator.height + gap);
     result
 }
 
@@ -237,20 +204,10 @@ fn layout_root(body: &Node, index: Option<&Node>, context: &Context) -> Block {
     result
 }
 
-fn layout_scripts(
-    base: &Node,
-    superscript: Option<&Node>,
-    subscript: Option<&Node>,
-    context: &Context,
-) -> Block {
+fn layout_scripts(base: &Node, superscript: Option<&Node>, subscript: Option<&Node>, context: &Context) -> Block {
     let present = |node: &Node| simple_text(node).as_deref() != Some("");
-    let (superscript, subscript) = (
-        superscript.filter(|n| present(n)),
-        subscript.filter(|n| present(n)),
-    );
-    if matches!(base, Node::Brace { .. })
-        || (matches!(base, Node::Operator { limits: true, .. }) && context.display)
-    {
+    let (superscript, subscript) = (superscript.filter(|n| present(n)), subscript.filter(|n| present(n)));
+    if matches!(base, Node::Brace { .. }) || (matches!(base, Node::Operator { limits: true, .. }) && context.display) {
         return layout_over_under(base, superscript, subscript, context);
     }
 
@@ -260,10 +217,9 @@ fn layout_scripts(
             Some(node) => simple_text(node).and_then(|text| map_script(&text, table)),
             None => Some(String::new()),
         };
-        if let (Some(superscript), Some(subscript)) = (
-            compact(superscript, SUPERSCRIPTS),
-            compact(subscript, SUBSCRIPTS),
-        ) {
+        if let (Some(superscript), Some(subscript)) =
+            (compact(superscript, SUPERSCRIPTS), compact(subscript, SUBSCRIPTS))
+        {
             let scripts = text_box(&(superscript + &subscript), &context.style);
             return hpack(vec![base, scripts]);
         }
@@ -271,17 +227,10 @@ fn layout_scripts(
 
     let superscript = superscript.map(|node| layout_node(node, context));
     let subscript = subscript.map(|node| layout_node(node, context));
-    let script_width = superscript
-        .as_ref()
-        .map_or(0, |s| s.width)
-        .max(subscript.as_ref().map_or(0, |s| s.width));
+    let script_width = superscript.as_ref().map_or(0, |s| s.width).max(subscript.as_ref().map_or(0, |s| s.width));
     let top = superscript.as_ref().map_or(0, |s| s.height);
     let bottom = subscript.as_ref().map_or(0, |s| s.height);
-    let mut result = blank(
-        base.width + script_width,
-        top + base.height + bottom,
-        top + base.baseline,
-    );
+    let mut result = blank(base.width + script_width, top + base.height + bottom, top + base.baseline);
     overlay(&mut result, &base, 0, top);
     if let Some(superscript) = &superscript {
         overlay(&mut result, superscript, base.width, 0);
@@ -292,19 +241,11 @@ fn layout_scripts(
     result
 }
 
-fn layout_over_under(
-    base: &Node,
-    over: Option<&Node>,
-    under: Option<&Node>,
-    context: &Context,
-) -> Block {
+fn layout_over_under(base: &Node, over: Option<&Node>, under: Option<&Node>, context: &Context) -> Block {
     let base = layout_node(base, context);
     let over = over.map(|node| layout_node(node, context));
     let under = under.map(|node| layout_node(node, context));
-    let width = base
-        .width
-        .max(over.as_ref().map_or(0, |b| b.width))
-        .max(under.as_ref().map_or(0, |b| b.width));
+    let width = base.width.max(over.as_ref().map_or(0, |b| b.width)).max(under.as_ref().map_or(0, |b| b.width));
     let over_height = over.as_ref().map_or(0, |b| b.height);
     let height = over_height + base.height + under.as_ref().map_or(0, |b| b.height);
     let mut result = blank(width, height, over_height + base.baseline);
@@ -313,12 +254,7 @@ fn layout_over_under(
     }
     overlay(&mut result, &base, (width - base.width) / 2, over_height);
     if let Some(under) = &under {
-        overlay(
-            &mut result,
-            under,
-            (width - under.width) / 2,
-            over_height + base.height,
-        );
+        overlay(&mut result, under, (width - under.width) / 2, over_height + base.height);
     }
     result
 }
@@ -330,71 +266,26 @@ fn layout_delimited(left: &str, body: &Node, right: &str, context: &Context) -> 
     hpack(vec![left, body, right])
 }
 
-fn layout_matrix(
-    rows: &[Vec<Node>],
-    environment: Environment,
-    columns: Option<&str>,
-    context: &Context,
-) -> Block {
-    let cell_rows: Vec<Vec<Block>> = rows
-        .iter()
-        .map(|row| row.iter().map(|cell| layout_node(cell, context)).collect())
-        .collect();
-    let alignments: Option<Vec<char>> =
-        columns.map(|columns| columns.chars().filter(|c| "lcr".contains(*c)).collect());
+fn layout_matrix(rows: &[Vec<Node>], environment: Environment, columns: Option<&str>, context: &Context) -> Block {
+    let cell_rows: Vec<Vec<Block>> =
+        rows.iter().map(|row| row.iter().map(|cell| layout_node(cell, context)).collect()).collect();
+    let alignments: Option<Vec<char>> = columns.map(|columns| columns.chars().filter(|c| "lcr".contains(*c)).collect());
     let rules: Vec<i32> = columns.map_or_else(Vec::new, |columns| {
-        columns
-            .split(['l', 'c', 'r'])
-            .map(|rule| rule.chars().count() as i32)
-            .collect()
+        columns.split(['l', 'c', 'r']).map(|rule| rule.chars().count() as i32).collect()
     });
-    let column_count = cell_rows
-        .iter()
-        .map(Vec::len)
-        .chain(alignments.as_ref().map(Vec::len))
-        .max()
-        .unwrap_or(0);
+    let column_count = cell_rows.iter().map(Vec::len).chain(alignments.as_ref().map(Vec::len)).max().unwrap_or(0);
     let column_widths: Vec<i32> = (0..column_count)
-        .map(|column| {
-            cell_rows
-                .iter()
-                .filter_map(|row| row.get(column))
-                .map(|cell| cell.width)
-                .max()
-                .unwrap_or(0)
-        })
+        .map(|column| cell_rows.iter().filter_map(|row| row.get(column)).map(|cell| cell.width).max().unwrap_or(0))
         .collect();
-    let ascents: Vec<i32> = cell_rows
-        .iter()
-        .map(|row| {
-            row.iter()
-                .map(|cell| cell.baseline)
-                .max()
-                .unwrap_or(0)
-                .max(0)
-        })
-        .collect();
+    let ascents: Vec<i32> =
+        cell_rows.iter().map(|row| row.iter().map(|cell| cell.baseline).max().unwrap_or(0).max(0)).collect();
     let descents: Vec<i32> = cell_rows
         .iter()
-        .map(|row| {
-            row.iter()
-                .map(|cell| cell.height - cell.baseline - 1)
-                .max()
-                .unwrap_or(0)
-                .max(0)
-        })
+        .map(|row| row.iter().map(|cell| cell.height - cell.baseline - 1).max().unwrap_or(0).max(0))
         .collect();
-    let row_heights: Vec<i32> = ascents
-        .iter()
-        .zip(&descents)
-        .map(|(ascent, descent)| ascent + 1 + descent)
-        .collect();
+    let row_heights: Vec<i32> = ascents.iter().zip(&descents).map(|(ascent, descent)| ascent + 1 + descent).collect();
     let aligned = matches!(environment, Environment::Aligned | Environment::Align);
-    let column_gap = if environment == Environment::Cases || aligned {
-        2
-    } else {
-        1
-    };
+    let column_gap = if environment == Environment::Cases || aligned { 2 } else { 1 };
     let gaps: Vec<i32> = (0..=column_count)
         .map(|boundary| {
             let edge = boundary == 0 || boundary == column_count;
@@ -415,10 +306,8 @@ fn layout_matrix(
         for column in 0..column_count {
             let column_width = column_widths[column];
             if let Some(cell) = cells.get(column) {
-                let alignment = alignments
-                    .as_ref()
-                    .and_then(|a| a.get(column).copied())
-                    .unwrap_or(match (environment, aligned) {
+                let alignment =
+                    alignments.as_ref().and_then(|a| a.get(column).copied()).unwrap_or(match (environment, aligned) {
                         (Environment::Cases, _) => 'l',
                         (_, true) if column % 2 == 0 => 'r',
                         (_, true) => 'l',
@@ -429,12 +318,7 @@ fn layout_matrix(
                     'r' => column_width - cell.width,
                     _ => (column_width - cell.width) / 2,
                 };
-                overlay(
-                    &mut result,
-                    cell,
-                    cell_x,
-                    y + ascents[row_index] - cell.baseline,
-                );
+                overlay(&mut result, cell, cell_x, y + ascents[row_index] - cell.baseline);
             }
             x += column_width + gaps[column + 1];
         }
@@ -468,29 +352,12 @@ fn layout_brace(body: &Node, over: bool, context: &Context) -> Block {
     let width = body.width.max(3);
     let mut result = blank(width, body.height + 1, body.baseline + i32::from(over));
     let y = if over { 0 } else { body.height };
-    overlay(
-        &mut result,
-        &body,
-        (width - body.width) / 2,
-        i32::from(over),
-    );
+    overlay(&mut result, &body, (width - body.width) / 2, i32::from(over));
     let style = &context.style;
     draw_horizontal(&mut result, y, 0, width, "─", style);
     set_cell(&mut result, 0, y, if over { "╭" } else { "╰" }, style);
-    set_cell(
-        &mut result,
-        width - 1,
-        y,
-        if over { "╮" } else { "╯" },
-        style,
-    );
-    set_cell(
-        &mut result,
-        (width - 1) / 2,
-        y,
-        if over { "┴" } else { "┬" },
-        style,
-    );
+    set_cell(&mut result, width - 1, y, if over { "╮" } else { "╯" }, style);
+    set_cell(&mut result, (width - 1) / 2, y, if over { "┴" } else { "┬" }, style);
     result
 }
 
@@ -518,13 +385,7 @@ fn layout_accent(accent: Accent, body: &Node, context: &Context) -> Block {
     if matches!(accent, Accent::Bar | Accent::Overline) {
         draw_horizontal(&mut result, 0, 0, body.width, mark, style);
     } else {
-        set_cell(
-            &mut result,
-            ((body.width - cell_width(mark)) / 2).max(0),
-            0,
-            mark,
-            style,
-        );
+        set_cell(&mut result, ((body.width - cell_width(mark)) / 2).max(0), 0, mark, style);
     }
     result
 }
@@ -537,11 +398,7 @@ fn delimiter_box(delimiter: &str, height: i32, baseline: i32, left: bool, style:
         return text_box(delimiter, style);
     }
     let glyphs = delimiter_glyphs(delimiter);
-    let width = glyphs
-        .iter()
-        .map(|glyph| cell_width(glyph))
-        .max()
-        .unwrap_or(0);
+    let width = glyphs.iter().map(|glyph| cell_width(glyph)).max().unwrap_or(0);
     let mut result = blank(width, height, baseline);
     for y in 0..height {
         let glyph = match y {
@@ -552,13 +409,7 @@ fn delimiter_box(delimiter: &str, height: i32, baseline: i32, left: bool, style:
         set_cell(&mut result, 0, y, glyph, style);
     }
     if (delimiter == "{" || delimiter == "}") && height >= 3 {
-        set_cell(
-            &mut result,
-            0,
-            height / 2,
-            if left { "⎨" } else { "⎬" },
-            style,
-        );
+        set_cell(&mut result, 0, height / 2, if left { "⎨" } else { "⎬" }, style);
     }
     result
 }
@@ -598,11 +449,7 @@ fn hpack(blocks: Vec<Block>) -> Block {
         return blank(0, 1, 0);
     }
     let ascent = blocks.iter().map(|block| block.baseline).max().unwrap_or(0);
-    let descent = blocks
-        .iter()
-        .map(|block| block.height - block.baseline - 1)
-        .max()
-        .unwrap_or(0);
+    let descent = blocks.iter().map(|block| block.height - block.baseline - 1).max().unwrap_or(0);
     let width = blocks.iter().map(|block| block.width).sum();
     let mut result = blank(width, ascent + descent + 1, ascent);
     let mut x = 0;
@@ -627,12 +474,7 @@ fn text_box(text: &str, style: &Style) -> Block {
 
 fn blank(width: i32, height: i32, baseline: i32) -> Block {
     let (width, height) = (width.max(0), height.max(1));
-    Block {
-        width,
-        height,
-        baseline: baseline.max(0),
-        cells: vec![vec![None; width as usize]; height as usize],
-    }
+    Block { width, height, baseline: baseline.max(0), cells: vec![vec![None; width as usize]; height as usize] }
 }
 
 fn overlay(target: &mut Block, source: &Block, x: i32, y: i32) {
@@ -657,10 +499,7 @@ fn set_cell(block: &mut Block, x: i32, y: i32, text: &str, style: &Style) {
     if x < 0 || y < 0 || x >= block.width || y >= block.height {
         return;
     }
-    block.cells[y as usize][x as usize] = Some(Cell {
-        text: text.to_owned(),
-        style: style.clone(),
-    });
+    block.cells[y as usize][x as usize] = Some(Cell { text: text.to_owned(), style: style.clone() });
 }
 
 fn node_role(node: &Node) -> Option<Role> {
@@ -668,9 +507,7 @@ fn node_role(node: &Node) -> Option<Role> {
         Node::Symbol { role, .. } => *role,
         // Tall constructs need a terminal-cell side bearing. Treating them like operators gives their fraction
         // bars and radical hooks breathing room without adding padding inside the construct itself.
-        Node::Operator { .. } | Node::Fraction { .. } | Node::Root { .. } | Node::Matrix { .. } => {
-            Some(Role::Operator)
-        }
+        Node::Operator { .. } | Node::Fraction { .. } | Node::Root { .. } | Node::Matrix { .. } => Some(Role::Operator),
         Node::Scripts { base, .. } => node_role(base),
         _ => None,
     }
@@ -678,59 +515,36 @@ fn node_role(node: &Node) -> Option<Role> {
 
 fn needs_space(previous: Option<Role>, current: Option<Role>, count: usize) -> bool {
     use Role::*;
-    if count == 0
-        || matches!(previous, Some(Punctuation | Opening))
-        || matches!(current, Some(Punctuation | Closing))
-    {
+    if count == 0 || matches!(previous, Some(Punctuation | Opening)) || matches!(current, Some(Punctuation | Closing)) {
         return false;
     }
-    matches!(previous, Some(Binary | Relation | Operator))
-        || matches!(current, Some(Binary | Relation | Operator))
+    matches!(previous, Some(Binary | Relation | Operator)) || matches!(current, Some(Binary | Relation | Operator))
 }
 
-fn normalize_binary(
-    role: Option<Role>,
-    previous: Option<Role>,
-    next: Option<Role>,
-) -> Option<Role> {
+fn normalize_binary(role: Option<Role>, previous: Option<Role>, next: Option<Role>) -> Option<Role> {
     use Role::*;
     if role != Some(Binary) {
         return role;
     }
-    let unary = matches!(
-        previous,
-        None | Some(Binary | Relation | Operator | Punctuation | Opening)
-    ) || matches!(next, None | Some(Binary | Relation | Punctuation | Closing));
+    let unary = matches!(previous, None | Some(Binary | Relation | Operator | Punctuation | Opening))
+        || matches!(next, None | Some(Binary | Relation | Punctuation | Closing));
     if unary { Some(Ordinary) } else { role }
 }
 
 fn next_significant_role(nodes: &[Node]) -> Option<Role> {
-    nodes
-        .iter()
-        .find(|node| !matches!(node, Node::Space(_)))
-        .map(|node| node_role(node).unwrap_or(Role::Ordinary))
+    nodes.iter().find(|node| !matches!(node, Node::Space(_))).map(|node| node_role(node).unwrap_or(Role::Ordinary))
 }
 
 fn simple_text(node: &Node) -> Option<String> {
     match node {
-        Node::Symbol { value, .. } | Node::Text(value) | Node::Operator { value, .. } => {
-            Some(value.clone())
-        }
+        Node::Symbol { value, .. } | Node::Text(value) | Node::Operator { value, .. } => Some(value.clone()),
         Node::Row(body) => body.iter().map(simple_text).collect(),
         _ => None,
     }
 }
 
 fn map_script(value: &str, table: &[(char, char)]) -> Option<String> {
-    value
-        .chars()
-        .map(|char| {
-            table
-                .iter()
-                .find(|(from, _)| *from == char)
-                .map(|(_, to)| *to)
-        })
-        .collect()
+    value.chars().map(|char| table.iter().find(|(from, _)| *from == char).map(|(_, to)| *to)).collect()
 }
 
 fn with_variant(context: &Context, variant: Variant) -> Context {
@@ -746,15 +560,14 @@ fn with_variant(context: &Context, variant: Variant) -> Context {
 
 fn apply_variant(value: &str, variant: Option<Variant>) -> String {
     // The first capital, first small letter, and first digit of each alphabet's Unicode block.
-    let (capital, small, digit, exceptions): (u32, u32, Option<u32>, &[(char, char)]) =
-        match variant {
-            Some(Variant::DoubleStruck) => (0x1d538, 0x1d552, Some(0x1d7d8), DOUBLE_STRUCK),
-            Some(Variant::Script) => (0x1d49c, 0x1d4b6, None, SCRIPT),
-            Some(Variant::Fraktur) => (0x1d504, 0x1d51e, None, FRAKTUR),
-            Some(Variant::Sans) => (0x1d5a0, 0x1d5ba, Some(0x1d7e2), &[]),
-            Some(Variant::Monospace) => (0x1d670, 0x1d68a, Some(0x1d7f6), &[]),
-            _ => return value.to_owned(),
-        };
+    let (capital, small, digit, exceptions): (u32, u32, Option<u32>, &[(char, char)]) = match variant {
+        Some(Variant::DoubleStruck) => (0x1d538, 0x1d552, Some(0x1d7d8), DOUBLE_STRUCK),
+        Some(Variant::Script) => (0x1d49c, 0x1d4b6, None, SCRIPT),
+        Some(Variant::Fraktur) => (0x1d504, 0x1d51e, None, FRAKTUR),
+        Some(Variant::Sans) => (0x1d5a0, 0x1d5ba, Some(0x1d7e2), &[]),
+        Some(Variant::Monospace) => (0x1d670, 0x1d68a, Some(0x1d7f6), &[]),
+        _ => return value.to_owned(),
+    };
     value
         .chars()
         .map(|char| {
@@ -780,7 +593,8 @@ pub fn cell_width(value: &str) -> i32 {
         return 0;
     };
     let single = chars.next().is_none();
-    let zero = matches!(first, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{300}'..='\u{36f}' | '\u{fe00}'..='\u{fe0f}');
+    let zero =
+        matches!(first, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{300}'..='\u{36f}' | '\u{fe00}'..='\u{fe0f}');
     if single && zero {
         return 0;
     }
@@ -854,15 +668,8 @@ const SUBSCRIPTS: &[(char, char)] = &[
     ('x', 'ₓ'),
 ];
 
-const DOUBLE_STRUCK: &[(char, char)] = &[
-    ('C', 'ℂ'),
-    ('H', 'ℍ'),
-    ('N', 'ℕ'),
-    ('P', 'ℙ'),
-    ('Q', 'ℚ'),
-    ('R', 'ℝ'),
-    ('Z', 'ℤ'),
-];
+const DOUBLE_STRUCK: &[(char, char)] =
+    &[('C', 'ℂ'), ('H', 'ℍ'), ('N', 'ℕ'), ('P', 'ℙ'), ('Q', 'ℚ'), ('R', 'ℝ'), ('Z', 'ℤ')];
 
 const SCRIPT: &[(char, char)] = &[
     ('B', 'ℬ'),

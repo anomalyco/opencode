@@ -36,10 +36,7 @@ pub struct Poll {
 impl Default for Poll {
     /// 50 ms × 100 (`stopPollInterval`, `stopPollAttempts`).
     fn default() -> Self {
-        Self {
-            interval: Duration::from_millis(50),
-            attempts: 100,
-        }
+        Self { interval: Duration::from_millis(50), attempts: 100 }
     }
 }
 
@@ -48,17 +45,10 @@ impl Default for Poll {
 pub struct StillRunning(pub u32);
 
 /// Stops the service registered in `file`, if any.
-pub async fn stop(
-    transport: Arc<dyn Transport>,
-    file: &Path,
-    pty: Pty,
-    poll: Poll,
-) -> Result<(), StillRunning> {
+pub async fn stop(transport: Arc<dyn Transport>, file: &Path, pty: Pty, poll: Poll) -> Result<(), StillRunning> {
     let info = registration::read(file);
     match (&info, pty) {
-        (Some(info), Pty::Handoff) => {
-            handoff::prepare(transport, file, info, REQUEST_TIMEOUT).await
-        }
+        (Some(info), Pty::Handoff) => handoff::prepare(transport, file, info, REQUEST_TIMEOUT).await,
         _ => handoff::clear(file),
     }
     match info {
@@ -94,10 +84,7 @@ pub async fn shutdown_persistent_pty(
     transport: Arc<dyn Transport>,
     endpoint: &Endpoint,
 ) -> Result<(), opencode_api::error::Error> {
-    endpoint
-        .client(transport)?
-        .experimental_persistent_pty_shutdown(&RequestOptions::default())
-        .await
+    endpoint.client(transport)?.experimental_persistent_pty_shutdown(&RequestOptions::default()).await
 }
 
 #[derive(Clone, Copy)]

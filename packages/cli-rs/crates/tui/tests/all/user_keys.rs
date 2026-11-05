@@ -17,12 +17,7 @@ use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-const LEADERS: [&[u8]; 4] = [
-    b"\x1c",
-    b"\x1b[92;5u",
-    b"\x1b[92;133u",
-    b"\x1b[27;5;92~",
-];
+const LEADERS: [&[u8]; 4] = [b"\x1c", b"\x1b[92;5u", b"\x1b[92;133u", b"\x1b[27;5;92~"];
 
 struct Harness {
     app: TestApp,
@@ -39,8 +34,7 @@ fn mount(mode: &str) -> Harness {
 fn mount_at(mode: &str, width: u16) -> Harness {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().to_owned();
-    let paths =
-        Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
+    let paths = Paths::from_vars(|name| (name == "HOME").then(|| root.clone().into_os_string())).unwrap();
     std::fs::create_dir_all(&paths.state).unwrap();
     let client = Client::with_transport("http://opencode.local", Arc::new(Memory::new(routes()))).unwrap();
     let app = TestApp::new(width, 30);
@@ -71,33 +65,20 @@ fn mount_at(mode: &str, width: u16) -> Harness {
             client,
             directory: "/project".into(),
             config: Resolved::new(info, |_| None),
-            roots: Some(Roots {
-                paths,
-                storage_channel: "test".into(),
-            }),
+            roots: Some(Roots { paths, storage_channel: "test".into() }),
             route: route("ses_a"),
             continue_: false,
             events: true,
         },
     );
-    let h = Harness {
-        app,
-        tui,
-        _home: home,
-    };
+    let h = Harness { app, tui, _home: home };
     h.tui.navigate(route("ses_b"));
-    assert!(
-        h.app.wait_until(WAIT, || h.app.text().contains("commands")),
-        "{}",
-        h.app.text()
-    );
+    assert!(h.app.wait_until(WAIT, || h.app.text().contains("commands")), "{}", h.app.text());
     h
 }
 
 fn route(id: &str) -> Route {
-    Route::Session {
-        id: SessionID(id.into()),
-    }
+    Route::Session { id: SessionID(id.into()) }
 }
 
 fn session(id: &str, title: &str) -> Value {
@@ -117,12 +98,7 @@ fn routes() -> Vec<MemoryRoute> {
     for (id, title) in [("ses_a", "Fix the parser"), ("ses_b", "Write the docs")] {
         let path = format!("/api/session/{id}");
         routes.push(MemoryRoute::json("GET", &path, 200, &json!({ "data": session(id, title) })));
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("{path}/message"),
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ));
+        routes.push(MemoryRoute::json("GET", &format!("{path}/message"), 200, &json!({ "data": [], "cursor": {} })));
         for list in ["inbox", "permission", "form"] {
             routes.push(MemoryRoute::json("GET", &format!("{path}/{list}"), 200, &json!({ "data": [] })));
         }
@@ -185,9 +161,7 @@ fn turning_tabs_on_in_settings_shows_a_rail_that_keys_and_clicks_drive() {
     assert!(!h.app.text().contains("Write the docs"), "{}", h.app.text());
 
     // `/settings` → Tabs → Mode, as the user would switch it.
-    settings::update(&h.tui, |draft| {
-        settings::set_path(draft, &["tabs", "mode"], json!("on"))
-    });
+    settings::update(&h.tui, |draft| settings::set_path(draft, &["tabs", "mode"], json!("on")));
     let shown = h.app.wait_until(WAIT, || h.app.text().contains("Write the docs"));
     assert!(shown, "the routed session got no tab:\n{}", h.app.text());
     h.tui.navigate(route("ses_a"));
@@ -203,11 +177,7 @@ fn turning_tabs_on_in_settings_shows_a_rail_that_keys_and_clicks_drive() {
     // A click on the other tab's title in the vertical rail selects it.
     let text = h.app.text();
     assert!(text.contains("+ New session"), "no vertical rail:\n{text}");
-    let (row, line) = text
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("Fix the parser"))
-        .unwrap();
+    let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Fix the parser")).unwrap();
     let column = line[..line.find("Fix the parser").unwrap()].chars().count();
     h.app.click(column as u16 + 2, row as u16);
     let selected = h.app.wait_until(WAIT, || h.tui.route() == route("ses_a"));

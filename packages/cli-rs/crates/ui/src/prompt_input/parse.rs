@@ -29,8 +29,7 @@ pub fn index_at(text: &str, offset: u32) -> usize {
 pub fn mention_trigger(text: &str) -> Option<u32> {
     let index = text.rfind('@')?;
     let before = text[..index].chars().next_back();
-    let open =
-        before.is_none_or(char::is_whitespace) && !text[index..].contains(char::is_whitespace);
+    let open = before.is_none_or(char::is_whitespace) && !text[index..].contains(char::is_whitespace);
     open.then(|| measure(&text[..index]))
 }
 
@@ -70,10 +69,7 @@ pub fn file_line_range(input: &str) -> (&str, Option<LineRange>) {
         return (input, None);
     }
     let start: u32 = start.parse().unwrap_or(u32::MAX);
-    let end = (ranged && !end.is_empty())
-        .then(|| end.parse::<u32>().ok())
-        .flatten()
-        .filter(|&end| start < end);
+    let end = (ranged && !end.is_empty()).then(|| end.parse::<u32>().ok()).flatten().filter(|&end| start < end);
     (&input[..hash], Some(LineRange { start, end }))
 }
 
@@ -99,11 +95,7 @@ pub struct DirectorySearch {
 
 pub fn directory_search(query: &str, directory: &str, home: &str) -> DirectorySearch {
     if query == "~" {
-        return DirectorySearch {
-            directory: home.to_owned(),
-            prefix: "~/".to_owned(),
-            query: String::new(),
-        };
+        return DirectorySearch { directory: home.to_owned(), prefix: "~/".to_owned(), query: String::new() };
     }
     if let Some(rest) = query.strip_prefix("~/") {
         return search_in(rest, home, "~/");
@@ -128,11 +120,7 @@ fn is_parent_chain(query: &str) -> bool {
 
 fn search_in(query: &str, root: &str, prefix: &str) -> DirectorySearch {
     let Some(separator) = query.rfind('/') else {
-        return DirectorySearch {
-            directory: root.to_owned(),
-            prefix: prefix.to_owned(),
-            query: query.to_owned(),
-        };
+        return DirectorySearch { directory: root.to_owned(), prefix: prefix.to_owned(), query: query.to_owned() };
     };
     let parent = &query[..separator + 1];
     DirectorySearch {
@@ -144,17 +132,12 @@ fn search_in(query: &str, root: &str, prefix: &str) -> DirectorySearch {
 
 /// `directoryAutocompleteResultValue`.
 pub fn directory_value(directory: &str, search: &DirectorySearch) -> String {
-    format!(
-        "{}{}",
-        search.prefix,
-        directory.trim_start_matches(['/', '\\'])
-    )
+    format!("{}{}", search.prefix, directory.trim_start_matches(['/', '\\']))
 }
 
 /// `directoryAutocompleteExactValue`: the query itself, when it names a directory to list.
 pub fn directory_exact(value: &str, search: &DirectorySearch) -> Option<String> {
-    (!value.is_empty() && !search.prefix.is_empty() && search.query.is_empty())
-        .then(|| value.to_owned())
+    (!value.is_empty() && !search.prefix.is_empty() && search.query.is_empty()).then(|| value.to_owned())
 }
 
 /// `directoryAutocompleteMatches`: a case-insensitive prefix; hidden directories need a query.
@@ -196,10 +179,7 @@ pub fn resolve(base: &str, path: &str) -> String {
 
 /// `path.basename`.
 pub fn basename(path: &str) -> &str {
-    path.trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or_default()
+    path.trim_end_matches('/').rsplit('/').next().unwrap_or_default()
 }
 
 /// `path.relative(base, path)` when `path` is inside `base`, with `/` separators
@@ -248,22 +228,10 @@ mod tests {
     #[test]
     fn line_ranges_and_slash_heads() {
         let range = |start, end| Some(LineRange { start, end });
-        assert_eq!(
-            file_line_range("src/a.ts#12"),
-            ("src/a.ts", range(12, None))
-        );
-        assert_eq!(
-            file_line_range("src/a.ts#12-20"),
-            ("src/a.ts", range(12, Some(20)))
-        );
-        assert_eq!(
-            file_line_range("src/a.ts#12-"),
-            ("src/a.ts", range(12, None))
-        );
-        assert_eq!(
-            file_line_range("src/a.ts#20-12"),
-            ("src/a.ts", range(20, None))
-        );
+        assert_eq!(file_line_range("src/a.ts#12"), ("src/a.ts", range(12, None)));
+        assert_eq!(file_line_range("src/a.ts#12-20"), ("src/a.ts", range(12, Some(20))));
+        assert_eq!(file_line_range("src/a.ts#12-"), ("src/a.ts", range(12, None)));
+        assert_eq!(file_line_range("src/a.ts#20-12"), ("src/a.ts", range(20, None)));
         assert_eq!(file_line_range("#12"), ("#12", None));
         assert_eq!(file_line_range("a#x"), ("a#x", None));
         assert_eq!(slash_head("/cd ../x"), Some(("cd", "../x", 3)));
@@ -284,10 +252,7 @@ mod tests {
         assert_eq!(search("../.."), dir("/", "../../", ""));
         assert_eq!(search("/usr/lo"), dir("/usr", "/usr/", "lo"));
         assert_eq!(search("pack"), dir("/p/app", "", "pack"));
-        assert_eq!(
-            search("packages/t"),
-            dir("/p/app/packages", "packages/", "t")
-        );
+        assert_eq!(search("packages/t"), dir("/p/app/packages", "packages/", "t"));
         let found = search("~/src/");
         assert_eq!(directory_exact("~/src/", &found).as_deref(), Some("~/src/"));
         assert_eq!(directory_exact("pack", &search("pack")), None);
@@ -296,10 +261,7 @@ mod tests {
         assert!(!directory_matches(".git", ""));
         assert!(directory_matches(".git", ".g"));
         assert_eq!(directory_recent_value("/home/u", "/home/u"), "~");
-        assert_eq!(
-            directory_recent_value("/home/u/src/x", "/home/u"),
-            "~/src/x"
-        );
+        assert_eq!(directory_recent_value("/home/u/src/x", "/home/u"), "~/src/x");
         assert_eq!(directory_recent_value("/srv/x", "/home/u"), "/srv/x");
     }
 

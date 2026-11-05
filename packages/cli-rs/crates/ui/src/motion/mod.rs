@@ -17,13 +17,11 @@ mod text;
 
 pub use curve::{clamp, coast, intensity_at, smootherstep};
 pub use one_cell::{
-    OneCellClip, OneCellFrame, OneCellMotion, Pace, WORK_SPINNER_NAMES, octant_glyph,
-    one_cell_frame, seed_launch, seed_mono, work_spinner,
+    OneCellClip, OneCellFrame, OneCellMotion, Pace, WORK_SPINNER_NAMES, octant_glyph, one_cell_frame, seed_launch,
+    seed_mono, work_spinner,
 };
 pub use scanner::{ScannerOptions, ScannerStyle, scanner_colors, scanner_frames};
-pub use spinner::{
-    ColorFn, SPINNER_FRAMES, SPINNER_INTERVAL, Spinner, SpinnerColor, spinner_frame,
-};
+pub use spinner::{ColorFn, SPINNER_FRAMES, SPINNER_INTERVAL, Spinner, SpinnerColor, spinner_frame};
 pub use text::{FadeInText, ShimmerText, fade_strength, shimmer_strength};
 
 use opentui::App;
@@ -39,11 +37,7 @@ pub fn enabled(animations: Option<bool>) -> bool {
 
 /// The palette title of `app.toggle.animations` for the current switch (TS `app.tsx`).
 pub fn toggle_title(animations: Option<bool>) -> &'static str {
-    if enabled(animations) {
-        "Disable animations"
-    } else {
-        "Enable animations"
-    }
+    if enabled(animations) { "Disable animations" } else { "Enable animations" }
 }
 
 /// How long a widget has animated. Its driver holds it weakly, so dropping it, with the widget or by replacing it
@@ -100,10 +94,5 @@ fn rgba(r: f64, g: f64, b: f64, a: f64) -> Color {
 /// A color's channels as the `f32` floats of a TypeScript `RGBA` made from it.
 fn channels(color: Color) -> [f64; 4] {
     let float = |byte: u8| f64::from((f64::from(byte) / 255.0) as f32);
-    [
-        float(color.r),
-        float(color.g),
-        float(color.b),
-        float(color.a),
-    ]
+    [float(color.r), float(color.g), float(color.b), float(color.a)]
 }

@@ -26,22 +26,11 @@ pub fn install(tui: &Rc<Tui>) {
     .title("View status")
     .group("System")
     .palette()
-    .slash(Slash {
-        name: "status".to_owned(),
-        aliases: Vec::new(),
-        arguments: false,
-    });
+    .slash(Slash { name: "status".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands: vec![command],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: `<leader>s` by default.
-        KeymapLayer {
-            bindings: vec!["opencode.status".to_owned()],
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { bindings: vec!["opencode.status".to_owned()], ..KeymapLayer::default() },
     ];
     for layer in layers {
         // The layers live as long as the keymap, which the TUI owns.
@@ -71,18 +60,7 @@ pub fn show(tui: &Tui) {
             let closed = status.clone();
             cx.on_close(Disposer::new(move || closed.open.set(false)));
             status.load(&tui);
-            layout(
-                cx,
-                &header(
-                    cx,
-                    HeaderProps {
-                        title: "Status".to_owned(),
-                        ..HeaderProps::default()
-                    },
-                ),
-                &body,
-                None,
-            )
+            layout(cx, &header(cx, HeaderProps { title: "Status".to_owned(), ..HeaderProps::default() }), &body, None)
         },
         None,
         DialogOptions::default(),
@@ -101,20 +79,14 @@ impl Status {
     /// Reads the list when the store has none (TS loads it with the location at startup), then follows the store.
     fn load(self: &Rc<Self>, tui: &Tui) {
         let location = tui.data.read(|state| state.default_location().clone());
-        let loaded = tui.data.read(|state| {
-            state
-                .location(Some(&location))
-                .is_some_and(|data| data.mcp_server.is_some())
-        });
+        let loaded =
+            tui.data.read(|state| state.location(Some(&location)).is_some_and(|data| data.mcp_server.is_some()));
         if !loaded {
-            tui.app.spawn(
-                tui.data.catalog_sync(Catalog::McpServer, Some(&location)),
-                |_, result| {
-                    if let Err(error) = result {
-                        log::warn!("mcp list: {error}");
-                    }
-                },
-            );
+            tui.app.spawn(tui.data.catalog_sync(Catalog::McpServer, Some(&location)), |_, result| {
+                if let Err(error) = result {
+                    log::warn!("mcp list: {error}");
+                }
+            });
         }
         self.watch(tui.data.subscribe());
     }
@@ -124,26 +96,21 @@ impl Status {
             return;
         };
         let status = self.clone();
-        tui.app.spawn(
-            async move { revisions.changed().await.is_ok().then_some(revisions) },
-            move |_, revisions| {
-                let (Some(tui), Some(cx), Some(revisions)) =
-                    (status.tui.upgrade(), status.cx.upgrade(), revisions)
-                else {
-                    return;
-                };
-                if !status.open.get() {
-                    return;
-                }
-                let location = tui.data.read(|state| state.default_location().clone());
-                let (revision, changes) = tui.data.changes_since(status.seen.get());
-                status.seen.set(revision);
-                if changes.location(&location) {
-                    draw(&status.body, &cx, &servers(&tui));
-                }
-                status.watch(revisions);
-            },
-        );
+        tui.app.spawn(async move { revisions.changed().await.is_ok().then_some(revisions) }, move |_, revisions| {
+            let (Some(tui), Some(cx), Some(revisions)) = (status.tui.upgrade(), status.cx.upgrade(), revisions) else {
+                return;
+            };
+            if !status.open.get() {
+                return;
+            }
+            let location = tui.data.read(|state| state.default_location().clone());
+            let (revision, changes) = tui.data.changes_since(status.seen.get());
+            status.seen.set(revision);
+            if changes.location(&location) {
+                draw(&status.body, &cx, &servers(&tui));
+            }
+            status.watch(revisions);
+        });
     }
 }
 
@@ -151,10 +118,7 @@ impl Status {
 fn servers(tui: &Tui) -> Vec<McpServer> {
     tui.data.read(|state| {
         let location = state.default_location().clone();
-        state
-            .location(Some(&location))
-            .and_then(|data| data.mcp_server.clone())
-            .unwrap_or_default()
+        state.location(Some(&location)).and_then(|data| data.mcp_server.clone()).unwrap_or_default()
     })
 }
 
@@ -170,11 +134,7 @@ fn draw(body: &View, cx: &DialogCx, servers: &[McpServer]) {
     body.add(&Text::new(app, format!("{} MCP server{plural}", servers.len())).fg(theme.text.base));
     for server in servers {
         let row = View::new(app).row().gap(1);
-        row.add(
-            &Text::new(app, "•")
-                .fg(color(theme, &server.status))
-                .shrink(0.0),
-        );
+        row.add(&Text::new(app, "•").fg(color(theme, &server.status)).shrink(0.0));
         let text = Text::new(app, "").fg(theme.text.base).wrap(WrapMode::Word);
         text.set_text(vec![
             Span::styled(server.name.clone(), Style::new().fg(theme.text.base).bold()),
@@ -203,10 +163,8 @@ fn describe(status: &McpServerStatus) -> String {
         McpServerStatus::Disabled(_) => "Disabled in configuration".to_owned(),
         McpServerStatus::NeedsAuth(auth) => format!("Needs authentication: {}", auth.error),
         McpServerStatus::Pending(_) => "pending".to_owned(),
-        McpServerStatus::Unknown(value) => value
-            .get("status")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned(),
+        McpServerStatus::Unknown(value) => {
+            value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned()
+        }
     }
 }

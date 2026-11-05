@@ -19,9 +19,8 @@ use crate::app::Tui;
 /// `prompt.editor`.
 pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
     tui.dialogs.clear();
-    let Some(command) = ["VISUAL", "EDITOR"]
-        .iter()
-        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+    let Some(command) =
+        ["VISUAL", "EDITOR"].iter().find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
     else {
         failed(tui, "Set $VISUAL or $EDITOR to open an external editor");
         return;
@@ -31,11 +30,7 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
     let cwd = working_directory(tui, prompt);
     let weak = Rc::downgrade(prompt);
     tui.app.release_terminal(move |_| {
-        let result = edit(
-            &command,
-            snapshot["text"].as_str().unwrap_or_default(),
-            &cwd,
-        );
+        let result = edit(&command, snapshot["text"].as_str().unwrap_or_default(), &cwd);
         let Some(prompt) = weak.upgrade() else { return };
         let Some(tui) = prompt.tui.upgrade() else {
             return;
@@ -57,8 +52,7 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
 }
 
 fn failed(tui: &Tui, message: &str) {
-    tui.toasts
-        .show(ToastOptions::new(Variant::Error, message.to_owned()).title("Failed to open editor"));
+    tui.toasts.show(ToastOptions::new(Variant::Error, message.to_owned()).title("Failed to open editor"));
 }
 
 /// The project's directory unless it is `/`, else the location's, else the TUI's.
@@ -71,29 +65,16 @@ fn working_directory(tui: &Tui, prompt: &Inner) -> PathBuf {
             .and_then(|data| data.info.as_ref())
             .map(|info| info.project.directory.0.clone())
     });
-    let directory = project
-        .filter(|directory| directory != "/")
-        .unwrap_or(location.directory);
-    PathBuf::from(if directory.is_empty() {
-        tui.directory.clone()
-    } else {
-        directory
-    })
+    let directory = project.filter(|directory| directory != "/").unwrap_or(location.directory);
+    PathBuf::from(if directory.is_empty() { tui.directory.clone() } else { directory })
 }
 
 /// The `PromptInfo` for `content`: each mention with text moves to an occurrence of that text, the one
 /// nearest its old offset, and a part whose text is gone is dropped (`realignPromptInputMentions`).
 pub fn realign(content: &str, prompt: &Value) -> Value {
     const KEYS: [&str; 3] = ["files", "agents", "skills"];
-    let lists: Vec<Option<&Vec<Value>>> = KEYS
-        .iter()
-        .map(|key| prompt.get(*key).and_then(Value::as_array))
-        .collect();
-    let parts: Vec<&Value> = lists
-        .iter()
-        .flatten()
-        .flat_map(|list| list.iter())
-        .collect();
+    let lists: Vec<Option<&Vec<Value>>> = KEYS.iter().map(|key| prompt.get(*key).and_then(Value::as_array)).collect();
+    let parts: Vec<&Value> = lists.iter().flatten().flat_map(|list| list.iter()).collect();
     let mentions: Vec<Option<Mention>> = parts.iter().map(|part| mention(part)).collect();
     let aligned = realign_mentions(content, &mentions);
 
@@ -111,8 +92,7 @@ pub fn realign(content: &str, prompt: &Value) -> Value {
                 }
                 let mention = aligned[at].as_ref()?;
                 let mut part = part.clone();
-                part["mention"] =
-                    json!({ "text": mention.text, "start": mention.start, "end": mention.end });
+                part["mention"] = json!({ "text": mention.text, "start": mention.start, "end": mention.end });
                 Some(part)
             })
             .collect();
@@ -124,16 +104,9 @@ pub fn realign(content: &str, prompt: &Value) -> Value {
 /// A part's mention with text.
 fn mention(part: &Value) -> Option<Mention> {
     let mention = part.get("mention")?;
-    let text = mention
-        .get("text")?
-        .as_str()
-        .filter(|text| !text.is_empty())?;
+    let text = mention.get("text")?.as_str().filter(|text| !text.is_empty())?;
     let offset = |key: &str| mention.get(key).and_then(Value::as_f64).unwrap_or_default() as u32;
-    Some(Mention {
-        start: offset("start"),
-        end: offset("end"),
-        text: text.to_owned(),
-    })
+    Some(Mention { start: offset("start"), end: offset("end"), text: text.to_owned() })
 }
 
 #[cfg(test)]
@@ -153,25 +126,13 @@ mod tests {
         });
         let next = realign("日本 @general then @a.ts", &prompt);
         assert_eq!(next["text"], "日本 @general then @a.ts");
-        assert_eq!(
-            next["files"][0]["mention"],
-            json!({ "text": "@a.ts", "start": 19, "end": 24 })
-        );
-        assert_eq!(
-            next["files"][1],
-            json!({ "uri": "file:///w/b.ts", "name": "b.ts" })
-        );
-        assert_eq!(
-            next["agents"][0]["mention"],
-            json!({ "text": "@general", "start": 5, "end": 13 })
-        );
+        assert_eq!(next["files"][0]["mention"], json!({ "text": "@a.ts", "start": 19, "end": 24 }));
+        assert_eq!(next["files"][1], json!({ "uri": "file:///w/b.ts", "name": "b.ts" }));
+        assert_eq!(next["agents"][0]["mention"], json!({ "text": "@general", "start": 5, "end": 13 }));
         assert!(next.get("skills").is_none());
 
         let gone = realign("nothing left", &prompt);
-        assert_eq!(
-            gone["files"],
-            json!([{ "uri": "file:///w/b.ts", "name": "b.ts" }])
-        );
+        assert_eq!(gone["files"], json!([{ "uri": "file:///w/b.ts", "name": "b.ts" }]));
         assert_eq!(gone["agents"], json!([]));
     }
 
@@ -181,12 +142,8 @@ mod tests {
         let prompt = json!({ "files": [part(0, "@x"), part(20, "@x"), part(30, "@x.ts")] });
         // Three "@x" candidates, one inside "@x.ts", which the longer mention protects.
         let next = realign("@x @x.ts                @x", &prompt);
-        let starts: Vec<u64> = next["files"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|file| file["mention"]["start"].as_u64().unwrap())
-            .collect();
+        let starts: Vec<u64> =
+            next["files"].as_array().unwrap().iter().map(|file| file["mention"]["start"].as_u64().unwrap()).collect();
         assert_eq!(starts, [0, 24, 3]);
     }
 }

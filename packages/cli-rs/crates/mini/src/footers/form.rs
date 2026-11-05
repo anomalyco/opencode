@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use opencode_api::generated::{FormAnswer, FormField, FormInfo, FormValue};
 use opencode_ui::form::{
-    custom, display_value, initial_values, key, label, rows, selected_row, set_multiselect_custom,
-    textual, toggle_multiselect, validate,
+    custom, display_value, initial_values, key, label, rows, selected_row, set_multiselect_custom, textual,
+    toggle_multiselect, validate,
 };
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -90,11 +90,9 @@ impl State {
     pub fn input(&self, field: Option<&FormField>) -> String {
         match field {
             None | Some(FormField::External(_)) => String::new(),
-            Some(field) => self
-                .custom
-                .get(key(field))
-                .cloned()
-                .unwrap_or_else(|| display_value(field, self.answer(field), "")),
+            Some(field) => {
+                self.custom.get(key(field)).cloned().unwrap_or_else(|| display_value(field, self.answer(field), ""))
+            }
         }
     }
 
@@ -145,11 +143,7 @@ impl State {
         }
         self.set_answer(&field, Some(row.value.clone()));
         self.error.clear();
-        let next = if single(form) {
-            self.field
-        } else {
-            self.field + 1
-        };
+        let next = if single(form) { self.field } else { self.field + 1 };
         self.set_field(form, next);
     }
 
@@ -163,11 +157,8 @@ impl State {
         }
         let input = text.trim();
         if let FormField::Multiselect(_) = field {
-            let values = set_multiselect_custom(
-                self.answer(&field),
-                self.custom.get(key(&field)).map(String::as_str),
-                input,
-            );
+            let values =
+                set_multiselect_custom(self.answer(&field), self.custom.get(key(&field)).map(String::as_str), input);
             let values = FormValue::Array(values);
             if let Some(invalid) = validate(&field, Some(&values)) {
                 return self.fail(invalid);
@@ -208,11 +199,7 @@ impl State {
         }
         self.set_answer(&field, Some(FormValue::Bool(true)));
         self.error.clear();
-        let next = if single(form) {
-            self.field
-        } else {
-            self.field + 1
-        };
+        let next = if single(form) { self.field } else { self.field + 1 };
         self.set_field(form, next);
     }
 }
@@ -243,10 +230,7 @@ pub fn single(form: &FormInfo) -> bool {
 /// `formPlaceholder`.
 pub fn placeholder(field: Option<&FormField>) -> String {
     match field {
-        Some(FormField::String(field)) => field
-            .placeholder
-            .clone()
-            .unwrap_or_else(|| "Type your answer".to_owned()),
+        Some(FormField::String(field)) => field.placeholder.clone().unwrap_or_else(|| "Type your answer".to_owned()),
         _ => "Enter a number".to_owned(),
     }
 }
@@ -311,12 +295,7 @@ pub fn answer(form: &FormInfo, state: &State) -> Option<FormAnswer> {
     if invalid(form, state).is_some() {
         return None;
     }
-    Some(
-        form.fields
-            .iter()
-            .filter_map(|field| Some((key(field).to_owned(), state.answer(field)?.clone())))
-            .collect(),
-    )
+    Some(form.fields.iter().filter_map(|field| Some((key(field).to_owned(), state.answer(field)?.clone()))).collect())
 }
 
 /// `action`: what Enter does, for the hint row.
@@ -388,21 +367,11 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         .margin_edge(Edge::Bottom, gap)
         .child(
             &Text::new(app, if body.mono { "*" } else { "◆" })
-                .fg(if unsupported.is_some() {
-                    theme.warning
-                } else {
-                    theme.question
-                })
+                .fg(if unsupported.is_some() { theme.warning } else { theme.question })
                 .wrap(WrapMode::None)
                 .shrink(0.0),
         )
-        .child(
-            &Text::new(app, form.title.clone())
-                .fg(theme.text)
-                .wrap(WrapMode::None)
-                .truncate(true)
-                .min_width(0),
-        );
+        .child(&Text::new(app, form.title.clone()).fg(theme.text).wrap(WrapMode::None).truncate(true).min_width(0));
     if unsupported.is_none() && !single(form) {
         title.add(
             &Text::new(
@@ -410,11 +379,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 if confirm {
                     "Review".to_owned()
                 } else {
-                    format!(
-                        "{}/{}",
-                        (state.field + 1).min(form.fields.len()),
-                        form.fields.len()
-                    )
+                    format!("{}/{}", (state.field + 1).min(form.fields.len()), form.fields.len())
                 },
             )
             .fg(theme.muted)
@@ -425,22 +390,11 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     root.add(&title);
 
     let line = |text: String, color: Color| {
-        Text::new(app, text)
-            .fg(color)
-            .wrap(WrapMode::Word)
-            .width(Length::percent(100.0))
-            .shrink(0.0)
+        Text::new(app, text).fg(color).wrap(WrapMode::Word).width(Length::percent(100.0)).shrink(0.0)
     };
-    let content = View::new(app)
-        .column()
-        .width(Length::percent(100.0))
-        .shrink(0.0)
-        .gap(gap);
-    if let Some(message) = form
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("message"))
-        .and_then(serde_json::Value::as_str)
+    let content = View::new(app).column().width(Length::percent(100.0)).shrink(0.0).gap(gap);
+    if let Some(message) =
+        form.metadata.as_ref().and_then(|metadata| metadata.get("message")).and_then(serde_json::Value::as_str)
     {
         content.add(&line(message.to_owned(), theme.muted));
     }
@@ -452,10 +406,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 .shrink(0.0)
                 .gap(gap)
                 .child(&line(unsupported.clone(), theme.warning))
-                .child(&line(
-                    "This request remains pending until you dismiss it.".to_owned(),
-                    theme.muted,
-                )),
+                .child(&line("This request remains pending until you dismiss it.".to_owned(), theme.muted)),
         );
     }
     if let (None, Some(outer @ FormField::External(field))) = (&unsupported, external) {
@@ -467,10 +418,7 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 .width(Length::percent(100.0))
                 .shrink(0.0)
                 .gap(gap)
-                .child(&line(
-                    field.description.clone().unwrap_or_else(|| label(outer)),
-                    theme.text,
-                ))
+                .child(&line(field.description.clone().unwrap_or_else(|| label(outer)), theme.text))
                 .child(&line(field.url.clone(), theme.link))
                 .child(&line(
                     if done {
@@ -487,28 +435,16 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     }
     if let (None, Some(field), false) = (&unsupported, answering, confirm) {
         let question = description(field).map_or_else(|| label(field), str::to_owned);
-        let block = View::new(app)
-            .column()
-            .width(Length::percent(100.0))
-            .shrink(0.0)
-            .gap(gap)
-            .child(&line(
-                format!(
-                    "{question}{}{}",
-                    if required(field) { " (required)" } else { "" },
-                    if multiple {
-                        " (select all that apply)"
-                    } else {
-                        ""
-                    }
-                ),
-                theme.text,
-            ));
+        let block = View::new(app).column().width(Length::percent(100.0)).shrink(0.0).gap(gap).child(&line(
+            format!(
+                "{question}{}{}",
+                if required(field) { " (required)" } else { "" },
+                if multiple { " (select all that apply)" } else { "" }
+            ),
+            theme.text,
+        ));
         if !is_textual && !state.editing {
-            let list = View::new(app)
-                .column()
-                .width(Length::percent(100.0))
-                .shrink(0.0);
+            let list = View::new(app).column().width(Length::percent(100.0)).shrink(0.0);
             let value = state.answer(field);
             for (index, row) in choices.iter().enumerate() {
                 let active = state.selected == index;
@@ -524,59 +460,45 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                 } else {
                     format!("{}.", index + 1)
                 };
-                let fg = if active {
-                    theme.formfield_focused_text
-                } else {
-                    theme.formfield_text
-                };
-                let inline = row.description.as_ref().is_some_and(|description| {
-                    ordinal.width()
-                        + 2
-                        + row.label.width()
-                        + if multiple {
-                            4
-                        } else if picked {
-                            2
-                        } else {
-                            0
-                        }
-                        + description.width()
-                        <= usize::from(width)
-                            .saturating_sub(if compact { 0 } else { 5 })
-                            .saturating_sub(if body.mono { 0 } else { 1 })
-                });
+                let fg = if active { theme.formfield_focused_text } else { theme.formfield_text };
+                let inline =
+                    row.description.as_ref().is_some_and(|description| {
+                        ordinal.width()
+                            + 2
+                            + row.label.width()
+                            + if multiple {
+                                4
+                            } else if picked {
+                                2
+                            } else {
+                                0
+                            }
+                            + description.width()
+                            <= usize::from(width)
+                                .saturating_sub(if compact { 0 } else { 5 })
+                                .saturating_sub(if body.mono { 0 } else { 1 })
+                    });
                 let mut spans = Vec::new();
                 if multiple {
-                    spans.push(
-                        format!("[{}] ", if picked { "x" } else { " " }).fg(if picked {
-                            theme.selection
-                        } else {
-                            fg
-                        }),
-                    );
+                    spans.push(format!("[{}] ", if picked { "x" } else { " " }).fg(if picked {
+                        theme.selection
+                    } else {
+                        fg
+                    }));
                 }
                 spans.push(row.label.clone().fg(fg));
                 if !multiple && picked {
                     spans.push(" *".fg(theme.selection));
                 }
                 let text = View::new(app)
-                    .direction(if inline {
-                        FlexDirection::Row
-                    } else {
-                        FlexDirection::Column
-                    })
+                    .direction(if inline { FlexDirection::Row } else { FlexDirection::Column })
                     .gap(u32::from(inline))
                     .grow(1.0)
                     .basis(Length::Auto)
                     .min_width(0)
                     .child(&Text::new(app, spans).wrap(WrapMode::Word).shrink(0.0));
                 if let Some(description) = &row.description {
-                    text.add(
-                        &Text::new(app, description.clone())
-                            .fg(theme.muted)
-                            .wrap(WrapMode::Word)
-                            .shrink(0.0),
-                    );
+                    text.add(&Text::new(app, description.clone()).fg(theme.muted).wrap(WrapMode::Word).shrink(0.0));
                 }
                 list.add(
                     &View::new(app)
@@ -584,27 +506,14 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                         .gap(1)
                         .shrink(0.0)
                         .align_items(Align::Start)
-                        .bg(if active {
-                            theme.formfield_focused_bg
-                        } else {
-                            Color::TRANSPARENT
-                        })
-                        .child(
-                            &Text::new(app, ordinal)
-                                .fg(fg)
-                                .wrap(WrapMode::None)
-                                .shrink(0.0),
-                        )
+                        .bg(if active { theme.formfield_focused_bg } else { Color::TRANSPARENT })
+                        .child(&Text::new(app, ordinal).fg(fg).wrap(WrapMode::None).shrink(0.0))
                         .child(&text),
                 );
             }
             if has_custom {
                 let active = state.selected == choices.len();
-                let fg = if active {
-                    theme.formfield_focused_text
-                } else {
-                    theme.formfield_text
-                };
+                let fg = if active { theme.formfield_focused_text } else { theme.formfield_text };
                 let ordinal = if body.mono {
                     format!("{}{}.", if active { ">" } else { " " }, choices.len() + 1)
                 } else {
@@ -615,17 +524,8 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
                         .row()
                         .gap(1)
                         .shrink(0.0)
-                        .bg(if active {
-                            theme.formfield_focused_bg
-                        } else {
-                            Color::TRANSPARENT
-                        })
-                        .child(
-                            &Text::new(app, ordinal)
-                                .fg(fg)
-                                .wrap(WrapMode::None)
-                                .shrink(0.0),
-                        )
+                        .bg(if active { theme.formfield_focused_bg } else { Color::TRANSPARENT })
+                        .child(&Text::new(app, ordinal).fg(fg).wrap(WrapMode::None).shrink(0.0))
                         .child(
                             &Text::new(app, "Type your own answer")
                                 .fg(fg)
@@ -641,24 +541,13 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
         content.add(&block);
     }
     if unsupported.is_none() && confirm {
-        let review = View::new(app)
-            .column()
-            .width(Length::percent(100.0))
-            .shrink(0.0);
+        let review = View::new(app).column().width(Length::percent(100.0)).shrink(0.0);
         for field in form.fields.iter() {
             let value = if matches!(field, FormField::External(_)) {
-                if state.acknowledged(field) {
-                    "acknowledged".to_owned()
-                } else {
-                    "required".to_owned()
-                }
+                if state.acknowledged(field) { "acknowledged".to_owned() } else { "required".to_owned() }
             } else {
                 let shown = display_value(field, state.answer(field), "");
-                if shown.is_empty() {
-                    "(not answered)".to_owned()
-                } else {
-                    shown
-                }
+                if shown.is_empty() { "(not answered)".to_owned() } else { shown }
             };
             review.add(&line(format!("{}: {value}", label(field)), theme.muted));
         }
@@ -669,16 +558,11 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     }
 
     let (frame, scroller) = Scroller::new(app, theme, !body.mono, false);
-    scroller
-        .scroll
-        .content_view()
-        .padding_edge(Edge::Right, if body.mono { 0 } else { 1 });
+    scroller.scroll.content_view().padding_edge(Edge::Right, if body.mono { 0 } else { 1 });
     if !compact && editing {
         // The content's height, capped to leave the field and the hints their rows.
         let rows = content_rows(form, state, width);
-        frame
-            .height(rows.min(usize::from(body.height).saturating_sub(9).max(1)) as u32)
-            .shrink(0.0);
+        frame.height(rows.min(usize::from(body.height).saturating_sub(9).max(1)) as u32).shrink(0.0);
     } else {
         frame.grow(1.0).basis(Length::Auto);
     }
@@ -716,17 +600,9 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     if !compact && editing {
         root.add(&View::new(app).grow(1.0).basis(Length::Auto).min_height(0));
     }
-    let status = if state.submitting {
-        theme.running
-    } else {
-        theme.muted
-    };
+    let status = if state.submitting { theme.running } else { theme.muted };
     if compact {
-        let hints = View::new(app)
-            .row()
-            .flex_wrap(Wrap::Wrap)
-            .column_gap(1)
-            .shrink(0.0);
+        let hints = View::new(app).row().flex_wrap(Wrap::Wrap).column_gap(1).shrink(0.0);
         if unsupported.is_none() {
             hints.add(
                 &Text::new(
@@ -744,31 +620,15 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
             );
         }
         if !state.submitting {
-            hints.add(
-                &Text::new(app, "esc dismiss")
-                    .fg(theme.muted)
-                    .height(1)
-                    .wrap(WrapMode::None)
-                    .shrink(0.0),
-            );
+            hints.add(&Text::new(app, "esc dismiss").fg(theme.muted).height(1).wrap(WrapMode::None).shrink(0.0));
         }
         if !state.submitting && body.height >= 10 {
             let select = width >= 56 && !choices.is_empty() && !state.editing;
             hints.add(
-                &Text::new(
-                    app,
-                    format!(
-                        "{}pgup/pgdn scroll",
-                        if select {
-                            "up/down select  tab next  "
-                        } else {
-                            ""
-                        }
-                    ),
-                )
-                .fg(theme.muted)
-                .wrap(WrapMode::Word)
-                .shrink(0.0),
+                &Text::new(app, format!("{}pgup/pgdn scroll", if select { "up/down select  tab next  " } else { "" }))
+                    .fg(theme.muted)
+                    .wrap(WrapMode::Word)
+                    .shrink(0.0),
             );
         }
         root.add(&hints);
@@ -793,28 +653,15 @@ pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
             .justify(Justify::SpaceBetween)
             .gap(1)
             .shrink(0.0)
-            .child(
-                &Text::new(app, hint)
-                    .fg(status)
-                    .wrap(WrapMode::Word)
-                    .shrink(1.0)
-                    .min_width(0),
-            );
+            .child(&Text::new(app, hint).fg(status).wrap(WrapMode::Word).shrink(1.0).min_width(0));
         if !state.error.is_empty() {
             row.add(
-                &Text::new(app, state.error.clone())
-                    .fg(theme.error)
-                    .wrap(WrapMode::None)
-                    .truncate(true)
-                    .shrink(1.0),
+                &Text::new(app, state.error.clone()).fg(theme.error).wrap(WrapMode::None).truncate(true).shrink(1.0),
             );
         }
         root.add(&row);
     }
-    Painted {
-        scroll: scroller,
-        field: area,
-    }
+    Painted { scroll: scroller, field: area }
 }
 
 /// The rows of the question and its message while editing, for the scroll box's height (`contentHeight`).
@@ -822,11 +669,8 @@ fn content_rows(form: &FormInfo, state: &State, width: u16) -> usize {
     let width = usize::from(width).saturating_sub(6).max(1);
     let wrapped = |text: &str| text.width().div_ceil(width).max(1);
     let mut rows = Vec::new();
-    if let Some(message) = form
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("message"))
-        .and_then(serde_json::Value::as_str)
+    if let Some(message) =
+        form.metadata.as_ref().and_then(|metadata| metadata.get("message")).and_then(serde_json::Value::as_str)
     {
         rows.push(wrapped(message));
     }
@@ -882,10 +726,7 @@ mod tests {
         state.pick(&form);
         assert!(confirm(&form, &state));
         let answer = answer(&form, &state).unwrap();
-        assert_eq!(
-            answer.get("target"),
-            Some(&FormValue::String("prod".into()))
-        );
+        assert_eq!(answer.get("target"), Some(&FormValue::String("prod".into())));
         assert_eq!(action(&form, &state, 80), "submit");
     }
 
@@ -900,27 +741,15 @@ mod tests {
         assert_eq!(state.error, "Must be at least 1");
         state.commit(&form, "3");
         assert_eq!(state.error, "");
-        assert_eq!(
-            answer(&form, &state).unwrap().get("count"),
-            Some(&FormValue::Number(3.0))
-        );
-        assert_eq!(
-            invalid(&form, &State::new(&form)).as_deref(),
-            Some("Count: Answer required")
-        );
+        assert_eq!(answer(&form, &state).unwrap().get("count"), Some(&FormValue::Number(3.0)));
+        assert_eq!(invalid(&form, &State::new(&form)).as_deref(), Some("Count: Answer required"));
     }
 
     #[test]
     fn unsupported_forms_say_why() {
+        assert_eq!(unsupported(&form(serde_json::json!([]))).as_deref(), Some("This form has no supported fields."));
         assert_eq!(
-            unsupported(&form(serde_json::json!([]))).as_deref(),
-            Some("This form has no supported fields.")
-        );
-        assert_eq!(
-            unsupported(&form(
-                serde_json::json!([{ "type": "string", "key": "a", "pattern": "x" }])
-            ))
-            .as_deref(),
+            unsupported(&form(serde_json::json!([{ "type": "string", "key": "a", "pattern": "x" }]))).as_deref(),
             Some("Pattern-constrained forms are not supported in Mini yet.")
         );
         assert_eq!(

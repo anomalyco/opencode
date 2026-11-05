@@ -7,35 +7,20 @@ use opencode_plugin_abi::{Command, Line, Setup, SlotKind, Span, Toast, export_pl
 const VERSION: &str = if cfg!(feature = "v2") { "v2" } else { "v1" };
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
-    if setup
-        .options()
-        .is_some_and(|options| options.contains("\"fail\":true"))
-    {
+    if setup.options().is_some_and(|options| options.contains("\"fail\":true")) {
         return Err("sample setup failed".to_owned());
     }
     let host = setup.host();
     setup.storage_key("count");
-    setup.command(
-        command("sample.hello", "Say hello", Some("hello")),
-        move |_| {
-            let count = count(host) + 1;
-            if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
-                host.log(opencode_plugin_abi::Level::Warn, &error);
-            }
-            host.toast(
-                Toast::Success,
-                &format!("Hello from sample {VERSION} ({count})"),
-            );
-        },
-    );
-    setup.command(
-        command("sample.open", "Open the sample route", Some("sample")),
-        move |_| host.open_route("hello"),
-    );
-    setup.command(
-        command("sample.panic", "Panic in the sample plugin", None),
-        |_| panic!("sample command panicked"),
-    );
+    setup.command(command("sample.hello", "Say hello", Some("hello")), move |_| {
+        let count = count(host) + 1;
+        if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
+            host.log(opencode_plugin_abi::Level::Warn, &error);
+        }
+        host.toast(Toast::Success, &format!("Hello from sample {VERSION} ({count})"));
+    });
+    setup.command(command("sample.open", "Open the sample route", Some("sample")), move |_| host.open_route("hello"));
+    setup.command(command("sample.panic", "Panic in the sample plugin", None), |_| panic!("sample command panicked"));
     setup.code_block("sample", |fence| {
         if fence.code.trim().is_empty() {
             return None;
@@ -50,9 +35,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     setup.code_block("sample-panic", |_| panic!("sample fence panicked"));
     setup.slot(SlotKind::Append, "home.footer", |_| {
-        vec![vec![
-            Span::new(format!("sample plugin {VERSION}: home.footer")).fg("text.muted"),
-        ]]
+        vec![vec![Span::new(format!("sample plugin {VERSION}: home.footer")).fg("text.muted")]]
     });
     setup.route("hello", move || -> Vec<Line> {
         vec![
@@ -77,22 +60,11 @@ fn command(name: &str, title: &str, slash: Option<&str>) -> Command {
 /// The stored `{"count":N}`, else 0.
 fn count(host: opencode_plugin_abi::Host) -> u64 {
     host.storage_get("count")
-        .and_then(|json| {
-            json.chars()
-                .filter(char::is_ascii_digit)
-                .collect::<String>()
-                .parse()
-                .ok()
-        })
+        .and_then(|json| json.chars().filter(char::is_ascii_digit).collect::<String>().parse().ok())
         .unwrap_or(0)
 }
 
-#[cfg(not(any(
-    feature = "abi-1-0",
-    feature = "minor-newer",
-    feature = "major-2",
-    feature = "requires-future"
-)))]
+#[cfg(not(any(feature = "abi-1-0", feature = "minor-newer", feature = "major-2", feature = "requires-future")))]
 export_plugin!("sample", setup);
 
 // Built against ABI 1.0: the shorter table, without `describe`.

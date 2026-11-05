@@ -30,16 +30,10 @@ struct Fixture {
 
 impl Transport for Fixture {
     fn send(&self, request: Request) -> BoxFuture<'_, Result<Response, String>> {
-        let body: Value = request
-            .body
-            .as_ref()
-            .and_then(|body| serde_json::from_slice(body).ok())
-            .unwrap_or(Value::Null);
+        let body: Value =
+            request.body.as_ref().and_then(|body| serde_json::from_slice(body).ok()).unwrap_or(Value::Null);
         let path = request.url.path().to_owned();
-        self.seen
-            .lock()
-            .unwrap()
-            .push((request.method.to_owned(), path.clone(), body.clone()));
+        self.seen.lock().unwrap().push((request.method.to_owned(), path.clone(), body.clone()));
         let location = json!({ "directory": LOCATION });
         let base = "/api/session/ses_a";
         let inbox = path.starts_with(&format!("{base}/inbox/"));
@@ -76,27 +70,18 @@ impl Transport for Fixture {
                     "enabled": true, "limit": { "context": 1000, "output": 100 },
                 }] }),
             ),
-            ("GET", "/api/provider" | "/api/command") => {
-                (200, json!({ "location": location, "data": [] }))
+            ("GET", "/api/provider" | "/api/command") => (200, json!({ "location": location, "data": [] })),
+            ("PATCH" | "DELETE", _) if inbox && self.fail => {
+                (409, json!({ "_tag": "SessionInboxConflict", "message": "already delivered" }))
             }
-            ("PATCH" | "DELETE", _) if inbox && self.fail => (
-                409,
-                json!({ "_tag": "SessionInboxConflict", "message": "already delivered" }),
-            ),
             ("PATCH" | "DELETE", _) if inbox => (204, Value::Null),
             ("POST", p) if p == format!("{base}/revert/stage") => {
                 (200, json!({ "data": { "messageID": body["messageID"] } }))
             }
-            ("POST", p) if p == format!("{base}/fork") => {
-                (200, json!({ "data": session("ses_fork") }))
-            }
+            ("POST", p) if p == format!("{base}/fork") => (200, json!({ "data": session("ses_fork") })),
             _ => (404, json!({})),
         };
-        let body = if status == 204 {
-            Vec::new()
-        } else {
-            serde_json::to_vec(&body).unwrap()
-        };
+        let body = if status == 204 { Vec::new() } else { serde_json::to_vec(&body).unwrap() };
         Box::pin(async move {
             Ok(Response {
                 status,
@@ -140,10 +125,7 @@ fn pending(id: &str, text: &str, delivery: &str) -> Value {
 }
 
 fn queued() -> Vec<Value> {
-    vec![
-        pending("msg_05", "First queued\nquestion", "queue"),
-        pending("msg_06", "Second queued", "queue"),
-    ]
+    vec![pending("msg_05", "First queued\nquestion", "queue"), pending("msg_06", "Second queued", "queue")]
 }
 
 struct Kit {
@@ -159,12 +141,7 @@ impl Kit {
 
     fn with(inbox: Vec<Value>, fail: bool) -> Self {
         let seen = Seen::default();
-        let fixture = Fixture {
-            messages: turns(),
-            inbox,
-            fail,
-            seen: seen.clone(),
-        };
+        let fixture = Fixture { messages: turns(), inbox, fail, seen: seen.clone() };
         let client = Client::with_transport("http://opencode.local", Arc::new(fixture)).unwrap();
         let app = TestApp::new(100, 30);
         let tui = opencode_tui::mount(
@@ -172,17 +149,9 @@ impl Kit {
             Deps {
                 client,
                 directory: LOCATION.into(),
-                config: Resolved::new(
-                    Info {
-                        animations: Some(false),
-                        ..Info::default()
-                    },
-                    |_| None,
-                ),
+                config: Resolved::new(Info { animations: Some(false), ..Info::default() }, |_| None),
                 roots: None,
-                route: Route::Session {
-                    id: SessionID("ses_a".into()),
-                },
+                route: Route::Session { id: SessionID("ses_a".into()) },
                 continue_: false,
                 events: false,
             },
@@ -201,9 +170,7 @@ impl Kit {
     }
 
     fn wait_gone(&self, text: &str) {
-        let gone = self
-            .app
-            .wait_until(WAIT, || !self.app.text().contains(text));
+        let gone = self.app.wait_until(WAIT, || !self.app.text().contains(text));
         assert!(gone, "{text:?} stayed:\n{}", self.app.text());
     }
 
@@ -232,9 +199,7 @@ impl Kit {
             .unwrap()
             .iter()
             // The goal footer's RPC `get` is a read, as P-REQ counts it.
-            .filter(|(method, path, _)| {
-                method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get"))
-            })
+            .filter(|(method, path, _)| method != "GET" && !(path.starts_with("/api/rpc/") && path.ends_with("/get")))
             .map(|(method, path, body)| format!("{method} {path} {body}"))
             .collect()
     }
@@ -247,12 +212,7 @@ impl Kit {
     }
 
     fn prompt_text(&self) -> String {
-        self.tui
-            .textarea
-            .borrow()
-            .as_ref()
-            .map(|textarea| textarea.text())
-            .unwrap_or_default()
+        self.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default()
     }
 }
 
@@ -262,10 +222,7 @@ fn the_dock_shows_the_queue_and_the_transcript_hides_it() {
     let screen = kit.wait_for("2 queued · First queued question");
     assert!(!screen.contains("Second queued"), "{screen}");
     // The dock sits above the prompt, and nothing else shows the queued prompts.
-    let dock = screen
-        .lines()
-        .position(|line| line.contains("2 queued"))
-        .unwrap();
+    let dock = screen.lines().position(|line| line.contains("2 queued")).unwrap();
     let prompt = screen.lines().position(|line| line.contains("╹▀")).unwrap();
     assert!(dock < prompt, "{screen}");
     assert_eq!(screen.matches("First queued").count(), 1, "{screen}");
@@ -276,11 +233,7 @@ fn the_dock_shows_the_queue_and_the_transcript_hides_it() {
     kit.app.press("ctrl+x");
     kit.app.press("q");
     kit.app.advance(Duration::from_millis(20));
-    assert!(
-        !kit.app.text().contains("Search queued prompts"),
-        "{}",
-        kit.app.text()
-    );
+    assert!(!kit.app.text().contains("Search queued prompts"), "{}", kit.app.text());
 }
 
 #[test]
@@ -297,10 +250,7 @@ fn the_queued_dialog_lists_prompts_and_enter_steers_one() {
     kit.app.press("down");
     kit.wait_for("2 of 2");
     kit.app.press("enter");
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"PATCH /api/session/ses_a/inbox/msg_06 {"delivery":"steer"}"#]
-    );
+    assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a/inbox/msg_06 {"delivery":"steer"}"#]);
     kit.wait_gone("Search queued prompts");
 }
 
@@ -310,16 +260,9 @@ fn a_click_on_the_dock_opens_the_dialog_and_delete_closes_after_the_last() {
     kit.click("2 queued");
     kit.wait_for("Search queued prompts");
     kit.app.press("ctrl+d");
-    assert_eq!(
-        kit.wait_writes(1),
-        ["DELETE /api/session/ses_a/inbox/msg_05 null"]
-    );
+    assert_eq!(kit.wait_writes(1), ["DELETE /api/session/ses_a/inbox/msg_05 null"]);
     // Not the last prompt: the dialog stays.
-    assert!(
-        kit.app.text().contains("Search queued prompts"),
-        "{}",
-        kit.app.text()
-    );
+    assert!(kit.app.text().contains("Search queued prompts"), "{}", kit.app.text());
 
     let kit = Kit::new(vec![pending("msg_05", "Only one", "queue")]);
     kit.click("1 queued");
@@ -337,10 +280,7 @@ fn undo_takes_a_queued_prompt_back_into_the_composer() {
     kit.app.press("q");
     kit.wait_for("Search queued prompts");
     kit.app.press("ctrl+u");
-    assert_eq!(
-        kit.wait_writes(1),
-        ["DELETE /api/session/ses_a/inbox/msg_05 null"]
-    );
+    assert_eq!(kit.wait_writes(1), ["DELETE /api/session/ses_a/inbox/msg_05 null"]);
     kit.wait_gone("Search queued prompts");
     assert_eq!(kit.prompt_text(), "draft\n\nFirst queued\nquestion");
 }
@@ -365,11 +305,7 @@ fn a_failed_steer_keeps_the_dialog_and_toasts() {
     kit.wait_for("Search queued prompts");
     kit.app.press("enter");
     kit.wait_for("Failed to steer pending prompt");
-    assert!(
-        kit.app.text().contains("Search queued prompts"),
-        "{}",
-        kit.app.text()
-    );
+    assert!(kit.app.text().contains("Search queued prompts"), "{}", kit.app.text());
 }
 
 #[test]
@@ -383,10 +319,7 @@ fn a_pending_steer_moves_to_the_queue_or_is_deleted() {
     assert!(screen.contains("Move to queue"), "{screen}");
     assert!(screen.contains("Delete"), "{screen}");
     kit.app.press("enter");
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"PATCH /api/session/ses_a/inbox/msg_05 {"delivery":"queue"}"#]
-    );
+    assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a/inbox/msg_05 {"delivery":"queue"}"#]);
     kit.wait_gone("Pending steer");
 
     let kit = Kit::new(vec![pending("msg_05", "Steer this", "steer")]);
@@ -394,10 +327,7 @@ fn a_pending_steer_moves_to_the_queue_or_is_deleted() {
     kit.wait_for("Pending steer");
     kit.app.press("down");
     kit.app.press("enter");
-    assert_eq!(
-        kit.wait_writes(1),
-        ["DELETE /api/session/ses_a/inbox/msg_05 null"]
-    );
+    assert_eq!(kit.wait_writes(1), ["DELETE /api/session/ses_a/inbox/msg_05 null"]);
 }
 
 #[test]
@@ -417,13 +347,8 @@ fn message_actions_revert_and_fork() {
     kit.wait_for("Message Actions");
     kit.app.press("down");
     kit.app.press("enter");
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"POST /api/session/ses_a/revert/stage {"messageID":"msg_01"}"#]
-    );
-    let found = kit
-        .app
-        .wait_until(WAIT, || kit.prompt_text() == "Read the parser");
+    assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/revert/stage {"messageID":"msg_01"}"#]);
+    let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "Read the parser");
     assert!(found, "{:?}", kit.prompt_text());
 
     let kit = Kit::new(vec![]);
@@ -433,10 +358,7 @@ fn message_actions_revert_and_fork() {
         kit.app.press("down");
     }
     kit.app.press("enter");
-    assert_eq!(
-        kit.wait_writes(1),
-        [r#"POST /api/session/ses_a/fork {"before":"msg_01"}"#]
-    );
+    assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/fork {"before":"msg_01"}"#]);
     kit.wait_for("Forked session");
 }
 

@@ -67,16 +67,14 @@ pub fn slugify(input: &str) -> String {
 /// `Slug.create` (`packages/core/src/util/slug.ts`): an adjective and a noun.
 pub fn slug() -> String {
     const ADJECTIVES: [&str; 29] = [
-        "brave", "calm", "clever", "cosmic", "crisp", "curious", "eager", "gentle", "glowing",
-        "happy", "hidden", "jolly", "kind", "lucky", "mighty", "misty", "neon", "nimble",
-        "playful", "proud", "quick", "quiet", "shiny", "silent", "stellar", "sunny", "swift",
-        "tidy", "witty",
+        "brave", "calm", "clever", "cosmic", "crisp", "curious", "eager", "gentle", "glowing", "happy", "hidden",
+        "jolly", "kind", "lucky", "mighty", "misty", "neon", "nimble", "playful", "proud", "quick", "quiet", "shiny",
+        "silent", "stellar", "sunny", "swift", "tidy", "witty",
     ];
     const NOUNS: [&str; 31] = [
-        "cabin", "cactus", "canyon", "circuit", "comet", "eagle", "engine", "falcon", "forest",
-        "garden", "harbor", "island", "knight", "lagoon", "meadow", "moon", "mountain", "nebula",
-        "orchid", "otter", "panda", "pixel", "planet", "river", "rocket", "sailor", "squid",
-        "star", "tiger", "wizard", "wolf",
+        "cabin", "cactus", "canyon", "circuit", "comet", "eagle", "engine", "falcon", "forest", "garden", "harbor",
+        "island", "knight", "lagoon", "meadow", "moon", "mountain", "nebula", "orchid", "otter", "panda", "pixel",
+        "planet", "river", "rocket", "sailor", "squid", "star", "tiger", "wizard", "wolf",
     ];
     let random = uuid::Uuid::new_v4().as_u128();
     format!(

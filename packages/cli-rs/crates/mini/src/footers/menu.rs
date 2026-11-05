@@ -56,11 +56,7 @@ fn grouped_rows(items: &[Item], compact: bool) -> Vec<Row> {
     let mut rows = Vec::new();
     let mut category = "";
     for (index, item) in items.iter().enumerate() {
-        if let Some(next) = item
-            .category
-            .as_deref()
-            .filter(|next| !next.is_empty() && *next != category)
-        {
+        if let Some(next) = item.category.as_deref().filter(|next| !next.is_empty() && *next != category) {
             if !rows.is_empty() && !compact {
                 rows.push(Row::Spacer);
             }
@@ -89,16 +85,10 @@ impl Groups {
             Some(previous) if previous > 0 && selected == previous - 1 => Some(false),
             _ => None,
         };
-        let window = Selection {
-            selected: row,
-            offset: self.offset,
-        };
+        let window = Selection { selected: row, offset: self.offset };
         self.offset = match step {
             Some(down) => {
-                let from = Selection {
-                    selected: if down { row - 1 } else { row + 1 },
-                    offset: self.offset,
-                };
+                let from = Selection { selected: if down { row - 1 } else { row + 1 }, offset: self.offset };
                 from.step(rows.len(), limit, down).offset
             }
             None => window.reconcile(rows.len(), limit).offset,
@@ -124,11 +114,7 @@ pub fn paint(
     let limit = limit.min(height).max(1);
     let pad = if width < COMPACT_WIDTH { 1 } else { look.pad };
     let available = usize::from(width.saturating_sub(pad * 2));
-    let shade = if look.background {
-        theme.shade
-    } else {
-        Color::TRANSPARENT
-    };
+    let shade = if look.background { theme.shade } else { Color::TRANSPARENT };
     root.clear();
     root.height(height as u32).bg(shade);
     let rows: Vec<Row> = if look.grouped {
@@ -137,10 +123,7 @@ pub fn paint(
         let start = groups.offset.min(all.len().saturating_sub(limit));
         all.into_iter().skip(start).take(limit).collect()
     } else {
-        (selection.offset..items.len())
-            .take(limit)
-            .map(Row::Item)
-            .collect()
+        (selection.offset..items.len()).take(limit).map(Row::Item).collect()
     };
     if rows.is_empty() {
         root.add(
@@ -148,12 +131,7 @@ pub fn paint(
                 .height(1)
                 .padding_x(u32::from(pad))
                 .bg(shade)
-                .child(
-                    &Text::new(app, look.empty.to_owned())
-                        .fg(theme.muted)
-                        .wrap(WrapMode::None)
-                        .truncate(true),
-                ),
+                .child(&Text::new(app, look.empty.to_owned()).fg(theme.muted).wrap(WrapMode::None).truncate(true)),
         );
         return;
     }
@@ -175,13 +153,7 @@ pub fn paint(
                         .height(1)
                         .shrink(0.0)
                         .padding_x(u32::from(pad))
-                        .child(
-                            &Text::new(app, label)
-                                .fg(theme.muted)
-                                .bold()
-                                .wrap(WrapMode::None)
-                                .truncate(true),
-                        ),
+                        .child(&Text::new(app, label).fg(theme.muted).bold().wrap(WrapMode::None).truncate(true)),
                 );
                 continue;
             }
@@ -189,28 +161,18 @@ pub fn paint(
         };
         let item = &items[index];
         let active = index == selection.selected;
-        let background = if active {
-            theme.action_focused_bg
-        } else {
-            shade
-        };
+        let background = if active { theme.action_focused_bg } else { shade };
         let footer = item.footer.as_deref().filter(|footer| {
             let title = item.display.width();
-            let primary =
-                item.tone.is_some() && !(item.current && item.tone == Some(Tone::Selection));
+            let primary = item.tone.is_some() && !(item.current && item.tone == Some(Tone::Selection));
             (if primary { title.min(8) } else { title }) + 1 + footer.width() <= available
         });
         let reserved = footer.map_or(0, |footer| footer.width() + 1);
         let description = item.description.as_deref().and_then(|description| {
             let remaining = available.saturating_sub(column + reserved);
-            (remaining >= description.width().min(12))
-                .then(|| fit(description, remaining, look.mono))
+            (remaining >= description.width().min(12)).then(|| fit(description, remaining, look.mono))
         });
-        let fg = if active {
-            theme.action_focused_text
-        } else {
-            theme.formfield_text
-        };
+        let fg = if active { theme.action_focused_text } else { theme.formfield_text };
         let emphasis = |span: Span<'static>| {
             if !active {
                 return span;
@@ -220,36 +182,15 @@ pub fn paint(
             }
             span.bold()
         };
-        let mut spans = vec![emphasis(
-            fit(&item.display, available.saturating_sub(reserved), look.mono).fg(fg),
-        )];
+        let mut spans = vec![emphasis(fit(&item.display, available.saturating_sub(reserved), look.mono).fg(fg))];
         if let Some(description) = description {
-            let muted = if active {
-                theme.action_focused_text
-            } else {
-                theme.muted
-            };
-            spans.push(
-                " ".repeat(column.saturating_sub(item.display.width()).max(1))
-                    .fg(muted),
-            );
+            let muted = if active { theme.action_focused_text } else { theme.muted };
+            spans.push(" ".repeat(column.saturating_sub(item.display.width()).max(1)).fg(muted));
             spans.push(description.fg(muted));
         }
-        let line = View::new(app)
-            .row()
-            .height(1)
-            .shrink(0.0)
-            .padding_x(u32::from(pad))
-            .gap(1)
-            .bg(background)
-            .child(
-                &Text::new(app, spans)
-                    .wrap(WrapMode::None)
-                    .truncate(true)
-                    .grow(1.0)
-                    .shrink(1.0)
-                    .basis(Length::Auto),
-            );
+        let line = View::new(app).row().height(1).shrink(0.0).padding_x(u32::from(pad)).gap(1).bg(background).child(
+            &Text::new(app, spans).wrap(WrapMode::None).truncate(true).grow(1.0).shrink(1.0).basis(Length::Auto),
+        );
         if let Some(footer) = footer {
             let color = if active {
                 theme.action_focused_text
@@ -262,11 +203,7 @@ pub fn paint(
                     None => theme.muted,
                 }
             };
-            line.add(
-                &Text::new(app, vec![emphasis(footer.to_owned().fg(color))])
-                    .wrap(WrapMode::None)
-                    .shrink(0.0),
-            );
+            line.add(&Text::new(app, vec![emphasis(footer.to_owned().fg(color))]).wrap(WrapMode::None).shrink(0.0));
         }
         root.add(&line);
     }
@@ -277,11 +214,7 @@ mod tests {
     use super::*;
 
     fn item(display: &str, category: &str) -> Item {
-        Item {
-            display: display.into(),
-            category: Some(category.into()),
-            ..Item::default()
-        }
+        Item { display: display.into(), category: Some(category.into()), ..Item::default() }
     }
 
     #[test]
@@ -298,17 +231,13 @@ mod tests {
                 Row::Item(2),
             ]
         );
-        assert_eq!(
-            grouped_rows(&items, true),
-            vec![Row::Item(0), Row::Item(1), Row::Item(2)]
-        );
+        assert_eq!(grouped_rows(&items, true), vec![Row::Item(0), Row::Item(1), Row::Item(2)]);
     }
 
     #[test]
     fn the_grouped_window_follows_the_selection() {
-        let items: Vec<Item> = (0..12)
-            .map(|index| item(&index.to_string(), if index < 6 { "One" } else { "Two" }))
-            .collect();
+        let items: Vec<Item> =
+            (0..12).map(|index| item(&index.to_string(), if index < 6 { "One" } else { "Two" })).collect();
         let rows = grouped_rows(&items, false);
         let mut groups = Groups::default();
         groups.follow(&rows, 0, 10);

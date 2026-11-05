@@ -31,38 +31,19 @@ pub struct Prepared {
 }
 
 pub async fn prepare(catalog: &Catalog, content: &[Value]) -> Result<Prepared, Failure> {
-    let empty = |block: &Value, key: &str| {
-        block
-            .get(key)
-            .and_then(Value::as_str)
-            .is_none_or(str::is_empty)
-    };
+    let empty = |block: &Value, key: &str| block.get(key).and_then(Value::as_str).is_none_or(str::is_empty);
     if content.iter().any(|block| {
-        block.get("type").and_then(Value::as_str) == Some("image")
-            && empty(block, "data")
-            && empty(block, "uri")
+        block.get("type").and_then(Value::as_str) == Some("image") && empty(block, "data") && empty(block, "uri")
     }) {
-        return Err(Failure::invalid_request(
-            "image content has no data or uri",
-            Some("prompt"),
-        ));
+        return Err(Failure::invalid_request("image content has no data or uri", Some("prompt")));
     }
-    let parts = futures_util::future::join_all(
-        prompt_content_to_parts(content)
-            .into_iter()
-            .map(reference_unreadable_file),
-    )
-    .await;
+    let parts =
+        futures_util::future::join_all(prompt_content_to_parts(content).into_iter().map(reference_unreadable_file))
+            .await;
     let visible: Vec<&PromptPart> = parts
         .iter()
         .filter(|part| {
-            !matches!(
-                part,
-                PromptPart::Text {
-                    synthetic: true,
-                    ..
-                } | PromptPart::Text { ignored: true, .. }
-            )
+            !matches!(part, PromptPart::Text { synthetic: true, .. } | PromptPart::Text { ignored: true, .. })
         })
         .collect();
     let text = visible
@@ -84,31 +65,20 @@ pub async fn prepare(catalog: &Catalog, content: &[Value]) -> Result<Prepared, F
         files: visible
             .iter()
             .filter_map(|part| match part {
-                PromptPart::File { url, filename, .. } => Some(File {
-                    uri: url.clone(),
-                    name: filename.clone(),
-                }),
+                PromptPart::File { url, filename, .. } => Some(File { uri: url.clone(), name: filename.clone() }),
                 PromptPart::Text { .. } => None,
             })
             .collect(),
         synthetic: parts
             .iter()
             .filter_map(|part| match part {
-                PromptPart::Text {
-                    text,
-                    synthetic: true,
-                    ..
-                } => Some(text.clone()),
+                PromptPart::Text { text, synthetic: true, .. } => Some(text.clone()),
                 _ => None,
             })
             .collect(),
-        command: slash.as_ref().and_then(|slash| {
-            catalog
-                .commands
-                .iter()
-                .find(|command| command.name == slash.name)
-                .cloned()
-        }),
+        command: slash
+            .as_ref()
+            .and_then(|slash| catalog.commands.iter().find(|command| command.name == slash.name).cloned()),
         slash,
         text,
     })
@@ -122,13 +92,8 @@ async fn reference_unreadable_file(part: PromptPart) -> PromptPart {
     if !url.starts_with("file://") {
         return part;
     }
-    let readable = match url::Url::parse(url)
-        .ok()
-        .and_then(|url| url.to_file_path().ok())
-    {
-        Some(path) => tokio::task::spawn_blocking(move || readable(&path))
-            .await
-            .unwrap_or(false),
+    let readable = match url::Url::parse(url).ok().and_then(|url| url.to_file_path().ok()) {
+        Some(path) => tokio::task::spawn_blocking(move || readable(&path)).await.unwrap_or(false),
         None => false,
     };
     if readable {
@@ -148,16 +113,7 @@ fn readable(path: &std::path::Path) -> bool {
 fn detect_slash_command(text: &str) -> Option<Slash> {
     let value = text.trim();
     let rest = value.strip_prefix('/')?;
-    let name = rest
-        .split(char::is_whitespace)
-        .next()
-        .filter(|name| !name.is_empty())?;
-    let args = rest[name.len()..]
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    Some(Slash {
-        name: name.to_owned(),
-        args: args.trim().to_owned(),
-    })
+    let name = rest.split(char::is_whitespace).next().filter(|name| !name.is_empty())?;
+    let args = rest[name.len()..].split_whitespace().collect::<Vec<_>>().join(" ");
+    Some(Slash { name: name.to_owned(), args: args.trim().to_owned() })
 }

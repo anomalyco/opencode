@@ -11,21 +11,13 @@ fn byte(value: f64) -> u8 {
 }
 
 pub fn blend(from: Color, to: Color, amount: f64) -> Color {
-    let mix =
-        |left: u8, right: u8| byte(f64::from(left) + (f64::from(right) - f64::from(left)) * amount);
-    Color::rgba(
-        mix(from.r, to.r),
-        mix(from.g, to.g),
-        mix(from.b, to.b),
-        mix(from.a, to.a),
-    )
+    let mix = |left: u8, right: u8| byte(f64::from(left) + (f64::from(right) - f64::from(left)) * amount);
+    Color::rgba(mix(from.r, to.r), mix(from.g, to.g), mix(from.b, to.b), mix(from.a, to.a))
 }
 
 /// `count` colors from `from` toward `to`, without either end (`createColorRampTheme`).
 pub fn ramp(count: usize, from: Color, to: Color) -> Vec<Color> {
-    (0..count)
-        .map(|index| blend(from, to, (index + 1) as f64 / (count + 1) as f64))
-        .collect()
+    (0..count).map(|index| blend(from, to, (index + 1) as f64 / (count + 1) as f64)).collect()
 }
 
 /// `RGBA.fromValues(r, g, b, alpha)` for a color's channels and a 0..1 alpha.

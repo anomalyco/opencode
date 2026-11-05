@@ -44,13 +44,7 @@ impl Route {
     }
 
     /// A response with a body of any type, or none.
-    pub fn body(
-        method: &str,
-        path: &str,
-        status: u16,
-        content_type: Option<&str>,
-        body: impl Into<Bytes>,
-    ) -> Self {
+    pub fn body(method: &str, path: &str, status: u16, content_type: Option<&str>, body: impl Into<Bytes>) -> Self {
         Self {
             method: method.to_owned(),
             path: path.to_owned(),
@@ -71,9 +65,7 @@ impl Route {
         let (want, have) = (self.path.split('/'), path.split('/'));
         self.method.eq_ignore_ascii_case(method)
             && want.clone().count() == have.clone().count()
-            && want
-                .zip(have)
-                .all(|(want, have)| want.starts_with(':') || want == have)
+            && want.zip(have).all(|(want, have)| want.starts_with(':') || want == have)
             && self.query.as_ref().is_none_or(|want| want == query)
     }
 }
@@ -117,12 +109,7 @@ const CONNECTED: &str = r#"{"id":"evt_connected","type":"server.connected","data
 impl Memory {
     /// Routes are tried in order.
     pub fn new(routes: Vec<Route>) -> Self {
-        Self {
-            inner: Arc::new(Inner {
-                routes,
-                ..Inner::default()
-            }),
-        }
+        Self { inner: Arc::new(Inner { routes, ..Inner::default() }) }
     }
 
     /// Sends one event on every open `/api/event` stream, or queues it for the next stream.
@@ -158,9 +145,7 @@ impl Memory {
             let _ = sender.send(queued);
         }
         streams.open.push(sender);
-        let body = futures_util::stream::poll_fn(move |cx| {
-            receiver.poll_recv(cx).map(|frame| frame.map(Ok))
-        });
+        let body = futures_util::stream::poll_fn(move |cx| receiver.poll_recv(cx).map(|frame| frame.map(Ok)));
         Response {
             status: 200,
             headers: vec![("content-type".into(), "text/event-stream".into())],
@@ -178,40 +163,22 @@ impl Transport for Memory {
         }
         let mut query = Query::new();
         for (name, value) in request.url.query_pairs() {
-            query
-                .entry(name.into_owned())
-                .or_default()
-                .push(value.into_owned());
+            query.entry(name.into_owned()).or_default().push(value.into_owned());
         }
-        let route = self
-            .inner
-            .routes
-            .iter()
-            .find(|route| route.matches(request.method, &path, &query))
-            .cloned();
+        let route = self.inner.routes.iter().find(|route| route.matches(request.method, &path, &query)).cloned();
         self.inner.log.lock().expect("log lock").push(Logged {
             method: request.method.to_owned(),
-            body: request
-                .body
-                .as_ref()
-                .filter(|body| !body.is_empty())
-                .map(|body| {
-                    serde_json::from_slice(body).unwrap_or_else(|_| {
-                        serde_json::Value::String(String::from_utf8_lossy(body).into_owned())
-                    })
-                }),
+            body: request.body.as_ref().filter(|body| !body.is_empty()).map(|body| {
+                serde_json::from_slice(body)
+                    .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(body).into_owned()))
+            }),
             unmatched: route.is_none(),
             path: path.clone(),
             query,
         });
         let route = route.unwrap_or_else(|| {
             let message = format!("memory transport: no route for {} {path}", request.method);
-            Route::json(
-                "",
-                "",
-                404,
-                &serde_json::json!({ "_tag": "NotFound", "message": message }),
-            )
+            Route::json("", "", 404, &serde_json::json!({ "_tag": "NotFound", "message": message }))
         });
         self.inner.in_flight.fetch_add(1, Ordering::SeqCst);
         let guard = InFlight(self.inner.clone());
@@ -223,10 +190,7 @@ impl Transport for Memory {
         Box::pin(async move {
             Ok(Response {
                 status: route.status,
-                headers: route
-                    .content_type
-                    .map(|value| vec![("content-type".to_owned(), value)])
-                    .unwrap_or_default(),
+                headers: route.content_type.map(|value| vec![("content-type".to_owned(), value)]).unwrap_or_default(),
                 body: Box::pin(body),
             })
         })
@@ -251,45 +215,25 @@ mod tests {
     use super::*;
 
     fn request(method: &'static str, url: &str) -> Request {
-        Request {
-            method,
-            url: url::Url::parse(url).unwrap(),
-            headers: Vec::new(),
-            body: None,
-        }
+        Request { method, url: url::Url::parse(url).unwrap(), headers: Vec::new(), body: None }
     }
 
     #[tokio::test]
     async fn serves_the_first_matching_route_and_logs_misses() {
         let exact: Query = [("limit".to_owned(), vec!["1".to_owned()])].into();
         let memory = Memory::new(vec![
-            Route::json("GET", "/api/session", 200, &serde_json::json!("exact"))
-                .with_query(exact.clone()),
+            Route::json("GET", "/api/session", 200, &serde_json::json!("exact")).with_query(exact.clone()),
             Route::json("GET", "/api/session", 200, &serde_json::json!("any")),
             Route::body("POST", "/api/session/:id/abort", 204, None, Bytes::new()),
         ]);
-        let body = |response: Response| async {
-            String::from_utf8(response.bytes().await.unwrap().to_vec()).unwrap()
-        };
-        let first = memory
-            .send(request("GET", "http://x/api/session?limit=1"))
-            .await
-            .unwrap();
+        let body = |response: Response| async { String::from_utf8(response.bytes().await.unwrap().to_vec()).unwrap() };
+        let first = memory.send(request("GET", "http://x/api/session?limit=1")).await.unwrap();
         assert_eq!(body(first).await, "\"exact\"");
-        let second = memory
-            .send(request("GET", "http://x/api/session?limit=2"))
-            .await
-            .unwrap();
+        let second = memory.send(request("GET", "http://x/api/session?limit=2")).await.unwrap();
         assert_eq!(body(second).await, "\"any\"");
-        let abort = memory
-            .send(request("POST", "http://x/api/session/ses_1/abort"))
-            .await
-            .unwrap();
+        let abort = memory.send(request("POST", "http://x/api/session/ses_1/abort")).await.unwrap();
         assert_eq!(abort.status, 204);
-        let missing = memory
-            .send(request("GET", "http://x/api/nope"))
-            .await
-            .unwrap();
+        let missing = memory.send(request("GET", "http://x/api/nope")).await.unwrap();
         assert_eq!(missing.status, 404);
         // Unread bodies count as in flight.
         assert_eq!(memory.in_flight(), 2);
@@ -305,21 +249,14 @@ mod tests {
     async fn the_event_stream_starts_connected_and_receives_queued_and_later_events() {
         let memory = Memory::new(Vec::new());
         memory.emit(&serde_json::json!({ "type": "early" }));
-        let mut body = memory
-            .send(request("GET", "http://x/api/event"))
-            .await
-            .unwrap()
-            .body;
+        let mut body = memory.send(request("GET", "http://x/api/event")).await.unwrap().body;
         memory.emit(&serde_json::json!({ "type": "late" }));
         let mut frames = Vec::new();
         for _ in 0..3 {
             frames.push(String::from_utf8(body.next().await.unwrap().unwrap().to_vec()).unwrap());
         }
         assert!(frames[0].contains("server.connected"), "{frames:?}");
-        assert!(
-            frames[1].contains("early") && frames[2].contains("late"),
-            "{frames:?}"
-        );
+        assert!(frames[1].contains("early") && frames[2].contains("late"), "{frames:?}");
         assert!(memory.requests().is_empty());
     }
 }

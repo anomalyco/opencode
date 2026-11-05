@@ -28,11 +28,7 @@ pub fn layout(height: u16, limit: usize) -> Layout {
     let available = usize::from(height).saturating_sub(1).max(3);
     let compact = available < limit + FRAME_ROWS;
     let frame = if compact { 2 } else { FRAME_ROWS };
-    Layout {
-        compact,
-        frame,
-        limit: limit.min(available.saturating_sub(frame)).max(1),
-    }
+    Layout { compact, frame, limit: limit.min(available.saturating_sub(frame)).max(1) }
 }
 
 /// One row of a panel (`PanelEntry`): the menu item and the extra words the search matches.
@@ -90,9 +86,7 @@ pub struct Panel<A> {
 
 impl<A: Clone> Panel<A> {
     pub fn new(app: &App, spec: Spec) -> Self {
-        let input = Input::new(app)
-            .placeholder("Search")
-            .width(Length::percent(100.0));
+        let input = Input::new(app).placeholder("Search").width(Length::percent(100.0));
         let row = || View::new(app).width(Length::percent(100.0)).shrink(0.0);
         let top = row().height(1);
         let header = row().row().height(1);
@@ -100,10 +94,7 @@ impl<A: Clone> Panel<A> {
         let field = row().height(1).child(&input);
         let under = row().height(1);
         let list = row().column();
-        let bottom = Text::new(app, "")
-            .wrap(WrapMode::None)
-            .height(1)
-            .shrink(0.0);
+        let bottom = Text::new(app, "").wrap(WrapMode::None).height(1).shrink(0.0);
         let root = View::new(app)
             .column()
             .width(Length::percent(100.0))
@@ -149,9 +140,7 @@ impl<A: Clone> Panel<A> {
 
     /// The highlighted entry.
     pub fn selected(&self) -> Option<&Entry<A>> {
-        self.matches
-            .get(self.selection.selected)
-            .map(|index| &self.entries[*index])
+        self.matches.get(self.selection.selected).map(|index| &self.entries[*index])
     }
 
     /// The footer rows the panel takes beside the blank row above it (`menu.rows() + layout().frame`).
@@ -164,9 +153,7 @@ impl<A: Clone> Panel<A> {
     pub fn set_entries(&mut self, entries: Vec<Entry<A>>, height: u16) {
         self.entries = entries;
         self.matches = self.find();
-        self.selection = self
-            .selection
-            .reconcile(self.matches.len(), layout(height, self.spec.rows).limit);
+        self.selection = self.selection.reconcile(self.matches.len(), layout(height, self.spec.rows).limit);
     }
 
     /// Moves to the current entry while the query is empty (`isCurrent`).
@@ -174,11 +161,7 @@ impl<A: Clone> Panel<A> {
         if !self.query.trim().is_empty() {
             return;
         }
-        if let Some(index) = self
-            .matches
-            .iter()
-            .position(|index| self.entries[*index].item.current)
-        {
+        if let Some(index) = self.matches.iter().position(|index| self.entries[*index].item.current) {
             self.reveal(index, height);
         }
     }
@@ -214,11 +197,8 @@ impl<A: Clone> Panel<A> {
     }
 
     fn reveal(&mut self, index: usize, height: u16) {
-        self.selection = Selection {
-            selected: index,
-            offset: self.selection.offset,
-        }
-        .reconcile(self.matches.len(), layout(height, self.spec.rows).limit);
+        self.selection = Selection { selected: index, offset: self.selection.offset }
+            .reconcile(self.matches.len(), layout(height, self.spec.rows).limit);
     }
 
     /// The panel's keys (`useKeyboard` in the controller). `None` lets the search field have the key.
@@ -226,9 +206,7 @@ impl<A: Clone> Panel<A> {
         let count = self.matches.len();
         let limit = layout(height, self.spec.rows).limit;
         match name {
-            "up" if self.spec.close_on_first_up && self.selection.selected == 0 => {
-                Some(Outcome::Close)
-            }
+            "up" if self.spec.close_on_first_up && self.selection.selected == 0 => Some(Outcome::Close),
             "escape" | "ctrl+c" => Some(Outcome::Close),
             "up" | "ctrl+p" => {
                 self.selection = self.selection.step(count, limit, false);
@@ -239,18 +217,12 @@ impl<A: Clone> Panel<A> {
                 Some(Outcome::Handled)
             }
             "pageup" => {
-                let index = self
-                    .selection
-                    .selected
-                    .saturating_sub(limit.saturating_sub(1).max(1));
+                let index = self.selection.selected.saturating_sub(limit.saturating_sub(1).max(1));
                 self.reveal(index, height);
                 Some(Outcome::Handled)
             }
             "pagedown" => {
-                self.reveal(
-                    self.selection.selected + limit.saturating_sub(1).max(1),
-                    height,
-                );
+                self.reveal(self.selection.selected + limit.saturating_sub(1).max(1), height);
                 Some(Outcome::Handled)
             }
             "home" => {
@@ -262,9 +234,7 @@ impl<A: Clone> Panel<A> {
                 Some(Outcome::Handled)
             }
             "return" => Some(
-                self.matches
-                    .get(self.selection.selected)
-                    .map_or(Outcome::Handled, |index| Outcome::Select(*index)),
+                self.matches.get(self.selection.selected).map_or(Outcome::Handled, |index| Outcome::Select(*index)),
             ),
             "ctrl+u" => {
                 self.input.set_value("");
@@ -279,11 +249,7 @@ impl<A: Clone> Panel<A> {
     pub fn paint(&mut self, app: &App, width: u16, height: u16, theme: &FooterTheme, mono: bool) {
         let layout = layout(height, self.spec.rows);
         let pad = if width < COMPACT_WIDTH || mono { 1 } else { 2 };
-        let shade = if self.spec.background {
-            theme.shade
-        } else {
-            Color::TRANSPARENT
-        };
+        let shade = if self.spec.background { theme.shade } else { Color::TRANSPARENT };
         let blank = u32::from(!layout.compact);
         for view in [&self.top, &self.gap, &self.under] {
             view.height(blank).bg(shade);
@@ -296,13 +262,9 @@ impl<A: Clone> Panel<A> {
                 .focused_colors(theme.formfield_focused_text, theme.formfield_focused_bg)
                 .cursor_color(theme.formfield_focused_text);
         } else {
-            self.input
-                .focused_colors(theme.formfield_text, Color::TRANSPARENT)
-                .cursor_color(theme.formfield_text);
+            self.input.focused_colors(theme.formfield_text, Color::TRANSPARENT).cursor_color(theme.formfield_text);
         }
-        self.input
-            .colors(theme.formfield_text, Color::TRANSPARENT)
-            .placeholder_color(theme.muted);
+        self.input.colors(theme.formfield_text, Color::TRANSPARENT).placeholder_color(theme.muted);
 
         let room = usize::from(width).saturating_sub(usize::from(pad) * 2 + 4);
         let title = fit(self.spec.title, room, mono);
@@ -313,35 +275,14 @@ impl<A: Clone> Panel<A> {
         };
         let show_count = self.spec.count && self.spec.title.width() + count.width() < room;
         let hint = self.hint.as_deref().filter(|hint| {
-            self.spec.title.width()
-                + if show_count { count.width() + 1 } else { 0 }
-                + hint.width()
-                + 3
-                <= room
+            self.spec.title.width() + if show_count { count.width() + 1 } else { 0 } + hint.width() + 3 <= room
         });
         self.header.clear();
-        self.header.add(
-            &Text::new(app, title)
-                .fg(theme.text)
-                .bold()
-                .wrap(WrapMode::None)
-                .shrink(0.0),
-        );
+        self.header.add(&Text::new(app, title).fg(theme.text).bold().wrap(WrapMode::None).shrink(0.0));
         if show_count {
-            self.header.add(
-                &Text::new(app, format!(" {count}"))
-                    .fg(theme.muted)
-                    .wrap(WrapMode::None)
-                    .shrink(0.0),
-            );
+            self.header.add(&Text::new(app, format!(" {count}")).fg(theme.muted).wrap(WrapMode::None).shrink(0.0));
         }
-        self.header.add(
-            &View::new(app)
-                .min_width(1)
-                .grow(1.0)
-                .shrink(1.0)
-                .basis(Length::Auto),
-        );
+        self.header.add(&View::new(app).min_width(1).grow(1.0).shrink(1.0).basis(Length::Auto));
         let separator = if mono { "-" } else { "·" };
         self.header.add(
             &Text::new(
@@ -356,16 +297,8 @@ impl<A: Clone> Panel<A> {
             .shrink(0.0),
         );
 
-        let items: Vec<Item> = self
-            .matches
-            .iter()
-            .map(|index| self.entries[*index].item.clone())
-            .collect();
-        let rows = if self.spec.fixed {
-            layout.limit
-        } else {
-            Selection::rows(items.len(), layout.limit)
-        };
+        let items: Vec<Item> = self.matches.iter().map(|index| self.entries[*index].item.clone()).collect();
+        let rows = if self.spec.fixed { layout.limit } else { Selection::rows(items.len(), layout.limit) };
         menu::paint(
             app,
             &self.list,
@@ -386,13 +319,11 @@ impl<A: Clone> Panel<A> {
             },
         );
         let half = !layout.compact && !mono && self.spec.background;
-        self.bottom
-            .height(u32::from(!layout.compact))
-            .set_text(if half {
-                vec!["▀".repeat(usize::from(width)).fg(theme.shade)]
-            } else {
-                Vec::new()
-            });
+        self.bottom.height(u32::from(!layout.compact)).set_text(if half {
+            vec!["▀".repeat(usize::from(width)).fg(theme.shade)]
+        } else {
+            Vec::new()
+        });
     }
 }
 
@@ -402,30 +333,9 @@ mod tests {
 
     #[test]
     fn the_layout_collapses_in_short_terminals() {
-        assert_eq!(
-            layout(30, LIST_ROWS),
-            Layout {
-                compact: false,
-                frame: 6,
-                limit: 10
-            }
-        );
-        assert_eq!(
-            layout(16, LIST_ROWS),
-            Layout {
-                compact: true,
-                frame: 2,
-                limit: 10
-            }
-        );
-        assert_eq!(
-            layout(8, LIST_ROWS),
-            Layout {
-                compact: true,
-                frame: 2,
-                limit: 5
-            }
-        );
+        assert_eq!(layout(30, LIST_ROWS), Layout { compact: false, frame: 6, limit: 10 });
+        assert_eq!(layout(16, LIST_ROWS), Layout { compact: true, frame: 2, limit: 10 });
+        assert_eq!(layout(8, LIST_ROWS), Layout { compact: true, frame: 2, limit: 5 });
         assert_eq!(layout(2, LIST_ROWS).limit, 1);
     }
 }

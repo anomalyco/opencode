@@ -63,9 +63,7 @@ fn location_routes(directory: &str, query: Option<&str>, spent: f64) -> Vec<Memo
     };
     routes
         .into_iter()
-        .map(|route| {
-            route.with_query([("location[directory]".to_owned(), vec![query.to_owned()])].into())
-        })
+        .map(|route| route.with_query([("location[directory]".to_owned(), vec![query.to_owned()])].into()))
         .collect()
 }
 
@@ -104,24 +102,9 @@ fn routes() -> Vec<MemoryRoute> {
     routes.extend(location_routes(DIRECTORY, None, 5.0));
     routes.extend([
         MemoryRoute::json("GET", "/api/config", 200, &json!([])),
-        MemoryRoute::json(
-            "GET",
-            "/api/session",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/ses_a/message",
-            200,
-            &json!({ "data": turns(30), "cursor": {} }),
-        ),
-        MemoryRoute::json(
-            "GET",
-            "/api/session/:id/message",
-            200,
-            &json!({ "data": [], "cursor": {} }),
-        ),
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/ses_a/message", 200, &json!({ "data": turns(30), "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json(
             "POST",
             "/api/session/ses_a/prompt",
@@ -132,10 +115,7 @@ fn routes() -> Vec<MemoryRoute> {
             } }),
         ),
     ]);
-    for (id, directory, title) in [
-        ("ses_a", DIRECTORY, "Long talk"),
-        ("ses_wt", WORKTREE, "Worktree work"),
-    ] {
+    for (id, directory, title) in [("ses_a", DIRECTORY, "Long talk"), ("ses_wt", WORKTREE, "Worktree work")] {
         routes.push(MemoryRoute::json(
             "GET",
             &format!("/api/session/{id}"),
@@ -144,21 +124,10 @@ fn routes() -> Vec<MemoryRoute> {
         ));
     }
     for path in ["agent", "model"] {
-        routes.push(MemoryRoute::body(
-            "POST",
-            &format!("/api/session/:id/{path}"),
-            204,
-            None,
-            "",
-        ));
+        routes.push(MemoryRoute::body("POST", &format!("/api/session/:id/{path}"), 204, None, ""));
     }
     for list in ["inbox", "permission", "form"] {
-        routes.push(MemoryRoute::json(
-            "GET",
-            &format!("/api/session/:id/{list}"),
-            200,
-            &json!({ "data": [] }),
-        ));
+        routes.push(MemoryRoute::json("GET", &format!("/api/session/:id/{list}"), 200, &json!({ "data": [] })));
     }
     routes
 }
@@ -181,9 +150,7 @@ fn mount(id: &str, config: Value) -> Harness {
             directory: DIRECTORY.into(),
             config: Resolved::new(info, |_| None),
             roots: None,
-            route: Route::Session {
-                id: SessionID(id.into()),
-            },
+            route: Route::Session { id: SessionID(id.into()) },
             continue_: false,
             events: true,
         },
@@ -191,9 +158,7 @@ fn mount(id: &str, config: Value) -> Harness {
     );
     let h = Harness { app, tui, memory };
     let local = h.tui.local.clone();
-    h.wait("the catalog", || {
-        local.catalog_ready() && !local.agents().is_empty()
-    });
+    h.wait("the catalog", || local.catalog_ready() && !local.agents().is_empty());
     h
 }
 
@@ -222,12 +187,7 @@ impl Harness {
             .requests()
             .iter()
             .filter(|logged| logged.method == "GET" && logged.path == LIMITS)
-            .map(|logged| {
-                logged
-                    .query
-                    .get("location[directory]")
-                    .and_then(|values| values.first().cloned())
-            })
+            .map(|logged| logged.query.get("location[directory]").and_then(|values| values.first().cloned()))
             .collect()
     }
 
@@ -239,18 +199,11 @@ impl Harness {
             self.settle();
         }
         self.wait_for("Jump to latest");
-        assert!(
-            !self.app.text().contains("Answer 30 three."),
-            "{}",
-            self.app.text()
-        );
+        assert!(!self.app.text().contains("Answer 30 three."), "{}", self.app.text());
         self.app.type_text("Next");
         self.app.press("enter");
         self.wait("the prompt", || {
-            self.memory
-                .requests()
-                .iter()
-                .any(|logged| logged.method == "POST" && logged.path.ends_with("/prompt"))
+            self.memory.requests().iter().any(|logged| logged.method == "POST" && logged.path.ends_with("/prompt"))
         });
     }
 }
@@ -265,10 +218,7 @@ fn a_send_returns_to_the_newest_rows_unless_submit_scroll_is_keep() {
         screen.contains("Answer 30 three.") && !screen.contains("Jump to latest")
     });
 
-    let h = mount(
-        "ses_a",
-        json!({ "animations": false, "session": { "submit_scroll": "keep" } }),
-    );
+    let h = mount("ses_a", json!({ "animations": false, "session": { "submit_scroll": "keep" } }));
     h.send_while_away();
     let screen = h.settle();
     assert!(screen.contains("Jump to latest"), "{screen}");
@@ -282,20 +232,13 @@ fn usage_limits_are_kept_per_location() {
     assert_eq!(h.limits(), [Some(DIRECTORY.to_owned())]);
 
     // The worktree's session reads its own location's limits, not the project's.
-    h.tui.navigate(Route::Session {
-        id: SessionID("ses_wt".into()),
-    });
+    h.tui.navigate(Route::Session { id: SessionID("ses_wt".into()) });
     h.wait_for("Worktree work");
     h.wait_for("$4 left");
-    assert_eq!(
-        h.limits(),
-        [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]
-    );
+    assert_eq!(h.limits(), [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]);
 
     // Back in the project, its limits show again without another request.
-    h.tui.navigate(Route::Session {
-        id: SessionID("ses_a".into()),
-    });
+    h.tui.navigate(Route::Session { id: SessionID("ses_a".into()) });
     h.wait_for("$5 left");
     h.settle();
     assert_eq!(h.limits().len(), 2);

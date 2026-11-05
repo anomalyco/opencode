@@ -42,13 +42,11 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
         .group("System")
     };
     let commands = vec![
-        command("location.reload", "Reload configuration", reload)
-            .palette()
-            .slash(Slash {
-                name: "reload".to_owned(),
-                aliases: Vec::new(),
-                arguments: false,
-            }),
+        command("location.reload", "Reload configuration", reload).palette().slash(Slash {
+            name: "reload".to_owned(),
+            aliases: Vec::new(),
+            arguments: false,
+        }),
         command("docs.open", "Open docs", |tui| {
             // TS ignores a failure here.
             let _ = crate::features::links::open_url(DOCS);
@@ -64,87 +62,46 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
             tui.dialogs.clear();
         })
         .palette(),
-        command("terminal.suspend", "Suspend terminal", |tui| {
-            tui.app.suspend()
-        })
-        .enabled(if cfg!(windows) {
+        command("terminal.suspend", "Suspend terminal", |tui| tui.app.suspend()).enabled(if cfg!(windows) {
             Condition::Never
         } else {
             Condition::Always
         }),
-        command(
-            "terminal.title.toggle",
-            &toggle_title(title_enabled(&info), "terminal title"),
-            |tui| {
-                let next = !title_enabled(&tui.settings.info());
-                if !next {
-                    crate::features::title::clear(tui);
-                }
-                write(tui, &["terminal", "title"], Value::Bool(next));
-            },
-        ),
-        command(
-            "app.toggle.animations",
-            &toggle_title(info.animations.unwrap_or(true), "animations"),
-            |tui| {
-                let next = !tui.settings.info().animations.unwrap_or(true);
-                write(tui, &["animations"], Value::Bool(next));
-            },
-        ),
-        command(
-            "app.toggle.file_context",
-            &toggle_title(file_context(&info), "file context"),
-            |tui| {
-                let next = !file_context(&tui.settings.info());
-                write(tui, &["prompt", "editor"], Value::Bool(next));
-            },
-        ),
-        command(
-            "app.toggle.diffwrap",
-            &toggle_title(diff_wrap(&info), "diff wrapping"),
-            |tui| {
-                let next = if diff_wrap(&tui.settings.info()) {
-                    "none"
-                } else {
-                    "word"
-                };
-                write(tui, &["diffs", "wrap"], Value::from(next));
-            },
-        ),
-        command(
-            "app.toggle.paste_summary",
-            &toggle_title(paste_summary(&info), "paste summary"),
-            |tui| {
-                let next = if paste_summary(&tui.settings.info()) {
-                    "full"
-                } else {
-                    "compact"
-                };
-                write(tui, &["prompt", "paste"], Value::from(next));
-            },
-        ),
+        command("terminal.title.toggle", &toggle_title(title_enabled(&info), "terminal title"), |tui| {
+            let next = !title_enabled(&tui.settings.info());
+            if !next {
+                crate::features::title::clear(tui);
+            }
+            write(tui, &["terminal", "title"], Value::Bool(next));
+        }),
+        command("app.toggle.animations", &toggle_title(info.animations.unwrap_or(true), "animations"), |tui| {
+            let next = !tui.settings.info().animations.unwrap_or(true);
+            write(tui, &["animations"], Value::Bool(next));
+        }),
+        command("app.toggle.file_context", &toggle_title(file_context(&info), "file context"), |tui| {
+            let next = !file_context(&tui.settings.info());
+            write(tui, &["prompt", "editor"], Value::Bool(next));
+        }),
+        command("app.toggle.diffwrap", &toggle_title(diff_wrap(&info), "diff wrapping"), |tui| {
+            let next = if diff_wrap(&tui.settings.info()) { "none" } else { "word" };
+            write(tui, &["diffs", "wrap"], Value::from(next));
+        }),
+        command("app.toggle.paste_summary", &toggle_title(paste_summary(&info), "paste summary"), |tui| {
+            let next = if paste_summary(&tui.settings.info()) { "full" } else { "compact" };
+            write(tui, &["prompt", "paste"], Value::from(next));
+        }),
     ];
     let ids: Vec<String> = commands.iter().filter_map(|c| c.id.clone()).collect();
     let layers = [
-        KeymapLayer {
-            mode: Some(GLOBAL_MODE.to_owned()),
-            commands,
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands, ..KeymapLayer::default() },
         // `appBindingCommands` (`app.tsx:150-186`).
-        KeymapLayer {
-            bindings: ids,
-            ..KeymapLayer::default()
-        },
+        KeymapLayer { bindings: ids, ..KeymapLayer::default() },
     ];
     install_effects(tui);
     layers
         .into_iter()
         .filter_map(|layer| {
-            tui.keymap
-                .layer(layer)
-                .inspect_err(|error| log::error!("system commands keymap layer: {error}"))
-                .ok()
+            tui.keymap.layer(layer).inspect_err(|error| log::error!("system commands keymap layer: {error}")).ok()
         })
         .collect()
 }
@@ -152,11 +109,7 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
 /// The mouse mode the terminal starts in: motion tracking for hover, or none with `mouse: false`
 /// (`useMouse: config.mouse`).
 pub fn mouse_tracking(config: &Resolved) -> MouseTracking {
-    if config.mouse {
-        MouseTracking::Motion
-    } else {
-        MouseTracking::Off
-    }
+    if config.mouse { MouseTracking::Motion } else { MouseTracking::Off }
 }
 
 /// The configured cursor (`useCursorStyle`): `cursor.style`, else a block, and `cursor.blinking`, else on.
@@ -185,11 +138,7 @@ fn install_effects(tui: &Rc<Tui>) {
             return;
         }
         let mouse = next;
-        let tracking = if mouse {
-            MouseTracking::Motion
-        } else {
-            MouseTracking::Off
-        };
+        let tracking = if mouse { MouseTracking::Motion } else { MouseTracking::Off };
         // Before terminal setup (tests) there is no terminal to tell.
         if let Err(error) = tui.app.session().control(Control::Mouse(tracking)) {
             log::debug!("mouse mode not applied: {error}");
@@ -201,25 +150,16 @@ fn install_effects(tui: &Rc<Tui>) {
 fn reload(tui: &Tui) {
     tui.dialogs.clear();
     tui.toasts.show(
-        ToastOptions::new(Variant::Info, "Reloading configuration…")
-            .duration(std::time::Duration::from_secs(30)),
+        ToastOptions::new(Variant::Info, "Reloading configuration…").duration(std::time::Duration::from_secs(30)),
     );
     let client = tui.data.client().clone();
     let weak = tui.weak();
     tui.app.spawn(
-        async move {
-            client
-                .location_reload(&RequestOptions::default())
-                .await
-                .map_err(|error| error.to_string())
-        },
+        async move { client.location_reload(&RequestOptions::default()).await.map_err(|error| error.to_string()) },
         move |_, result| {
             let Some(tui) = weak.upgrade() else { return };
             match result {
-                Ok(()) => tui.toasts.show(ToastOptions::new(
-                    Variant::Success,
-                    "Configuration reloaded",
-                )),
+                Ok(()) => tui.toasts.show(ToastOptions::new(Variant::Success, "Configuration reloaded")),
                 Err(error) => tui.toasts.error(error),
             }
         },
@@ -239,25 +179,15 @@ fn toggle_title(on: bool, what: &str) -> String {
 }
 
 pub(crate) fn title_enabled(info: &Info) -> bool {
-    info.terminal
-        .as_ref()
-        .and_then(|terminal| terminal.title)
-        .unwrap_or(true)
+    info.terminal.as_ref().and_then(|terminal| terminal.title).unwrap_or(true)
 }
 
 fn file_context(info: &Info) -> bool {
-    info.prompt
-        .as_ref()
-        .and_then(|prompt| prompt.editor)
-        .unwrap_or(true)
+    info.prompt.as_ref().and_then(|prompt| prompt.editor).unwrap_or(true)
 }
 
 fn diff_wrap(info: &Info) -> bool {
-    info.diffs
-        .as_ref()
-        .and_then(|diffs| diffs.wrap)
-        .unwrap_or(DiffWrap::Word)
-        == DiffWrap::Word
+    info.diffs.as_ref().and_then(|diffs| diffs.wrap).unwrap_or(DiffWrap::Word) == DiffWrap::Word
 }
 
 /// `prompt.paste !== "full"`.
@@ -284,9 +214,6 @@ mod tests {
         assert!(!title_enabled(&set) && !file_context(&set));
         assert!(!diff_wrap(&set) && !paste_summary(&set));
         assert_eq!(toggle_title(true, "animations"), "Disable animations");
-        assert_eq!(
-            toggle_title(false, "terminal title"),
-            "Enable terminal title"
-        );
+        assert_eq!(toggle_title(false, "terminal title"), "Enable terminal title");
     }
 }
