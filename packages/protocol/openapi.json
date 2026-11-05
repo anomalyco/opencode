@@ -16664,13 +16664,13 @@
               "media_blob": {
                 "type": "boolean"
               },
-              "part_rows": {
-                "type": "boolean"
-              },
               "schedules": {
                 "type": "boolean"
               },
               "artifacts": {
+                "type": "boolean"
+              },
+              "part_rows": {
                 "type": "boolean"
               },
               "image_generate": {
