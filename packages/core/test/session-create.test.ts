@@ -1309,6 +1309,116 @@ describe("Session.create", () => {
   )
 })
 
+describe("Session.spawn", () => {
+  const parentModel = Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") })
+
+  it.effect("starts a child that inherits location, metadata, permissions, agent and model", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const metadata = { thread: "C123/1699999999.123" }
+      const permissions = [{ action: "edit", resource: "/original/**", effect: "deny" as const }]
+      const parent = yield* session.create({
+        location,
+        metadata,
+        permissions,
+        agent: Agent.ID.make("build"),
+        model: parentModel,
+      })
+
+      const spawned = yield* session.spawn({ parent: { id: parent.id }, title: "child" })
+      const child = yield* session.get(spawned.id)
+
+      expect(child).toMatchObject({
+        parentID: parent.id,
+        location,
+        title: "child",
+        agent: "build",
+        model: parentModel,
+        permissions,
+      })
+      // Inheriting the loud default must not add the key, so the metadata stays the parent's own.
+      expect(child.metadata).toEqual(metadata)
+      // No prompt was given, so the child waits for work instead of starting a run.
+      expect(yield* session.inbox(spawned.id)).toEqual([])
+    }),
+  )
+
+  it.effect("writes the notify preference only when it differs from the inherited one", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const loud = yield* session.create({ location, metadata: { thread: "x" } })
+      const silent = yield* session.create({ location, metadata: { thread: "x", "subagent.notify": false } })
+
+      const showing = yield* session.spawn({ parent: { id: loud.id } })
+      expect((yield* session.get(showing.id)).metadata).toEqual({ thread: "x" })
+
+      const muted = yield* session.spawn({ parent: { id: loud.id, notify: false } })
+      expect((yield* session.get(muted.id)).metadata).toEqual({ thread: "x", "subagent.notify": false })
+
+      // Silence is inherited, so an omitted notify has to be written back explicitly.
+      const revived = yield* session.spawn({ parent: { id: silent.id } })
+      expect((yield* session.get(revived.id)).metadata).toEqual({ thread: "x", "subagent.notify": true })
+    }),
+  )
+
+  it.effect("inherits the model only while the agent stays the same", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location, agent: Agent.ID.make("build"), model: parentModel })
+
+      const same = yield* session.spawn({ parent: { id: parent.id }, agent: Agent.ID.make("build") })
+      expect((yield* session.get(same.id)).model).toMatchObject(parentModel)
+
+      // A different agent leaves the model to SessionRunnerModel.resolve.
+      const different = yield* session.spawn({ parent: { id: parent.id }, agent: Agent.ID.make("reviewer") })
+      expect((yield* session.get(different.id)).agent).toBe(Agent.ID.make("reviewer"))
+      expect((yield* session.get(different.id)).model).toBeUndefined()
+
+      const explicit = Model.Ref.make({ id: Model.ID.make("explicit"), providerID: Provider.ID.make("test") })
+      const overridden = yield* session.spawn({ parent: { id: parent.id }, model: explicit })
+      expect((yield* session.get(overridden.id)).model).toMatchObject(explicit)
+    }),
+  )
+
+  it.effect("admits the given prompt to the child", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+
+      const spawned = yield* session.spawn({ parent: { id: parent.id }, prompt: { text: "do it" } })
+
+      expect(yield* session.inbox(spawned.id)).toMatchObject([{ type: "user", payload: { text: "do it" } }])
+      expect(yield* session.inbox(parent.id)).toEqual([])
+    }),
+  )
+
+  it.effect("rejects a missing parent", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const missing = Session.ID.create()
+
+      expect(yield* Effect.flip(session.spawn({ parent: { id: missing } }))).toEqual(
+        new Session.NotFoundError({ sessionID: missing }),
+      )
+      expect((yield* session.list({ parentID: missing })).data).toEqual([])
+    }),
+  )
+
+  it.effect("returns the recorded child when the same creation is retried", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+      const childID = Session.ID.create()
+
+      const first = yield* session.create({ id: childID, parentID: parent.id, title: "child" })
+      const retried = yield* session.create({ id: childID, parentID: parent.id, title: "child" })
+
+      expect(retried).toEqual(first)
+      expect((yield* session.list({ parentID: parent.id })).data.map((item) => item.id)).toEqual([childID])
+    }),
+  )
+})
+
 describe("SessionTransfer", () => {
   it.effect("exports only settled projected messages", () =>
     Effect.gen(function* () {
