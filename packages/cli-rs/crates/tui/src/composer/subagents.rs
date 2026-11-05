@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{SessionID, SessionInfo, SessionInterruptInput};
 use opencode_store::SessionStatus;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, TuiCommand};
 use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
@@ -107,14 +108,15 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
 
 pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
     let command = |id: &str, title: &str, run: fn(&Rc<Inner>, &Tui)| {
-        let weak = Rc::downgrade(inner);
-        TuiCommand::new(id, move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
-            run(&inner, &tui);
-        })
+        TuiCommand::new(
+            id,
+            bind!(inner, |inner, _, _| {
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                run(&inner, &tui);
+            }),
+        )
         .title(title)
         .group("Composer")
     };
@@ -196,34 +198,25 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
             RowState::Base
         };
         let hover = {
-            let weak = Rc::downgrade(inner);
-            move || {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(inner, |inner| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 if std::mem::replace(&mut inner.subagents.borrow_mut().selected, index) != index {
                     inner.redraw_later(&tui);
                 }
-            }
+            })
         };
         let click = {
-            let weak = Rc::downgrade(inner);
             let id = entry.session.clone();
-            move || {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(inner, |inner| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 inner.subagents.borrow_mut().selected = index;
                 let id = id.clone();
-                let weak = tui.weak();
-                tui.app.defer(move |_| {
-                    if let Some(tui) = weak.upgrade() {
-                        tui.navigate(Route::Session { id });
-                    }
-                });
-            }
+                tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id })));
+            })
         };
         inner.body.add(&row(
             tui,

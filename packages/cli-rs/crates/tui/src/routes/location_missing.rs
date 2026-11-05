@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{AbsolutePath, ProjectID, SessionID, SessionMoveInput, WorktreeCreateInput};
+use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::keymap::Disposer;
@@ -60,17 +61,12 @@ impl LocationMissing {
         };
         self.root.add(&view(tui, &self.session, &directory));
         self.root.visible(true);
-        let weak = tui.weak();
         let session = self.session.clone();
         let layer = KeymapLayer {
             commands: vec![
-                TuiCommand::inline("return", move |_, _| {
-                    if let Some(tui) = weak.upgrade() {
-                        choose(&tui, session.clone(), directory.clone());
-                    }
-                })
-                .title("Select option")
-                .group("Session recovery"),
+                TuiCommand::inline("return", bind!(tui, |tui, _, _| choose(&tui, session.clone(), directory.clone())))
+                    .title("Select option")
+                    .group("Session recovery"),
             ],
             ..KeymapLayer::default()
         };
@@ -154,13 +150,12 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
         .align_items(if narrow { Align::Start } else { Align::Center })
         .child(&actions)
         .child(&hints);
-    let weak = tui.weak();
     let (session, directory) = (session.clone(), directory.to_owned());
-    action.mouse_pointer(MousePointer::POINTER).on_click(move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            choose(&tui, session.clone(), directory.clone());
-        }
-    });
+    action.mouse_pointer(MousePointer::POINTER).on_click(bind!(tui, |tui, _, _| choose(
+        &tui,
+        session.clone(),
+        directory.clone()
+    )));
     View::new(app)
         .column()
         .bg(theme.background.raised.base)
@@ -203,23 +198,24 @@ fn choose(tui: &Tui, session: SessionID, directory: String) {
 fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
     let client = tui.data.client().clone();
     let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
-    let weak = tui.weak();
-    tui.app.spawn(async move { client.worktree_create(&input, &RequestOptions::default()).await }, move |_, result| {
-        let Some(tui) = weak.upgrade() else { return };
-        match result.map(|created| created.directory.0) {
-            Ok(directory) if !directory.is_empty() => move_session(&tui, session, directory),
-            result => tui.toasts.show(
-                ToastOptions::new(
-                    Variant::Error,
-                    result.map_or_else(
-                        |error| crate::dialogs::worktrees::error_message(&error),
-                        |_| "No worktree directory returned".to_owned(),
-                    ),
-                )
-                .title("Creating workspace failed"),
-            ),
-        }
-    });
+    tui.app.spawn(
+        async move { client.worktree_create(&input, &RequestOptions::default()).await },
+        bind!(tui, |tui, _, result| {
+            match result.map(|created| created.directory.0) {
+                Ok(directory) if !directory.is_empty() => move_session(&tui, session, directory),
+                result => tui.toasts.show(
+                    ToastOptions::new(
+                        Variant::Error,
+                        result.map_or_else(
+                            |error| crate::dialogs::worktrees::error_message(&error),
+                            |_| "No worktree directory returned".to_owned(),
+                        ),
+                    )
+                    .title("Creating workspace failed"),
+                ),
+            }
+        }),
+    );
 }
 
 fn move_session(tui: &Tui, session: SessionID, directory: String) {

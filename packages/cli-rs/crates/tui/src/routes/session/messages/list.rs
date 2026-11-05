@@ -21,6 +21,7 @@ use opencode_api::generated::{
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_store::location::{Catalog, Location};
 use opencode_store::{Changes, LoadMore, MessageExt, State};
+use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::{Theme, ThemeMode};
@@ -396,13 +397,12 @@ impl Transcript {
         let weak = self.0.this.clone();
         tui.app.spawn(
             async move { data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }).await },
-            move |_, result| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(weak, |inner, _, result| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 done(&tui, result.map_err(|error| error.to_string()));
-            },
+            }),
         );
     }
 }
@@ -430,8 +430,7 @@ impl Inner {
     fn install(&self, tui: &Tui) {
         // A group header click re-renders the rows; a config change of the grouping settings too.
         let weak = self.this.clone();
-        *self.groups.refresh.borrow_mut() = Some(Rc::new(move || {
-            let Some(inner) = weak.upgrade() else { return };
+        *self.groups.refresh.borrow_mut() = Some(Rc::new(bind!(weak, |inner| {
             let Some(tui) = inner.tui.upgrade() else {
                 return;
             };
@@ -439,10 +438,9 @@ impl Inner {
                 tui.tabs.set_expanded_groups(&session.0, inner.groups.expanded.borrow().clone());
             }
             inner.render(&tui, |_| true);
-        }));
+        })));
         let weak = self.this.clone();
-        tui.settings.on_change(move |tui| {
-            let Some(inner) = weak.upgrade() else { return };
+        tui.settings.on_change(bind!(weak, |inner, tui| {
             let view = RowSettings::read(&tui.config());
             let before = inner.view.replace(view);
             let groups = inner.groups.read(&tui.settings.info());
@@ -453,11 +451,10 @@ impl Inner {
             if groups || before != view {
                 inner.render(tui, |_| true);
             }
-        });
+        }));
         // Keep the reader's row in place when rows mount above it.
         let weak = self.this.clone();
-        self.scroll.content_view().on_resize(move |cx, rect| {
-            let Some(inner) = weak.upgrade() else { return };
+        self.scroll.content_view().on_resize(bind!(weak, |inner, cx, rect| {
             let Some(pin) = inner.pin.take() else { return };
             // Only the frame that lays the new rows out moves the view.
             if cx.app().frame_number() > pin.frame + 1 {
@@ -467,7 +464,7 @@ impl Inner {
             if grown > 0.0 {
                 inner.scroll.scroll_by(0.0, f64::from(grown));
             }
-        });
+        }));
         // The wheel moves the view before this runs, so the window checks after it.
         let weak = self.this.clone();
         self.scroll.on_mouse(move |cx, event| {
@@ -476,17 +473,18 @@ impl Inner {
                 MouseEventKind::ScrollDown => false,
                 _ => return,
             };
-            let weak = weak.clone();
-            cx.set_timeout(Duration::ZERO, move |_| {
-                let Some(inner) = weak.upgrade() else { return };
-                let Some(tui) = inner.tui.upgrade() else {
-                    return;
-                };
-                if up && inner.reveal_older(&tui) || !up && inner.reveal_newer(&tui) {
-                    return;
-                }
-                inner.follow(&tui, !up);
-            });
+            cx.set_timeout(
+                Duration::ZERO,
+                bind!(weak, |inner, _| {
+                    let Some(tui) = inner.tui.upgrade() else {
+                        return;
+                    };
+                    if up && inner.reveal_older(&tui) || !up && inner.reveal_newer(&tui) {
+                        return;
+                    }
+                    inner.follow(&tui, !up);
+                }),
+            );
         });
         self.register(tui);
     }
@@ -495,17 +493,19 @@ impl Inner {
     fn register(&self, tui: &Tui) {
         let weak = self.this.clone();
         let title = if self.view.get().hide_thinking { "Expand thinking" } else { "Collapse thinking" };
-        let toggle = TuiCommand::new("session.toggle.thinking", move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
-            let next = if inner.view.get().hide_thinking { Visibility::Show } else { Visibility::Hide };
-            crate::dialogs::settings::update(&tui, move |draft| {
-                crate::dialogs::settings::set_path(draft, &["session", "thinking"], next.as_str().into());
-            });
-            tui.dialogs.clear();
-        })
+        let toggle = TuiCommand::new(
+            "session.toggle.thinking",
+            bind!(weak, |inner, _, _| {
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                let next = if inner.view.get().hide_thinking { Visibility::Show } else { Visibility::Hide };
+                crate::dialogs::settings::update(&tui, move |draft| {
+                    crate::dialogs::settings::set_path(draft, &["session", "thinking"], next.as_str().into());
+                });
+                tui.dialogs.clear();
+            }),
+        )
         .title(title)
         .group("Session");
         let layer = KeymapLayer { commands: vec![toggle], ..KeymapLayer::default() };
@@ -621,16 +621,18 @@ impl Inner {
         self.loading.set(true);
         let data = tui.data.clone();
         let weak = self.this.clone();
-        tui.app.spawn(async move { data.message_load_more(&session, LoadMore::default()).await }, move |_, result| {
-            let Some(inner) = weak.upgrade() else { return };
-            inner.loading.set(false);
-            if let Err(error) = result {
-                log::error!("Failed to load older messages: {error}");
-            }
-            if let Some(tui) = inner.tui.upgrade() {
-                inner.complete_group_boundary(&tui);
-            }
-        });
+        tui.app.spawn(
+            async move { data.message_load_more(&session, LoadMore::default()).await },
+            bind!(weak, |inner, _, result| {
+                inner.loading.set(false);
+                if let Err(error) = result {
+                    log::error!("Failed to load older messages: {error}");
+                }
+                if let Some(tui) = inner.tui.upgrade() {
+                    inner.complete_group_boundary(&tui);
+                }
+            }),
+        );
     }
 
     fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(&str) -> bool) {
@@ -753,18 +755,20 @@ impl Inner {
         *self.start.borrow_mut() = Start::Top;
         let data = tui.data.clone();
         let weak = self.this.clone();
-        tui.app.spawn(async move { data.message_load_more(&session, LoadMore::default()).await }, move |_, result| {
-            let Some(inner) = weak.upgrade() else { return };
-            inner.loading.set(false);
-            inner.hint.visible(false);
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
-            match result {
-                Ok(_) => inner.complete_group_boundary(&tui),
-                Err(error) => tui.toasts.error(error.to_string()),
-            }
-        });
+        tui.app.spawn(
+            async move { data.message_load_more(&session, LoadMore::default()).await },
+            bind!(weak, |inner, _, result| {
+                inner.loading.set(false);
+                inner.hint.visible(false);
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                match result {
+                    Ok(_) => inner.complete_group_boundary(&tui),
+                    Err(error) => tui.toasts.error(error.to_string()),
+                }
+            }),
+        );
         true
     }
 

@@ -10,6 +10,7 @@ use opencode_api::generated::{
     ModelInfo, ProviderInfo, UsageLimitsBudget, UsageLimitsBudgetCoverage, UsageLimitsBudgetPer,
     UsageLimitsBudgetScope, UsageLimitsInfo,
 };
+use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogCx, DialogOptions, HeaderProps, header, layout};
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
 use opentui::prelude::*;
@@ -202,14 +203,10 @@ impl Local {
 /// `DialogUsage`: the models the workspace limits, with what each has left.
 pub fn show(local: &Rc<Local>) {
     local.load_usage(true);
-    let weak = Rc::downgrade(local);
     local.dialogs.replace(
-        move |cx| {
-            let Some(local) = weak.upgrade() else {
-                return View::new(&cx.app);
-            };
+        bind!(local, |local, cx| {
             build(cx, &local)
-        },
+        }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );
@@ -251,8 +248,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     let refresh = handle.clone();
     let active: Rc<RefCell<Option<String>>> = Rc::default();
     let selected = active.clone();
-    cx.on_close(local.subscribe(move || {
-        let Some(local) = weak.upgrade() else { return };
+    cx.on_close(local.subscribe(bind!(weak, |local| {
         if reopened.get() {
             return;
         }
@@ -265,7 +261,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
         if let Some(handle) = refresh.borrow().as_ref() {
             handle.set_options(options(&local, &selected.borrow(), error));
         }
-    }));
+    })));
     let Some(info) = state else {
         return message(cx, "Usage", "Loading…", false);
     };
@@ -305,12 +301,11 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
             .as_any()
     }));
     let weak = Rc::downgrade(local);
-    props.on_select = Some(Rc::new(move |option: &SelectOption<String>| {
-        let Some(local) = weak.upgrade() else { return };
+    props.on_select = Some(Rc::new(bind!(weak, |local, option: &SelectOption<String>| {
         if let Some(row) = rows(&local).into_iter().find(|row| key(&row.model) == option.value) {
             crate::dialogs::usage_model::show(&local, row.model);
         }
-    }));
+    })));
     let weak = Rc::downgrade(local);
     let refresh = handle.clone();
     props.on_move = Some(Rc::new(move |option: &SelectOption<String>| {

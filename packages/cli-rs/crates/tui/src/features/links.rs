@@ -11,16 +11,15 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opentui::prelude::*;
 
 use crate::app::Tui;
 
 /// Registers the link click handler. `app::mount` calls it once.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
     let pressed = Rc::new(Cell::new(None::<(u16, u16)>));
-    tui.app.on_mouse(move |_, event| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_mouse(bind!(tui, |tui, _, event| {
         let plain = [Modifiers::CTRL, Modifiers::ALT, Modifiers::SHIFT]
             .into_iter()
             .all(|modifier| !event.modifiers.contains(modifier));
@@ -46,7 +45,7 @@ pub fn install(tui: &Rc<Tui>) {
             }
             _ => {}
         }
-    });
+    }));
 }
 
 /// The hyperlink presented at a cell (`renderer.getLinkAt`).

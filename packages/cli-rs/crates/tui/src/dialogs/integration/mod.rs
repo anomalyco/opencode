@@ -27,6 +27,7 @@ use opencode_api::generated::{
     IntegrationOauthCompleteInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
     ModelInfoStatus, ModelListInput, ProviderListInput,
 };
+use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DIALOG_LIST_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps,
     footer, header, layout_view,
@@ -52,19 +53,14 @@ pub type OnConnected = Rc<dyn Fn(&Rc<Local>, Option<String>)>;
 /// Registers `provider.connect` (`/connect`, `app.tsx:1019-1032`).
 pub fn install(tui: &Rc<Tui>) {
     let local = tui.local.clone();
-    let run = Rc::downgrade(&local);
     let suggested = Rc::downgrade(&local);
-    let command = TuiCommand::new("provider.connect", move |_, _| {
-        if let Some(local) = run.upgrade() {
-            show(&local, Some(show_models()));
-        }
-    })
-    .bind(Bind::Off)
-    .title("Connect an integration")
-    .group("Integration")
-    .palette()
-    .suggested(Condition::when(move || suggested.upgrade().is_some_and(|local| !local.connected())))
-    .slash(Slash { name: "connect".to_owned(), aliases: Vec::new(), arguments: false });
+    let command = TuiCommand::new("provider.connect", bind!(local, |local, _, _| show(&local, Some(show_models()))))
+        .bind(Bind::Off)
+        .title("Connect an integration")
+        .group("Integration")
+        .palette()
+        .suggested(Condition::when(move || suggested.upgrade().is_some_and(|local| !local.connected())))
+        .slash(Slash { name: "connect".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
         KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appGlobalBindingCommands`.
@@ -429,8 +425,7 @@ fn build_manage(
     props.preserve_selection = true;
     props.on_move = Some({
         let state = Rc::downgrade(&state);
-        Rc::new(move |option: &SelectOption<Account>| {
-            let Some(state) = state.upgrade() else { return };
+        Rc::new(bind!(state, |state, option: &SelectOption<Account>| {
             let had = state.deleting.borrow_mut().take().is_some();
             if (option.value == Account::Add) != state.built.0 {
                 state.reopen(Some(option.value.clone()));
@@ -439,15 +434,11 @@ fn build_manage(
             if had {
                 state.refresh();
             }
-        })
+        }))
     });
     props.on_select = Some({
         let state = Rc::downgrade(&state);
-        Rc::new(move |option: &SelectOption<Account>| {
-            if let Some(state) = state.upgrade() {
-                state.choose(&option.value);
-            }
-        })
+        Rc::new(bind!(state, |state, option: &SelectOption<Account>| state.choose(&option.value)))
     });
     let account_only: select::ActionDisabled<Account> =
         Rc::new(|option| option.is_none_or(|option| option.value == Account::Add));
@@ -483,9 +474,7 @@ fn build_manage(
         handle.set_filter(filter);
     }
     *state.select.borrow_mut() = Some(handle);
-    let weak = Rc::downgrade(&state);
-    cx.on_close(state.flow.local.subscribe(move || {
-        let Some(state) = weak.upgrade() else { return };
+    cx.on_close(state.flow.local.subscribe(bind!(state, |state| {
         let active = credentials(&state.current()).first().map(|item| item.id.clone());
         if active != state.built.1 {
             let focus = state.selected();
@@ -493,7 +482,7 @@ fn build_manage(
             return;
         }
         state.refresh();
-    }));
+    })));
     // The dialog owns the state through its close handler.
     let owner = state.clone();
     cx.on_close(Disposer::new(move || drop(owner)));
@@ -590,14 +579,13 @@ impl Manage {
         let local = Rc::downgrade(&self.flow.local);
         self.flow.spawn(
             async move { client.credential_activate(&input, &RequestOptions::default()).await },
-            move |result| {
-                let Some(local) = local.upgrade() else { return };
+            bind!(local, |local, result| {
                 match result {
                     // The active account comes first; the marker follows the reloaded list.
                     Ok(()) => local.load_integrations(),
                     Err(error) => local.toasts.error(error.to_string()),
                 }
-            },
+            }),
         );
     }
 
@@ -660,8 +648,7 @@ impl Manage {
         let state: Weak<Manage> = Rc::downgrade(self);
         self.flow.spawn(
             async move { client.credential_remove(&input, &RequestOptions::default()).await },
-            move |result| {
-                let Some(local) = local.upgrade() else { return };
+            bind!(local, |local, result| {
                 if let Some(state) = state.upgrade()
                     && state.deleting.borrow_mut().take().is_some()
                 {
@@ -678,7 +665,7 @@ impl Manage {
                     }
                     Err(error) => local.toasts.error(error.to_string()),
                 }
-            },
+            }),
         );
     }
 }
@@ -945,16 +932,8 @@ impl Oauth {
         self.flow.local.dialogs.replace(
             move |cx| {
                 let (open, copy) = (Rc::downgrade(&me), Rc::downgrade(&me));
-                let open: Rc<dyn Fn()> = Rc::new(move || {
-                    if let Some(me) = open.upgrade() {
-                        me.open();
-                    }
-                });
-                let copy: Rc<dyn Fn()> = Rc::new(move || {
-                    if let Some(me) = copy.upgrade() {
-                        me.copy();
-                    }
-                });
+                let open: Rc<dyn Fn()> = Rc::new(bind!(open, |me| me.open()));
+                let copy: Rc<dyn Fn()> = Rc::new(bind!(copy, |me| me.copy()));
                 cx.layer(KeymapLayer {
                     commands: vec![
                         TuiCommand::inline("return", {
@@ -991,11 +970,9 @@ impl Oauth {
     fn poll(self: &Rc<Self>) {
         let client = self.flow.local.client.clone();
         let input = self.status_input();
-        let weak = Rc::downgrade(self);
         self.flow.local.app.spawn(
             async move { client.integration_oauth_status(&input, &RequestOptions::default()).await },
-            move |cx, result| {
-                let Some(me) = weak.upgrade() else { return };
+            bind!(self, |me, cx, result| {
                 if me.settled.get() {
                     return;
                 }
@@ -1008,13 +985,13 @@ impl Oauth {
                 };
                 match status {
                     IntegrationAttemptStatus::Pending(_) => {
-                        let weak = Rc::downgrade(&me);
-                        me.timer.set(Some(cx.set_timeout(POLL, move |_| {
-                            if let Some(me) = weak.upgrade() {
+                        me.timer.set(Some(cx.set_timeout(
+                            POLL,
+                            bind!(me, |me, _| {
                                 me.timer.set(None);
                                 me.poll();
-                            }
-                        })));
+                            }),
+                        )));
                     }
                     IntegrationAttemptStatus::Complete(_) => {
                         me.settled.set(true);
@@ -1029,7 +1006,7 @@ impl Oauth {
                         me.flow.fail("Authorization expired".into());
                     }
                 }
-            },
+            }),
         );
     }
 
@@ -1042,19 +1019,9 @@ impl Oauth {
                 cx.on_close(Disposer::new(move || closing.close()));
                 let (errors, set_error) = error_slot(cx, false);
                 let open = Rc::downgrade(&me);
-                let link = link(
-                    cx,
-                    &me.attempt.url,
-                    Some(Rc::new(move || {
-                        if let Some(me) = open.upgrade() {
-                            me.open();
-                        }
-                    })),
-                );
+                let link = link(cx, &me.attempt.url, Some(Rc::new(bind!(open, |me| me.open()))));
                 let description = View::new(&cx.app).gap(1).child(&link).child(&errors);
-                let submit = Rc::downgrade(&me);
-                let on_confirm = Rc::new(move |code: &str| {
-                    let Some(me) = submit.upgrade() else { return };
+                let on_confirm = Rc::new(bind!(me, |me, code: &str| {
                     if code.is_empty() {
                         return;
                     }
@@ -1076,7 +1043,7 @@ impl Oauth {
                             Err(error) => set_error(error.to_string()),
                         },
                     );
-                });
+                }));
                 prompt(
                     cx,
                     PromptProps {
@@ -1294,11 +1261,9 @@ impl Command {
             attempt_id: self.attempt.clone(),
             location: self.flow.location(),
         };
-        let weak = Rc::downgrade(self);
         self.flow.local.app.spawn(
             async move { client.integration_command_status(&input, &RequestOptions::default()).await },
-            move |cx, result| {
-                let Some(me) = weak.upgrade() else { return };
+            bind!(self, |me, cx, result| {
                 if me.settled.get() {
                     return;
                 }
@@ -1315,13 +1280,13 @@ impl Command {
                             output.set_text(pending.message.unwrap_or_default().trim().to_owned());
                         }
                         me.flow.local.app.request_redraw();
-                        let weak = Rc::downgrade(&me);
-                        me.timer.set(Some(cx.set_timeout(POLL, move |_| {
-                            if let Some(me) = weak.upgrade() {
+                        me.timer.set(Some(cx.set_timeout(
+                            POLL,
+                            bind!(me, |me, _| {
                                 me.timer.set(None);
                                 me.poll();
-                            }
-                        })));
+                            }),
+                        )));
                     }
                     IntegrationCommandAttemptStatus::Complete(_) => {
                         me.settled.set(true);
@@ -1336,7 +1301,7 @@ impl Command {
                         me.flow.fail("Authentication expired".into());
                     }
                 }
-            },
+            }),
         );
     }
 

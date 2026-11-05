@@ -15,6 +15,7 @@ use opencode_api::generated::ExperimentalSessionLogInput;
 use opencode_api::generated::ServerInfo;
 use opencode_api::transport::SseResponse;
 use opencode_local::cli_config::{Info, TurnTokens};
+use opencode_ui::bind;
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::theme::{Theme, ThemeMode};
 use opentui::keymap::{Condition, Disposer};
@@ -188,16 +189,17 @@ fn install_escape(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         Condition::when(move || weak.upgrade().is_some_and(|bar| bar.panel.get().is_some()))
     };
     let close = |key: &str| {
-        let weak = Rc::downgrade(bar);
-        TuiCommand::inline(key, move |_, _| {
-            let Some(bar) = weak.upgrade() else { return };
-            let Some(tui) = bar.tui.upgrade() else { return };
-            if tui.app.selected_text().is_some() {
-                tui.app.clear_selection();
-                return;
-            }
-            bar.close(&tui);
-        })
+        TuiCommand::inline(
+            key,
+            bind!(bar, |bar, _, _| {
+                let Some(tui) = bar.tui.upgrade() else { return };
+                if tui.app.selected_text().is_some() {
+                    tui.app.clear_selection();
+                    return;
+                }
+                bar.close(&tui);
+            }),
+        )
     };
     let layer = KeymapLayer {
         enabled: open,
@@ -214,9 +216,7 @@ fn install_escape(tui: &Rc<Tui>, bar: &Rc<Bar>) {
 /// Connection state from the event connection; server details once connected.
 fn install_connection(tui: &Rc<Tui>, bar: &Rc<Bar>) {
     struct Changed(State);
-    let weak = Rc::downgrade(bar);
-    tui.app.on_message(move |_, Changed(state): &Changed| {
-        let Some(bar) = weak.upgrade() else { return };
+    tui.app.on_message(bind!(bar, |bar, _, Changed(state): &Changed| {
         let Some(tui) = bar.tui.upgrade() else { return };
         let connected = state.status == Status::Connected;
         let was = bar.state.replace(state.clone()).status == Status::Connected;
@@ -224,7 +224,7 @@ fn install_connection(tui: &Rc<Tui>, bar: &Rc<Bar>) {
             bar.fetch_server(&tui);
         }
         bar.render(&tui);
-    });
+    }));
     let Some(mut watch) = tui.connection_watch() else {
         return;
     };
@@ -241,10 +241,8 @@ fn install_connection(tui: &Rc<Tui>, bar: &Rc<Bar>) {
 
 /// Takes a UI sample now and every 2 s: CPU, memory, and how late the sampling timer fired.
 fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
-    let weak = Rc::downgrade(bar);
     let last = Cell::new((tui.app.now(), cpu_time(), false));
-    let sample = move |now: Instant| {
-        let Some(bar) = weak.upgrade() else { return };
+    let sample = bind!(bar, |bar, now: Instant| {
         let (then, cpu_then, ready) = last.get();
         let cpu_now = cpu_time();
         let elapsed = now.saturating_duration_since(then);
@@ -264,7 +262,7 @@ fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         {
             bar.render(&tui);
         }
-    };
+    });
     sample(tui.app.now());
     tui.app.set_interval(SAMPLE_INTERVAL, move |cx| sample(cx.now()));
 }
@@ -299,12 +297,14 @@ impl Bar {
     fn fetch_server(self: &Rc<Self>, tui: &Tui) {
         let client = tui.data.client().clone();
         let weak = self.weak();
-        tui.app.spawn(async move { client.server_info(&RequestOptions::default()).await }, move |_, result| {
-            let Some(bar) = weak.upgrade() else { return };
-            let Some(tui) = bar.tui.upgrade() else { return };
-            *bar.server.borrow_mut() = Some(result.map_err(|error| error.to_string()));
-            bar.render(&tui);
-        });
+        tui.app.spawn(
+            async move { client.server_info(&RequestOptions::default()).await },
+            bind!(weak, |bar, _, result| {
+                let Some(tui) = bar.tui.upgrade() else { return };
+                *bar.server.borrow_mut() = Some(result.map_err(|error| error.to_string()));
+                bar.render(&tui);
+            }),
+        );
     }
 
     /// Rebuilds the bar.
@@ -669,25 +669,19 @@ impl Bar {
                     .map_err(|error| error.to_string())
                     .and_then(|result| result)
             },
-            move |_, result| {
-                let Some(bar) = weak.upgrade() else { return };
+            bind!(weak, |bar, _, result| {
                 let Some(tui) = bar.tui.upgrade() else { return };
                 bar.dumping.set(false);
                 *bar.dump.borrow_mut() = Some(result);
                 bar.render(&tui);
-            },
+            }),
         );
     }
 }
 
 /// Runs `run` after the current event, since bar handlers run inside widgets a render replaces.
 fn defer(tui: &Tui, run: impl FnOnce(&Tui) + 'static) {
-    let weak = tui.weak();
-    tui.app.defer(move |_| {
-        if let Some(tui) = weak.upgrade() {
-            run(&tui);
-        }
-    });
+    tui.app.defer(bind!(tui, |tui, _| run(&tui)));
 }
 
 /// The last 100 durable events of the session's log; nothing when the log is unavailable.

@@ -24,6 +24,7 @@ pub use scanner::{ScannerOptions, ScannerStyle, scanner_colors, scanner_frames};
 pub use spinner::{ColorFn, SPINNER_FRAMES, SPINNER_INTERVAL, Spinner, SpinnerColor, spinner_frame};
 pub use text::{FadeInText, ShimmerText, fade_strength, shimmer_strength};
 
+use crate::bind;
 use opentui::App;
 use opentui::style::Color;
 use std::cell::Cell;
@@ -64,15 +65,12 @@ fn tick_every(app: &App, interval: Duration, clock: &Clock) {
 /// Advances `clock` by the time between frames until `limit` (if any) is reached.
 fn tick_frames(app: &App, clock: &Clock, limit: Option<Duration>) {
     let weak: Weak<Cell<Duration>> = Rc::downgrade(clock);
-    app.animate(move |cx, elapsed| {
-        let Some(clock) = weak.upgrade() else {
-            return false;
-        };
+    app.animate(bind!(weak, |clock, cx, elapsed| {
         let next = clock.get() + elapsed;
         clock.set(limit.map_or(next, |limit| next.min(limit)));
         cx.request_redraw();
         limit.is_none_or(|limit| next < limit)
-    });
+    }));
 }
 
 /// Milliseconds, as the TypeScript clocks count.

@@ -7,6 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::motion::Spinner;
@@ -60,13 +61,12 @@ pub fn show(tui: &Tui, checks: bool) {
                 *tui.updates.dialog.borrow_mut() = Some(Rc::downgrade(&draw));
                 let enter = {
                     let (weak, check) = (tui.weak(), check.clone());
-                    move |_: Option<&str>, _: Option<&KeyEvent>| {
-                        let Some(tui) = weak.upgrade() else { return };
+                    bind!(weak, |tui, _: Option<&str>, _: Option<&KeyEvent>| {
                         let shown = shown(&tui, &check.borrow());
                         if let Some(run) = buttons(&tui, &shown).pop().map(|button| button.1) {
                             tui.app.defer(move |_| run());
                         }
-                    }
+                    })
                 };
                 cx.layer(KeymapLayer {
                     commands: vec![TuiCommand::inline("return", enter).title("Confirm update action").group("Dialog")],
@@ -93,11 +93,9 @@ pub fn show(tui: &Tui, checks: bool) {
     if !checks {
         return;
     }
-    let weak = tui.weak();
     updates::check(
         tui,
-        Box::new(move |result| {
-            let Some(tui) = weak.upgrade() else { return };
+        Box::new(bind!(tui, |tui, result| {
             if tui.updates.generation.get() != generation {
                 return;
             }
@@ -110,7 +108,7 @@ pub fn show(tui: &Tui, checks: bool) {
                 }
             }
             tui.updates.redraw_dialog();
-        }),
+        })),
     );
 }
 
@@ -138,14 +136,7 @@ fn buttons(tui: &Tui, shown: &Shown) -> Vec<Button> {
     if matches!(shown, Shown::Update(UpdateState::Installing(_))) {
         return Vec::new();
     }
-    let action = |run: fn(&Tui)| -> Rc<dyn Fn()> {
-        let weak = tui.weak();
-        Rc::new(move || {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui);
-            }
-        })
-    };
+    let action = |run: fn(&Tui)| -> Rc<dyn Fn()> { Rc::new(bind!(tui, |tui| run(&tui))) };
     let mut buttons: Vec<Button> = vec![(
         "Skip",
         action(|tui| {

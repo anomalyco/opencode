@@ -4,6 +4,7 @@
 //! field has focus, and a busy state. [`prompt`] returns a [`Prompt`] handle for what TS props change later:
 //! the busy state and the value.
 
+use crate::bind;
 use crate::dialog::{
     DialogCx, DialogSize, FocusId, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
@@ -92,8 +93,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     }
     body.add(&prompt.0.field).add(&prompt.0.busy_line);
     let weak = Rc::downgrade(&prompt.0);
-    let on_close: Rc<dyn Fn()> = Rc::new(move || {
-        let Some(inner) = weak.upgrade() else { return };
+    let on_close: Rc<dyn Fn()> = Rc::new(bind!(weak, |inner| {
         if inner.busy.get() {
             return;
         }
@@ -101,7 +101,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
             Some(cancel) => cancel(),
             None => inner.cx.dialogs.clear(),
         }
-    });
+    }));
     let head = header(
         cx,
         HeaderProps {
@@ -175,25 +175,16 @@ impl Prompt {
         };
         let submit = weak.clone();
         let mut commands = vec![
-            TuiCommand::new("dialog.prompt.submit", move |_, _| {
-                if let Some(inner) = submit.upgrade() {
-                    Prompt(inner).confirm();
-                }
-            })
-            .title("Submit dialog prompt")
-            .group("Dialog"),
+            TuiCommand::new("dialog.prompt.submit", bind!(submit, |inner, _, _| Prompt(inner).confirm()))
+                .title("Submit dialog prompt")
+                .group("Dialog"),
         ];
         for action in &self.0.props.actions {
-            let weak = weak.clone();
             let run = action.run.clone();
             commands.push(
-                TuiCommand::new(action.command.clone(), move |_, _| {
-                    if let Some(inner) = weak.upgrade() {
-                        run(&Prompt(inner));
-                    }
-                })
-                .title(action.command_title.clone().unwrap_or_else(|| action.title.clone()))
-                .group("Dialog"),
+                TuiCommand::new(action.command.clone(), bind!(weak, |inner, _, _| run(&Prompt(inner))))
+                    .title(action.command_title.clone().unwrap_or_else(|| action.title.clone()))
+                    .group("Dialog"),
             );
         }
         // Dialog form semantics win over the managed textarea input layer.
@@ -205,22 +196,23 @@ impl Prompt {
             ..KeymapLayer::default()
         });
         if self.0.props.on_cancel.is_some() {
-            let weak = weak.clone();
             self.0.cx.layer(KeymapLayer::<FocusId> {
                 priority: 1,
                 commands: vec![
-                    TuiCommand::inline("escape", move |_, _| {
-                        let Some(inner) = weak.upgrade() else { return };
-                        if inner.cx.app.selected_text().is_some() {
-                            inner.cx.app.clear_selection();
-                            return;
-                        }
-                        if !inner.busy.get()
-                            && let Some(cancel) = &inner.props.on_cancel
-                        {
-                            cancel();
-                        }
-                    })
+                    TuiCommand::inline(
+                        "escape",
+                        bind!(weak, |inner, _, _| {
+                            if inner.cx.app.selected_text().is_some() {
+                                inner.cx.app.clear_selection();
+                                return;
+                            }
+                            if !inner.busy.get()
+                                && let Some(cancel) = &inner.props.on_cancel
+                            {
+                                cancel();
+                            }
+                        }),
+                    )
                     .title("Back")
                     .group("Dialog"),
                 ],
@@ -250,11 +242,9 @@ impl Prompt {
         let slot = &inner.footer_slot;
         slot.clear();
         let weak: Weak<Inner> = Rc::downgrade(&self.0);
-        let submit = FooterAction::new("submit").command("dialog.prompt.submit").on_trigger(move || {
-            if let Some(inner) = weak.upgrade() {
-                Prompt(inner).confirm();
-            }
-        });
+        let submit = FooterAction::new("submit")
+            .command("dialog.prompt.submit")
+            .on_trigger(bind!(weak, |inner| Prompt(inner).confirm()));
         let extra: Vec<FooterAction> = inner
             .props
             .actions
@@ -265,11 +255,7 @@ impl Prompt {
                 FooterAction::new(action.title.clone())
                     .command(action.command.clone())
                     .disabled(inner.busy.get())
-                    .on_trigger(move || {
-                        if let Some(inner) = weak.upgrade() {
-                            run(&Prompt(inner));
-                        }
-                    })
+                    .on_trigger(bind!(weak, |inner| run(&Prompt(inner))))
             })
             .collect();
         let mut primary = extra;

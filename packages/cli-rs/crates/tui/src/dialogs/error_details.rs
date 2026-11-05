@@ -6,6 +6,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, HeaderProps, footer, header};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;
@@ -39,8 +40,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let hook: Rc<Hook> = Rc::default();
     let copy: Rc<dyn Fn()> = {
         let (weak, copied, text, hook) = (weak.clone(), copied.clone(), details.text, hook.clone());
-        Rc::new(move || {
-            let Some(tui) = weak.upgrade() else { return };
+        Rc::new(bind!(weak, |tui| {
             if !tui.app.copy_to_clipboard(&text) {
                 tui.toasts.error("Failed to copy to clipboard");
                 return;
@@ -50,16 +50,13 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             if let Some(draw) = hook.borrow().as_ref().and_then(Weak::upgrade) {
                 tui.app.defer(move |_| draw());
             }
-        })
+        }))
     };
     let investigate: Rc<dyn Fn()> = {
         let (weak, prompt) = (weak.clone(), details.prompt);
-        Rc::new(move || {
-            let Some(tui) = weak.upgrade() else { return };
+        Rc::new(bind!(weak, |tui| {
             let prompt = prompt.clone();
-            let weak = tui.weak();
-            tui.app.defer(move |_| {
-                let Some(tui) = weak.upgrade() else { return };
+            tui.app.defer(bind!(tui, |tui, _| {
                 tui.dialogs.clear();
                 // `route.navigate({ type: "home", prompt })`: the new home prompt takes the text.
                 tui.navigate(Route::Home);
@@ -67,16 +64,15 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
                     textarea.set_text(&prompt);
                     textarea.set_cursor_offset(u32::MAX);
                 }
-            });
-        })
+            }));
+        }))
     };
 
     let slot = View::new(app);
     let draw: Rc<dyn Fn()> = {
         let (cx, slot, copied) = (Rc::downgrade(cx), slot.clone(), copied.clone());
         let (copy, investigate) = (copy.clone(), investigate.clone());
-        Rc::new(move || {
-            let Some(cx) = cx.upgrade() else { return };
+        Rc::new(bind!(cx, |cx| {
             let mut actions = vec![FooterAction::new("investigate").key("i")];
             actions[0].on_trigger = Some(investigate.clone());
             let mut copy_action = if copied.get() {
@@ -90,7 +86,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
             actions.push(copy_action);
             slot.clear();
             slot.add(&footer(&cx, FooterProps { primary: actions, ..FooterProps::default() }));
-        })
+        }))
     };
     draw();
     *hook.borrow_mut() = Some(Rc::downgrade(&draw));

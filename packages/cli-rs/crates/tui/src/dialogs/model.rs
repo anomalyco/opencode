@@ -25,6 +25,7 @@ use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
 use opencode_store::location::{Catalog, Location};
 use opencode_store::{Changes, Data};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, Dialogs};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{self, ActionRun, SelectAction, SelectOption, SelectProps, fuzzy};
@@ -200,11 +201,7 @@ impl Local {
             return;
         };
         let weak = self.this.clone();
-        self.app.on_message(move |_, _: &PreferencesChanged| {
-            if let Some(local) = weak.upgrade() {
-                local.load_preferences();
-            }
-        });
+        self.app.on_message(bind!(weak, |local, _, _: &PreferencesChanged| local.load_preferences()));
         let proxy = self.app.proxy();
         *self.watch.borrow_mut() = preferences.watch(move || {
             let _ = proxy.send(PreferencesChanged);
@@ -257,13 +254,15 @@ impl Local {
     fn read(&self, catalog: Catalog, location: &Location) {
         let weak = self.this.clone();
         let task = self.data.catalog_sync(catalog, Some(location));
-        self.app.spawn(task, move |_, result| {
-            let Some(local) = weak.upgrade() else { return };
-            match result {
-                Ok(()) => local.read_catalog(),
-                Err(error) => log::warn!("model catalog: {error}"),
-            }
-        });
+        self.app.spawn(
+            task,
+            bind!(weak, |local, _, result| {
+                match result {
+                    Ok(()) => local.read_catalog(),
+                    Err(error) => log::warn!("model catalog: {error}"),
+                }
+            }),
+        );
     }
 
     fn read_catalog(&self) {
@@ -324,8 +323,7 @@ impl Local {
         let weak = self.this.clone();
         self.app.spawn(
             async move { client.experimental_usage_limits(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(local) = weak.upgrade() else { return };
+            bind!(weak, |local, _, result| {
                 local.usage_loading.borrow_mut().remove(&key);
                 match result {
                     Ok(output) => {
@@ -335,7 +333,7 @@ impl Local {
                     }
                     Err(error) => log::warn!("usage limits: {error}"),
                 }
-            },
+            }),
         );
     }
 
@@ -351,11 +349,7 @@ impl Local {
         self.next_listener.set(id + 1);
         self.listeners.borrow_mut().push((id, Rc::new(listener)));
         let listeners = Rc::downgrade(&self.listeners);
-        Disposer::new(move || {
-            if let Some(listeners) = listeners.upgrade() {
-                listeners.borrow_mut().retain(|(other, _)| *other != id);
-            }
-        })
+        Disposer::new(bind!(listeners, |listeners| listeners.borrow_mut().retain(|(other, _)| *other != id)))
     }
 
     fn notify(&self) {
@@ -386,8 +380,7 @@ impl Local {
                 let settled = written.load(Ordering::SeqCst) == started;
                 tokio::task::spawn_blocking(move || preferences.load()).await.map(|preference| (preference, settled))
             },
-            move |_, result| {
-                let Some(local) = weak.upgrade() else { return };
+            bind!(weak, |local, _, result| {
                 // A read that may predate a write would undo the change the write carries; read again once it lands.
                 if let Ok((_, settled)) = &result
                     && (!settled || local.writes.get() != started)
@@ -401,7 +394,7 @@ impl Local {
                 state.ready = true;
                 drop(state);
                 local.notify();
-            },
+            }),
         );
     }
 
@@ -1076,14 +1069,10 @@ pub fn show(local: &Rc<Local>, provider: Option<String>) {
 
 // Opens the connected models with `filter` typed, as a reopen keeps it.
 fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
-    let weak = Rc::downgrade(local);
     local.dialogs.replace(
-        move |cx| {
-            let Some(local) = weak.upgrade() else {
-                return View::new(&cx.app);
-            };
+        bind!(local, |local, cx| {
             build(cx, &local, provider, &filter)
-        },
+        }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );
@@ -1115,31 +1104,10 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     props.current = local.current();
     props.search_in_title = true;
     props.title_placeholder = Some("Search models".to_owned());
-    let on_select = {
-        let weak = Rc::downgrade(local);
-        Rc::new(move |option: &SelectOption<Model>| {
-            if let Some(local) = weak.upgrade() {
-                choose(&local, &option.value);
-            }
-        })
-    };
+    let on_select = { Rc::new(bind!(local, |local, option: &SelectOption<Model>| choose(&local, &option.value))) };
     props.on_select = Some(on_select);
-    let connect = {
-        let weak = Rc::downgrade(local);
-        Rc::new(move || {
-            if let Some(local) = weak.upgrade() {
-                connect(&local);
-            }
-        })
-    };
-    let usage = {
-        let weak = Rc::downgrade(local);
-        Rc::new(move || {
-            if let Some(local) = weak.upgrade() {
-                crate::dialogs::usage::show(&local);
-            }
-        })
-    };
+    let connect = { Rc::new(bind!(local, |local| connect(&local))) };
+    let usage = { Rc::new(bind!(local, |local| crate::dialogs::usage::show(&local))) };
     let provider_title = if connected { "connect integration" } else { "view all integrations" };
     let favorite_title = {
         let weak = Rc::downgrade(local);
@@ -1164,12 +1132,7 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
             title: Rc::new(favorite_title),
             hidden: !connected,
             ..SelectAction::new("model.dialog.favorite", "Favorite", {
-                let weak = Rc::downgrade(local);
-                move |option| {
-                    if let Some(local) = weak.upgrade() {
-                        local.toggle_favorite(&option.value);
-                    }
-                }
+                bind!(local, |local, option| local.toggle_favorite(&option.value))
             })
         },
     ];
@@ -1179,11 +1142,9 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     }
     // Refresh the rows as the catalog, the favorites, or the connections change. When the usage action or the
     // connected state would change the footer, the dialog opens again with the same filter.
-    let weak = Rc::downgrade(local);
     let usage_shown = matches!(local.usage(), Some(Some(_)));
     let reopened = Rc::new(Cell::new(false));
-    cx.on_close(local.subscribe(move || {
-        let Some(local) = weak.upgrade() else { return };
+    cx.on_close(local.subscribe(bind!(local, |local| {
         if reopened.get() {
             return;
         }
@@ -1196,7 +1157,7 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
             return;
         }
         handle.set_options(options(&handle.filter()));
-    }));
+    })));
     view
 }
 
@@ -1434,14 +1395,7 @@ pub fn connect(local: &Rc<Local>) {
 pub fn install(tui: &Rc<Tui>) {
     let local = tui.local.clone();
     let command = |id: &str, run: fn(&Rc<Local>)| {
-        let weak = Rc::downgrade(&local);
-        TuiCommand::new(id, move |_, _| {
-            if let Some(local) = weak.upgrade() {
-                run(&local);
-            }
-        })
-        .bind(Bind::Off)
-        .group("Agent")
+        TuiCommand::new(id, bind!(local, |local, _, _| run(&local))).bind(Bind::Off).group("Agent")
     };
     let slash = |name: &str, aliases: &[&str]| Slash {
         name: name.to_owned(),
@@ -1488,13 +1442,10 @@ pub fn install(tui: &Rc<Tui>) {
             Err(error) => log::error!("model keymap layer: {error}"),
         }
     }
-    let weak = Rc::downgrade(&local);
-    let listener = local.subscribe(move || {
-        if let Some(local) = weak.upgrade() {
-            local.load_served_usage();
-            usage_alerts(&local);
-        }
-    });
+    let listener = local.subscribe(bind!(local, |local| {
+        local.load_served_usage();
+        usage_alerts(&local);
+    }));
     local.layers.borrow_mut().push(listener);
     local.load();
 }
@@ -1509,11 +1460,9 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
     let pending = Rc::new(RefCell::new(Some((agent, model))));
     let listener: Rc<RefCell<Option<Disposer>>> = Rc::default();
     let apply = {
-        let weak = Rc::downgrade(local);
         let pending = pending.clone();
         let listener = listener.clone();
-        move || {
-            let Some(local) = weak.upgrade() else { return };
+        bind!(local, |local| {
             if !local.ready() || !local.catalog_ready() || local.agents().is_empty() {
                 return;
             }
@@ -1527,7 +1476,7 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
             if let Some(model) = model {
                 local.set(&model, true);
             }
-        }
+        })
     };
     *listener.borrow_mut() = Some(local.subscribe(apply.clone()));
     apply();
@@ -1556,22 +1505,14 @@ pub fn usage_alerts(local: &Local) {
     let toast = if reached {
         ToastOptions::new(Variant::Error, format!("Resets {}", format_reset(usage.resets_at)))
             .title(format!("{} limit reached", model.name))
-            .action("Switch model", move || {
-                if let Some(local) = weak.upgrade() {
-                    show(&local, None);
-                }
-            })
+            .action("Switch model", bind!(weak, |local| show(&local, None)))
     } else {
         ToastOptions::new(
             Variant::Warning,
             format!("{} left · resets {}", format_dollars(usage.left), format_reset(usage.resets_at)),
         )
         .title(format!("Running low on {}", model.name))
-        .action("View usage", move || {
-            if let Some(local) = weak.upgrade() {
-                crate::dialogs::usage::show(&local);
-            }
-        })
+        .action("View usage", bind!(weak, |local| crate::dialogs::usage::show(&local)))
     };
     local.toasts.show(toast);
 }
@@ -1601,13 +1542,10 @@ pub fn prompt_selection(
 
 /// The [`LocationFn`] of the TUI: the current location, else the default one.
 pub fn location_fn(tui: Weak<Tui>) -> LocationFn {
-    Rc::new(move || {
-        let Some(tui) = tui.upgrade() else {
-            return Location::default();
-        };
+    Rc::new(bind!(tui, |tui| {
         crate::features::location::current(&tui)
             .unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
-    })
+    }, else Location::default()))
 }
 
 /// The [`RouteFn`] of the TUI: the routed session and what the store held of it at the last sync. It does not

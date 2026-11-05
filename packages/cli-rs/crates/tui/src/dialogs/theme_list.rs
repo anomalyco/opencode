@@ -9,6 +9,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
+use opencode_ui::bind;
 use opencode_ui::dialog::DialogOptions;
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::select::{Select, SelectOption, SelectProps, select};
@@ -20,17 +21,12 @@ use crate::dialogs::settings::{set_path, update};
 
 /// Registers `theme.switch` ("Switch theme", `/themes`) as `app.tsx:1130-1137` does.
 pub fn install(tui: &Rc<Tui>) {
-    let weak = tui.weak();
-    let command = TuiCommand::new("theme.switch", move |_, _| {
-        if let Some(tui) = weak.upgrade() {
-            show(&tui, None);
-        }
-    })
-    .bind(Bind::Off)
-    .title("Switch theme")
-    .group("System")
-    .palette()
-    .slash(Slash { name: "themes".to_owned(), aliases: Vec::new(), arguments: false });
+    let command = TuiCommand::new("theme.switch", bind!(tui, |tui, _, _| show(&tui, None)))
+        .bind(Bind::Off)
+        .title("Switch theme")
+        .group("System")
+        .palette()
+        .slash(Slash { name: "themes".to_owned(), aliases: Vec::new(), arguments: false });
     let layers = [
         KeymapLayer { mode: Some(GLOBAL_MODE.to_owned()), commands: vec![command], ..KeymapLayer::default() },
         // `appBindingCommands`: the configured keybind (`none` by default).
@@ -95,27 +91,15 @@ impl List {
                 props.current = Some(list.initial.clone());
                 props.on_move = Some(Rc::new({
                     let list = Rc::downgrade(&list);
-                    move |option| {
-                        if let Some(list) = list.upgrade() {
-                            list.preview(&option.value);
-                        }
-                    }
+                    bind!(list, |list, option| list.preview(&option.value))
                 }));
                 props.on_select = Some(Rc::new({
                     let list = Rc::downgrade(&list);
-                    move |option| {
-                        if let Some(list) = list.upgrade() {
-                            list.pick(&option.value);
-                        }
-                    }
+                    bind!(list, |list, option| list.pick(&option.value))
                 }));
                 props.on_filter = Some(Rc::new({
                     let list = Rc::downgrade(&list);
-                    move |query| {
-                        if let Some(list) = list.upgrade() {
-                            list.filtered(query);
-                        }
-                    }
+                    bind!(list, |list, query| list.filtered(query))
                 }));
                 // Escape and the close label run it.
                 props.on_cancel = list.on_close.clone();

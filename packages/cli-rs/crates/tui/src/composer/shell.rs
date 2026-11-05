@@ -6,6 +6,7 @@ use std::rc::Rc;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, SessionMessageShellStatus, ShellRemoveInput};
 use opencode_store::Shell;
+use opencode_ui::bind;
 use opencode_ui::keymap::TuiCommand;
 use opencode_ui::theme::Theme;
 use opentui::prelude::Container;
@@ -52,14 +53,15 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
 
 pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
     let command = |id: &str, title: &str, run: fn(&Rc<Inner>, &Tui)| {
-        let weak = Rc::downgrade(inner);
-        TuiCommand::new(id, move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
-            let Some(tui) = inner.tui.upgrade() else {
-                return;
-            };
-            run(&inner, &tui);
-        })
+        TuiCommand::new(
+            id,
+            bind!(inner, |inner, _, _| {
+                let Some(tui) = inner.tui.upgrade() else {
+                    return;
+                };
+                run(&inner, &tui);
+            }),
+        )
         .title(title)
         .group("Composer")
     };
@@ -127,33 +129,27 @@ pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, 
     }
     for index in window(&entries, offset) {
         let hover = {
-            let weak = Rc::downgrade(inner);
-            move || {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(inner, |inner| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 if std::mem::replace(&mut inner.shell.borrow_mut().selected, index) != index {
                     inner.redraw_later(&tui);
                 }
-            }
+            })
         };
         let click = {
-            let weak = Rc::downgrade(inner);
-            move || {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(inner, |inner| {
                 let Some(tui) = inner.tui.upgrade() else {
                     return;
                 };
                 inner.shell.borrow_mut().selected = index;
-                let weak = Rc::downgrade(&inner);
-                tui.app.defer(move |_| {
-                    let Some(inner) = weak.upgrade() else { return };
+                tui.app.defer(bind!(inner, |inner, _| {
                     if let Some(tui) = inner.tui.upgrade() {
                         open(&inner, &tui);
                     }
-                });
-            }
+                }));
+            })
         };
         let command = entries[index].info.command.split('\n').next().unwrap_or_default();
         inner.body.add(&row(

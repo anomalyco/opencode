@@ -10,6 +10,7 @@ use opencode_api::generated::{SessionID, V2Event};
 use opencode_local::cli_config::AttentionSoundName;
 use opencode_plugin::{Definition, Setup};
 use opencode_store::{SessionStatus, State};
+use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
 
 use crate::app::Tui;
@@ -26,15 +27,13 @@ pub fn plugin() -> Definition<Tui> {
     Definition::new(ID, |setup: &mut Setup<'_, Tui>| {
         let tui = setup.host();
         let tracker = Rc::new(RefCell::new(Tracker::default()));
-        let weak = tui.weak();
-        let handler = tui.app.on_message(move |_, Signal(event)| {
-            let Some(tui) = weak.upgrade() else { return };
+        let handler = tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
             // The actions are built under the store's read guard and carried out after it.
             let actions = tui.data.read(|state| tracker.borrow_mut().event(event, &Snapshot(state)));
             for action in actions {
                 run(&tui, action);
             }
-        });
+        }));
         let mut signals = tui.data.signals();
         let proxy = tui.app.proxy();
         let task = tui.app.runtime().spawn(async move {
@@ -98,12 +97,7 @@ fn toast(tui: &Tui, session: &str, message: String) {
         tui.toasts.show(toast);
         return;
     }
-    let weak = tui.weak();
-    tui.toasts.show(toast.action("Open", move || {
-        if let Some(tui) = weak.upgrade() {
-            tui.navigate(Route::Session { id: id.clone() });
-        }
-    }));
+    tui.toasts.show(toast.action("Open", bind!(tui, |tui| tui.navigate(Route::Session { id: id.clone() }))));
 }
 
 /// What [`Tracker`] reads about sessions.

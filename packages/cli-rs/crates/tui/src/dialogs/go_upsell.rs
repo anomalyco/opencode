@@ -13,6 +13,7 @@ use opencode_api::generated::{
     IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
 };
 use opencode_local::model_pref::Model;
+use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DialogCx, DialogOptions, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
 };
@@ -101,7 +102,6 @@ pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
         open_if_allowed(local, offer);
         return;
     };
-    let weak = Rc::downgrade(local);
     local.app.spawn(
         async move {
             tokio::task::spawn_blocking(move || {
@@ -113,8 +113,7 @@ pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
             .await
             .unwrap_or(Claim::Claimed)
         },
-        move |_, claimed| {
-            let Some(local) = weak.upgrade() else { return };
+        bind!(local, |local, _, claimed| {
             match claimed {
                 Claim::DontShow(at) => {
                     let mut memory = local.go_memory.borrow_mut();
@@ -124,7 +123,7 @@ pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
                 Claim::Recent(at) => local.go_memory.borrow_mut().last_seen_at = at,
                 Claim::Claimed => open_if_allowed(&local, offer),
             }
-        },
+        }),
     );
 }
 
@@ -189,10 +188,8 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         })
     };
     let run: Rc<dyn Fn(usize)> = {
-        let weak = Rc::downgrade(local);
         let offer = offer.clone();
-        Rc::new(move |index| {
-            let Some(local) = weak.upgrade() else { return };
+        Rc::new(bind!(local, |local, index| {
             match ACTIONS[index] {
                 "subscribe" => {
                     let _ = (local.open_url.borrow())(GO_URL);
@@ -205,7 +202,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
                     local.dialogs.clear();
                 }
             }
-        })
+        }))
     };
     let step = {
         let selected = selected.clone();
@@ -411,19 +408,11 @@ fn build_connect(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     state.render();
     let open = {
         let state = Rc::downgrade(&state);
-        move |_: Option<&str>, _: Option<&KeyEvent>| {
-            if let Some(state) = state.upgrade() {
-                state.open();
-            }
-        }
+        bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.open())
     };
     let copy = {
         let state = Rc::downgrade(&state);
-        move |_: Option<&str>, _: Option<&KeyEvent>| {
-            if let Some(state) = state.upgrade() {
-                state.copy();
-            }
-        }
+        bind!(state, |state, _: Option<&str>, _: Option<&KeyEvent>| state.copy())
     };
     let enabled = {
         let state = Rc::downgrade(&state);
@@ -467,11 +456,7 @@ impl Connect {
         }
         let action = |title: &str, key: &str, run: fn(&Connect)| {
             let me = self.me.clone();
-            FooterAction::new(title).key(key).on_trigger(move || {
-                if let Some(state) = me.upgrade() {
-                    run(&state);
-                }
-            })
+            FooterAction::new(title).key(key).on_trigger(bind!(me, |state| run(&state)))
         };
         let primary = match &attempt {
             Some(attempt) => vec![
@@ -528,12 +513,7 @@ impl Connect {
         }
         let Some((label, form)) = self.method() else {
             // Wait for the integrations, which the dialog asks for again.
-            let weak = Rc::downgrade(self);
-            self.cx.on_close(self.local.subscribe(move || {
-                if let Some(state) = weak.upgrade() {
-                    state.start();
-                }
-            }));
+            self.cx.on_close(self.local.subscribe(bind!(self, |state| state.start())));
             if self.local.integrations().is_none() {
                 self.local.load_integrations();
             }
@@ -570,11 +550,9 @@ impl Connect {
             label: None,
         };
         let client = self.local.client.clone();
-        let weak = Rc::downgrade(self);
         self.local.app.spawn(
             async move { client.integration_oauth_connect(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(state) = weak.upgrade() else { return };
+            bind!(self, |state, _, result| {
                 match result {
                     Ok(output) if state.closed.get() => state.cancel(output.data.attempt_id),
                     Ok(output) => {
@@ -585,7 +563,7 @@ impl Connect {
                     Err(error) if !state.closed.get() => state.fail(error.to_string()),
                     Err(_) => {}
                 }
-            },
+            }),
         );
     }
 
@@ -599,8 +577,7 @@ impl Connect {
         let weak = Rc::downgrade(self);
         self.local.app.spawn(
             async move { client.integration_oauth_status(&input, &RequestOptions::default()).await },
-            move |cx, result| {
-                let Some(state) = weak.upgrade() else { return };
+            bind!(weak, |state, cx, result| {
                 if state.closed.get() {
                     return;
                 }
@@ -614,12 +591,9 @@ impl Connect {
                 };
                 match status {
                     IntegrationAttemptStatus::Pending(_) => {
-                        let weak = Rc::downgrade(&state);
-                        state.timer.set(Some(cx.set_timeout(Duration::from_millis(500), move |_| {
-                            if let Some(state) = weak.upgrade() {
-                                state.poll(attempt);
-                            }
-                        })));
+                        state.timer.set(Some(
+                            cx.set_timeout(Duration::from_millis(500), bind!(state, |state, _| state.poll(attempt))),
+                        ));
                     }
                     IntegrationAttemptStatus::Complete(_) => {
                         state.settled.set(true);
@@ -642,7 +616,7 @@ impl Connect {
                         state.fail("Authorization expired".into());
                     }
                 }
-            },
+            }),
         );
     }
 
@@ -651,7 +625,6 @@ impl Connect {
     fn sync(self: &Rc<Self>, announce: bool, done: impl FnOnce(Option<bool>) + 'static) {
         let client = self.local.client.clone();
         let location = self.location();
-        let weak = Rc::downgrade(self);
         self.local.app.spawn(
             async move {
                 let options = RequestOptions::default();
@@ -671,8 +644,7 @@ impl Connect {
                     client.provider_list(&opencode_api::generated::ProviderListInput { location }, &options).await?;
                 Ok::<_, opencode_api::error::Error>((integrations.data, models.data, providers.data))
             },
-            move |_, result| {
-                let Some(state) = weak.upgrade() else { return };
+            bind!(self, |state, _, result| {
                 if state.closed.get() || state.local.dialogs.is_empty() {
                     return done(Some(false));
                 }
@@ -698,7 +670,7 @@ impl Connect {
                 }
                 state.finish();
                 done(Some(true));
-            },
+            }),
         );
     }
 

@@ -13,6 +13,7 @@ use opencode_api::generated::{
     ShellOutputInput,
 };
 use opencode_store::Data;
+use opencode_ui::bind;
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
@@ -112,16 +113,12 @@ impl Shell {
             read: RefCell::default(),
             this: this.clone(),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_hover(move |_, hovered| {
-            let Some(inner) = weak.upgrade() else { return };
+        inner.root.on_hover(bind!(inner, |inner, _, hovered| {
             inner.root.mouse_pointer(opencode_ui::click_pointer(inner.expandable.get()));
             inner.hover.set(hovered);
             inner.paint_background();
-        });
-        let weak = Rc::downgrade(&inner);
-        inner.root.on_click(move |_, _| {
-            let Some(inner) = weak.upgrade() else { return };
+        }));
+        inner.root.on_click(bind!(inner, |inner, _, _| {
             if !inner.expandable.get() {
                 return;
             }
@@ -132,7 +129,7 @@ impl Shell {
                 inner.load(!background);
             }
             inner.render();
-        });
+        }));
         Self(inner)
     }
 
@@ -202,11 +199,7 @@ impl Inner {
             return;
         }
         let weak = self.this.clone();
-        read.timer = Some(self.app.set_interval(Duration::from_secs(1), move |_| {
-            if let Some(inner) = weak.upgrade() {
-                inner.load(false);
-            }
-        }));
+        read.timer = Some(self.app.set_interval(Duration::from_secs(1), bind!(weak, |inner, _| inner.load(false))));
         drop(read);
         self.load(false);
     }
@@ -243,8 +236,7 @@ impl Inner {
                     )
                     .await
             },
-            move |_, response| {
-                let Some(inner) = weak.upgrade() else { return };
+            bind!(weak, |inner, _, response| {
                 let mut read = inner.read.borrow_mut();
                 read.loading = false;
                 let mut again = std::mem::take(&mut read.drain);
@@ -279,7 +271,7 @@ impl Inner {
                 if again {
                     inner.load(true);
                 }
-            },
+            }),
         );
     }
 

@@ -17,6 +17,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use opencode_local::cli_config::PromptPaste;
+use opencode_ui::bind;
 use opencode_ui::prompt_input::paste::{Content, content, strip_ansi};
 use opentui::native::ClipboardOutcome;
 use opentui::prelude::*;
@@ -61,8 +62,7 @@ impl Before {
 /// Routes the textarea's pastes here and expands a pasted mark on click.
 pub fn connect(inner: &Rc<Inner>) {
     let weak = Rc::downgrade(inner);
-    inner.textarea.on_paste(move |cx, text| {
-        let Some(prompt) = weak.upgrade() else { return };
+    inner.textarea.on_paste(bind!(weak, |prompt, cx, text| {
         // Inserted here, after the file check, not by the textarea.
         cx.prevent_default();
         cx.stop_propagation();
@@ -71,16 +71,14 @@ pub fn connect(inner: &Rc<Inner>) {
             return;
         }
         enqueue(&prompt, Job::Text(text.replace("\r\n", "\n").replace('\r', "\n")));
-    });
+    }));
     let weak = Rc::downgrade(inner);
     inner.textarea.on_mouse(move |cx, event| {
         if event.kind != MouseEventKind::Down(MouseButton::Left) {
             return;
         }
-        let weak = weak.clone();
         // After the textarea moved its cursor to the click.
-        cx.app().defer(move |_| {
-            let Some(prompt) = weak.upgrade() else { return };
+        cx.app().defer(bind!(weak, |prompt, _| {
             let cursor = prompt.textarea.cursor_offset();
             let mark = prompt
                 .textarea
@@ -90,7 +88,7 @@ pub fn connect(inner: &Rc<Inner>) {
             if let Some(mark) = mark {
                 expand(&prompt, mark.id);
             }
-        });
+        }));
     });
 }
 
@@ -123,26 +121,27 @@ fn next(prompt: &Rc<Inner>) {
     match job {
         Job::Text(text) => paste_input_text(prompt, text, before),
         Job::Clipboard => {
-            let weak = Rc::downgrade(prompt);
-            read_clipboard(&prompt.app, move |outcome| {
-                let Some(prompt) = weak.upgrade() else { return };
-                match content(outcome) {
-                    Err(message) => {
-                        error(&prompt, &message);
-                        finish(&prompt);
-                    }
-                    Ok(_) if before.changed(&prompt) => finish(&prompt),
-                    Ok(Some(Content::Image { mime, data })) => {
-                        let uri = format!("data:{mime};base64,{data}");
-                        if let Err(message) = attachment(&prompt, &uri, Some("clipboard"), None) {
+            read_clipboard(
+                &prompt.app,
+                bind!(prompt, |prompt, outcome| {
+                    match content(outcome) {
+                        Err(message) => {
                             error(&prompt, &message);
+                            finish(&prompt);
                         }
-                        finish(&prompt);
+                        Ok(_) if before.changed(&prompt) => finish(&prompt),
+                        Ok(Some(Content::Image { mime, data })) => {
+                            let uri = format!("data:{mime};base64,{data}");
+                            if let Err(message) = attachment(&prompt, &uri, Some("clipboard"), None) {
+                                error(&prompt, &message);
+                            }
+                            finish(&prompt);
+                        }
+                        Ok(Some(Content::Text(text))) => paste_input_text(&prompt, text, before),
+                        Ok(None) => finish(&prompt),
                     }
-                    Ok(Some(Content::Text(text))) => paste_input_text(&prompt, text, before),
-                    Ok(None) => finish(&prompt),
-                }
-            });
+                }),
+            );
         }
     }
 }
@@ -178,12 +177,10 @@ fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
         finish(prompt);
         return;
     }
-    let weak = Rc::downgrade(prompt);
     let input = pasted.clone();
     prompt.app.spawn(
         async move { tokio::task::spawn_blocking(move || attach::resolve(&input, windows)).await.ok().flatten() },
-        move |_, resolved| {
-            let Some(prompt) = weak.upgrade() else { return };
+        bind!(prompt, |prompt, _, resolved| {
             if before.changed(&prompt) {
                 finish(&prompt);
                 return;
@@ -209,7 +206,7 @@ fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
                 None => insert(&prompt, &normalized, &pasted),
             }
             finish(&prompt);
-        },
+        }),
     );
 }
 

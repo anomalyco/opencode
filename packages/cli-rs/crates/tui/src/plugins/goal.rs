@@ -10,6 +10,7 @@ use std::rc::{Rc, Weak};
 
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationQueryInput, RpcCallInput, SessionCommandInput, SessionID, V2Event};
+use opencode_ui::bind;
 use opencode_ui::dialog::{self, DialogOptions, FooterAction, FooterProps, HeaderProps};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::theme::Theme;
@@ -56,12 +57,7 @@ struct Signal(V2Event);
 impl Goals {
     /// Forwards the store's goal events to the trackers until [`Goals::dispose`].
     pub fn install(self: &Rc<Self>, tui: &Tui) {
-        let weak = Rc::downgrade(self);
-        let handler = tui.app.on_message(move |_, Signal(event)| {
-            if let Some(goals) = weak.upgrade() {
-                goals.event(event);
-            }
-        });
+        let handler = tui.app.on_message(bind!(self, |goals, _, Signal(event)| goals.event(event)));
         self.handler.set(Some(handler));
         let mut signals = tui.data.signals();
         let proxy = tui.app.proxy();
@@ -160,20 +156,20 @@ impl Tracker {
         };
         let client = tui.data.client().clone();
         let weak = self.this.clone();
-        tui.app.spawn(async move { client.rpc_call(&input, &RequestOptions::default()).await }, move |_, result| {
-            let Some(tracker) = weak.upgrade() else {
-                return;
-            };
-            let Some(tui) = tracker.tui.upgrade() else {
-                return;
-            };
-            let Ok(output) = result else { return };
-            if tracker.turn.get() != turn {
-                return;
-            }
-            let goal = output.output.and_then(|goal| Goal::deserialize(goal).ok());
-            tracker.set(&tui, goal);
-        });
+        tui.app.spawn(
+            async move { client.rpc_call(&input, &RequestOptions::default()).await },
+            bind!(weak, |tracker, _, result| {
+                let Some(tui) = tracker.tui.upgrade() else {
+                    return;
+                };
+                let Ok(output) = result else { return };
+                if tracker.turn.get() != turn {
+                    return;
+                }
+                let goal = output.output.and_then(|goal| Goal::deserialize(goal).ok());
+                tracker.set(&tui, goal);
+            }),
+        );
     }
 
     fn set(&self, tui: &Tui, goal: Option<Goal>) {
@@ -250,13 +246,8 @@ fn show(tui: &Tui, tracker: &Tracker) {
     let session = tracker.session.clone();
     let weak = tui.weak();
     let run = move |text: &'static str| {
-        let weak = weak.clone();
         let session = session.clone();
-        Rc::new(move || {
-            if let Some(tui) = weak.upgrade() {
-                command(&tui, &session, text);
-            }
-        }) as Rc<dyn Fn()>
+        Rc::new(bind!(weak, |tui| command(&tui, &session, text))) as Rc<dyn Fn()>
     };
     let (pause, resume, clear) = (run("pause"), run("resume"), run("clear"));
     tui.dialogs.replace(

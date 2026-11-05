@@ -13,6 +13,7 @@
 use std::rc::Rc;
 
 use opencode_local::cli_config::TerminalCopy;
+use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
 
@@ -22,11 +23,7 @@ use crate::app::Tui;
 /// the keymap's key handler, as TS intercepts selection keys at priority 101 (`app.tsx:589-596`).
 pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();
-    tui.app.on_key_capture(move |cx, key| {
-        if let Some(tui) = weak.upgrade() {
-            handle_key(&tui, cx, key);
-        }
-    });
+    tui.app.on_key_capture(bind!(weak, |tui, cx, key| handle_key(&tui, cx, key)));
     let weak = tui.weak();
     tui.app.on_selection(move |cx, text| {
         // The library would copy without the toast or the NUL rule.
@@ -37,9 +34,7 @@ pub fn install(tui: &Rc<Tui>) {
             copy(&tui, &text, "Copied to clipboard");
         }
     });
-    let weak = tui.weak();
-    tui.app.on_mouse(move |cx, event| {
-        let Some(tui) = weak.upgrade() else { return };
+    tui.app.on_mouse(bind!(tui, |tui, cx, event| {
         if event.kind != MouseEventKind::Down(MouseButton::Right) || copy_on_select(&tui) {
             return;
         }
@@ -47,7 +42,7 @@ pub fn install(tui: &Rc<Tui>) {
             cx.prevent_default();
             cx.stop_propagation();
         }
-    });
+    }));
 }
 
 /// Whether releasing a selection copies it: `terminal.copy`, else `"select"` outside Windows.

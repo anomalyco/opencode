@@ -17,6 +17,7 @@ use opencode_api::generated::{
     V2Event,
 };
 use opencode_plugin::{Definition, Setup, Source, Status};
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, DialogSize};
 use opencode_ui::keymap::{Bind, GLOBAL_MODE, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
@@ -36,16 +37,12 @@ pub fn plugin() -> Definition<Tui> {
         setup.layer(KeymapLayer {
             mode: Some(GLOBAL_MODE.to_owned()),
             commands: vec![
-                TuiCommand::new("plugins.list", move |_, _| {
-                    if let Some(tui) = weak.upgrade() {
-                        show(&tui);
-                    }
-                })
-                .bind(Bind::Default)
-                .title("Plugins")
-                .group("System")
-                .palette()
-                .slash(Slash { name: "plugins".to_owned(), aliases: Vec::new(), arguments: false }),
+                TuiCommand::new("plugins.list", bind!(weak, |tui, _, _| show(&tui)))
+                    .bind(Bind::Default)
+                    .title("Plugins")
+                    .group("System")
+                    .palette()
+                    .slash(Slash { name: "plugins".to_owned(), aliases: Vec::new(), arguments: false }),
             ],
             ..KeymapLayer::default()
         });
@@ -118,65 +115,49 @@ impl Manager {
         let manager = self.clone();
         tui.dialogs.replace(
             move |cx| {
-                let weak = Rc::downgrade(&manager);
                 let mut props = SelectProps::new("Plugins", manager.options(&cx.theme));
                 props.preserve_selection = true;
                 props.locked = manager.locked.get();
                 props.focus_target = focus;
                 props.bindings = vec![
-                    TuiCommand::inline("ctrl+a", {
-                        let weak = weak.clone();
-                        move |_, _| {
-                            if let Some(manager) = weak.upgrade() {
-                                manager.show_internal.set(!manager.show_internal.get());
-                                manager.refresh();
-                            }
-                        }
-                    })
+                    TuiCommand::inline(
+                        "ctrl+a",
+                        bind!(manager, |manager, _, _| {
+                            manager.show_internal.set(!manager.show_internal.get());
+                            manager.refresh();
+                        }),
+                    )
                     .title("Toggle internal plugins")
                     .group("Plugins"),
                 ];
-                props.dynamic_hints = Some(Rc::new({
-                    let weak = weak.clone();
-                    move || {
-                        let Some(manager) = weak.upgrade() else {
-                            return Vec::new();
-                        };
-                        let focused = manager.focused();
-                        let mut hints = Vec::new();
-                        if focused.as_ref().and_then(error).is_some() && manager.toggleable(focused.as_ref()).is_none()
-                        {
-                            hints.push(FooterHint {
-                                title: "view error".to_owned(),
-                                label: "enter".to_owned(),
-                                group: Some(Group::Primary),
-                            });
-                        }
-                        let internal = if manager.show_internal.get() { "hide" } else { "show" };
+                props.dynamic_hints = Some(Rc::new(bind!(manager, |manager| {
+                    let focused = manager.focused();
+                    let mut hints = Vec::new();
+                    if focused.as_ref().and_then(error).is_some() && manager.toggleable(focused.as_ref()).is_none() {
                         hints.push(FooterHint {
-                            title: format!("{internal} internal"),
-                            label: "ctrl+a".to_owned(),
-                            group: None,
+                            title: "view error".to_owned(),
+                            label: "enter".to_owned(),
+                            group: Some(Group::Primary),
                         });
-                        hints
                     }
-                }));
-                props.on_select = Some(Rc::new({
-                    let weak = weak.clone();
-                    move |option| {
-                        let Some(manager) = weak.upgrade() else {
-                            return;
-                        };
-                        let entry = manager.entry(&option.value);
-                        if manager.toggleable(entry.as_ref()).is_some() {
-                            manager.toggle(entry.as_ref());
-                            return;
-                        }
-                        if let Some(entry) = entry.filter(|entry| error(entry).is_some()) {
-                            manager.detail(entry);
-                        }
+                    let internal = if manager.show_internal.get() { "hide" } else { "show" };
+                    hints.push(FooterHint {
+                        title: format!("{internal} internal"),
+                        label: "ctrl+a".to_owned(),
+                        group: None,
+                    });
+                    hints
+                })));
+                props.on_select = Some(Rc::new(bind!(manager, |manager, option| {
+                    let entry = manager.entry(&option.value);
+                    if manager.toggleable(entry.as_ref()).is_some() {
+                        manager.toggle(entry.as_ref());
+                        return;
                     }
-                }));
+                    if let Some(entry) = entry.filter(|entry| error(entry).is_some()) {
+                        manager.detail(entry);
+                    }
+                })));
                 props.actions = manager.actions();
                 let (view, handle) = select(cx, props);
                 *manager.select.borrow_mut() = Some(handle.clone());
@@ -195,13 +176,10 @@ impl Manager {
     fn actions(self: &Rc<Self>) -> Vec<SelectAction<String>> {
         let weak = Rc::downgrade(self);
         let with = |run: fn(&Rc<Manager>, Option<Entry>)| {
-            let weak = weak.clone();
-            move |option: &SelectOption<String>| {
-                if let Some(manager) = weak.upgrade() {
-                    let entry = manager.entry(&option.value);
-                    run(&manager, entry);
-                }
-            }
+            bind!(weak, |manager, option: &SelectOption<String>| {
+                let entry = manager.entry(&option.value);
+                run(&manager, entry);
+            })
         };
         let hidden = |test: fn(&Manager, Option<&Entry>) -> bool| {
             let weak = weak.clone();
@@ -226,14 +204,7 @@ impl Manager {
                     let weak = weak.clone();
                     move |_| weak.upgrade().is_some_and(|manager| manager.checking.get())
                 })),
-                run: ActionRun::Dialog(Rc::new({
-                    let weak = weak.clone();
-                    move || {
-                        if let Some(manager) = weak.upgrade() {
-                            manager.check();
-                        }
-                    }
-                })),
+                run: ActionRun::Dialog(Rc::new(bind!(weak, |manager| manager.check()))),
                 ..SelectAction::new("dialog.plugins.check", "check for updates", |_| {})
             },
             SelectAction {
@@ -249,20 +220,14 @@ impl Manager {
                 )
             },
             SelectAction {
-                title: Rc::new({
-                    let weak = weak.clone();
-                    move |option: Option<&SelectOption<String>>| {
-                        let Some(manager) = weak.upgrade() else {
-                            return "toggle".to_owned();
-                        };
+                title: Rc::new(bind!(weak, |manager, option: Option<&SelectOption<String>>| {
                         let entry = option.and_then(|option| manager.entry(&option.value));
                         match manager.toggleable(entry.as_ref()).map(Manager::active) {
                             Some(true) => "disable".to_owned(),
                             Some(false) => "enable".to_owned(),
                             None => "toggle".to_owned(),
                         }
-                    }
-                }),
+                    }, else "toggle".to_owned())),
                 group: Some(Group::Primary),
                 hidden_when: Some(hidden(|manager, entry| manager.toggleable(entry).is_none())),
                 ..SelectAction::new("plugins.toggle", "toggle", with(|manager, entry| manager.toggle(entry.as_ref())))
@@ -421,19 +386,18 @@ impl Manager {
         };
         let client = tui.data.client().clone();
         let input = PluginListInput { location: self.location() };
-        let weak = Rc::downgrade(self);
-        tui.app.spawn(async move { client.plugin_list(&input, &RequestOptions::default()).await }, move |_, result| {
-            let Some(manager) = weak.upgrade() else {
-                return;
-            };
-            match result {
-                Ok(output) => {
-                    *manager.server.borrow_mut() = Some(output.data);
-                    manager.refresh();
+        tui.app.spawn(
+            async move { client.plugin_list(&input, &RequestOptions::default()).await },
+            bind!(self, |manager, _, result| {
+                match result {
+                    Ok(output) => {
+                        *manager.server.borrow_mut() = Some(output.data);
+                        manager.refresh();
+                    }
+                    Err(error) => log::warn!("plugin list: {error}"),
                 }
-                Err(error) => log::warn!("plugin list: {error}"),
-            }
-        });
+            }),
+        );
     }
 
     /// Reads the server plugins again on `plugin.updated` while the dialog is open.
@@ -508,13 +472,9 @@ impl Manager {
         self.refresh();
         let client = tui.data.client().clone();
         let input = PluginUpdateInput { location: self.location(), targets: vec![target] };
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move { client.plugin_update(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(manager) = weak.upgrade() else {
-                    return;
-                };
+            bind!(self, |manager, _, result| {
                 manager.pending.borrow_mut().retain(|pending| *pending != key);
                 match result {
                     Ok(()) => manager.refetch(),
@@ -525,7 +485,7 @@ impl Manager {
                         manager.refresh();
                     }
                 }
-            },
+            }),
         );
     }
 
@@ -540,13 +500,9 @@ impl Manager {
         self.refresh();
         let client = tui.data.client().clone();
         let input = PluginCheckInput { location: self.location(), ..PluginCheckInput::default() };
-        let weak = Rc::downgrade(self);
         tui.app.spawn(
             async move { client.plugin_check(&input, &RequestOptions::default()).await },
-            move |_, result| {
-                let Some(manager) = weak.upgrade() else {
-                    return;
-                };
+            bind!(self, |manager, _, result| {
                 manager.checking.set(false);
                 match result {
                     Ok(output) => *manager.server.borrow_mut() = Some(output.data),
@@ -557,7 +513,7 @@ impl Manager {
                     }
                 }
                 manager.refresh();
-            },
+            }),
         );
     }
 
@@ -594,16 +550,14 @@ impl Manager {
                 }
             }),
         };
-        let weak = tui.weak();
         // The select is still handling the key that opened the error.
-        tui.app.defer(move |_| {
-            let Some(tui) = weak.upgrade() else { return };
+        tui.app.defer(bind!(tui, |tui, _| {
             tui.dialogs.replace(
                 |cx| error_details::view(&tui, cx, props),
                 None,
                 DialogOptions { size: DialogSize::Large, ..DialogOptions::default() },
             );
-        });
+        }));
     }
 }
 

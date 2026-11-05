@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use opencode_api::generated::{McpServerStatus, V2Event};
 use opencode_store::Changes;
+use opencode_ui::bind;
 use opencode_ui::toast::{ToastOptions, Variant};
 
 use crate::app::Tui;
@@ -30,12 +31,7 @@ pub struct Events {
 struct Signal(V2Event);
 
 pub fn install(tui: &Tui) {
-    let weak = tui.weak();
-    tui.app.on_message(move |_, Signal(event)| {
-        if let Some(tui) = weak.upgrade() {
-            handle(&tui, event);
-        }
-    });
+    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| handle(&tui, event)));
     let mut signals = tui.data.signals();
     let proxy = tui.app.proxy();
     tui.app.runtime().spawn(async move {
@@ -171,17 +167,17 @@ fn mcp_toasts(tui: &Tui) {
         if tui.events.alerted.borrow_mut().insert(name.clone(), status) == Some(status) {
             continue;
         }
-        let weak = tui.weak();
         let toast = if status == "needs_auth" {
             ToastOptions::new(Variant::Warning, format!("Connect \"{name}\" to use its tools."))
                 .title("MCP server needs authentication")
         } else {
             ToastOptions::new(Variant::Error, "Run /mcps to view details.").title(format!("MCP server failed: {name}"))
         };
-        tui.toasts.show(toast.action("Open MCP servers", move || {
-            if let Some(tui) = weak.upgrade() {
+        tui.toasts.show(toast.action(
+            "Open MCP servers",
+            bind!(tui, |tui| {
                 tui.keymap.dispatch("mcp.list", None);
-            }
-        }));
+            }),
+        ));
     }
 }

@@ -4,6 +4,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use opencode_ui::bind;
 use opencode_ui::tool_info::primitive_input_summary;
 use opentui::prelude::*;
 use serde_json::Value;
@@ -43,13 +44,10 @@ impl Generic {
             expanded: Cell::new(false),
             entries: RefCell::default(),
         });
-        let weak = Rc::downgrade(&inner);
-        inner.inline.on_click(move || {
-            if let Some(inner) = weak.upgrade() {
-                inner.expanded.set(!inner.expanded.get());
-                inner.paint();
-            }
-        });
+        inner.inline.on_click(bind!(inner, |inner| {
+            inner.expanded.set(!inner.expanded.get());
+            inner.paint();
+        }));
         Self(inner)
     }
 

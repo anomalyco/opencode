@@ -6,6 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
+use opencode_ui::bind;
 use opencode_ui::dialog::{
     DIALOG_INSET, DialogCx, DialogOptions, DialogSize, FooterAction, FooterProps, HeaderProps, footer, header,
 };
@@ -92,11 +93,7 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
             live.copied.set(Some(kind));
             // A footer action runs inside the footer it replaces, so the redraw waits.
             let live = Rc::downgrade(&live);
-            tui.app.defer(move |_| {
-                if let Some(live) = live.upgrade() {
-                    live.redraw();
-                }
-            });
+            tui.app.defer(bind!(live, |live, _| live.redraw()));
         })
     };
 

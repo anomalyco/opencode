@@ -8,6 +8,7 @@ use opencode_api::client::RequestOptions;
 use opencode_api::generated::{
     SessionID, SessionMessageAssistantContentItem, SessionMessageID, SessionMessageInfo, SessionRevertStageInput,
 };
+use opencode_ui::bind;
 use opencode_ui::dialog::{DialogOptions, Dialogs};
 use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
@@ -18,11 +19,7 @@ use crate::app::Tui;
 pub fn show(tui: &Tui, session: SessionID, message: String) {
     let action = |run: fn(&Tui, &Dialogs, &SessionID, &str)| {
         let (weak, session, message) = (tui.weak(), session.clone(), message.clone());
-        move |dialogs: &Dialogs| {
-            if let Some(tui) = weak.upgrade() {
-                run(&tui, dialogs, &session, &message);
-            }
-        }
+        bind!(weak, |tui, dialogs: &Dialogs| run(&tui, dialogs, &session, &message))
     };
     let options = vec![
         SelectOption::new("Jump to", "message.jump")
@@ -62,8 +59,7 @@ fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
     let (weak, session) = (tui.weak(), session.clone());
     tui.app.spawn(
         async move { client.session_revert_stage(&input, &RequestOptions::default()).await },
-        move |_, result| {
-            let Some(tui) = weak.upgrade() else { return };
+        bind!(weak, |tui, _, result| {
             match (result, restored) {
                 (Ok(_), Some(text)) => crate::routes::session::actions::append_prompt(&tui, &session, &text),
                 (Ok(_), None) => {}
@@ -71,7 +67,7 @@ fn revert(tui: &Tui, dialogs: &Dialogs, session: &SessionID, message: &str) {
                     .toasts
                     .show(ToastOptions::new(Variant::Error, error.to_string()).duration(Duration::from_millis(5000))),
             }
-        },
+        }),
     );
     dialogs.clear();
 }

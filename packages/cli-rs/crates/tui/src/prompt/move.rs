@@ -12,6 +12,7 @@ use std::time::Duration;
 use opencode_api::client::RequestOptions;
 use opencode_api::generated::{LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput};
 use opencode_store::Location;
+use opencode_ui::bind;
 use opencode_ui::keymap::{Bind, Slash, TuiCommand};
 use opencode_ui::motion::Spinner;
 use opencode_ui::theme::Theme;
@@ -139,18 +140,18 @@ impl Move {
     }
 
     fn tick(&self, prompt: Weak<Inner>) {
-        self.timer.set(Some(self.app.set_timeout(Duration::from_secs(1), move |_| {
-            let Some(prompt) = prompt.upgrade() else {
-                return;
-            };
-            let staging = &prompt.staging;
-            staging.timer.set(None);
-            staging.dots.set(staging.dots.get() % 3 + 1);
-            if let Some(tui) = prompt.tui.upgrade() {
-                prompt.refresh(&tui);
-            }
-            staging.tick(Rc::downgrade(&prompt));
-        })));
+        self.timer.set(Some(self.app.set_timeout(
+            Duration::from_secs(1),
+            bind!(prompt, |prompt, _| {
+                let staging = &prompt.staging;
+                staging.timer.set(None);
+                staging.dots.set(staging.dots.get() % 3 + 1);
+                if let Some(tui) = prompt.tui.upgrade() {
+                    prompt.refresh(&tui);
+                }
+                staging.tick(Rc::downgrade(&prompt));
+            }),
+        )));
     }
 
     /// `finishSubmit`.
@@ -213,14 +214,16 @@ fn open(tui: &Tui, prompt: &Rc<Inner>) {
     // `resolveSession`: the session is read once if the store does not have it yet.
     let task = tui.data.session_sync(&id, false);
     let weak = prompt.this.clone();
-    tui.app.spawn(task, move |_, _| {
-        let Some(prompt) = weak.upgrade() else { return };
-        let Some(tui) = prompt.tui.upgrade() else {
-            return;
-        };
-        let session = prompt.session_info(&tui);
-        show(&tui, &prompt, session.as_ref().map(|s| s.project_id.clone()), session);
-    });
+    tui.app.spawn(
+        task,
+        bind!(weak, |prompt, _, _| {
+            let Some(tui) = prompt.tui.upgrade() else {
+                return;
+            };
+            let session = prompt.session_info(&tui);
+            show(&tui, &prompt, session.as_ref().map(|s| s.project_id.clone()), session);
+        }),
+    );
 }
 
 /// `resolveProjectID` on home: the stored location's project, else a location read.
@@ -235,13 +238,12 @@ fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
     let weak = prompt.this.clone();
     tui.app.spawn(
         async move { client.location_get(&input, &RequestOptions::default()).await.ok().map(|info| info.project.id) },
-        move |_, project| {
-            let Some(prompt) = weak.upgrade() else { return };
+        bind!(weak, |prompt, _, project| {
             let Some(tui) = prompt.tui.upgrade() else {
                 return;
             };
             show(&tui, &prompt, project, None);
-        },
+        }),
     );
 }
 
@@ -291,11 +293,7 @@ fn show(tui: &Tui, prompt: &Rc<Inner>, project: Option<ProjectID>, session: Opti
                 }
                 select_workspace(tui, &prompt, selection);
             }),
-            on_current_change: Some(Rc::new(move |selection| {
-                if let Some(prompt) = change.upgrade() {
-                    prompt.staging.stage(Some(selection));
-                }
-            })),
+            on_current_change: Some(Rc::new(bind!(change, |prompt, selection| prompt.staging.stage(Some(selection))))),
         },
     );
 }
@@ -354,8 +352,7 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
                 .map_err(|error| worktrees::error_message(&error))?;
             Ok(directory)
         },
-        move |_, result| {
-            let Some(prompt) = weak.upgrade() else { return };
+        bind!(weak, |prompt, _, result| {
             let Some(tui) = prompt.tui.upgrade() else {
                 return;
             };
@@ -373,7 +370,7 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
                     then(&tui, &prompt, None);
                 }
             }
-        },
+        }),
     );
 }
 
