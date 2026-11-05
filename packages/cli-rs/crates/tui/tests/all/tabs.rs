@@ -260,6 +260,7 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
                     &tui.app,
                     format!("panel for {}", input.target.session),
                 ));
+                Box::new(()) as Box<dyn std::any::Any>
             },
         ),
     );
