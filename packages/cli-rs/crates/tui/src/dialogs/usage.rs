@@ -10,12 +10,13 @@ use opencode_api::generated::{
     ModelInfo, ProviderInfo, UsageLimitsBudget, UsageLimitsBudgetCoverage, UsageLimitsBudgetPer,
     UsageLimitsBudgetScope, UsageLimitsInfo,
 };
+use opencode_api::js::locale_compare;
 use opencode_ui::bind;
 use opencode_ui::dialog::{DIALOG_LIST_INSET, DialogCx, DialogOptions, HeaderProps, header, layout};
 use opencode_ui::select::{self, Select, SelectOption, SelectProps};
 use opentui::prelude::*;
 
-use crate::dialogs::model::{Local, locale_compare};
+use crate::dialogs::model::Local;
 
 /// One limit on a model (`ModelLimit`).
 #[derive(Clone, Debug, PartialEq)]

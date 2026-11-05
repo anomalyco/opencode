@@ -451,7 +451,7 @@ fn created(message: &SessionMessageInfo) -> f64 {
 /// `Locale.duration`: `850ms`, `12.4s`, `3m 5s`, `2h 10m`, `1d 4h`.
 pub fn duration(input: f64) -> String {
     if input < 1000.0 {
-        return format!("{}ms", js_number(input));
+        return format!("{}ms", opencode_api::js::number_to_string(input));
     }
     if input < 60_000.0 {
         return format!("{}s", to_fixed_1(input / 1000.0));
@@ -474,11 +474,6 @@ fn to_fixed_1(value: f64) -> String {
         return format!("{:.1}", value + 0.05);
     }
     format!("{value:.1}")
-}
-
-/// A number as JavaScript prints it: integers without a fraction.
-fn js_number(value: f64) -> String {
-    if value.fract() == 0.0 { format!("{}", value as i64) } else { format!("{value}") }
 }
 
 /// `Number.toLocaleString()` in `en-US` for token counts: digits grouped by commas.

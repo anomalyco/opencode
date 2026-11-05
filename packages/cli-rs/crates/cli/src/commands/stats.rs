@@ -171,7 +171,9 @@ pub struct Palette {
 
 impl Palette {
     pub fn from_colorfgbg(value: Option<&str>) -> Self {
-        match value.and_then(|value| js_number(value.rsplit(';').next().unwrap_or(value))) {
+        let background =
+            value.and_then(|value| opencode_api::js::parse_number(value.rsplit(';').next().unwrap_or(value)));
+        match background.filter(|background| background.is_finite()) {
             Some(background) if background >= 7.0 => Self {
                 primary: "38;2;59;125;216",
                 activity: ["38;2;153;169;192", "38;2;122;155;200", "38;2;90;140;208", "38;2;59;125;216"],
@@ -183,26 +185,6 @@ impl Palette {
             None => Self { primary: "36", activity: ["2;36", "36", "1;36", "1;96"] },
         }
     }
-}
-
-// `Number(text)` when it is finite: surrounding whitespace is ignored, empty is 0, and `0x`, `0o`,
-// and `0b` prefixes are integers.
-fn js_number(text: &str) -> Option<f64> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Some(0.0);
-    }
-    let radix = [("0x", 16), ("0X", 16), ("0o", 8), ("0O", 8), ("0b", 2), ("0B", 2)]
-        .iter()
-        .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|rest| (rest, *radix)));
-    if let Some((digits, radix)) = radix {
-        return u64::from_str_radix(digits, radix).ok().map(|value| value as f64);
-    }
-    // Rust also reads `inf` and `nan`, which are never finite; JavaScript reads neither.
-    if text.chars().any(|c| c.is_ascii_alphabetic() && !matches!(c, 'e' | 'E')) {
-        return None;
-    }
-    text.parse::<f64>().ok().filter(|value| value.is_finite())
 }
 
 #[derive(Debug, Clone)]
