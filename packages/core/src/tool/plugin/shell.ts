@@ -248,7 +248,6 @@ export const Plugin = {
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
-    const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
@@ -300,15 +299,6 @@ export const Plugin = {
       (sessionID: SessionSchema.ID, id: string, shellID: string, command: string, settled: Deferred.Deferred<Output>) =>
         daemon.watch(notify(sessions, jobs, { sessionID, id, shellID, command, settled })),
     )
-
-    // Foreground commands this tool is blocked on. A planned shutdown moves them to the background, so it records
-    // that in the daemon while it still can, for a next server that finds them without a background job.
-    const foreground = new Set<ShellSchema.ID>()
-    yield* detaching
-      .onDetach(
-        Effect.forEach(foreground, (id) => shell.backgroundAtShutdown(id), { concurrency: "unbounded", discard: true }),
-      )
-      .pipe(Effect.provideService(Scope.Scope, scope))
 
     // Settles an interrupted foreground call. The interrupt only reaches the step through ToolInterrupted.
     const interrupted = Effect.fnUntraced(function* (
@@ -363,6 +353,7 @@ export const Plugin = {
                     timeout,
                     shell: yield* compatibleShell,
                     metadata: { sessionID: context.sessionID },
+                    foreground: input.background !== true,
                     toolCall: {
                       sessionID: context.sessionID,
                       assistantMessageID: context.messageID,
@@ -398,10 +389,8 @@ export const Plugin = {
                   return backgroundResult(info.id, info.file)
                 }
 
-                foreground.add(info.id)
                 const blocked = yield* restore(jobs.block({ id: job.id, sessionID: context.sessionID })).pipe(
                   Effect.exit,
-                  Effect.ensuring(Effect.sync(() => foreground.delete(info.id))),
                 )
                 if (Exit.isFailure(blocked)) {
                   if (Cause.hasInterrupts(blocked.cause))

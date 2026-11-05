@@ -1925,7 +1925,8 @@ describe("ShellTool", () => {
             expect(result?.metadata).toMatchObject({ shellID, status: "running" })
             const process = fake?.processes.find((item) => item.pipe?.output_path === info.file)
             expect(process?.lifecycle.status).toBe("running")
-            expect(process?.pipe?.metadata).toMatchObject({ id: shellID, backgroundedAtShutdown: true })
+            // Moved to the background: a next server neither waits on it nor times it out.
+            expect(process?.pipe?.metadata).toMatchObject({ id: shellID, foreground: false })
             expect(process?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
             expect(process?.pipe?.metadata).not.toHaveProperty("stopReason")
             expect(fake?.ops).not.toContain("signal")

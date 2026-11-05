@@ -8,7 +8,6 @@ import { Location } from "@opencode/core/location"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Shell } from "@opencode/core/shell"
-import { Detaching } from "@opencode/core/detaching"
 import { Bus } from "@opencode/core/bus"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
@@ -42,7 +41,7 @@ export const daemonShells = Effect.fn(function* () {
   ).pipe(Layer.provide(hostEnvironmentLayer))
   // `server` shares one server's daemon commands between Locations; without it the Location gets a server of its own.
   const shellLayer = (directory: string, server?: Shell.DaemonInterface) =>
-    AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node, Detaching.node]), [
+    AppNodeBuilder.build(LayerNode.group([Shell.node, LocationLifecycle.node, Bus.node]), [
       ...(server ? [Shell.daemonNode.replace(Layer.succeed(Shell.Daemon, server))] : []),
       Location.node.replace(
         Layer.succeed(
@@ -82,7 +81,7 @@ export const daemonShells = Effect.fn(function* () {
         ),
       }
     })
-  // Runs `body` against the Location's Shell, then closes it as the server shutting down for a restart does.
+  // Runs `body` against the Location's Shell on a server of its own, then stops that server, as a restart does.
   const withShell = <A, E>(
     directory: string,
     body: (shell: Shell.Interface) => Effect.Effect<A, E, LocationLifecycle.Service | Bus.Service>,
@@ -90,10 +89,7 @@ export const daemonShells = Effect.fn(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const shell = yield* Shell.Service
-        const detaching = yield* Detaching.Service
-        const result = yield* body(shell)
-        yield* detaching.begin
-        return result
+        return yield* body(shell)
       }).pipe(Effect.provide(shellLayer(directory))),
     )
   const directory = (yield* tmpdirScoped()).path

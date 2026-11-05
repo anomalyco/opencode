@@ -347,25 +347,41 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  timed("records a command moved to the background at shutdown so the next server never times it out", () =>
+  timed("a server that takes over a foreground command times out only what moved to the background", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
-      const info = yield* env.withShell(env.directory, (shell) =>
+      // The old server dies without a shutdown: one call still waits on its command, another backgrounded its own.
+      const before = yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
-          const info = yield* shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 100 })
-          yield* shell.backgroundAtShutdown(info.id)
-          return info
+          const waited = yield* shell.create({ shell: "/bin/sh", command: "sleep 60", timeout: 100, foreground: true })
+          const backgrounded = yield* shell.create({
+            shell: "/bin/sh",
+            command: "sleep 60",
+            timeout: 100,
+            foreground: true,
+          })
+          yield* shell.timeout(backgrounded.id, 30_000)
+          yield* shell.timeout(backgrounded.id, 0)
+          yield* shell.timeout(backgrounded.id, 100)
+          return { waited, backgrounded }
         }),
       )
-      expect(env.daemon.processes[0]?.pipe?.metadata).toMatchObject({ backgroundedAtShutdown: true })
-      expect(env.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
+      expect(env.daemon.processes[0]?.pipe?.metadata).toMatchObject({
+        foreground: true,
+        timeoutDeadline: expect.any(Number),
+      })
+      expect(env.daemon.processes[1]?.pipe?.metadata).toMatchObject({ foreground: false })
+      // Both deadlines pass while no server runs.
+      for (const process of env.daemon.processes)
+        if (process.pipe) process.pipe.metadata = { ...process.pipe.metadata, timeoutDeadline: Date.now() - 1 }
       yield* env.withShell(env.directory, (shell) =>
         Effect.gen(function* () {
-          yield* TestClock.adjust("1 second")
-          expect((yield* shell.get(info.id)).status).toBe("running")
+          yield* until(() => env.signals(2).length > 0)
+          expect((yield* shell.wait(before.backgrounded.id)).status).toBe("timeout")
+          // The restart moves the waited-on command to the background, so its old timeout no longer applies.
+          yield* TestClock.adjust("1 hour")
+          expect((yield* shell.get(before.waited.id)).status).toBe("running")
           expect(env.signals(1)).toEqual([])
-          // No timer was armed, so none consulted the daemon.
-          expect(env.daemon.ops).not.toContain("get")
         }),
       )
     }),

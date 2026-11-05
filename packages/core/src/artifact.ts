@@ -169,7 +169,9 @@ export interface Interface extends State.Transformable<Editor> {
     readonly provider?: ProviderID
   }) => Effect.Effect<readonly Info[], DisabledError | Session.NotFoundError>
   readonly create: (input: CreateInput) => Effect.Effect<Info, Error>
-  readonly get: (id: ID) => Effect.Effect<Content, DisabledError | NotFoundError | ProviderNotFoundError | ProviderError>
+  readonly get: (
+    id: ID,
+  ) => Effect.Effect<Content, DisabledError | NotFoundError | ProviderNotFoundError | ProviderError>
   readonly info: (id: ID) => Effect.Effect<Info, DisabledError | NotFoundError>
   readonly update: (id: ID, input: UpdateInput) => Effect.Effect<Info, Error>
   readonly remove: (id: ID) => Effect.Effect<void, DisabledError | NotFoundError | ProviderError>

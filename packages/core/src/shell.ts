@@ -63,6 +63,8 @@ export type ToolCall = typeof ToolCall.Type
 type CreateInput = Shell.CreateInput & {
   shell?: string
   toolCall?: ToolCall
+  // A call is waiting on it. A server that takes it over after a restart moves it to the background instead.
+  foreground?: boolean
 }
 
 // What the server needs to take a daemon-run command back after a restart, kept in the daemon's metadata.
@@ -75,7 +77,7 @@ const Stored = Schema.Struct({
   toolCall: Schema.optional(ToolCall),
   timeoutDeadline: Schema.optional(Schema.Number),
   stopReason: Schema.optional(Schema.Literals(["timeout", "killed"])),
-  backgroundedAtShutdown: Schema.optional(Schema.Boolean),
+  foreground: Schema.optional(Schema.Boolean),
 })
 type Stored = typeof Stored.Type
 const decodeStored = Schema.decodeUnknownOption(Stored)
@@ -105,7 +107,8 @@ type Run = {
   toolCall?: ToolCall
   timeoutDeadline?: number
   stopReason?: StopReason
-  backgroundedAtShutdown?: boolean
+  // A call waits on it, until it moves to the background (its timeout cleared).
+  foreground: boolean
   // From the exit: newlines in the file, and why the daemon stopped writing it early.
   outputLines?: number
   outputError?: string
@@ -159,9 +162,6 @@ export interface Interface {
   readonly stop: (id: Shell.ID, reason: StopReason) => Effect.Effect<Shell.Info, NotFoundError>
   // Whether the command's process can outlive this server, so a planned shutdown leaves it running.
   readonly detachable: (id: Shell.ID) => boolean
-  // Records in the daemon that a planned shutdown moved this running command to the background, clearing
-  // its timeout, so the next server neither times it out nor waits on it. Best effort; spawned commands ignore it.
-  readonly backgroundAtShutdown: (id: Shell.ID) => Effect.Effect<void>
   // The command a tool call started, while it is still known here (including one taken back after a restart).
   readonly byToolCall: (call: ToolCall) => Effect.Effect<Shell.Info | undefined>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
@@ -230,10 +230,10 @@ interface Runs {
     readonly env: Readonly<Record<string, string>>
     readonly timeout: number
     readonly toolCall: ToolCall | undefined
+    readonly foreground: boolean
   }) => Effect.Effect<Info, PersistentPty.UnavailableError | PersistentPty.RequestError>
   readonly timeout: (run: Run, duration: number) => Effect.Effect<void>
   readonly stop: (run: Run, reason: StopReason) => Effect.Effect<void>
-  readonly backgroundAtShutdown: (run: Run) => Effect.Effect<void>
   readonly remove: (id: Shell.ID) => Effect.Effect<void>
 }
 
@@ -289,7 +289,7 @@ const daemonLayer = Layer.effect(
         toolCall: run.toolCall,
         timeoutDeadline: run.timeoutDeadline,
         stopReason: run.stopReason,
-        backgroundedAtShutdown: run.backgroundedAtShutdown,
+        foreground: run.foreground,
       })
 
       // Records the command's latest timeout and stop reason in the daemon, so a restart sees them.
@@ -383,17 +383,10 @@ const daemonLayer = Layer.effect(
         if (run.timeoutFiber) yield* Fiber.interrupt(run.timeoutFiber)
         run.timeoutFiber = undefined
         run.timeoutDeadline = duration === 0 ? undefined : Date.now() + duration
+        // Clearing the timeout is how a call moves its command to the background.
+        if (duration === 0) run.foreground = false
         yield* store(run)
         if (duration !== 0) yield* arm(run, duration)
-      })
-
-      const backgroundAtShutdown = Effect.fnUntraced(function* (run: Run) {
-        if (run.info.status !== "running") return
-        if (run.timeoutFiber) yield* Fiber.interrupt(run.timeoutFiber)
-        run.timeoutFiber = undefined
-        run.timeoutDeadline = undefined
-        run.backgroundedAtShutdown = true
-        yield* store(run)
       })
 
       // Watches the exit, and the timeout (in ms from now, none if undefined).
@@ -442,6 +435,7 @@ const daemonLayer = Layer.effect(
           info: input.info,
           process: 0,
           toolCall: input.toolCall,
+          foreground: input.foreground,
           timeoutDeadline: input.timeout > 0 ? input.info.time.started + input.timeout : undefined,
           done: Deferred.makeUnsafe<Info, NotFoundError>(),
         }
@@ -515,7 +509,7 @@ const daemonLayer = Layer.effect(
             toolCall: stored.toolCall,
             timeoutDeadline: stored.timeoutDeadline,
             stopReason: stored.stopReason,
-            backgroundedAtShutdown: stored.backgroundedAtShutdown,
+            foreground: stored.foreground === true,
             ...(running ? {} : { outputLines: process.outputLines, outputError: process.outputError }),
             ...(process.lifecycle.status === "failed" && !stored.stopReason
               ? { killed: `Command was killed: ${process.lifecycle.message}` }
@@ -524,8 +518,9 @@ const daemonLayer = Layer.effect(
           }
           runs.set(stored.id, run)
           if (running) {
-            // A command moved to the background at shutdown has no timeout; an expired deadline fires at once.
-            const deadline = stored.backgroundedAtShutdown ? undefined : stored.timeoutDeadline
+            // Its call died with the previous server, so taking it over moves it to the background, which clears
+            // its timeout. Otherwise an expired deadline fires at once.
+            const deadline = stored.foreground ? undefined : stored.timeoutDeadline
             yield* attach(run, deadline === undefined ? undefined : Math.max(0, deadline - Date.now()))
             continue
           }
@@ -546,7 +541,6 @@ const daemonLayer = Layer.effect(
         create,
         timeout,
         stop,
-        backgroundAtShutdown,
         remove: removeRun,
       }
       return { runs: handle, recover }
@@ -716,11 +710,6 @@ const layer = () =>
       })
 
       const detachable = (id: Shell.ID) => find(id)?.kind === "daemon"
-
-      const backgroundAtShutdown = Effect.fn("Shell.backgroundAtShutdown")(function* (id: Shell.ID) {
-        const command = find(id)
-        if (command?.kind === "daemon") yield* runs!.backgroundAtShutdown(command)
-      })
 
       const byToolCall = Effect.fn("Shell.byToolCall")(function* (call: ToolCall) {
         return runs
@@ -918,6 +907,7 @@ const layer = () =>
               ),
               timeout: invocation.timeout,
               toolCall: input.toolCall,
+              foreground: input.foreground === true,
             })
             .pipe(
               Effect.map(Option.some),
@@ -1068,7 +1058,6 @@ const layer = () =>
         timeout,
         stop,
         detachable,
-        backgroundAtShutdown,
         byToolCall,
         output,
         remove,

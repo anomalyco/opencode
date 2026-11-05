@@ -566,9 +566,13 @@ describe("SessionRestart background recovery", () => {
           command: "sleep 60",
           cwd: "/tmp",
           timeout: 120_000,
+          foreground: true,
           toolCall: { sessionID: parent, assistantMessageID, callID: "call-shell" },
         }),
       )
+      // Its deadline passed while no server ran: taking it over must not time it out before settling the call.
+      const pipe = daemon.daemon.processes[0]?.pipe
+      if (pipe) pipe.metadata = { ...pipe.metadata, timeoutDeadline: Date.now() - 1 }
 
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
@@ -602,6 +606,8 @@ describe("SessionRestart background recovery", () => {
       ])
       expect((yield* restarted.get(info.id))?.status).toBe("running")
       expect(daemon.daemon.processes[0]?.pipe?.metadata).not.toHaveProperty("timeoutDeadline")
+      expect(daemon.daemon.processes[0]?.pipe?.metadata).toMatchObject({ foreground: false })
+      expect(daemon.signals(1)).toEqual([])
 
       daemon.daemon.exit(1, 0)
       const notices = Effect.gen(function* () {
@@ -632,6 +638,7 @@ describe("SessionRestart background recovery", () => {
               shell: "/bin/sh",
               command: "work",
               cwd: "/tmp",
+              foreground: true,
               toolCall: { sessionID: parent, assistantMessageID, callID: "call-shell" },
             }),
           )
@@ -705,6 +712,7 @@ describe("SessionRestart background recovery", () => {
           shell: "/bin/sh",
           command: "child work",
           cwd: "/tmp",
+          foreground: true,
           toolCall: { sessionID: child, assistantMessageID, callID: "call-child-shell" },
         }),
       )
