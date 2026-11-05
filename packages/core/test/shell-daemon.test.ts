@@ -71,7 +71,7 @@ describe("Shell on the process daemon", () => {
           expect(request?.env).toMatchObject({ TERM: "xterm-256color", OPENCODE_TERMINAL: "1" })
           expect(request?.env).not.toHaveProperty("OPENCODE_TEST_REMOVED")
           expect(request?.env).not.toHaveProperty("OPENCODE_TEST_UNSET")
-          expect(info).toMatchObject({ status: "running", pid: 1001 })
+          expect(info).toMatchObject({ status: "running", pid: 1001, cwd: path.join(env.directory, "sub") })
           expect(shell.detachable(info.id)).toBe(true)
           expect(env.spawned()).toBe(0)
           expect(
