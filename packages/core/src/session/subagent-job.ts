@@ -9,6 +9,7 @@ import { Job } from "../job.js"
 import { Session } from "../session.js"
 import { SessionBackground } from "./background.js"
 import { SessionEvent } from "./event.js"
+import { SessionExecution } from "./execution.js"
 import type { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { SubagentCompletion } from "./subagent-completion.js"
@@ -32,9 +33,16 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Su
 const make: Effect.Effect<
   Interface,
   never,
-  Session.Service | Job.Service | Bus.Service | SessionStore.Service | Database.Service | Scope.Scope
+  | Session.Service
+  | SessionExecution.Service
+  | Job.Service
+  | Bus.Service
+  | SessionStore.Service
+  | Database.Service
+  | Scope.Scope
 > = Effect.gen(function* () {
   const sessions = yield* Session.Service
+  const execution = yield* SessionExecution.Service
   const jobs = yield* Job.Service
   const bus = yield* Bus.Service
   const store = yield* SessionStore.Service
@@ -114,6 +122,13 @@ const make: Effect.Effect<
       )
       if (!SubagentMetadata.notify(metadata)) {
         if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
+        // Nothing reaches the parent, so wake it once idle: a parent whose report waited on this job
+        // settles again and reports its final state, without running a model step. Waiting for idle
+        // rather than skipping an active parent covers a settlement that read this job as running.
+        const parentID = recovery.parentSessionID
+        if (!(yield* store.get(parentID))) return
+        yield* execution.awaitIdle(parentID)
+        yield* execution.wake(parentID)
         return
       }
       yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
@@ -161,5 +176,5 @@ const make: Effect.Effect<
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
   layer: Layer.effect(Service, make),
-  deps: [Session.node, Job.node, Bus.node, SessionStore.node, Database.node],
+  deps: [Session.node, SessionExecution.node, Job.node, Bus.node, SessionStore.node, Database.node],
 })

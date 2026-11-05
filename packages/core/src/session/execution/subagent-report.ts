@@ -46,6 +46,9 @@ export const make = (deps: Deps) => {
   // Busy periods that began with a running job. That job owns its report whenever it finishes or
   // is cancelled before settlement, so settlement must not send a second one.
   const jobPeriods = new Set<SessionSchema.ID>()
+  // Children whose last succeeded period held its report for background work. Process-local: after
+  // a restart, recovery and background notices wake the child instead.
+  const held = new Set<SessionSchema.ID>()
 
   const started = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
     const job = yield* deps.jobs.get(sessionID)
@@ -76,10 +79,18 @@ export const make = (deps: Deps) => {
   const report = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, outcome: Outcome, snap: Snapshot) {
     // Shutdown keeps the claim, and restart owns the report that resumes it.
     if (outcome.type === "interrupted" && outcome.reason === "shutdown") return
+    // Every settlement decides afresh; a period that holds again re-adds the child below. This
+    // returns true for the period that releases an earlier hold.
+    held.delete(sessionID)
     const child = yield* deps.store.get(sessionID)
     if (!child?.parentID) return
-    if (!SubagentMetadata.notify(child.metadata)) return
     const parentID = child.parentID
+    if (!SubagentMetadata.notify(child.metadata)) {
+      // A silent descendant sends no notice, so wake a held parent to report its final state. The
+      // wake runs no model step when the parent has no input.
+      if (held.has(parentID) && (yield* deps.store.get(parentID))) yield* deps.wake(parentID)
+      return
+    }
     if (!(yield* deps.store.get(parentID))) return
     // A foreground caller receives this result inline through its own blocking registration.
     if (snap.blocked) return
@@ -91,7 +102,10 @@ export const make = (deps: Deps) => {
     if (!live && snap.remembered) return
     // The child's own background work will wake it again, and that later settlement reports the
     // final state. Failures and user interrupts report now.
-    if (outcome.type === "succeeded" && (yield* deps.pending(child.id))) return
+    if (outcome.type === "succeeded" && (yield* deps.pending(child.id))) {
+      held.add(child.id)
+      return
+    }
 
     const recovery = subagentRecovery(live?.notificationID ? snap.recovery : undefined, child, parentID)
     const status = outcome.type === "succeeded" ? "completed" : outcome.type === "interrupted" ? "cancelled" : "error"
