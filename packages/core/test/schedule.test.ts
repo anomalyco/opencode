@@ -387,6 +387,10 @@ const pending = Database.Service.use(({ db }) =>
       Effect.map((rows) => rows.map((row) => row.id)),
     ),
 )
+const scheduleRow = (id: Schedule.ID) =>
+  Database.Service.use(({ db }) =>
+    db.select().from(ScheduleTable).where(eq(ScheduleTable.id, id)).get().pipe(Effect.orDie),
+  )
 /** Moves pending prompts into the transcript, as a running Session would. */
 const deliver = Effect.gen(function* () {
   const { db } = yield* Database.Service
@@ -656,7 +660,10 @@ describe("Schedule", () => {
       yield* schedules.tick
       expect(shellState.runs).toEqual(["echo hi"])
       expect(shellState.cwds).toEqual([globalDirectory])
-      expect(shellState.envs[0]).toMatchObject({ OPENCODE_SCHEDULE_ID: schedule.id })
+      expect(shellState.envs[0]).toMatchObject({
+        OPENCODE_SCHEDULE_ID: schedule.id,
+        OPENCODE_SCHEDULE_RUN: "1",
+      })
       expect(wakes).toEqual([])
       expect(yield* pending).toEqual([])
       const info = yield* schedules.get(schedule.id)
@@ -1528,7 +1535,7 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("records a non-zero exit without treating it as a failure", () =>
+    it.effect("records a non-zero exit as a run failure", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
         shellState.exitCode = 3
@@ -1540,8 +1547,126 @@ describe("Schedule", () => {
         yield* TestClock.adjust("1 minute")
         yield* schedules.tick
         const info = yield* schedules.get(schedule.id)
-        expect(info).toMatchObject({ lastOutcome: "fired", lastRun: { exitCode: 3, output: "" } })
+        expect(info).toMatchObject({ status: "done", lastOutcome: "fired", lastRun: { exitCode: 3, output: "" } })
         expect(info.lastRun?.error).toBeUndefined()
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 1 })
+      }),
+    )
+
+    it.effect("pauses a shell action after three failed runs", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 2
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          action: { type: "shell", run: "false" },
+        })
+
+        for (const strikes of [1, 2]) {
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+          expect(yield* schedules.get(schedule.id)).toMatchObject({
+            status: "active",
+            runCount: strikes,
+            lastOutcome: "fired",
+            lastRun: { exitCode: 2, output: "" },
+          })
+          expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: strikes })
+        }
+
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        const info = yield* schedules.get(schedule.id)
+        expect(info).toMatchObject({
+          status: "paused",
+          runCount: 3,
+          lastOutcome: "failed",
+          lastRun: { exitCode: 2, output: "" },
+        })
+        expect(info.lastRun?.error).toBe("Schedule paused after 3 failed runs: Command exited with code 2")
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 3, retry_at: null })
+        expect(shellState.runs).toEqual(["false", "false", "false"])
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(shellState.runs).toEqual(["false", "false", "false"])
+      }),
+    )
+
+    it.effect("clears run failures after a successful run", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 1
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          action: { type: "shell", run: "false" },
+        })
+        for (const _ of [1, 2]) {
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+        }
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 2 })
+
+        shellState.exitCode = 0
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ status: "active", run_failures: 0 })
+
+        shellState.exitCode = 1
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(yield* schedules.get(schedule.id)).toMatchObject({ status: "active", lastOutcome: "fired" })
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 1 })
+      }),
+    )
+
+    it.effect("counts a command that could not start toward the pause", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.die = "spawn failed"
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          action: { type: "shell", run: "deploy" },
+        })
+        for (const _ of [1, 2, 3]) {
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+        }
+        const info = yield* schedules.get(schedule.id)
+        expect(info).toMatchObject({ status: "paused", lastOutcome: "failed" })
+        expect(info.lastRun?.exitCode).toBeUndefined()
+        expect(info.lastRun?.error).toBe("Schedule paused after 3 failed runs: spawn failed")
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 3 })
+      }),
+    )
+
+    it.effect("gives a resumed schedule fresh run failures", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 4
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          action: { type: "shell", run: "false" },
+        })
+        for (const _ of [1, 2, 3]) {
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+        }
+        expect(yield* schedules.get(schedule.id)).toMatchObject({ status: "paused" })
+
+        expect(yield* schedules.resume(schedule.id)).toMatchObject({ status: "active" })
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 0 })
+
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(yield* schedules.get(schedule.id)).toMatchObject({ status: "active", lastOutcome: "fired" })
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 1 })
       }),
     )
 
@@ -1670,6 +1795,7 @@ describe("Schedule", () => {
         expect(info.lastRun?.durationMs).toBe(1000)
         expect(shellState.interrupts).toBe(1)
         expect(info).toMatchObject({ status: "done", lastOutcome: "fired" })
+        expect(yield* scheduleRow(schedule.id)).toMatchObject({ run_failures: 1 })
       }),
     )
 

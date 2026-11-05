@@ -107,9 +107,10 @@ const LEADER_TTL = 2 * MAX_SLEEP
 const DISABLED_RETRY = HOUR
 /** How long a schedule whose prompt failed waits before trying again. */
 const FAILED_RETRY = 5 * MINUTE
-/** How long a schedule whose check failed waits before trying again, up to MAX_CHECK_FAILURES. */
+/** How long a schedule whose check failed waits before trying again, up to MAX_FAILURES. */
 const CHECK_FAILED_RETRY = MINUTE
-const MAX_CHECK_FAILURES = 3
+/** Consecutive failures, of a check or a shell run, that pause a schedule. */
+const MAX_FAILURES = 3
 const TICK_CONCURRENCY = 4
 const UNSEEDED = { matched: false as const, state: null as Schema.Json, checks: 0 }
 
@@ -353,8 +354,9 @@ const layer = Layer.effect(
     })
 
     /**
-     * Runs one shell action in the background and records how it ended. Failures become the row's `last_run`; only
-     * interrupts are re-raised, so shutdown and `remove` stop the run and leave the start marker in place.
+     * Runs one shell action in the background and records how it ended. A run that exits non-zero, times out, or cannot
+     * start counts toward MAX_FAILURES and pauses the schedule when it gets there; a run that succeeds clears the count.
+     * Only interrupts are re-raised, so shutdown and `remove` stop the run and leave the start marker in place.
      */
     const execute = (
       row: Row,
@@ -363,7 +365,10 @@ const layer = Layer.effect(
       run: number,
       message: string | undefined,
     ) =>
-      inLocation(session, ScheduleAction.run(session, action, { OPENCODE_SCHEDULE_ID: row.id }, message)).pipe(
+      inLocation(
+        session,
+        ScheduleAction.run(session, action, { OPENCODE_SCHEDULE_ID: row.id, OPENCODE_SCHEDULE_RUN: String(run) }, message),
+      ).pipe(
         Effect.catchCause((cause) => {
           if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
           const error = Cause.squash(cause)
@@ -373,16 +378,42 @@ const layer = Layer.effect(
             error: error instanceof Error ? error.message : String(error),
           } satisfies RunResult)
         }),
-        Effect.flatMap((result) =>
+        Effect.flatMap((result: RunResult) =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis
-            // Not filtered on status = active, because a one-shot is already done. The run_count guard stops a stale
-            // completion from overwriting a newer start marker.
             yield* db
-              .update(ScheduleTable)
-              .set({ last_run: result, time_updated: now })
-              .where(and(eq(ScheduleTable.id, row.id), eq(ScheduleTable.run_count, run)))
-              .run()
+              .transaction((tx) =>
+                Effect.gen(function* () {
+                  // The count comes from the row as it is now: a tick during the run may have written a newer one.
+                  // Not filtered on status = active, because a one-shot is already done. The run_count guard stops a
+                  // stale completion from overwriting a newer start marker.
+                  const current = yield* tx
+                    .select({ status: ScheduleTable.status, run_failures: ScheduleTable.run_failures })
+                    .from(ScheduleTable)
+                    .where(and(eq(ScheduleTable.id, row.id), eq(ScheduleTable.run_count, run)))
+                    .get()
+                  if (current === undefined) return
+                  // An absent exit code means the command never finished: a timeout, a spawn or permission error.
+                  const failed = result.exitCode !== 0
+                  const strikes = failed ? current.run_failures + 1 : 0
+                  // A row that is done stays done, and a row the user paused stays paused.
+                  const pause = failed && strikes >= MAX_FAILURES && current.status === "active"
+                  const reason = result.error ?? `Command exited with code ${result.exitCode}`
+                  yield* tx
+                    .update(ScheduleTable)
+                    .set({
+                      // The real exit code and output stay, so the last run is still there to read.
+                      last_run: pause
+                        ? { ...result, error: `Schedule paused after ${strikes} failed runs: ${reason}` }
+                        : result,
+                      run_failures: strikes,
+                      time_updated: now,
+                      ...(pause ? { status: "paused" as const, last_outcome: "failed" as const, retry_at: null } : {}),
+                    })
+                    .where(and(eq(ScheduleTable.id, row.id), eq(ScheduleTable.run_count, run)))
+                    .run()
+                }),
+              )
               .pipe(Effect.orDie)
           }),
         ),
@@ -412,7 +443,7 @@ const layer = Layer.effect(
 
       if (!outcome.ok) {
         const strikes = row.failures + 1
-        if (!outcome.invalid && strikes < MAX_CHECK_FAILURES) {
+        if (!outcome.invalid && strikes < MAX_FAILURES) {
           yield* update(row, {
             failures: strikes,
             last_outcome: "failed",
@@ -965,6 +996,8 @@ const layer = Layer.effect(
             status: done ? "done" : "active",
             next_due_at: done ? null : next,
             failures: 0,
+            // A resumed schedule gets three fresh strikes.
+            run_failures: 0,
             retry_at: null,
             time_updated: now,
           })
