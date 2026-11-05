@@ -248,6 +248,100 @@ it.live("session-less schedule reads follow the global flag", () =>
   }).pipe(Effect.scoped),
 )
 
+it.live("filters a session-less list by each Session's location flag", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-schedule-list-")).path
+    const global = path.join(dir, "global")
+    const on = path.join(dir, "on")
+    const off = path.join(dir, "off")
+    const dbPath = path.join(dir, "opencode.db")
+    yield* Effect.promise(async () => {
+      await Promise.all([global, on, off].map((item) => fs.mkdir(item, { recursive: true })))
+      await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+      await fs.writeFile(path.join(on, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+      await fs.writeFile(path.join(off, "opencode.json"), JSON.stringify({ experimental: { schedules: true } }))
+    })
+
+    // Seeded while every location has the flag on, so the off rows exist before its flag turns off.
+    const ids = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handler = yield* ServerFetch.make({
+          app: { version: "test" },
+          database: { path: dbPath },
+          config: { directory: global, project: true, claude: false },
+          models: { fetch: false },
+          fs: { filewatcher: false },
+        })
+        const api = client(handler)
+        return yield* Effect.promise(async () => {
+          const session = await api.session.create({ location: { directory: on } })
+          const offSession = await api.session.create({ location: { directory: off } })
+          const goneSession = await api.session.create({ location: { directory: on } })
+          const standalone = await api.experimental.schedule.create({ when: { in: "1 hour" }, run: "true" })
+          const kept = await api.experimental.schedule.create({
+            sessionID: session.id,
+            when: { in: "1 hour" },
+            prompt: "kept",
+          })
+          const offFirst = await api.experimental.schedule.create({
+            sessionID: offSession.id,
+            when: { in: "1 hour" },
+            prompt: "off",
+          })
+          const offSecond = await api.experimental.schedule.create({
+            sessionID: offSession.id,
+            when: { in: "1 hour" },
+            prompt: "off too",
+          })
+          const orphan = await api.experimental.schedule.create({
+            sessionID: goneSession.id,
+            when: { in: "1 hour" },
+            prompt: "orphan",
+          })
+          // The schedule stays behind, so a gone Session must hide it rather than fail the whole list.
+          await api.session.remove({ sessionID: goneSession.id })
+          return {
+            sessionID: session.id,
+            offSessionID: offSession.id,
+            standaloneID: standalone.id,
+            keptID: kept.id,
+            offIDs: [offFirst.id, offSecond.id],
+            orphanID: orphan.id,
+          }
+        })
+      }),
+    )
+
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(off, "opencode.json"), JSON.stringify({ experimental: { schedules: false } })),
+    )
+
+    const handler = yield* ServerFetch.make({
+      app: { version: "test" },
+      database: { path: dbPath },
+      config: { directory: global, project: true, claude: false },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+    })
+    const api = client(handler)
+    yield* Effect.promise(async () => {
+      // The global flag is still on, so the session-less list works, keeps the session-less row, and hides the rows
+      // whose Session lives where the flag is off or whose Session is gone.
+      const listed = await api.experimental.schedule.list()
+      expect(listed.map((row) => row.id).sort()).toEqual([ids.keptID, ids.standaloneID].sort())
+      expect(listed.map((row) => row.id)).not.toContain(ids.offIDs[0])
+      expect(listed.map((row) => row.id)).not.toContain(ids.offIDs[1])
+      expect(listed.map((row) => row.id)).not.toContain(ids.orphanID)
+
+      // An explicit session list is unchanged: still 403 where that Session's location is off.
+      await expect(api.experimental.schedule.list({ sessionID: ids.offSessionID })).rejects.toMatchObject({
+        _tag: "ForbiddenError",
+      })
+      expect(await api.experimental.schedule.list({ sessionID: ids.sessionID })).toMatchObject([{ id: ids.keptID }])
+    })
+  }).pipe(Effect.scoped),
+)
+
 it.live("ticks due schedules in standalone ServerProcess.start without lifecycle", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-schedule-serve-")).path

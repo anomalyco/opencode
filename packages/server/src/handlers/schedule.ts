@@ -31,6 +31,19 @@ export const makeSchedule = Effect.gen(function* () {
       return info
     })
 
+  // A session-less list spans every location, so hide rows whose Session lives where the flag is off. Distinct Sessions
+  // are deduped, keeping it to one enabled check and one config read per location.
+  const hiddenSessions = (data: ReadonlyArray<Schedule.Info>) =>
+    Effect.forEach(
+      new Set(data.flatMap((row) => (row.sessionID === undefined ? [] : [row.sessionID]))),
+      (sessionID) =>
+        schedules.enabled(sessionID).pipe(
+          Effect.catchTag("Session.NotFoundError", () => Effect.succeed(false)),
+          Effect.map((enabled) => (enabled ? [] : [sessionID])),
+        ),
+      { concurrency: "unbounded" },
+    ).pipe(Effect.map((groups) => new Set(groups.flat())))
+
   return {
     create: (payload: CreatePayload) =>
       // Stateless HTTP callers have no guaranteed UI listener to answer an interactive ask, so settle asks unattended.
@@ -49,7 +62,14 @@ export const makeSchedule = Effect.gen(function* () {
     list: (sessionID?: Session.ID) =>
       allowed(sessionID).pipe(
         Effect.andThen(schedules.list({ sessionID })),
-        Effect.map((data) => ({ data })),
+        Effect.flatMap((data) => {
+          if (sessionID !== undefined) return Effect.succeed({ data })
+          return hiddenSessions(data).pipe(
+            Effect.map((hidden) => ({
+              data: data.filter((row) => row.sessionID === undefined || !hidden.has(row.sessionID)),
+            })),
+          )
+        }),
       ),
     get: (id: Schedule.ID) => find(id).pipe(Effect.map((data) => ({ data }))),
     pause: (id: Schedule.ID) =>
