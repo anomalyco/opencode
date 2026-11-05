@@ -117,6 +117,7 @@ const shellState = {
   runs: [] as string[],
   envs: [] as (Record<string, unknown> | undefined)[],
   cwds: [] as (string | undefined)[],
+  stdins: [] as (string | undefined)[],
   missingNow: false,
   die: undefined as string | undefined,
   interrupts: 0,
@@ -139,6 +140,14 @@ const testEnvironment = Layer.effect(
         shellState.runs.push(script)
         shellState.envs.push(command._tag === "StandardCommand" ? command.options.env : undefined)
         shellState.cwds.push(command._tag === "StandardCommand" ? command.options.cwd : undefined)
+        const stdin = command._tag === "StandardCommand" ? command.options.stdin : undefined
+        shellState.stdins.push(
+          Stream.isStream(stdin)
+            ? new TextDecoder().decode(Buffer.concat(Array.from(yield* Stream.runCollect(stdin))))
+            : typeof stdin === "string"
+              ? stdin
+              : undefined,
+        )
         if (shellState.die !== undefined) return yield* Effect.die(new Error(shellState.die))
         if (shellState.hangMs > 0)
           yield* Effect.sleep(shellState.hangMs).pipe(
@@ -354,6 +363,7 @@ const setup = (directory = enabledDirectory) =>
     shellState.runs = []
     shellState.envs = []
     shellState.cwds = []
+    shellState.stdins = []
     shellState.missingNow = false
     shellState.die = undefined
     shellState.interrupts = 0
@@ -689,6 +699,31 @@ describe("Schedule", () => {
       yield* schedules.tick
       expect(shellState.runs).toEqual([])
       expect(yield* schedules.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
+    }),
+  )
+
+  it.effect("defaults run_failures to 0", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { db } = yield* Database.Service
+      const id = Schedule.ID.create()
+      yield* db
+        .insert(ScheduleTable)
+        .values({
+          id,
+          session_id: null,
+          action: { type: "shell", run: "echo hi" },
+          when: { type: "in", in: "1 minute" },
+          tz: "UTC",
+          next_due_at: 0,
+          time_created: 0,
+          time_updated: 0,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const row = yield* db.select().from(ScheduleTable).where(eq(ScheduleTable.id, id)).get().pipe(Effect.orDie)
+      expect(row?.run_failures).toBe(0)
+      expect(row?.failures).toBe(0)
     }),
   )
 
@@ -1531,7 +1566,7 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("passes the check message to the command in OPENCODE_SCHEDULE_MESSAGE", () =>
+    it.effect("passes the check message to the command on stdin and in OPENCODE_SCHEDULE_MESSAGE", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
         shellState.stdout = "new reply"
@@ -1544,7 +1579,25 @@ describe("Schedule", () => {
         yield* TestClock.adjust("1 minute")
         yield* schedules.tick
         expect(shellState.runs).toEqual(["probe", "echo hi"])
-        expect(shellState.envs.some((env) => env?.OPENCODE_SCHEDULE_MESSAGE === "new reply")).toBe(true)
+        expect(shellState.stdins).toEqual(["ignore", "new reply\n"])
+        expect(shellState.envs[1]).toMatchObject({ OPENCODE_SCHEDULE_MESSAGE: "new reply" })
+        expect(shellState.envs[0]?.OPENCODE_SCHEDULE_MESSAGE).toBeUndefined()
+      }),
+    )
+
+    it.effect("passes no stdin without a check message", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        yield* schedules.create({
+          sessionID,
+          when: { type: "in", in: "1 minute" },
+          action: { type: "shell", run: "echo hi" },
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(shellState.runs).toEqual(["echo hi"])
+        expect(shellState.stdins).toEqual(["ignore"])
+        expect(shellState.envs[0]?.OPENCODE_SCHEDULE_MESSAGE).toBeUndefined()
       }),
     )
 
@@ -1789,10 +1842,10 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("caps captured output at 32 KB", () =>
+    it.effect("keeps the last 32 KB of captured output", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
-        shellState.stdout = "x".repeat(40 * 1024)
+        shellState.stdout = "first\n" + "x".repeat(40 * 1024) + "\nlast"
         const schedule = yield* schedules.create({
           sessionID,
           when: { type: "in", in: "1 minute" },
@@ -1802,7 +1855,11 @@ describe("Schedule", () => {
         yield* schedules.tick
 
         const info = yield* schedules.get(schedule.id)
-        expect(info.lastRun?.output).toBe("x".repeat(32 * 1024) + "\n[output truncated at 32 KB]")
+        expect(info.lastRun?.output.startsWith("[output truncated at 32 KB]\n")).toBe(true)
+        expect(info.lastRun?.output.endsWith("last")).toBe(true)
+        expect(info.lastRun?.output).not.toContain("first")
+        expect(info.lastRun?.output).toHaveLength("[output truncated at 32 KB]\n".length + 32 * 1024)
+        expect(info.lastRun?.output.slice(-32 * 1024)).toBe("x".repeat(32 * 1024 - 5) + "\nlast")
         expect(info.lastRun?.exitCode).toBe(0)
         expect(info.lastRun?.error).toBeUndefined()
       }),

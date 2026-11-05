@@ -363,13 +363,7 @@ const layer = Layer.effect(
       run: number,
       message: string | undefined,
     ) =>
-      inLocation(
-        session,
-        ScheduleAction.run(session, action, {
-          OPENCODE_SCHEDULE_ID: row.id,
-          ...(message?.trim() ? { OPENCODE_SCHEDULE_MESSAGE: message } : {}),
-        }),
-      ).pipe(
+      inLocation(session, ScheduleAction.run(session, action, { OPENCODE_SCHEDULE_ID: row.id }, message)).pipe(
         Effect.catchCause((cause) => {
           if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
           const error = Cause.squash(cause)

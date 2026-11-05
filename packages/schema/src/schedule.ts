@@ -67,7 +67,7 @@ export type PromptAction = typeof PromptAction.Type
 
 /**
  * Runs `run` in the shell, in `cwd` (relative to the Session's directory, which is the default), with no model call.
- * The check's message arrives in `OPENCODE_SCHEDULE_MESSAGE`. `timeout` defaults to 10 minutes.
+ * The check's message arrives on stdin and in `OPENCODE_SCHEDULE_MESSAGE`. `timeout` defaults to 10 minutes.
  */
 export const ShellAction = Schema.Struct({
   type: Schema.tag("shell"),
