@@ -684,6 +684,7 @@ export const dict = {
   "session.websearch.loadFailed": "Could not load search providers.",
   "session.websearch.empty": "No search providers available.",
   "session.websearch.failed": "Could not save your choice. Please try again.",
+  "session.websearch.unavailable": "That search provider is no longer available. Choose another.",
   "session.websearch.retry": "Retry",
   "session.question.minimize": "Minimize question",
   "session.question.restore": "Restore question",
