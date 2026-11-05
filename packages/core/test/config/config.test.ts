@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream, Tracer } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -781,6 +781,116 @@ describe("Config", () => {
             const collected = yield* Fiber.join(received).pipe(Effect.timeout("1 second"))
             expect(Array.from(collected)).toEqual([{ type: "update", path: file }])
           }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
+        }),
+      ),
+    ),
+  )
+
+  const countReloads = () => {
+    const counter = { reloads: 0, finished: 0 }
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = Tracer.nativeTracer.span(options)
+        if (options.name !== "Config.reload") return span
+        counter.reloads++
+        const end = span.end.bind(span)
+        span.end = (time, exit) => {
+          counter.finished++
+          end(time, exit)
+        }
+        return span
+      },
+    })
+    // Waits out the readiness reload so later counts only see what the test triggers.
+    const settled = Effect.gen(function* () {
+      while (true) {
+        const seen = counter.reloads
+        yield* Effect.sleep("150 millis")
+        if (seen > 0 && seen === counter.reloads && seen === counter.finished) return
+      }
+    })
+    return { counter, tracer, settled }
+  }
+
+  it.live("does not reload when an unrelated file under a config root changes", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(global, "skills", "demo"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          const { counter, tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            const changes = yield* config
+              .changes()
+              .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* settled
+            const before = counter.reloads
+
+            // The config file changed on disk, but only unrelated paths report updates.
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* watcher.emit({ type: "update", path: path.join(global, "skills", "demo", "SKILL.md") })
+            yield* watcher.emit({ type: "update", path: path.join(global, "opencode.json.bak") })
+            yield* Effect.sleep("300 millis")
+
+            expect(Array.from(yield* Fiber.join(changes)).map((update) => update.path)).toEqual([
+              path.join(global, "skills", "demo", "SKILL.md"),
+              path.join(global, "opencode.json.bak"),
+            ])
+            expect(counter.reloads).toBe(before)
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+          }).pipe(
+            Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    ),
+  )
+
+  it.live("reloads once for a burst of updates to a config file", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          const { counter, tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            const watcher = yield* Watcher.Test
+            yield* settled
+            const before = counter.reloads
+            const changed = yield* bus
+              .subscribe(Event.Updated)
+              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* watcher.emit({ type: "update", path: file })
+            yield* watcher.emit({ type: "update", path: file })
+            yield* watcher.emit({ type: "update", path: file })
+            yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+            yield* Effect.sleep("300 millis")
+
+            expect(counter.reloads).toBe(before + 1)
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
+          }).pipe(
+            Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)),
+            Effect.withTracer(tracer),
+          )
         }),
       ),
     ),
