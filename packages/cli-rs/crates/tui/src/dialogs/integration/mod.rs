@@ -41,7 +41,7 @@ use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 
 use crate::app::Tui;
-use crate::dialogs::model::Local;
+use crate::local::Local;
 
 /// `INTEGRATION_PRIORITY`: these come first, as "Popular".
 const PRIORITY: [&str; 6] = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"];

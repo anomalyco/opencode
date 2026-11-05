@@ -8,7 +8,7 @@ use opencode_ui::keymap::{Keybinds, Options};
 use opencode_ui::keymap::{KeymapLayer, TuiCommand};
 use opencode_ui::select::{self, SelectAction, SelectOption, SelectProps};
 use opencode_ui::theme::{Catalog, Theme, ThemeError, ThemeMode};
-use opencode_ui::{alert, confirm, help, palette, path, prompt, toast};
+use opencode_ui::{alert, confirm, fuzzy, help, palette, path, prompt, toast};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 use std::cell::RefCell;
@@ -399,7 +399,7 @@ fn fuzzy_order_matches_fuzzysort() {
         let threshold = case["threshold"].as_f64().unwrap();
         let expected: Vec<usize> =
             case["results"].as_array().unwrap().iter().map(|index| index.as_u64().unwrap() as usize).collect();
-        let actual = select::fuzzy::go(
+        let actual = fuzzy::go(
             &query.to_lowercase(),
             &options,
             |option| option.each_ref().map(|key| Some(key.as_str())),
