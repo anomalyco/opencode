@@ -45,7 +45,15 @@ import type {
   ComposerSuggestion,
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
-import { isAttachment } from "../prompt-parts"
+import { isAttachment, promptLength } from "../prompt-parts"
+import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
+import {
+  INITIAL_EDITOR_SYNC_STATE,
+  INPUT_PARSED,
+  INPUT_PARSED_BLANK,
+  storeChanged,
+  transitionEditorSync,
+} from "./machine"
 import { QuoteCommentEditor } from "./quote-comment"
 import "../attachments/attachments.css"
 import "./editor.css"
@@ -158,11 +166,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
       scrollObserver.disconnect()
     })
   })
-  let localInput = false
+  let sync = INITIAL_EDITOR_SYNC_STATE
 
   const updateCursor = () => {
-    if (!editor || !window.getSelection()?.isCollapsed) return
-    props.controller.onCursor(composerCursor(editor))
+    const cursor = editor && getCursorPosition(editor)
+
+    if (cursor !== undefined) props.controller.onCursor(cursor)
   }
 
   const mode = createMemo(() => state.mode)
@@ -177,14 +186,17 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const parts = props.controller.parts()
 
     if (!editor) return
+    // The DOM already shows the user's own input and any update that leaves the text alone (an attachment), so
+    // neither rewrites it, which would move the caret and drop native undo. Each check reads every part, so an
+    // in-place store update runs this again.
+    const matches = editorMatchesPrompt(editor, parts)
+    const step = transitionEditorSync(
+      sync,
+      storeChanged(matches, !matches && isPromptInlineBlank(parts) && isEditorDomBlank(editor)),
+    )
+    sync = step.state
 
-    if (localInput) {
-      localInput = false
-
-      return
-    }
-
-    renderComposerEditor(editor, parts)
+    if (step.render) renderComposerEditor(editor, parts)
   })
 
   // Kept out of JSX: an inline ternary prop compiles to a memo created on every read, and the popover reads
@@ -315,10 +327,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 "text-align": "start",
               }}
               onInput={(event) => {
-                const cursor = composerCursor(event.currentTarget)
                 const prompt = parseComposerEditor(event.currentTarget)
+                const cursor = getCursorPosition(event.currentTarget) ?? promptLength(prompt)
                 const attachments = props.controller.parts().filter(isAttachment)
-                localInput = true
+                sync = transitionEditorSync(
+                  sync,
+                  event.currentTarget.firstChild && isPromptInlineBlank(prompt) ? INPUT_PARSED_BLANK : INPUT_PARSED,
+                ).state
                 props.controller.onInput(
                   prompt.map((part) => part.content).join(""),
                   [...prompt, ...attachments],
@@ -694,17 +709,6 @@ function parseComposerEditor(editor: HTMLDivElement) {
   if (parts.length > 0) return parts
 
   return [{ type: "text" as const, content: "", start: 0, end: 0 }]
-}
-
-function composerCursor(editor: HTMLDivElement) {
-  const selection = window.getSelection()
-
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
-  const range = selection.getRangeAt(0).cloneRange()
-  range.selectNodeContents(editor)
-  range.setEnd(selection.anchorNode!, selection.anchorOffset)
-
-  return range.toString().length
 }
 
 function ComposerAttachments(props: {
