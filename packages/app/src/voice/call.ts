@@ -129,7 +129,6 @@ export function createVoiceCall(input: {
       const id = event.delegation.id
       const viewing = viewedSession(input.call())
 
-      // A repeated event must not capture the transcript again: that would clear this delegation's reservation.
       if (!viewing || hasDelegation(delegations, id)) return
       dispatch({ type: "delegation.created", id, sessionID: viewing.id, transcript: tail.capture(id) })
 
@@ -313,6 +312,7 @@ export function createVoiceCall(input: {
     connection = undefined
     dispatchReply({ type: "call.disconnected" })
     dispatch({ type: "call.reset" })
+    tail.clearReservations()
 
     if (!transport) return Promise.resolve()
 
