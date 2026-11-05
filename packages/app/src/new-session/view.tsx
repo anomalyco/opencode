@@ -19,6 +19,7 @@ import { Schema } from "effect"
 import { createPresence } from "@/runtime/presence"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
+import { NewSessionComposerAfter } from "@/new-session/composer-after"
 import type { ComposerModel } from "@/composer/model"
 import {
   PromptProjectAddButton,
@@ -133,6 +134,7 @@ export function NewSessionView(props: {
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>
+              <NewSessionComposerAfter composer={props.composer} workspace={props.workspace} />
             </div>
           </div>
         </div>
