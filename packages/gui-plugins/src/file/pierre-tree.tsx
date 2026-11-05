@@ -330,6 +330,7 @@ export default function PierreFileTree(props: {
   const scheduleScroll = (path: string, attempt: number) => {
     queueMicrotask(() => {
       if (!shouldScrollPierreTree(untrack(machine), attempt)) return
+
       const scroller = tree
         ?.getFileTreeContainer()
         ?.shadowRoot?.querySelector<HTMLElement>("[data-file-tree-virtualized-scroll]")
@@ -381,6 +382,7 @@ export default function PierreFileTree(props: {
     })
 
     tree = created
+
     // Collapsed before the first paint, so those folders never flash open.
     if (effect.collapse.length > 0) run({ type: "sync-expansion", expand: [], collapse: effect.collapse })
     created.render({ containerWrapper: wrapper })

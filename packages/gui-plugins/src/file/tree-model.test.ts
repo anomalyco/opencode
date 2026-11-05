@@ -73,6 +73,7 @@ describe("buildLiveTreeInput", () => {
 describe("collectAllowedCollapsedDirs", () => {
   test("keeps tracked folders open and untracked folders closed until the user toggles them", () => {
     const model = buildAllowedTreeInput(["src/lib/a.ts", "docs/guide.md", "research/"])
+
     const state = new Map([
       ["docs", false],
       ["research", true],
@@ -115,15 +116,15 @@ describe("diffStatusLayers", () => {
   })
 
   test("diffs only ignored entries while the change kinds stay the same map, and a change kind wins", () => {
-    const kinds = buildKindsStatus(new Map([["build/", "add"]]))
+    const kinds = buildKindsStatus(new Map([["app.log", "add"]]))
 
     expect(
       diffStatusLayers(
-        { kinds, ignored: new Set(["dist/", "build/"]) },
-        { kinds, ignored: new Set(["build/", "out/"]) },
+        { kinds, ignored: new Set(["dist/", "app.log"]) },
+        { kinds, ignored: new Set(["app.log", "out/"]) },
       ),
     ).toEqual({ remove: ["dist/"], set: [{ path: "out/", status: "ignored" }] })
-    expect(diffStatusLayers({ kinds, ignored: new Set() }, { kinds, ignored: new Set(["build/"]) })).toEqual({
+    expect(diffStatusLayers({ kinds, ignored: new Set() }, { kinds, ignored: new Set(["app.log"]) })).toEqual({
       remove: [],
       set: [],
     })

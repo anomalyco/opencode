@@ -16,7 +16,11 @@ import { buildAllowedTreeInput, buildLiveTreeInput, type AllowedTreeInput } from
 /** A workspace listing as `file.tree.list` returns it: children by directory, directories with a trailing slash. */
 type Listing = Record<string, readonly string[]>
 
-function liveInput(listing: Listing, expanded: readonly string[] = [], options?: { root?: string; ignored?: string[] }) {
+function liveInput(
+  listing: Listing,
+  expanded: readonly string[] = [],
+  options?: { root?: string; ignored?: string[] },
+) {
   const node = (path: string): FileNode => {
     const dir = path.endsWith("/")
     const clean = dir ? path.slice(0, -1) : path
@@ -52,7 +56,8 @@ function synced(input: PierreTreeInput, active = "", kinds?: ReadonlyMap<string,
 
 /** Drives the machine the way the driver does, recording every effect. */
 function drive(state: PierreTreeState = createPierreTreeState()) {
-  const run = { state, effects: [] as PierreTreeEffect[] }
+  const effects: PierreTreeEffect[] = []
+  const run = { state, effects }
 
   const dispatch = (event: PierreTreeEvent) => {
     const next = transitionPierreTree(run.state, event)
@@ -68,16 +73,17 @@ function drive(state: PierreTreeState = createPierreTreeState()) {
 }
 
 function mounted(state: PierreTreeState) {
-  if (state.status !== "live" && state.status !== "allowed") throw new Error(`Expected a mounted tree, got ${state.status}`)
+  if (state.status !== "live" && state.status !== "allowed")
+    throw new Error(`Expected a mounted tree, got ${state.status}`)
 
   return state
 }
 
-const project: Listing = {
+const project = {
   "": ["src/", "README.md"],
   src: ["src/a.ts", "src/nested/"],
   "src/nested": ["src/nested/b.ts"],
-}
+} satisfies Listing
 
 describe("mode", () => {
   test("allowed paths arriving after a live mount build an allowed tree instead of resetting the live one", () => {
@@ -217,7 +223,7 @@ describe("live paths", () => {
   })
 
   test("a folder another view collapses closes here, and its open subfolder keeps its state", () => {
-    const listing: Listing = { "": ["src/"], src: ["src/sub/", "src/a.ts"], "src/sub": ["src/sub/b.ts"] }
+    const listing = { "": ["src/"], src: ["src/sub/", "src/a.ts"], "src/sub": ["src/sub/b.ts"] } satisfies Listing
     const tree = drive()
     tree.dispatch(synced(liveInput(listing, ["src", "src/sub"])))
     tree.take()
@@ -246,9 +252,7 @@ describe("live paths", () => {
 
     expect(tree.take()).toEqual([])
     expect(after.status === "live" && before.status === "live" && after.knownPaths === before.knownPaths).toBe(true)
-    expect(after.status === "live" && before.status === "live" && after.treeExpanded === before.treeExpanded).toBe(
-      true,
-    )
+    expect(after.status === "live" && before.status === "live" && after.treeExpanded === before.treeExpanded).toBe(true)
   })
 })
 
@@ -332,7 +336,7 @@ describe("scroll", () => {
   })
 
   test("an active file under a collapsed live folder scrolls once the folder opens", () => {
-    const listing: Listing = { "": ["src/", "b.ts"], src: ["src/a.ts"] }
+    const listing = { "": ["src/", "b.ts"], src: ["src/a.ts"] } satisfies Listing
     const tree = drive()
     tree.dispatch(synced(liveInput(listing, ["src"])))
     tree.dispatch(synced(liveInput(listing)))
@@ -366,7 +370,7 @@ describe("scroll", () => {
   })
 
   test("another workspace root scrolls to the same active path again", () => {
-    const listing: Listing = { "": ["src/"], src: ["src/index.ts"] }
+    const listing = { "": ["src/"], src: ["src/index.ts"] } satisfies Listing
     const tree = drive()
     tree.dispatch(synced(liveInput(listing, ["src"], { root: "/one" }), "src/index.ts"))
     tree.dispatch({ type: "scroll.flushed", attempt: 1 })
@@ -405,7 +409,7 @@ describe("no-op updates", () => {
 
   test("an equal change-kinds map patches nothing, and an ignored-only change patches only that entry", () => {
     const kinds = new Map<string, ChangeKind>([["src/a.ts", "add"]])
-    const listing: Listing = { "": ["src/", "dist/"], src: ["src/a.ts"] }
+    const listing = { "": ["src/", "dist/"], src: ["src/a.ts"] } satisfies Listing
     const tree = drive()
     tree.dispatch(synced(liveInput(listing, ["src"]), "", kinds))
     tree.take()
@@ -415,7 +419,9 @@ describe("no-op updates", () => {
     expect(tree.take()).toEqual([])
 
     tree.dispatch(synced(liveInput(listing, ["src"], { ignored: ["dist/"] }), "", kinds))
-    expect(tree.take()).toEqual([{ type: "patch-git-status", patch: { remove: [], set: [{ path: "dist/", status: "ignored" }] } }])
+    expect(tree.take()).toEqual([
+      { type: "patch-git-status", patch: { remove: [], set: [{ path: "dist/", status: "ignored" }] } },
+    ])
     expect(mounted(tree.run.state).kindsStatus).toBe(before.kindsStatus)
   })
 
@@ -445,6 +451,7 @@ describe("disposal", () => {
     expect(shouldScrollPierreTree(tree.run.state, 1)).toBe(false)
 
     const disposed = tree.run.state
+
     for (const event of [
       synced(allowedInput(buildAllowedTreeInput(["b.ts"])), "b.ts"),
       { type: "scroll.flushed", attempt: 1 },

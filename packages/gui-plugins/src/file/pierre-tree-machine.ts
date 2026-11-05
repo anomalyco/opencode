@@ -108,7 +108,11 @@ export type PierreTreeEffect =
       readonly gitStatus: ReadonlyArray<{ readonly path: string; readonly status: TreeGitStatus }>
       readonly collapse: readonly string[]
     }
-  | { readonly type: "reset-paths"; readonly paths: readonly string[]; readonly expanded: readonly string[] | undefined }
+  | {
+      readonly type: "reset-paths"
+      readonly paths: readonly string[]
+      readonly expanded: readonly string[] | undefined
+    }
   | { readonly type: "batch-paths"; readonly ops: readonly PierreTreeBatchOp[] }
   | { readonly type: "sync-expansion"; readonly expand: readonly string[]; readonly collapse: readonly string[] }
   /** Selects exactly `path` in the tree, or nothing when it is `""`. */
@@ -315,7 +319,9 @@ export function reconcileScroll(scroll: PierreTreeScroll, active: string, visibl
   if (scroll.status === "idle" && scroll.scrolledPath === active) return scroll
 
   if (!active || !visible) {
-    return scroll.status === "idle" && scroll.scrolledPath === "" ? scroll : { status: "idle", scrolledPath: "", issued }
+    return scroll.status === "idle" && scroll.scrolledPath === ""
+      ? scroll
+      : { status: "idle", scrolledPath: "", issued }
   }
 
   if (scroll.status === "pending" && scroll.path === active) return scroll
@@ -366,7 +372,8 @@ function mount(event: Synced, issued: number): PierreTreeTransition {
 
   const input = event.input
   const selectedPath = active && input.model.files.has(active) ? active : ""
-  const scroll = reconcileScroll(idle, active, selectedPath !== "" && !hasCollapsedAncestor(active, input.collapsedDirs))
+  const visible = selectedPath !== "" && !hasCollapsedAncestor(active, input.collapsedDirs)
+  const scroll = reconcileScroll(idle, active, visible)
 
   return {
     state: {
@@ -413,9 +420,7 @@ function syncLive(
   const knownPaths = structure?.knownPaths ?? state.knownPaths
   const selectedPath = active && knownPaths.has(active) ? active : ""
   // Another workspace root is another set of rows: the active file scrolls into view in it again.
-  const base: PierreTreeScroll = rootChanged
-    ? { status: "idle", scrolledPath: "", issued: issuedAttempt(state.scroll) }
-    : state.scroll
+  const base = rootChanged ? forgetScroll(state.scroll) : state.scroll
   const scroll = reconcileScroll(base, active, active !== "" && input.model.pathSet.has(active))
   const changed = structure !== undefined && structure.effects.length > 0
 
@@ -507,7 +512,8 @@ function syncAllowed(
   if (modelChanged) {
     effects.push({ type: "reset-paths", paths: input.model.paths, expanded: undefined })
 
-    if (input.collapsedDirs.size > 0) effects.push({ type: "sync-expansion", expand: [], collapse: [...input.collapsedDirs] })
+    if (input.collapsedDirs.size > 0)
+      effects.push({ type: "sync-expansion", expand: [], collapse: [...input.collapsedDirs] })
   }
 
   if (expansion) effects.push({ type: "sync-expansion", expand: expansion.expand, collapse: expansion.collapse })
@@ -537,6 +543,7 @@ function syncAllowed(
 function userExpansion(state: Live | Allowed, rawPath: string, expanded: boolean): PierreTreeTransition {
   const norm = normalizeFileTreeV2Path(rawPath)
   const width: readonly PierreTreeEffect[] = state.widest > 0 ? [{ type: "reset-width" }] : NONE
+
   const persist: PierreTreeEffect = {
     type: "persist-expansion",
     path: pierreTreeOriginalPath(state, rawPath),
@@ -569,26 +576,34 @@ function reconcileStatus(
   const kindsSame = sameStringMap(state.kinds, kinds)
   const ignoredSame = sameStringSet(state.ignored, ignored)
   const kindsStatus = kindsSame ? state.kindsStatus : buildKindsStatus(kinds)
-  const next = { kinds, kindsStatus, ignored: ignoredSame ? state.ignored : ignored }
+  const layers = { kinds: kindsStatus, ignored: ignoredSame ? state.ignored : ignored }
+  const next = { kinds, kindsStatus, ignored: layers.ignored }
 
   if (kindsSame && ignoredSame) return { state: next, effects: NONE }
-  const patch = diffStatusLayers({ kinds: state.kindsStatus, ignored: state.ignored }, next)
-  const effects: readonly PierreTreeEffect[] =
-    patch.remove.length > 0 || patch.set.length > 0 ? [{ type: "patch-git-status", patch }] : NONE
+  const patch = diffStatusLayers({ kinds: state.kindsStatus, ignored: state.ignored }, layers)
 
-  return { state: next, effects }
+  if (patch.remove.length === 0 && patch.set.length === 0) return { state: next, effects: NONE }
+
+  return { state: next, effects: [{ type: "patch-git-status", patch } as const] }
 }
 
 function diffCollapsed(previous: ReadonlySet<string>, next: ReadonlySet<string>) {
   if (sameStringSet(previous, next)) return undefined
 
-  return { expand: [...previous].filter((dir) => !next.has(dir)), collapse: [...next].filter((dir) => !previous.has(dir)) }
+  return {
+    expand: [...previous].filter((dir) => !next.has(dir)),
+    collapse: [...next].filter((dir) => !previous.has(dir)),
+  }
 }
 
 function scheduled(previous: PierreTreeScroll, next: PierreTreeScroll): readonly PierreTreeEffect[] {
   if (next.status !== "pending" || next === previous) return NONE
 
   return [{ type: "schedule-scroll", path: next.path, attempt: next.attempt }]
+}
+
+function forgetScroll(scroll: PierreTreeScroll): PierreTreeScroll {
+  return { status: "idle", scrolledPath: "", issued: issuedAttempt(scroll) }
 }
 
 function issuedAttempt(scroll: PierreTreeScroll) {
