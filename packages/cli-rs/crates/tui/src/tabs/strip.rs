@@ -10,7 +10,7 @@ use opencode_ui::bind;
 use opencode_ui::theme::{Theme, tint};
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use opentui::prelude::*;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
@@ -152,7 +152,7 @@ pub(super) fn take_width(text: &str, width: usize) -> Vec<char> {
     let mut used = 0;
     text.chars()
         .take_while(|character| {
-            let next = character.to_string().width();
+            let next = char_width(*character);
             if used + next > width {
                 return false;
             }
@@ -180,10 +180,16 @@ pub(super) fn draw_chars(
     style: impl Fn(usize) -> Style,
 ) {
     let mut column = x;
+    let mut buffer = [0; 4];
     for (index, character) in characters.iter().enumerate() {
-        painter.text(column, y, &character.to_string(), style(index));
-        column += character.to_string().width() as i32;
+        painter.text(column, y, character.encode_utf8(&mut buffer), style(index));
+        column += char_width(*character) as i32;
     }
+}
+
+/// A character's width as a one-character string measures: a control character counts as one column.
+fn char_width(character: char) -> usize {
+    character.width().unwrap_or(1)
 }
 
 impl Strip {
