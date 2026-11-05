@@ -667,6 +667,7 @@ impl Inner {
                         .model
                         .as_ref()
                         .and_then(|model| model.variant.clone()),
+                    limit: tui.local.limit_label(),
                 }
             }
             _ => Display::default(),

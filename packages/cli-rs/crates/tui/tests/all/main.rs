@@ -25,6 +25,7 @@ mod permission;
 mod prompt;
 mod queue;
 mod review_ms1;
+mod review_ms34;
 mod root;
 mod sessions;
 mod settings;
