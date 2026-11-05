@@ -56,10 +56,7 @@ test("an unlisted store survives until a tab lists it, then closes with that tab
     { event: sync([], undefined), open: [] },
   ]
 
-  const states = steps.reduce<SessionStoreState<string>[]>(
-    (all, item) => [...all, transitionSessionStore(all.at(-1) ?? createSessionStoreState(), item.event).state],
-    [],
-  )
+  const states = steps.map((_, index) => replay(steps.slice(0, index + 1).map((item) => item.event)).state)
 
   expect(states.map(open)).toEqual(steps.map((item) => item.open))
 })
