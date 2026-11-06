@@ -242,6 +242,23 @@ pub struct Transcript {
     shell_started: HashSet<String>,
     shell_ended: HashSet<String>,
     active_compaction: Option<String>,
+    /// Prompts admitted by this client or enqueued live, until delivered (`admitted`).
+    admitted: HashSet<String>,
+    /// The prompt turn this client waits for (`state.wait`).
+    wait: Option<Wait>,
+}
+
+/// A prompt turn in flight (`Wait`): the error the session's terminal event names, shown after it settles unless a
+/// step already showed one.
+#[derive(Debug, Default)]
+struct Wait {
+    message_id: String,
+    failure_message_id: String,
+    promoted: bool,
+    promotion_observed: bool,
+    interrupted: bool,
+    failure_rendered: bool,
+    terminal_error: Option<String>,
 }
 
 /// A tool part that is still running (`ToolState`): the output already shown, and the snapshot version it shows
@@ -287,6 +304,54 @@ impl Transcript {
             shell_started: HashSet::new(),
             shell_ended: HashSet::new(),
             active_compaction: None,
+            admitted: HashSet::new(),
+            wait: None,
+        }
+    }
+
+    /// A prompt turn starts (`runTurnWait`).
+    pub fn begin_wait(&mut self, message_id: &str) {
+        self.wait = Some(Wait {
+            message_id: message_id.to_owned(),
+            failure_message_id: message_id.to_owned(),
+            ..Wait::default()
+        });
+    }
+
+    /// The two-press gesture interrupts the turn: its own `user` interruption shows no error.
+    pub fn interrupt_wait(&mut self) {
+        if let Some(wait) = &mut self.wait {
+            wait.interrupted = true;
+        }
+    }
+
+    /// The turn settled: the terminal error no step showed, under the message that failed.
+    pub fn end_wait(&mut self) -> Option<Commit> {
+        let wait = self.wait.take()?;
+        let error = wait.terminal_error.filter(|_| !wait.failure_rendered)?;
+        Some(Commit::error(error).message(&wait.failure_message_id))
+    }
+
+    /// `promoteWait`: a new message of the turn was delivered, so the failure tracking starts over for it.
+    fn promote_wait(&mut self, observed: bool, message_id: Option<&str>) {
+        let Some(wait) = &mut self.wait else { return };
+        let message_id = message_id.unwrap_or(&wait.message_id).to_owned();
+        let transition =
+            message_id != wait.failure_message_id || if observed { !wait.promotion_observed } else { !wait.promoted };
+        wait.promoted = true;
+        if observed {
+            wait.promotion_observed = true;
+        }
+        if transition {
+            wait.failure_message_id = message_id;
+            wait.failure_rendered = false;
+            wait.terminal_error = None;
+        }
+    }
+
+    fn failure_rendered(&mut self) {
+        if let Some(wait) = &mut self.wait {
+            wait.failure_rendered = true;
         }
     }
 
@@ -440,6 +505,7 @@ impl Transcript {
         if self.promoted.contains(message_id) {
             return self.user(message_id, text, files, true);
         }
+        self.admitted.insert(message_id.to_owned());
         self.pending.insert(message_id.to_owned(), Pending { text: text.to_owned(), files: files.to_vec() });
         Output::default()
     }
@@ -594,6 +660,12 @@ impl Transcript {
         match message {
             SessionMessageInfo::User(user) => {
                 let id = user.id.as_str();
+                let admitted = self.admitted.remove(id);
+                let waiting =
+                    self.wait.as_ref().is_some_and(|wait| wait.message_id == id && wait.failure_message_id == id);
+                if admitted || waiting {
+                    self.promote_wait(false, Some(id));
+                }
                 self.pending.remove(id);
                 self.promoted.insert(id.to_owned());
                 self.user(id, &user.text, user.files.as_deref().unwrap_or_default(), render)
@@ -602,6 +674,9 @@ impl Transcript {
             SessionMessageInfo::Assistant(assistant) => self.assistant(assistant, render),
             SessionMessageInfo::Skill(skill) => {
                 let id = skill.id.as_str();
+                if self.wait.as_ref().is_some_and(|wait| wait.message_id == id) {
+                    self.promote_wait(false, None);
+                }
                 let fresh = self.skill_messages.insert(id.to_owned());
                 if !render || !self.tools || !fresh {
                     return Output::default();
@@ -727,6 +802,7 @@ impl Transcript {
             && self.errors.insert(id.to_owned())
             && render
         {
+            self.failure_rendered();
             commits.push(Commit::error(error_message(error)).message(id));
         }
         Output::commits(commits)
@@ -772,6 +848,8 @@ impl Transcript {
             }
             V2Event::SessionInboxDelivered(delivered) => {
                 let id = delivered.data.inbox_id.as_str();
+                self.promote_wait(true, Some(id));
+                self.admitted.remove(id);
                 self.promoted.insert(id.to_owned());
                 let mut output = match self.pending.remove(id) {
                     Some(pending) => self.user(id, &pending.text, &pending.files, true),
@@ -782,6 +860,7 @@ impl Transcript {
                 output
             }
             V2Event::SessionInboxCancelled(cancelled) => {
+                self.admitted.remove(cancelled.data.inbox_id.as_str());
                 self.pending.remove(cancelled.data.inbox_id.as_str());
                 footer()
             }
@@ -865,6 +944,7 @@ impl Transcript {
             V2Event::SessionStepFailed(failed) => {
                 let message = failed.data.assistant_message_id.as_str();
                 let mut commits = self.flush_quiet(message);
+                self.failure_rendered();
                 if self.errors.insert(message.to_owned()) {
                     commits.push(Commit::error(error_message(&failed.data.error)).message(message));
                 }
@@ -880,10 +960,29 @@ impl Transcript {
                 self.root_active = false;
                 let messages: Vec<String> = self.quiet.iter().map(|(id, _)| id.clone()).collect();
                 let commits = messages.iter().flat_map(|id| self.flush_quiet(id)).collect();
+                if let Some(wait) = &mut self.wait {
+                    match event {
+                        V2Event::SessionExecutionFailed(failed) if !wait.failure_rendered => {
+                            wait.terminal_error = Some(error_message(&failed.data.error));
+                        }
+                        V2Event::SessionExecutionInterrupted(interrupted)
+                            if !(wait.interrupted
+                                && interrupted.data.reason
+                                    == opencode_api::generated::SessionExecutionInterruptedDataReason::User) =>
+                        {
+                            let reason = interrupted.data.reason.as_str();
+                            wait.terminal_error = Some(format!("Session interrupted: {reason}"));
+                        }
+                        _ => {}
+                    }
+                }
                 Output { commits, ..Output::patch(false, "") }
             }
             V2Event::SessionSkillActivated(activated) => {
                 let message = message_from_event(activated.id.as_str());
+                if self.wait.as_ref().is_some_and(|wait| wait.message_id == message) {
+                    self.promote_wait(true, None);
+                }
                 if !self.skill_messages.insert(message.clone()) || !self.tools {
                     return Output::default();
                 }
@@ -1304,7 +1403,7 @@ fn compaction_summary(message: &str, text: &str, phase: Phase) -> Commit {
 }
 
 /// `SessionMessage.ID.fromEvent`.
-fn message_from_event(id: &str) -> String {
+pub(crate) fn message_from_event(id: &str) -> String {
     match id.strip_prefix("evt_") {
         Some(rest) => format!("msg_{rest}"),
         None => id.to_owned(),
@@ -1609,6 +1708,48 @@ mod tests {
         // The listed user message does not print it again.
         let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hi" }));
         assert!(transcript.message(&listed, true).commits.is_empty());
+    }
+
+    /// A turn that fails before its first step, or is interrupted by anything but this client's gesture, shows
+    /// the terminal event's error once it settles; a step that showed its own error is not repeated.
+    #[test]
+    fn a_turn_shows_the_terminal_error_no_step_showed() {
+        let failed = || {
+            event(
+                "session.execution.failed",
+                json!({ "error": { "type": "unknown", "message": "API key is missing" } }),
+            )
+        };
+        let interrupted = |reason: &str| event("session.execution.interrupted", json!({ "reason": reason }));
+        let delivered = event("session.inbox.delivered", json!({ "inboxID": "msg_p" }));
+        let mut transcript = Transcript::new("ses_1", true, true, true, None);
+        transcript.hydrate(&[], false);
+        let error = |commit: Option<Commit>| commit.map(|commit| (commit.kind, commit.text, commit.message_id));
+        transcript.begin_wait("msg_p");
+        transcript.admitted("msg_p", "hi", &[]);
+        transcript.event(&delivered);
+        transcript.event(&failed());
+        let listed = message(json!({ "id": "msg_p", "type": "user", "text": "hi" }));
+        transcript.message(&listed, true);
+        assert_eq!(
+            error(transcript.end_wait()),
+            Some((EntryKind::Error, "API key is missing".into(), Some("msg_p".into())))
+        );
+        transcript.begin_wait("msg_q");
+        transcript.event(&interrupted("shutdown"));
+        assert_eq!(error(transcript.end_wait()).map(|error| error.1), Some("Session interrupted: shutdown".into()));
+        transcript.begin_wait("msg_r");
+        transcript.interrupt_wait();
+        transcript.event(&interrupted("user"));
+        assert_eq!(error(transcript.end_wait()), None);
+        transcript.begin_wait("msg_s");
+        let step = event(
+            "session.step.failed",
+            json!({ "assistantMessageID": "msg_a", "error": { "type": "unknown", "message": "Boom" } }),
+        );
+        assert_eq!(texts(&transcript.event(&step)), [(EntryKind::Error, "Boom".into())]);
+        transcript.event(&failed());
+        assert_eq!(error(transcript.end_wait()), None);
     }
 
     #[test]
