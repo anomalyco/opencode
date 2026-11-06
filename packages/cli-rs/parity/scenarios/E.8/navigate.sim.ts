@@ -13,7 +13,6 @@ const read = (index: number, path: string) => ({
   input: { path },
 })
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
-const deviation = ["P15-metadata-gap-fg"]
 
 export default defineSim({
   files: { "src/a.rs": "fn a() {}\n", "src/b.rs": "fn b() {}\n" },
@@ -30,15 +29,15 @@ export default defineSim({
   steps: [
     // The TS footer shows "Finishing startup…" until startup ends, then the working directory.
     { until: "/work " },
-    { checkpoint: "open", until: "Answer 8 three.", masks: [duration], deviation },
+    { checkpoint: "open", until: "Answer 8 three.", masks: [duration] },
     // The drive protocol names no Page Up key, so the legacy sequence goes through as is on both sides.
     { press: "\x1b[5~" },
-    { checkpoint: "page-up", until: "Jump to latest", masks: [duration], deviation },
+    { checkpoint: "page-up", until: "Jump to latest", masks: [duration] },
     { press: "g", modifiers: { ctrl: true } },
-    { checkpoint: "first", until: "Question 1", masks: [duration], deviation },
+    { checkpoint: "first", until: "Question 1", masks: [duration] },
     { press: "end" },
-    { checkpoint: "last", until: "Answer 8 three.", masks: [duration], deviation },
+    { checkpoint: "last", until: "Answer 8 three.", masks: [duration] },
     { press: "end", modifiers: { meta: true } },
-    { checkpoint: "last-user", until: "Jump to latest", masks: [duration], deviation },
+    { checkpoint: "last-user", until: "Jump to latest", masks: [duration] },
   ],
 })
