@@ -57,7 +57,7 @@ Pour définir l'un d'entre eux comme modèle par défaut, vous pouvez définir l
 }
 ```
 
-Ici, l'identifiant complet est `provider_id/model_id`. Par exemple, si vous utilisez [OpenCode Zen](https://opencode.ai/v2/docs/console/), vous utiliserez `opencode/gpt-6.1-sol` pour GPT-6.1 Sol.
+Ici, l'identifiant complet est `provider_id/model_id`. Par exemple, si vous utilisez [OpenCode Models](https://opencode.ai/v2/docs/console/), vous utiliserez `opencode/gpt-6.1-sol` pour GPT-6.1 Sol.
 
 Si vous avez configuré un [fournisseur personnalisé](/docs/providers#custom), le `provider_id` est la clé de la partie `provider` de votre configuration et le `model_id` est la clé de `provider.models`.
 

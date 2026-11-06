@@ -43,7 +43,7 @@ For web development, run the backend and app in separate terminals. Other interf
 bun dev serve --port 4096
 bun run dev:web
 bun run dev:desktop
-bun run dev:www
+bun run dev:site
 ```
 
 ### Packages

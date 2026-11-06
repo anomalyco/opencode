@@ -1,5 +1,4 @@
 import { createMemo, createSignal, For, onCleanup, Show, type JSX, type ParentProps } from "solid-js"
-import { createStore } from "solid-js/store"
 import { AppIcon } from "@opencode/ui/app-icon"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
@@ -8,7 +7,7 @@ import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencod
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import {
-  createLatest,
+  createKeyed,
   usePlugin,
   type Context,
   type OS,
@@ -16,8 +15,7 @@ import {
   type SessionScreen,
 } from "@opencode/plugin/gui"
 import type { OpenApp } from "./apps"
-import { useShared, type OpenRequest } from "./context"
-import { openInAppParentPath } from "./path"
+import { useShared } from "./context"
 
 const MAC_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "Visual Studio Code" },
@@ -75,7 +73,7 @@ const showRequestError = (ctx: Context, err: Error | string) => {
   })
 }
 
-export function useOpenInApp(input: { session: MountedSession; path: () => string; request?: OpenRequest }) {
+export function useOpenInApp(input: { session: MountedSession; path: () => string }) {
   const ctx = usePlugin()
   const desktop = ctx.desktop
   const shared = useShared()
@@ -84,44 +82,28 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
   const apps = createMemo(() => openAppsForOS(os()))
   const fileManager = createMemo(() => fileManagerApp(os()))
 
-  const checkAppExists = (app: string) => {
-    const cached = shared.installed.get(app)
-
-    if (cached) return cached
-
-    const request = Promise.resolve(desktop?.installed(app))
-      .then(Boolean)
-      .catch(() => false)
-
-    shared.installed.set(app, request)
-
-    return request
-  }
-
-  // Which of the OS's apps are installed; none are listed until the check answers.
-  const installed = createLatest(
+  // Asks the desktop which of the OS's apps are installed; each app lists once its own check answers.
+  createKeyed(
     () => desktop && apps(),
-    (list) =>
-      Promise.all(list.map((app) => checkAppExists(app.openWith).then((ok) => [app.id, ok] as const))).then(
-        (entries) => new Map<OpenApp, boolean>(entries),
-      ),
+    (list) => shared.openInApp.check(list.map((app) => app.openWith)),
   )
 
   const options = createMemo(() => {
     return [
       { id: "finder", label: ctx.t(fileManager().label), icon: fileManager().icon },
       ...apps()
-        .filter((app) => installed.latest?.get(app.id))
+        .filter((app) => shared.openInApp.installed(app.openWith))
         .map((app) => ({ ...app, label: ctx.t(app.label) })),
     ] as const
   })
 
-  const [menu, setMenu] = createStore({ open: false })
-  const [local, setLocal] = createStore<{ app?: OpenApp }>({})
-
-  const request = input.request ?? { app: () => local.app, set: (app: OpenApp | undefined) => setLocal("app", app) }
-
-  const canOpen = createMemo(() => !!desktop && input.session.server.local)
+  const canOpen = createMemo(
+    () =>
+      !!desktop &&
+      input.session.server.local &&
+      !input.path().startsWith("skill://") &&
+      !input.path().startsWith("/builtin/"),
+  )
 
   const current = createMemo(
     () =>
@@ -130,34 +112,20 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
 
-  const opening = createMemo(() => request.app() !== undefined)
+  const opening = () => shared.openInApp.opening()
 
-  const selectApp = (app: OpenApp | "finder") => {
+  const selectApp = (app: OpenApp) => {
     if (!options().some((item) => item.id === app)) return
     shared.app?.set(app)
   }
 
-  const openPath = (app: OpenApp | "finder", target = input.path(), reveal = false) => {
-    if (opening() || !canOpen() || !desktop) return
-
-    if (!target) return
+  const openPath = (app: OpenApp, target = input.path(), reveal = false) => {
+    if (!canOpen()) return
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
-    request.set(app)
 
-    const launched =
-      app === "finder" && reveal
-        ? desktop
-            .reveal(target)
-            .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
-        : desktop.launch(target, openWith)
-
-    launched
-      .catch((err) => showRequestError(ctx, err))
-      .finally(() => {
-        request.set(undefined)
-      })
+    shared.openInApp.launch({ app, target, openWith, reveal })
   }
 
   const copyPath = (target = input.path()) => {
@@ -183,8 +151,6 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
     opening,
     current,
     options,
-    menu,
-    setMenu,
     openPath,
     selectApp,
     copyPath,
@@ -201,7 +167,6 @@ export function OpenInAppMenuItem(props: { session: MountedSession }) {
       return props.session
     },
     path: () => props.session.directory,
-    request: useShared().request,
   })
 
   return (
@@ -217,7 +182,8 @@ export function OpenInAppMenuItem(props: { session: MountedSession }) {
 export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = usePlugin()
   const directory = () => props.screen.file.root
-  const state = useOpenInApp({ session: props.session, path: directory, request: useShared().request })
+  const state = useOpenInApp({ session: props.session, path: directory })
+  const [menu, setMenu] = createSignal(false)
 
   return (
     <Show when={directory() && state.canOpen()}>
@@ -243,13 +209,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
             </Show>
           </SplitButtonAction>
         </Tooltip>
-        <Menu
-          gutter={4}
-          modal={false}
-          placement="bottom-end"
-          open={state.menu.open}
-          onOpenChange={(open) => state.setMenu("open", open)}
-        >
+        <Menu gutter={4} modal={false} placement="bottom-end" open={menu()} onOpenChange={setMenu}>
           <Menu.Trigger
             as={SplitButtonMenuTrigger}
             disabled={state.opening()}
@@ -260,7 +220,7 @@ export default function OpenInAppButton(props: { session: MountedSession; screen
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
-              <OpenInAppMenuItemsV2 state={state} close={() => state.setMenu("open", false)} />
+              <OpenInAppMenuItemsV2 state={state} close={() => setMenu(false)} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>

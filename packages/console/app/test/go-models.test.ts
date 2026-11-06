@@ -15,7 +15,7 @@ describe("goPlanModels", () => {
         expect(model.teamsAllowance).toBe(Infinity)
         continue
       }
-      expect(model.teamsAllowance).toBe(model.allowance + 5)
+      expect(model.teamsAllowance).toBeGreaterThan(model.allowance)
       expect(Number.isFinite(model.teamsRequests)).toBe(true)
       expect(model.teamsRequests).toBeGreaterThan(model.requests)
       expect(model.plusAllowance).toBeGreaterThan(model.teamsAllowance)

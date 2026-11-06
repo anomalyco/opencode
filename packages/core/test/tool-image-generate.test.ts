@@ -96,7 +96,7 @@ const setup = (providerID = "test") =>
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
     const location = yield* Location.Service
-    const host = yield* PluginHost.make(plugins)
+    const host = yield* PluginHost.make(plugins, "test")
     yield* ImageGenerateTool.Plugin.effect(host)
     yield* OpenCodeTools.Plugin.effect(host)
     const session = yield* sessions.create({

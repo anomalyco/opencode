@@ -58,7 +58,7 @@ OpenCode config.
 }
 ```
 
-Here the full ID is `provider_id/model_id`. For example, if you're using [OpenCode Zen](https://opencode.ai/v2/docs/console/), you would use `opencode/gpt-6.1-sol` for GPT-6.1 Sol.
+Here the full ID is `provider_id/model_id`. For example, if you're using [OpenCode Models](https://opencode.ai/v2/docs/console/), you would use `opencode/gpt-6.1-sol` for GPT-6.1 Sol.
 
 If you've configured a [custom provider](/docs/providers#custom), the `provider_id` is key from the `provider` part of your config, and the `model_id` is the key from `provider.models`.
 

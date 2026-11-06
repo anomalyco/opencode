@@ -28,7 +28,9 @@ for (const variant of ["classic", "experimental"] as const) {
       await page.mouse.down()
       await page.mouse.move(box!.x + box!.width - 1, box!.y + box!.height / 2, { steps: 12 })
       await page.mouse.up()
-      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim())).toBe(await text.innerText())
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
+        .toBe(await text.innerText())
     }
 
     for (const slot of ["option-label", "option-description"]) {
@@ -64,7 +66,30 @@ for (const variant of ["classic", "experimental"] as const) {
     await files.click({ position: { x: 4, y: 4 } })
     await expect(files).not.toBeChecked()
   })
+
+  story(`${variant} question text links URLs`, async ({ mount, page }) => {
+    await page.addInitScript(
+      (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
+      variant === "experimental",
+    )
+
+    const component = await mount("session-question-switch--link-prompt")
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+    const url = "https://www.npmjs.com/auth/cli/2ff15723-dfa2-4eec-addd-53cb3ff7597f"
+    const link = question.locator('[data-slot="question-text"]').getByRole("link", { name: url, exact: true })
+
+    await expect(link).toHaveAttribute("href", url)
+    await expect(link).toHaveAttribute("target", "_blank")
+  })
 }
+
+story("MCP elicitation message and field descriptions link URLs", async ({ mount }) => {
+  const component = await mount("app-current-session-surface--mcp-elicitation-request")
+  const dock = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+
+  for (const url of ["https://example.com/releases/v2.4.0", "https://example.com/docs/release-notes"])
+    await expect(dock.getByRole("link", { name: url, exact: true })).toHaveAttribute("href", url)
+})
 
 story(
   "uses the original question cards by default and submits selected and custom answers",
@@ -1081,6 +1106,44 @@ story.describe("with the new question UI experiment enabled", () => {
 
       expect(frames.moving.heights + frames.moving.ghosts).toBeGreaterThan(0)
       expect(frames.after).toEqual({ animations: 0, heights: 0, ghosts: 0 })
+    })
+
+    story("lands the composer's switch to a question at once when the knob turns off", async ({ mount }) => {
+      const component = await mount("session-composer-docks--empty")
+      await expect(component.locator('[data-slot="composer-face"]')).toHaveCount(1)
+
+      const frames = await component.evaluate(
+        async (root, tuning) => {
+          const { motionTuning } = await import(tuning)
+          const knob = motionTuning.list().find((item: MotionKnob) => item.id === "question.motion")
+          const region = root.querySelector<HTMLElement>('[data-slot="composer-morph"]')!
+          const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+          const sample = () => ({
+            moving: region.hasAttribute("data-moving"),
+            height: !!region.style.height,
+            faces: region.querySelectorAll('[data-slot="composer-face"]').length,
+          })
+
+          // A face that changes within 250ms of mount swaps without a flight.
+          for (const end = performance.now() + 300; performance.now() < end; ) await frame()
+          motionTuning
+            .actions()
+            .find((action: { id: string }) => action.id === "docks.question")
+            .run()
+          await frame()
+          await frame()
+          const moving = sample()
+          motionTuning.set(knob, false)
+          await frame()
+
+          return { moving, after: sample() }
+        },
+        sourceURL(new URL("../../ui/src/motion-tuning.ts", import.meta.url)),
+      )
+
+      expect(frames.moving).toEqual({ moving: true, height: true, faces: 2 })
+      expect(frames.after).toEqual({ moving: false, height: false, faces: 1 })
     })
   })
 

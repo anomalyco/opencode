@@ -1,7 +1,19 @@
 import { isArrayNonEmpty } from "effect/Array"
 import * as NodeSink from "@effect/platform-node/NodeSink"
 import * as NodeStream from "@effect/platform-node/NodeStream"
-import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
+import {
+  Deferred,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Path,
+  PlatformError,
+  Predicate,
+  Redacted,
+  Sink,
+  Stream,
+} from "effect"
 import type { Scope } from "effect"
 import { ChildProcess } from "effect/process"
 import {
@@ -35,6 +47,31 @@ const killGroups = () =>
       // Already gone.
     }
   })
+
+const unwrap = (value: string | Redacted.Redacted<string>): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value
+
+// Node's own NUL check throws an error that includes the value, so NUL is rejected here to keep Redacted values
+// out of errors.
+const findNulCharacter = (command: ChildProcess.StandardCommand): string | undefined => {
+  if (command.command.includes("\0")) return "The command contains a NUL character"
+  const index = command.args.findIndex((arg) => unwrap(arg).includes("\0"))
+  if (index !== -1) return `Argument ${index + 1} contains a NUL character`
+  for (const [name, value] of Object.entries(command.options.env ?? {})) {
+    if (value !== undefined && unwrap(value).includes("\0")) {
+      return `The environment variable ${name} contains a NUL character`
+    }
+  }
+  return undefined
+}
+
+// Buffered writes can fail after the sink has been interrupted and removed its error listener. Keep a fallback until
+// close, without replacing the sink listener that propagates errors while it is active.
+const handleInputErrors = (writable: NodeJS.WritableStream) => {
+  const onError = () => {}
+  writable.on("error", onError)
+  writable.once("close", () => writable.off("error", onError))
+}
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
@@ -129,8 +166,15 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     return path.resolve(opts.cwd)
   })
 
-  const env = (opts: ChildProcess.CommandOptions) =>
-    opts.extendEnv ? { ...globalThis.process.env, ...opts.env } : opts.env
+  const env = (opts: ChildProcess.CommandOptions) => {
+    if (opts.env === undefined) return opts.extendEnv ? globalThis.process.env : undefined
+    const result: Record<string, string | undefined> = opts.extendEnv ? { ...globalThis.process.env } : {}
+    for (const [key, value] of Object.entries(opts.env)) {
+      if (value === undefined) delete result[key]
+      else result[key] = unwrap(value)
+    }
+    return result
+  }
 
   const input = (x: ChildProcess.CommandInput | undefined): NodeChildProcess.IOType | undefined =>
     Stream.isStream(x) ? "pipe" : x
@@ -203,37 +247,64 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     const ins = new Map<number, Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError>>()
     const outs = new Map<number, Stream.Stream<Uint8Array, PlatformError.PlatformError>>()
 
+    const setupInput = Effect.fnUntraced(function* (
+      fd: number,
+      node: NodeChildProcess.ChildProcess["stdio"][number],
+      source: Stream.Stream<Uint8Array, PlatformError.PlatformError> | undefined,
+    ) {
+      let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
+      if (node && "write" in node) {
+        handleInputErrors(node)
+        sink = NodeSink.fromWritable({
+          evaluate: () => node,
+          onError: (err) => toPlatformError(`fromWritable(fd${fd})`, toError(err), command),
+          endOnDone: true,
+        })
+      }
+      if (source) yield* Effect.forkScoped(Stream.run(source, sink))
+      ins.set(fd, sink)
+    })
+
+    const setupOutput = (
+      fd: number,
+      node: NodeChildProcess.ChildProcess["stdio"][number],
+      sink: Sink.Sink<Uint8Array, Uint8Array, never, PlatformError.PlatformError> | undefined,
+    ) => {
+      let stream: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
+      if (node && "read" in node) {
+        const tap = new PassThrough()
+        // Retain errors raised before anyone reads, e.g. a failed write on a duplex fd, so they neither go uncaught
+        // nor leave later readers hanging.
+        let error: unknown = undefined
+        tap.on("error", (cause) => {
+          error ??= cause
+        })
+        node.on("error", (err) => tap.destroy(toError(err)))
+        node.pipe(tap)
+        const onError = (err: unknown) => toPlatformError(`fromReadable(fd${fd})`, toError(err), command)
+        stream = Stream.suspend(() =>
+          error === undefined ? NodeStream.fromReadable({ evaluate: () => tap, onError }) : Stream.fail(onError(error)),
+        )
+      }
+      if (sink) stream = Stream.transduce(stream, sink)
+      outs.set(fd, stream)
+    }
+
     for (const x of extra) {
       const node = proc.stdio[x.fd]
       switch (x.config.type) {
-        case "input": {
-          let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
-          if (node && "write" in node) {
-            sink = NodeSink.fromWritable({
-              evaluate: () => node,
-              onError: (err) => toPlatformError(`fromWritable(fd${x.fd})`, toError(err), command),
-              endOnDone: true,
-            })
-          }
-          if (x.config.stream) yield* Effect.forkScoped(Stream.run(x.config.stream, sink))
-          ins.set(x.fd, sink)
+        case "input":
+          yield* setupInput(x.fd, node, x.config.stream)
           break
-        }
-        case "output": {
-          let stream: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
-          if (node && "read" in node) {
-            const tap = new PassThrough()
-            node.on("error", (err) => tap.destroy(toError(err)))
-            node.pipe(tap)
-            stream = NodeStream.fromReadable({
-              evaluate: () => tap,
-              onError: (err) => toPlatformError(`fromReadable(fd${x.fd})`, toError(err), command),
-            })
-          }
-          if (x.config.sink) stream = Stream.transduce(stream, x.config.sink)
-          outs.set(x.fd, stream)
+        case "output":
+          setupOutput(x.fd, node, x.config.sink)
           break
-        }
+        case "duplex":
+          // Keep writing possible after the child closes its write side.
+          if (node && "allowHalfOpen" in node) node.allowHalfOpen = true
+          setupOutput(x.fd, node, x.config.sink)
+          yield* setupInput(x.fd, node, x.config.stream)
+          break
       }
     }
 
@@ -251,6 +322,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.suspend(() => {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
+        handleInputErrors(proc.stdin)
         sink = NodeSink.fromWritable({
           evaluate: () => proc.stdin!,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
@@ -302,11 +374,17 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(command.command, command.args, opts)
+      const proc = launch(command.command, command.args.map(unwrap), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
+        // Node copies the arguments into `spawnargs`.
+        if (command.args.some(Redacted.isRedacted)) {
+          Object.assign(err, {
+            spawnargs: [command.command, ...command.args.map((arg) => (Redacted.isRedacted(arg) ? "<redacted>" : arg))],
+          })
+        }
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
       proc.on("exit", (...args) => {
@@ -452,6 +530,12 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     function* (command) {
       switch (command._tag) {
         case "StandardCommand": {
+          const nul = findNulCharacter(command)
+          if (nul !== undefined) {
+            return yield* Effect.fail(
+              PlatformError.badArgument({ module: "ChildProcess", method: "spawn", description: nul }),
+            )
+          }
           const sin = stdin(command.options)
           const sout = stdio(command.options, "stdout")
           const serr = stdio(command.options, "stderr")
@@ -567,12 +651,14 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               )
               continue
             }
+            const name = ChildProcess.fdName(fd) as `fd${number}`
+            const existing = next.options.additionalFds?.[name]
             handle = spawnCommand(
               ChildProcess.make(next.command, next.args, {
                 ...next.options,
                 additionalFds: {
                   ...next.options.additionalFds,
-                  [ChildProcess.fdName(fd) as `fd${number}`]: { type: "input", stream },
+                  [name]: existing?.type === "duplex" ? { ...existing, stream } : { type: "input", stream },
                 },
               }),
             )

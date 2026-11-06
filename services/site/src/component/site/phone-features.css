@@ -1,0 +1,249 @@
+/* Settings › Phone feature list (phone-features.tsx). Wider screens keep the feature grid and never
+   show these parts; on phones the section's data-phone-features picks one. */
+[data-page="home"][data-site] [data-section="what"] {
+  [data-component="phone-features"] {
+    display: none;
+  }
+
+  @media (max-width: 40rem) {
+    [data-component="phone-features"] {
+      display: block;
+      margin-top: -1rem;
+
+      > * {
+        display: none;
+      }
+    }
+
+    /* Each option's own part. */
+    &[data-phone-features="show more"] [data-slot="show-more"],
+    &[data-phone-features="accordion"] [data-slot="accordion"],
+    &[data-phone-features="highlights + list"] [data-slot="index"],
+    &[data-phone-features="swipe deck"] [data-slot="deck"] {
+      display: flex;
+    }
+
+    &[data-phone-features="highlights"] [data-slot="also"] {
+      display: block;
+    }
+
+    /* The grid: its first five ("show more", until expanded) or four, or none. */
+    &[data-phone-features="show more"]:not([data-features-expanded]) [data-component="features"] > li:nth-child(n + 6),
+    &:is([data-phone-features="highlights"], [data-phone-features="highlights + list"])
+      [data-component="features"]
+      > li:nth-child(n + 5) {
+      display: none;
+    }
+
+    &:is([data-phone-features="accordion"], [data-phone-features="swipe deck"]) [data-component="features"] {
+      display: none;
+    }
+
+    &:is([data-phone-features="accordion"], [data-phone-features="swipe deck"]) [data-component="phone-features"] {
+      margin-top: 0;
+    }
+  }
+
+  /* "show more": a text button under the grid, its chevron turning when open. */
+  [data-slot="show-more"] {
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-decoration-color: var(--border-strong);
+    text-underline-offset: 0.25em;
+
+    &[aria-expanded="true"] [data-slot="chevron"] {
+      scale: 1 -1;
+    }
+  }
+
+  /* "accordion": the FAQ's rows (site.css), as a list, with a heading per row. */
+  [data-slot="accordion"] {
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    [data-slot="faq-heading"] {
+      margin: 0;
+      font: inherit;
+    }
+
+    /* Divided like /press's boilerplate accordion (press/index.css): a 1px line between rows and
+       one under the last, each title evenly spaced between its lines. */
+    > li + li {
+      border-top: 1px solid var(--border);
+    }
+
+    > li:last-child {
+      border-bottom: 1px solid var(--border);
+    }
+
+    && [data-slot="faq-question"] {
+      --padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+
+    [data-slot="faq-answer-inner"] {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+
+      p {
+        margin: 0;
+      }
+    }
+  }
+
+  /* "highlights": the rest as one wrapped line of links. */
+  [data-slot="also"] {
+    margin: 0;
+    line-height: 1.7;
+    color: var(--text-weak);
+
+    > span:first-child {
+      margin-inline-end: 0.5rem;
+      font-family: var(--font-mono);
+      color: var(--text-strong);
+    }
+
+    a {
+      color: var(--text-strong);
+      text-decoration: underline;
+      text-decoration-color: var(--border-strong);
+      text-underline-offset: 0.15em;
+    }
+  }
+
+  /* "highlights + list": the rest as one column of rows, each its docs link. */
+  [data-slot="index"] {
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--border);
+
+    a {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 3rem;
+      border-bottom: 1px solid var(--border);
+      font-size: var(--fs-body);
+      font-weight: 500;
+      color: var(--text-strong);
+      text-decoration: none;
+
+      [data-slot="chevron-right"] {
+        color: var(--text-weak);
+      }
+    }
+  }
+
+  /* "swipe deck": cards of two features, 1.2 in view, snapping; dots under them. */
+  [data-slot="deck"] {
+    flex-direction: column;
+    gap: 1rem;
+
+    > ul {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 83%;
+      gap: 0.75rem;
+      margin: 0 calc(-1 * var(--edge, 1.5rem));
+      padding: 0 var(--edge, 1.5rem);
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: var(--edge, 1.5rem);
+      scrollbar-width: none;
+      list-style: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      padding: 1.25rem;
+      background: var(--bg-weak);
+      scroll-snap-align: start;
+    }
+
+    a {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    h3 {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--fs-body);
+      font-weight: 500;
+      color: var(--text-strong);
+    }
+
+    p {
+      margin: 0;
+      font-size: var(--fs-ui);
+      line-height: 1.45;
+      color: var(--text-weak);
+    }
+
+    [data-slot="dots"] {
+      display: flex;
+      justify-content: center;
+      gap: 0.25rem;
+
+      button {
+        width: 1.5rem;
+        height: 1.5rem;
+        padding: 0;
+        background: none;
+
+        &::before {
+          content: "";
+          display: block;
+          width: 6px;
+          height: 6px;
+          margin: auto;
+          background: var(--border-strong);
+        }
+
+        &[aria-current="true"]::before {
+          background: var(--text-strong);
+        }
+      }
+    }
+  }
+}
+
+/* On phones the accordion's last line is the section's end: the next section draws no divider of
+   its own (the border keeps its width, so the space is the same), as after /press's accordion.
+   Doubled to outrank the shared spacer rules. */
+@media (max-width: 40rem) {
+  [data-page="home"][data-site]
+    [data-section="what"][data-phone-features="accordion"]
+    + [data-component="block"][data-component="block"] {
+    border-top-color: transparent;
+    border-image: none;
+    background-image: none;
+
+    &::before,
+    &::after {
+      display: none;
+    }
+  }
+}

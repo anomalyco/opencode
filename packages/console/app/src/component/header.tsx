@@ -13,11 +13,12 @@ import copyLogoSvgLight from "../asset/lander/opencode-logo-light.svg"
 import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
 import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
 import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
-import { A, useNavigate } from "@solidjs/router"
+import { A, useLocation, useNavigate } from "@solidjs/router"
 import { Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
+import { strip } from "~/lib/language"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import "./header-context-menu.css"
@@ -35,10 +36,12 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
   }
 }
 
-export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: boolean }) {
+export function Header() {
   const navigate = useNavigate()
   const i18n = useI18n()
   const language = useLanguage()
+  const location = useLocation()
+  const onDownload = () => strip(location.pathname) === "/download"
 
   const [store, setStore] = createStore({
     mobileMenuOpen: false,
@@ -165,43 +168,28 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           <li>
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
           </li>
+          {/* Console links use a full page load into its separate application. */}
           <li>
-            {/* Console links use a full page load into its separate application. */}
-            <Show
-              when={config.consoleMarketingEnabled}
-              fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
-            >
-              <a href="/console/models" target="_self">
-                {i18n.t("nav.models")}
-              </a>
-            </Show>
+            <a href="/console/models" target="_self">
+              {i18n.t("nav.models")}
+            </a>
           </li>
           <li>
-            <Show
-              when={config.consoleMarketingEnabled}
-              fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
-            >
-              <a href="/console/go" target="_self">
-                {i18n.t("nav.go")}
-              </a>
-            </Show>
+            <a href="/console/go" target="_self">
+              {i18n.t("nav.subscription")}
+            </a>
           </li>
           <li>
-            <Show
-              when={config.consoleMarketingEnabled}
-              fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
-            >
-              <a href="/console/teams" target="_self">
-                {i18n.t("nav.teams")}
-              </a>
-            </Show>
+            <a href="/console/enterprise" target="_self">
+              {i18n.t("nav.enterprise")}
+            </a>
           </li>
-          <Show when={props.zen || props.go}>
-            <li>
-              <a href="/console">{i18n.t("nav.login")}</a>
-            </li>
-          </Show>
-          <Show when={!props.hideGetStarted}>
+          <li>
+            <a href="/console" target="_self">
+              {i18n.t("nav.console")}
+            </a>
+          </li>
+          <Show when={!onDownload()}>
             <li>
               <A href={language.route("/download")} data-slot="cta-button">
                 <svg
@@ -288,46 +276,27 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                 <li>
                   <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
                 </li>
-                <Show when={!props.zen}>
-                  <li>
-                    <Show
-                      when={config.consoleMarketingEnabled}
-                      fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
-                    >
-                      <a href="/console/models" target="_self">
-                        {i18n.t("nav.models")}
-                      </a>
-                    </Show>
-                  </li>
-                </Show>
-                <Show when={!props.go}>
-                  <li>
-                    <Show
-                      when={config.consoleMarketingEnabled}
-                      fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
-                    >
-                      <a href="/console/go" target="_self">
-                        {i18n.t("nav.go")}
-                      </a>
-                    </Show>
-                  </li>
-                </Show>
                 <li>
-                  <Show
-                    when={config.consoleMarketingEnabled}
-                    fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
-                  >
-                    <a href="/console/teams" target="_self">
-                      {i18n.t("nav.teams")}
-                    </a>
-                  </Show>
+                  <a href="/console/models" target="_self">
+                    {i18n.t("nav.models")}
+                  </a>
                 </li>
-                <Show when={props.zen || props.go}>
-                  <li>
-                    <a href="/console">{i18n.t("nav.login")}</a>
-                  </li>
-                </Show>
-                <Show when={!props.hideGetStarted}>
+                <li>
+                  <a href="/console/go" target="_self">
+                    {i18n.t("nav.subscription")}
+                  </a>
+                </li>
+                <li>
+                  <a href="/console/enterprise" target="_self">
+                    {i18n.t("nav.enterprise")}
+                  </a>
+                </li>
+                <li>
+                  <a href="/console" target="_self">
+                    {i18n.t("nav.console")}
+                  </a>
+                </li>
+                <Show when={!onDownload()}>
                   <li>
                     <A href={language.route("/download")} data-slot="cta-button">
                       {i18n.t("nav.getStartedFree")}

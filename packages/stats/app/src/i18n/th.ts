@@ -59,7 +59,7 @@ export const dict = {
   "modal.success": "สมัครเรียบร้อยแล้ว",
   "modal.error": "สมัครไม่สำเร็จ",
   "product.allUsers": "ผู้ใช้ทั้งหมด",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1 วัน",
   "range.1W": "1 สัปดาห์",

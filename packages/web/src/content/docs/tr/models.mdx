@@ -58,7 +58,7 @@ opencode yapılandırması
 }
 ```
 
-Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [OpenCode Zen](https://opencode.ai/v2/docs/console/) kullanıyorsanız, GPT-6.1 Sol için `opencode/gpt-6.1-sol` kullanırsınız.
+Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [OpenCode Models](https://opencode.ai/v2/docs/console/) kullanıyorsanız, GPT-6.1 Sol için `opencode/gpt-6.1-sol` kullanırsınız.
 
 Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_id`, performansınızın `provider` bölümünden gelen anahtardır ve `model_id`, `provider.models`'den gelen anahtardır.
 

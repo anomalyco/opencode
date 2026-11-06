@@ -1,8 +1,8 @@
 import { Config, Effect, Formatter, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
 import { NodeFileSystem } from "@effect/platform-node"
-import { ai, AIClient, LLMRequest, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
-import { toDefinitions, tool } from "@opencode/ai/effect"
+import { ai, AIClient, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
+import { tool } from "@opencode/ai/effect"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
 
@@ -28,7 +28,7 @@ const apiKey = Config.Redacted("OPENAI_API_KEY")
 // image generation.
 const openai = OpenAI.configure({
   apiKey,
-  generation: { maxTokens: 160 },
+  maxTokens: 160,
   providerOptions: {
     store: false,
   },
@@ -40,8 +40,8 @@ const model = openai.responses("gpt-4o-mini")
 //
 // Options can live on both the configured route/provider facade and the request:
 //
-//   - `generation`: common controls such as max tokens, temperature, topP/topK,
-//     penalties, seed, and stop sequences.
+//   - `maxTokens`, `temperature`, `topP`, `topK`, penalties, `seed` and `stop`:
+//     common controls set at the top level.
 //   - `promptCacheKey`: stable cache affinity for protocols that support it.
 //   - `providerOptions`: model-typed provider-native behavior. For example,
 //     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or
@@ -54,7 +54,8 @@ const request = ai.request({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
-  generation: { maxTokens: 80, temperature: 0.7 },
+  maxTokens: 80,
+  temperature: 0.7,
   promptCacheKey: "tutorial-joke",
 })
 
@@ -86,21 +87,23 @@ const streamText = ai.stream(request).pipe(
 // 5. Tools are typed with Effect Schema. Provider turns remain explicit:
 // advertise definitions on the request, stream one turn, dispatch local calls,
 // then persist/build follow-up history in the enclosing product flow.
-const tools = {
-  get_weather: tool({
+const tools = [
+  tool({
+    name: "get_weather",
     description: "Get current weather for a city.",
-    parameters: Schema.Struct({ city: Schema.String }),
+    input: Schema.Struct({ city: Schema.String }),
     success: Schema.Struct({ forecast: Schema.String }),
     execute: (input) => Effect.succeed({ forecast: `${input.city}: sunny, 72F` }),
   }),
-}
+]
 
 const streamWithTools = Effect.gen(function* () {
   const request = ai.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
-    generation: { maxTokens: 80, temperature: 0 },
-    tools: toDefinitions(tools),
+    maxTokens: 80,
+    temperature: 0,
+    tools,
   })
   const events = Array.from(yield* ai.stream(request).pipe(Stream.runCollect))
   for (const event of events) {
@@ -112,20 +115,20 @@ const streamWithTools = Effect.gen(function* () {
 
     // A durable agent would persist these messages before starting another
     // raw model turn. This tutorial keeps the boundary visible instead.
-    const followUp = LLMRequest.update(request, {
+    const followUp = {
+      ...request,
       messages: [
         ...request.messages,
         Message.assistant([event]),
         Message.tool({ ...event, result: dispatched.result }),
       ],
-    })
+    }
     console.log("follow-up history messages:", followUp.messages.length)
   }
 })
 
-// 6. `generateObject` is the structured-output helper. It forces a synthetic
-// tool call internally, so the same call site works across providers instead of
-// depending on provider-specific JSON mode flags.
+// 6. `schema` asks for structured output. It forces a hidden tool call, so the
+// same call site works across providers, and decodes its input into `object`.
 const WeatherReport = Schema.Struct({
   city: Schema.String,
   forecast: Schema.String,
@@ -133,24 +136,25 @@ const WeatherReport = Schema.Struct({
 })
 
 const generateStructuredObject = Effect.gen(function* () {
-  const response = yield* ai.generateObject({
+  const response = yield* ai.generate({
     model,
     system: "Return only structured weather data.",
     prompt: "Give me today's weather for San Francisco.",
     schema: WeatherReport,
-    generation: { maxTokens: 120, temperature: 0 },
+    maxTokens: 120,
+    temperature: 0,
   })
 
-  console.log("\n== generateObject ==")
+  console.log("\n== structured output ==")
   console.log(Formatter.formatJson(response.object, { space: 2 }))
 })
 
 // If the shape is only known at runtime, pass raw JSON Schema instead. The
 // `.object` type is `unknown`; callers that need static types should validate it.
-const generateDynamicObject = ai.generateObject({
+const generateDynamicObject = ai.generate({
   model,
   prompt: "Extract the city and forecast from: San Francisco is sunny.",
-  jsonSchema: {
+  schema: {
     type: "object",
     properties: {
       city: { type: "string" },
@@ -183,7 +187,7 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
       Effect.succeed({
         model: request.model.id,
         input: request.messages
-          .flatMap((message) => message.content)
+          .flatMap((message) => [...message.content])
           .filter((part) => part.type === "text")
           .map((part) => part.text)
           .join("\n"),

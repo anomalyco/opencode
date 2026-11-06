@@ -50,7 +50,7 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   tools?: Provided & Tools<Services<Provided>>
   /** Hooks around every tool and extension call the program makes; see `Hooks`. */
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
-  /** Host functions exposed as globals; see `Extension.make`. */
+  /** Host functions and objects exposed as globals, also importable by Node module name; see `Extension.make`. */
   extensions?: Extensions
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
@@ -156,7 +156,8 @@ export const execute = <
   const Extensions extends ReadonlyArray<Extension> = [],
 >(
   options: ExecuteOptions<Provided, Extensions>,
-): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code, options.bindings)
+): Effect.Effect<Result, never, Environment<Provided, Extensions>> =>
+  make(options).execute(options.code, options.bindings)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
 export const make = <

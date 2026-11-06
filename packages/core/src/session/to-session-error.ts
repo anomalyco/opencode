@@ -5,6 +5,7 @@ import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
+import { ModelRetry } from "../model-retry.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 const tokenSharingMessages = {
@@ -49,6 +50,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
       case "Transport":
+        if (ModelRetry.isUnreachable(cause)) return unreachable(cause.reason)
         return providerError("provider.transport", cause.reason)
       case "ProviderInternal":
         return providerError("provider.internal", cause.reason)
@@ -58,8 +60,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-request", cause.reason)
       case "UnsupportedOperation":
         return providerError("provider.unsupported-operation", cause.reason)
-      case "NoRoute":
-        return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
       case "Timeout":
@@ -119,6 +119,15 @@ function goLimit(reason: AIError["reason"]): SessionError.Error {
   return {
     ...providerError("provider.go-limit", reason),
     message: `OpenCode Go ${name ? `${name} ` : ""}usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.`,
+  }
+}
+
+// Names the network as the problem, so a DNS outage doesn't read like a broken model or provider.
+function unreachable(reason: AIError["reason"]): SessionError.Error {
+  const host = "url" in reason && reason.url !== undefined ? URL.parse(reason.url)?.hostname : undefined
+  return {
+    ...providerError("provider.transport", reason),
+    message: `Can't reach ${host || "the provider"}. Check the network connection. (${reason.message})`,
   }
 }
 

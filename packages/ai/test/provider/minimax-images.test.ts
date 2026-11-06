@@ -63,7 +63,8 @@ describe("MiniMax Images", () => {
         aspect: "16:9",
         images: [Media.url("https://example.test/face.jpg")],
         providerOptions: { responseFormat: "url", response_format: "base64", promptOptimizer: true, seed: 7 },
-        http: { headers: { "x-request": "yes" }, body: { future_option: "http" } },
+        headers: { "x-request": "yes" },
+        http: { body: { future_option: "http" } },
       })
 
       expect(response.images).toHaveLength(2)

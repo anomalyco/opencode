@@ -10,6 +10,7 @@ import { readLocalImage } from "../../app/src/runtime/server/image"
 
 export {
   getCachedMarkdown,
+  getReadyMarkdown,
   renderCachedMarkdown,
   sanitizeMarkdown,
   touchCachedMarkdown,

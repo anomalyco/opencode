@@ -30,6 +30,12 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
+- [x] Imports of globals by Node module name: `import x from "m"`, `import { a, b as c } from "m"`,
+      `import * as m from "m"`, `import "m"`, `require("m")`, and `await import("m")`, with `node:fs` naming the
+      same module as `fs` and `fs/promises`, `url`, `util`, and `buffer` mapped to their globals. Imports load before
+      the program runs; a default import binds the module itself and the namespace adds it as `default`, the way
+      Node presents a CommonJS module. Anything else throws, and `import()` of it rejects. `export` is a parse error,
+      and an import below the top level throws.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals. Its result can also be awaited or chained with
       `then`, `catch`, and `finally`.

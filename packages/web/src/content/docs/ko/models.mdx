@@ -58,7 +58,7 @@ opencode 설정.
 }
 ```
 
-전체 ID는 `provider_id/model_id`입니다. 예를 들어, [OpenCode Zen](https://opencode.ai/v2/docs/console/)을 사용한다면, GPT-6.1 Sol에 `opencode/gpt-6.1-sol`를 사용할 수 있습니다.
+전체 ID는 `provider_id/model_id`입니다. 예를 들어, [OpenCode Models](https://opencode.ai/v2/docs/console/)을 사용한다면, GPT-6.1 Sol에 `opencode/gpt-6.1-sol`를 사용할 수 있습니다.
 
 [custom Provider](/docs/providers#custom)를 구성하면 `provider_id`는 구성의 `provider` 부분에서 키이며 `model_id`는 `provider.models`에서 키입니다.
 

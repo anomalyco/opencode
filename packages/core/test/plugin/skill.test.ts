@@ -14,6 +14,7 @@ const config = (plugins: Info["plugins"] = []) =>
     Config.Service,
     Config.Service.of({
       entries: () => Effect.succeed([new Document({ type: "document", info: new Info({ plugins }) })]),
+      snapshot: () => [new Document({ type: "document", info: new Info({ plugins }) })],
       changes: () => Stream.never,
     }),
   )
@@ -39,6 +40,7 @@ describe("SkillPlugin.Plugin", () => {
         expect.objectContaining({
           id: "opencode",
           name: "OpenCode",
+          path: "skill://opencode/SKILL.md",
           description: expect.stringContaining("any question about OpenCode itself"),
         }),
       )
@@ -46,6 +48,7 @@ describe("SkillPlugin.Plugin", () => {
         expect.objectContaining({
           id: "report",
           name: "Report",
+          path: "skill://report/SKILL.md",
           description: expect.stringContaining("opencode issue"),
         }),
       )
@@ -70,12 +73,7 @@ describe("SkillPlugin.Plugin", () => {
       expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
     }).pipe(
       Effect.provide(
-        config([
-          "package-plugin",
-          "-disabled",
-          "local.ts",
-          { package: "package-plugin", options: { enabled: true } },
-        ]),
+        config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
       ),
     ),
   )

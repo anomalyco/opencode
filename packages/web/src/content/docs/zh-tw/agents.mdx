@@ -366,7 +366,7 @@ Markdown 檔案名稱即為代理名稱。例如，`review.md` 會建立一個�
 }
 ```
 
-OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，則可以使用 `opencode/gpt-6.1-sol` 來表示 GPT-6.1 Sol。
+OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [OpenCode Models](https://opencode.ai/v2/docs/console/)，則可以使用 `opencode/gpt-6.1-sol` 來表示 GPT-6.1 Sol。
 
 ---
 

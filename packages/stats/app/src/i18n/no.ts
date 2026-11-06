@@ -57,7 +57,7 @@ export const dict = {
   "modal.success": "Du er abonnert.",
   "modal.error": "Kunne ikke abonnere",
   "product.allUsers": "Alle brukere",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1 dag",
   "range.1W": "1 uke",
