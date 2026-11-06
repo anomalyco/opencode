@@ -173,6 +173,7 @@ Review files`,
             )
             await fs.writeFile(path.join(tmp.path, "commands", "nested", "docs.md"), "Write docs")
             await fs.writeFile(path.join(tmp.path, "commands", "empty.md"), "")
+            await fs.writeFile(path.join(tmp.path, "commands", "opus.md"), "---\nmodel: opus\n---\nThink hard")
           })
 
           const command = yield* Command.Service
@@ -222,6 +223,7 @@ Review files`,
             }),
             Command.Info.make({ name: "empty" }),
             Command.Info.make({ name: "nested/docs" }),
+            Command.Info.make({ name: "opus" }),
           ])
           yield* command.execute({
             name: "nested/docs",

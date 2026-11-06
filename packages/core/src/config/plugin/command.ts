@@ -3,6 +3,7 @@ export * as ConfigCommandPlugin from "./command.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { ConfigCommand } from "@opencode/schema/config/command"
+import { ConfigModel } from "@opencode/schema/config/model"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
 import { Effect, Option, Schema } from "effect"
@@ -18,6 +19,7 @@ import { ConfigMarkdown } from "../markdown.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
+const decodeModel = Schema.decodeUnknownOption(ConfigModel.Selection)
 
 export const Plugin = define({
   id: "opencode.config.command",
@@ -125,7 +127,7 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
       .pipe(Effect.orElseSucceed(() => [] as string[]))
     return yield* Effect.forEach(files.toSorted(), (filepath) =>
       fs.readFileStringSafe(filepath).pipe(
-        Effect.map((content) => (content === undefined ? undefined : decode(directory, filepath, content))),
+        Effect.flatMap((content) => (content === undefined ? Effect.undefined : decode(directory, filepath, content))),
         Effect.orElseSucceed(() => undefined),
       ),
     ).pipe(
@@ -136,10 +138,16 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
   })
 }
 
-function decode(directory: string, filepath: string, content: string) {
+const decode = Effect.fnUntraced(function* (directory: string, filepath: string, content: string) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) return
-  const info = Option.getOrUndefined(decodeCommand({ ...markdown.data, template: markdown.content.trim() }))
+  const data = { ...markdown.data, template: markdown.content.trim() }
+  // An unsupported model, such as Claude's `opus`, should not drop the whole command.
+  if ("model" in data && Option.isNone(decodeModel(data.model))) {
+    yield* Effect.logWarning("ignored invalid command model", { path: filepath, model: data.model })
+    delete data.model
+  }
+  const info = Option.getOrUndefined(decodeCommand(data))
   if (!info) return
   return {
     name: path
@@ -149,7 +157,7 @@ function decode(directory: string, filepath: string, content: string) {
       .replace(/\.md$/, ""),
     info,
   }
-}
+})
 
 function evaluateTemplate(
   template: string,
