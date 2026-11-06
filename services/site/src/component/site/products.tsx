@@ -34,6 +34,7 @@ import { copyOnClick, copySelection } from "~/lib/clipboard"
 import { detectPlatform, isMobile, requestPlatform } from "~/lib/platform"
 import { Chevron, NewTab, PlatformIcon } from "./icons"
 import { onCloseMenus } from "./menu-open"
+import { placeMenu } from "./place-menu"
 import { Sheet, prefersSheet, type SheetControl } from "./sheet"
 import { holdPopstate } from "./popstate"
 import {
@@ -1102,7 +1103,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
     if (openSheet()) return
     setOpen(!open())
     const panel = menu?.querySelector<HTMLElement>('[data-slot="menu"]')
-    if (panel) fitMenu(panel)
+    if (panel) placeMenu(panel)
     // From the keyboard, focus moves into the menu.
     if (open() && event.detail === 0)
       menu?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true })
@@ -1279,7 +1280,7 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                 if (openSheet()) return
                 setOpen(!open())
                 const panel = menu?.querySelector<HTMLElement>('[data-slot="menu"]')
-                if (panel) fitMenu(panel)
+                if (panel) placeMenu(panel)
               }}
             >
               {props.slug === "mobile" ? i18n.t("download.action.download") : i18n.t("download.action.install")}
@@ -1518,26 +1519,6 @@ function elementReady(selector: string) {
     observer.observe(document.body, { childList: true, subtree: true })
     const timer = setTimeout(done, 1000)
   })
-}
-
-/**
- * Keeps an open menu inside the carousel's visible area (or the window, outside the carousel),
- * which would otherwise cut it off: no wider than that area and 8px clear of the window's edges
- * (long install commands wrap), and slid sideways just enough.
- */
-function fitMenu(panel: HTMLElement) {
-  const area = panel.closest('[data-slot="track"]')?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth)
-  // Never closer than 16px to a screen edge; on phones the menu takes that whole width, so the
-  // install commands get as much room as there is (each still one line, cut with an ellipsis).
-  const left = Math.max(area.left, 16)
-  const right = Math.min(area.right, window.innerWidth - 16)
-  panel.style.maxWidth = `${right - left}px`
-  panel.style.width = window.matchMedia("(max-width: 40rem)").matches ? `${right - left}px` : ""
-  // Laid out, not as drawn: the opening animation scales the menu from a corner.
-  const parent = (panel.offsetParent ?? document.body).getBoundingClientRect()
-  const start = parent.left + panel.offsetLeft
-  const shift = Math.max(left - start, Math.min(0, right - (start + panel.offsetWidth)))
-  panel.style.translate = shift ? `${Math.round(shift)}px 0` : ""
 }
 
 // The card transition running now. A newer one (back during a grow) owns the page's markers.

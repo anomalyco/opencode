@@ -2,6 +2,7 @@ import { Link, Title, Meta } from "@solidjs/meta"
 import { Router, useCurrentMatches, useLocation } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
 import { Show, Suspense } from "solid-js"
+import { isServer } from "solid-js/web"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
 import "./style/ibm-plex-mono.dev.css"
@@ -69,14 +70,26 @@ function AppMeta() {
   )
 }
 
+// The router's scroll restoration (below) sets history.scrollRestoration to "manual" and restores
+// only after the app has loaded, so a page loaded again (a reload, or back from another site or a
+// plain link) would paint at the top and then jump. Leaving a document hands its entry back to the
+// browser, which restores it as the page loads; a page restored from the back/forward cache, still
+// running, takes the router's manual mode again for its in-site back and forward.
+if (!isServer) {
+  window.addEventListener("pagehide", () => (history.scrollRestoration = "auto"))
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) history.scrollRestoration = "manual"
+  })
+}
+
 export default function App() {
   return (
     <Router
       explicitLinks={true}
       transformUrl={strip}
-      // The router restores scroll on back and forward itself, once the page has rendered. The
-      // browser's own restore lands before that, on the page being left, and shows as a jump at
-      // the start of the hero's shrink back into its card.
+      // On in-site back and forward the router restores scroll itself, once the page has rendered.
+      // The browser's own restore lands right after popstate, on the page being left, and shows as
+      // a jump at the start of the hero's shrink back into its card.
       scrollRestoration
       root={(props) => (
         <LanguageProvider>

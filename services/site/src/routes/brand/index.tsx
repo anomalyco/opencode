@@ -40,6 +40,7 @@ import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site
 import { PageTitle } from "~/component/site/sticky-title"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { inlineKey } from "~/lib/direction"
+import { placeMenu } from "~/component/site/place-menu"
 
 export default function Brand() {
   const i18n = useI18n()
@@ -344,7 +345,11 @@ export default function Brand() {
               ? i18n.t("brand.ui.moreFormats", { detail: props.detail })
               : i18n.t("brand.ui.downloadAsset", { detail: props.detail })
           }
-          onClick={() => setOpen(!open())}
+          onClick={() => {
+            setOpen(!open())
+            const menu = state.root?.querySelector<HTMLElement>('[data-slot="menu"]')
+            if (menu) placeMenu(menu)
+          }}
         >
           <Show when={!props.chevronOnly}>{i18n.t("download.action.download")}</Show>
           <ChevronIcon />

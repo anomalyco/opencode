@@ -792,8 +792,9 @@ html:has([data-site][data-theme="dark"]) {
       margin: 0;
     }
 
-    /* Opens upward because the carousel track clips anything below the cards (SiteMenu's
-       placement="below" opens it downward; align="end" from the trigger's end edge). */
+    /* Laid out above the trigger, from its start edge (align="end": its end edge). placeMenu
+       (place-menu.ts) then opens it on the side with room, in the top layer, so the carousel's
+       track doesn't cut it off. */
     [data-slot="menu"] {
       position: absolute;
       inset-inline-start: 0;
@@ -827,19 +828,9 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
-    &[data-placement="below"] [data-slot="menu"] {
-      top: calc(100% + 0.375rem);
-      bottom: auto;
-      transform-origin: top var(--x-start, left);
-    }
-
     &[data-align="end"] [data-slot="menu"] {
       inset-inline: auto 0;
       transform-origin: bottom var(--x-end, right);
-    }
-
-    &[data-placement="below"][data-align="end"] [data-slot="menu"] {
-      transform-origin: top var(--x-end, right);
     }
 
     /* SiteMenu's link rows: the label, then the external arrow for a link that opens a new tab. */
@@ -891,8 +882,8 @@ html:has([data-site][data-theme="dark"]) {
       color: var(--text-strong);
     }
 
-    /* Phones: menu rows at the body size, 44px tall; ProductAction's fitMenu keeps the menu 16px
-       from both screen edges. Commands stay on one line and end in an ellipsis. */
+    /* Phones: menu rows at the body size, 44px tall; placeMenu widens the menu to 16px from both
+       screen edges. Commands stay on one line and end in an ellipsis. */
     @media (max-width: 40rem) {
       [data-slot="menu"] > :is([data-slot="install"], [data-slot="store"], [data-slot="item"], [data-slot="link"]) {
         min-height: 2.75rem;
@@ -923,6 +914,14 @@ html:has([data-site][data-theme="dark"]) {
         white-space: nowrap;
       }
     }
+  }
+
+  /* A menu placeMenu moved to the top layer keeps its own look, without a popover's frame. */
+  :where([data-side][popover]) {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
   }
 
   /* Page header: the large OpenTUI Mono title and its Inter description. Every page starts with one. */
