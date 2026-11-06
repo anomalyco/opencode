@@ -1,5 +1,4 @@
-// Where the current docs live. The docs Intro is a page of this app; the other docs pages come from
-// the separate docs app at the same paths. The old /v2/docs URLs redirect here (see middleware.ts).
+// Where the current docs live: the V2 docs app (services/www), which serves /v2* on opencode.ai.
 export const docsBase = "/v2/docs"
 
 /** Where the separate V1 docs app (Starlight, built for /docs/) serves the V1 docs. */

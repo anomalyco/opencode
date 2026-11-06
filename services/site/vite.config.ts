@@ -36,6 +36,17 @@ function notFoundInDev(): PluginOption {
   }
 }
 
+// Production only: a stylesheet named *.dev.css is for development tools (Settings, Design mode) and
+// builds empty, so its rules never reach a page's render-blocking CSS.
+function devOnlyCss(): PluginOption {
+  return {
+    name: "dev-only-css",
+    apply: "build",
+    enforce: "pre",
+    load: (id) => (/\.dev\.css(\?|$)/.test(id) ? "" : undefined),
+  }
+}
+
 // Production only: Settings and Design mode are development tools, so the site root's settings
 // attributes always carry the default settings' values (src/component/site/css-variants.json). This
 // drops, from the production CSS, each selector that needs another value of one of them, and each
@@ -116,6 +127,7 @@ export default defineConfig({
       },
     }),
     notFoundInDev(),
+    devOnlyCss(),
     cssVariantsForProduction(),
   ],
   server: {

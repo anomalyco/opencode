@@ -22,6 +22,7 @@ import { robotsTxt } from "~/lib/robots-txt"
 import { mediaUrl } from "~/lib/media"
 import { legacyRedirect } from "~/lib/legacy"
 import { metaResponse } from "~/lib/meta"
+import { securityHeaders } from "~/lib/security-headers"
 import { v1DocsOrigin } from "~/lib/docs"
 
 // The page middleware, then the HTML cache headers and edge cache (lib/html-cache.ts), which see
@@ -33,6 +34,8 @@ export default [
       // The OAuth client document and the Apple app association, before anything else (lib/meta.ts).
       const meta = metaResponse(event.request)
       if (meta) return meta
+      // Every other response, pages and redirects included (lib/security-headers.ts).
+      Object.entries(securityHeaders).forEach(([name, value]) => event.response.headers.set(name, value))
 
       event.request = sanitizeServerActionRequest(event.request)
 
@@ -74,9 +77,10 @@ export default [
       // /product. The legacy redirects (/go, /zen, /enterprise, /black, /auth, …) are zone rules.
       const moved = movedPath(url.pathname)
       if (moved) {
-        const headers = new Headers({ Location: `${locale ? route(locale, moved) : moved}${url.search}` })
-        event.response.headers.getSetCookie().forEach((value) => headers.append("set-cookie", value))
-        return new Response(null, { status: 301, headers })
+        return new Response(null, {
+          status: 301,
+          headers: { Location: `${locale ? route(locale, moved) : moved}${url.search}` },
+        })
       }
 
       if (event.request.method !== "GET" && event.request.method !== "HEAD") return
@@ -89,9 +93,7 @@ export default [
       const englishOnly = locale !== null && /^\/(changelog|font)(?=$|[/.])/.test(path)
       const slash = requested.length > 1 && requested.endsWith("/") && !/^\/docs(\/|$)/.test(path)
       if (english || englishOnly || (slash && findPageMarkdown(path))) {
-        const headers = new Headers({ Location: `${route(locale ?? "en", path)}${url.search}` })
-        event.response.headers.getSetCookie().forEach((value) => headers.append("set-cookie", value))
-        return new Response(null, { status: 301, headers })
+        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", path)}${url.search}` } })
       }
       // One release as JSON, at a stable URL per version (for the apps' "What's new").
       const release = path.match(/^\/changelog\/(v\d[\w.+-]*)\.json$/)?.[1]

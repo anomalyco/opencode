@@ -21,8 +21,9 @@ import { platformFromUserAgent } from "~/lib/platform"
 // would get the same HTML, and Vary (which Cloudflare's cache would apply to raw header values) plays
 // no part. The build id is in the key too, so a deploy starts from an empty cache without a purge.
 //
-// Never cached: a response that sets other cookies, and any status but 200. A render that used a
-// stand-in for GitHub's data (lib/edge-cache.ts) is kept fresh for 30 seconds only.
+// Never cached: a response that sets other cookies, and any status but 200; a server error (a
+// release page while GitHub is down) also tells browsers not to keep it, and to retry in a minute. A render that used a stand-in for GitHub's data (lib/edge-cache.ts)
+// is kept fresh for 30 seconds only.
 
 type Middleware = ReturnType<typeof createMiddleware>[number]
 
@@ -86,6 +87,11 @@ export const htmlCache: Middleware = async (event, next) => {
 
   const value = await next()
   if (typeof value !== "string") return value
+  if (event.res.status && event.res.status >= 500) {
+    event.res.headers.set("Cache-Control", "no-store")
+    event.res.headers.set("Retry-After", "60")
+    return value
+  }
   const cookies = event.res.headers.getSetCookie()
   event.res.headers.set("Cache-Control", cookies.length ? cookiePolicy : browserPolicy)
   event.res.headers.set("ETag", await etag(value))

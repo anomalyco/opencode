@@ -51,6 +51,7 @@
     "@typescript/native": "catalog:",
     "@webgpu/types": "0.1.54",
     "cf": "1.0.0-beta.12",
+    "miniflare": "5.20260930.0-alpha",
     "playwright-core": "1.59.1",
     "satori": "0.63.2",
     "sharp": "0.34.5",
