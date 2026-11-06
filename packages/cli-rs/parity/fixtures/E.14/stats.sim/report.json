@@ -5,13 +5,10 @@
     "rs"
   ],
   "home": {
-    "equal": false,
-    "differences": 87,
-    "colorOnly": 84,
-    "deviation": [
-      "T17-home-prompt",
-      "P15-metadata-gap-fg"
-    ]
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
   },
   "poster": {
     "equal": true,
