@@ -171,9 +171,13 @@ const make = Effect.gen(function* () {
     return values.findLast((value) => value !== undefined) ?? "notify"
   })
 
-  const exec = Effect.fnUntraced(function* (command: string[], timeout: Duration.Input = "30 seconds") {
+  const exec = Effect.fnUntraced(function* (
+    command: string[],
+    timeout: Duration.Input = "30 seconds",
+    options?: { cwd?: string; env?: Record<string, string>; extendEnv?: boolean },
+  ) {
     return yield* appProcess
-      .run(ChildProcess.make(command[0], command.slice(1)), {
+      .run(ChildProcess.make(command[0], command.slice(1), options), {
         timeout,
         maxOutputBytes: 100_000,
         maxErrorBytes: 100_000,
@@ -226,10 +230,17 @@ const make = Effect.gen(function* () {
       { method: "vp", command: ["vp", "list", "-g", "--json", installedPackage] },
     ]
     checks.sort((a, b) => Number(parts.includes(b.method)) - Number(parts.includes(a.method)))
+    // These queries only inspect global installs, so they do not need the project directory. Running a
+    // corepack shim from one makes it auto-pin `packageManager` into the project's package.json (#62246).
+    const options = {
+      cwd: global.tmp,
+      env: { COREPACK_ENABLE_AUTO_PIN: "0" },
+      extendEnv: true,
+    }
     const results = yield* Effect.forEach(
       checks,
       (check) =>
-        exec(check.command).pipe(
+        exec(check.command, "30 seconds", options).pipe(
           Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
           Effect.map((result) => ({ check, result })),
         ),
