@@ -19,6 +19,7 @@ const drag = "drag the review's edge"
 
 // The divider between the session and the side panel, read once the review is open. The session panel keeps at least
 // 400px, the side panel 320px and the 8px gap.
+const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]'
 let divider: Divider | undefined
 
 export default bench({
@@ -26,17 +27,15 @@ export default bench({
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: async ({ case: name, playwright, mock, url }) => ({
-        ...(await mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
+      prepare: async (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
-          historyTurns: name === "expand an edit" ? 0 : 120,
-          collapsedEdits: name === "expand an edit",
-          tools: name === "expand an edit" ? await editTools() : undefined,
-          vcsDiff: name === drag ? reviewDiffs() : undefined,
-        })),
-        mouse: playwright.page.mouse,
-      }),
+          historyTurns: ctx.case === "expand an edit" ? 0 : 120,
+          collapsedEdits: ctx.case === "expand an edit",
+          tools: ctx.case === "expand an edit" ? await editTools() : undefined,
+          vcsDiff: ctx.case === drag ? reviewDiffs() : undefined,
+        }),
       url: ({ prepared }) => prepared.path,
     }),
   },
@@ -49,7 +48,6 @@ export default bench({
       await openReview(page)
       await page.idle()
       divider = await page.eval(measureDivider, {
-        selector: '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]',
         panel: '[data-slot="session-chat-panel"]',
         row: "[data-pane-row]",
         min: 400,
@@ -118,7 +116,7 @@ export default bench({
     [drag]: {
       primary: "frames.dropped.pct",
       metrics: ["main.work", "main.layout", "main.style", "main.script", "frames.interval.p95"],
-      run: ({ prepared }) => dragDivider(prepared.mouse, divider!),
+      run: ({ page }) => dragDivider(page, handle, divider!),
       reset: ({ page }) => page.idle(),
     },
   },
