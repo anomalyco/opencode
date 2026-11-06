@@ -1,5 +1,6 @@
 /* Settings › Sign-up section "off" (the default): the section renders but takes no space. The
-   pre-paint script sets data-off from saved Settings. */
+   pre-paint script sets data-off from saved Settings. Production leaves it out while "off" is the
+   default (index.tsx, script/fold-settings.ts). */
 [data-page="home"][data-site] [data-section="signup"][data-off] {
   display: none;
 }

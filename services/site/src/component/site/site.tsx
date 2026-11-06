@@ -1141,7 +1141,7 @@ export function Site(props: {
           ones one step more specific until the store takes over. */}
       <style
         innerHTML={
-          spacerGradientRule(siteSettings, "") +
+          (siteSettings.spacer === "dot gradient" ? spacerGradientRule(siteSettings, "") : "") +
           (siteSettings.spacer === "dither gradient" ? ditherGradientRule(siteSettings, "") : "")
         }
       />
