@@ -13,7 +13,6 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { changelogEntry } from "~/lib/changelog"
 import { entryStatus } from "~/lib/changelog-notes"
-import { changelogEntryPageMarkdown } from "~/lib/changelog-markdown"
 import { PageTitle } from "~/component/site/sticky-title"
 
 /** One release's page, `/changelog/<tag>`: the entry in full, with Share, and the newer and older entries. */
@@ -23,7 +22,11 @@ export default function ChangelogRelease() {
   const params = useParams()
   const view = createAsync(() => changelogEntry(params.tag ?? ""))
   const entry = () => view()?.entries[0]
-  const markdown = useMarkdown(`/changelog/${params.tag}`, changelogEntryPageMarkdown, { changelog: view })
+  const markdown = useMarkdown(
+    `/changelog/${params.tag}`,
+    (context, pages) => pages.changelogEntryPageMarkdown(context),
+    { changelog: view },
+  )
   const description = () => {
     const current = entry()
     if (!current) return i18n.t("changelog.meta.description")

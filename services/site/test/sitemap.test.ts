@@ -6,7 +6,7 @@ import { SolidStartServerFileRouter } from "../node_modules/@solidjs/start/dist/
 import { config } from "~/config"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { LOCALES, strip } from "~/lib/language"
-import { legalDocuments } from "~/lib/legal"
+import { legalDocuments } from "~/lib/legal-documents"
 import {
   sitemapExclusion,
   sitemapExclusions,

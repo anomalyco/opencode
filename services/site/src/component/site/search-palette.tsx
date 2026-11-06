@@ -16,8 +16,8 @@ import {
 import type { SearchAction, SearchGroup, SearchItem, SearchResult } from "./search-index"
 
 /**
- * The ⌘K dialog, loaded by the search shell (search.tsx) on the first ⌘K, Ctrl+K or "/", or when
- * the page is idle. The index loads with a second dynamic import on first open.
+ * The ⌘K dialog, loaded by the search shell (search.tsx) on the first ⌘K, Ctrl+K or "/", or once ⌘
+ * or Ctrl is pressed. The index loads with a second dynamic import on first open.
  */
 
 type SearchModule = typeof import("./search-index")
@@ -367,8 +367,8 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount: boolean })
     document.addEventListener("focusin", trap)
     document.addEventListener(searchOpenEvent, show)
     if (props.openOnMount) show()
-    // Mounted while the page is idle: build the index in the next idle period, so the first ⌘K
-    // shows results at once.
+    // Mounted ahead of the first open (⌘ or Ctrl pressed): build the index in the next idle period,
+    // so the first ⌘K shows results at once.
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 500))
     if (!props.openOnMount) idle(() => void index())
     onCleanup(() => {

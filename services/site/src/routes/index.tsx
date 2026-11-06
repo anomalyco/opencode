@@ -62,7 +62,6 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
-import { homeMarkdown } from "~/lib/home-markdown"
 import { repoStats, type RepoStats } from "~/lib/github"
 import { inlineKey } from "~/lib/direction"
 import { copyOnClick } from "~/lib/clipboard"
@@ -76,7 +75,7 @@ const PageSettings = import.meta.env.DEV ? lazy(() => import("~/component/site/p
 export default function Home() {
   const i18n = useI18n()
   const language = useLanguage()
-  const markdown = useMarkdown("/", homeMarkdown)
+  const markdown = useMarkdown("/", (context, pages) => pages.homeMarkdown(context))
   useHomeOrder()
   const [statsVisible, setStatsVisible] = createSignal(false)
   // Live repo numbers (lib/github.ts), streamed in under the config's numbers.

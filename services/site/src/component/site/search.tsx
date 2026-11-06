@@ -8,9 +8,9 @@ import { siteSettings } from "./settings"
 /**
  * The site search: ⌘K, Ctrl+K or "/" (when not typing) opens it. It has no visible trigger unless
  * Settings › Search hint shows one. This shell only listens for the shortcut; the dialog
- * (search-palette.tsx, with its styles) loads on the first open, on hover or focus of a trigger, or
- * when the page is idle, and the index (search-index.ts) loads on first open. Neither adds to the
- * page's first load.
+ * (search-palette.tsx, with its styles) and the index (search-index.ts) load on intent: ⌘ or Ctrl
+ * pressed (the start of ⌘K), hover or focus of a trigger, or the first open. Neither loads without
+ * one.
  */
 
 export type SiteSearchProps = {
@@ -69,19 +69,17 @@ export function SiteSearch(props: SiteSearchProps) {
     setMounted(true)
     setMac(isApple(detectPlatform()))
     const shortcut = (event: KeyboardEvent) => {
-      if (Palette() || !isSearchShortcut(event)) return
+      if (Palette()) return
+      // ⌘ or Ctrl on its own starts loading the dialog, so a fast ⌘K, type and Enter finds results.
+      if (event.key === "Meta" || event.key === "Control")
+        return void prefetchSearch().then((module) => !Palette() && setPalette(() => module.SearchPalette))
+      if (!isSearchShortcut(event)) return
       event.preventDefault()
       open()
     }
-    // Load the dialog once the page is idle, so a fast ⌘K, type and Enter finds results.
-    const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    const task = idle(
-      () => void prefetchSearch().then((module) => !Palette() && setPalette(() => module.SearchPalette)),
-    )
     document.addEventListener("keydown", shortcut)
     document.addEventListener(searchOpenEvent, open)
     onCleanup(() => {
-      if (window.cancelIdleCallback && typeof task === "number") window.cancelIdleCallback(task)
       document.removeEventListener("keydown", shortcut)
       document.removeEventListener(searchOpenEvent, open)
     })
