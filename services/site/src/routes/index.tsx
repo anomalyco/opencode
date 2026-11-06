@@ -41,6 +41,7 @@ import { byos } from "~/lib/byos"
 import { localize, useArea } from "~/i18n/content"
 import { announcementsSource } from "~/i18n/content/areas/announcements"
 import "~/component/site/byos.css"
+import { ByosOptionLeads, ByosOptions } from "~/component/site/byos-options"
 import { getStarted } from "~/lib/get-started"
 import "~/component/site/get-started.css"
 import { installs } from "~/component/site/product-data"
@@ -62,7 +63,6 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
-import { homeMarkdown } from "~/lib/home-markdown"
 import { repoStats, type RepoStats } from "~/lib/github"
 import { inlineKey } from "~/lib/direction"
 import { copyOnClick } from "~/lib/clipboard"
@@ -76,7 +76,7 @@ const PageSettings = import.meta.env.DEV ? lazy(() => import("~/component/site/p
 export default function Home() {
   const i18n = useI18n()
   const language = useLanguage()
-  const markdown = useMarkdown("/", homeMarkdown)
+  const markdown = useMarkdown("/", (context, pages) => pages.homeMarkdown(context))
   useHomeOrder()
   const [statsVisible, setStatsVisible] = createSignal(false)
   // Live repo numbers (lib/github.ts), streamed in under the config's numbers.
@@ -230,6 +230,7 @@ export default function Home() {
       <Announcement />
       <section
         data-component="hero"
+        data-section="hero"
         data-design="hero heroTitleSize heroText heroInstall homeAnnouncement"
         data-variant={heroVariant()}
         data-title-size={siteSettings.heroTitleSize}
@@ -1255,6 +1256,17 @@ function BringYourOwnSubs() {
               )}
             />
           </span>
+          {/* Spelled out so the production build folds it (script/fold-settings.ts). */}
+          <Show
+            when={
+              import.meta.env.DEV ||
+              siteSettings.subsStyle === "A rows" ||
+              siteSettings.subsStyle === "B wall" ||
+              siteSettings.subsStyle === "C names"
+            }
+          >
+            <ByosOptionLeads />
+          </Show>
         </p>
 
         {/* "grid": the providers' grid. */}
@@ -1308,6 +1320,18 @@ function BringYourOwnSubs() {
               {providers()}
             </div>
           </div>
+        </Show>
+
+        {/* A, B and C: showing that OpenCode works with nearly every subscription, provider and model. */}
+        <Show
+          when={
+            import.meta.env.DEV ||
+            siteSettings.subsStyle === "A rows" ||
+            siteSettings.subsStyle === "B wall" ||
+            siteSettings.subsStyle === "C names"
+          }
+        >
+          <ByosOptions />
         </Show>
       </div>
     </section>

@@ -275,14 +275,11 @@
       }
     }
 
-    /* The intro has room below it, so the menu opens downward from the right edge. */
+    /* The menu opens from the right edge. */
     [data-slot="menu"] {
       inset-inline-start: auto;
       inset-inline-end: 0;
-      top: calc(100% + 0.5rem);
-      bottom: auto;
       transform-origin: top var(--x-end, right);
-      --menu-shift: -4px;
     }
 
     /* The exposed install commands need two columns: the copy takes the first two. */

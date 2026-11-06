@@ -281,6 +281,8 @@ export const dict = {
   "site.newTab": "{{label}} (откроется в новой вкладке)",
   "site.products.label": "Продукты",
   "site.products.gridLabel": "Продукты OpenCode",
+  "site.products.previous": "Назад",
+  "site.products.next": "Вперёд",
   "site.action.copy": "Копировать",
   "site.action.copied": "Скопировано",
   "site.action.desktopDownloads": "Загрузки Desktop",

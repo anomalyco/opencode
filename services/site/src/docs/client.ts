@@ -1,6 +1,13 @@
-// The docs pages' only script: search, copy buttons, tabs and the status link. Pages are plain HTML
-// (no hydration); everything here is delegated from the document, so it needs no per-element setup.
-// The theme toggle is in the layout's head script, so it works before this loads.
+// The docs pages' only script: search, copy buttons, tabs, the status link and the funnel. Pages are
+// plain HTML (no hydration); everything here is delegated from the document, so it needs no
+// per-element setup. The theme toggle is in the layout's head script, so it works before this loads.
+import { Funnel } from "../lib/funnel"
+import { downloadOf, surfaceOf, targetOf } from "../lib/funnel-config"
+
+// The page reports to the Console's funnel like the site's (lib/funnel.ts). The docs are English, at the host's root
+// like the site; their config is built in, as a chunk would bring Vite's preload helper with it.
+Funnel.start(async () => ({ surfaceOf, targetOf, localeOf: () => "en", base: "", downloadOf }))
+
 type PagefindResult = { url: string; excerpt: string; meta: { title: string } }
 type Pagefind = { search(query: string): Promise<{ results: { data(): Promise<PagefindResult> }[] }> }
 
@@ -11,16 +18,46 @@ const load = new Function("url", "return import(url)") as (url: string) => Promi
 const dialog = document.querySelector<HTMLDialogElement>("[data-search-dialog]")
 const input = document.querySelector<HTMLInputElement>("[data-search-input]")
 const results = document.querySelector<HTMLElement>("[data-search-results]")
+// Whether a result was chosen since the search opened, so closing it then isn't a dismissal.
+let chosen = false
 
-function openSearch() {
+function openSearch(via: "shortcut" | "button") {
+  if (dialog && !dialog.open)
+    Funnel.track({ name: "search.opened", action: "opened", target: via, properties: { kind: "docs" } })
+  chosen = false
   dialog?.showModal()
   input?.focus()
 }
 
+// How many results showed for how many characters; never what was typed.
+const searched = () => ({
+  results: results?.querySelectorAll("a").length ?? 0,
+  query_len: input?.value.trim().length ?? 0,
+})
+
+dialog?.addEventListener("close", () => {
+  if (!chosen) Funnel.track({ name: "search.closed", action: "dismissed", target: "", properties: searched() })
+})
+
+// A chosen result, captured on the window so it's reported before the tracker's own report of the click sends what's
+// waiting as the result's page loads.
+window.addEventListener(
+  "click",
+  (event) => {
+    const result = event.target instanceof Element && event.target.closest<HTMLAnchorElement>("[data-search-results] a")
+    if (!result) return
+    chosen = true
+    const target = `link:${new URL(result.href).pathname}`.replace(/[^A-Za-z0-9/_.:+-]+/g, "-").slice(0, 96)
+    const rank = [...(results?.querySelectorAll("a") ?? [])].indexOf(result) + 1
+    Funnel.track({ name: "search.selected", action: "selected", target, properties: { rank, ...searched() } })
+  },
+  true,
+)
+
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault()
-    openSearch()
+    openSearch("shortcut")
   }
 })
 
@@ -54,7 +91,7 @@ input?.addEventListener("input", async () => {
 
 document.addEventListener("click", async (event) => {
   if (!(event.target instanceof Element)) return
-  if (event.target.closest("[data-search-open]")) return openSearch()
+  if (event.target.closest("[data-search-open]")) return openSearch("button")
 
   const code = event.target.closest<HTMLButtonElement>("[data-copy-code]")
   if (code) {

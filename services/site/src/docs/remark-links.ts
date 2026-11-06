@@ -5,7 +5,7 @@ interface MarkdownNode {
 }
 
 export default function remarkDocsLinks(options: { base: string }) {
-  const docsBase = `${options.base.replace(/\/$/, "")}/docs`
+  const docsBase = options.base.replace(/\/$/, "")
 
   return (tree: MarkdownNode) => {
     const visit = (node: MarkdownNode) => {

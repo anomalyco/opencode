@@ -34,12 +34,13 @@ import {
   colorFormats,
   type BadgeFont,
 } from "~/lib/brand-content"
-import { useMarkdown } from "~/component/site/use-markdown"
+import { useMarkdown, useMarkdownSource } from "~/component/site/use-markdown"
 import { siteSettings } from "~/component/site/settings"
 import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site/on-this-page"
 import { PageTitle } from "~/component/site/sticky-title"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { inlineKey } from "~/lib/direction"
+import { placeMenu } from "~/component/site/place-menu"
 
 export default function Brand() {
   const i18n = useI18n()
@@ -54,6 +55,7 @@ export default function Brand() {
   const tone = (value: string) => lower(themeName(value))
   const themeName = (value: string) => i18n.t(value === "dark" ? "site.theme.dark" : "site.theme.light")
   const markdown = useMarkdown("/brand", brandMarkdown)
+  const rules = useMarkdownSource("/brand", brandMarkdown)
 
   // The sections in page order, for the "Contents" list.
   const sections = createMemo(() =>
@@ -343,7 +345,11 @@ export default function Brand() {
               ? i18n.t("brand.ui.moreFormats", { detail: props.detail })
               : i18n.t("brand.ui.downloadAsset", { detail: props.detail })
           }
-          onClick={() => setOpen(!open())}
+          onClick={() => {
+            setOpen(!open())
+            const menu = state.root?.querySelector<HTMLElement>('[data-slot="menu"]')
+            if (menu) placeMenu(menu)
+          }}
         >
           <Show when={!props.chevronOnly}>{i18n.t("download.action.download")}</Show>
           <ChevronIcon />
@@ -698,7 +704,7 @@ export default function Brand() {
           <AgentRulesButton
             label={content().hero.copy.text}
             copied={content().hero.copy.copied}
-            source={markdown.source}
+            source={rules}
           />
         </div>
       </section>

@@ -1,4 +1,3 @@
-import "./markdown-view.css"
 import { createSignal, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { config } from "~/config"
 import { NewTab } from "./icons"
@@ -53,7 +52,7 @@ export function MarkdownView(props: { source: string; file: string; href?: strin
           </Show>
         </nav>
         <div data-slot="actions">
-          <button type="button" data-slot="copy" onClick={copy}>
+          <button type="button" data-slot="copy" data-funnel-copy="page-markdown" onClick={copy}>
             <span aria-live="polite">{copied() ? "Copied" : "Copy Markdown"}</span>
           </button>
         </div>

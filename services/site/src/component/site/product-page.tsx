@@ -13,7 +13,6 @@ import { useI18n } from "~/context/i18n"
 import { useArea } from "~/i18n/content"
 import { productDetailsSource } from "~/i18n/content/areas/product-details"
 import { productsSource } from "~/i18n/content/areas/products"
-import { productMarkdown } from "~/lib/product-markdown"
 import { ChangelogSettings, ChangelogTimeline, ChangelogUnavailable } from "./changelog-entry"
 import { MoreFromAnomaly } from "./product-list"
 import { moreProducts, productAreas, productDetails, type PageSlug } from "./product-data"
@@ -102,7 +101,9 @@ export function ProductPage(props: { slug: PageSlug }) {
       .map((row, index) => ({ ...row, ...detail().showcase[index] }))
       .slice(0, Number(siteSettings.featureClipCount))
       .filter((row) => row.clip || !moreProducts.some((item) => item.slug === props.slug))
-  const markdown = useMarkdown(`/${props.slug}`, productMarkdown(props.slug), { changelog: data })
+  const markdown = useMarkdown(`/${props.slug}`, (context, pages) => pages.productMarkdown(props.slug)(context), {
+    changelog: data,
+  })
 
   return (
     <Site
@@ -304,7 +305,11 @@ export function ProductPage(props: { slug: PageSlug }) {
           </Show>
         </div>
 
-        <section data-component="product-intro" data-install={exposedInstall() ? "exposed" : undefined}>
+        <section
+          data-component="product-intro"
+          data-section="intro"
+          data-install={exposedInstall() ? "exposed" : undefined}
+        >
           <div data-slot="copy">
             <h1>{product().name}</h1>
             <p data-design-copy={`product.${props.slug}.intro`}>
@@ -335,6 +340,7 @@ export function ProductPage(props: { slug: PageSlug }) {
       <Show when={showcase().length > 0}>
         <section
           data-component="showcase"
+          data-section="showcase"
           data-design="featureClipStyle featureClipCount"
           data-count={siteSettings.featureClipCount}
           data-media={productDetails[props.slug].showcaseMedia === false ? "none" : undefined}
@@ -363,7 +369,11 @@ export function ProductPage(props: { slug: PageSlug }) {
       </Show>
 
       <Show when={detail().features.length > 0}>
-        <ul data-component="product-features" data-columns={siteSettings.productFeatureColumns.charAt(0)}>
+        <ul
+          data-component="product-features"
+          data-section="features"
+          data-columns={siteSettings.productFeatureColumns.charAt(0)}
+        >
           <For each={detail().features}>
             {(feature) => (
               <li>
@@ -379,7 +389,7 @@ export function ProductPage(props: { slug: PageSlug }) {
 
       <Show when={areas()}>
         {(filter) => (
-          <section data-component="block" data-slot="product-changelog">
+          <section data-component="block" data-slot="product-changelog" data-section="changelog">
             <h2 data-slot="label">{i18n.t("nav.changelog")}</h2>
             {/* Its own boundary, so the page (and the card growing into its hero) does not wait for
             GitHub's releases, which can take over a second. */}

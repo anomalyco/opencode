@@ -21,7 +21,6 @@ import { PageTitle } from "~/component/site/sticky-title"
 import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
-import { productsMarkdown } from "~/lib/product-markdown"
 import { useI18n } from "~/context/i18n"
 import { localize, useArea } from "~/i18n/content"
 import { extensionsSource } from "~/i18n/content/areas/extensions"
@@ -34,7 +33,7 @@ export default function Product() {
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
   const download = () => localize(language.locale(), "download", downloadContent(i18n.t, language.route))
-  const markdown = useMarkdown("/product", productsMarkdown)
+  const markdown = useMarkdown("/product", (context, pages) => pages.productsMarkdown(context))
 
   return (
     <Site page="products" markdown={markdown}>
@@ -53,6 +52,7 @@ export default function Product() {
           and the cards below land where the home page's do (hero-title.css). */}
       <section
         data-component="hero"
+        data-section="hero"
         data-design="hero heroTitleSize"
         data-variant={siteSettings.hero}
         data-title-size={siteSettings.heroTitleSize}
@@ -70,7 +70,7 @@ export default function Product() {
 
       {/* Hidden while extensionPages is empty. */}
       <Show when={extensionPages.length > 0}>
-        <section data-component="block" data-slot="products-extensions">
+        <section data-component="block" data-slot="products-extensions" data-section="extensions">
           <SectionHeading id="extensions" title={i18n.t("site.extensions")} label />
           <div data-slot="body">
             {/* Each extension's page, with its install steps; a blank tile until one has an icon. */}
@@ -87,7 +87,7 @@ export default function Product() {
       </Show>
 
       {/* /product#download lands here, the first of the download page's sections on this page. */}
-      <section data-component="block" data-slot="products-integrations">
+      <section data-component="block" data-slot="products-integrations" data-section="integrations">
         <SectionHeading id="download" title={download().integrations.title} label />
         <div data-slot="body">
           <ProductList

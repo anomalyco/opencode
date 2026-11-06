@@ -16,6 +16,7 @@ export function CodeTabs(props: { id: string; label: string; tabs: { label: stri
               aria-selected={index() === 0 ? "true" : "false"}
               tabindex={index() === 0 ? 0 : -1}
               data-code-tab
+              data-funnel={`code-tab:${tab.label}`}
             >
               {tab.label}
             </button>

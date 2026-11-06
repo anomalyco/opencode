@@ -15,15 +15,18 @@ import { readBuildOutput } from "@cloudflare/build-output-utils"
 import { Miniflare, Response } from "miniflare"
 
 const root = path.resolve(import.meta.dir, "..")
-// Pages with a status must answer exactly that, others anything but a 5xx. The docs page is asked for
-// as a browser asks and, at a second URL, as an agent asks (its Markdown twin, src/docs/middleware.ts).
-const pages: { path: string; status?: number; accept?: string }[] = [
+// Pages with a status must answer exactly that, others anything but a 5xx; a redirect must go to its
+// location. The docs page is asked for as a browser asks and, at a second URL, as an agent asks (its
+// Markdown twin, src/docs/middleware.ts). The docs' old /v2 address and a V1 docs path redirect.
+const pages: { path: string; status?: number; accept?: string; location?: string }[] = [
   { path: "/", status: 200 },
   { path: "/ja", status: 200 },
   { path: "/desktop", status: 200 },
   { path: "/check-worker-start-404", status: 404 },
-  { path: "/v2/docs/", status: 200 },
-  { path: "/v2/docs/config/", status: 200, accept: "text/markdown" },
+  { path: "/docs/", status: 200 },
+  { path: "/docs/config/", status: 200, accept: "text/markdown" },
+  { path: "/v2/docs/config/", status: 301, location: "/docs/config/" },
+  { path: "/docs/ja/", status: 302, location: "/v1/docs/ja/" },
 ]
 
 const started = performance.now()
@@ -87,9 +90,12 @@ const results = await Promise.resolve()
         headers: { accept: page.accept ?? "text/html" },
         redirect: "manual",
       })
-        .then(async (response) => (await response.arrayBuffer(), response.status))
-        .catch(() => 0)
-      answers.push({ ...page, actual })
+        .then(async (response) => {
+          await response.arrayBuffer()
+          return { status: response.status, location: response.headers.get("location") ?? undefined }
+        })
+        .catch(() => ({ status: 0, location: undefined }))
+      answers.push({ ...page, actual: actual.status, actualLocation: actual.location })
     }
     return answers
   })
@@ -101,9 +107,15 @@ const results = await Promise.resolve()
   .finally(() => miniflare.dispose().catch(() => {}))
 
 const failures = results
-  .filter((result) => (result.status ? result.actual !== result.status : result.actual === 0 || result.actual >= 500))
+  .filter(
+    (result) =>
+      (result.status ? result.actual !== result.status : result.actual === 0 || result.actual >= 500) ||
+      result.actualLocation !== result.location,
+  )
   .map(
-    (result) => `${result.path} answered ${result.actual || "nothing"}${result.status ? `, not ${result.status}` : ""}`,
+    (result) =>
+      `${result.path} answered ${result.actual || "nothing"}${result.status ? `, not ${result.status}` : ""}` +
+      (result.actualLocation !== result.location ? ` to ${result.actualLocation}, not ${result.location}` : ""),
   )
 if (failures.length || errors.length) {
   console.error(`check-worker-start: FAILED\n${[...errors, ...failures].map((line) => `  ${line}`).join("\n")}`)
