@@ -18,6 +18,7 @@ const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
 const build = Agent.defaultID
+const localTime = (hour: number, minute: number) => DateTime.makeUnsafe(new Date(2026, 8, 5, hour, minute).getTime())
 
 describe("toLLMMessages", () => {
   test("background user shells enter model context only through their completion notification", () => {
@@ -35,7 +36,7 @@ describe("toLLMMessages", () => {
       type: "synthetic",
       text: "User shell pwd completed: /project",
       metadata: { source: "shell", shellID: shell.shellID, state: "completed" },
-      time: { created },
+      time: { created: localTime(21, 28) },
     })
 
     expect(toLLMMessages([shell], model)).toEqual([])
@@ -49,6 +50,32 @@ describe("toLLMMessages", () => {
     expect(toLLMMessages([completed], model)).toEqual([])
     expect(toLLMMessages([completed, notification], model)).toEqual([
       Message.make({ id: notification.id, role: "user", content: notification.text }),
+    ])
+    expect(toLLMMessages([completed, notification], model, model.providerID, { timestamps: true })).toEqual([
+      Message.make({
+        id: notification.id,
+        role: "user",
+        content: '<message_metadata created_at="2026-09-05 21:28" />\n\nUser shell pwd completed: /project',
+      }),
+    ])
+  })
+
+  test("timestamps foreground user shell output at completion", () => {
+    const shell = SessionMessage.Shell.make({
+      id: id("foreground-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_foreground"),
+      status: "timeout",
+      command: "long-task",
+      output: { output: "partial output", cursor: 14, size: 14, truncated: false },
+      time: { created: localTime(21, 20), completed: localTime(21, 28) },
+    })
+
+    expect(toLLMMessages([shell], model, model.providerID, { timestamps: true })[0]?.content).toEqual([
+      {
+        type: "text",
+        text: '<message_metadata completed_at="2026-09-05 21:28" />\n\nThe following shell command was executed by the user:\n\nCommand:\nlong-task\n\nOutput:\npartial output',
+      },
     ])
   })
 
@@ -80,6 +107,193 @@ describe("toLLMMessages", () => {
     )
 
     expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
+  })
+
+  test("timestamps user input as metadata and preserves assistant text", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("timed-user"),
+          type: "user",
+          text: "Investigate this",
+          time: { created: localTime(21, 20) },
+        }),
+        SessionMessage.Assistant.make({
+          id: id("timed-assistant"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [SessionMessage.AssistantText.make({ type: "text", text: "I found the cause" })],
+          time: { created: localTime(21, 21), completed: localTime(21, 28) },
+        }),
+      ],
+      model,
+      model.providerID,
+      { timestamps: true },
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: '<message_metadata created_at="2026-09-05 21:20" />\n\nInvestigate this' },
+    ])
+    expect(messages[1]?.content).toEqual([{ type: "text", text: "I found the cause" }])
+  })
+
+  test("keeps the timestamped history prefix stable as new input is appended", () => {
+    const history = [
+      SessionMessage.User.make({
+        id: id("stable-user"),
+        type: "user",
+        text: "Investigate this",
+        time: { created: localTime(21, 20) },
+      }),
+      SessionMessage.Assistant.make({
+        id: id("stable-assistant"),
+        type: "assistant",
+        agent: build,
+        model,
+        content: [SessionMessage.AssistantText.make({ type: "text", text: "[2026-09-05 21:21] I found the cause" })],
+        time: { created: localTime(21, 21) },
+      }),
+    ]
+    const before = toLLMMessages(history, model, model.providerID, { timestamps: true })
+    const after = toLLMMessages(
+      [
+        ...history,
+        SessionMessage.User.make({
+          id: id("next-user"),
+          type: "user",
+          text: "Continue",
+          time: { created: localTime(21, 30) },
+        }),
+      ],
+      model,
+      model.providerID,
+      { timestamps: true },
+    )
+    expect(after.slice(0, before.length)).toEqual(before)
+    expect(after[1]?.content).toEqual([{ type: "text", text: "[2026-09-05 21:21] I found the cause" }])
+  })
+
+  test("timestamps local, MCP, and hosted tool results at completion", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("timed-tools"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "shell-call",
+              name: "shell",
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { command: "pwd" },
+                content: [{ type: "text", text: "/project" }],
+              }),
+              time: { created: localTime(21, 21), ran: localTime(21, 22), completed: localTime(21, 25) },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "mcp-call",
+              name: "docs_search",
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: { query: "timestamps" },
+                error: { type: "tool.execution", message: "MCP server unavailable" },
+              }),
+              time: { created: localTime(21, 25), ran: localTime(21, 25), completed: localTime(21, 26) },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-call",
+              name: "web_search",
+              executed: true,
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { query: "OpenCode" },
+                content: [{ type: "text", text: "Search result" }],
+              }),
+              time: { created: localTime(21, 26), ran: localTime(21, 26), completed: localTime(21, 27) },
+            }),
+          ],
+          time: { created: localTime(21, 21), completed: localTime(21, 28) },
+        }),
+      ],
+      model,
+      model.providerID,
+      { timestamps: true },
+    )
+
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool", "tool"])
+    expect(messages[0]?.content.find((part) => part.type === "tool-result")?.result).toEqual({
+      type: "text",
+      value: '<message_metadata completed_at="2026-09-05 21:27" />\n\nSearch result',
+    })
+    expect(messages[1]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: { type: "text", value: '<message_metadata completed_at="2026-09-05 21:25" />\n\n/project' },
+    })
+    expect(messages[2]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: {
+        type: "error",
+        value: {
+          content: [{ type: "text", text: '<message_metadata completed_at="2026-09-05 21:26" />' }],
+        },
+      },
+    })
+  })
+
+  test("adds timestamp text without changing tool files and leaves system and reasoning content untouched", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.System.make({
+          id: id("timed-system"),
+          type: "system",
+          text: "Updated instructions",
+          time: { created: localTime(21, 20) },
+        }),
+        SessionMessage.Assistant.make({
+          id: id("timed-file"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [
+            SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "Internal reasoning" }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "file-call",
+              name: "read",
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { path: "image.png" },
+                content: [{ type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png" }],
+              }),
+              time: { created: localTime(21, 20), completed: localTime(21, 28) },
+            }),
+          ],
+          time: { created: localTime(21, 20), completed: localTime(21, 28) },
+        }),
+      ],
+      model,
+      model.providerID,
+      { timestamps: true },
+    )
+
+    expect(messages[0]?.content).toEqual([{ type: "text", text: "Updated instructions" }])
+    expect(messages[1]?.content[0]).toMatchObject({ type: "reasoning", text: "Internal reasoning" })
+    expect(messages[2]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: {
+        type: "content",
+        value: [
+          { type: "text", text: '<message_metadata completed_at="2026-09-05 21:28" />' },
+          { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png" },
+        ],
+      },
+    })
   })
 
   test("maps every top-level Session message type", () => {
