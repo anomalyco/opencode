@@ -92,6 +92,7 @@ impl RouteView for Home {
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
+        crate::features::location::follow_default(tui);
         self.prompt.sync(tui, changes);
         self.slot.sync(tui, changes);
         // The last form closed: the prompt takes the keys back, after any open dialog.

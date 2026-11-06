@@ -178,6 +178,28 @@ fn cd_on_home_moves_the_agents_to_the_new_directory() {
     setup.wait("the new directory's agents", || setup.tui.local.agents().iter().any(|agent| agent.id.0 == "reviewer"));
 }
 
+/// MS6 carbon-3: home follows the default location once the server names its canonical directory, so the
+/// agents load when the start directory is spelled differently.
+#[test]
+fn home_follows_the_canonical_default_location() {
+    let fake = Fake::new(|seen| {
+        let directory = seen.param("location[directory]");
+        let directory = directory.trim_end_matches('/');
+        support::base(seen, if directory.is_empty() { "/project" } else { directory })
+    });
+    let deps = Deps { directory: "/project/".into(), route: Route::Home, ..support::deps(Arc::new(fake)) };
+    let h = support::mount(100, 30, deps);
+    // The first connection reads the default location, which adopts the server's directory.
+    let connected =
+        opencode_api::events::State { status: opencode_api::events::Status::Connected, attempt: 0, error: None };
+    opencode_tui::features::overlays::connection_changed(&h.tui, &connected);
+    h.wait("the home agents", || !h.tui.local.agents().is_empty());
+    assert_eq!(
+        opencode_tui::features::location::current(&h.tui).map(|location| location.directory).as_deref(),
+        Some("/project")
+    );
+}
+
 /// carbon-3: once the session reports the agent and model a submit committed, the drafts give way, so a
 /// later switch from another client shows.
 #[test]
