@@ -4,6 +4,7 @@ import { bench, web } from "@hona/strobe"
 import { scalingDiffs, scalingRows } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"
+import { keepStartStorage, saveStartStorage } from "./fixtures/storage"
 import { mockTimelineSession, serveDiffs, timeline } from "./fixtures/timeline"
 
 export default bench({
@@ -17,6 +18,7 @@ export default bench({
       async prepare(ctx) {
         const { params, url } = ctx
         const page = cached(ctx)
+        await keepStartStorage(page)
         const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
         // The app asks for the changes only when the pane opens.
         await serveDiffs(page, scalingDiffs(params.files))
@@ -32,6 +34,8 @@ export default bench({
 
     if (name !== "open review") await openReview(page)
     await page.idle()
+    // A reload keeps the review open (the app saves its layout on pagehide), so every run starts from this storage.
+    await saveStartStorage(page)
   },
 
   cases: {
