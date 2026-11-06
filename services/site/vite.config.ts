@@ -181,6 +181,9 @@ export default defineConfig({
         // Oxc, Vite 8's own minifier. "esbuild" here left the bundles unminified: Vite only adds its
         // esbuild minifier when the top-level build.minify asks for it, and that stays off for the Worker.
         minify: "oxc",
+        // strobe builds with STROBE_SOURCEMAP=hidden: maps beside the scripts without a
+        // sourceMappingURL comment, so the scripts stay byte for byte and profiles name source lines.
+        sourcemap: process.env.STROBE_SOURCEMAP === "hidden" ? "hidden" : undefined,
       },
     },
   },
