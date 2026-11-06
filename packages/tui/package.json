@@ -12,6 +12,7 @@
   },
   "exports": {
     ".": "./src/index.tsx",
+    "./clipboard-process": "./src/clipboard/process.ts",
     "./config": "./src/config/index.tsx",
     "./config/keybind": "./src/config/keybind.ts",
     "./config/v1": "./src/config/v1/index.tsx",

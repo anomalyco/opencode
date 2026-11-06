@@ -104,7 +104,7 @@ async function mountForm(
           },
           write(text) {
             copied.push(text)
-            return Promise.resolve()
+            return Promise.resolve("written" as const)
           },
         }}
       >

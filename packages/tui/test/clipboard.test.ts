@@ -98,7 +98,7 @@ test("uses all available routes but skips the process host remotely", async () =
     }),
   )
 
-  expect(await clipboard.write("hello")).toBeUndefined()
+  expect(await clipboard.write("hello")).toBe("attempted")
   expect(writes).toEqual({ host: 0, terminal: 1 })
 })
 
@@ -110,8 +110,8 @@ test("removes NUL characters before writing", async () => {
     }),
   )
 
-  expect(await clipboard.write("before\0after")).toBeUndefined()
-  expect(await clipboard.write("clean")).toBeUndefined()
+  expect(await clipboard.write("before\0after")).toBe("written")
+  expect(await clipboard.write("clean")).toBe("written")
   expect(writes).toEqual(["beforeafter", "clean"])
 })
 
@@ -136,7 +136,7 @@ test("rejects only when no clipboard route accepted the write", async () => {
     }),
   )
 
-  expect(await fallback.write("hello")).toBeUndefined()
+  expect(await fallback.write("hello")).toBe("written")
   expect(await clipboard.write("hello").then(undefined, (error) => error)).toBe(failure)
   expect(writes).toEqual([["hello", { destination: "all-available", selection: "clipboard" }]])
 })

@@ -3,6 +3,7 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
 import { useConfig } from "../config"
 import { useClipboard } from "../context/clipboard"
+import { clipboardFeedback } from "../util/clipboard-feedback"
 import { Keymap } from "../context/keymap"
 import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
@@ -36,7 +37,10 @@ export function DialogErrorDetails(props: {
   const copy = () => {
     void clipboard
       .write(errorDetails(props).text)
-      .then(() => setCopied(true))
+      .then((result) => {
+        setCopied(result === "written")
+        if (result === "attempted") toast.show(clipboardFeedback(result))
+      })
       .catch(toast.error)
   }
 

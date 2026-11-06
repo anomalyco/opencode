@@ -54,7 +54,13 @@ for (const width of [40, 100]) {
         <TestTuiContexts
           directory={temporary.path}
           paths={{ state: temporary.path }}
-          clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+          clipboard={{
+            read: async () => undefined,
+            write: async (text) => {
+              copied.push(text)
+              return "written"
+            },
+          }}
         >
           <ConfigProvider config={createTuiResolvedConfig()}>
             <RouteProvider initialRoute={{ type: "home" }}>

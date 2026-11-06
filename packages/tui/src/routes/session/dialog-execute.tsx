@@ -6,6 +6,7 @@ import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
+import { clipboardFeedback } from "../../util/clipboard-feedback"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
 import {
@@ -81,7 +82,10 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     if (!value) return
     void clipboard
       .write(value)
-      .then(() => setCopied(kind))
+      .then((result) => {
+        setCopied(result === "written" ? kind : undefined)
+        if (result === "attempted") toast.show(clipboardFeedback(result))
+      })
       .catch(toast.error)
   }
 

@@ -34,6 +34,7 @@ test.each([
           },
           async write(text) {
             writes.push(text)
+            return "written"
           },
         }}
       >
