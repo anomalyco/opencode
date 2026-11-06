@@ -127,10 +127,8 @@ mod tests {
     use super::*;
 
     fn script(dir: &Path, body: &str) -> TsCommand {
-        use std::os::unix::fs::PermissionsExt;
         let path = dir.join("opencode");
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::ts_command::write_script(&path, &format!("#!/bin/sh\n{body}\n"));
         TsCommand::new(path)
     }
 
