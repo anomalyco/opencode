@@ -1,6 +1,5 @@
-import type { Component } from "solid-js"
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import { createStore } from "solid-js/store"
+import type { Component, JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Key } from "@solid-primitives/keyed"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -22,7 +21,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { worktreeInventoryKey } from "@/workspaces/inventory"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
-import { useHostApis } from "@/runtime/extension/root"
+import { useHostApis } from "@/runtime/plugin/root"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Project } from "@/runtime/server/types"
 import {
@@ -30,13 +29,24 @@ import {
   inspectWorkspaceDeletion,
   managedWorkspaceDirectories,
   mergeWorkspaceSessionInventory,
-  removeWorkspacesSequentially,
   sessionsForWorkspace,
   type WorkspaceDeleteInspection,
   workspaceInventory,
 } from "@/workspaces/paths"
 import { listAllSessions } from "@/session/list"
-import type { ServerScope } from "@/runtime/server/scope"
+import {
+  createWorkspaceDeleteState,
+  isWorkspaceDeleteBusy,
+  transitionWorkspaceDelete,
+  visibleWorkspaces,
+  workspaceConfirmView,
+  workspaceRowView,
+  type WorkspaceDeleteEffect,
+  type WorkspaceDeleteEvent,
+  type WorkspaceDeleteScope,
+  type WorkspaceSkipReason,
+  type WorkspaceTarget,
+} from "./delete-machine"
 import { workspaceInventoryQuery } from "./queries"
 import "@/settings/settings.css"
 
@@ -49,6 +59,7 @@ export const SettingsWorkspaces: Component<{
   activeDirectory?: string
   resetProjectFilter?: () => number
   projectID?: string
+  headerAction?: JSX.Element
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
@@ -57,29 +68,21 @@ export const SettingsWorkspaces: Component<{
   const queryClient = useQueryClient()
   const data = server.ctx.data
   const tabs = useTabs()
-  const extensions = useHostApis()
+  const hostApis = useHostApis()
 
-  const [store, setStore] = createStore<{
-    project: string
-    transaction: "confirm" | "running" | undefined
-    deleting: string[]
-    removing: string[]
-  }>({
-    project: "all",
-    transaction: undefined,
-    deleting: [],
-    removing: [],
-  })
+  const [projectFilter, setProjectFilter] = createSignal("all")
+  const [deleteState, setDeleteState] = createSignal(createWorkspaceDeleteState())
+  const busy = () => isWorkspaceDeleteBusy(deleteState())
 
   createEffect(() => {
     if (props.projectID) {
-      setStore("project", props.projectID)
+      setProjectFilter(props.projectID)
 
       return
     }
 
     props.resetProjectFilter?.()
-    setStore("project", "all")
+    setProjectFilter("all")
   })
 
   const projectQuery = useQuery(() => ({
@@ -101,33 +104,26 @@ export const SettingsWorkspaces: Component<{
   const selectedProject = createMemo(() =>
     props.projectID
       ? props.projectID
-      : store.project === "all" || projects().some((project) => project.id === store.project)
-        ? store.project
+      : projectFilter() === "all" || projects().some((project) => project.id === projectFilter())
+        ? projectFilter()
         : "all",
   )
 
-  const filtered = createMemo(() => filterWorkspaceInventory(workspaces(), selectedProject()))
+  const workspaceKey = (workspace: Workspace) => String(pathKey(workspace.directory))
 
-  const captureDeleteContext = () => {
-    const sdk = serverSDK
-
-    return {
-      sdk,
-      data,
-      server: ServerConnection.key(sdk.server),
-      activeDirectory: props.activeDirectory,
-    }
-  }
+  const filtered = createMemo(() =>
+    visibleWorkspaces(deleteState(), filterWorkspaceInventory(workspaces(), selectedProject()), workspaceKey),
+  )
 
   // Fetch sessions per workspace directory instead of paging through every session on the server.
-  const loadSessions = async (directories: readonly string[], context = captureDeleteContext()) => {
+  const loadSessions = async (directories: readonly string[], signal?: AbortSignal) => {
     const fetched = await Promise.all(
-      directories.map((directory) => listAllSessions(context.sdk.api.session, { order: "desc", directory })),
+      directories.map((directory) => listAllSessions(serverSDK.api.session, { order: "desc", directory }, { signal })),
     )
 
     const sessions = fetched.flat()
 
-    return mergeWorkspaceSessionInventory(sessions, context.data.session.list())
+    return mergeWorkspaceSessionInventory(sessions, data.session.list())
   }
 
   const workspaceDirectories = createMemo(() => workspaces().map((workspace) => workspace.directory))
@@ -209,21 +205,19 @@ export const SettingsWorkspaces: Component<{
     return getRelativeTime(new Date(session.time.updated).toISOString(), language.t)
   }
 
-  const inspect = async (workspace: Workspace, context = captureDeleteContext()) => {
+  const inspect = async (directory: string, active: string | undefined, signal?: AbortSignal) => {
     const [working, branch, sessions] = await Promise.all([
-      context.sdk.api.vcs.status({ location: { directory: workspace.directory } }),
-      context.sdk.api.vcs.diff({ location: { directory: workspace.directory }, mode: "branch" }),
-      loadSessions([workspace.directory], context),
+      serverSDK.api.vcs.status({ location: { directory } }, { signal }),
+      serverSDK.api.vcs.diff({ location: { directory }, mode: "branch" }, { signal }),
+      loadSessions([directory], signal),
     ])
 
-    const result = inspectWorkspaceDeletion({
-      workspace: workspace.directory,
-      activeDirectory: context.activeDirectory,
+    return inspectWorkspaceDeletion({
+      workspace: directory,
+      activeDirectory: active,
       sessions,
       status: working.data.length > 0 || branch.data.length > 0 ? "dirty" : "clean",
     })
-
-    return { result, sessions }
   }
 
   const inspectionMessages = (result: WorkspaceDeleteInspection) => {
@@ -235,162 +229,209 @@ export const SettingsWorkspaces: Component<{
     return messages
   }
 
-  const blocked = (result: WorkspaceDeleteInspection) => {
-    showToast({
-      variant: "error",
-      title: language.t("workspace.delete.failed.title"),
-      description: result.active
+  const skippedMessage = (reason: WorkspaceSkipReason) => {
+    if (reason.kind === "blocked")
+      return reason.inspection.active
         ? language.t("settings.workspaces.delete.blocked.active")
-        : inspectionMessages(result)[0],
-    })
+        : inspectionMessages(reason.inspection)[0]
+
+    if (reason.kind === "failed") return reason.message ?? language.t("common.requestFailed")
+
+    return language.t("common.requestFailed")
   }
 
-  const remove = async (workspace: Workspace, force = false, context = captureDeleteContext()) => {
-    const key = String(pathKey(workspace.directory))
-    setStore("deleting", (items) => [...items, key])
+  // A bulk delete checks each worktree first; a single one was checked in its confirmation and deletes with force.
+  const removeWorkspace = async (effect: Extract<WorkspaceDeleteEffect, { type: "delete.run" }>) => {
+    const target = effect.target
 
-    try {
-      const preflight = await inspect(workspace, context)
+    if (!effect.force) {
+      const preflight = await inspect(target.directory, effect.active)
 
-      if (!force && (preflight.result.active || preflight.result.linked || preflight.result.dirty)) {
-        blocked(preflight.result)
-
-        return
-      }
-
-      const removed = await context.sdk.api.worktree
-        .remove({
-          projectID: workspace.project.id,
-          directory: workspace.directory,
-          force,
+      if (preflight.active || preflight.linked || preflight.dirty)
+        return dispatch({
+          type: "delete.skipped",
+          attempt: effect.attempt,
+          reason: { kind: "blocked", inspection: preflight },
         })
-        .then(() => true)
-        .catch((error) => {
-          showToast({
-            variant: "error",
-            title: language.t("workspace.delete.failed.title"),
-            description: error instanceof Error ? error.message : language.t("common.requestFailed"),
-          })
-
-          return false
-        })
-
-      if (!removed) return
-      setStore("removing", (items) => [...items, key])
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      tabs.store.forEach((tab) => {
-        if (tab.type !== "draft" || tab.server !== context.server) return
-        const directoryMatches = containsDirectory(workspace.directory, tab.directory)
-        const worktreeMatches = tab.worktree && containsDirectory(workspace.directory, tab.worktree)
-
-        if (!directoryMatches && !worktreeMatches) return
-        tabs.updateDraft(tab.draftID, {
-          directory: directoryMatches ? workspace.project.worktree : tab.directory,
-          worktree: undefined,
-        })
-      })
-      extensions.workspaceRemoved({ server: context.server, directory: workspace.directory })
-      await queryClient.invalidateQueries({
-        queryKey: worktreeInventoryKey(context.sdk.scope, workspace.project.id),
-      })
-      await queryClient.invalidateQueries({ queryKey: [context.sdk.scope, "settings-workspace-inventory"] })
-    } finally {
-      setStore("deleting", (items) => items.filter((item) => item !== key))
-      setStore("removing", (items) => items.filter((item) => item !== key))
     }
+
+    await serverSDK.api.worktree.remove({
+      projectID: target.projectID,
+      directory: target.directory,
+      force: effect.force,
+    })
+    dispatch({ type: "delete.succeeded", attempt: effect.attempt, target })
   }
 
-  let inspectionID = 0
+  const deleteTimers = new Map<number, ReturnType<typeof setTimeout>>()
+  const checks = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  let collapseTimer: ReturnType<typeof setTimeout> | undefined
+  const serverKey = ServerConnection.key(serverSDK.server)
 
-  const releaseConfirmation = () => {
-    if (store.transaction === "confirm") setStore("transaction", undefined)
+  const dispatch = (event: WorkspaceDeleteEvent) => {
+    const previous = untrack(deleteState)
+    const next = transitionWorkspaceDelete(previous, event)
+
+    if (next.state !== previous) setDeleteState(next.state)
+    next.effects.forEach(run)
   }
 
-  const transact = async (task: () => Promise<void>) => {
-    if (store.transaction !== "confirm") return
-    setStore("transaction", "running")
+  const run = (effect: WorkspaceDeleteEffect) => {
+    if (effect.type === "open.confirm") return openConfirm(effect)
 
-    try {
-      await task()
-    } catch (error) {
-      showToast({
+    if (effect.type === "inspect.run") {
+      const attempt = effect.attempt
+      const controller = new AbortController()
+      checks.set(attempt, {
+        controller,
+        timer: setTimeout(() => dispatch({ type: "inspect.timed-out", attempt }), effect.timeoutMs),
+      })
+      void inspect(effect.directory, effect.active, controller.signal).then(
+        (inspection) => dispatch({ type: "inspect.succeeded", attempt, inspection }),
+        () => dispatch({ type: "inspect.failed", attempt }),
+      )
+
+      return
+    }
+
+    if (effect.type === "inspect.stop") {
+      const check = checks.get(effect.attempt)
+      checks.delete(effect.attempt)
+      clearTimeout(check?.timer)
+      check?.controller.abort()
+
+      return
+    }
+
+    if (effect.type === "delete.run") {
+      const attempt = effect.attempt
+      deleteTimers.set(
+        attempt,
+        setTimeout(() => dispatch({ type: "delete.timed-out", attempt }), effect.timeoutMs),
+      )
+      void removeWorkspace(effect).catch((error) =>
+        dispatch({
+          type: "delete.skipped",
+          attempt,
+          reason: { kind: "failed", message: error instanceof Error ? error.message : undefined },
+        }),
+      )
+
+      return
+    }
+
+    if (effect.type === "delete.timer.stop") {
+      clearTimeout(deleteTimers.get(effect.attempt))
+      deleteTimers.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "collapse.start") {
+      const attempt = effect.attempt
+      collapseTimer = setTimeout(() => dispatch({ type: "collapse.completed", attempt }), effect.delayMs)
+
+      return
+    }
+
+    if (effect.type === "collapse.cancel") return clearTimeout(collapseTimer)
+
+    if (effect.type === "toast.skipped")
+      return showToast({
         variant: "error",
         title: language.t("workspace.delete.failed.title"),
-        description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+        description: skippedMessage(effect.reason),
       })
-    } finally {
-      setStore("transaction", undefined)
+
+    const target = effect.target
+    tabs.store.forEach((tab) => {
+      if (tab.type !== "draft" || tab.server !== serverKey) return
+      const directoryMatches = containsDirectory(target.directory, tab.directory)
+      const worktreeMatches = tab.worktree && containsDirectory(target.directory, tab.worktree)
+
+      if (!directoryMatches && !worktreeMatches) return
+      tabs.updateDraft(tab.draftID, {
+        directory: directoryMatches ? target.projectWorktree : tab.directory,
+        worktree: undefined,
+      })
+    })
+    hostApis.workspaceRemoved({ server: serverKey, directory: target.directory })
+    void queryClient.invalidateQueries({ queryKey: worktreeInventoryKey(serverSDK.scope, target.projectID) })
+    void queryClient.invalidateQueries({ queryKey: [serverSDK.scope, "settings-workspace-inventory"] })
+  }
+
+  const openConfirm = (effect: Extract<WorkspaceDeleteEffect, { type: "open.confirm" }>) => {
+    const attempt = effect.attempt
+    const accept = () => dispatch({ type: "confirm.accepted", attempt })
+    // A closing dialog reports this after its exit animation, which the attempt makes harmless for the next one.
+    const cancel = () => dispatch({ type: "confirm.cancelled", attempt })
+    const target = effect.targets[0]
+
+    if (effect.scope === "one" && target) {
+      void dialog.push(
+        () => (
+          <DialogDeleteWorkspace
+            directory={target.directory}
+            view={workspaceConfirmView(deleteState(), attempt)}
+            inspectionMessages={inspectionMessages}
+            onRetry={() => dispatch({ type: "inspect.retried", attempt })}
+            onDelete={accept}
+          />
+        ),
+        cancel,
+      )
+
+      return
     }
-  }
 
-  const confirmDelete = (workspace: Workspace) => {
-    if (store.transaction) return
-    const context = captureDeleteContext()
-    const current = ++inspectionID
-    setStore("transaction", "confirm")
-    void dialog.push(
-      () => (
-        <DialogDeleteWorkspace
-          workspace={workspace}
-          scope={context.sdk.scope}
-          inspectionID={current}
-          inspect={() => inspect(workspace, context)}
-          inspectionMessages={inspectionMessages}
-          onDelete={() => transact(() => remove(workspace, true, context))}
-        />
-      ),
-      releaseConfirmation,
-    )
-  }
+    const copy =
+      effect.scope === "unused"
+        ? {
+            title: language.t("settings.workspaces.deleteWithoutSessions"),
+            confirmation: language.plural("settings.workspaces.deleteWithoutSessions.confirm", effect.targets.length),
+            warning: language.t("settings.workspaces.deleteWithoutSessions.warning"),
+          }
+        : {
+            title: language.t("settings.workspaces.deleteAll"),
+            confirmation: language.plural("settings.workspaces.deleteAll.confirm", effect.targets.length),
+            warning: language.t("settings.workspaces.deleteAll.warning"),
+          }
 
-  const removeAll = async (inventory: Workspace[], context: ReturnType<typeof captureDeleteContext>) => {
-    await removeWorkspacesSequentially(inventory, (workspace) => remove(workspace, false, context))
-  }
-
-  const confirmDeleteAll = () => {
-    if (store.transaction) return
-    const context = captureDeleteContext()
-    const inventory = [...filtered()]
-    setStore("transaction", "confirm")
     void dialog.push(
       () => (
         <DialogDeleteWorkspaces
-          title={language.t("settings.workspaces.deleteAll")}
-          confirmation={language.plural("settings.workspaces.deleteAll.confirm", inventory.length)}
-          warning={language.t("settings.workspaces.deleteAll.warning")}
-          onDelete={() => transact(() => removeAll(inventory, context))}
+          title={copy.title}
+          confirmation={copy.confirmation}
+          warning={copy.warning}
+          onDelete={accept}
         />
       ),
-      releaseConfirmation,
+      cancel,
     )
   }
 
-  const confirmDeleteWithoutSessions = () => {
-    if (store.transaction || workspacesWithoutSessions().length === 0) return
-    const context = captureDeleteContext()
-    const inventory = [...workspacesWithoutSessions()]
-    setStore("transaction", "confirm")
-    void dialog.push(
-      () => (
-        <DialogDeleteWorkspaces
-          title={language.t("settings.workspaces.deleteWithoutSessions")}
-          confirmation={language.plural("settings.workspaces.deleteWithoutSessions.confirm", inventory.length)}
-          warning={language.t("settings.workspaces.deleteWithoutSessions.warning")}
-          onDelete={() => transact(() => removeAll(inventory, context))}
-        />
-      ),
-      releaseConfirmation,
-    )
-  }
+  const targetOf = (workspace: Workspace): WorkspaceTarget => ({
+    key: workspaceKey(workspace),
+    directory: workspace.directory,
+    projectID: workspace.project.id,
+    projectWorktree: workspace.project.worktree,
+  })
+
+  const confirm = (scope: WorkspaceDeleteScope, inventory: readonly Workspace[]) =>
+    dispatch({ type: "confirm.opened", scope, active: props.activeDirectory, targets: inventory.map(targetOf) })
+
+  createEffect(() => dispatch({ type: "inventory.synced", keys: workspaces().map(workspaceKey) }))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return (
     <>
       <div class="settings-tab-header settings-workspaces-header">
         <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.tab.workspaces")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.workspaces.description")}</span>
           </div>
+          <div class="settings-tab-header-actions">{props.headerAction}</div>
         </div>
       </div>
 
@@ -413,7 +454,7 @@ export const SettingsWorkspaces: Component<{
                     <Menu.Content>
                       <For each={projectOptions()}>
                         {(option) => (
-                          <Menu.Item onSelect={() => setStore("project", option.id)}>
+                          <Menu.Item onSelect={() => setProjectFilter(option.id)}>
                             <span class="min-w-0 flex-1 truncate">{option.label}</span>
                             <Show when={selectedProject() === option.id}>
                               <Icon name="check" size="small" class="shrink-0" />
@@ -432,18 +473,18 @@ export const SettingsWorkspaces: Component<{
                   variant="ghost-muted"
                   size="small"
                   aria-label={language.t("common.moreOptions")}
-                  disabled={!!store.transaction}
+                  disabled={busy()}
                   icon={<Icon name="outline-dots" size="small" />}
                 />
                 <Menu.Portal>
                   <Menu.Content>
                     <Show when={workspacesWithoutSessions().length > 0}>
-                      <Menu.Item onSelect={confirmDeleteWithoutSessions}>
+                      <Menu.Item onSelect={() => confirm("unused", workspacesWithoutSessions())}>
                         {language.t("settings.workspaces.deleteWithoutSessions")}
                       </Menu.Item>
                       <Menu.Separator />
                     </Show>
-                    <Menu.Item onSelect={confirmDeleteAll}>
+                    <Menu.Item onSelect={() => confirm("all", filtered())}>
                       <span class="settings-workspaces-delete-all">{language.t("settings.workspaces.deleteAll")}</span>
                     </Menu.Item>
                   </Menu.Content>
@@ -469,11 +510,11 @@ export const SettingsWorkspaces: Component<{
             <Key each={filtered()} by={(workspace) => `${workspace.project.id}:${pathKey(workspace.directory)}`}>
               {(workspace) => {
                 const linked = () => workspaceSessions(workspace())
-                const key = () => String(pathKey(workspace().directory))
-                const deleting = () => store.deleting.includes(key())
+                const row = () => workspaceRowView(deleteState(), workspaceKey(workspace()))
+                const deleting = () => row().deleting
 
                 return (
-                  <div class="settings-workspaces-row-motion" data-removing={store.removing.includes(key())}>
+                  <div class="settings-workspaces-row-motion" data-removing={row().collapsing}>
                     <div class="settings-workspaces-row">
                       <div class="settings-workspaces-row-header">
                         <div class="settings-workspaces-copy">
@@ -506,9 +547,9 @@ export const SettingsWorkspaces: Component<{
                                   aria-label={language.t("workspace.delete.confirm", {
                                     name: getFilename(workspace().directory),
                                   })}
-                                  disabled={!!store.transaction}
+                                  disabled={busy()}
                                   icon={<Icon name="outline-trash" size="small" />}
-                                  onClick={() => confirmDelete(workspace())}
+                                  onClick={() => confirm("one", [workspace()])}
                                 />
                               </>
                             }
@@ -568,19 +609,13 @@ function WorkspacePath(props: { directory: string }) {
   )
 }
 
-function DialogDeleteWorkspaces(props: {
-  title: string
-  confirmation: string
-  warning: string
-  onDelete: () => Promise<void>
-}) {
+function DialogDeleteWorkspaces(props: { title: string; confirmation: string; warning: string; onDelete: () => void }) {
   const dialog = useDialog()
   const language = useLanguage()
 
   const remove = () => {
-    const deleting = props.onDelete()
+    props.onDelete()
     dialog.close()
-    void deleting
   }
 
   return (
@@ -597,7 +632,7 @@ function DialogDeleteWorkspaces(props: {
         />
       </DialogHeader>
       <DialogFooter>
-        <Button type="button" variant="neutral" onClick={() => dialog.close()}>
+        <Button type="button" variant="neutral" autofocus onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
         <Button type="button" variant="danger" onClick={remove}>
@@ -609,51 +644,41 @@ function DialogDeleteWorkspaces(props: {
 }
 
 function DialogDeleteWorkspace(props: {
-  workspace: Workspace
-  scope: ServerScope
-  inspectionID: number
-  inspect: () => Promise<{ result: WorkspaceDeleteInspection; sessions: SessionInfo[] }>
+  directory: string
+  view: ReturnType<typeof workspaceConfirmView>
   inspectionMessages: (result: WorkspaceDeleteInspection) => string[]
-  onDelete: () => Promise<void>
+  onRetry: () => void
+  onDelete: () => void
 }) {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const status = useQuery(() => ({
-    queryKey: [props.scope, pathKey(props.workspace.directory), "workspace-delete-status", props.inspectionID] as const,
-    queryFn: props.inspect,
-    staleTime: 0,
-  }))
-
   const descriptions = () => {
-    if (status.isPending) return []
+    if (props.view.failed) return [language.t("workspace.status.error")]
 
-    if (status.isError) return [language.t("workspace.status.error")]
+    if (!props.view.inspection) return []
 
-    if (!status.data) return []
-
-    return props.inspectionMessages(status.data.result)
+    return props.inspectionMessages(props.view.inspection)
   }
 
   const remove = () => {
-    const deleting = props.onDelete()
+    props.onDelete()
     dialog.close()
-    void deleting
   }
 
   return (
     <Dialog fit>
       <DialogHeader>
         <DialogTitleGroup
-          title={language.t("workspace.delete.confirm", { name: getFilename(props.workspace.directory) })}
+          title={language.t("workspace.delete.confirm", { name: getFilename(props.directory) })}
           description={
             <div class="flex flex-col gap-2">
               <div class="flex flex-col gap-1">
                 <span class="text-11-regular text-v2-text-text-faint">
-                  {language.t(status.isPending ? "workspace.status.checking" : "workspace.delete.location")}
+                  {language.t(props.view.checking ? "workspace.status.checking" : "workspace.delete.location")}
                 </span>
                 <code class="block w-fit max-w-full rounded-[4px] bg-[color-mix(in_oklch,var(--v2-text-text-base)_8%,transparent)] px-1 py-0.5 font-mono text-xs font-medium leading-4 text-v2-text-text-base break-all">
-                  {props.workspace.directory}
+                  {props.directory}
                 </code>
               </div>
               <div>{language.t("settings.workspaces.delete.warning")}</div>
@@ -663,10 +688,15 @@ function DialogDeleteWorkspace(props: {
         />
       </DialogHeader>
       <DialogFooter>
-        <Button type="button" variant="neutral" onClick={() => dialog.close()}>
+        <Button type="button" variant="neutral" autofocus onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
-        <Button type="button" variant="danger" disabled={status.isPending || status.isError} onClick={remove}>
+        <Show when={props.view.failed}>
+          <Button type="button" variant="neutral" onClick={() => props.onRetry()}>
+            {language.t("common.retry")}
+          </Button>
+        </Show>
+        <Button type="button" variant="danger" disabled={!props.view.canDelete} onClick={remove}>
           {language.t("workspace.delete.button")}
         </Button>
       </DialogFooter>

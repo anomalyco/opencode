@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { LanguageModelCompatibility } from "../schema/index.js"
+import type { LanguageModelCompatibility, Capabilities } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
@@ -16,7 +16,7 @@ const Options = Schema.Struct({
   clearThinking: Schema.optional(Schema.Boolean),
   thinking: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"adaptive" | "disabled" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"adaptive" | "disabled">(),
     }),
   ),
   toolStream: Schema.optional(Schema.Boolean),
@@ -24,7 +24,7 @@ const Options = Schema.Struct({
   repetitionPenalty: Schema.optional(Schema.Number),
   responseFormat: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"text" | "json_object" | "json_schema" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"text" | "json_object" | "json_schema">(),
       json_schema: Schema.optional(JsonObject),
     }),
   ),
@@ -32,9 +32,7 @@ const Options = Schema.Struct({
   searchOptions: Schema.optional(
     Schema.Struct({
       forced_search: Schema.optional(Schema.Boolean),
-      search_strategy: Schema.optional(
-        Schema.declare<"turbo" | "max" | "agent" | "agent_max" | (string & {})>(Schema.is(Schema.String)),
-      ),
+      search_strategy: Schema.optional(ProviderShared.knownString<"turbo" | "max" | "agent" | "agent_max">()),
       enable_search_extension: Schema.optional(Schema.Boolean),
     }),
   ),
@@ -43,10 +41,11 @@ export type OptionsInput = typeof Options.Type
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsStrictMode: false,
   reasoningField: "reasoning_content",
   zaiToolStream: false,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { tools: { strict: false } } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "alibaba-chat",
@@ -74,7 +73,7 @@ export const protocol = Protocol.make({
         thinking_budget:
           opts.thinkingBudget === undefined
             ? undefined
-            : ProviderShared.fitThinkingBudget(opts.thinkingBudget, req.generation?.maxTokens),
+            : ProviderShared.fitThinkingBudget(opts.thinkingBudget, req.maxTokens),
         preserve_thinking: opts.preserveThinking,
         clear_thinking: opts.clearThinking,
         thinking: opts.thinking,
@@ -83,7 +82,7 @@ export const protocol = Protocol.make({
           opts.parallelToolCalls ??
           (req.toolChoice?.disableParallelToolUse === undefined ? undefined : !req.toolChoice.disableParallelToolUse),
         repetition_penalty: opts.repetitionPenalty,
-        top_k: req.generation?.topK,
+        top_k: req.topK,
         response_format: opts.responseFormat,
         enable_search: opts.enableSearch,
         search_options: opts.searchOptions,

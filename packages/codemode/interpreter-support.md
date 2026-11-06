@@ -30,8 +30,15 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
+- [x] Imports of globals by Node module name: `import x from "m"`, `import { a, b as c } from "m"`,
+      `import * as m from "m"`, `import "m"`, `require("m")`, and `await import("m")`, with `node:fs` naming the
+      same module as `fs` and `fs/promises`, `url`, `util`, and `buffer` mapped to their globals. Imports load before
+      the program runs; a default import binds the module itself and the namespace adds it as `default`, the way
+      Node presents a CommonJS module. Anything else throws, and `import()` of it rejects. `export` is a parse error,
+      and an import below the top level throws.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
-      shadowable by program declarations like other globals.
+      shadowable by program declarations like other globals. Its result can also be awaited or chained with
+      `then`, `catch`, and `finally`.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
 - [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
       2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to
@@ -103,7 +110,9 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
       non-objects iterate nothing. An un-awaited promise throws rather than iterating.
-- [ ] `for...in` over inherited enumerable keys (`Object.create(proto)`), and skipping keys deleted during the loop.
+- [x] `for...in` over inherited enumerable keys (`Object.create(proto)`): own keys first, then each prototype's, skipping
+      keys a nearer level already has, even as a non-enumerable property.
+- [ ] `for...in` skipping keys deleted during the loop.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -274,6 +283,9 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       unless its cleanup fails, and direct self-resolution rejects with a `TypeError`.
 - [x] Every `await` (including of plain values and already-settled promises) defers its continuation one reaction
       turn, so concurrent async functions interleave at await points as in JavaScript.
+- [x] Each job runs to completion: code between two awaits, and an async function's body up to its first await,
+      finishes before another job runs, even when the scheduler preempts a long job. Tool calls still run
+      concurrently.
 - [x] Combinators settle one reaction turn after their deciding member (V8-observable ordering): reactions already
       attached to members run first, and an aggregate cannot beat a plain value settling in the same turn into a
       `Promise.race`. Exact microtask-count parity beyond this observable ordering is not a documented guarantee.
@@ -334,8 +346,8 @@ reject }` object.
       (`Object.getPrototypeOf("a") === String.prototype`); `null`, `undefined`, and the two confined symbols throw a
       `TypeError`.
 - [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
-      (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, and own-only
-      `Object.keys` follow the chain as in JS, but `for...in` still enumerates own keys only. A second `properties`
+      (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, own-only
+      `Object.keys`, and `for...in` follow the chain as in JS. A second `properties`
       argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
       `Object.defineProperty` either).
 - [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.

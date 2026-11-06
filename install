@@ -311,7 +311,15 @@ download_and_install() {
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -f -# -L -o "$tmp_dir/$filename" "$url"
+        local ret=0
+        curl -f -# -L -o "$tmp_dir/$filename" "$url" || ret=$?
+        # curl exits 23 when it cannot write the file, usually because the temporary directory is full.
+        if [ "$ret" -eq 23 ]; then
+            print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
+        fi
+        if [ "$ret" -ne 0 ]; then
+            exit "$ret"
+        fi
     fi
 
     tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
@@ -366,6 +374,7 @@ fi
 install_legacy_shim
 
 
+path_added=false
 add_to_path() {
     local config_file=$1
     local command=$2
@@ -375,6 +384,7 @@ add_to_path() {
     elif [[ -w $config_file ]]; then
         echo -e "\n# opencode" >> "$config_file"
         echo "$command" >> "$config_file"
+        path_added=true
         print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
@@ -415,6 +425,18 @@ if [[ "$no_modify_path" != "true" ]]; then
             break
         fi
     done
+
+    # A new Mac has no ~/.zshrc, so create the shell's main config file rather than leaving opencode off PATH.
+    if [[ -z $config_file ]]; then
+        case $current_shell in
+            zsh) new_config_file="${ZDOTDIR:-$HOME}/.zshrc" ;;
+            fish) new_config_file="$HOME/.config/fish/config.fish" ;;
+            *) new_config_file="" ;;
+        esac
+        if [[ -n $new_config_file ]] && mkdir -p "$(dirname "$new_config_file")" 2>/dev/null && touch "$new_config_file" 2>/dev/null; then
+            config_file=$new_config_file
+        fi
+    fi
 
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
@@ -459,6 +481,9 @@ echo -e ""
 echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
+if [[ $path_added == "true" ]]; then
+    echo -e "exec \$SHELL   ${MUTED}# Reload PATH (or open a new terminal)${NC}"
+fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "opencode      ${MUTED}# Run command${NC}"
 echo -e ""

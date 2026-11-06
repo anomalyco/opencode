@@ -28,7 +28,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 ## 외부 디렉터리
 
-`external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `glob`, `grep` 및 많은 `shell` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
+`external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
 
 홈 확장 (`~/...`와 같은) 패턴이 작성된 방법에 영향을 미칩니다. 그것은 현재의 작업 공간의 외부 경로 부분을 만들지 않습니다, 그래서 작업 디렉토리 외부 경로는 여전히 `external_directory`를 통해 허용해야합니다.
 
@@ -121,7 +121,7 @@ Permission 본 사용 간단한 wildcard 일치:
 }
 ```
 
-신뢰할 수있는 경로에 초점을 맞춘 목록을 유지하고 다른 도구 (예 : `shell`)에 필요한대로 추가 허용하거나 deny 규칙을 층을 설정합니다.
+신뢰할 수있는 경로에 초점을 맞춘 목록을 유지하고 다른 도구 (예 : `bash`)에 필요한대로 추가 허용하거나 deny 규칙을 층을 설정합니다.
 
 ---
 
@@ -133,7 +133,7 @@ opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 - `edit` - 모든 파일 수정 (covers `edit`, `write`, `patch`)
 - `glob` - 파일 globbing (glob 패턴 매칭)
 - `grep` - 콘텐츠 검색 ( regex 패턴 매칭)
-- `shell` - shell 명령 실행 (`git status --porcelain`와 같은 팟 명령)
+- `bash` - shell 명령 실행 (`git status --porcelain`와 같은 팟 명령)
 - `task` - 에이전트 실행 (작업 에이전트 유형)
 - `skill` - 기술을 로딩 (기술 이름을 매칭)
 - `lsp` - LSP 쿼리 실행 (현재 비 과립)
@@ -175,7 +175,7 @@ opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
 - `always` - 제안 된 패턴과 일치하는 미래 요청 (현재 opencode 세션의 나머지)
 - `reject` - 요청을 거부
 
-`always`는 도구 (예를 들면, shell 승인 일반적으로 `git status*`와 같은 안전한 명령 접두사)에 의해 approve가 제공 될 패턴의 집합.
+`always`는 도구 (예를 들면, bash 승인 일반적으로 `git status*`와 같은 안전한 명령 접두사)에 의해 approve가 제공 될 패턴의 집합.
 
 ---
 
@@ -191,7 +191,7 @@ opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

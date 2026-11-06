@@ -117,7 +117,7 @@ describe("SkillInstructions", () => {
     }).pipe(Effect.provide(layer(() => skills)))
   })
 
-  it.effect("restates the full skill list when a description changes", () => {
+  it.effect("renders only the changed skill when a description changes", () => {
     const agent = Agent.Info.make(Agent.Info.default(build))
     let skills = [effect]
     return Effect.gen(function* () {
@@ -125,15 +125,19 @@ describe("SkillInstructions", () => {
       const initialized = yield* instructions.load(agent.permissions).pipe(Effect.flatMap(readInitial))
 
       skills = [Skill.Info.make({ ...effect, description: "Build applications with Effect v4" })]
-      expect(
-        yield* instructions
-          .load(agent.permissions)
-          .pipe(Effect.flatMap((context) => readUpdate(context, initialized))),
-      ).toMatchObject({
-        text: expect.stringContaining(
-          "The available skills have changed. This list supersedes the previous available skills list.",
-        ),
-      })
+      const changed = yield* instructions
+        .load(agent.permissions)
+        .pipe(Effect.flatMap((context) => readUpdate(context, initialized)))
+      expect(changed.text).toBe(
+        [
+          "The following skills have changed. Each entry replaces the previously listed skill with the same ID:",
+          "  <skill>",
+          "    <id>effect</id>",
+          "    <name>Effect</name>",
+          "    <description>Build applications with Effect v4</description>",
+          "  </skill>",
+        ].join("\n"),
+      )
     }).pipe(Effect.provide(layer(() => skills)))
   })
 

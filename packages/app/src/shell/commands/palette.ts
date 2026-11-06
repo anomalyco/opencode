@@ -2,26 +2,42 @@ import { getFilename } from "@opencode/util/path"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useFile } from "@/workspaces/files/model"
-import { useGlobal } from "@/runtime/server/runtime"
+import type { ServerCtx } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@opencode/ui/project-avatar"
-import { resolveProjectForSession } from "@/shell/layout/helpers"
-import { useExtensionHost } from "@/runtime/extension/host"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { projectForSession } from "@/shell/layout/helpers"
+import { usePluginHost } from "@/runtime/plugin/host"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { looksLikeSessionID } from "@/session/search"
+import { createSettingsPaletteEntries } from "@/settings/palette"
+import type { SettingsSearchResult } from "@/settings/search-results"
+import {
+  INITIAL_PALETTE_HIGHLIGHT_STATE,
+  transitionPaletteHighlight,
+  type PaletteHighlightEvent,
+} from "./highlight-machine"
+import {
+  INITIAL_SESSION_SOURCE_STATE,
+  PALETTE_SESSION_DEBOUNCE_MS,
+  transitionSessionSource,
+  type SessionSourceEffect,
+  type SessionSourceEvent,
+} from "./search-machine"
 
 export type CommandPaletteEntry = {
   id: string
-  type: "command" | "file" | "session"
+  type: "command" | "file" | "session" | "setting"
   title: string
   description?: string
+  keywords?: string
   keybind?: string
   category: string
   option?: CommandOption
@@ -32,11 +48,12 @@ export type CommandPaletteEntry = {
   project?: LocalProject
   archived?: number
   updated?: number
+  setting?: SettingsSearchResult
 }
 
 const ENTRY_LIMIT = 5
 
-// The palette opens with these host commands. Featured extension commands list before the view toggles.
+// The palette opens with these host commands. Featured plugin commands list before the view toggles.
 const COMMON_COMMAND_IDS = ["session.new", "workspace.new", "session.previous", "session.next"] as const
 
 const COMMON_VIEW_COMMAND_IDS = ["review.toggle"] as const
@@ -63,30 +80,66 @@ export function createCommandPaletteFileEntry(path: string, category: string): C
 }
 
 export function createCommandPaletteFileOpener(onOpenFile?: (path: string) => void) {
-  const links = useExtensionHost().links
-  const extensions = useExtensionAttachment()
+  const links = usePluginHost().links
+  const attachment = usePluginAttachment()
 
   return (path: string) => {
-    links.open({ href: path, exact: true, background: true, session: extensions.current() })
+    links.open({ href: path, exact: true, background: true, session: attachment.current() })
     onOpenFile?.(path)
   }
 }
 
-/** The highlighted option's preview cleanup, and whether the palette committed a choice. */
-export type PaletteHighlight = { cleanup: (() => void) | void; committed: boolean }
+/** Previews the highlighted command and reverts the preview unless the palette commits to that command. */
+export function createPaletteHighlight() {
+  let state = INITIAL_PALETTE_HIGHLIGHT_STATE
+  let highlighted: CommandPaletteEntry | undefined
+  let revert: (() => void) | void
+
+  const dispatch = (event: PaletteHighlightEvent) => {
+    const next = transitionPaletteHighlight(state, event)
+    state = next.state
+    next.effects.forEach((effect) => {
+      if (effect.type === "preview.apply") {
+        revert = highlighted?.option?.onHighlight?.()
+
+        return
+      }
+
+      const cleanup = revert
+      revert = undefined
+      cleanup?.()
+    })
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return {
+    highlight(item: CommandPaletteEntry | undefined) {
+      highlighted = item
+      dispatch({
+        type: "highlight.changed",
+        entryID: item?.id,
+        previewable: item?.type === "command" && !!item.option?.onHighlight,
+      })
+    },
+    select(item: CommandPaletteEntry) {
+      dispatch({ type: "entry.selected", entryID: item.id })
+    },
+  }
+}
 
 export function createCommandPaletteModel(props: { filesOnly?: () => boolean; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
-  const global = useGlobal()
   const language = useLanguage()
   const file = useFile()
   const dialog = useDialog()
   const serverSDK = useServerSDK()
-  const serverCtx = global.ensureServerCtx(serverSDK.server)
+  const serverCtx = useServer().ctx
   const appTabs = useTabs()
-  const extensions = useExtensionAttachment()
+  const attachment = usePluginAttachment()
   const openFile = createCommandPaletteFileOpener(props.onOpenFile)
-  const state: PaletteHighlight = { cleanup: undefined, committed: false }
+  const settings = createSettingsPaletteEntries()
+  const preview = createPaletteHighlight()
   const filesOnly = () => props.filesOnly?.() ?? false
 
   const allowedCommands = createMemo(() => {
@@ -120,8 +173,8 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   })
 
   const recentFileEntries = createMemo(() => {
-    const all = extensions.files.opened()
-    const active = extensions.files.active()
+    const all = attachment.files.opened()
+    const active = attachment.files.active()
     const order = active ? [active, ...all.filter((path) => path !== active)] : all
     const category = language.t("palette.group.files")
 
@@ -142,27 +195,19 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
 
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(serverSDK.server),
-    opened: serverCtx.projects.list,
-    stored: () => serverCtx.sync.data.project,
-    load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
+    known: createKnownServerSessions(() => serverCtx),
+    projects: serverCtx.projects.list,
+    load: (search, signal) =>
+      serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
     get: (sessionID, signal) => serverSDK.api.session.get({ sessionID }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
     recentCategory: () => language.t("palette.group.recentSessions"),
   })
 
-  const highlight = (item: CommandPaletteEntry | undefined) => {
-    state.cleanup?.()
-    state.cleanup = undefined
-
-    if (item?.type !== "command") return
-    state.cleanup = item.option?.onHighlight?.()
-  }
-
   const select = (item: CommandPaletteEntry | undefined) => {
     if (!item) return
-    state.committed = true
-    state.cleanup = undefined
+    preview.select(item)
     dialog.close()
 
     if (item.type === "command") {
@@ -175,10 +220,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
       if (!item.sessionID || !item.server) return
       const directory = item.project?.worktree ?? item.directory
 
-      if (directory) {
-        serverCtx.projects.open(directory)
-        serverCtx.projects.touch(directory)
-      }
+      if (directory) serverCtx.projects.touch(directory)
 
       const tab = appTabs.addSessionTab({
         server: item.server,
@@ -190,14 +232,11 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
       return
     }
 
+    if (item.type === "setting") return settings.select(item)
+
     if (!item.path) return
     openFile(item.path)
   }
-
-  onCleanup(() => {
-    if (state.committed) return
-    state.cleanup?.()
-  })
 
   return {
     language,
@@ -207,7 +246,8 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     recentFileEntries,
     rootFileEntries,
     sessions,
-    highlight,
+    settings,
+    highlight: preview.highlight,
     select,
     close: () => dialog.close(),
   }
@@ -219,6 +259,7 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
     type: "command",
     title: option.title,
     description: option.description,
+    keywords: option.keywords,
     keybind: option.keybind,
     category,
     option,
@@ -227,79 +268,193 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
-  opened: () => LocalProject[]
-  stored: () => Project[]
+  archived?: boolean
+  known?: () => SessionInfo[]
+  /** Hides sessions deleted since they were loaded. */
+  apply?: (sessions: SessionInfo[]) => SessionInfo[]
+  projects: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
   get: (sessionID: string, signal: AbortSignal) => Promise<SessionInfo>
   untitled: () => string
   category: () => string
   recentCategory: () => string
+  recentLimit?: number
 }) {
-  let abort: AbortController | undefined
+  const [sourceState, setSourceState] = createSignal(INITIAL_SESSION_SOURCE_STATE)
 
-  onCleanup(() => abort?.abort())
+  const runs = new Map<
+    number,
+    {
+      result: PromiseWithResolvers<CommandPaletteEntry[]>
+      timer: ReturnType<typeof setTimeout>
+      controller?: AbortController
+      unlink?: () => void
+    }
+  >()
 
-  return async (text: string): Promise<CommandPaletteEntry[]> => {
-    const search = text.trim()
+  // Let the newest metadata win duplicates before ranking the merged sessions newest-first.
+  const known = createMemo(() => {
+    const merged = [
+      ...new Map(
+        [...(props.known?.() ?? []), ...sourceState().loaded]
+          .toSorted((a, b) => a.time.updated - b.time.updated)
+          .map((session) => [session.id, session] as const),
+      ).values(),
+    ].toSorted((a, b) => b.time.updated - a.time.updated)
 
-    abort?.abort()
-    const current = new AbortController()
-    abort = current
+    return props.apply?.(merged) ?? merged
+  })
 
-    // Typed searches wait for a pause; an empty query lists recent sessions right away.
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, search ? 100 : 0)
-      current.signal.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer)
-          resolve()
-        },
-        { once: true },
-      )
+  const dispatch = (event: SessionSourceEvent) =>
+    untrack(() => {
+      const previous = sourceState()
+      const next = transitionSessionSource(previous, event)
+
+      if (next.state !== previous) setSourceState(next.state)
+      next.effects.forEach(run)
     })
 
-    if (current.signal.aborted) return []
-    const opened = props.opened()
-    const stored = props.stored().map((project) => ({ ...project, expanded: false }))
+  function run(effect: SessionSourceEffect) {
+    if (effect.type === "debounce.start") {
+      runs.set(effect.attempt, {
+        result: Promise.withResolvers<CommandPaletteEntry[]>(),
+        timer: setTimeout(() => dispatch({ type: "debounce.fired", attempt: effect.attempt }), effect.delayMs),
+      })
+
+      return
+    }
+
+    const current = runs.get(effect.attempt)
+
+    if (!current) return
+
+    if (effect.type === "fetch.start") {
+      const controller = new AbortController()
+      current.controller = controller
+      const search = effect.query
+      void Promise.all([
+        Promise.try(() => props.load(search, controller.signal)).then(
+          (result) => ({ items: result.data, failed: false }),
+          () => ({ items: [], failed: true }),
+        ),
+        looksLikeSessionID(search)
+          ? Promise.try(() => props.get(search, controller.signal)).then(
+              (result) => [result],
+              () => [],
+            )
+          : Promise.resolve([]),
+      ]).then(([listed, exact]) =>
+        dispatch(
+          listed.failed && exact.length === 0
+            ? { type: "fetch.failed", attempt: effect.attempt, error: new Error("Session search failed") }
+            : {
+                type: "fetch.succeeded",
+                attempt: effect.attempt,
+                sessions: [
+                  ...new Map([...exact, ...listed.items].map((session) => [session.id, session] as const)).values(),
+                ],
+              },
+        ),
+      )
+
+      return
+    }
+
+    runs.delete(effect.attempt)
+    clearTimeout(current.timer)
+    current.unlink?.()
+
+    if (effect.type === "attempt.cancel") {
+      current.controller?.abort()
+      current.result.resolve([])
+
+      return
+    }
+
+    // The local collection owns the recent rows, including newly loaded ones.
+    if (effect.type === "attempt.resolve")
+      return current.result.resolve(effect.query ? entries([...effect.sessions], effect.query) : [])
+
+    current.result.reject(effect.error)
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  const entries = (sessions: SessionInfo[], search: string): CommandPaletteEntry[] => {
+    const projects = props.projects()
     const category = search ? props.category() : props.recentCategory()
 
-    const entries = await Promise.all([
-      props.load(search, current.signal).then(
-        (result) => result.data,
-        () => [],
-      ),
-      looksLikeSessionID(search)
-        ? props.get(search, current.signal).then(
-            (result) => [result],
-            () => [],
-          )
-        : Promise.resolve([]),
-    ]).then(([listed, exact]) =>
-      [...new Map([...exact, ...listed].map((session) => [session.id, session] as const)).values()].flatMap(
-        (session) => {
-          if (session.time.archived) return []
+    return sessions.flatMap((session) => {
+      if (!!session.time.archived !== !!props.archived) return []
 
-          const project = resolveProjectForSession(session, opened, stored)
+      const project = projectForSession(session, projects)
 
-          return [
-            {
-              id: `session:${props.server}:${session.id}`,
-              type: "session" as const,
-              title: session.title || props.untitled(),
-              description: project ? displayName(project) : getFilename(session.location.directory),
-              category,
-              directory: session.location.directory,
-              sessionID: session.id,
-              server: props.server,
-              project,
-              updated: session.time.updated,
-            },
-          ]
+      return [
+        {
+          id: `session:${props.server}:${session.id}`,
+          type: "session" as const,
+          title: session.title || props.untitled(),
+          description: project ? displayName(project) : getFilename(session.location.directory),
+          category,
+          directory: session.location.directory,
+          sessionID: session.id,
+          server: props.server,
+          project,
+          updated: session.time.updated,
         },
-      ),
-    )
+      ]
+    })
+  }
 
-    return search ? entries : entries.slice(0, ENTRY_LIMIT)
+  // A superseded or aborted search answers with no results.
+  const search = (text: string, signal?: AbortSignal): Promise<CommandPaletteEntry[]> => {
+    if (signal?.aborted) return Promise.resolve([])
+    const query = text.trim()
+
+    // Typed searches wait for a pause; an empty query lists recent sessions right away.
+    dispatch({ type: "search.requested", query, delayMs: query ? PALETTE_SESSION_DEBOUNCE_MS : 0 })
+    const current = untrack(sourceState)
+    const started = current.status === "debouncing" ? runs.get(current.attempt) : undefined
+
+    if (current.status !== "debouncing" || !started) return Promise.resolve([])
+    const attempt = current.attempt
+
+    if (signal) {
+      const abort = () => dispatch({ type: "search.aborted", attempt })
+      signal.addEventListener("abort", abort, { once: true })
+      started.unlink = () => signal.removeEventListener("abort", abort)
+    }
+
+    return started.result.promise
+  }
+
+  return Object.assign(search, {
+    search,
+    items(text: string) {
+      const search = text.trim()
+
+      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
+
+      // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
+      // per known session on every keystroke is what made search slow once the loaded index grew.
+      const value = search.toLowerCase()
+
+      const matched = known()
+        .filter((session) => (session.title || props.untitled()).toLowerCase().includes(value))
+        .slice(0, ENTRY_LIMIT * 10)
+
+      return entries(matched, search)
+    },
+  })
+}
+
+/** Sessions this client already has in its data store; the local list search narrows while the server answers. */
+export function createKnownServerSessions(context: Accessor<ServerCtx | undefined>) {
+  return () => {
+    const server = context()
+
+    if (!server) return []
+
+    return server.data.session.list().filter((session) => !session.parentID && !session.time.archived)
   }
 }

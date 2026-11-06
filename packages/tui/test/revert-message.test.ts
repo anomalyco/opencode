@@ -1,21 +1,25 @@
 import { expect, test } from "bun:test"
-import { emptyPrompt } from "../src/prompt/history"
 import { revertMessage } from "../src/routes/session/revert"
 
-function client(calls: string[], stage: () => Promise<void> = async () => {}) {
+function client(calls: string[], hooks: { wait?: () => Promise<void>; stage?: () => Promise<void> } = {}) {
   return {
     api: {
       session: {
         interrupt: async () => {
           calls.push("interrupt")
         },
-        wait: async () => {
-          calls.push("wait")
-        },
         revert: {
           stage: async () => {
             calls.push("stage")
-            await stage()
+            await hooks.stage?.()
+          },
+        },
+      },
+      experimental: {
+        session: {
+          wait: async () => {
+            calls.push("wait")
+            await hooks.wait?.()
           },
         },
       },
@@ -23,53 +27,40 @@ function client(calls: string[], stage: () => Promise<void> = async () => {}) {
   }
 }
 
-test("stops the turn and stages the revert before filling the prompt", async () => {
+test("settles the running turn before staging the revert", async () => {
   const calls: string[] = []
-  const prompt = { ...emptyPrompt(), text: "restored" }
-  let filled = false
-  await revertMessage({
-    client: client(calls),
-    sessionID: "ses_test",
-    messageID: "msg_test",
-    prompt,
-    setPrompt: (value) => {
-      calls.push("prompt")
-      filled = value === prompt
-    },
-  })
-  expect(calls).toEqual(["interrupt", "wait", "stage", "prompt"])
-  expect(filled).toBe(true)
+  await revertMessage({ client: client(calls), sessionID: "ses_test", messageID: "msg_test" })
+  expect(calls).toEqual(["interrupt", "wait", "stage"])
 })
 
-test("leaves the prompt untouched when the revert cannot be staged", async () => {
+test("does not stage the revert when the turn never settles", async () => {
   const calls: string[] = []
-  let filled = false
   await expect(
     revertMessage({
-      client: client(calls, async () => {
-        throw new Error("Session is busy")
+      client: client(calls, {
+        wait: async () => {
+          throw new Error("Session is still running")
+        },
       }),
       sessionID: "ses_test",
       messageID: "msg_test",
-      prompt: { ...emptyPrompt(), text: "restored" },
-      setPrompt: () => {
-        filled = true
-      },
     }),
-  ).rejects.toThrow("Session is busy")
-  expect(calls).toEqual(["interrupt", "wait", "stage"])
-  expect(filled).toBe(false)
+  ).rejects.toThrow("Session is still running")
+  expect(calls).toEqual(["interrupt", "wait"])
 })
 
-test("does not fill the prompt for messages without prompt content", async () => {
+test("propagates a stage failure after the turn settled", async () => {
   const calls: string[] = []
-  await revertMessage({
-    client: client(calls),
-    sessionID: "ses_test",
-    messageID: "msg_test",
-    setPrompt: () => {
-      calls.push("prompt")
-    },
-  })
+  await expect(
+    revertMessage({
+      client: client(calls, {
+        stage: async () => {
+          throw new Error("Session is busy")
+        },
+      }),
+      sessionID: "ses_test",
+      messageID: "msg_test",
+    }),
+  ).rejects.toThrow("Session is busy")
   expect(calls).toEqual(["interrupt", "wait", "stage"])
 })

@@ -1,42 +1,76 @@
 import { useCommand } from "@/shell/commands/command"
 import { useLayout } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
-import { serverName } from "@/runtime/server/registry"
+import { useServers } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { sessionLabel } from "@/session/title"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createMemo, onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import type { HomeController } from "../model"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./controller"
-import { looksLikeSessionID } from "@/session/search"
+import {
+  INITIAL_HOME_SESSION_SEARCH_STATE,
+  selectSearchExact,
+  selectSearchHighlighted,
+  selectSearchLookingUp,
+  selectSearchOpen,
+  selectSearchQuery,
+  selectSearchValue,
+  transitionHomeSessionSearch,
+  type HomeSessionSearchEffect,
+  type HomeSessionSearchEvent,
+} from "./search-machine"
 
 type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
+
+type PendingLookup = { controller: AbortController; timer: ReturnType<typeof setTimeout> }
 
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
+  const servers = useServers()
 
-  const [state, setState] = createStore<{
-    value: string
-    focused: boolean
-    highlighted: string
-    exact: HomeSessionRecord | undefined
-    lookingUp: boolean
-  }>({
-    value: "",
-    focused: false,
-    highlighted: "",
-    exact: undefined,
-    lookingUp: false,
-  })
-
-  let lookup = 0
+  const [searchState, setSearchState] = createSignal(INITIAL_HOME_SESSION_SEARCH_STATE)
+  let lookup: PendingLookup | undefined
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let list: HTMLDivElement | undefined
-  const query = createMemo(() => state.value.trim())
+  const query = createMemo(() => selectSearchQuery(searchState()))
+  const highlighted = createMemo(() => selectSearchHighlighted(searchState()))
+
+  const dispatch = (event: HomeSessionSearchEvent) =>
+    untrack(() => {
+      const previous = searchState()
+      const next = transitionHomeSessionSearch(previous, event)
+
+      if (next.state !== previous) setSearchState(next.state)
+      next.effects.forEach(run)
+    })
+
+  function run(effect: HomeSessionSearchEffect) {
+    clearTimeout(lookup?.timer)
+    lookup?.controller.abort()
+    lookup = undefined
+
+    if (effect.type === "lookup.abort") return
+    const controller = new AbortController()
+    const attempt = effect.attempt
+    const timer = setTimeout(() => dispatch({ type: "lookup.timed-out", attempt }), effect.timeoutMs)
+    lookup = { controller, timer }
+    void sessions.session.lookup(effect.sessionID, controller.signal).then(
+      (record) => {
+        clearTimeout(timer)
+        dispatch({ type: "lookup.resolved", attempt, record })
+      },
+      () => {
+        clearTimeout(timer)
+
+        if (controller.signal.aborted) return
+        dispatch({ type: "lookup.failed", attempt })
+      },
+    )
+  }
 
   const results = createMemo(() => {
     const value = query().toLowerCase()
@@ -47,20 +81,22 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       .searchRecords()
       .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
 
-    if (!state.exact || records.some((record) => record.session.id === state.exact?.session.id)) return records
+    const exact = selectSearchExact(searchState())
 
-    return [state.exact, ...records]
+    if (!exact || records.some((record) => record.session.id === exact.session.id)) return records
+
+    return [exact, ...records]
   })
 
   const active = createMemo(() => {
     const records = results()
 
-    if (records.some((record) => homeSessionSearchKey(record) === state.highlighted)) return state.highlighted
+    if (records.some((record) => homeSessionSearchKey(record) === highlighted())) return highlighted()
 
     return records[0] ? homeSessionSearchKey(records[0]) : ""
   })
 
-  const open = createMemo(() => state.focused && query().length > 0)
+  const open = createMemo(() => selectSearchOpen(searchState()))
 
   const placeholder = createMemo(() => {
     const project = home.project.selected()
@@ -70,10 +106,18 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     if (home.server.list().length > 1) {
       const conn = home.server.focused()
 
-      if (conn) return language.t("home.sessions.search.placeholder.scoped", { scope: serverName(conn) })
+      if (conn) return language.t("home.sessions.search.placeholder.scoped", { scope: servers.label(conn) })
     }
 
     return language.t("home.sessions.search.placeholder")
+  })
+
+  // An exact match belongs to the server and project it was looked up in.
+  createEffect(() => {
+    const selection = home.selection.value()
+    const scope = `${selection.server ?? ""}\0${selection.directory ?? ""}`
+    const connected = home.server.focusedContext()?.sdk.connection.status() === "connected"
+    dispatch({ type: "scope.changed", scope, connected })
   })
 
   onCleanup(
@@ -85,15 +129,16 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       close()
     }),
   )
-  onCleanup(() => lookup++)
+  onCleanup(() => dispatch({ type: "disposed" }))
   onMount(() => {
     if (layout.home.searchFocus.take()) focus()
   })
 
+  // Home's Find focuses its session search, so Settings > Shortcuts lists one Find and one Search sessions.
   command.register("home.search", () => [
     {
-      id: "home.sessions.search.focus",
-      title: placeholder(),
+      id: "session.search",
+      title: language.t("session.search.placeholder"),
       keybind: "mod+f",
       hidden: true,
       onSelect: focus,
@@ -102,31 +147,17 @@ export function createHomeSessionSearchController(home: HomeController, sessions
 
   function focus() {
     input?.focus()
-    setState("focused", true)
+    dispatch({ type: "focused" })
+  }
+
+  // Focus moving inside the search (to a result) keeps it open; the window losing focus keeps the input focused.
+  function blur(next: EventTarget | null) {
+    if ((next instanceof Node && root?.contains(next)) || document.activeElement === input) return
+    dispatch({ type: "blurred" })
   }
 
   function close() {
-    lookup++
-    setState({ value: "", focused: false, exact: undefined, lookingUp: false })
-  }
-
-  function update(value: string) {
-    const current = ++lookup
-    const sessionID = value.trim()
-    setState({ value, highlighted: "", exact: undefined, lookingUp: false })
-
-    if (!looksLikeSessionID(sessionID)) return
-    setState("lookingUp", true)
-    void sessions.session.lookup(sessionID).then(
-      (record) => {
-        if (current !== lookup) return
-        setState({ exact: record, lookingUp: false })
-      },
-      () => {
-        if (current !== lookup) return
-        setState("lookingUp", false)
-      },
-    )
+    dispatch({ type: "closed" })
   }
 
   function select(record: HomeSessionRecord, options?: { background?: boolean }) {
@@ -137,27 +168,29 @@ export function createHomeSessionSearchController(home: HomeController, sessions
 
   return {
     query: {
-      value: () => state.value,
+      value: () => selectSearchValue(searchState()),
       placeholder,
       open,
       focus,
-      input: update,
+      blur,
+      input: (value: string) => dispatch({ type: "input.changed", value }),
       close,
     },
     result: {
-      loading: () => sessions.data.loading() || state.lookingUp,
+      loading: () => sessions.data.loading() || selectSearchLookingUp(searchState()),
       list: results,
       active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
-      highlight: (record: HomeSessionRecord) => setState("highlighted", homeSessionSearchKey(record)),
+      highlight: (record: HomeSessionRecord) =>
+        dispatch({ type: "highlight.changed", key: homeSessionSearchKey(record) }),
       move: (delta: number) => {
         const records = results()
 
         if (records.length === 0) return
         const index = records.findIndex((record) => homeSessionSearchKey(record) === active())
         const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
-        setState("highlighted", homeSessionSearchKey(records[next]))
-        list?.querySelector<HTMLElement>(`[data-key="${state.highlighted}"]`)?.scrollIntoView({ block: "nearest" })
+        dispatch({ type: "highlight.changed", key: homeSessionSearchKey(records[next]) })
+        list?.querySelector<HTMLElement>(`[data-key="${highlighted()}"]`)?.scrollIntoView({ block: "nearest" })
       },
       select,
       selectActive: () => {

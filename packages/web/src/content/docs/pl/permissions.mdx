@@ -28,7 +28,7 @@ Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego si�
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "*": "ask",
-    "shell": "allow",
+    "bash": "allow",
     "edit": "deny"
   }
 }
@@ -53,7 +53,7 @@ Można skorzystać z różnych działań, które zależą od danych użytkowych.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
@@ -88,7 +88,7 @@ Możesz używać `~` lub `$HOME` na początku wzorca, aby zastosować się do sw
 
 ### Katalogi zewnętrzne
 
-Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem opencode. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `glob`, `grep` i wiele założycieli `shell`).
+Użycie `external_directory`, aby zezwolić na wywołanie narzędzia, które obsługuje obsługę poza katalogiem roboczym, z uruchomieniem opencode. Dotyczy każdego narzędzia, które jako dane wejściowe zostało przyjęte (na przykład `read`, `edit`, `glob`, `grep` i wiele założycieli `bash`).
 
 Rozszerzenie domu (jak `~/...`) wpływa tylko na sposób za zwyczajowy wzorca. Nie powoduje to, że strategie zewnętrzne stają się stosowane przez `external_directory`.
 
@@ -121,7 +121,7 @@ Każdy dopuszczony tutaj katalog jest dziedziczy tych samych ustawień, co dost�
 }
 ```
 
-Skoncentruj listę na zaufanych ścieżkach i dodaj dodatkowe zezwolenie lub odmowę, jeśli jest potrzebne w innych narzędziach (na przykład `shell`).
+Skoncentruj listę na zaufanych ścieżkach i dodaj dodatkowe zezwolenie lub odmowę, jeśli jest potrzebne w innych narzędziach (na przykład `bash`).
 
 ---
 
@@ -133,7 +133,7 @@ Uprawnienia opencode są określane na podstawie nazwy narzędzia i kilku zabezp
 - `edit` — wszystkie modyfikacje plików (obejmuje `edit`, `write`, `patch`)
 - `glob` — maglowanie plików (pasuje do wzorców globowania)
 - `grep` — wyszukiwanie treści (pasuje do wzorca regularnego)
-- `shell` — uruchamianie poleceń shell (pasuje do poleceń przeanalizowanych, takich jak `git status --porcelain`)
+- `bash` — uruchamianie poleceń shell (pasuje do poleceń przeanalizowanych, takich jak `git status --porcelain`)
 - `task` — uruchamianie podagentów (odpowiada typowi podagenta)
 - `skill` — ładowanie umiejętności (pasuje do nazwy umiejętności)
 - `lsp` — uruchamianie zapytań LSP (obecnie nieszczegółowych)
@@ -175,7 +175,7 @@ Gdy opencode poprosi o zatwierdzenie, interfejs użytkownika oferujący trzy wyn
 - `always` — zastosowanie, które następuje po zastosowaniu sugerowanych wzorców (przez następczą bieżącą sesję opencode)
 - `reject` — odrzucić
 
-Zestaw wzorców, które `always` zatwierdziłby, jest udostępniony przez narzędzie (na przykładzie zatwierdzenia shell zazwyczaj umieszczają na częstotliwości bezpiecznej prefiksy polecenia, takie jak `git status*`).
+Zestaw wzorców, które `always` zatwierdziłby, jest udostępniony przez narzędzie (na przykładzie zatwierdzenia bash zazwyczaj umieszczają na częstotliwości bezpiecznej prefiksy polecenia, takie jak `git status*`).
 
 ---
 
@@ -191,7 +191,7 @@ Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekc
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": {
+    "bash": {
       "*": "ask",
       "git *": "allow",
       "git commit *": "deny",
@@ -202,7 +202,7 @@ Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekc
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git *": "allow",
           "git commit *": "ask",
@@ -223,7 +223,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell: ask
+  bash: ask
   webfetch: deny
 ---
 

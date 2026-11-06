@@ -9,7 +9,7 @@ import { decide, fallback, headers, probeResult, same } from "../service-probe.j
 export * from "../service.js"
 export { headers }
 /** Contents of the local service registration file. */
-export type Info = import("../service.js").Info
+export type Info = typeof Info.Type
 
 // Find, start, and stop the local opencode background service.
 //

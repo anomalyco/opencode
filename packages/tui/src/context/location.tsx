@@ -1,4 +1,5 @@
-import type { LocationGetOutput, LocationRef } from "@opencode/client"
+import { isLocationNotFoundError, type LocationGetOutput, type LocationRef } from "@opencode/client"
+import { retry } from "@opencode/util/retry"
 import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
 import { useClient } from "./client"
 import { useData } from "./data"
@@ -28,9 +29,14 @@ export function LocationProvider(props: ParentProps) {
         ? undefined
         : location
     setError(undefined)
-    void data.location.sync(target).catch((cause) => {
+    // Only the server's typed LocationNotFoundError proves the folder is gone. Other failures, such as
+    // plugins still activating after a restart, are retried and never block the composer.
+    void retry(() => (generation === attempt ? data.location.sync(target) : Promise.resolve()), {
+      retryIf: (cause) => generation === attempt && !isLocationNotFoundError(cause),
+    }).catch((cause) => {
       const current = ref()
       if (
+        !isLocationNotFoundError(cause) ||
         generation !== attempt ||
         current?.directory !== location.directory ||
         current.workspaceID !== location.workspaceID

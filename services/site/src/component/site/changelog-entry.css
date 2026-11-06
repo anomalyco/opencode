@@ -1,0 +1,1229 @@
+/* An entry's title and notes: summary, other highlights, then grouped lists of changes. Spacing
+   alone separates them; there are no rules. */
+[data-component="changelog-entry"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+  /* The site's body copy: its size, and the line height the page sets for it. */
+  font-size: var(--fs-read);
+  color: var(--text);
+
+  /* Inter at Settings › Changelog title size (26px/500 by default, a clear start to each entry
+     over the 15px/500 subheads), in the strong text colour. Trimmed so the title starts level with
+     the date. */
+  [data-slot="title"] {
+    text-box: trim-start cap alphabetic;
+    font-family: var(--font-sans);
+    font-size: var(--entry-title-size, var(--fs-entry));
+    font-weight: var(--entry-title-weight, 500);
+    line-height: var(--entry-title-leading, 1.2);
+    letter-spacing: var(--entry-title-tracking, -0.02em);
+    color: var(--text-strong);
+    text-wrap: balance;
+    overflow-wrap: break-word;
+  }
+
+  /* A heading's text is its copy-link: the strong colour, a faint underline on hover and focus,
+     and "Link copied" after it for a moment. */
+  [data-slot="copy-heading"] {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+
+    /* Not the inline-link blue: a heading stays a heading on hover, focus and press. */
+    &:focus-visible,
+    &:active {
+      color: inherit;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: inherit;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-decoration-color: var(--border-strong);
+        text-underline-offset: 0.2em;
+      }
+    }
+
+    &:focus-visible {
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-decoration-color: var(--border-strong);
+      text-underline-offset: 0.2em;
+    }
+
+    /* Inline-block, so the heading's hover underline doesn't run under it. */
+    [data-slot="copied"]:not(:empty) {
+      display: inline-block;
+      margin-inline-start: 0.625rem;
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      font-weight: 400;
+      letter-spacing: normal;
+      color: var(--text-weak);
+      vertical-align: middle;
+    }
+  }
+
+  [data-slot="subhead"] {
+    scroll-margin-top: var(--content-top);
+  }
+
+  /* The pull requests and people after a note, in small mono: "#123 · @user". */
+  [data-slot="refs"] {
+    margin-inline-start: 0.5em;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+
+    /* Each link stays whole; a long run of them wraps between links, not at the note's last word. */
+    a {
+      --inline-link-color: var(--text-weak);
+      white-space: nowrap;
+    }
+
+    /* The dot ends the link before it, so a wrapped line starts with a link, not a dot. */
+    a:not(:last-child)::after {
+      content: "·" / "";
+      margin-inline: 0.375em;
+      color: var(--text-weaker);
+      display: inline-block;
+      text-decoration: none;
+    }
+  }
+
+  /* Settings › Changelog title › mono: the earlier mono titles, headings and labels. */
+  [data-title="mono"]
+    &
+    :is([data-slot="subhead"], [data-slot="group-label"], [data-slot="area"], [data-slot="show-more"]) {
+    font-family: var(--font-mono);
+    font-size: var(--mono-size);
+    font-weight: 400;
+    line-height: 1.3;
+  }
+
+  [data-title="mono"] & :is([data-slot="area"], [data-slot="show-more"], [data-slot="group-label"]) {
+    font-size: var(--fs-meta);
+    line-height: 1.55;
+  }
+
+  [data-title="mono"] & [data-slot="title"] {
+    font-family: var(--font-mono);
+    font-size: 1.375rem;
+    font-weight: 400;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+
+    code {
+      font-family: inherit;
+    }
+  }
+
+  [data-slot="title"] + [data-slot="summary"] {
+    margin-top: -1.125rem;
+  }
+
+  /* The reading size (--fs-read), like the docs and legal text. */
+  [data-slot="summary"] {
+    color: var(--text);
+    text-wrap: pretty;
+  }
+
+  /* Reading text stops at about 70 characters. */
+  :is([data-slot="summary"], [data-slot="feature"] > p, [data-slot="group"] ul) {
+    max-inline-size: var(--measure);
+  }
+
+  /* Headings in the notes are sans like the title, a step down from it; only code is mono. */
+  [data-slot="subhead"],
+  [data-slot="group-label"] {
+    font-family: var(--font-sans);
+    font-size: var(--fs-read);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-strong);
+  }
+
+  /* The media slot, right under the title: like the product pages' clips, black, square, no
+     border, the full width of the column. A carousel when it has more than one slide. */
+  [data-slot="media"] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  [data-slot="title"] + [data-slot="media"] {
+    margin-top: -1.125rem;
+  }
+
+  /* The indicator row is a 24px target row, so it sits a little closer to the summary. */
+  [data-slot="media"]:has([data-slot="carousel-nav"]) + [data-slot="summary"] {
+    margin-top: -0.75rem;
+  }
+
+  /* The slides sit in a row and the track moves to the current one, or with the pointer while it
+     is dragged (--drag). Touch keeps vertical scrolling; only mainly horizontal gestures drag. */
+  [data-slot="viewport"] {
+    overflow: hidden;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  [data-draggable] [data-slot="viewport"] {
+    cursor: grab;
+  }
+
+  [data-dragging] [data-slot="viewport"] {
+    cursor: grabbing;
+  }
+
+  [data-slot="slides"] {
+    --gap: 8px;
+    /* One slide plus the gap: the track's width is the viewport's. */
+    --step: calc(100% + var(--gap));
+    display: flex;
+    gap: var(--gap);
+    transform: translateX(calc(var(--index) * -1 * var(--step) * var(--x-dir, 1) + var(--drag, 0px)));
+    transition: transform 250ms var(--ease-out);
+  }
+
+  [data-dragging] [data-slot="slides"] {
+    transition: none;
+  }
+
+  [data-slot="slide"] {
+    position: relative;
+    flex: 0 0 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #0a0a0a;
+
+    :is(video, img) {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
+  }
+
+  /* Changelog carousel › peek: the next slide shows 24px at the right. */
+  [data-carousel="peek"] {
+    [data-slot="slides"] {
+      --step: calc(100% - 24px);
+    }
+
+    [data-slot="slide"]:not(:only-child) {
+      flex-basis: calc(100% - 32px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="slides"] {
+      transition: none;
+    }
+  }
+
+  /* The indicator: 20×2px bars 4px apart, each in a 24px-tall target that touches the next, so
+     there is no dead gap between them. The row starts 2px left so the first bar lines up with the
+     media. */
+  [data-slot="carousel-nav"] {
+    display: flex;
+    align-items: center;
+    margin-inline-start: -2px;
+  }
+
+  [data-slot="bars"] {
+    display: flex;
+  }
+
+  [data-slot="carousel-nav"] button {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    &:focus-visible {
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot="bar"] {
+    position: relative;
+    width: 20px;
+    height: 2px;
+    overflow: hidden;
+    background: var(--border-strong);
+    transition: background-color 150ms ease;
+  }
+
+  [aria-current] > [data-slot="bar"] {
+    background: var(--text-strong);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [data-slot="bars"] button:hover > [data-slot="bar"] {
+      background: var(--link);
+    }
+
+    [data-slot="arrows"] button:hover {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="bars"] button:active > [data-slot="bar"] {
+    background: var(--link);
+  }
+
+  [data-slot="arrows"] button:active {
+    color: var(--text-strong);
+  }
+
+  /* bars + count: "1/3" at the right end of the row. */
+  [data-slot="count"] {
+    margin-inline-start: auto;
+    font-size: var(--fs-meta);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-weak);
+  }
+
+  /* bars + arrows: previous and next at the right end, their icons lined up with the media edge. */
+  [data-slot="arrows"] {
+    display: flex;
+    margin-inline-start: auto;
+    margin-inline-end: -6px;
+  }
+
+  /* progress: the active bar fills over four seconds, then the next slide shows. */
+  [data-carousel="progress"] [aria-current] > [data-slot="bar"] {
+    background: var(--border-strong);
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--text-strong);
+      transform-origin: var(--x-start, left);
+      animation: changelog-slide-progress 4s linear forwards;
+    }
+  }
+
+  [data-carousel="progress"][data-paused] [data-slot="bar"]::after {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-carousel="progress"] [aria-current] > [data-slot="bar"]::after {
+      animation: none;
+    }
+  }
+
+  [data-slot="feature"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    p {
+      text-wrap: pretty;
+    }
+  }
+
+  [data-slot="group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    margin-top: 0.75rem;
+
+    > [data-slot="group-label"],
+    > summary [data-slot="group-label"] {
+      font-size: var(--fs-meta);
+      color: var(--text-weak);
+    }
+  }
+
+  /* A long list, collapsed behind its heading: "Fixes 26 ›". The whole row is the target. */
+  details[data-slot="group"] {
+    display: block;
+
+    > summary {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      align-self: flex-start;
+      width: fit-content;
+      min-height: 1.5rem;
+      cursor: pointer;
+      list-style: none;
+      color: var(--text-weak);
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+
+      [data-slot="count"] {
+        font-family: var(--font-mono);
+        color: var(--text-weak);
+      }
+
+      [data-slot="chevron"] {
+        rotate: -90deg;
+        transition: rotate 150ms ease;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover [data-slot="group-label"],
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active [data-slot="group-label"],
+      &:active {
+        color: var(--text-strong);
+      }
+    }
+
+    &[open] > summary [data-slot="chevron"] {
+      rotate: 0deg;
+    }
+
+    > ul {
+      margin-top: 0.875rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      > summary [data-slot="chevron"] {
+        transition: none;
+      }
+    }
+  }
+
+  [data-slot="breaking"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    & + & {
+      margin-top: 1rem;
+    }
+
+    p {
+      text-wrap: pretty;
+    }
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Each change: the sections it was listed under in a narrow column, then the text. */
+  [data-slot="group"] > ul > li {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    column-gap: 1rem;
+    text-wrap: pretty;
+  }
+
+  [data-slot="area"] {
+    grid-column: 1;
+    padding-top: 0.125rem;
+    font-size: var(--fs-meta);
+    line-height: 1.55;
+    color: var(--text-weak);
+  }
+
+  [data-slot="text"] {
+    grid-column: 2;
+  }
+
+  [data-slot="breaking"] li {
+    position: relative;
+    padding-inline-start: 1rem;
+
+    &::before {
+      content: "–";
+      position: absolute;
+      inset-inline-start: 0;
+      color: var(--text-weaker);
+    }
+  }
+
+  strong {
+    font-weight: 500;
+    color: var(--text-strong);
+  }
+
+  /* Links use the site's inline link style; the author credit stays in the weak colour. */
+  [data-slot="author"] {
+    --inline-link-color: var(--text-weak);
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: calc(0.875em + 1px);
+    padding: 0.1em 0.3em;
+    background: var(--bg-weaker);
+    color: var(--text-strong);
+    overflow-wrap: anywhere;
+  }
+
+  pre {
+    overflow-x: auto;
+    padding: 0.75rem 1rem;
+    background: var(--bg-weak);
+
+    code {
+      padding: 0;
+      background: none;
+      white-space: pre;
+    }
+  }
+
+  [data-slot="show-more"] {
+    align-self: flex-start;
+    margin-inline-start: 7.5rem;
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+    text-decoration: none;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  [data-slot="meta"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.2;
+
+    a,
+    [data-slot="copy-link"] {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-weak);
+      text-decoration: none;
+      transition: color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+    }
+
+    [data-slot="external"] {
+      translate: 0 -2px;
+    }
+  }
+
+  @media (max-width: 40rem) {
+    gap: 2rem;
+
+    /* The sections sit above the text on narrow screens. */
+    [data-slot="group"] > ul {
+      gap: 0.875rem;
+    }
+
+    [data-slot="group"] > ul > li {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-slot="area"],
+    [data-slot="text"] {
+      grid-column: 1;
+    }
+
+    [data-slot="area"] {
+      padding-top: 0;
+    }
+
+    [data-slot="show-more"] {
+      margin-inline-start: 0;
+      padding-block: 0.75rem;
+      margin-block: -0.75rem;
+    }
+
+    [data-slot="meta"] :is(a, [data-slot="copy-link"]) {
+      padding-block: 0.75rem;
+      margin-block: -0.75rem;
+    }
+
+    /* When the links wrap (two versions and Copy link at 320px), the lines sit a 44px target apart,
+       so the tap areas no longer overlap by 23px. */
+    [data-slot="meta"] {
+      row-gap: calc(2.75rem - 1lh);
+    }
+  }
+}
+
+/*
+ * The timeline. A 1px rail runs down the first column through a 9px square marker per entry.
+ * "active" (Changelog marker › active square): only the entry whose date is stuck at the top has
+ * a blue marker. "progress": a blue line fills the rail down to the line 40% down the viewport,
+ * and every marker it has passed stays blue.
+ */
+[data-component="changelog-timeline"] {
+  --marker: 9px;
+  --rail-gap: 0.75rem;
+  /* Where the marker sits from the header's left edge. */
+  --marker-x: 0px;
+  /* Where the rail runs, from the list's left edge: through the markers' centres. */
+  --rail-x: calc(var(--marker) / 2);
+  /* Page colour above a stuck phone header's date row, which covers the gap under the top bar. */
+  --head-pad: 0px;
+  /* Where a stuck date sits: the content line, below any notch. */
+  --sticky-top: calc(var(--content-top) + env(safe-area-inset-top, 0px));
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  /* Each entry is one grid row, like Linear's: the date is sticky within it, and the space between
+     entries is padding at the end of the notes, inside the row. So a stuck date holds until the
+     next entry's date reaches it, then that date pushes it off, touching, with no gap between. */
+  > li {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    position: relative;
+    scroll-margin-top: var(--sticky-top);
+
+    /* Link targets for the entry's other releases and the old changelog's ids: out of the grid, at
+       the entry's top, so a jump lands where the entry itself would. */
+    > [data-slot="anchor"] {
+      position: absolute;
+      top: 0;
+      scroll-margin-top: var(--sticky-top);
+    }
+
+    /* Each entry clips its own piece of the rail (see header::before) to its own height, so the
+       pieces meet end to end. 3px of slack at the top keeps the date's round glyphs, which rise
+       a little above the trimmed cap line, without reaching the marker above. */
+    clip-path: inset(-3px -100vw 0 -100vw);
+
+    &:not(:last-child) > [data-component="changelog-entry"] {
+      padding-bottom: 6rem;
+    }
+
+    /* The rail through this entry, top to bottom, sized to it (so it adds no scroll), to the
+       next entry's marker. The last entry has none: its rail ends at its marker (header::before). */
+    &:not(:last-of-type)::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      inset-inline-start: calc(var(--rail-x) - 0.5px);
+      width: 1px;
+      background: var(--border);
+      pointer-events: none;
+    }
+  }
+
+  /* The marker and date, in the first column. */
+  header {
+    grid-column: 1;
+    position: relative;
+    z-index: 2;
+    align-self: start;
+  }
+
+  /* The rail: one continuous 1px line from the first marker down to the last. Nothing is drawn
+     above the first marker. Each entry draws its own piece, top to bottom (li::after). The
+     (sticky) header adds one that runs up from its marker, clipped to the entry, so the line
+     reaches a stuck marker, and the last one's ends at its marker, wherever sticky has moved it.
+     Nothing runs far down, which would add empty scroll below the page. In "progress", a line in --text-strong (::after)
+     covers the rail down to the reading line: from the top through every marker passed
+     (--fill-up) and on below this one (--fill, which the script stops at the entry's bottom). */
+  header::before,
+  header::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: calc(var(--marker-x) + var(--marker) / 2 - 0.5px);
+    width: 1px;
+    pointer-events: none;
+  }
+
+  header::before {
+    top: -100000px;
+    height: calc(100000px + var(--head-pad) + var(--marker) / 2);
+    background: var(--border);
+  }
+
+  /* Nothing shows above the first marker, stuck or not: its header masks its own entry's rail
+     above it with the page colour. The line above a marker appears only from the second entry on,
+     as its date arrives and pushes the first one off. */
+  > li:first-of-type header::before {
+    inset-inline-start: calc(var(--marker-x) + var(--marker) / 2 - 1.5px);
+    width: 3px;
+    height: calc(100000px + var(--head-pad));
+    background: var(--bg);
+  }
+
+  > li:first-of-type header::after {
+    top: calc(var(--head-pad) + var(--marker) / 2);
+    height: var(--fill, 0px);
+  }
+
+  header::after {
+    display: none;
+    top: calc(var(--head-pad) + var(--marker) / 2 - var(--fill-up, 0px));
+    height: calc(var(--fill-up, 0px) + var(--fill, 0px));
+    background: var(--text-strong);
+  }
+
+  &[data-marker="progress"] header::after {
+    display: block;
+  }
+
+  > li:last-of-type header::after {
+    height: var(--fill-up, 0px);
+  }
+
+  &[data-sticky] header {
+    position: sticky;
+    top: var(--sticky-top);
+  }
+
+  [data-slot="marker"] {
+    position: absolute;
+    z-index: 1;
+    inset-inline-start: var(--marker-x);
+    top: var(--head-pad);
+    width: var(--marker);
+    height: var(--marker);
+    box-sizing: border-box;
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    transition:
+      background-color 200ms var(--ease-out),
+      border-color 200ms var(--ease-out);
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  &[data-marker="active"] > li[data-active] [data-slot="marker"],
+  &[data-marker="progress"] > li[data-reached] [data-slot="marker"] {
+    border-color: var(--text-strong);
+    background: var(--text-strong);
+  }
+
+  /* The date, then the version, plain mono text that links to the entry's page. Both are trimmed
+     to their cap height and centred in a row as tall as the marker, so their figures sit level with
+     the square's centre, the first a rail gap from it. A later entry on the same day keeps its date
+     for screen readers only. */
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 0.625rem;
+    padding-inline-start: calc(var(--marker) + var(--rail-gap));
+    min-height: var(--marker);
+  }
+
+  time {
+    display: block;
+    text-box: trim-both cap alphabetic;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.2;
+    color: var(--text-weak);
+
+    &[data-same-day] {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  [data-slot="version"] {
+    display: block;
+    text-box: trim-both cap alphabetic;
+    /* A taller target than the trimmed text, taken back so nothing moves. */
+    padding-block: 0.375rem;
+    margin-block: -0.375rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    line-height: 1.2;
+    color: var(--text-weak);
+    text-decoration: none;
+    transition: color 150ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+
+  /* Settings › Changelog title size: px · weight. The default is the scale's entry size (26px, 22px
+     at 960px and below). */
+  --entry-title-size: var(--fs-entry);
+  --entry-title-weight: 500;
+
+  &[data-title-size="24-500"] {
+    --entry-title-size: 24px;
+  }
+
+  &[data-title-size="28-500"] {
+    --entry-title-size: 28px;
+  }
+
+  &[data-title-size="26-600"] {
+    --entry-title-weight: 600;
+  }
+
+  &[data-title-size="18-400"] {
+    --entry-title-size: var(--subtitle-size);
+    --entry-title-weight: 400;
+    --entry-title-leading: var(--subtitle-leading);
+    --entry-title-tracking: normal;
+  }
+
+  /* The title and notes span the second and third columns. */
+  [data-component="changelog-entry"] {
+    grid-column: 2 / 4;
+  }
+
+  /* Narrow screens: the rail on the left, through the centre of the top bar's logo mark (the mark
+     is centred in a 24px box at the content edge: 4/5 of the bar's own 30px --logo-height, in
+     site.css), and the date, title and
+     notes stacked beside it. With Changelog sticky on, the date row and the title stick under the
+     top bar on the page colour until the next entry pushes them off. Tablets beside the sidebar
+     (961–1248px) too: there a section stacks its title above its content (site.css), so the block
+     is no longer a grid and the subgrid's date column and title columns fell into one, the date
+     drawn over the title. */
+  @media (max-width: 78rem) {
+    --rail-gap: 1rem;
+    --rail-x: var(--timeline-x);
+    display: flex;
+    flex-direction: column;
+
+    > li {
+      display: block;
+      /* Whole pixels, so the stuck date row's and title's page colour has a crisp left edge. */
+      padding-inline-start: round(calc(var(--rail-x) + var(--marker) / 2 + var(--rail-gap)), 1px);
+
+      &:not(:last-child) > [data-component="changelog-entry"] {
+        padding-bottom: 4rem;
+      }
+    }
+
+    /* The date row's page colour reaches up to the top bar (padding, pulled back by a negative
+       margin, so nothing moves), and the title sticks right under the row. The two leave together:
+       the space after an entry is a margin inside it, so the title is held until the next date
+       touches it, and the date row's bottom margin, the title's height (--title-h, set by the
+       script) and taken back by the notes, holds the row back just as long. */
+    &[data-sticky] {
+      --head-pad: calc(var(--sticky-top) - var(--topbar-height));
+
+      header {
+        top: calc(var(--sticky-top) - var(--head-pad));
+        box-sizing: content-box;
+        height: var(--marker);
+        margin-top: calc(-1 * var(--head-pad));
+        margin-bottom: calc(var(--title-h, 1rem) - 1rem);
+        padding-top: var(--head-pad);
+        padding-bottom: 1rem;
+        background: var(--bg);
+      }
+
+      > li:not(:last-child) > [data-component="changelog-entry"] {
+        padding-bottom: 0;
+
+        > :last-child {
+          margin-bottom: 4rem;
+        }
+      }
+
+      > li > [data-component="changelog-entry"] {
+        margin-top: calc(1rem - var(--title-h, 1rem));
+
+        > [data-slot="title"] {
+          position: sticky;
+          top: calc(var(--sticky-top) + var(--marker) + 1rem);
+          z-index: 1;
+          padding-bottom: 1rem;
+          margin-bottom: -1rem;
+          background: var(--bg);
+        }
+      }
+    }
+
+    --marker-x: calc(
+      var(--rail-x) - var(--marker) / 2 - round(calc(var(--rail-x) + var(--marker) / 2 + var(--rail-gap)), 1px)
+    );
+
+    header {
+      padding-inline-start: 0;
+    }
+
+    [data-component="changelog-entry"] {
+      margin-top: 1rem;
+    }
+
+    /* A step smaller on phones, still well above the subheads (the default follows --fs-entry). */
+    &:is([data-title-size="24-500"], [data-title-size="28-500"]) {
+      --entry-title-size: calc(var(--entry-title-size-desktop) * 0.85);
+    }
+
+    &[data-title-size="24-500"] {
+      --entry-title-size-desktop: 24px;
+    }
+
+    &[data-title-size="28-500"] {
+      --entry-title-size-desktop: 28px;
+    }
+
+    &[data-title="mono"] [data-slot="title"] {
+      font-size: 1.1875rem;
+    }
+  }
+}
+
+@keyframes changelog-slide-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* A video slide's pause and play button, always visible (WCAG 2.2.2), in the slide's corner. */
+[data-component="changelog-entry"] [data-slot="play"] {
+  position: absolute;
+  inset-inline-end: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: #fff;
+  background: rgb(0 0 0 / 0.6);
+  opacity: 0.8;
+  transition: opacity 150ms ease;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      opacity: 1;
+    }
+  }
+
+  &:active {
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline-offset: 2px;
+  }
+}
+
+/* Under the changelog's title: the area filter, and Subscribe at the end of the row. The row
+   lines up with the entries' titles. The product areas stay on one line: on a phone the chips
+   scroll sideways, cut hard at the edge, and Subscribe keeps its place beside them. Every
+   heading ("all headings") wraps onto as many lines as it needs. */
+[data-component="changelog-toolbar"] {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 4rem;
+
+  /* Beside the sidebar the row pins on the logo row while the changelog scrolls (the chips' centre
+     on the logo's, as the fixed GitHub mark is), above the entries' stuck dates on the content
+     line. It ends clear of the GitHub mark (--github-clear, as the Markdown view's Copy does), at
+     rest too, so pinning moves nothing. The page colour behind it runs up to the window's top and
+     a little below, a hard cut for the notes passing under it. Phones keep it in the page: there
+     each entry's date and title already stick under the top bar. */
+  @media (min-width: 60.0625rem) {
+    --pin-top: calc(
+      max(var(--banner-offset, 0px), env(safe-area-inset-top, 0px)) + var(--top) + var(--logo-height) / 2 - 1rem
+    );
+    position: sticky;
+    top: var(--pin-top);
+    z-index: 3;
+    margin-inline-end: calc(var(--github-clear) - var(--edge));
+
+    &::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: calc(-1 * var(--pin-top)) 0 -0.75rem;
+      background: var(--bg);
+      pointer-events: none;
+    }
+  }
+
+  &[data-filters="areas"] {
+    flex-wrap: nowrap;
+    align-items: center;
+
+    [data-slot="filter"] {
+      flex: 0 1 auto;
+      min-width: 0;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+      /* Room for the focus ring, which the scroller would clip. */
+      padding: 3px;
+      margin: -3px;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+
+      a {
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+    }
+
+    [data-slot="subscribe"] {
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 40rem) {
+      gap: 0.75rem;
+    }
+  }
+
+  [data-slot="filter"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+
+    /* A chosen area (or All) has the grey fill and ink text; the others are muted text with no
+       fill or outline, ink on hover and press. Mono at the nav's size, like the nav items. The ring
+       sits inside, so the row's scroller keeps it. */
+    a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 2rem;
+      padding: 0 0.75rem;
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-weak);
+      text-decoration: none;
+      transition:
+        color 150ms ease,
+        background-color 150ms ease;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: -2px;
+      }
+
+      &[aria-current="true"] {
+        color: var(--text-strong);
+        background: var(--bg-weaker);
+      }
+    }
+  }
+
+  @media (max-width: 60rem) {
+    margin-bottom: 3rem;
+  }
+}
+
+/* Subscribe: the trigger of a SiteMenu (site-menu.tsx), whose menu has the site's shared look. */
+[data-slot="subscribe"] [data-slot="trigger"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border);
+  font-size: var(--fs-meta);
+  color: var(--text-strong);
+  transition: background-color 150ms ease;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--bg-weak);
+    }
+  }
+
+  &:active {
+    background: var(--bg-weak);
+  }
+
+  &[aria-expanded="true"] {
+    background: var(--bg-weaker);
+  }
+
+  &[aria-expanded="true"] [data-slot="chevron"] {
+    rotate: 180deg;
+  }
+}
+
+/* Newer and older pages, under the timeline, lined up with the titles. */
+[data-component="changelog-pages"],
+[data-component="changelog-neighbours"] {
+  grid-column: 2 / 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 2rem;
+  margin-top: 5rem;
+  font-size: var(--fs-small);
+
+  a {
+    color: var(--text-strong);
+    text-decoration: none;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        text-decoration: underline;
+        text-underline-offset: 0.2em;
+      }
+    }
+
+    &:active {
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+    }
+  }
+
+  [data-slot="position"] {
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+  }
+
+  @media (max-width: 60rem) {
+    margin-top: 3rem;
+  }
+}
+
+/* Phones: a 44px target around the one-line links, with the layout unchanged. */
+@media (max-width: 60rem) {
+  [data-component="changelog-pages"] a {
+    padding-block: 0.75rem;
+    margin-block: -0.75rem;
+  }
+}
+
+[data-component="changelog-pages"] [rel="next"] {
+  margin-inline-start: auto;
+}
+
+/* An entry's page: the newer and older entries side by side, each its date line and title. */
+[data-component="changelog-neighbours"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+
+  a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  [data-slot="older"] {
+    grid-column: 2;
+    text-align: end;
+  }
+
+  [data-slot="kicker"] {
+    font-family: var(--font-mono);
+    font-size: var(--fs-meta);
+    color: var(--text-weak);
+  }
+
+  [data-slot="title"] {
+    font-size: var(--body-size);
+    font-weight: 500;
+    text-wrap: balance;
+  }
+
+  @media (max-width: 40rem) {
+    grid-template-columns: minmax(0, 1fr);
+
+    [data-slot="older"] {
+      grid-column: 1;
+      text-align: start;
+    }
+  }
+}
+
+/* An entry's page: "← All updates" above the entry, clear of the rail. */
+[data-page="changelog-entry"] [data-slot="entry-nav"] {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  background: var(--bg);
+  box-shadow: 0 0 0 0.75rem var(--bg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+
+  a {
+    color: var(--text-weak);
+    text-decoration: none;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:active {
+      color: var(--text-strong);
+    }
+  }
+}

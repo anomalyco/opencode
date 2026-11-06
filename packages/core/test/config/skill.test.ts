@@ -21,6 +21,7 @@ import { Skill } from "@opencode/core/skill"
 import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { WellKnown } from "@opencode/core/wellknown"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
+import { advance, drain } from "../lib/clock"
 import { tmpdir } from "../fixture/tmpdir"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
@@ -415,7 +416,8 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
 
           yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
-          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
+          yield* watcher.emit({ type: "create", path: path.join(tmp.path, "generated") })
+          while ((yield* watcher.subscriptions()).at(-1)?.path !== source) yield* Effect.sleep("10 millis")
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(source, "deploy"), { recursive: true })
             await write(source, "deploy", "Deploy")
@@ -423,6 +425,55 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* emitAndWait({ type: "create", path: source })
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
         }),
+      ),
+    ),
+  )
+
+  it.effect("ignores unrelated config updates and coalesces compatibility bursts into one reload", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const claude = path.join(tmp.path, ".claude")
+          const skills = path.join(claude, "skills")
+          const service = yield* Skill.Service
+          const configTest = yield* Config.Test
+          let reloads = 0
+          yield* ConfigCompatibilityPlugin.Plugin.effect(
+            host({
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: () => service.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+          yield* Effect.yieldNow
+
+          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "commands", "review.md") })
+          yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "agents", "reviewer.md") })
+          yield* drain
+          expect(reloads).toBe(0)
+
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(skills, "review"), { recursive: true })
+            await write(skills, "review", "Review once")
+          })
+          yield* configTest.emitChange({ type: "create", path: claude })
+          yield* configTest.emitChange({ type: "create", path: path.join(skills, "review", "SKILL.md") })
+          yield* configTest.emitChange({ type: "update", path: path.join(skills, "review", "SKILL.md") })
+          yield* advance(() => reloads >= 1)
+          yield* drain
+          expect(reloads).toBe(1)
+          expect((yield* service.list()).find((item) => item.id === "review")?.description).toBe("Review once")
+        }).pipe(
+          Effect.provide(
+            Config.testLayer(
+              [new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) })],
+              { claude: [AbsolutePath.make(path.join(tmp.path, ".claude"))], agents: [] },
+            ),
+          ),
+        ),
       ),
     ),
   )

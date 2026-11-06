@@ -1,8 +1,5 @@
 import { shortDomain } from "./stage"
 
-// Retains existing share data until it is deleted separately.
-new sst.cloudflare.Bucket("EnterpriseStorage")
-
 // The Share worker takes over the hostname of the retired Teams worker. Cloudflare rejects a second custom domain for
 // the same hostname, so adopt the Teams domain and replace it, deleting the old one first.
 $transform(cloudflare.WorkersCustomDomain, (_args, opts, name) => {

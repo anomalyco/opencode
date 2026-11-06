@@ -11,12 +11,6 @@ const HOSTED_TOOL_CASES = [
     name: "current_web",
     args: {},
     wireType: "web_search",
-    output: {
-      type: "web_search_call",
-      id: "web_1",
-      status: "completed",
-      action: { type: "search", query: "news" },
-    },
     stream: [
       {
         type: "response.output_item.added",
@@ -47,12 +41,6 @@ const HOSTED_TOOL_CASES = [
     name: "preview_web",
     args: {},
     wireType: "web_search_preview",
-    output: {
-      type: "web_search_call",
-      id: "preview_1",
-      status: "completed",
-      action: { type: "search", query: "news" },
-    },
     stream: [
       {
         type: "response.output_item.added",
@@ -83,7 +71,6 @@ const HOSTED_TOOL_CASES = [
     name: "documents",
     args: { vectorStoreIds: ["store_1"] },
     wireType: "file_search",
-    output: { type: "file_search_call", id: "file_1", queries: ["news"], results: null },
     stream: [
       {
         type: "response.output_item.added",
@@ -104,13 +91,6 @@ const HOSTED_TOOL_CASES = [
     name: "python",
     args: {},
     wireType: "code_interpreter",
-    output: {
-      type: "code_interpreter_call",
-      id: "code_1",
-      code: "print(1)",
-      container_id: "container_1",
-      outputs: null,
-    },
     stream: [
       {
         type: "response.output_item.added",
@@ -164,7 +144,6 @@ const HOSTED_TOOL_CASES = [
     name: "illustrate",
     args: {},
     wireType: "image_generation",
-    output: { type: "image_generation_call", id: "image_1", result: "final-image" },
     stream: [
       {
         type: "response.output_item.added",
@@ -192,15 +171,9 @@ function hostedTool(testCase: (typeof HOSTED_TOOL_CASES)[number]): LanguageModel
   return { type: "provider", id: testCase.id, name: testCase.name, args: testCase.args }
 }
 
-function createMockFetch(body: unknown) {
-  return mock(
-    async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }),
-  )
-}
-
 function createStreamFetch(events: ReadonlyArray<Record<string, unknown>>) {
   return mock(
-    async () =>
+    async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
       new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
         status: 200,
         headers: { "Content-Type": "text/event-stream" },
@@ -215,6 +188,10 @@ function createModel(fetchFn: ReturnType<typeof mock>) {
     headers: () => ({ Authorization: "Bearer test-token" }),
     fetch: fetchFn as any,
   })
+}
+
+function requestBodies(fetchFn: ReturnType<typeof createStreamFetch>) {
+  return fetchFn.mock.calls.map((call) => JSON.parse(call[1]?.body as string))
 }
 
 async function readStream(stream: ReadableStream<LanguageModelV3StreamPart>) {
@@ -232,52 +209,25 @@ async function readStream(stream: ReadableStream<LanguageModelV3StreamPart>) {
 // namespace request options already use. It used to echo this metadata under "openai" (a leftover
 // from forking the OpenAI Responses model), which left it unreachable by anything reading the
 // "copilot" namespace and let stale itemIds slip past stripping meant for that namespace.
-describe("doGenerate", () => {
+describe("doStream", () => {
   test.each([...HOSTED_TOOL_CASES])("forces $id by its declared logical name", async (testCase) => {
-    const requests: unknown[] = []
-    const model = createModel(
-      mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-        requests.push(await new Response(init?.body).json())
-        return new Response(
-          JSON.stringify({
-            id: "resp_1",
-            created_at: 0,
-            model: "test-model",
-            output: [],
-            usage: { input_tokens: 1, output_tokens: 1 },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        )
-      }),
-    )
+    const fetchFn = createStreamFetch([])
+    const model = createModel(fetchFn)
 
-    await model.doGenerate({
+    await model.doStream({
       prompt: TEST_PROMPT,
       tools: [hostedTool(testCase)],
       toolChoice: { type: "tool", toolName: testCase.name },
     })
 
-    expect(requests[0]).toMatchObject({ tool_choice: { type: testCase.wireType } })
+    expect(requestBodies(fetchFn)[0]).toMatchObject({ tool_choice: { type: testCase.wireType } })
   })
 
   test("does not mistake a colliding function name for a hosted tool", async () => {
-    const requests: unknown[] = []
-    const model = createModel(
-      mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-        requests.push(await new Response(init?.body).json())
-        return new Response(
-          JSON.stringify({
-            id: "resp_1",
-            created_at: 0,
-            model: "test-model",
-            output: [],
-            usage: { input_tokens: 1, output_tokens: 1 },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        )
-      }),
-    )
-    await model.doGenerate({
+    const fetchFn = createStreamFetch([])
+    const model = createModel(fetchFn)
+
+    await model.doStream({
       prompt: TEST_PROMPT,
       tools: [
         { type: "provider", id: "openai.web_search", name: "lookup", args: {} },
@@ -286,156 +236,21 @@ describe("doGenerate", () => {
       toolChoice: { type: "tool", toolName: "web_search" },
     })
 
-    expect(requests[0]).toMatchObject({ tool_choice: { type: "function", name: "web_search" } })
-  })
-
-  test.each([...HOSTED_TOOL_CASES])("uses $name for generated $id calls and results", async (testCase) => {
-    const model = createModel(
-      createMockFetch({
-        id: "resp_1",
-        created_at: 0,
-        model: "test-model",
-        output: [testCase.output],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }),
-    )
-
-    const result = await model.doGenerate({ prompt: TEST_PROMPT, tools: [hostedTool(testCase)] })
-
-    expect(result.content.filter((part) => part.type === "tool-call" || part.type === "tool-result")).toMatchObject([
-      { type: "tool-call", toolName: testCase.name },
-      { type: "tool-result", toolName: testCase.name },
-    ])
-  })
-
-  test("uses canonical names only when no hosted declaration matches", async () => {
-    const model = createModel(
-      createMockFetch({
-        id: "resp_1",
-        created_at: 0,
-        model: "test-model",
-        output: [
-          HOSTED_TOOL_CASES[0].output,
-          HOSTED_TOOL_CASES[2].output,
-          HOSTED_TOOL_CASES[3].output,
-          HOSTED_TOOL_CASES[4].output,
-          { type: "computer_call", id: "computer_1", status: "completed" },
-        ],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }),
-    )
-
-    const result = await model.doGenerate({ prompt: TEST_PROMPT })
-
-    expect(result.content.filter((part) => part.type === "tool-call").map((part) => part.toolName)).toEqual([
-      "web_search",
-      "file_search",
-      "code_interpreter",
-      "image_generation",
-      "computer_use",
-    ])
-  })
-
-  test("rejects an automatic web response when both variants have different logical names", async () => {
-    const model = createModel(
-      createMockFetch({
-        id: "resp_1",
-        created_at: 0,
-        model: "test-model",
-        output: [HOSTED_TOOL_CASES[0].output],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }),
-    )
-
-    await expect(
-      model.doGenerate({
-        prompt: TEST_PROMPT,
-        tools: [hostedTool(HOSTED_TOOL_CASES[0]), hostedTool(HOSTED_TOOL_CASES[1])],
-      }),
-    ).rejects.toThrow("ambiguous web_search response for hosted tools: current_web, preview_web")
-  })
-
-  test("attaches item metadata under the copilot namespace, not openai", async () => {
-    const mockFetch = createMockFetch({
-      id: "resp_1",
-      created_at: 0,
-      model: "gpt-5.5",
-      output: [
-        {
-          type: "reasoning",
-          id: "rs_1",
-          encrypted_content: "enc_1",
-          summary: [{ type: "summary_text", text: "thinking..." }],
-        },
-        {
-          type: "message",
-          role: "assistant",
-          id: "msg_1",
-          content: [{ type: "output_text", text: "Hello there", annotations: [] }],
-        },
-        {
-          type: "function_call",
-          call_id: "call_1",
-          name: "bash",
-          arguments: "{}",
-          id: "fc_1",
-        },
-      ],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    })
-    const model = createModel(mockFetch)
-
-    const { content, providerMetadata } = await model.doGenerate({
-      prompt: TEST_PROMPT,
-      includeRawChunks: false,
-    } as any)
-
-    const reasoning = content.find((part: any) => part.type === "reasoning") as any
-    expect(reasoning.providerMetadata?.copilot?.itemId).toBe("rs_1")
-    expect(reasoning.providerMetadata?.copilot?.reasoningEncryptedContent).toBe("enc_1")
-    expect(reasoning.providerMetadata?.openai).toBeUndefined()
-
-    const text = content.find((part: any) => part.type === "text") as any
-    expect(text.providerMetadata?.copilot?.itemId).toBe("msg_1")
-    expect(text.providerMetadata?.openai).toBeUndefined()
-
-    const toolCall = content.find((part: any) => part.type === "tool-call") as any
-    expect(toolCall.providerMetadata?.copilot?.itemId).toBe("fc_1")
-    expect(toolCall.providerMetadata?.openai).toBeUndefined()
-
-    expect(providerMetadata?.copilot?.responseId).toBe("resp_1")
-    expect(providerMetadata?.openai).toBeUndefined()
+    expect(requestBodies(fetchFn)[0]).toMatchObject({ tool_choice: { type: "function", name: "web_search" } })
   })
 
   test("defaults to stateless encrypted reasoning and keeps previousResponseId opt-in", async () => {
-    const requests: Array<Record<string, unknown>> = []
-    const fetchFn = mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      requests.push(JSON.parse(init?.body as string))
-      return new Response(
-        JSON.stringify({
-          id: "resp_1",
-          created_at: 0,
-          model: "gpt-5.5",
-          output: [],
-          usage: { input_tokens: 1, output_tokens: 1 },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      )
-    })
+    const fetchFn = createStreamFetch([])
     const model = createModel(fetchFn)
 
-    await model.doGenerate({ prompt: TEST_PROMPT, includeRawChunks: false } as any)
-    await model.doGenerate({
+    await model.doStream({ prompt: TEST_PROMPT })
+    await model.doStream({
       prompt: TEST_PROMPT,
-      includeRawChunks: false,
       providerOptions: { copilot: { previousResponseId: "resp_previous", store: false } },
-    } as any)
-    await model.doGenerate({
-      prompt: TEST_PROMPT,
-      includeRawChunks: false,
-      providerOptions: { copilot: { store: true } },
-    } as any)
+    })
+    await model.doStream({ prompt: TEST_PROMPT, providerOptions: { copilot: { store: true } } })
 
+    const requests = requestBodies(fetchFn)
     expect(requests[0]?.previous_response_id).toBeUndefined()
     expect(requests[0]?.store).toBe(false)
     expect(requests[0]?.include).toEqual(["reasoning.encrypted_content"])
@@ -445,9 +260,6 @@ describe("doGenerate", () => {
     expect(requests[2]?.store).toBe(true)
     expect(requests[2]?.include).toEqual(["reasoning.encrypted_content"])
   })
-})
-
-describe("doStream", () => {
   test.each([...HOSTED_TOOL_CASES])("uses $name for every streamed $id identity event", async (testCase) => {
     const model = createModel(createStreamFetch(testCase.stream))
     const result = await model.doStream({

@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "Sazlama panelini göstər/gizlət",
+  providerAriaLabel: "Provayder performansının diaqnostikası",
+  na: "yox",
+  "duration.label": "TIME",
+  "duration.tip": "Son növbəni başladan sorğudan cavabının tamamlanmasına qədər keçən vaxt.",
+  "tps.label": "TPS",
+  "tps.tip": "Son növbənin model sorğuları üzrə saniyədə çıxış və düşünmə tokenləri, alət vaxtı istisna olmaqla.",
+  "focus.label": "FOCUS",
+  "focus.tip": "Bütün interaktiv elementlərə fokus üslublarını məcburi tətbiq et",
+  "focus.on": "AÇIQ",
+  "focus.off": "QAPALI",
+  "direction.label": "DIR",
+  "direction.tip": "Seçilmiş dili dəyişmədən bütün tətbiq üçün tərtibat istiqamətini məcburi təyin et",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

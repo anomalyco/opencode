@@ -4,9 +4,11 @@ import {
   ReasoningEfforts,
   ToolCallPart,
   ToolResultPart,
-  type ContentPart,
+  type AssistantMessage,
+  type MediaPart,
   type ProviderMetadata,
-} from "@opencode/ai"
+  type TextPart,
+} from "@opencode/ai/effect"
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
@@ -17,11 +19,10 @@ import type { FileAttachment } from "@opencode/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
-const media = (file: FileAttachment): ContentPart => ({
+const media = (file: FileAttachment): MediaPart => ({
   type: "media",
   media: Media.base64(file.data, file.mime),
   filename: file.name,
-  metadata: file.description === undefined ? undefined : { description: file.description },
 })
 
 const attachmentLocation = (file: FileAttachment) => {
@@ -35,7 +36,7 @@ const attachmentLocation = (file: FileAttachment) => {
   }
 }
 
-const textAttachment = (file: FileAttachment): ContentPart => ({
+const textAttachment = (file: FileAttachment): TextPart => ({
   type: "text",
   text: `\n\n${[
     `Attached file: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}`,
@@ -45,16 +46,9 @@ const textAttachment = (file: FileAttachment): ContentPart => ({
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")}`,
-  metadata: {
-    attachment: {
-      source: file.source,
-      name: file.name,
-      description: file.description,
-    },
-  },
 })
 
-const directoryAttachment = (file: FileAttachment): ContentPart => ({
+const directoryAttachment = (file: FileAttachment): TextPart => ({
   type: "text",
   text: `\n\n${[
     `Attached directory: ${attachmentLocation(file) ?? file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
@@ -64,16 +58,9 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
   ]
     .filter((line): line is string => line !== undefined)
     .join("\n")}`,
-  metadata: {
-    attachment: {
-      source: file.source,
-      name: file.name,
-      description: file.description,
-    },
-  },
 })
 
-const attachmentContent = (file: FileAttachment): ContentPart[] => {
+const attachmentContent = (file: FileAttachment): Array<TextPart | MediaPart> => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
   if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
@@ -103,6 +90,7 @@ const userAttachmentContent = (files: readonly FileAttachment[]) => {
 }
 
 const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const decodeNativeWindow = Schema.decodeUnknownSync(SessionHistory.NativeWindow)
 
 const providerMetadata = (
   provider: string,
@@ -114,7 +102,7 @@ const toolInput = (tool: SessionMessage.AssistantTool) =>
     ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
     : tool.state.input
 
-const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ContentPart =>
+const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ToolCallPart =>
   ToolCallPart.make({
     id: tool.id,
     name: tool.name,
@@ -152,13 +140,13 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 }
 
 const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
-  const sameProvider = String(message.model.providerID) === String(model.providerID)
-  const sameModel = sameProvider && String(message.model.id) === String(model.id)
+  const sameProvider = message.model.providerID === model.providerID
+  const sameModel = sameProvider && message.model.id === model.id
   const reuseProviderMetadata = sameModel && message.error === undefined
   const reasoningInterrupted = message.content.some(
     (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
   )
-  const content = message.content.flatMap((item): ContentPart[] => {
+  const content = message.content.flatMap((item): Array<AssistantMessage["content"][number]> => {
     if (item.type === "text")
       return [
         {
@@ -170,8 +158,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         },
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
-    if (item.type === "reasoning")
-      return reuseProviderMetadata && !reasoningInterrupted
+    if (item.type === "reasoning") {
+      if (message.error !== undefined || reasoningInterrupted) return []
+      return reuseProviderMetadata
         ? [
             {
               type: "reasoning",
@@ -180,8 +169,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
             },
           ]
         : item.text.length > 0
-          ? [{ type: message.error === undefined && !reasoningInterrupted ? "reasoning" : "text", text: item.text }]
+          ? [{ type: "reasoning", text: item.text }]
           : []
+    }
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
@@ -212,10 +202,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results
-  return [
-    Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
-    ...results,
-  ]
+  return [Message.make({ id: message.id, role: "assistant", content: meaningful }), ...results]
 }
 
 const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
@@ -249,7 +236,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           id: message.id,
           role: "user",
           content: `The working directory has been changed to ${message.location.directory}.`,
-          metadata: message.metadata,
         }),
       ]
     case "user":
@@ -264,16 +250,12 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           id: message.id,
           role: "user",
           content,
-          metadata: {
-            ...message.metadata,
-            ...(message.agents?.length ? { agents: message.agents } : {}),
-          },
         }),
       ]
     case "synthetic":
       return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "skill":
-      return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
+      return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "system":
       return [Message.system(message.text)]
     case "shell":
@@ -284,7 +266,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           id: message.id,
           role: "user",
           content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
-          metadata: message.metadata,
         }),
       ]
     case "assistant":
@@ -292,8 +273,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
-      if (message.native?.messages !== undefined)
-        return [...Schema.decodeUnknownSync(SessionHistory.NativeWindow)(message.native.messages)]
+      if (message.native?.messages !== undefined) return [...decodeNativeWindow(message.native.messages)]
       const kept = SessionRecentText.kept(message)
       return [
         Message.make({
@@ -307,7 +287,6 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
             ...(kept ? ["", `<recent-context>\n${kept}\n</recent-context>`] : []),
             "</conversation-checkpoint>",
           ].join("\n"),
-          metadata: message.metadata,
         }),
       ]
     }
