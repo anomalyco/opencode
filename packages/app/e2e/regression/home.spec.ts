@@ -1,7 +1,18 @@
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, sessionHref, T0 } from "../utils/app"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import {
+  expectPath,
+  holdRoute,
+  NO_PROVIDER,
+  project,
+  REMOTE_SERVER,
+  seed,
+  SERVER,
+  session,
+  sessionHref,
+  T0,
+} from "../utils/app"
+import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer, mockWorkspace, newSessionLocation } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
@@ -338,6 +349,90 @@ test("Home migrates the directories an older build listed to the server's curren
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")))
     .toMatchObject({ usedProjectIDs: { local: ["proj_api", "proj_web"] }, projects: {} })
+})
+
+test("selecting a Home project lists its worktrees once, however often the project updates", async ({ page }) => {
+  const listed = [entry("alpha", 2), entry("beta", 1)]
+  const view = await homeProjects(page, listed)
+  await seed(page, { usedProjects: { local: ["proj_alpha", "proj_beta"] } })
+  const lists: string[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (request.method() === "GET" && url.pathname === "/api/worktree") lists.push(url.searchParams.get("projectID")!)
+  })
+  await page.goto("/")
+  await expect(view.rows).toHaveText(["alpha", "beta"])
+  const alpha = page.locator('[data-component="home-project-row"]').filter({ hasText: "alpha" })
+
+  const refreshed = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/worktree/refresh",
+  )
+
+  await alpha.click()
+  await expect(alpha).toHaveAttribute("data-selected", "")
+  await refreshed
+
+  // Each update replaces the selected project's object in the store.
+  const renamed: OpenCodeEvent = {
+    id: "evt_home_worktrees",
+    created: T0,
+    type: "project.updated",
+    data: { ...listed[0]!, name: "alpha renamed" },
+  }
+
+  await view.server.push([renamed])
+  await expect(view.rows).toHaveText(["alpha renamed", "beta"])
+
+  const beta = page.waitForRequest((request) => new URL(request.url()).searchParams.get("projectID") === "proj_beta")
+  await page.locator('[data-component="home-project-row"]').filter({ hasText: "beta" }).click()
+  await beta
+  expect(lists).toEqual(["proj_alpha", "proj_beta"])
+})
+
+test("Home keeps a restored remote selection while the desktop server list loads", async ({ page }) => {
+  const local = session({ id: "ses_home_local", directory: "/repo", title: "Local session" })
+  const remote = session({ id: "ses_home_remote", directory: "/remote/project", title: "Remote session" })
+  const selection = { server: REMOTE_SERVER, directory: "/remote/project" }
+
+  await mockServers(page, {
+    [SERVER]: {
+      directory: "/repo",
+      project: project({ id: "proj_local", directory: "/repo" }),
+      provider: NO_PROVIDER,
+      sessions: [local],
+      pageMessages: () => ({ items: [] }),
+    },
+    [REMOTE_SERVER]: {
+      directory: selection.directory,
+      project: project({ id: "proj_remote", directory: selection.directory, name: "remote-project" }),
+      provider: NO_PROVIDER,
+      sessions: [remote],
+      pageMessages: () => ({ items: [] }),
+    },
+  })
+  await seed(page, {
+    servers: [{ url: REMOTE_SERVER, name: "Remote" }],
+    usedProjects: { [REMOTE_SERVER]: ["proj_remote"] },
+    storage: { "opencode.global.dat:layout": { home: { selection } } },
+  })
+  // Desktop storage is asynchronous; the stored servers load after the layout here.
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "stopped", storage: "async", hold: "^server$", path: "/" })}`,
+  )
+
+  // Until then Home shows this computer's sessions, not filtered by the remote server's directory.
+  await expect(row(page, local.title)).toBeVisible()
+  await page.getByRole("button", { name: "Load held storage", exact: true }).click()
+
+  await expect(row(page, remote.title)).toBeVisible()
+  await expect(
+    page.locator('[data-component="home-project-row"]').filter({ hasText: "remote-project" }),
+  ).toHaveAttribute("data-selected", "")
+  await expect(row(page, local.title)).toHaveCount(0)
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}").home.selection),
+  ).toEqual(selection)
 })
 
 test("Home shows loaded sessions before the location request resolves", async ({ page }) => {

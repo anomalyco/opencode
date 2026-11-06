@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, jest, test } from "bun:test"
 import { batch, createComponent, createRoot, createSignal, onCleanup, type Accessor } from "solid-js"
 import { Schema } from "effect"
 import {
@@ -14,6 +14,7 @@ import type { Platform } from "@/runtime/platform/platform"
 import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { createLocatedWrites } from "@/runtime/plugin/located"
+import { LOCATED_WRITE_TTL_MS } from "@/runtime/plugin/located-machine"
 import { createSessionStore, globalStoreTarget, persistedHandle, whenLoaded } from "@/runtime/plugin/stores"
 
 const pending = { status: "pending" } as const
@@ -590,5 +591,26 @@ describe("plugin primitives", () => {
     setLocation({ directory: "/repo" })
     expect({ before, after: log }).toEqual({ before: [], after: ["open", "scroll"] })
     root.dispose()
+  })
+
+  // Before, a write held for a session that never located was kept forever and replayed whenever it did.
+  test("a held write expires when the session stays unlocated past the TTL", () => {
+    jest.useFakeTimers()
+    const [location, setLocation] = createSignal<{ directory: string } | undefined>()
+    const target = session(() => "server\nses_gone", location)
+    const log: string[] = []
+    const root = createRoot((dispose) => ({ dispose, writes: createLocatedWrites() }))
+
+    try {
+      root.writes.hold(target, () => log.push("open"))
+      jest.advanceTimersByTime(LOCATED_WRITE_TTL_MS)
+      setLocation({ directory: "/repo" })
+      root.writes.hold(target, () => log.push("later"))
+
+      expect(log).toEqual(["later"])
+    } finally {
+      root.dispose()
+      jest.useRealTimers()
+    }
   })
 })

@@ -1,10 +1,11 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { McpServer } from "@opencode/client/promise"
-import { Predicate } from "effect"
-import { onMount } from "solid-js"
+import { createSignal, onMount, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { McpController } from "./mcp"
 import { McpDialog } from "./mcp-dialog"
+import { createMcpState, type McpEvent, transitionMcp } from "./mcp-machine"
 
 function McpDialogStory(props: { server?: string }) {
   const dialog = useDialog()
@@ -23,23 +24,34 @@ function McpDialogStory(props: { server?: string }) {
     },
   ])
 
-  const open = () =>
-    dialog.show(() => (
-      <McpDialog
-        servers={servers}
-        server={props.server}
-        pending={false}
-        onToggle={(input) => {
-          const action = Predicate.isString(input)
-            ? { name: input, enabled: servers.find((server) => server.name === input)?.status.status !== "connected" }
-            : input
+  // The real machine, mounted for the story's lifetime, with toggles that succeed at once and stay in the story.
+  const [mcpState, setMcpState] = createSignal(transitionMcp(createMcpState(), { type: "mounted" }).state)
+  const listeners = new Set<Parameters<McpController["onFocus"]>[0]>()
 
-          setServers((server) => server.name === action.name, "status", {
-            status: action.enabled ? "connected" : "disabled",
-          })
-        }}
-      />
-    ))
+  const mcp: Pick<McpController, "state" | "dispatch" | "onFocus"> = {
+    state: mcpState,
+    dispatch: (event: McpEvent) => {
+      const step = transitionMcp(untrack(mcpState), event)
+      setMcpState(step.state)
+      step.effects.forEach((effect) => {
+        if (effect.type === "focus-detail" || effect.type === "focus-list")
+          return listeners.forEach((listener) => listener(effect))
+
+        if (effect.type !== "run-toggle") return
+        setServers((server) => server.name === effect.name, "status", {
+          status: effect.enabled ? "connected" : "disabled",
+        })
+        mcp.dispatch({ type: "toggle.succeeded", name: effect.name, attempt: effect.attempt })
+      })
+    },
+    onFocus: (listener) => {
+      listeners.add(listener)
+
+      return () => listeners.delete(listener)
+    },
+  }
+
+  const open = () => dialog.show(() => <McpDialog servers={servers} server={props.server} mcp={mcp} />)
 
   onMount(open)
 

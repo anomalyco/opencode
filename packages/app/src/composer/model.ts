@@ -483,7 +483,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         return
       }
 
-      if (item?.type === "file") openComment(item, links, plugins.current(), files, comments)
+      if (item?.type === "file") openComment(item, links, plugins.current(), comments)
     },
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
@@ -655,31 +655,13 @@ function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
   links: Links,
   session: MountedSession | undefined,
-  files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
 ) {
   if (!item.commentID) return
-  const focus = { file: item.path, id: item.commentID }
-  comments.setActive(focus)
-
-  const queueFocus = (attempts = 6) => {
-    requestAnimationFrame(() => {
-      comments.setFocus({ ...focus })
-
-      if (attempts <= 0) return
-      requestAnimationFrame(() => {
-        const current = comments.focus()
-
-        if (current?.file === focus.file && current.id === focus.id) queueFocus(attempts - 1)
-      })
-    })
-  }
-
   // The plugin that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
+  // It opens first, so a preview it replaces unmounts before the request, which then waits for the view to answer.
   links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
-
-  if (item.commentOrigin === "review") return queueFocus()
-  void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
+  comments.open({ file: item.path, id: item.commentID })
 }
 
 function firstWord(query: string) {

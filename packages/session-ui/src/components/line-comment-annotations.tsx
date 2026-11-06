@@ -2,7 +2,7 @@ import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
 import { render as renderSolid } from "solid-js/web"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { createHoverCommentUtility } from "../pierre/comment-hover"
+import { createHoverComment, type HoverComment, type HoverCommentLine } from "../pierre/comment-hover"
 import { cloneSelectedLineRange, formatSelectedLineLabel, lineInSelectedRange } from "../pierre/selection-bridge"
 import { LineComment, LineCommentEditor, type LineCommentEditorProps } from "./line-comment"
 import {
@@ -35,11 +35,6 @@ type LineCommentAnnotationsProps<T> = {
 
 type LineCommentAnnotationsWithSideProps<T> = LineCommentAnnotationsProps<T> & {
   getSide: (range: SelectedLineRange) => "additions" | "deletions"
-}
-
-type HoverCommentLine = {
-  lineNumber: number
-  side?: "additions" | "deletions"
 }
 
 /** A line-comment mode owned by the caller, such as one file's entry in a multi-file review. Omit it to keep the mode inside the controller. */
@@ -538,8 +533,17 @@ export function createLineCommentGutterRenderer(props: {
   getSelectedRange: Accessor<SelectedLineRange | null>
   onOpenDraft: (range: SelectedLineRange) => void
 }) {
-  return (getHoveredLine: () => HoverCommentLine | undefined) =>
-    createHoverCommentUtility({
+  let active: { comment: HoverComment; getHoveredLine: () => HoverCommentLine | undefined } | undefined
+
+  onCleanup(() => active?.comment.dispose())
+
+  // Pierre calls this on every render and rerender but inserts the result only when it holds no button yet, so hand
+  // back the same button for the same viewer instead of building one with fresh document listeners each time.
+  return (getHoveredLine: () => HoverCommentLine | undefined) => {
+    if (active?.getHoveredLine === getHoveredLine && active.comment.canReuse()) return active.comment.button
+    active?.comment.dispose()
+
+    const comment = createHoverComment({
       label: props.label,
       getHoveredLine,
       onSelect: (hovered) => {
@@ -560,4 +564,9 @@ export function createLineCommentGutterRenderer(props: {
         props.onOpenDraft(range)
       },
     })
+
+    active = comment && { comment, getHoveredLine }
+
+    return comment?.button
+  }
 }
