@@ -97,6 +97,9 @@ denies it: the host function is never called, and the program catches the failur
 fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
 throws.
 
+`engine: "vm"` runs programs on the bytecode VM in `src/vm` instead of the default `"legacy"` interpreter. It is
+experimental: `execute` has the same signature and results on both engines.
+
 ### `Extension.make`
 
 Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the
