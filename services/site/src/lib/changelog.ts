@@ -5,6 +5,7 @@ import { staleValue } from "~/lib/edge-cache"
 import {
   changelogEntryView,
   changelogView,
+  entryStatus,
   parseReleaseNotes,
   type ChangelogView,
   type ReleaseNotes,
@@ -165,7 +166,7 @@ export const changelogPage = query(async (page: number, filter: string[]): Promi
 export const changelogEntry = query(async (tag: string): Promise<ChangelogView> => {
   "use server"
   const result = await loadChangelog()
-  return changelogEntryView(result.releases, tag)
+  return changelogEntryView(result.releases, tag, result.stale)
 }, "changelog-entry")
 
 /** The newest few entries with notes in one product's areas, for its product page. */
@@ -181,10 +182,9 @@ export const productChangelog = query(async (filter: string[]): Promise<Changelo
  */
 export async function changelogEntryJson(tag: string) {
   const result = await loadChangelog(feedWait).catch((): ChangelogData => ({ ok: false, releases: [] }))
-  const view = changelogEntryView(result.releases, tag)
+  const view = changelogEntryView(result.releases, tag, result.stale)
   const entry = view.entries[0]
-  // A tag missing from a stale list may just be newer than it: a 404 then, cached for a minute only.
-  const status = entry ? 200 : result.ok ? 404 : 503
+  const status = entryStatus(view)
   return new Response(
     JSON.stringify(
       entry
@@ -196,9 +196,12 @@ export async function changelogEntryJson(tag: string) {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control":
-          entry && !result.stale
-            ? "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
-            : "public, max-age=1, s-maxage=60",
+          status === 503
+            ? "no-store"
+            : entry && !result.stale
+              ? "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+              : "public, max-age=1, s-maxage=60",
+        ...(status === 503 ? { "Retry-After": "60" } : {}),
         "Access-Control-Allow-Origin": "*",
       },
     },
