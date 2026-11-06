@@ -668,7 +668,26 @@ impl Mini {
             let Some((provider_id, model_id)) = model else {
                 return;
             };
-            mini.patch(|state| state.model = Some((model_id, Some(provider_id), None)));
+            // A model chosen meanwhile wins.
+            if mini.state.borrow().model.is_some() {
+                return;
+            }
+            mini.patch(|state| state.model = Some((model_id.clone(), Some(provider_id.clone()), None)));
+            // Without the catalog yet, `load_models` resolves the variants once it arrives.
+            if mini.providers.borrow().is_none() {
+                return;
+            }
+            let model = ModelSelection { provider_id, model_id };
+            let variants = crate::variants::variants_for(&mini.providers(), &model);
+            let saved = crate::variants::saved_variant(&mini.preferences, &model);
+            let variant = crate::variants::resolve_variant(None, None, saved.as_deref(), &variants);
+            *mini.variants.borrow_mut() = variants;
+            // The session switches to the default model only for a variant (`if (state.activeVariant)`).
+            if variant.is_some() {
+                mini.set_variant(variant);
+            }
+            mini.footers.models_changed();
+            mini.paint_status();
         });
     }
 
