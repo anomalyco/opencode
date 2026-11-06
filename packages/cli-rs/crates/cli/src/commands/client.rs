@@ -113,8 +113,7 @@ process.exit(0)
         std::fs::write(&script, STANDALONE).unwrap();
         // `OPENCODE_TS_BIN` names one executable.
         let program = dir.path().join("opencode-ts");
-        std::fs::write(&program, format!("#!/bin/sh\nexec bun {}\n", script.display())).unwrap();
-        std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        opencode_service::ts_command::write_script(&program, &format!("#!/bin/sh\nexec bun {}\n", script.display()));
         let root = dir.path().to_owned();
         let paths = Paths::from_vars(|name| match name {
             "HOME" => Some(root.clone().into()),

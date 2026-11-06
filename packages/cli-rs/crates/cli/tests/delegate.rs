@@ -2,9 +2,10 @@
 //! TypeScript binary records what it got, so nothing real is installed, removed, or served.
 
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+
+use opencode_service::ts_command::write_script;
 
 const FAKE: &str = r#"#!/bin/sh
 printf '%s\n' "$@" > "$DELEGATE_DIR/args"
@@ -23,8 +24,7 @@ impl Fake {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("opencode");
-        std::fs::write(&bin, FAKE).unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_script(&bin, FAKE);
         Self { dir }
     }
 
@@ -123,12 +123,10 @@ fn an_interrupt_waits_for_the_remote_access_command() {
     use std::os::unix::process::CommandExt;
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("opencode");
-    std::fs::write(
+    write_script(
         &bin,
         "#!/bin/sh\ntrap 'sleep 0.5; echo done > \"$DELEGATE_DIR/teardown\"; exit 130' INT\necho > \"$DELEGATE_DIR/started\"\nwhile :; do sleep 0.05; done\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let mut child = Command::new(env!("CARGO_BIN_EXE_opencode-rs"))
         .args(["service", "set", "remote", "true"])
         .env("OPENCODE_TS_BIN", &bin)
