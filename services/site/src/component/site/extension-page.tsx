@@ -1,7 +1,7 @@
 import "./product-page.css"
 import { Meta, Title } from "@solidjs/meta"
 import { useNavigate } from "@solidjs/router"
-import { For, onCleanup, onMount } from "solid-js"
+import { For, onCleanup, onMount, Show } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
@@ -20,17 +20,18 @@ import { useMarkdown } from "./use-markdown"
 import { inlineKey } from "~/lib/direction"
 
 /**
- * An extension's page: a lighter product page with a black hero until there is real footage, what
- * it does, how to get it and its source. The arrow keys step through the extensions only.
+ * A light product page: what it does, how to get it and its source. Browse is a product, served at
+ * /browse; an extension page would sit at /extensions/<slug>. The arrow keys step through the
+ * extensions only, when there is more than one.
  */
-export function ExtensionPage(props: { slug: ExtensionSlug }) {
+export function ExtensionPage(props: { slug: ExtensionSlug; path?: string }) {
   const language = useLanguage()
   const i18n = useI18n()
   const extensionCopy = useArea("extensions", extensionsSource)
   const navigate = useNavigate()
   const data = () => extensionPages.find((item) => item.slug === props.slug)!
   const extension = () => extensionCopy()[props.slug]
-  const path = () => `/extensions/${props.slug}`
+  const path = () => props.path ?? `/extensions/${props.slug}`
   const neighbour = (step: number) => {
     const index = extensionPages.findIndex((item) => item.slug === props.slug)
     const slug = extensionPages[(index + step + extensionPages.length) % extensionPages.length].slug
@@ -41,6 +42,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
 
   onMount(() => {
     const step = (event: KeyboardEvent) => {
+      if (extensionPages.length < 2 || data().product) return
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented) return
       if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable], [role="tablist"]')) return
@@ -53,11 +55,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
   return (
     <Site page="product" markdown={markdown}>
       <Title>{extension().title}</Title>
-      <ShareMeta
-        title={extension().title}
-        description={extension().description}
-        image={ogImage(`/extensions/${props.slug}`)}
-      />
+      <ShareMeta title={extension().title} description={extension().description} image={ogImage(path())} />
       <LocaleLinks path={path()} />
       <Meta name="description" content={extension().description} />
       <JsonLd
@@ -65,7 +63,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
           name: `OpenCode ${extension().name}`,
           description: extension().description,
           path: language.route(path()),
-          image: ogImage(`/extensions/${props.slug}`).src,
+          image: ogImage(path()).src,
           operatingSystem: data().operatingSystem ?? "macOS, Windows, Linux",
         })}
       />
@@ -86,29 +84,31 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
       </nav>
 
       {/* Fixed beside the GitHub mark in the top-right corner (product-page.css). */}
-      <nav data-component="product-cycle" aria-label={i18n.t("site.cycle.extensions")}>
-        <a
-          href={language.route(`/extensions/${neighbour(-1).slug}`)}
-          aria-label={i18n.t("site.cycle.previousExtension", { name: neighbour(-1).name })}
-          data-tip={i18n.t("site.cycle.previous", { name: neighbour(-1).name })}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M10 4L6 8L10 12" stroke="currentColor" stroke-width="1" />
-          </svg>
-        </a>
-        <a
-          href={language.route(`/extensions/${neighbour(1).slug}`)}
-          aria-label={i18n.t("site.cycle.nextExtension", { name: neighbour(1).name })}
-          data-tip={i18n.t("site.cycle.next", { name: neighbour(1).name })}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1" />
-          </svg>
-        </a>
-      </nav>
+      <Show when={extensionPages.length > 1 && !data().product}>
+        <nav data-component="product-cycle" aria-label={i18n.t("site.cycle.extensions")}>
+          <a
+            href={language.route(`/extensions/${neighbour(-1).slug}`)}
+            aria-label={i18n.t("site.cycle.previousExtension", { name: neighbour(-1).name })}
+            data-tip={i18n.t("site.cycle.previous", { name: neighbour(-1).name })}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M10 4L6 8L10 12" stroke="currentColor" stroke-width="1" />
+            </svg>
+          </a>
+          <a
+            href={language.route(`/extensions/${neighbour(1).slug}`)}
+            aria-label={i18n.t("site.cycle.nextExtension", { name: neighbour(1).name })}
+            data-tip={i18n.t("site.cycle.next", { name: neighbour(1).name })}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1" />
+            </svg>
+          </a>
+        </nav>
+      </Show>
 
       <div data-slot="first-screen">
-        {/* Plain black until there is real footage of the extension. */}
+        {/* Plain black until there is real footage of the product. */}
         <div data-component="product-hero" data-product={props.slug} data-empty />
 
         <section data-component="product-intro" data-section="intro">
@@ -117,10 +117,26 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
             <p>{extension().intro}</p>
           </div>
           <div data-slot="action">
-            <a href={data().source} target="_blank" rel="noopener" data-component="site-button">
-              {i18n.t("site.action.viewSource")}
-              <NewTab />
-            </a>
+            <div data-component="site-buttons">
+              <Show when={data().store}>
+                {(store) => (
+                  <a href={store()} target="_blank" rel="noopener" data-component="site-button">
+                    {i18n.t("site.action.addToChrome")}
+                    <NewTab />
+                  </a>
+                )}
+              </Show>
+              <a
+                href={data().source}
+                target="_blank"
+                rel="noopener"
+                data-component="site-button"
+                data-variant="neutral"
+              >
+                {i18n.t("site.action.viewSource")}
+                <NewTab />
+              </a>
+            </div>
           </div>
         </section>
       </div>

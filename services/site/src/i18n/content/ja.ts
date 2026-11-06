@@ -90,9 +90,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile、スマートフォンで操作するコーディングセッション",
       description:
-        "スマートフォンからOpenCodeのセッションを開始、指示、承認できます。エージェントがコンピューターで動く間に、話しかけ、変更を確認し、必要な操作を許可できます。",
+        "スマートフォンからOpenCodeのセッションを開始して操作できます。エージェントがコンピューターで動く間も、会話できます。",
       intro:
-        "どこにいても、スマートフォンからセッションを開始、指示、承認できます。セッションに通話してエージェントと話し、変更を確認し、必要な操作を許可できます。すべて自分のコンピューターで動くOpenCode上で行われます。",
+        "どこにいても、スマートフォンからセッションを開始して操作できます。セッションに通話してエージェントと話したり、セッションを開いて続きから再開できます。すべて自分のコンピューターで動くOpenCode上で行われます。",
       features: {
         "notify-when-done": { title: "完了を通知", body: "開始したセッションが終わると、短い要約が届きます。" },
         "pair-from-anywhere": {
@@ -111,10 +111,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "音声", body: "セッションに通話して、必要なことを話すだけ。エージェントが声で答えます。" },
-        approvals: {
-          title: "承認",
-          body: "エージェントに求められたら、スマートフォンから変更を確認して許可できます。",
-        },
         sessions: { title: "セッション", body: "どのセッションも開いて進み具合を確認し、続きから再開できます。" },
         results: { title: "結果", body: "依頼した作業が終わると、何が変わったかを通話で伝えます。" },
         steer: { title: "指示", body: "セッションの途中で追加のメッセージを送り、方向を変えられます。" },
@@ -310,7 +306,7 @@ export const content = {
         allowlists: { title: "許可リスト", body: "セッションのタブを、指定したサイトだけに制限できます。" },
       },
       install:
-        "これを1回実行します。選んだエージェントにbrowse MCPサーバーを追加し、Chrome Web Storeの拡張機能とペアリングします。Node.js 22.19以降が必要です。",
+        "1行でBrowseをインストールし、見つけたエージェントに追加して拡張機能とペアリングします。Windowsでは irm https://opencode.ai/browse/install.ps1 | iex を実行します。エージェントに設定を頼むこともできます。",
     },
   },
   apps: {
@@ -730,13 +726,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "連携",
-      items: {
-        github: { label: "GitHub", body: "GitHub ActionsでOpenCodeを使えます。" },
-        gitlab: { label: "GitLab", body: "GitLab CI/CDやDuoでOpenCodeを使えます。" },
       },
     },
     faq: {

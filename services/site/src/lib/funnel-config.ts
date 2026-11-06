@@ -11,6 +11,7 @@ const pages = new Set([
   "sdk",
   "ide",
   "mini",
+  "browse",
   "extensions",
   "changelog",
   "brand",

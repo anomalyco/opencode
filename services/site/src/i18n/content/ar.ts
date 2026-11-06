@@ -50,9 +50,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile، جلسات البرمجة على هاتفك",
       description:
-        "ابدأ جلسات OpenCode ووجّهها ووافق عليها من هاتفك. تحدّث مع الوكيل، وراجع تغييراته، واسمح بما يحتاجه، بينما يعمل على حاسوبك.",
+        "ابدأ جلسات OpenCode وقُدها من هاتفك. تحدّث إلى الوكيل أثناء عمله على حاسوبك.",
       intro:
-        "ابدأ الجلسات ووجّهها ووافق عليها من هاتفك أينما كنت. اتصل بجلسة وتحدّث مع الوكيل، وراجع تغييراته، واسمح بما يحتاجه، وكل ذلك مع OpenCode الذي يعمل على حاسوبك الخاص.",
+        "ابدأ الجلسات وقُدها من هاتفك أينما كنت. اتصل بجلسة وتحدّث إلى الوكيل، أو افتح أي جلسة وتابع من حيث توقفت، كل ذلك في OpenCode على حاسوبك.",
       features: {
         "notify-when-done": { title: "إشعار عند الانتهاء", body: "احصل على ملخص قصير عند انتهاء جلسة بدأتها." },
         "pair-from-anywhere": { title: "اربط من أي مكان", body: "اتصل من أي شبكة عبر opencode pair --remote." },
@@ -65,7 +65,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "الصوت", body: "اتصل بجلسة وقل ما تحتاجه. يجيبك الوكيل بصوت مسموع." },
-        approvals: { title: "الموافقات", body: "راجع التغيير واسمح به من هاتفك عندما يطلب الوكيل." },
         results: { title: "النتائج", body: "تخبرك المكالمة بما تغيّر بعد انتهاء العمل الذي طلبته." },
         sessions: { title: "الجلسات", body: "افتح أي جلسة لترى أين وصلت، ثم أكمل من حيث توقفت." },
         steer: { title: "التوجيه", body: "أرسل رسالة متابعة لتغيير الاتجاه في منتصف الجلسة." },
@@ -200,7 +199,7 @@ export const content = {
         allowlists: { title: "قوائم السماح", body: "اقصر علامات تبويب الجلسة على المواقع التي تحددها." },
       },
       install:
-        "شغّل هذا مرة واحدة. يضيف خادم browse MCP إلى الوكلاء الذين تختارهم ويربط الإضافة من Chrome Web Store. يتطلب Node.js 22.19 أو أحدث.",
+        "سطر واحد يثبّت Browse، ويضيفه إلى الوكلاء الذين يجدهم ويقرن الإضافة. على Windows، شغّل irm https://opencode.ai/browse/install.ps1 | iex. أو اطلب من وكيلك إعداده.",
     },
   },
   apps: {
@@ -605,13 +604,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "التكاملات",
-      items: {
-        github: { body: "استخدم OpenCode في GitHub Actions." },
-        gitlab: { label: "GitLab", body: "استخدم OpenCode في GitLab CI/CD أو Duo." },
       },
     },
   },

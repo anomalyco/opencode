@@ -85,20 +85,19 @@ function alignActions(root: HTMLElement) {
 }
 
 /**
- * The download sections (Desktop, Mobile, Terminal, Extensions, Integrations, FAQ), at the bottom of
+ * The download sections (Desktop, Mobile, Terminal, Extensions, FAQ), at the bottom of
  * /product. `heading` draws each section's
  * title (an id for anchors, then the title); `columns` marks the blocks for the /product
  * title-in-the-first-column layout. `apps: false` leaves out the Desktop, Mobile and Terminal
- * sections (/product has those on its cards); `editors: false` and
- * `integrations: false` the editor Extensions and Integrations ones. `firstId` replaces the first section's id, so a
- * page's own anchor (/product#download) lands on it. `beforeFaq` goes right above the FAQ.
+ * sections (/product has those on its cards); `editors: false` the editor Extensions one. `firstId`
+ * replaces the first section's id, so a page's own anchor (/product#download) lands on it.
+ * `beforeFaq` goes right above the FAQ.
  */
 export function DownloadSections(props: {
   heading: (id: string, title: string) => JSX.Element
   columns?: boolean
   apps?: boolean
   editors?: boolean
-  integrations?: boolean
   firstId?: string
   beforeFaq?: JSX.Element
 }) {
@@ -143,15 +142,6 @@ export function DownloadSections(props: {
           title={content().extensions.title}
         >
           <LinkList items={content().extensions.items} action={content().actions.install} />
-        </Section>
-      </Show>
-
-      <Show when={props.integrations !== false}>
-        <Section
-          id={props.editors === false ? (props.firstId ?? "download-integrations") : "download-integrations"}
-          title={content().integrations.title}
-        >
-          <LinkList items={content().integrations.items} action={content().actions.install} />
         </Section>
       </Show>
 

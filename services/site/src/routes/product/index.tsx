@@ -12,8 +12,7 @@ import { extensionPages } from "~/component/site/extension-data"
 import { SectionHeading } from "~/component/site/on-this-page"
 import { ProductGrid } from "~/component/site/products"
 import { MoreFromAnomaly, ProductList } from "~/component/site/product-list"
-import { BrowseMark, GitHubMark, GitLabMark } from "~/component/site/icons"
-import { downloadContent } from "~/lib/download-content"
+import { BrowseMark } from "~/component/site/icons"
 import "~/component/site/product-list.css"
 import { productsOrderScript } from "~/component/site/products-order"
 import { Site } from "~/component/site/site"
@@ -22,7 +21,7 @@ import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
 import { useI18n } from "~/context/i18n"
-import { localize, useArea } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
 import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { siteSettings } from "~/component/site/settings"
 
@@ -30,9 +29,10 @@ export default function Product() {
   const language = useLanguage()
   const i18n = useI18n()
   const extensionCopy = useArea("extensions", extensionsSource)
+  const productLandingPages = () => extensionPages.filter((extension) => extension.product)
+  const extensionPagesListed = () => extensionPages.filter((extension) => !extension.product)
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
-  const download = () => localize(language.locale(), "download", downloadContent(i18n.t, language.route))
   const markdown = useMarkdown("/product", (context, pages) => pages.productsMarkdown(context))
 
   return (
@@ -68,14 +68,31 @@ export default function Product() {
       {/* Right after the grid, so a saved order (Design mode, development only) applies before it paints. */}
       {import.meta.env.DEV && <script innerHTML={productsOrderScript} />}
 
-      {/* Hidden while extensionPages is empty. */}
-      <Show when={extensionPages.length > 0}>
+      {/* Products with a light page of their own, listed after the grid. */}
+      <Show when={productLandingPages().length > 0}>
+        <section data-component="block" data-slot="products-more" data-section="more-products">
+          <SectionHeading id="more-products" title={i18n.t("site.moreProducts")} label />
+          <div data-slot="body">
+            <ProductList
+              items={productLandingPages().map((extension) => ({
+                name: extensionCopy()[extension.slug].name,
+                description: extensionCopy()[extension.slug].body,
+                href: language.route(`/${extension.slug}`),
+                icon: <BrowseMark />,
+              }))}
+            />
+          </div>
+        </section>
+      </Show>
+
+      {/* Hidden while no extension is listed; SSH and WSL are commented out in extension-data.ts. */}
+      <Show when={extensionPagesListed().length > 0}>
         <section data-component="block" data-slot="products-extensions" data-section="extensions">
           <SectionHeading id="extensions" title={i18n.t("site.extensions")} label />
           <div data-slot="body">
             {/* Each extension's page, with its install steps; a blank tile until one has an icon. */}
             <ProductList
-              items={extensionPages.map((extension) => ({
+              items={extensionPagesListed().map((extension) => ({
                 name: extensionCopy()[extension.slug].name,
                 description: extensionCopy()[extension.slug].body,
                 href: language.route(`/extensions/${extension.slug}`),
@@ -86,28 +103,11 @@ export default function Product() {
         </section>
       </Show>
 
-      {/* /product#download lands here, the first of the download page's sections on this page. */}
-      <section data-component="block" data-slot="products-integrations" data-section="integrations">
-        <SectionHeading id="download" title={download().integrations.title} label />
-        <div data-slot="body">
-          <ProductList
-            items={download().integrations.items.map((integration) => ({
-              name: integration.label,
-              description: integration.body,
-              href: integration.href,
-              external: true,
-              icon: integration.id === "github" ? <GitHubMark /> : <GitLabMark />,
-            }))}
-          />
-        </div>
-      </section>
-
-      {/* Everything the download page has, in this page's layout (/product#download). */}
+      {/* Everything the download page has, in this page's layout. */}
       <DownloadSections
         columns
         apps={false}
         editors={false}
-        integrations={false}
         beforeFaq={<MoreFromAnomaly slot="products-anomaly" />}
         heading={(id, title) => <SectionHeading id={id} title={title} label />}
       />

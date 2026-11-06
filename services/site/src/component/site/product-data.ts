@@ -221,11 +221,11 @@ export const productDetails: Record<
   mobile: {
     title: "OpenCode | Mobile, your coding sessions on your phone",
     description:
-      "Start, steer and approve OpenCode sessions from your phone. Talk to the agent, review its changes and allow what it needs, while it runs on your computer.",
+      "Start and steer OpenCode sessions from your phone. Talk to the agent while it runs on your computer.",
     // Android joins when it is available (androidStatus).
     operatingSystem: androidSoon ? "iOS" : "iOS, Android",
     intro:
-      "Start, steer and approve sessions from your phone, wherever you are. Call a session and talk to the agent, review its changes, and allow what it needs, all on OpenCode running on your own computer.",
+      "Start and steer sessions from your phone, wherever you are. Call a session and talk to the agent, or open any session to pick up where you left off, all on OpenCode running on your own computer.",
     // The page shows only its four clips for now (5 Nov 2026). The grid's points, checked against
     // the iOS app's What's New entries (anomalyco/opencode-ios), are kept here to bring back:
     // "Every computer" takes two taps (the drawer title, then the server), and muting leaves
@@ -244,11 +244,6 @@ export const productDetails: Record<
         title: "Voice",
         clip: "/product-videos/features/mobile-1",
         body: "Call a session and say what you need. The agent answers out loud.",
-      },
-      {
-        title: "Approvals",
-        clip: "/product-videos/features/mobile-2",
-        body: "Review the change and allow it from your phone when the agent asks.",
       },
       {
         title: "Sessions",

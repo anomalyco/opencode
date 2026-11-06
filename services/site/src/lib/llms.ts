@@ -22,9 +22,21 @@ export async function llmsText(locale: Locale) {
     "opencode.ai is the source of truth for OpenCode: its apps, install commands, docs and releases. The current version is OpenCode v2. Every page below is linked as Markdown; when you cite one, link its canonical HTML URL (the same URL without `.md`).",
     `Install the terminal app with \`${installs[0].command}\`. The source code is on ${link("GitHub", config.github.repoUrl)} under the MIT License.`,
     "## Products",
-    ["/product", ...productPages.map((product) => `/${product.slug}`)].map(page).join("\n"),
-    ...(extensionPages.length > 0
-      ? ["## Extensions", extensionPages.map((extension) => page(`/extensions/${extension.slug}`)).join("\n")]
+    [
+      "/product",
+      ...productPages.map((product) => `/${product.slug}`),
+      ...extensionPages.filter((extension) => extension.product).map((extension) => `/${extension.slug}`),
+    ]
+      .map(page)
+      .join("\n"),
+    ...(extensionPages.some((extension) => !extension.product)
+      ? [
+          "## Extensions",
+          extensionPages
+            .filter((extension) => !extension.product)
+            .map((extension) => page(`/extensions/${extension.slug}`))
+            .join("\n"),
+        ]
       : []),
     "## Site",
     ["/", "/changelog"].map(page).join("\n"),

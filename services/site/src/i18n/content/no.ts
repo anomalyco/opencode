@@ -82,9 +82,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile, kodesesjonene dine på telefonen",
       description:
-        "Start, styr og godkjenn OpenCode-sesjoner fra telefonen. Snakk med agenten, se gjennom endringene og tillat det den trenger, mens den kjører på datamaskinen din.",
+        "Start og styr OpenCode-økter fra telefonen. Snakk med agenten mens den kjører på datamaskinen din.",
       intro:
-        "Start, styr og godkjenn sesjoner fra telefonen, uansett hvor du er. Ring en sesjon og snakk med agenten, se gjennom endringene og tillat det den trenger, alt med OpenCode på din egen datamaskin.",
+        "Start og styr økter fra telefonen, uansett hvor du er. Ring en økt og snakk med agenten, eller åpne en økt og fortsett der du slapp, alt med OpenCode på din egen datamaskin.",
       features: {
         "notify-when-done": {
           title: "Varsel når ferdig",
@@ -109,7 +109,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "Stemme", body: "Ring en sesjon og si hva du trenger. Agenten svarer høyt." },
-        approvals: { title: "Godkjenning", body: "Se gjennom endringen og tillat den fra telefonen når agenten spør." },
         sessions: { title: "Sesjoner", body: "Åpne en sesjon for å se hvor den står, og fortsett der du slapp." },
         steer: { title: "Styr", body: "Send en oppfølging for å endre retning midt i sesjonen." },
         results: { title: "Resultater", body: "Samtalen forteller deg hva som er endret når arbeidet er ferdig." },
@@ -295,7 +294,7 @@ export const content = {
         allowlists: { title: "Hvitelister", body: "Begrens fanene til en sesjon til nettstedene du oppgir." },
       },
       install:
-        "Kjør dette én gang. Det legger til browse-MCP-serveren i agentene du velger, og kobler til utvidelsen fra Chrome Web Store. Krever Node.js 22.19 eller nyere.",
+        "Én linje installerer Browse, legger det til i agentene den finner og kobler til utvidelsen. På Windows kjører du irm https://opencode.ai/browse/install.ps1 | iex. Eller be agenten din sette det opp.",
     },
   },
   apps: {
@@ -711,13 +710,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "Integrasjoner",
-      items: {
-        github: { body: "Bruk OpenCode i GitHub Actions." },
-        gitlab: { label: "GitLab", body: "Bruk OpenCode i GitLab CI/CD eller Duo." },
       },
     },
   },

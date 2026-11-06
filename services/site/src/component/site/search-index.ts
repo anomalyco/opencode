@@ -107,14 +107,17 @@ export function buildSearchIndex(
     ...deviceOrder(productPages).map((product) => ({
       title: content.products[product.slug].name,
       path: `/${product.slug}`,
-      body: `${content.products[product.slug].body} ${content.productDetails[product.slug].intro}`,
+      body:
+        product.slug === "mobile"
+          ? content.productDetails.mobile.description
+          : `${content.products[product.slug].body} ${content.productDetails[product.slug].intro}`,
       keywords: "product",
     })),
     ...extensionPages.map((extension) => ({
       title: content.extensions[extension.slug].name,
-      path: `/extensions/${extension.slug}`,
+      path: extension.product ? `/${extension.slug}` : `/extensions/${extension.slug}`,
       body: `${content.extensions[extension.slug].body} ${content.extensions[extension.slug].intro}`,
-      keywords: "extension",
+      keywords: extension.product ? "product" : "extension",
     })),
     { title: t("nav.changelog"), path: "/changelog", keywords: "releases versions what's new" },
     { title: names.brand, path: "/brand", body: brand.hero.body, keywords: "logo wordmark assets" },
@@ -193,7 +196,6 @@ export function buildSearchIndex(
       download.extensions.title,
       download.extensions.items.map((i) => i.label).join(" "),
     ),
-    section(names.product, "/product#download", download.integrations.title, "GitHub GitLab"),
   ]
   const pressSections = [press.company, press.about, press.brand, press.product, press.contact].map((part) =>
     section(names.press, "/press", part.title, "lead" in part ? part.lead : undefined),
