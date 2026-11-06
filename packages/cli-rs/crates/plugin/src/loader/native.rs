@@ -32,6 +32,7 @@ use opencode_plugin_abi::{
 };
 use opencode_ui::keymap::{Bind, KeymapLayer, Slash, TuiCommand};
 use opencode_ui::theme::Theme;
+use opentui::keymap::Disposer;
 use opentui::prelude::*;
 use opentui::style::Color;
 use serde::de::DeserializeOwned;
@@ -104,6 +105,7 @@ impl<H: Host> Backend<H> for Native {
                     failure: failure.clone(),
                     host,
                     id: setup.id().to_owned(),
+                    layer: RefCell::new(None),
                 });
                 register(setup, &guest, &manifest);
                 // What setup asked for (toasts, routes) happens now that the plugin is active.
@@ -414,6 +416,8 @@ struct Guest<H: Host> {
     failure: Rc<RefCell<Option<String>>>,
     host: Weak<H>,
     id: String,
+    /// The commands' keymap layer, until deactivation or a panic removes it.
+    layer: RefCell<Option<Disposer>>,
 }
 
 impl<H: Host> Guest<H> {
@@ -442,7 +446,12 @@ impl<H: Host> Guest<H> {
         log::error!("plugin {} failed: {error}", self.id);
         *self.failure.borrow_mut() = Some(error);
         let id = self.id.clone();
+        // The layer goes once the key that may have run the panicking command is handled.
+        let layer = self.layer.borrow_mut().take();
         self.defer(move |host| {
+            if let Some(layer) = layer {
+                layer.dispose();
+            }
             host.toast(Toast::Error, Some(&format!("Plugin failed: {id}")), "Run /plugins to view details.");
         });
         None
@@ -504,7 +513,18 @@ fn register<H: Host>(setup: &mut Setup<'_, H>, guest: &Rc<Guest<H>>, manifest: &
         })
         .collect();
     if !commands.is_empty() {
-        setup.layer(KeymapLayer::global(commands));
+        match setup.host().keymap().layer(KeymapLayer::global(commands)) {
+            Ok(disposer) => {
+                guest.layer.replace(Some(disposer));
+                let guest = guest.clone();
+                setup.on_dispose(move || {
+                    if let Some(layer) = guest.layer.take() {
+                        layer.dispose();
+                    }
+                });
+            }
+            Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
+        }
     }
     for language in &manifest.fences {
         let guest = guest.clone();

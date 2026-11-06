@@ -145,6 +145,14 @@ fn a_panicking_command_fails_the_plugin() {
     let registry = active(&host, &build(""));
     assert!(matches!(host.keymap().dispatch("sample.panic", None), RunResult::Ok));
     assert_eq!(status(&registry), Status::Failed("run-command panicked: sample command panicked".to_owned()));
+    // Its commands leave the keymap once the key is handled; it stays active, so it can be disabled.
+    host.app.advance(Duration::from_millis(1));
+    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::NotFound));
+    assert!(entry(&registry.entries(), "sample.so").active);
+    assert!(registry.set_active(&host, "sample", false));
+    assert_eq!(status(&registry), Status::Inactive);
+    assert!(registry.set_active(&host, "sample", true));
+    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
 }
 
 #[test]
