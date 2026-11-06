@@ -3,6 +3,7 @@ import { ServerProcess } from "@opencode/server/process"
 import { afterAll, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpServer, HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
+import { createHash } from "node:crypto"
 import { createServer } from "node:http"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -87,6 +88,91 @@ describe("web UI", () => {
       const authorized = yield* Effect.promise(() => fetch(new URL("/api/info", origin), { headers: { cookie } }))
       expect(authorized.status).toBe(200)
       yield* Effect.promise(() => authorized.arrayBuffer())
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+  )
+
+  it.live("serves the web app and the API under a base path", () =>
+    Effect.gen(function* () {
+      const theme = "document.documentElement.dataset.theme = 'dark'"
+      const transform = yield* WebUi.handler({
+        basePath: "/opencode",
+        assets: {
+          "index.html": `<html><head data-build="1"><script id="oc-theme-preload-script">${theme}</script><link rel="manifest" href="/site.webmanifest" /></head><body><header></header><script type="module" src="/_assets/app.js"></script><a href="//example.com">external</a></body></html>`,
+          "_assets/app.js": "console.log('prefixed')",
+          "site.webmanifest": JSON.stringify(
+            { id: "/", start_url: "/", scope: "/", icons: [{ src: "/icons/icon.png" }], related: "//example.com/app" },
+            null,
+            2,
+          ),
+        },
+        brotli: { "site.webmanifest": brotliCompressSync('{"id":"/"}') },
+      })
+      const server = yield* ServerProcess.start<never, never>(
+        { hostname: "127.0.0.1", port: 0, basePath: "/opencode", password: "secret", database: { path: ":memory:" } },
+        undefined,
+        transform,
+      )
+      const origin = HttpServer.formatAddress(server.address)
+      const authorization = { authorization: `Basic ${btoa("opencode:secret")}` }
+      const get = (pathname: string, init?: RequestInit) => Effect.promise(() => fetch(`${origin}${pathname}`, init))
+
+      yield* Effect.forEach(["/opencode/", "/opencode/settings"], (pathname) =>
+        Effect.gen(function* () {
+          const page = yield* get(pathname)
+          const html = yield* Effect.promise(() => page.text())
+          expect(page.status).toBe(200)
+          expect(html).toContain('<head data-build="1">\n    <meta name="opencode-base-path" content="/opencode" />')
+          expect(html).toContain("<header></header>")
+          expect(html).toContain('src="/opencode/_assets/app.js"')
+          expect(html).toContain('href="/opencode/site.webmanifest"')
+          expect(html).toContain('href="//example.com"')
+          expect(page.headers.get("content-security-policy")).toContain(
+            `'sha256-${createHash("sha256").update(theme).digest("base64")}'`,
+          )
+        }),
+      )
+
+      const script = yield* get("/opencode/_assets/app.js")
+      expect(yield* Effect.promise(() => script.text())).toBe("console.log('prefixed')")
+
+      // The embedded brotli bytes still carry root paths, so a brotli-accepting browser must get the rewritten manifest.
+      const manifest = yield* get("/opencode/site.webmanifest", { headers: { "accept-encoding": "br" } })
+      expect(yield* Effect.promise(() => manifest.json())).toEqual({
+        id: "/opencode/",
+        start_url: "/opencode/",
+        scope: "/opencode/",
+        icons: [{ src: "/opencode/icons/icon.png" }],
+        related: "//example.com/app",
+      })
+
+      const bare = yield* get("/opencode?x=1", { redirect: "manual" })
+      expect(bare.status).toBe(301)
+      expect(bare.headers.get("location")).toBe("/opencode/?x=1")
+
+      yield* Effect.forEach(["/", "/settings", "/api/info", "/_assets/app.js"], (pathname) =>
+        Effect.gen(function* () {
+          const outside = yield* get(pathname, { headers: authorization })
+          expect(outside.status).toBe(404)
+          yield* Effect.promise(() => outside.arrayBuffer())
+        }),
+      )
+
+      const info = yield* get("/opencode/api/info", { headers: authorization })
+      expect(info.status).toBe(200)
+      expect((yield* Effect.promise(() => info.json() as Promise<{ urls: string[] }>)).urls).toEqual([
+        `${origin}/opencode`,
+      ])
+
+      const pairing = yield* get("/opencode/api/pair", { method: "POST", headers: authorization }).pipe(
+        Effect.flatMap((response) => Effect.promise(() => response.json() as Promise<{ code: string }>)),
+      )
+      const link = `${origin}/opencode/auth/connect/${pairing.code}`
+      const connected = yield* Effect.promise(() =>
+        fetch(link, { redirect: "manual", headers: { accept: "text/html" } }),
+      )
+      expect(connected.status).toBe(302)
+      expect(new URL(connected.headers.get("location") ?? "", link).href).toBe(`${origin}/opencode/`)
+      expect(connected.headers.get("set-cookie")).toContain("Path=/opencode/")
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
 

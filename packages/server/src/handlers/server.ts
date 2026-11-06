@@ -44,9 +44,11 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             )
           }
           if (!browser) return { token }
-          return HttpServerResponse.redirect("/").pipe(
+          const info = yield* ServerInfo.Service
+          // Relative to /auth/connect/<code>, so a server mounted under a base path returns the browser to its own root.
+          return HttpServerResponse.redirect("../../").pipe(
             HttpServerResponse.setCookieUnsafe(ServerAuth.sessionCookieName(request.headers.host), token, {
-              path: "/",
+              path: `${info.basePath}/`,
               httpOnly: true,
               sameSite: "lax",
               maxAge: Duration.seconds(ServerAuth.SESSION_TTL_SECONDS),
