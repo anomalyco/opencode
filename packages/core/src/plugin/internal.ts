@@ -67,6 +67,7 @@ import { Schedule } from "../schedule.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
+import { SessionTeam } from "../session/team.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
@@ -90,6 +91,7 @@ import { ScheduleTools } from "../tool/plugin/schedule.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
+import { TeamTool } from "../tool/plugin/team.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -163,6 +165,7 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionTeam.Service,
   SubagentJob.Service,
   SharedCache.Service,
   Shell.Service,
@@ -224,6 +227,7 @@ export const requirements = LayerNode.group([
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionTeam.node,
   SubagentJob.node,
   SharedCache.node,
   Shell.node,
@@ -275,6 +279,7 @@ const pre = [
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
+  TeamTool.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
