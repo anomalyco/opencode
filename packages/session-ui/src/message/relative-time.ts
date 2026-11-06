@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 
 const MINUTE = 60_000
 
@@ -22,36 +22,49 @@ export function relativeTime(created: number, now: number) {
 
 const [now, setNow] = createSignal(Date.now())
 
+const [today, setToday] = createSignal(0)
+
 let subscribers = 0
 
 let timer: ReturnType<typeof setInterval> | undefined
 
-// One shared clock for every relative timestamp on screen; it only ticks while one is mounted.
+// One shared clock for every relative timestamp on screen; it only ticks while one is mounted. Timers stop while the
+// machine sleeps, so it also catches up as soon as the page is shown or focused again.
 export function useNow() {
   subscribers++
 
   if (subscribers === 1) {
-    setNow(Date.now())
-    timer = setInterval(() => setNow(Date.now()), 30_000)
+    tick()
+    timer = setInterval(tick, 30_000)
+    document.addEventListener("visibilitychange", tick)
+    window.addEventListener("focus", tick)
   }
 
   onCleanup(() => {
     subscribers--
 
-    if (subscribers === 0) clearInterval(timer)
+    if (subscribers > 0) return
+
+    clearInterval(timer)
+    document.removeEventListener("visibilitychange", tick)
+    window.removeEventListener("focus", tick)
   })
 
   return now
 }
 
-// The start of the local day on the shared clock. It changes only at midnight, so labels that name the day (Today,
-// Yesterday) redraw once a day, and the 30-second tick catches up soon after a sleeping machine wakes.
+// The start of the local day on the shared clock. It changes only when the date does (or the clock or time zone), so
+// labels that name the day redraw once a day, and a tick costs the same however many labels are on screen.
 export function useToday() {
-  const now = useNow()
+  useNow()
 
-  return createMemo(() => {
-    const date = new Date(now())
+  return today
+}
 
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-  })
+function tick() {
+  const value = Date.now()
+  const date = new Date(value)
+
+  setNow(value)
+  setToday(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime())
 }

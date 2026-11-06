@@ -158,6 +158,26 @@ story.describe("message actions menu", () => {
     await expect(page.getByRole("menu").locator("time")).toHaveText("Yesterday, 12:00 AM")
   })
 
+  story(
+    "names the day again as soon as the page is shown or focused after the machine slept",
+    async ({ mount, page }) => {
+      await page.clock.install({ time: new Date("2025-01-01T23:59:30Z") })
+      const timeline = await mount("current-session-timeline-rows--response-speed")
+      const finished = timeline.locator('[data-slot="text-part-meta-time"] time')
+      await expect(finished).toHaveText("12:05 AM")
+
+      // Asleep: the date moves on while no timer fires.
+      await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
+      await page.clock.setSystemTime(new Date("2025-01-02T09:00:00Z"))
+      await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+      await expect(finished).toHaveText("Yesterday, 12:05 AM")
+
+      await page.clock.setSystemTime(new Date("2025-01-03T09:00:00Z"))
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+      await expect(finished).toHaveText("Jan 1, 12:05 AM")
+    },
+  )
+
   story("opens upward, 4px from the chevron, with its trailing edge on the chevron's", async ({ mount, page }) => {
     const timeline = await mount("current-session-timeline-rows--prompt-runs")
     await timeline.getByRole("button", { name: "Send next", exact: true }).click()
