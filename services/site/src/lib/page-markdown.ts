@@ -1,6 +1,7 @@
 import { translator } from "~/i18n"
 import { brandMarkdown } from "~/lib/brand-content"
-import { loadChangelog, type ChangelogRelease } from "~/lib/changelog"
+import type { ChangelogRelease } from "~/lib/changelog"
+import { loadChangelog } from "~/lib/changelog-releases"
 import { changelogEntryPageMarkdown, changelogMarkdown } from "~/lib/changelog-markdown"
 import { areaKeys, changelogEntryView, changelogView, type ChangelogView } from "~/lib/changelog-notes"
 import { fontMarkdown } from "~/lib/font-content"

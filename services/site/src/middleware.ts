@@ -12,7 +12,7 @@ import {
   strip,
 } from "~/lib/language"
 import { absoluteUrl, markdownHeaders } from "~/lib/markdown"
-import { changelogEntryJson } from "~/lib/changelog"
+import { changelogEntryJson } from "~/lib/changelog-releases"
 import { findPageMarkdown, renderPageMarkdown } from "~/lib/page-markdown"
 import { htmlCache } from "~/lib/html-cache"
 import { oneStylesheet } from "~/lib/one-stylesheet"
