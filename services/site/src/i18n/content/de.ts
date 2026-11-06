@@ -32,50 +32,25 @@ export const content = {
     desktop: {
       title: "OpenCode | Desktop-App für macOS, Windows und Linux",
       description:
-        "Lass mehrere OpenCode-Agents gleichzeitig laufen, jeden in einem eigenen Tab. Prüfe jede Änderung als Diff, kommentiere jede Zeile und sieh dir Ergebnisse im Browser an.",
+        "Lass so viele OpenCode-Agents parallel laufen, wie du willst, sieh jede Änderung im Browser daneben und mach auf jedem Gerät weiter. Für macOS, Windows und Linux.",
       intro:
         "Lass mehrere Agents gleichzeitig laufen, jede Session in einem eigenen Tab. Prüfe jede Änderung als Diff, kommentiere jede Zeile und kontrolliere das Ergebnis im integrierten Browser. Für macOS, Windows und Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Integriertes Terminal",
-          body: "Führe Befehle in einem Terminal-Tab neben der Session aus.",
-        },
-        "ssh-servers": {
-          title: "SSH-Server",
-          body: "Verbinde dich per SSH mit einem anderen Rechner und arbeite an seinen Projekten.",
-        },
-        extensions: { title: "Extensions", body: "Verwalte MCP-Server, Plugins und Skills in einem Menü." },
-        wsl: { title: "WSL", body: "Führe Sessions unter Windows in einer WSL-2-Distribution statt nativ aus." },
-        "office-files": {
-          title: "Office-Dateien",
-          body: "Öffne Word-, Excel- und PowerPoint-Dateien neben der Session.",
-        },
-        "keyboard-shortcuts": {
-          title: "Tastenkürzel",
-          body: "Jede Aktion hat ein Tastenkürzel, und du kannst jedes davon ändern.",
-        },
-        "updates-itself": { title: "Auto-Update", body: "Neue Versionen werden in der App geladen und installiert." },
-        "all-your-projects": {
-          title: "Alle Projekte",
-          body: "Wechsle in einem Fenster zwischen Projekten und ihren Sessions.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sessions in Tabs",
-          body: "Lass mehrere Agents parallel arbeiten, jede Session in einem Tab.",
-        },
-        "review-and-comment": {
-          title: "Prüfen und kommentieren",
-          body: "Lies Änderungen als Diff, kommentiere Zeilen und schick sie zurück.",
+        "parallel-agents": {
+          title: "Parallele Agents",
+          body: "Starte so viele Agents, wie du willst, und lass sie alle parallel arbeiten. Wechsle zwischen ihnen, sobald sie fertig sind.",
         },
         "see-it-in-the-browser": {
           title: "Im Browser ansehen",
-          body: "Die Arbeit des Agents öffnet sich im Browser neben der Session.",
+          body: "Deine App öffnet sich in einem Browser neben dem Agent, so seht ihr beide jede Änderung, sobald sie landet.",
         },
-        "pair-your-phone": {
-          title: "Smartphone koppeln",
-          body: "Scanne einen QR-Code in OpenCode Mobile, um Sessions vom iPhone aus zu steuern.",
+        "on-every-device": {
+          title: "Auf jedem Gerät",
+          body: "Starte Agents auf all deinen Geräten und mach in der Desktop-App, im Terminal oder auf dem Smartphone weiter.",
+        },
+        "extend-it": {
+          title: "Erweitern",
+          body: "Verbinde deine Tools und Dienste, damit der Agent mit allem arbeiten kann. Oder lass OpenCode Plugins für sich selbst bauen, mit eigener Oberfläche in der Seitenleiste.",
         },
       },
     },

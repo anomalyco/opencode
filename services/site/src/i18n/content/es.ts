@@ -35,59 +35,25 @@ export const content = {
     desktop: {
       title: "OpenCode | App de escritorio para macOS, Windows y Linux",
       description:
-        "Ejecuta varios agentes de OpenCode a la vez, cada uno en su pestaña. Revisa cada cambio como diff, comenta cualquier línea y previsualiza el resultado en el navegador integrado.",
+        "Ejecuta en paralelo todos los agentes de OpenCode que quieras, ve cada cambio en un navegador al lado y retómalos en cualquier dispositivo. Para macOS, Windows y Linux.",
       intro:
         "Ejecuta varios agentes a la vez, cada sesión en su propia pestaña. Revisa cada cambio como diff, comenta cualquier línea y comprueba el resultado en el navegador integrado. Para macOS, Windows y Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Terminal integrada",
-          body: "Ejecuta comandos en una pestaña de terminal junto a la sesión.",
-        },
-        "ssh-servers": {
-          title: "Servidores SSH",
-          body: "Conéctate a otra máquina por SSH y trabaja en sus proyectos.",
-        },
-        extensions: {
-          title: "Extensiones",
-          body: "Gestiona servidores MCP, plugins y skills en un solo menú.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "En Windows, ejecuta las sesiones en una distro de WSL 2 en lugar de en nativo.",
-        },
-        "office-files": {
-          title: "Archivos Office",
-          body: "Abre archivos de Word, Excel y PowerPoint junto a la sesión.",
-        },
-        "keyboard-shortcuts": {
-          title: "Atajos de teclado",
-          body: "Cada acción tiene un atajo de teclado, y puedes cambiar cualquiera.",
-        },
-        "updates-itself": {
-          title: "Se actualiza sola",
-          body: "Las nuevas versiones se descargan e instalan desde la app.",
-        },
-        "all-your-projects": {
-          title: "Todos tus proyectos",
-          body: "Cambia entre proyectos y sus sesiones en una sola ventana.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sesiones en pestañas",
-          body: "Pon a trabajar varios agentes a la vez, cada sesión en su pestaña.",
-        },
-        "review-and-comment": {
-          title: "Revisa y comenta",
-          body: "Lee cada cambio como diff, comenta una línea y devuélvelo.",
+        "parallel-agents": {
+          title: "Agentes en paralelo",
+          body: "Inicia todos los agentes que quieras y deja que trabajen en paralelo. Salta de uno a otro a medida que terminan.",
         },
         "see-it-in-the-browser": {
           title: "Míralo en el navegador",
-          body: "El trabajo del agente se abre en un navegador junto a la sesión según llega.",
+          body: "Tu app se abre en un navegador junto al agente, así ambos ven cada cambio en cuanto llega.",
         },
-        "pair-your-phone": {
-          title: "Vincula el móvil",
-          body: "Escanea un código QR en OpenCode Mobile para guiar sesiones desde tu iPhone.",
+        "on-every-device": {
+          title: "En todos tus dispositivos",
+          body: "Inicia agentes en todos tus dispositivos y retómalos desde la app de escritorio, la terminal o tu teléfono.",
+        },
+        "extend-it": {
+          title: "Extiéndelo",
+          body: "Conecta tus herramientas y servicios para que el agente trabaje con cualquier cosa. O pide a OpenCode que cree plugins para sí mismo, con su propia interfaz en la barra lateral.",
         },
       },
     },

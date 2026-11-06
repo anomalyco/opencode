@@ -29,26 +29,25 @@ export const content = {
     desktop: {
       title: "OpenCode | 適用於 macOS、Windows 和 Linux 的桌面應用程式",
       description:
-        "同時執行多個 OpenCode 代理，每個都在獨立的分頁中。以 diff 審查每項變更，在任何一行留言，並在內建瀏覽器中預覽結果。",
+        "平行執行任意多個 OpenCode 代理，在旁邊的瀏覽器中查看每項變更，並在任何裝置上繼續。適用於 macOS、Windows 和 Linux。",
       intro:
         "同時執行多個代理，每個工作階段都有獨立的分頁。以 diff 審查每項變更，在任何一行留言，並在內建瀏覽器中檢查結果。支援 macOS、Windows 和 Linux。",
-      features: {
-        "built-in-terminal": { title: "內建終端機", body: "在工作階段旁的終端機分頁中執行指令。" },
-        "ssh-servers": { title: "SSH 伺服器", body: "透過 SSH 連線到另一台電腦，處理其中的專案。" },
-        extensions: { title: "擴充功能", body: "在同一個選單中管理 MCP 伺服器、外掛和技能。" },
-        wsl: { title: "WSL", body: "在 Windows 上，可以在 WSL 2 發行版中執行工作階段，而非原生執行。" },
-        "office-files": { title: "Office 檔案", body: "在工作階段旁開啟 Word、Excel 和 PowerPoint 檔案。" },
-        "keyboard-shortcuts": { title: "鍵盤快捷鍵", body: "每個動作都有快捷鍵，而且都能自訂。" },
-        "updates-itself": { title: "自動更新", body: "新版本會在應用程式內下載並安裝。" },
-        "all-your-projects": { title: "所有專案", body: "在一個視窗中切換專案及其工作階段。" },
-      },
       showcase: {
-        "pair-your-phone": { title: "配對手機", body: "在 OpenCode Mobile 中掃描 QR 碼，用 iPhone 引導工作階段。" },
-        "sessions-in-tabs": { title: "分頁中的工作階段", body: "讓多個代理同時工作，每個工作階段都有自己的分頁。" },
-        "review-and-comment": { title: "審查與留言", body: "以 diff 閱讀每項變更，在某一行留言並傳回。" },
+        "parallel-agents": {
+          title: "平行代理",
+          body: "想啟動多少個代理都可以，讓它們全部平行工作。哪個完成了，就切換過去查看。",
+        },
         "see-it-in-the-browser": {
           title: "在瀏覽器中查看",
-          body: "代理的成果一出來，就會在工作階段旁的瀏覽器中開啟。",
+          body: "你的應用程式會在代理旁的瀏覽器中開啟，你和代理都能看到每項變更落地。",
+        },
+        "on-every-device": {
+          title: "在每台裝置上",
+          body: "在你的所有裝置上啟動代理，並在桌面應用程式、終端機或手機上繼續。",
+        },
+        "extend-it": {
+          title: "擴充它",
+          body: "連接你的工具和服務，讓代理能處理任何事情。或者讓 OpenCode 為自己建立外掛程式，並在側邊欄中擁有自己的介面。",
         },
       },
     },

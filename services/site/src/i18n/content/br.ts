@@ -59,59 +59,25 @@ export const content = {
     desktop: {
       title: "OpenCode | App desktop para macOS, Windows e Linux",
       description:
-        "Rode vários agentes do OpenCode ao mesmo tempo, cada um na sua aba. Revise cada mudança como diff, comente qualquer linha e veja o resultado no navegador integrado.",
+        "Rode quantos agentes do OpenCode quiser em paralelo, veja cada mudança em um navegador ao lado e retome-os em qualquer dispositivo. Para macOS, Windows e Linux.",
       intro:
         "Rode vários agentes ao mesmo tempo, cada sessão na sua própria aba. Revise cada mudança como diff, comente qualquer linha e confira o resultado no navegador integrado. Para macOS, Windows e Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Terminal integrado",
-          body: "Rode comandos em uma aba de terminal ao lado da sessão.",
-        },
-        "ssh-servers": {
-          title: "Servidores SSH",
-          body: "Conecte-se a outra máquina por SSH e trabalhe nos projetos dela.",
-        },
-        extensions: {
-          title: "Extensões",
-          body: "Gerencie servidores MCP, plugins e skills em um só menu.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "No Windows, rode sessões em uma distro WSL 2 em vez de nativamente.",
-        },
-        "office-files": {
-          title: "Arquivos Office",
-          body: "Abra arquivos do Word, Excel e PowerPoint ao lado da sessão.",
-        },
-        "keyboard-shortcuts": {
-          title: "Atalhos de teclado",
-          body: "Toda ação tem um atalho de teclado, e você pode mudar qualquer um.",
-        },
-        "updates-itself": {
-          title: "Autoatualização",
-          body: "Novas versões são baixadas e instaladas pelo próprio app.",
-        },
-        "all-your-projects": {
-          title: "Todos os projetos",
-          body: "Alterne entre projetos e suas sessões em uma só janela.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sessões em abas",
-          body: "Vários agentes trabalhando ao mesmo tempo, cada sessão na sua aba.",
-        },
-        "review-and-comment": {
-          title: "Revise e comente",
-          body: "Leia cada mudança como diff, comente uma linha e envie de volta.",
+        "parallel-agents": {
+          title: "Agentes em paralelo",
+          body: "Inicie quantos agentes quiser e deixe todos trabalharem em paralelo. Alterne entre eles conforme terminam.",
         },
         "see-it-in-the-browser": {
           title: "Veja no navegador",
-          body: "O trabalho do agente abre num navegador ao lado da sessão.",
+          body: "Seu app abre em um navegador ao lado do agente, então vocês dois veem cada mudança chegar.",
         },
-        "pair-your-phone": {
-          title: "Pareie o celular",
-          body: "Leia um QR code no OpenCode Mobile para conduzir sessões pelo iPhone.",
+        "on-every-device": {
+          title: "Em todos os dispositivos",
+          body: "Inicie agentes em todos os seus dispositivos e retome-os pelo app desktop, pelo terminal ou pelo celular.",
+        },
+        "extend-it": {
+          title: "Estenda",
+          body: "Conecte suas ferramentas e serviços para o agente trabalhar com qualquer coisa. Ou peça ao OpenCode para criar plugins para si mesmo, com interface própria na barra lateral.",
         },
       },
     },

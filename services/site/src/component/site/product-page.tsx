@@ -19,7 +19,8 @@ import { moreProducts, productAreas, productDetails, type PageSlug } from "./pro
 import { orderedProducts } from "./products-order"
 import { designCopy, designEditing } from "./design-copy"
 import { CardVideo, InstallTabs, prefersReducedMotion, ProductAction, rescueMedia, useCardShrink } from "./products"
-import { imageSources, posterFile, stillSizes, videoSources } from "./media"
+import { imageSources, posterFile, Still, stillSizes, videoSources } from "./media"
+import { LogoIcon } from "./marks"
 import { ProductDownload } from "./download-sections"
 import { siteSettings } from "./settings"
 import { featureClip, pageMedia, pageScheme } from "./videos"
@@ -336,7 +337,7 @@ export function ProductPage(props: { slug: PageSlug }) {
         </section>
       </div>
 
-      {/* Three (or four) clips side by side, each with its title and description below. Rows without a clip yet stay black. */}
+      {/* Three (or four) clips side by side, each with its title and description below. Rows without a clip yet show a placeholder. */}
       <Show when={showcase().length > 0}>
         <section
           data-component="showcase"
@@ -353,8 +354,24 @@ export function ProductPage(props: { slug: PageSlug }) {
                   <div data-slot="media">
                     {/* Rests on its first frame and plays on hover (in view on touch screens), like
                       the carousel cards. */}
-                    <Show when={row.clip ? featureClip(row.clip) : undefined}>
-                      {(clip) => <CardVideo src={clip().src} poster={clip().poster} />}
+                    {/* A clip whose video isn't uploaded shows its still; a row with no footage
+                      yet shows the logo, dimmed, on the black frame. */}
+                    <Show
+                      when={row.clip ? featureClip(row.clip) : undefined}
+                      fallback={
+                        <div data-slot="placeholder">
+                          <LogoIcon />
+                        </div>
+                      }
+                    >
+                      {(clip) => (
+                        <Show
+                          when={clip().src}
+                          fallback={<Still src={clip().poster} sizes={stillSizes.clip} alt="" loading="lazy" />}
+                        >
+                          {(src) => <CardVideo src={src()} poster={clip().poster} />}
+                        </Show>
+                      )}
                     </Show>
                   </div>
                 </Show>

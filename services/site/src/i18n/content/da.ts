@@ -32,50 +32,25 @@ export const content = {
     desktop: {
       title: "OpenCode | Desktopapp til macOS, Windows og Linux",
       description:
-        "Kør flere OpenCode-agenter på én gang, hver i sin egen fane. Gennemgå hver ændring som et diff, kommenter enhver linje, og se resultatet i den indbyggede browser.",
+        "Kør så mange OpenCode-agenter parallelt, som du vil, se hver ændring i en browser ved siden af, og fortsæt på enhver enhed. Til macOS, Windows og Linux.",
       intro:
         "Kør flere agenter på én gang, hver session i sin egen fane. Gennemgå hver ændring som et diff, kommenter enhver linje, og tjek resultatet i den indbyggede browser. Til macOS, Windows og Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Indbygget terminal",
-          body: "Kør kommandoer i en terminalfane ved siden af sessionen.",
-        },
-        "ssh-servers": {
-          title: "SSH-servere",
-          body: "Forbind til en anden maskine over SSH, og arbejd på dens projekter.",
-        },
-        extensions: { title: "Udvidelser", body: "Administrer MCP-servere, plugins og skills i én menu." },
-        wsl: { title: "WSL", body: "Kør sessioner i en WSL 2-distro på Windows i stedet for direkte." },
-        "office-files": {
-          title: "Office-filer",
-          body: "Åbn Word-, Excel- og PowerPoint-filer ved siden af sessionen.",
-        },
-        "keyboard-shortcuts": {
-          title: "Genveje",
-          body: "Alle handlinger har en tastaturgenvej, og du kan ændre dem alle.",
-        },
-        "updates-itself": { title: "Opdaterer sig selv", body: "Nye versioner downloades og installeres fra appen." },
-        "all-your-projects": {
-          title: "Alle dine projekter",
-          body: "Skift mellem projekter og deres sessioner i ét vindue.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sessioner i faner",
-          body: "Lad flere agenter arbejde på én gang, hver session i sin egen fane.",
-        },
-        "review-and-comment": {
-          title: "Gennemgå og kommenter",
-          body: "Læs hver ændring som et diff, kommenter en linje, og send den tilbage.",
+        "parallel-agents": {
+          title: "Parallelle agenter",
+          body: "Start så mange agenter, du vil, og lad dem alle arbejde parallelt. Skift mellem dem, efterhånden som de bliver færdige.",
         },
         "see-it-in-the-browser": {
           title: "Se det i browseren",
-          body: "Agentens arbejde åbner i en browser ved siden af sessionen.",
+          body: "Din app åbner i en browser ved siden af agenten, så I begge ser hver ændring lande.",
         },
-        "pair-your-phone": {
-          title: "Par din telefon",
-          body: "Scan en QR-kode i OpenCode Mobile for at styre sessioner fra din iPhone.",
+        "on-every-device": {
+          title: "På alle enheder",
+          body: "Start agenter på alle dine enheder, og fortsæt i desktop-appen, terminalen eller på din telefon.",
+        },
+        "extend-it": {
+          title: "Udvid den",
+          body: "Forbind dine værktøjer og tjenester, så agenten kan arbejde med alt. Eller lad OpenCode bygge plugins til sig selv med deres egen brugerflade i sidepanelet.",
         },
       },
     },

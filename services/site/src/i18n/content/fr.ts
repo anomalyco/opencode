@@ -35,59 +35,25 @@ export const content = {
     desktop: {
       title: "OpenCode | App desktop pour macOS, Windows et Linux",
       description:
-        "Lancez plusieurs agents OpenCode à la fois, chacun dans son onglet. Relisez chaque changement en diff, commentez n'importe quelle ligne et prévisualisez dans le navigateur intégré.",
+        "Lancez autant d'agents OpenCode que vous voulez en parallèle, voyez chaque changement dans un navigateur à côté et reprenez-les sur tout appareil. Pour macOS, Windows et Linux.",
       intro:
         "Lancez plusieurs agents à la fois, chaque session dans son propre onglet. Relisez chaque changement en diff, commentez n'importe quelle ligne et vérifiez le résultat dans le navigateur intégré. Pour macOS, Windows et Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Terminal intégré",
-          body: "Lancez des commandes dans un onglet de terminal à côté de la session.",
-        },
-        "ssh-servers": {
-          title: "Serveurs SSH",
-          body: "Connectez-vous à une autre machine en SSH et travaillez sur ses projets.",
-        },
-        extensions: {
-          title: "Extensions",
-          body: "Gérez serveurs MCP, plugins et skills dans un seul menu.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "Sous Windows, lancez les sessions dans une distribution WSL 2 plutôt qu'en natif.",
-        },
-        "office-files": {
-          title: "Fichiers Office",
-          body: "Ouvrez des fichiers Word, Excel et PowerPoint à côté de la session.",
-        },
-        "keyboard-shortcuts": {
-          title: "Raccourcis clavier",
-          body: "Chaque action a un raccourci clavier, et vous pouvez tous les modifier.",
-        },
-        "updates-itself": {
-          title: "Mises à jour auto",
-          body: "Les nouvelles versions se téléchargent et s'installent depuis l'app.",
-        },
-        "all-your-projects": {
-          title: "Tous vos projets",
-          body: "Passez d'un projet et de ses sessions à l'autre dans une seule fenêtre.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sessions en onglets",
-          body: "Plusieurs agents à la fois, chaque session dans son onglet.",
-        },
-        "review-and-comment": {
-          title: "Relire et commenter",
-          body: "Lisez chaque changement en diff, commentez une ligne et renvoyez-la.",
+        "parallel-agents": {
+          title: "Agents en parallèle",
+          body: "Lancez autant d'agents que vous voulez et laissez-les tous travailler en parallèle. Passez de l'un à l'autre à mesure qu'ils terminent.",
         },
         "see-it-in-the-browser": {
           title: "Voir dans le navigateur",
-          body: "Le travail de l'agent s'ouvre dans un navigateur à côté de la session.",
+          body: "Votre app s'ouvre dans un navigateur à côté de l'agent, pour que vous voyiez tous les deux chaque changement arriver.",
         },
-        "pair-your-phone": {
-          title: "Associer un mobile",
-          body: "Scannez un QR code dans OpenCode Mobile pour piloter depuis l'iPhone.",
+        "on-every-device": {
+          title: "Sur tous vos appareils",
+          body: "Lancez des agents sur tous vos appareils et reprenez-les depuis l'app desktop, le terminal ou votre téléphone.",
+        },
+        "extend-it": {
+          title: "Étendez-le",
+          body: "Connectez vos outils et services pour que l'agent puisse travailler avec tout. Ou demandez à OpenCode de créer ses propres plugins, avec leur interface dans la barre latérale.",
         },
       },
     },

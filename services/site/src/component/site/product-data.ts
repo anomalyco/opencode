@@ -159,7 +159,7 @@ export const mobileStores = [
 
 /**
  * The product page below the intro: the showcase clips (the fourth only with Settings › Feature
- * clips count "4"), then six short feature points.
+ * clips count "4"), then short feature points (none on Desktop and Mobile).
  */
 export const productDetails: Record<
   PageSlug,
@@ -181,40 +181,32 @@ export const productDetails: Record<
   desktop: {
     title: "OpenCode | Desktop app for macOS, Windows and Linux",
     description:
-      "Run several OpenCode agents at once, each in its own tab. Review every change as a diff, comment on any line and preview results in the built-in browser.",
+      "Run as many OpenCode agents as you want in parallel, see every change in a browser beside them and pick them up on any device. For macOS, Windows and Linux.",
     operatingSystem: "macOS, Windows, Linux",
     intro:
       "Run several agents at once, each session in its own tab. Review every change as a diff, comment on any line, and check the result in the built-in browser. For macOS, Windows and Linux.",
-    features: [
-      { title: "Built-in terminal", body: "Run commands in a terminal tab beside the session." },
-      { title: "SSH servers", body: "Connect to another machine over SSH and work on its projects." },
-      { title: "Extensions", body: "Manage MCP servers, plugins and skills in one menu." },
-      { title: "All your projects", body: "Switch between projects and their sessions in one window." },
-      { title: "WSL", body: "On Windows, run sessions in a WSL 2 distro instead of natively." },
-      { title: "Office files", body: "Open Word, Excel and PowerPoint files beside the session." },
-      { title: "Keyboard shortcuts", body: "Every action has a keyboard shortcut, and you can change any of them." },
-      { title: "Updates itself", body: "New versions download and install from the app." },
-    ],
+    // The page shows only its four key features (6 Nov 2026), with no feature points below them.
+    features: [],
     showcase: [
       {
-        title: "Sessions in tabs",
+        title: "Parallel agents",
         clip: "/product-videos/features/desktop-1",
-        body: "Keep several agents working at once, each session in its own tab.",
-      },
-      {
-        title: "Review and comment",
-        clip: "/product-videos/features/desktop-2",
-        body: "Read each change as a diff, comment on a line and send it back.",
+        body: "Start as many agents as you want and let them all work in parallel. Jump between them as they finish.",
       },
       {
         title: "See it in the browser",
         clip: "/product-videos/features/desktop-3",
-        body: "The agent's work opens in a browser beside the session as it lands.",
+        body: "Your app opens in a browser beside the agent, so you both see every change land.",
       },
       {
-        title: "Pair your phone",
+        title: "On every device",
         clip: "/product-videos/features/desktop-4",
-        body: "Scan a QR code in OpenCode Mobile to steer sessions from your iPhone.",
+        body: "Start agents across all your devices, and pick them up from the desktop app, the terminal or your phone.",
+      },
+      // No footage yet: the row shows a placeholder until its clip lands.
+      {
+        title: "Extend it",
+        body: "Connect your tools and services so the agent can work with anything. Or have OpenCode build plugins for itself, with their own UI in the sidebar.",
       },
     ],
   },
