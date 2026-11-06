@@ -74,6 +74,8 @@ await writeWorkerConfig({
   config: config.worker,
   manifest: { type: "partial", mainModule: "index.mjs", modules: {} },
 })
+// The bundle checks read the files; this starts the Worker that would be deployed and loads pages.
+await Bun.$`bun ./script/check-worker-start.ts`.cwd(root).env(env)
 console.log(`site: built ${config.worker.name} (${mode}), ${shipped.length} assets`)
 
 /** In CI the snapshot is what /changelog.json serves when GitHub fails, so it must have releases. */
