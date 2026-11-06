@@ -957,6 +957,11 @@
         height: 1lh;
       }
     }
+
+    /* A reel keeps its cells once it has spun (SlotDigit); only a spinning reel shows them. */
+    [data-slot="reel"]:not([data-spinning]) [data-slot="strip"] > span + span {
+      display: none;
+    }
   }
 
   [data-component="odometer"] {

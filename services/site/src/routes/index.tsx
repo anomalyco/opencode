@@ -896,7 +896,11 @@ function SlotStat(props: { value: string; start?: number; stat: number }) {
 }
 
 function SlotDigit(props: { digit: number; start?: number; place: number; stat: number }) {
+  // The reel's cells are added when it first spins and stay; only a spinning reel shows more than the
+  // first (index.css). Removing them as each digit landed, a frame apart, restyled the whole page in
+  // each of those frames (every :has() rule re-checks a removal), right while it scrolled.
   const [reel, setReel] = createSignal([props.digit])
+  const [spinning, setSpinning] = createSignal(false)
   let strip: HTMLSpanElement | undefined
   createEffect(
     on(
@@ -911,6 +915,7 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
           props.digit,
         ]
         setReel(digits)
+        setSpinning(true)
         const line = strip.parentElement?.getBoundingClientRect().height ?? 0
         const animation = strip.animate(
           [{ transform: "translateY(0)" }, { transform: `translateY(${-(digits.length - 1) * line}px)` }],
@@ -922,7 +927,8 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
           },
         )
         animation.onfinish = () => {
-          setReel([props.digit])
+          setReel((cells) => cells.with(0, props.digit))
+          setSpinning(false)
           animation.cancel()
         }
         onCleanup(() => animation.cancel())
@@ -930,7 +936,7 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
     ),
   )
   return (
-    <span data-slot="reel" aria-hidden="true" data-spinning={reel().length > 1 ? "" : undefined}>
+    <span data-slot="reel" aria-hidden="true" data-spinning={spinning() ? "" : undefined}>
       <span data-slot="strip" ref={strip}>
         <Index each={reel()}>{(digit) => <span>{digit()}</span>}</Index>
       </span>
