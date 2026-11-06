@@ -15,6 +15,7 @@ import { toSessionError } from "./to-session-error.js"
 import { SessionInbox } from "./inbox.js"
 import { SessionTeam } from "./team.js"
 import { SessionGoal } from "./goal.js"
+import { SessionWatch } from "./watch.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -63,6 +64,7 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const teams = yield* SessionTeam.Service
     const goals = yield* SessionGoal.Service
+    const watches = yield* SessionWatch.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -113,15 +115,15 @@ export const layer = Layer.effect(
     const coordinator: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason> =
       yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
         // Shared idle hook (ported from v2-custom): runs after ownership is removed when no
-        // successor is pending. Teams + goal below; watch (watches.stopped) merges into this
-        // same body at automation integration (must run BEFORE the team early-return) — do not
-        // add a second coordinator. Upstream interrupt({resume}), stepped, Reloaded preserved.
+        // successor is pending. Watch wakes FIRST (before team early-return, Boss ordering),
+        // then teams+goal gate. Upstream interrupt({resume}), stepped, Reloaded preserved.
         idle: (sessionID, exit, reason) =>
           reportLifecycle(
             sessionID,
             Effect.gen(function* () {
               const outcome = terminal(exit, reason)
               if (outcome.type === "interrupted" && outcome.reason === "shutdown") return
+              for (const target of yield* watches.stopped(sessionID)) yield* coordinator.wake(target)
               const membership = yield* teams.membership(sessionID)
               if (!membership && (yield* teams.teamsOf(sessionID)).length === 0) return
               const candidates = membership
@@ -213,7 +215,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionTeam.node, SessionGoal.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionTeam.node, SessionGoal.node, SessionWatch.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
