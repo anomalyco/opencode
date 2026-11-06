@@ -146,6 +146,14 @@ const layer = Layer.effect(
         },
         { concurrency: "unbounded" },
       )
+      const tools = loaded.tools.definitions.some((tool) => tool.name === "shell")
+        ? {
+            ...loaded.tools,
+            definitions: loaded.tools.definitions.filter(
+              (tool) => !["read", "write", "edit", "patch", "glob", "grep"].includes(tool.name),
+            ),
+          }
+        : loaded.tools
       return {
         session,
         agent: { ...agent, info: agent.info },
@@ -153,7 +161,7 @@ const layer = Layer.effect(
         // prompt-cache prefix: user-level catalog and guidance, then project instructions, then
         // the date and environment, which vary by day and directory.
         instructions: Instructions.combine([
-          CodeModeInstructions.make(loaded.tools.codeModeCatalog),
+          CodeModeInstructions.make(tools.codeModeCatalog),
           loaded.mcp,
           loaded.references,
           loaded.skills,
@@ -161,7 +169,7 @@ const layer = Layer.effect(
           loaded.builtins,
           loaded.entries,
         ]),
-        tools: loaded.tools,
+        tools,
       }
     })
 

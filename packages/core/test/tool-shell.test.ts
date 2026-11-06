@@ -4,6 +4,7 @@ import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -795,6 +796,56 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
+  it.effect("automatically backgrounds after a minute and sends only one running notice after thirty minutes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      reset()
+      const release = "long-command-release"
+      const releasePath = path.join(tmp.path, release)
+      yield* withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const shell = yield* Shell.Service
+          const notices = yield* Queue.unbounded<SessionEvent.InboxEnqueued>()
+          yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runForEach((event) => Queue.offer(notices, event)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const started = yield* Deferred.make<string>()
+          const execution = yield* executeTool(registry, {
+            ...call({ command: progressOverflowCommand(1, release) }, "call-auto-background"),
+            progress: (update) =>
+              typeof update.shellID === "string"
+                ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+                : Effect.void,
+          }).pipe(Effect.forkScoped({ startImmediately: true }))
+          const id = ID.make(yield* Deferred.await(started))
+          yield* TestClock.adjust("1 minute")
+          const result = yield* Fiber.join(execution)
+          expect(result.output).toMatchObject({ status: "running", shellID: id })
+          expect((yield* shell.get(id)).status).toBe("running")
+          expect(yield* Queue.size(notices)).toBe(0)
+          yield* TestClock.adjust("29 minutes")
+          const notice = yield* Queue.take(notices)
+          expect(notice.data.item.delivery).toBe("steer")
+          expect(notice.data.item.payload).toMatchObject({
+            text: expect.stringContaining("Command is still running 30 minutes after starting."),
+            metadata: { source: "shell", shellID: id, state: "running" },
+          })
+          yield* TestClock.adjust("30 minutes")
+          expect(yield* Queue.size(notices)).toBe(0)
+          expect((yield* shell.get(id)).status).toBe("running")
+          yield* Effect.promise(() => Bun.write(releasePath, ""))
+          const completion = yield* Queue.take(notices)
+          expect(completion.data.item.payload).toMatchObject({
+            metadata: { state: "completed" },
+          })
+        }).pipe(Effect.ensuring(Effect.promise(() => Bun.write(releasePath, "")).pipe(Effect.ignore))),
+      )
+    }),
+  )
+
   it.live("returns both parallel CodeMode shell results", () =>
     withTempDir((tmp) => {
       reset()
