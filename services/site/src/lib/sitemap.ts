@@ -2,7 +2,8 @@ import { config } from "~/config"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
 import { LOCALES, localized, route, tag } from "~/lib/language"
-import { legalDocuments, legalVersions } from "~/lib/legal"
+import { legalVersions } from "~/lib/legal"
+import { legalDocuments } from "~/lib/legal-documents"
 
 /**
  * /sitemap.xml is the one public sitemap, an index of the sitemaps below. Search engines read it from
