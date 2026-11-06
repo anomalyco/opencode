@@ -87,10 +87,18 @@ pub fn session(tui: &Tui, id: &SessionID) {
     }
 }
 
-/// `server.connected`: reads the location again and uploads the open session's environment again.
+/// `server.connected`: reads the location again.
 pub(crate) fn reconnected(tui: &Tui) {
-    tui.location.uploaded.borrow_mut().take();
     sync(tui, current(tui));
+    if let Route::Session { id } = tui.route() {
+        session(tui, &id);
+    }
+}
+
+/// The status turned connected: uploads the open session's environment again. TS runs the upload as an
+/// effect of the connection status (`app.tsx:529-539`), which turns connected after `server.connected`.
+pub(crate) fn connected_again(tui: &Tui) {
+    tui.location.uploaded.borrow_mut().take();
     if let Route::Session { id } = tui.route() {
         session(tui, &id);
     }
