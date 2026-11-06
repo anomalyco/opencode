@@ -23,7 +23,7 @@ pub struct Home {
     /// The global form overlay (E.9b); while it holds the keys, the prompt must not take the focus.
     forms: crate::features::home_forms::HomeForms,
     /// The `home.footer` slot's plugin claims (P.1).
-    slot: opencode_plugin::SlotMount<Tui>,
+    slot: std::rc::Rc<opencode_plugin::SlotMount<Tui>>,
 }
 
 impl Home {
@@ -59,18 +59,19 @@ impl Home {
             .child(&composer)
             .child(&spacer());
         let footer = View::new(app).column().width(Length::percent(100.0)).shrink(0.0);
-        let slot = crate::plugins::host::slot(
+        let slot = std::rc::Rc::new(crate::plugins::host::slot(
             tui,
             &footer,
             opencode_plugin::slot::HOME_FOOTER,
             &Default::default(),
             // The footer itself is the `opencode.home.footer` plugin's claim (E.14).
             |_| {},
-        );
+        ));
         let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&center).child(&footer);
         let forms = crate::features::home_forms::mount(tui, &root);
-        // The logo and the side padding follow the terminal size (`useTerminalDimensions`).
+        // The logo, the side padding and the footer follow the terminal size (`useTerminalDimensions`).
         let size = std::cell::Cell::new((width, height));
+        let footer_slot = slot.clone();
         root.on_resize(bind!(tui, |tui, cx, _| {
             let (width, height) = cx.app().size();
             if size.replace((width, height)) == (width, height) {
@@ -78,6 +79,7 @@ impl Home {
             }
             center.padding_x(padding(width));
             paint_logo(&tui.app, &logo, &tui.page(), width, height);
+            footer_slot.sync(&tui, &Changes::everything());
             tui.app.request_redraw();
         }));
         Self { root, prompt, forms, slot }

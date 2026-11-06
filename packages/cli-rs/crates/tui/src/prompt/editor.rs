@@ -412,12 +412,26 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         }
     });
     inner.layers.borrow_mut().push(mentions);
-    // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does.
+    // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does; the
+    // footer's shortcuts follow the keybinds.
     tui.settings.on_change(bind!(inner, |inner, tui| {
         let cursor = crate::features::system_commands::cursor(&tui.config());
         inner.textarea.cursor_style(cursor.0, cursor.1);
         inner.staging.set_animations(opencode_ui::motion::enabled(tui.config().info.animations));
-        inner.refresh(tui);
+        inner.relayout(tui);
+    }));
+    // The metadata row and the footer follow the terminal size (`useTerminalDimensions`).
+    let weak = Rc::downgrade(&inner);
+    let resize = tui.app.on_resize(move |_, _, _| {
+        if let Some(inner) = weak.upgrade()
+            && let Some(tui) = inner.tui.upgrade()
+        {
+            inner.relayout(&tui);
+        }
+    });
+    let app = tui.app.clone();
+    inner.layers.borrow_mut().push(Disposer::new(move || {
+        app.remove_handler(resize);
     }));
     // Home drops the last session's selection; a session follows its directory (`editor.reconnect`).
     match session {
@@ -706,6 +720,13 @@ impl Inner {
             .color(color);
         self.running.add(&mounted);
         *spinner = Some(mounted);
+    }
+
+    /// Repaints after a change outside the store, the terminal size or the settings, which the footer slots read too.
+    fn relayout(&self, tui: &Tui) {
+        self.refresh(tui);
+        let everything = Changes::everything();
+        self.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, &everything));
     }
 
     /// Mounts the `prompt.footer` slots again when their input changed (E.14).
