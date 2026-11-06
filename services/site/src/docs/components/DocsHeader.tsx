@@ -25,7 +25,8 @@ export function DocsHeader(props: { currentSlug: string }) {
                 </a>
               )}
             </For>
-            <a href="/docs">V1</a>
+            {/* The V1 docs app, through the site's /v1/docs redirect (src/middleware.ts). */}
+            <a href="/v1/docs">V1</a>
           </nav>
           <div class="header-spacer"></div>
           <Show when={searchEnabled}>
@@ -70,8 +71,8 @@ export function DocsHeader(props: { currentSlug: string }) {
         <dialog
           class="search-dialog"
           data-search-dialog
-          data-pagefind-path={`${base}docs/pagefind/pagefind.js`}
-          data-base-url={`${base}docs/`}
+          data-pagefind-path={`${base}pagefind/pagefind.js`}
+          data-base-url={base}
           aria-label="Search documentation"
         >
           <form method="dialog" class="search-bar">

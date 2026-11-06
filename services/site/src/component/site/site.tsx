@@ -128,7 +128,7 @@ const markdownKey = "opencode-markdown-view"
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
 // Pages of this site that render client-side; everything else keeps a full page load. The docs
-// (/docs and /v2/docs) are served separately, and /download redirects on the server.
+// (/docs) are served separately, and /download redirects on the server.
 const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
@@ -146,7 +146,7 @@ const speculationRules = JSON.stringify({
       where: {
         and: [
           {
-            href_matches: ["{/:locale}?/:page(product|ide|mini|font)", "{/:locale}?/extensions/*", "/v2/*", "/data{/*}?"],
+            href_matches: ["{/:locale}?/:page(product|ide|mini|font)", "{/:locale}?/extensions/*", "/docs{/*}?", "/data{/*}?"],
           },
           { not: { selector_matches: "[hreflang]" } },
         ],

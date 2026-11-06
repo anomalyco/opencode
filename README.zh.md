@@ -94,11 +94,11 @@ OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
 
 另外还包含一个 **general** 子 Agent，用于复杂搜索和多步任务，内部使用，也可在消息中输入 `@general` 调用。
 
-了解更多 [Agents](https://opencode.ai/v2/docs/agents) 相关信息。
+了解更多 [Agents](https://opencode.ai/docs/agents) 相关信息。
 
 ### 文档
 
-更多配置说明请查看我们的 [**官方文档**](https://opencode.ai/v2/docs)。
+更多配置说明请查看我们的 [**官方文档**](https://opencode.ai/docs)。
 
 ### 参与贡献
 
