@@ -50,7 +50,7 @@ fn skills() -> Value {
     ])
 }
 
-/// Serves the location, the MCP list and skills (`None` answers the skill list with a 500), the prompt catalog,
+/// Serves the location, the MCP list and skills (`None` answers the skill list with a declared error), the prompt catalog,
 /// and the writes; logs every request.
 fn fake(servers: Arc<Mutex<Value>>, skills: Option<Value>) -> Fake {
     Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
@@ -61,7 +61,7 @@ fn fake(servers: Arc<Mutex<Value>>, skills: Option<Value>) -> Fake {
         ("GET", "/api/mcp") => (200, list(DIRECTORY, servers.lock().unwrap().clone())),
         ("GET", "/api/skill") => match &skills {
             Some(skills) => (200, list(DIRECTORY, skills.clone())),
-            None => (500, json!({ "message": "skills exploded" })),
+            None => (400, json!({ "_tag": "InvalidRequestError", "message": "skills exploded" })),
         },
         ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
         // `docs` fails to connect, so the error toast and the cleared loading state show.
@@ -341,6 +341,8 @@ fn skills_dialog_shows_a_failed_read() {
     kit.run("prompt.skills");
     let screen = kit.wait_for("Could not load skills");
     assert!(screen.contains("Close and reopen Skills to try again."), "{screen}");
+    // The declared error's message, as `errorMessage` shows it, without its tag.
+    assert!(screen.contains("skills exploded") && !screen.contains("InvalidRequestError"), "{screen}");
     // Locked while failed: typing does not filter.
     assert!(!screen.contains("Search"), "{screen}");
 }
