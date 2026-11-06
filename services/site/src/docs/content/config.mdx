@@ -414,11 +414,16 @@ and cost considerations.
 
 ### Skills
 
-Add directories or URLs that OpenCode should search for agent skills.
+Add directories or URLs that OpenCode should search for agent skills. Write a
+URL as `{ "url", "headers" }` to send headers with its requests.
 
 ```jsonc
 {
-  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+  "skills": [
+    "./team-skills",
+    "https://example.com/.well-known/skills/",
+    { "url": "https://skills.example.com/team/", "headers": { "Authorization": "Bearer {env:TEAM_SKILLS_TOKEN}" } },
+  ],
 }
 ```
 
@@ -444,11 +449,16 @@ See the [commands guide](/commands) for arguments, models, agents, and file-base
 ### Instructions
 
 Declare additional instruction files, globs, or HTTP(S) URLs. OpenCode loads
-them alongside discovered `AGENTS.md` files.
+them alongside discovered `AGENTS.md` files. Write a URL as `{ "url", "headers" }`
+to send headers with its request.
 
 ```jsonc
 {
-  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+  "instructions": [
+    "CONTRIBUTING.md",
+    "docs/guidelines/*.md",
+    { "url": "https://docs.example.com/team.md", "headers": { "Authorization": "Bearer {env:TEAM_DOCS_TOKEN}" } },
+  ],
 }
 ```
 

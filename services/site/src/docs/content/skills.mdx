@@ -86,6 +86,7 @@ Add more local directories or HTTP catalogs with the `skills` array in any `open
 | `~/` path | From the current user's home directory |
 | Absolute path | Used as written |
 | `http://` or `https://` URL | Loaded as an HTTP catalog |
+| `{ "url", "headers" }` | Loaded as an HTTP catalog, sending the headers with every request |
 
 Every discovered config file contributes its entries. `skills` arrays are combined rather than replaced.
 
@@ -116,6 +117,26 @@ For that entry, OpenCode downloads each file from `<base-url>/git-release/<file>
 | Updates | Increment `version` when files change so OpenCode refreshes its cache |
 
 Each downloaded skill directory becomes a source root named after the entry, so both `git-release.md` and `SKILL.md` have the ID `git-release`.
+
+### Private catalogs
+
+Write the entry as an object to send headers with `index.json` and every file download:
+
+```jsonc title="opencode.jsonc"
+{
+  "skills": [
+    {
+      "url": "https://skills.example.com/team/",
+      "headers": { "Authorization": "Bearer {env:TEAM_SKILLS_TOKEN}" },
+    },
+  ],
+}
+```
+
+- `url` must start with `http://` or `https://`. Other entries in object form are skipped with a warning.
+- The headers go to the catalog and to redirects on the same origin. A redirect to another origin receives none of them.
+- Downloads are cached by URL, so changing the headers does not download unchanged skills again.
+- When several config files list the same URL, the headers from the highest-precedence file are used.
 
 ## Frontmatter
 
@@ -175,9 +196,10 @@ Sources are registered from lower to higher precedence:
 1. Built-in skills
 2. `.claude/skills`, global first and then from the farthest ancestor toward the current directory
 3. `.agents/skills`, global first and then from the farthest ancestor toward the current directory
-4. `~/.config/opencode/skills`
-5. Project `.opencode/skills`, from the project root toward the current directory
-6. Explicit `skills` config entries, in config priority and array order
+4. Skills from a connected integration, such as an [OpenCode Console](/console) workspace
+5. `~/.config/opencode/skills`
+6. Project `.opencode/skills`, from the project root toward the current directory
+7. Explicit `skills` config entries, in config priority and array order
 
 Avoid duplicate IDs unless you intend to override an earlier skill.
 
@@ -203,6 +225,8 @@ OpenCode then:
 To load a skill yourself, mention it in your prompt as `@skill-id`.
 
 Supporting file contents are not loaded automatically. The agent reads them when the skill directs it to do so. The file sample is available for directory-based `SKILL.md` skills; flat Markdown skills do not receive a neighboring file list.
+
+Reading a file in a `SKILL.md` skill's directory needs the `skill` permission for that skill and the `read` permission for the file. This holds when the directory is outside the project, such as a catalog skill in OpenCode's download cache, so no `external_directory` approval is asked. Editing those files still needs it.
 
 ## Permissions
 

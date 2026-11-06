@@ -122,10 +122,31 @@ Configured instructions load after `AGENTS.md` files, in the order they are list
 | `~/` path               | Resolved from your home directory                                    |
 | Absolute path           | Used as written; the file name may be a glob                         |
 | `http://` or `https://` | Fetched when config loads, with a five-second timeout                |
+| `{ "url", "headers" }`  | Fetched like a URL, sending the headers with the request             |
 
 - Local files update like `AGENTS.md` when they change. New files matching a glob load on the next config change.
 - Missing files are skipped. A URL that cannot be fetched is skipped, or keeps its last fetched content.
 - With `OPENCODE_DISABLE_PROJECT_CONFIG=1`, or when the workspace is outside the project, relative entries resolve against the global config directory.
+
+### Private URLs
+
+Write an entry as an object to send headers with the request, for example to read instructions that need a token:
+
+```jsonc title="opencode.jsonc"
+{
+  "instructions": [
+    {
+      "url": "https://docs.example.com/team/instructions.md",
+      "headers": { "Authorization": "Bearer {env:TEAM_DOCS_TOKEN}" },
+    },
+  ],
+}
+```
+
+- `url` must start with `http://` or `https://`. Other entries in object form are skipped with a warning.
+- The headers go to the URL and to redirects on the same origin. A redirect to another origin receives none of them.
+- The instruction is labeled with its URL only. Header values never reach the model or OpenCode's logs.
+- When several config files list the same URL, it is fetched once, with the headers from the highest-precedence file.
 
 A connected [OpenCode Console](/console) workspace can also share instructions.
 
