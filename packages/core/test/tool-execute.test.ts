@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { CodeMode } from "@opencode/codemode"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -10,7 +12,7 @@ import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Schema } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
@@ -29,12 +31,15 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll)
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
 
 const vmConfig = (codemode_vm: boolean) =>
-  Config.testLayer([
-    new Document({
-      type: "document",
-      info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
-    }),
-  ])
+  Layer.merge(
+    Layer.succeed(Flag.Overrides, undefined),
+    Config.testLayer([
+      new Document({
+        type: "document",
+        info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
+      }),
+    ]),
+  )
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -476,4 +481,18 @@ test("runtime cache is keyed per engine when experimental.codemode_vm toggles", 
   // Reading the catalog reuses the cached runtime without rebuilding
   expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   expect(conversions).toBe(2)
+})
+
+test("a suspended VM execution is reported as an ExecutionFailure", async () => {
+  const runtime = CodeMode.make({ tools: {}, engine: "vm" })
+  const result = await Effect.runPromise(
+    CodeModeTool.finish(
+      runtime.start("return 1 + 1").pipe(Effect.tap((execution) => execution.suspend)),
+    ),
+  )
+  expect(result).toEqual({
+    ok: false,
+    error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
+    toolCalls: [],
+  })
 })
