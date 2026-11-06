@@ -6,7 +6,8 @@
 // ternaries, `&&`/`||`, `if`), so the branches production never takes, and everything only they
 // import, leave the bundle. The server and the browser builds fold the same way, so hydration keys
 // still match. The development server is untouched.
-import { mkdir, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { transformAsync, types, type NodePath, type PluginObj } from "@babel/core"
 import type { Plugin } from "vite"
@@ -34,14 +35,23 @@ const designModules = [
   path.join(root, "component/site/design-copy.ts"),
   path.join(root, "component/site/design-mode.tsx"),
 ]
+// A page's link preview card (lib/og.ts), from og-images.json, which script/og.ts writes before the
+// build: `ogImage("/press")` becomes the card itself, so a page whose cards are all named that way
+// doesn't download the list.
+const ogModule = path.join(root, "lib/og.ts")
+const ogCards = path.join(root, "lib/og-images.json")
 const candidate =
-  /\b(siteSettings|siteSettingsDefaults|setSiteSetting|designMode|designEditing|designCopy|import\.meta\.env\.(DEV|PROD))\b/
+  /\b(siteSettings|siteSettingsDefaults|setSiteSetting|designMode|designEditing|designCopy|ogImage|import\.meta\.env\.(DEV|PROD))\b/
 
 export function foldSettingsForProduction(): Plugin {
+  let cards: Record<string, unknown> = {}
   return {
     name: "fold-settings-for-production",
     apply: "build",
     enforce: "pre",
+    async buildStart() {
+      cards = existsSync(ogCards) ? JSON.parse(await readFile(ogCards, "utf8")) : {}
+    },
     resolveId: (id) => (id === liveModule ? `\0${liveModule}` : undefined),
     load(id) {
       if (id !== `\0${liveModule}`) return
@@ -64,9 +74,10 @@ export function foldSettingsForProduction(): Plugin {
         sourceMaps: true,
         parserOpts: { plugins: ["jsx", "typescript"] },
         generatorOpts: { retainLines: false },
-        plugins: [foldSettings(file)],
+        plugins: [foldSettings(file, cards)],
       })
       if (!result?.code) return
+      // FOLD_DEBUG=<directory> writes each folded module there, to see what production compiles.
       if (process.env.FOLD_DEBUG) {
         const out = path.join(process.env.FOLD_DEBUG, this.environment.name, path.relative(root, file))
         await mkdir(path.dirname(out), { recursive: true })
@@ -81,7 +92,10 @@ export function foldSettingsForProduction(): Plugin {
     generateBundle(_, bundle) {
       const modules = Object.values(bundle)
         .flatMap((chunk) => (chunk.type === "chunk" ? Object.entries(chunk.modules) : []))
-        .map(([id, module]) => ({ file: id.split("?")[0], code: module.code ?? "" }))
+        .map(([id, module]) => ({
+          file: id.split("?")[0],
+          code: (module.code ?? "").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""),
+        }))
         .filter((module) => module.file.startsWith(root + path.sep) && module.file !== settingsModule)
       const name = (file: string) => path.relative(root, file)
       const written = modules
@@ -110,11 +124,12 @@ type Imports = {
   settings: Set<string>
   defaults: Set<string>
   setters: Set<string>
+  og: Set<string>
   design: Map<string, string>
   solid: Map<string, string>
 }
 
-function foldSettings(file: string) {
+function foldSettings(file: string, cards: Record<string, unknown>) {
   return (): PluginObj => ({
     name: "fold-settings",
     visitor: {
@@ -144,6 +159,13 @@ function foldSettings(file: string) {
             }
             const call = identifier.parentPath
             const key = call.isCallExpression() ? call.node.arguments[0] : undefined
+            if (
+              imports.og.has(name) &&
+              isImported(identifier, name) &&
+              call.isCallExpression({ callee: identifier.node })
+            )
+              if (types.isStringLiteral(key) && Object.hasOwn(cards, key.value))
+                call.replaceWith(types.valueToNode(cards[key.value]))
             if (
               imports.setters.has(name) &&
               isImported(identifier, name) &&
@@ -188,6 +210,7 @@ function readImports(program: NodePath<types.Program>, file: string): Imports {
     settings: new Set(),
     defaults: new Set(),
     setters: new Set(),
+    og: new Set(),
     design: new Map(),
     solid: new Map(),
   }
@@ -201,6 +224,7 @@ function readImports(program: NodePath<types.Program>, file: string): Imports {
       if (source === "solid-js") return imports.solid.set(local, imported)
       if (settingsModules.includes(source) && imported === "siteSettings") return imports.settings.add(local)
       if (settingsModules.includes(source) && imported === "setSiteSetting") return imports.setters.add(local)
+      if (source === ogModule && imported === "ogImage") return imports.og.add(local)
       if (source === settingsModule && imported === "siteSettingsDefaults") return imports.defaults.add(local)
       if (designModules.includes(source) && ["designMode", "designEditing", "designCopy", "editing"].includes(imported))
         imports.design.set(local, imported)
@@ -217,7 +241,7 @@ function resolveSource(source: string, file: string) {
 
 function withExtension(file: string) {
   if (/\.(ts|tsx)$/.test(file)) return file
-  const known = [...settingsModules, ...designModules]
+  const known = [...settingsModules, ...designModules, ogModule]
   return [".ts", ".tsx"].map((extension) => file + extension).find((name) => known.includes(name)) ?? file
 }
 
@@ -351,6 +375,34 @@ function fold(program: NodePath<types.Program>, imports: Imports) {
           mark()
         },
       },
+      // A static read of an object literal of constants (`{ src: "/og/home.png", alt }.src`).
+      MemberExpression: {
+        exit(member) {
+          const object = member.get("object")
+          const key = staticKey(member.node)
+          if (!object.isObjectExpression() || key === undefined || isWritten(member)) return
+          if (member.parentPath.isCallExpression({ callee: member.node })) return
+          const properties = object.node.properties
+          const plain = properties.every(
+            (property) =>
+              types.isObjectProperty(property) &&
+              !property.computed &&
+              (types.isIdentifier(property.key) || types.isStringLiteral(property.key)) &&
+              types.isLiteral(property.value) &&
+              !types.isTemplateLiteral(property.value),
+          )
+          if (!plain) return
+          const found = properties.findLast(
+            (property) =>
+              types.isObjectProperty(property) &&
+              (types.isIdentifier(property.key) ? property.key.name : (property.key as types.StringLiteral).value) ===
+                key,
+          ) as types.ObjectProperty | undefined
+          if (!found) return
+          member.replaceWith(found.value as types.Expression)
+          mark()
+        },
+      },
       ConditionalExpression: {
         exit(conditional) {
           const test = known(conditional.get("test"))
@@ -421,13 +473,9 @@ function fold(program: NodePath<types.Program>, imports: Imports) {
       JSXExpressionContainer: {
         exit(container) {
           if (!container.parentPath.isJSXElement() && !container.parentPath.isJSXFragment()) return
-          const expression = container.get("expression")
-          if (
-            !expression.isBooleanLiteral() &&
-            !expression.isNullLiteral() &&
-            !expression.isIdentifier({ name: "undefined" })
-          )
-            return
+          // Nothing to render: a boolean, null or undefined, written out or decided.
+          const value = known(container.get("expression"))
+          if (value !== null && value !== undefined && typeof value !== "boolean") return
           container.remove()
           mark()
         },
