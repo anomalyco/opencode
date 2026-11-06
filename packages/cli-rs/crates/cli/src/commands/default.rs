@@ -3,7 +3,8 @@
 
 use std::sync::Arc;
 
-use opencode_api::generated::SessionID;
+use opencode_api::client::Client;
+use opencode_api::generated::{FileListInput, LocationGetInput, LocationQueryInput, SessionID};
 use opencode_api::transport::Reqwest;
 use opencode_local::channel::Channels;
 use opencode_local::cli_config::{CliConfig, Resolved};
@@ -48,6 +49,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     ))?;
     // A managed service's client follows the service when it restarts on a new port or password.
     let client = opencode_service::follow::client(transport, &connection, &paths, &env)?;
+    let location = runtime.block_on(server_directory(&client, &directory.to_string_lossy()))?;
     let info = CliConfig::new(&paths).get().unwrap_or_else(|error| {
         log::warn!("failed to read cli.json: {error}");
         Default::default()
@@ -89,7 +91,7 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     opencode_tui::run(Launch {
         deps: Deps {
             client,
-            directory: directory.to_string_lossy().into_owned(),
+            directory: location,
             config,
             roots: Some(Roots { paths, storage_channel: Channels::from_env().storage }),
             route,
@@ -103,4 +105,44 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         plugins: Some(plugins),
     })?;
     Ok(())
+}
+
+/// The server's canonical name for `directory`, or the server's own directory when it cannot list this one,
+/// as a `--server` on another machine (`app.tsx`'s `file.list` probe).
+async fn server_directory(client: &Client, directory: &str) -> anyhow::Result<String> {
+    let location = Some(LocationQueryInput { directory: Some(directory.to_owned()) });
+    if let Ok(listed) = client.file_list(&FileListInput { location, path: None }).await {
+        return Ok(listed.location.directory.0);
+    }
+    let info = client
+        .location_get(&LocationGetInput { location: None })
+        .await
+        .map_err(|error| anyhow::anyhow!(error.error_message()))?;
+    Ok(info.directory.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use opencode_api::client::Client;
+    use opencode_api::memory::{Memory, Route};
+    use serde_json::json;
+
+    fn directory(routes: Vec<Route>) -> String {
+        let client = Client::with_transport("http://opencode.local", Arc::new(Memory::new(routes))).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        runtime.block_on(super::server_directory(&client, "/project/")).unwrap()
+    }
+
+    #[test]
+    fn the_server_names_the_directory_or_its_own() {
+        let location =
+            json!({ "directory": "/remote", "project": { "id": "p", "directory": "/remote", "canonical": "/remote" } });
+        let listed = json!({ "location": { "directory": "/project" }, "data": [] });
+        let both =
+            vec![Route::json("GET", "/api/fs/list", 200, &listed), Route::json("GET", "/api/location", 200, &location)];
+        assert_eq!(directory(both), "/project");
+        assert_eq!(directory(vec![Route::json("GET", "/api/location", 200, &location)]), "/remote");
+    }
 }
