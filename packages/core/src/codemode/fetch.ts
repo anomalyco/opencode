@@ -16,9 +16,14 @@ type Init = {
 
 const fetch = (input: string | URL, init: Init = {}) =>
   Effect.gen(function* () {
-    const url = String(input)
-    if (URL.parse(url)?.protocol === "file:")
-      return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact URL from
+    // matching.
+    const url = String(input).split("#")[0]
+    const parsed = URL.parse(url)
+    if (parsed?.protocol === "file:") return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
+    if (parsed?.username || parsed?.password)
+      return yield* Effect.fail(new TypeError("fetch cannot be used with credentials in the URL."))
     const execution = yield* CodeModeExecution.Service
     const permission = yield* Permission.Service
     const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
@@ -68,6 +73,9 @@ const fetch = (input: string | URL, init: Init = {}) =>
           const next = new URL(location, target)
           if (next.protocol !== "http:" && next.protocol !== "https:")
             return Effect.fail(new Error(`fetch cannot follow a redirect to ${next.protocol} URLs.`))
+          if (next.username || next.password)
+            return Effect.fail(new Error("fetch cannot follow a redirect with credentials in the URL."))
+          next.hash = ""
           return check(next.href).pipe(
             Effect.andThen(follow(next.href, redirected(request, response.status, target, next), redirects + 1)),
           )

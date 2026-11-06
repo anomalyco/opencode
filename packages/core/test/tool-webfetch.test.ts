@@ -537,6 +537,23 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("matches rules against the URL as written without the fragment and rejects credentials", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+
+      yield* executeTool(registry, call({ url: "https://Example.com#top", format: "text" }))
+      expect(assertions.map((assertion) => assertion.resources)).toEqual([["https://Example.com"]])
+
+      reset()
+      expect(yield* executeTool(registry, call({ url: "https://user@example.com/", format: "text" }))).toMatchObject({
+        status: "error",
+        error: { message: "URL must not include credentials" },
+      })
+      expect(requests).toEqual([])
+    }),
+  )
+
   it.effect("rejects redirects to non-HTTP schemes and endless redirect chains", () =>
     Effect.gen(function* () {
       reset()
