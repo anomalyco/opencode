@@ -51,6 +51,9 @@ function astroCode(lang: string): ShikiTransformer {
       const join = (value: unknown) => (Array.isArray(value) ? value.join(" ") : value)
       node.properties.class = String(join(node.properties.class) ?? "").replace(/shiki/g, "astro-code")
       node.properties.dataLanguage = lang
+      // A copy of text selected in it is the funnel's `ui.copied` `snippet` (lib/funnel.ts).
+      node.properties.dataFunnelCopy = "snippet"
+      node.properties.dataFunnelMethod = lang
       node.properties.style = `${join(node.properties.style) ?? ""}; overflow-x: auto;`
     },
     line(node) {

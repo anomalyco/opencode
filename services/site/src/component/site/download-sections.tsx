@@ -32,12 +32,14 @@ function useCopy() {
 
 /**
  * One copyable command as a list row: the method, the command, and a neutral Copy button. Clicking
- * the command copies too; the button alone says so (and is the keyboard's way in).
+ * the command copies too; the button alone says so (and is the keyboard's way in). `copies` names
+ * what it installs for the funnel's `ui.copied` (lib/funnel.ts), and the item's id the method.
  */
-function CopyRow(props: { item: Command; method: string; state: ReturnType<typeof useCopy> }) {
+function CopyRow(props: { item: Command; method: string; copies: string; state: ReturnType<typeof useCopy> }) {
   const i18n = useI18n()
   return (
-    <li data-slot="copy-row">
+    // data-funnel makes the row a control for the tracker, as a click on its command copies too.
+    <li data-slot="copy-row" data-funnel-copy={props.copies} data-funnel-method={props.item.id} data-funnel="copy">
       <span data-slot="method">{props.method}</span>
       <span
         data-slot="name"
@@ -109,7 +111,7 @@ export function DownloadSections(props: {
   onMount(() => alignActions(root))
 
   const Section = (section: { id: string; title: string; children: JSX.Element }) => (
-    <section data-component="block" data-columns={props.columns ? "" : undefined}>
+    <section data-component="block" data-section={section.id} data-columns={props.columns ? "" : undefined}>
       {props.heading(section.id, section.title)}
       <div data-slot="body">{section.children}</div>
     </section>
@@ -129,7 +131,7 @@ export function DownloadSections(props: {
         <Section id="download-terminal" title={content().terminal.title}>
           <ul data-component="download-list">
             <For each={content().terminal.installs}>
-              {(item) => <CopyRow item={item} method={item.id} state={state} />}
+              {(item) => <CopyRow item={item} method={item.id} copies="terminal" state={state} />}
             </For>
           </ul>
         </Section>
@@ -213,7 +215,7 @@ function DesktopList(props: { os: OS; build?: DownloadPlatform; state: ReturnTyp
           </li>
         )}
       </For>
-      <CopyRow item={content().desktop.install} method="brew" state={props.state} />
+      <CopyRow item={content().desktop.install} method="brew" copies="desktop" state={props.state} />
     </ul>
   )
 }
@@ -328,7 +330,7 @@ export function ProductDownload(props: { slug: PageSlug }) {
   })
 
   return (
-    <section data-component="block" data-slot="product-download">
+    <section data-component="block" data-slot="product-download" data-section="download">
       <SectionHeading id="download" title={i18n.t("download.action.download")} label />
       <div data-slot="body" ref={root}>
         <Show when={details().lead}>{(lead) => <p data-slot="lead">{lead()}</p>}</Show>
@@ -347,7 +349,9 @@ export function ProductDownload(props: { slug: PageSlug }) {
         <Show when={details().commandsLead}>{(lead) => <p data-slot="lead">{lead()}</p>}</Show>
         <Show when={details().commands.length > 0}>
           <ul data-component="download-list">
-            <For each={details().commands}>{(item) => <CopyRow item={item} method={item.id} state={state} />}</For>
+            <For each={details().commands}>
+              {(item) => <CopyRow item={item} method={item.id} copies={props.slug} state={state} />}
+            </For>
           </ul>
         </Show>
         <Show when={details().more}>
@@ -369,14 +373,19 @@ export function ExtensionDownload(props: { lead: string; command?: string }) {
   let root!: HTMLDivElement
   onMount(() => alignActions(root))
   return (
-    <section data-component="block" data-slot="product-download">
+    <section data-component="block" data-slot="product-download" data-section="download">
       <SectionHeading id="download" title={i18n.t("download.action.install")} label />
       <div data-slot="body" ref={root}>
         <p data-slot="lead">{props.lead}</p>
         <Show when={props.command}>
           {(command) => (
             <ul data-component="download-list">
-              <CopyRow item={{ id: "install", command: command() }} method={command().split(" ")[0]} state={state} />
+              <CopyRow
+                item={{ id: "install", command: command() }}
+                method={command().split(" ")[0]}
+                copies="extension"
+                state={state}
+              />
             </ul>
           )}
         </Show>

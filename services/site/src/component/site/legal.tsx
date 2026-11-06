@@ -507,6 +507,7 @@ function CopyMarkdown(props: { path: string }) {
         data-variant="neutral"
         data-slot="copy-markdown"
         data-state={state()}
+        data-funnel-copy="page-markdown"
         onPointerEnter={() => void load().catch(() => undefined)}
         onFocus={() => void load().catch(() => undefined)}
         onClick={() => void copy()}

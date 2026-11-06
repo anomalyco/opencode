@@ -34,6 +34,9 @@ export const setSearchShown = setShown
 const [announcement, setAnnouncement] = createSignal("")
 export const setSearchAnnouncement = setAnnouncement
 
+/** How the search was opened, for the funnel's `search.opened`. */
+export type SearchVia = "shortcut" | "slash" | "button"
+
 /** ⌘K or Ctrl+K anywhere, or "/" outside text fields. */
 export function isSearchShortcut(event: KeyboardEvent) {
   if (event.defaultPrevented || event.altKey || event.repeat) return false
@@ -53,15 +56,15 @@ export function prefetchSearch() {
 
 export function SiteSearch(props: SiteSearchProps) {
   const i18n = useI18n()
-  const [Palette, setPalette] = createSignal<Component<SiteSearchProps & { openOnMount: boolean }>>()
+  const [Palette, setPalette] = createSignal<Component<SiteSearchProps & { openOnMount?: SearchVia }>>()
   const [mounted, setMounted] = createSignal(false)
   const [mac, setMac] = createSignal(true)
-  let openOnMount = false
+  let openOnMount: SearchVia | undefined
 
   // Until the dialog has loaded; once mounted it handles the shortcut and the open event itself.
-  const open = () => {
+  const open = (via: SearchVia) => {
     if (Palette()) return
-    openOnMount = true
+    openOnMount = via
     void prefetchSearch().then((module) => setPalette(() => module.SearchPalette))
   }
 
@@ -75,13 +78,14 @@ export function SiteSearch(props: SiteSearchProps) {
         return void prefetchSearch().then((module) => !Palette() && setPalette(() => module.SearchPalette))
       if (!isSearchShortcut(event)) return
       event.preventDefault()
-      open()
+      open(event.key === "/" ? "slash" : "shortcut")
     }
+    const openFromButton = () => open("button")
     document.addEventListener("keydown", shortcut)
-    document.addEventListener(searchOpenEvent, open)
+    document.addEventListener(searchOpenEvent, openFromButton)
     onCleanup(() => {
       document.removeEventListener("keydown", shortcut)
-      document.removeEventListener(searchOpenEvent, open)
+      document.removeEventListener(searchOpenEvent, openFromButton)
     })
   })
 
@@ -101,7 +105,7 @@ export function SiteSearch(props: SiteSearchProps) {
           aria-expanded={shown() ? "true" : "false"}
           onPointerEnter={() => void prefetchSearch()}
           onFocus={() => void prefetchSearch()}
-          onClick={() => (Palette() ? document.dispatchEvent(new Event(searchOpenEvent)) : open())}
+          onClick={() => (Palette() ? document.dispatchEvent(new Event(searchOpenEvent)) : open("button"))}
         >
           {mac() ? "⌘K" : "Ctrl K"}
         </button>

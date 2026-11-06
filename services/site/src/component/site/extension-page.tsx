@@ -111,7 +111,7 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
         {/* Plain black until there is real footage of the extension. */}
         <div data-component="product-hero" data-product={props.slug} data-empty />
 
-        <section data-component="product-intro">
+        <section data-component="product-intro" data-section="intro">
           <div data-slot="copy">
             <h1>{extension().name}</h1>
             <p>{extension().intro}</p>
@@ -125,7 +125,11 @@ export function ExtensionPage(props: { slug: ExtensionSlug }) {
         </section>
       </div>
 
-      <ul data-component="product-features" data-columns={siteSettings.productFeatureColumns.charAt(0)}>
+      <ul
+        data-component="product-features"
+        data-section="features"
+        data-columns={siteSettings.productFeatureColumns.charAt(0)}
+      >
         <For each={extension().features}>
           {(feature) => (
             <li>

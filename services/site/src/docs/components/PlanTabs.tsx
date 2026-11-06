@@ -23,6 +23,7 @@ export function PlanTabs(props: { id: string; label: string; syncKey: string; ch
               aria-selected={index() === 0 ? "true" : "false"}
               tabindex={index() === 0 ? 0 : -1}
               data-plan-tab={plan.id}
+              data-funnel={`plan-tab:${plan.id}`}
             >
               {plan.label}
             </button>

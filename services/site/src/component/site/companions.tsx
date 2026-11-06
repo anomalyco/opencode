@@ -30,6 +30,7 @@ export function Companions(props: { product: PageSlug }) {
   return (
     <section
       data-component="companions"
+      data-section="companions"
       data-design="companionStyle"
       data-style={siteSettings.companionStyle}
       aria-label={i18n.t("site.companions")}

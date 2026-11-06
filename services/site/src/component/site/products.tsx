@@ -289,6 +289,7 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
   return (
     <section
       data-component="products"
+      data-section="products"
       data-layout="carousel"
       data-design="buttonHover cardTone cardInfo phoneCardContent cardVideo cardHover cardHoverEntry productBadges mobileCover mobileOrbShade cardLoopSpeed cardVideoCut cardTransition cardGrowDuration cardShrinkDuration cardEasing extensionsCard"
       data-tone={siteSettings.cardTone}
@@ -482,6 +483,7 @@ export function ProductGrid() {
   return (
     <section
       data-component="products"
+      data-section="products"
       data-layout="grid"
       data-design="buttonHover productButton cardTone cardInfo cardVideo cardHover cardHoverEntry productBadges mobileCover mobileOrbShade cardLoopSpeed cardVideoCut cardTransition cardGrowDuration cardShrinkDuration cardEasing"
       data-tone={siteSettings.cardTone}
@@ -1339,6 +1341,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                         type="button"
                         data-slot="install"
                         data-copied={copied() === item.id ? "" : undefined}
+                        data-funnel-copy="terminal"
+                        data-funnel-method={item.id}
                         onClick={() => copy(item)}
                       >
                         <span data-slot="method">{item.id}</span>
@@ -1401,6 +1405,8 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
                           type="button"
                           data-slot="row"
                           data-copied={copied() === item.id ? "" : undefined}
+                          data-funnel-copy="terminal"
+                          data-funnel-method={item.id}
                           onClick={() => copy(item)}
                         >
                           <span data-slot="method">{item.id}</span>
@@ -1507,6 +1513,7 @@ export function InstallTabs() {
               aria-controls={`${id}-panel`}
               aria-selected={selected() === index() ? "true" : "false"}
               tabIndex={selected() === index() ? 0 : -1}
+              data-funnel={`install-tab:${item.id}`}
               onClick={() => select(index())}
               onKeyDown={(event) => keyDown(event, index())}
             >
@@ -1515,7 +1522,16 @@ export function InstallTabs() {
           )}
         </For>
       </div>
-      <div data-slot="code" id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${selected()}`}>
+      <div
+        data-slot="code"
+        id={`${id}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${id}-tab-${selected()}`}
+        data-funnel-copy="terminal"
+        data-funnel-method={installs[selected()].id}
+        // A control for the tracker, as a click on the command copies too.
+        data-funnel="copy"
+      >
         <code data-copy-command {...copyOnClick(copy)}>
           {installs[selected()].command}
         </code>
