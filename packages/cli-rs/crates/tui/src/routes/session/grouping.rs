@@ -7,7 +7,7 @@
 //! is open or not grouped, its children.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use opencode_api::generated::{
@@ -54,7 +54,7 @@ pub enum Node {
     Group(Group),
 }
 
-/// A group row (`SessionGroup` without the permission partition, which E.9a's pending tools need).
+/// A group row (`SessionGroup`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Group {
     pub kind: Kind,
@@ -63,6 +63,8 @@ pub struct Group {
     pub size: usize,
     /// A later row closed the group, or every thought in it finished.
     pub completed: bool,
+    /// The tool rows below that wait on a permission request, which show outside the group ([`partition_pending`]).
+    pub pending: Vec<Spec>,
 }
 
 impl Group {
@@ -276,6 +278,26 @@ pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verb
     out
 }
 
+/// `partitionPending`: moves the exploration tools waiting on a permission request (by tool call ID) to the end
+/// of their group, keeping the order otherwise, and records the waiting rows of exploration and activity groups.
+pub fn partition_pending(specs: &mut [Spec], pending: &HashSet<&str>) {
+    let blocked =
+        |spec: &Spec| matches!(spec, Spec::Part { part: Part::Tool(id), .. } if pending.contains(id.as_str()));
+    for spec in specs {
+        let Spec::Group(group) = spec else { continue };
+        if !matches!(group.kind, Kind::Exploration | Kind::Activity) {
+            continue;
+        }
+        if group.kind == Kind::Exploration {
+            let (waiting, rest): (Vec<Node>, Vec<Node>) = std::mem::take(&mut group.children)
+                .into_iter()
+                .partition(|node| matches!(node, Node::Entry(spec) if blocked(spec)));
+            group.children = rest.into_iter().chain(waiting).collect();
+        }
+        group.pending = group.entries().into_iter().filter(|spec| blocked(spec)).cloned().collect();
+    }
+}
+
 /// Appends a row along its path (`appendEntry`). The flag is `closesPrevious`.
 fn append(nodes: &mut Vec<(Node, bool)>, spec: Spec, path: &[Kind], closes: bool) {
     let Some((&kind, rest)) = path.split_first() else {
@@ -291,7 +313,7 @@ fn append(nodes: &mut Vec<(Node, bool)>, spec: Spec, path: &[Kind], closes: bool
     }
     let mut children = Vec::new();
     append_child(&mut children, spec, rest);
-    nodes.push((Node::Group(Group { kind, children, size: 1, completed: false }), closes));
+    nodes.push((Node::Group(Group { kind, children, size: 1, completed: false, pending: Vec::new() }), closes));
 }
 
 fn append_child(nodes: &mut Vec<Node>, spec: Spec, path: &[Kind]) {
@@ -308,7 +330,7 @@ fn append_child(nodes: &mut Vec<Node>, spec: Spec, path: &[Kind]) {
     }
     let mut children = Vec::new();
     append_child(&mut children, spec, rest);
-    nodes.push(Node::Group(Group { kind, children, size: 1, completed: false }));
+    nodes.push(Node::Group(Group { kind, children, size: 1, completed: false, pending: Vec::new() }));
 }
 
 /// A row's grouping path (`partPath`, `messagePath`) and whether it closes the group before it.
@@ -554,6 +576,8 @@ struct Inner {
     root: View,
     header: View,
     body: View,
+    /// The root group's permission-blocked rows, below it even when it is closed (`PendingEntries`).
+    outside: View,
     level: usize,
     id: RefCell<Option<String>>,
     kind: Cell<Option<Kind>>,
@@ -561,6 +585,7 @@ struct Inner {
     /// The header that is mounted, so a hover only recolors it.
     painted: RefCell<Option<(Header, Painted)>>,
     children: RefCell<Vec<(ChildKey, Child)>>,
+    outside_children: RefCell<Vec<(ChildKey, Child)>>,
     /// The latest thought's title (`latest`), kept while the next thought has none yet.
     latest: RefCell<Option<String>>,
 }
@@ -626,7 +651,8 @@ impl GroupView {
     pub fn new(cx: &Context<'_>, settings: &Rc<Settings>, level: usize) -> Self {
         let header = View::new(cx.app).padding_edge(Edge::Left, 3);
         let body = View::new(cx.app).column().shrink(0.0);
-        let root = View::new(cx.app).column().shrink(0.0).child(&header).child(&body);
+        let outside = View::new(cx.app).column().shrink(0.0);
+        let root = View::new(cx.app).column().shrink(0.0).child(&header).child(&body).child(&outside);
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
@@ -634,12 +660,14 @@ impl GroupView {
             root,
             header,
             body,
+            outside,
             level,
             id: RefCell::default(),
             kind: Cell::default(),
             hover: Cell::new(false),
             painted: RefCell::default(),
             children: RefCell::default(),
+            outside_children: RefCell::default(),
             latest: RefCell::default(),
         });
         inner.header.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, cx, _| {
@@ -668,8 +696,14 @@ impl GroupView {
         &self.0.root
     }
 
-    /// Renders `group`; `completed` is the group's own flag or what its parent passes down.
+    /// Renders a root `group`; `completed` is the group's own flag.
     pub fn update(&self, cx: &Context<'_>, group: &Group, completed: bool) {
+        self.render(cx, group, completed, &group.pending, true);
+    }
+
+    /// Renders `group` without the rows in `pending`; `completed` is what its parent passes down. The root group
+    /// shows the pending rows after it (`outside`).
+    fn render(&self, cx: &Context<'_>, group: &Group, completed: bool, pending: &[Spec], outside: bool) {
         let inner = &self.0;
         let id = group.id(inner.level);
         inner.kind.set(Some(group.kind));
@@ -684,8 +718,8 @@ impl GroupView {
         let grouped = inner.settings.grouped(group.kind, cx.hide_thinking);
         let (header, mode) = match group.kind {
             Kind::Reasoning => self.reasoning(cx, group, completed, expanded, grouped),
-            Kind::Exploration => self.exploration(cx, group, completed, expanded, grouped),
-            Kind::Activity => self.activity(cx, group, completed, expanded),
+            Kind::Exploration => self.exploration(cx, group, completed, expanded, grouped, pending),
+            Kind::Activity => self.activity(cx, group, completed, expanded, pending),
             Kind::Instructions => self.instructions(cx, group, expanded),
         };
         inner.paint(header);
@@ -693,7 +727,10 @@ impl GroupView {
         inner.body.margin_edge(Edge::Top, if group.kind == Kind::Activity && mode.is_some() { 1 } else { 0 });
         inner.body.gap(if group.kind == Kind::Activity { 1 } else { 0 });
         inner.body.padding_edge(Edge::Left, if mode == Some(Mode::Thought) { 3 } else { 0 });
-        inner.children(cx, children, mode.unwrap_or(Mode::Normal), completed);
+        inner.children(&inner.body, &inner.children, cx, children, mode.unwrap_or(Mode::Normal), completed, pending);
+        let waiting: Vec<Node> =
+            if outside { pending.iter().map(|spec| Node::Entry(spec.clone())).collect() } else { Vec::new() };
+        inner.children(&inner.outside, &inner.outside_children, cx, &waiting, Mode::Normal, completed, &[]);
     }
 
     fn reasoning(
@@ -769,6 +806,7 @@ impl GroupView {
         completed: bool,
         expanded: bool,
         grouped: bool,
+        pending: &[Spec],
     ) -> (Option<Header>, Option<Mode>) {
         if !grouped {
             return (None, Some(Mode::Normal));
@@ -776,6 +814,7 @@ impl GroupView {
         let tools: Vec<_> = group
             .entries()
             .into_iter()
+            .filter(|spec| !pending.contains(spec))
             .filter_map(|spec| match spec {
                 Spec::Part { message, part } => match part.resolve(cx.assistant(message)?)? {
                     SessionMessageAssistantContentItem::Tool(tool) => Some(tool),
@@ -803,10 +842,12 @@ impl GroupView {
         group: &Group,
         completed: bool,
         expanded: bool,
+        pending: &[Spec],
     ) -> (Option<Header>, Option<Mode>) {
         let entries = group.entries();
         let items: Vec<_> = entries
             .iter()
+            .filter(|spec| !pending.contains(spec))
             .filter_map(|spec| {
                 let Spec::Part { message, part } = spec else {
                     return None;
@@ -845,7 +886,8 @@ impl GroupView {
 
     /// The content y of each mounted row inside the group, with its message, for navigation.
     pub fn anchors(&self, out: &mut Vec<(String, f64)>) {
-        for (key, child) in self.0.children.borrow().iter() {
+        let (children, outside) = (self.0.children.borrow(), self.0.outside_children.borrow());
+        for (key, child) in children.iter().chain(outside.iter()) {
             match (key, child) {
                 (ChildKey::Entry(_, message, _), Child::Row(row)) => {
                     out.push((message.clone(), row.wrapper.rect().screen_y))
@@ -943,11 +985,26 @@ impl Inner {
         }
     }
 
-    /// Mounts `nodes` in order, reusing the children that are still there (`Children`).
-    fn children(&self, cx: &Context<'_>, nodes: &[Node], mode: Mode, completed: bool) {
-        let mut children = self.children.borrow_mut();
+    /// Mounts `nodes` in `target` in order, reusing the children in `store` that are still there, and leaves out
+    /// the rows in `pending` (`Children`).
+    #[allow(clippy::too_many_arguments)]
+    fn children(
+        &self,
+        target: &View,
+        store: &RefCell<Vec<(ChildKey, Child)>>,
+        cx: &Context<'_>,
+        nodes: &[Node],
+        mode: Mode,
+        completed: bool,
+        pending: &[Spec],
+    ) {
+        let waiting = |node: &Node| matches!(node, Node::Entry(spec) if pending.contains(spec));
+        let mut children = store.borrow_mut();
         let mut old = std::mem::take(&mut *children);
         for (index, node) in nodes.iter().enumerate() {
+            if waiting(node) {
+                continue;
+            }
             let level = self.level + 1;
             let (key, child) = match old.iter().position(|(other, _)| other.is(node, mode, level)) {
                 Some(position) => old.remove(position),
@@ -973,17 +1030,17 @@ impl Inner {
                     }
                 }
                 (Child::Group(view), Node::Group(group)) => {
-                    // A nested group closes when its parent did, when anything follows it, or when every
-                    // thought in it finished.
+                    // A nested group closes when its parent did, when anything but a pending row follows it, or
+                    // when every thought in it finished.
                     let completed = completed
-                        || index + 1 < nodes.len()
+                        || nodes[index + 1..].iter().any(|next| !waiting(next))
                         || (group.kind == Kind::Reasoning
                             && group.entries().iter().all(|spec| {
                                 thought(cx, spec).is_some_and(|(_, part)| {
                                     part.time.as_ref().and_then(|time| time.completed).is_some()
                                 })
                             }));
-                    view.update(cx, group, completed);
+                    view.render(cx, group, completed, pending, false);
                 }
                 _ => {}
             }
@@ -992,9 +1049,9 @@ impl Inner {
         for (_, child) in &old {
             child_root(child).detach();
         }
-        self.body.clear();
+        target.clear();
         for (_, child) in children.iter() {
-            self.body.add(child_root(child));
+            target.add(child_root(child));
         }
     }
 }
@@ -1130,6 +1187,7 @@ mod tests {
             ],
             size: 2,
             completed: true,
+            pending: Vec::new(),
         });
         assert_eq!(settings.weight(&group, true), 1);
         let Spec::Group(inner) = &group else { unreachable!() };
@@ -1153,5 +1211,29 @@ mod tests {
         assert_eq!(exploration_label(&refs[..1], false), "Exploring: 1 read");
         let items: Vec<_> = tools.iter().map(Activity::Tool).collect();
         assert_eq!(activity_summary(&items, 1, true), ("2 reads, 3 tools, 1 instruction".to_owned(), false));
+    }
+
+    #[test]
+    fn pending_tools_go_last_in_exploration_and_are_recorded_in_activity() {
+        let entry = |id: &str| Node::Entry(part("msg_1", Part::Tool(id.into())));
+        let group = |kind, ids: &[&str]| {
+            Spec::Group(Group {
+                kind,
+                children: ids.iter().map(|id| entry(id)).collect(),
+                size: ids.len(),
+                completed: false,
+                pending: Vec::new(),
+            })
+        };
+        let mut specs = vec![group(Kind::Exploration, &["a", "b", "c"]), group(Kind::Activity, &["a", "b", "c"])];
+        partition_pending(&mut specs, &HashSet::from(["a", "b"]));
+        let Spec::Group(exploration) = &specs[0] else { unreachable!() };
+        assert_eq!(exploration.children, [entry("c"), entry("a"), entry("b")]);
+        let pending = vec![part("msg_1", Part::Tool("a".into())), part("msg_1", Part::Tool("b".into()))];
+        assert_eq!(exploration.pending, pending);
+        // Activity groups keep their order.
+        let Spec::Group(activity) = &specs[1] else { unreachable!() };
+        assert_eq!(activity.children, [entry("a"), entry("b"), entry("c")]);
+        assert_eq!(activity.pending, pending);
     }
 }
