@@ -23,18 +23,13 @@ const pages = "virtual:docs-pages"
 
 /**
  * The docs in the site's Vite build: compiles content/*.mdx into server-only Solid modules (for
- * script/build.ts and the development server), adds the docs' stylesheet and browser script to the
- * client build, and provides `virtual:docs-pages`, the list of page slugs.
+ * script/build.ts and the development server) and provides `virtual:docs-pages`, the list of page
+ * slugs. The docs' stylesheet and script are built by script/build.ts, under /v2.
  */
 export function docs(): Plugin {
   return {
     name: "opencode-docs",
     enforce: "pre",
-    config: () => ({
-      environments: {
-        client: { build: { rolldownOptions: { input: ["src/docs/client.ts", "src/docs/styles/global.css"] } } },
-      },
-    }),
     resolveId: (id) => (id === pages ? `\0${pages}` : undefined),
     load(id) {
       if (id !== `\0${pages}`) return

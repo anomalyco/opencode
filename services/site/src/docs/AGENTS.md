@@ -13,13 +13,15 @@
 ## Rendering
 
 - Pages are plain HTML. They never hydrate and never load the site's styles, fonts or scripts; the site's never load the docs'. A page links `styles/global.css` and the one browser script, `client.ts`.
+- Everything a page loads lives under `/v2` (the stylesheet, script and fonts are built to `/v2/_build`), because production can route `/v2` to this Worker before the rest of the domain. The build fails otherwise.
 - Interactive pieces (search, copy buttons, tabs, the status link) are delegated listeners in `client.ts`, keyed on `data-*` attributes the components render. Don't add Solid state or effects to docs components; they only run on the server.
 - The theme script is inline in `layouts/DocsLayout.tsx` so pages never flash. Navigation is ordinary page loads, made instant by Speculation Rules and cross-document view transitions.
 - `vite.ts` compiles MDX the way Astro's MDX integration did (GitHub-flavoured Markdown, smart punctuation, Shiki with the github-light and github-dark themes, GitHub-style heading ids), so the markup and `global.css` stay unchanged.
 
 ## Build and serving
 
-- `script/build.ts` runs after the site's `vite build` (from `script/build.ts` at the site root): it prerenders every page, every content page's Markdown twin (`/v2/docs/config.md`), `llms.txt` and the sitemap into `.output/public`, builds the Pagefind index and checks every link.
+- `script/build.ts` runs after the site's `vite build` (from `script/build.ts` at the site root): it builds the docs' stylesheet and script, prerenders every page, every content page's Markdown twin (`/v2/docs/config.md`), `llms.txt` and the sitemap into `.output/public`, builds the Pagefind index, and checks every link and that nothing loads from outside `/v2`. `--mode dev` makes `llms.txt` and the sitemap list dev.opencode.ai.
+- Pull requests that touch the site run the same build on its own (`.github/workflows/check-docs.yml`): `bun run generate`, then `bun src/docs/script/build.ts --out <dir>`.
 - The Worker never renders docs. `middleware.ts` serves the prerendered files: docs URLs reach it first (`runWorkerFirst` in `cloudflare.config.ts`), so a page's URL answers `Accept: text/markdown` with its twin. `vite dev` has no prerendered files, so the development server renders on request.
 
 ## Writing Style

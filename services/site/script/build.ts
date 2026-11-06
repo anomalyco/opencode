@@ -35,7 +35,7 @@ await Bun.$`bun ./script/og.ts`.cwd(root).env(env)
 await Bun.$`bun ./textjs/script/build.ts`.cwd(root).env(env)
 await Bun.$`vite build`.cwd(root).env(env)
 // The V2 docs at /v2: prerendered pages, Markdown twins and search (src/docs/script/build.ts).
-await Bun.$`bun ./src/docs/script/build.ts`.cwd(root).env(env)
+await Bun.$`bun ./src/docs/script/build.ts --mode ${mode}`.cwd(root).env(env)
 await Bun.$`bun ./script/check-server-bundle.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-client-bundle.ts`.cwd(root).env(env)
 

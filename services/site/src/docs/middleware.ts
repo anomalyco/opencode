@@ -25,7 +25,7 @@ export const docsMiddleware = createMiddleware({
     if (!url.pathname.startsWith(base) && url.pathname !== base.slice(0, -1)) return
     const path = url.pathname.slice(base.length - 1)
     if (path === "" || path === "/") return redirect(`${base}docs/`, 301)
-    if (path === "/install") return install()
+    if (path === "/install" || path === "/install/") return install()
     // Static assets in the Worker, so only the development server reaches these two.
     if (path === "/llms.txt")
       return new Response(renderLlmsTxt(new URL(config.baseUrl)), {
