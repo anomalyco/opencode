@@ -4,6 +4,7 @@ import { bench, web, type Case } from "@hona/strobe"
 import { reviewDiffs, routesDiff } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"
+import { keepStartStorage, saveStartStorage } from "./fixtures/storage"
 import { mockTimelineSession, serveDiffs, timeline } from "./fixtures/timeline"
 
 // The pane opening on the diff, in a fresh document each run.
@@ -28,6 +29,7 @@ export default bench({
       async prepare(ctx) {
         const { case: name, url } = ctx
         const page = cached(ctx)
+        await keepStartStorage(page)
         const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
         await serveDiffs(page, changes(name))
 
@@ -43,6 +45,8 @@ export default bench({
     // The long diff rendered once, then the pane moved to another file.
     if (name === "return to a long diff") {
       await openReview(page)
+      // The pane widens to fit the diff after its first file shows, which moves Next: click it once the pane rests.
+      await page.idle()
       await page.click(review.next)
       await page.waitFor(review.file, { text: "routes.ts" })
       await page.waitFor(review.line)
@@ -51,6 +55,8 @@ export default bench({
     }
 
     await page.idle()
+    // A reload keeps the review open (the app saves its layout on pagehide), so every run starts from this storage.
+    await saveStartStorage(page)
   },
 
   cases: {
