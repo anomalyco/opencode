@@ -24,9 +24,9 @@ pub fn entry_file() -> String {
 
 /// Loads native builds.
 pub trait Backend<H: Host> {
-    /// Loads the build `library` and runs its setup once with `options` (JSON text), returning the definition,
-    /// not yet active, and its failure while it runs. An error is why the build cannot load.
-    fn load(&self, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String>;
+    /// Loads the build `library` and runs its setup once with `options` (JSON text) against `host`, returning the
+    /// definition, not yet active, and its failure while it runs. An error is why the build cannot load.
+    fn load(&self, host: &Rc<H>, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String>;
 }
 
 /// A `plugins` entry of `cli.json` that names no built-in: a TypeScript package or path, or a native build.
@@ -193,7 +193,7 @@ impl<H: Host> Loader<H> {
         if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) {
             return false;
         }
-        let loaded = self.backend.load(&bytes, target.options.as_deref()).and_then(|loaded| {
+        let loaded = self.backend.load(host, &bytes, target.options.as_deref()).and_then(|loaded| {
             match registry.id_taken(&loaded.0.id, name) {
                 true => Err(format!("plugin ID {} is already registered", loaded.0.id)),
                 false => Ok(loaded),

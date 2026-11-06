@@ -202,6 +202,10 @@ pub struct Metadata {
     /// The plugin's own version, such as its crate version.
     #[serde(default)]
     pub version: Option<String>,
+    /// The plugin's ID, the one its [`Manifest`] will have. A host that knows it before setup serves storage
+    /// requests during setup; older hosts ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 /// Everything a plugin registered in its setup.
@@ -310,6 +314,7 @@ pub enum Request {
 }
 
 /// From the plugin to the host. Results: `StorageGet` → `Option<String>` (JSON text), everything else `null`.
+/// A host that does not know a request answers it with an error.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum HostRequest {
@@ -331,6 +336,11 @@ pub enum HostRequest {
     },
     OpenRoute {
         name: String,
+    },
+    /// Declares a storage key during setup, so setup itself may read and write it. The [`Manifest`] still lists
+    /// every key; a host that does not know this request learns them from it.
+    StorageKey {
+        key: String,
     },
 }
 
@@ -457,6 +467,7 @@ impl Setup {
 
     /// Declares storage key `key`; [`Host::storage_get`] and [`Host::storage_set`] accept declared keys only.
     pub fn storage_key(&mut self, key: &str) {
+        let _ = self.host.request(&HostRequest::StorageKey { key: key.to_owned() });
         self.manifest.storage.push(key.to_owned());
     }
 
@@ -522,7 +533,7 @@ macro_rules! export_plugin {
         pub extern "C" fn opencode_plugin_v1() -> *const $crate::PluginApi {
             $crate::export_plugin!(@create $id, $setup);
             unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
-                unsafe { $crate::runtime::describe(env!("CARGO_PKG_VERSION"), out) }
+                unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), out) }
             }
             static API: $crate::PluginApi = $crate::PluginApi {
                 size: ::std::mem::size_of::<$crate::PluginApi>(),
@@ -613,9 +624,9 @@ pub mod runtime {
 
     /// # Safety
     /// `out` must be valid for writes.
-    pub unsafe fn describe(version: &str, out: *mut Owned) -> i32 {
+    pub unsafe fn describe(id: &str, version: &str, out: *mut Owned) -> i32 {
         guard(out, || {
-            let metadata = Metadata { version: Some(version.to_owned()) };
+            let metadata = Metadata { version: Some(version.to_owned()), id: Some(id.to_owned()) };
             serde_json::to_vec(&metadata).map_err(|error| error.to_string())
         })
     }
