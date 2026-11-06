@@ -10,7 +10,6 @@ export function render(prompt: string, tools: string[]) {
   const instructions: string[] = []
   if (tools.includes("shell")) {
     instructions.push(
-      "- Prefer dedicated tools over shell commands; fall back to the shell when a tool cannot do what you need.",
       "- Do not chain shell commands with separators like `echo \"====\";` or `printf '---'`; the output becomes noisy in a way that makes the user's side of the conversation worse.",
     )
   }
