@@ -1,13 +1,5 @@
 # M06, M07, M08, M14: mini's output, settings, spinners, and models
 
-## Sequenced work spinners loop their main clip
-
-- TypeScript: `block-soft-sweep`, `block-low-comet`, and `seed` are sequenced: `seed` plays an intro first, and
-  the three slow down over a minute of work (`pace`). The spinner keeps its age across repaints.
-- Rust: every work spinner loops its main clip at its fixed interval, and starts over when its color changes.
-- Reason: opentui-rust's `Spinner` drives a looping clip only. The default spinner, `block-soft-slide`, and the
-  other ten are not sequenced and match.
-
 ## No launch animation for the entry header
 
 - TypeScript: with `mini.splash: show` and animations on, the entry header first shows in the footer with the
