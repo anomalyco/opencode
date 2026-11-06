@@ -34,8 +34,9 @@ const alias = { "~": path.join(root, "src") }
 const inputs = restyle
   ? { stylesheet: "src/docs/styles/docs.css", script: "src/docs/client.ts" }
   : { stylesheet: "src/docs/legacy/styles/global.css", script: "src/docs/legacy/client.ts" }
-// llms.txt and the sitemap list the deployment's own URLs; pages keep production canonical links.
-const site = new URL(mode === "dev" ? "https://dev.opencode.ai" : config.baseUrl)
+// llms.txt and the sitemap list opencode.ai's URLs in every mode, as the pages' canonical links do:
+// search engines must not take dev.opencode.ai's for the real ones (src/lib/noindex.ts).
+const site = new URL(config.baseUrl)
 
 await rm(cache, { recursive: true, force: true })
 

@@ -24,13 +24,16 @@ import { mediaUrl } from "~/lib/media"
 import { legacyRedirect } from "~/lib/legacy"
 import { metaResponse } from "~/lib/meta"
 import { setSecurityHeaders } from "~/lib/security-headers"
+import { noindexDev } from "~/lib/noindex"
 import { v1DocsOrigin } from "~/lib/docs"
 import { docsMiddleware } from "~/docs/middleware"
 
-// The V2 docs (everything under /docs, docs/middleware.ts), then the page middleware, then the HTML
-// cache headers and edge cache (lib/html-cache.ts), which see the request without its locale, then
-// one stylesheet per page (lib/one-stylesheet.ts), inside the cache so cached pages carry it too.
+// dev.opencode.ai's noindex header on every response (lib/noindex.ts), then the V2 docs (everything
+// under /docs, docs/middleware.ts), then the page middleware, then the HTML cache headers and edge
+// cache (lib/html-cache.ts), which see the request without its locale, then one stylesheet per page
+// (lib/one-stylesheet.ts), inside the cache so cached pages carry it too.
 export default [
+  noindexDev,
   ...docsMiddleware,
   ...createMiddleware({
     async onRequest(event) {
@@ -102,7 +105,10 @@ export default [
       if (english || englishOnly || (slash && findPageMarkdown(path))) {
         // Pages lose a trailing slash; other apps' addresses (the docs) keep theirs.
         const target = findPageMarkdown(path) ? path : url.pathname
-        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", target)}${url.search}` } })
+        return new Response(null, {
+          status: 301,
+          headers: { Location: `${route(locale ?? "en", target)}${url.search}` },
+        })
       }
       // One release as JSON, at a stable URL per version (for the apps' "What's new").
       const release = path.match(/^\/changelog\/(v\d[\w.+-]*)\.json$/)?.[1]
