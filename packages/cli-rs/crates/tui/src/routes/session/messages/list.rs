@@ -553,6 +553,14 @@ impl Inner {
             let mut rows = reduce(messages, self.view.get().turn_tokens.is_some());
             rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id.as_str())));
             let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
+            let blocked: HashSet<&str> = state
+                .permissions(&session)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|request| request.source.as_ref().filter(|source| source.r#type == "tool"))
+                .map(|source| source.id.as_str())
+                .collect();
+            grouping::partition_pending(&mut specs, &blocked);
             // Compactions waiting in the inbox go last (`createSessionRows`).
             specs.extend(state.pending(&session).iter().filter_map(|item| match item {
                 SessionInboxInfo::Compaction(compaction) => Some(Spec::CompactionQueued(compaction.id.0.clone())),

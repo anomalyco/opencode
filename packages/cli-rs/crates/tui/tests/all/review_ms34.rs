@@ -101,6 +101,29 @@ fn grouped() -> Value {
     ])
 }
 
+/// A running answer whose second read waits on a permission request.
+fn blocked() -> Value {
+    json!([
+        {
+            "id": "msg_2", "type": "assistant", "agent": "build", "model": { "providerID": "demo", "id": "other" },
+            "content": [
+                {
+                    "type": "tool", "id": "call_a", "name": "read",
+                    "state": { "status": "completed", "input": { "filePath": "src/a.rs" }, "content": [] },
+                    "time": { "created": 1100, "completed": 1200 },
+                },
+                {
+                    "type": "tool", "id": "call_b", "name": "read",
+                    "state": { "status": "running", "input": { "filePath": "src/b.rs" }, "metadata": {} },
+                    "time": { "created": 1300 },
+                },
+            ],
+            "time": { "created": 1000 },
+        },
+        { "id": "msg_1", "type": "user", "text": "Read both", "time": { "created": 1 } },
+    ])
+}
+
 fn routes() -> Vec<MemoryRoute> {
     // The worktree's catalogs answer for the worktree, so the store files them there.
     let mut routes: Vec<MemoryRoute> = [(DIRECTORY, None), (WORKTREE, Some(WORKTREE))]
@@ -141,12 +164,23 @@ fn sessions() -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/config", 200, &json!([])),
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
         MemoryRoute::json("GET", "/api/session/ses_g/message", 200, &json!({ "data": grouped(), "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/ses_p/message", 200, &json!({ "data": blocked(), "cursor": {} })),
+        MemoryRoute::json(
+            "GET",
+            "/api/session/ses_p/permission",
+            200,
+            &json!({ "data": [{
+                "id": "per_1", "sessionID": "ses_p", "action": "read", "resources": ["elsewhere"],
+                "source": { "type": "tool", "messageID": "msg_2", "id": "call_b" },
+            }] }),
+        ),
         MemoryRoute::json("GET", "/api/session/:id/message", 200, &json!({ "data": [], "cursor": {} })),
     ];
     for (id, directory, title, agent) in [
         ("ses_a", DIRECTORY, "Fix the parser", None),
         ("ses_b", DIRECTORY, "Write the docs", Some("build")),
         ("ses_g", DIRECTORY, "Grouped reads", None),
+        ("ses_p", DIRECTORY, "Blocked read", None),
         ("ses_wt", WORKTREE, "Worktree work", None),
     ] {
         routes.push(MemoryRoute::json(
@@ -351,4 +385,15 @@ fn an_opened_group_stays_open_when_the_session_shows_again() {
     h.tui.navigate(session_route("ses_g"));
     h.wait_for("Explored");
     h.wait_for("Reading file");
+}
+
+#[test]
+fn a_tool_waiting_on_a_permission_shows_outside_its_closed_group() {
+    let h = mount(session_route("ses_p"), Args::default(), animations_off());
+    // `partitionPending`: the header counts the finished read only, and the blocked one shows below it.
+    h.wait_for("Explored: 1 read");
+    let screen = h.app.text();
+    assert!(!screen.contains("src/a.rs"), "{screen}");
+    let header = screen.find("Explored: 1 read").unwrap();
+    assert!(screen[header..].contains("src/b.rs"), "{screen}");
 }
