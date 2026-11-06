@@ -71,8 +71,8 @@ export function versionBelongsToChannel(
 ) {
   if (version === undefined) return false
   if (version === installedVersion) return true
-  const prefix = `0.0.0-${channel}-`
-  if (!version.startsWith(prefix)) return false
+  const prefix = [`0.0.0-${channel}-`, `2.0.0-${channel}-`].find((prefix) => version.startsWith(prefix))
+  if (!prefix) return false
   return /^\d+(?:\.\d+)?$/.test(version.slice(prefix.length))
 }
 
