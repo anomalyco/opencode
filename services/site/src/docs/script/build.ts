@@ -1,8 +1,8 @@
 // Builds the docs into the site's built assets, after the site's `vite build` (script/build.ts):
 // the docs' stylesheet, script and fonts, every page as HTML, every content page's Markdown twin,
 // llms.txt and the sitemap, then the Pagefind search index. Then it checks every link between them,
-// and that the pages load nothing from outside /v2 (production can route /v2 to this Worker before
-// the rest of the domain, see cloudflare.config.ts).
+// that the pages load nothing from outside /docs, and that no page takes the name of one of the docs'
+// files (config.ts `files`).
 //
 // The pages render in a small server build of their own (render.tsx), outside the site's Worker
 // bundle, which only serves the files (middleware.ts). On its own (CI, after `bun run generate`):
@@ -14,7 +14,7 @@ import { parseArgs } from "node:util"
 import { build } from "vite"
 import solid from "vite-plugin-solid"
 import { config } from "../../config"
-import { base } from "../config"
+import { base, files } from "../config"
 import { docsHref, docsMarkdownHref } from "../lib/navigation"
 import type { docsSlugs, renderDocsMarkdown, renderDocsPage, renderLlmsTxt, renderSitemap } from "../render"
 import { docs } from "../vite"
@@ -30,7 +30,7 @@ const site = new URL(mode === "dev" ? "https://dev.opencode.ai" : config.baseUrl
 
 await rm(cache, { recursive: true, force: true })
 
-// The stylesheet, script and fonts, hashed under /v2/_build (immutable in public/_headers).
+// The stylesheet, script and fonts, hashed under /docs/_build (immutable in public/_headers).
 await build({
   configFile: false,
   root,
@@ -85,14 +85,21 @@ await Promise.all([
   cp(path.join(root, "public", base), path.join(output, base), { recursive: true }),
 ])
 
-const pagefind = path.join(output, `${base}docs`)
+const pagefind = path.join(output, base)
 await mkdir(pagefind, { recursive: true })
 await Bun.$`${path.join(root, "node_modules/.bin/pagefind")} --site ${pagefind}`.quiet()
+checkFileNames()
 await checkAssetPrefix()
 await Bun.$`bun ${path.join(import.meta.dir, "validate-links.ts")} ${output}`
 console.log(`docs: built ${render.docsSlugs.length} pages (${mode})`)
 
-/** Fails when a docs page, or a stylesheet it links, loads a file from outside /v2. */
+/** Fails when a page's first path segment is the name of one of the docs' files, which it would hide. */
+function checkFileNames() {
+  const taken = render.docsSlugs.filter((slug) => files.includes(slug.split("/")[0]))
+  if (taken.length) throw new Error(`docs: these pages use a name reserved for the docs' files: ${taken.join(", ")}`)
+}
+
+/** Fails when a docs page, or a stylesheet it links, loads a file from outside /docs. */
 async function checkAssetPrefix() {
   const origin = "https://opencode.local"
   const pages = await Array.fromAsync(new Bun.Glob(`${base.slice(1)}**/*.html`).scan({ cwd: output }))

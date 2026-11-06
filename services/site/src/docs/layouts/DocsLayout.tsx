@@ -32,7 +32,7 @@ document.addEventListener("click", (event) => {
 // pointer rests on it, and global.css turns on cross-document view transitions, so a click shows the
 // next page at once, without a blank frame.
 const speculationRules = JSON.stringify({
-  prerender: [{ where: { href_matches: `${base}docs/*` }, eagerness: "moderate" }],
+  prerender: [{ where: { href_matches: `${base}*` }, eagerness: "moderate" }],
 })
 
 export function DocsLayout(props: {

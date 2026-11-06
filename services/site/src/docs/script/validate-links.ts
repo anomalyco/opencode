@@ -1,12 +1,13 @@
 // Fails when a link on a prerendered docs page points at a missing file or anchor in the site's built
-// assets (the directory given). The V1 docs and the status page are other apps.
+// assets (the directory given). The V1 docs (/v1/docs, redirected to their own app) and the status
+// page are other apps.
 //
 //   bun src/docs/script/validate-links.ts .output/public
 import path from "node:path"
 
 const root = path.resolve(process.argv[2] ?? ".output/public")
-const externalRoutes = new Set(["/docs", "/status"])
-const files = await Array.fromAsync(new Bun.Glob("v2/**/*.html").scan({ cwd: root, absolute: true }))
+const externalRoutes = new Set(["/v1/docs", "/status"])
+const files = await Array.fromAsync(new Bun.Glob("docs/**/*.html").scan({ cwd: root, absolute: true }))
 const failures = (
   await Promise.all(
     files.flatMap(async (file) => {

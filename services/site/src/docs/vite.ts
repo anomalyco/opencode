@@ -24,7 +24,7 @@ const pages = "virtual:docs-pages"
 /**
  * The docs in the site's Vite build: compiles content/*.mdx into server-only Solid modules (for
  * script/build.ts and the development server) and provides `virtual:docs-pages`, the list of page
- * slugs. The docs' stylesheet and script are built by script/build.ts, under /v2.
+ * slugs. The docs' stylesheet and script are built by script/build.ts, under /docs/_build.
  */
 export function docs(): Plugin {
   return {
