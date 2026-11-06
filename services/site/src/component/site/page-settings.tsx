@@ -47,7 +47,6 @@ import {
   statsModes,
   ossProofs,
   ossVariants,
-  signupStyles,
   avatarAnimations,
   toolsAnimations,
   avatarLinks,
@@ -77,7 +76,6 @@ const sectionColumnSettings = [
   { key: "whatColumns", label: "What is OpenCode?", copy: "whatCopyColumns" },
   { key: "toolsColumns", label: "Bring your own tools", copy: "toolsCopyColumns" },
   { key: "openSourceColumns", label: "Open source", copy: "openSourceCopyColumns" },
-  { key: "privacyColumns", label: "Privacy" },
   { key: "faqColumns", label: "FAQ" },
   { key: "consoleColumns", label: "Console", copy: "consoleCopyColumns" },
 ] as const
@@ -639,18 +637,6 @@ export default function PageSettings(props: { home?: boolean; terminal?: boolean
             options={ossProofs}
             value={siteSettings.ossProof}
             onChange={(value) => setSiteSetting("ossProof", value)}
-          />
-          <SettingsSelect
-            label="Sign-up section"
-            options={toggles}
-            value={siteSettings.signupSection}
-            onChange={(value) => setSiteSetting("signupSection", value)}
-          />
-          <SettingsSelect
-            label="Sign-up style"
-            options={signupStyles}
-            value={siteSettings.signupStyle}
-            onChange={(value) => setSiteSetting("signupStyle", value)}
           />
           <SettingsSelect
             label="Avatar animation"

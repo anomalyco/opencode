@@ -249,5 +249,5 @@ export function docsMarkdown() {
   )
 }
 
-/** The docs' own llms.txt, which the docs app serves under /v2 on opencode.ai. */
-export const docsLlms = "/v2/llms.txt"
+/** The docs' own llms.txt, which the docs serve under /docs on opencode.ai. */
+export const docsLlms = "/docs/llms.txt"

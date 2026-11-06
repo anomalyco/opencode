@@ -537,13 +537,13 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  it.effect("matches rules without the fragment and rejects credentials in the URL", () =>
+  it.effect("matches rules against the URL as written without the fragment and rejects credentials", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* Tool.Service
 
-      yield* executeTool(registry, call({ url: "https://example.com/page#top", format: "text" }))
-      expect(assertions.map((assertion) => assertion.resources)).toEqual([["https://example.com/page"]])
+      yield* executeTool(registry, call({ url: "https://Example.com#top", format: "text" }))
+      expect(assertions.map((assertion) => assertion.resources)).toEqual([["https://Example.com"]])
 
       reset()
       expect(yield* executeTool(registry, call({ url: "https://user@example.com/", format: "text" }))).toMatchObject({

@@ -8,7 +8,7 @@ import { readdirSync } from "node:fs"
 import path from "node:path"
 
 const app = path.resolve(import.meta.dir, "..")
-const content = path.resolve(app, "../../../services/www/src/docs/content")
+const content = path.resolve(app, "src/docs/content")
 const sprite = await Bun.file(path.resolve(app, "../../ui/src/components/file-icons/sprite.svg")).text()
 
 const walk = (dir: string): string[] =>

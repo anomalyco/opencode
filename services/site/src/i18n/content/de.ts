@@ -366,7 +366,7 @@ export const content = {
   byos: {
     title: "Eigenes Abo mitbringen",
     headline: "Nutze die Abos, die du schon hast.",
-    line: "Melde dich mit ChatGPT Plus oder Pro, GitHub Copilot oder Claude Code an. Oder nutze ein OpenCode-Abo.",
+    line: "Melde dich mit ChatGPT Plus oder Pro oder mit GitHub Copilot an. Oder nutze ein OpenCode-Abo.",
     yours: { label: "Dein Abo", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCode-Abo"],
     ours: { label: "OpenCode-Pläne" },
@@ -813,10 +813,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "Erstelle, installiere und teile Desktop-Plugins.",
       link: "Neu in 2.2 ansehen",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Nutze deinen Claude-Code-Login in OpenCode.",
-      link: "v2.2.3 ansehen",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "Desktop-Terminals überstehen jetzt Neustarts.",

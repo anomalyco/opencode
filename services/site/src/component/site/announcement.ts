@@ -4,8 +4,6 @@
 export const announcements = [
   // v2.2.0: "Create, install and share Desktop plugins (experimental)".
   { text: "Create, install and share desktop plugins.", link: "See what's new in 2.2", href: "/changelog/v2.2.0" },
-  // v2.2.3: "Use Claude Code in OpenCode".
-  { text: "Use your Claude Code login in OpenCode.", link: "See v2.2.3", href: "/changelog/v2.2.3" },
   // v2.2.4: "Persistent Desktop Terminals".
   { text: "Desktop terminals now survive restarts.", link: "See v2.2.4", href: "/changelog/v2.2.4" },
   // v2.2.1: "Generate Images".

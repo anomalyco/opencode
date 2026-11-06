@@ -4,7 +4,7 @@ export const privacyPolicy: LegalDocumentContent = {
   path: "/legal/privacy-policy",
   title: "Privacy Policy",
   metaTitle: "OpenCode | Privacy Policy for the website and services",
-  effective: "Effective date: Nov 4, 2026",
+  effective: "Effective date: Nov 6, 2026",
   description:
     "How OpenCode collects, uses, shares and protects your personal data when you use the OpenCode website, apps and hosted services, and the choices you have.",
   body: [
@@ -63,7 +63,7 @@ export const privacyPolicy: LegalDocumentContent = {
         "li",
         {},
         ["a", { href: "#tracking-tools" }, "Tracking Tools and Opt-Out"],
-        ["ul", {}, ["li", {}, ["a", { href: "#product-analytics" }, "Product Analytics on opencode.ai/console"]]],
+        ["ul", {}, ["li", {}, ["a", { href: "#product-analytics" }, "Product Analytics on opencode.ai"]]],
       ],
       ["li", {}, ["a", { href: "#data-security" }, "Data Security"]],
       ["li", {}, ["a", { href: "#personal-data-of-children" }, "Personal Data of Children"]],
@@ -425,11 +425,7 @@ export const privacyPolicy: LegalDocumentContent = {
         "li",
         {},
         ["strong", {}, "Performance/Analytical Cookies."],
-        " Performance/Analytical Cookies allow us to understand how visitors use our Services. They do this by collecting information about the number of visitors to the Services, what pages visitors view on our Services and how long visitors are viewing pages on the Services. Performance/Analytical Cookies also help us measure the performance of our advertising campaigns in order to help us improve our campaigns and the Services' content for those who engage with our advertising. For example, Google LLC (\"Google\") uses cookies in connection with its Google Analytics services. Google's ability to use and disclose information collected by Google Analytics about your visits to the Services is subject to the Google Analytics Terms of Use and the Google Privacy Policy. You have the option to opt-out of Google's use of Cookies by visiting the Google advertising opt-out page at ",
-        ["a", { href: "http://www.google.com/privacy_ads.html" }, "www.google.com/privacy_ads.html"],
-        " or the Google Analytics Opt-out Browser Add-on at ",
-        ["a", { href: "https://tools.google.com/dlpage/gaoptout/" }, "https://tools.google.com/dlpage/gaoptout/"],
-        ".",
+        " Performance/Analytical Cookies allow us to understand how visitors use our Services. They do this by collecting information about the number of visitors to the Services, what pages visitors view on our Services and how long visitors are viewing pages on the Services. Performance/Analytical Cookies also help us measure the performance of our advertising campaigns in order to help us improve our campaigns and the Services' content for those who engage with our advertising.",
       ],
     ],
     [
@@ -444,13 +440,13 @@ export const privacyPolicy: LegalDocumentContent = {
       ["a", { href: "http://www.allaboutcookies.org/" }, "http://www.allaboutcookies.org/"],
       ".",
     ],
-    // Carried over from dev: #61905 (first-party product analytics) and #62084 (no cookie banner). Needs legal sign-off.
-    ["h3", { id: "product-analytics" }, "Product Analytics on opencode.ai/console"],
+    ["h3", { id: "product-analytics" }, "Product Analytics on opencode.ai"],
     [
       "p",
       {},
-      "When you visit pages under opencode.ai/console, including the sign-in pages, we record the pages you view, how long each page is visible, how long you're active on it and how far you scroll, the links and buttons you click, and the type of any sign-in error. In the Console we record the pages you open and the controls you use in its navigation, plan, billing and onboarding screens. We also record account and workspace events: when you sign up, sign in, verify your email, approve a device, create or delete a workspace, invite or remove members, create API keys, connect providers or clients, and start or complete a checkout or payment, including its amount and any decline reason. We use these records to understand how people find OpenCode and where they stop before signing up or subscribing, so we can improve the Services.",
+      "When you visit opencode.ai, including the docs and the Console, we record the pages you view, how long each page is visible, how long you're active on it, how far you scroll and how quickly it loads. We also record the links and buttons you click, when you download an app or copy a command, when you search (but not what you search for), and the type of any sign-in error. We record each click under a fixed name we give that link or button, so text you or your team entered, such as workspace names or email addresses, isn't recorded even when it appears on the page. We record account and workspace events: when you sign up, sign in, verify your email, approve a device, create or delete a workspace, invite or remove members, create API keys, connect providers or clients, and start or complete a checkout or payment, including its amount and any decline reason. We use these records to understand how people find OpenCode and where they stop before signing up or subscribing, so we can improve the Services.",
     ],
+    ["p", {}, "We collect these records ourselves and don't use third-party analytics services on opencode.ai."],
     [
       "p",
       {},
@@ -459,7 +455,7 @@ export const privacyPolicy: LegalDocumentContent = {
     [
       "p",
       {},
-      "We set the following first-party Cookies. Your browser sends them only to opencode.ai/console. We also keep a list in your browser's local storage of which events it has already reported that day.",
+      "We set the following first-party Cookies. Your browser sends them only to opencode.ai. We also keep a list in your browser's local storage of which events it has already reported that day.",
     ],
     [
       "div",
@@ -476,7 +472,7 @@ export const privacyPolicy: LegalDocumentContent = {
             {},
             ["td", {}, "oc_vid"],
             ["td", {}, "A random ID for your browser"],
-            ["td", {}, "1 year from when it's first set"],
+            ["td", {}, "1 year from your latest visit"],
           ],
           [
             "tr",
@@ -492,9 +488,16 @@ export const privacyPolicy: LegalDocumentContent = {
             [
               "td",
               {},
-              "How you first and most recently arrived: the page you landed on, the domain of the website that referred you, any campaign (UTM) parameters in the link, and the last sign-up or sign-in link you clicked",
+              "The page you first and most recently landed on, the domain of the website that referred you and any campaign (UTM) parameters in the link, plus the last link into the Console you clicked (a sign-up or sign-in link, and the plan it was for, if any) and when you clicked it",
             ],
-            ["td", {}, "1 year"],
+            ["td", {}, "1 year from the last time it changed"],
+          ],
+          [
+            "tr",
+            {},
+            ["td", {}, "oc_optout"],
+            ["td", {}, "A record that you turned off analytics in this browser"],
+            ["td", {}, "1 year from your latest visit"],
           ],
         ],
       ],
@@ -504,6 +507,15 @@ export const privacyPolicy: LegalDocumentContent = {
       {},
       "When you create an account, sign in, verify your email or approve a device, we link the records from that browser to your account. Records made while you're signed in carry your account ID directly.",
     ],
+    [
+      "p",
+      {},
+      "If your browser sends a Global Privacy Control signal, or you ",
+      ["a", { href: "https://opencode.ai/legal/privacy-policy#product-analytics" }, "turn off analytics on this page"],
+      ", we still record the page views, clicks and other browser events above, but without the IDs and arrival details in oc_vid, oc_sid and oc_attr, and without your account or workspace ID. We delete those Cookies and the local storage list from your browser and don't set them again while analytics are off. Account and workspace events, such as sign-ups, payments and workspace changes, still carry your account ID, but we don't link them or any other records to that browser, even if you're signed in.",
+    ],
+    // The on and off control for this browser (AnalyticsChoice); the Markdown version leaves it out.
+    ["analytics-choice", {}],
     [
       "p",
       {},

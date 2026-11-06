@@ -71,12 +71,22 @@
         max-height: 100%;
         overflow-y: auto;
         overscroll-behavior: contain;
+        /* The "[n]" column centres on the top bar's logo mark above it: the mark's box starts at
+           --edge and is --phone-logo-height × 4/5 wide, and "[n]" is three mono characters (3ch)
+           wide, so the list starts half of each before the mark's centre. The labels keep their
+           gap after the numbers, so they share one column too. Mirrored right to left. */
+        --menu-start: calc(var(--edge) + var(--phone-logo-height, 30px) * 2 / 5 - 1.5ch);
         padding: 0.5rem calc(var(--edge) + env(safe-area-inset-right, 0px))
-          calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(var(--edge) + env(safe-area-inset-left, 0px));
+          calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(var(--menu-start) + env(safe-area-inset-left, 0px));
         font-family: var(--font-mono);
         /* The sheet's one job is this list: a step above the body copy, like a native menu. */
         font-size: var(--fs-large);
         line-height: 24px;
+
+        &:dir(rtl) {
+          padding-left: calc(var(--edge) + env(safe-area-inset-left, 0px));
+          padding-right: calc(var(--menu-start) + env(safe-area-inset-right, 0px));
+        }
       }
 
       [data-slot="panel"] > ul > li {

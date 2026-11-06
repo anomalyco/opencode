@@ -68,13 +68,17 @@ const defaults = () =>
   ) as LayerValues
 
 const storageKey = "opencode-arcade-layers-v1"
-const saved = z.record(z.string(), z.record(z.string(), z.number()))
 
 export const [layerValues, setLayerValues] = createStore<LayerValues>(defaults())
 
 /** Reads saved values over the defaults, keeping each one inside its control's range. */
 export function loadLayerValues() {
-  const parsed = saved.safeParse(readJson(localStorage.getItem(storageKey)))
+  // Values are saved from Settings, a development tool, so production keeps the defaults, and its
+  // bundle leaves zod out.
+  if (import.meta.env.PROD) return
+  const parsed = z
+    .record(z.string(), z.record(z.string(), z.number()))
+    .safeParse(readJson(localStorage.getItem(storageKey)))
   if (!parsed.success) return
   const next = defaults()
   for (const [group, entry] of Object.entries(layerControls) as [keyof Controls, Controls[keyof Controls]][])

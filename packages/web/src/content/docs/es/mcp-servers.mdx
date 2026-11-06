@@ -23,7 +23,7 @@ Ciertos servidores MCP, como el servidor GitHub MCP, tienden a agregar muchos to
 
 ## Habilitar
 
-Puede definir servidores MCP en su [OpenCode Config](https://opencode.ai/docs/config/) en `mcp`. Agregue cada MCP con un nombre único. Puede referirse a ese MCP por su nombre cuando solicite el LLM.
+Puede definir servidores MCP en su [OpenCode Config](/docs/config/) en `mcp`. Agregue cada MCP con un nombre único. Puede referirse a ese MCP por su nombre cuando solicite el LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {

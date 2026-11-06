@@ -1,13 +1,14 @@
 import { bindings, defineConfig, triggers } from "cf/config"
+import { base, files } from "./src/docs/config"
 
 // The opencode.ai website (SolidStart). `--mode dev` deploys opencode-site-dev on dev.opencode.ai;
 // any other mode deploys opencode-site-production on opencode.ai. It is the catch-all: more specific
-// routes on the zone (the V2 docs at /v2* in services/www, Console, inference, changelog, update,
-// files, stats, …) keep beating it.
+// routes on the zone (Console, inference, changelog, update, files, stats, …) keep beating it. It
+// also serves the V2 docs at /docs (src/docs).
 //
 // Production takes no routes until the go-live flips this switch (the `production` branch is shared
 // with every other service, so an unrelated push must not take the domain).
-const productionOwnsRoot = false
+const productionOwnsRoot = true
 
 export default defineConfig(({ mode }) => {
   const dev = mode === "dev"
@@ -20,7 +21,17 @@ export default defineConfig(({ mode }) => {
       compatibilityDate: "2026-07-25",
       // The Nitro server is built with node compatibility (vite.config.ts).
       compatibilityFlags: ["nodejs_compat"],
-      assets: { htmlHandling: "drop-trailing-slash" },
+      assets: {
+        htmlHandling: "drop-trailing-slash",
+        // Docs pages answer with HTML or Markdown from one URL, and a /docs URL without a V2 page
+        // goes to the V1 docs, so the Worker picks the asset (src/docs/middleware.ts). The docs' own
+        // files (search, stylesheets, images, llms.txt, …) are plain assets.
+        runWorkerFirst: [
+          base.slice(0, -1),
+          `${base}*`,
+          ...files.map((file) => `!${base}${file}${file.includes(".") ? "" : "/*"}`),
+        ],
+      },
       env: {
         ASSETS: bindings.assets(),
         STAGE: bindings.text(dev ? "dev" : "production"),
@@ -34,6 +45,8 @@ export default defineConfig(({ mode }) => {
           : [],
       workersDev: false,
       previewUrls: false,
+      // Workers Logs: requests, errors and console output, searchable in the Cloudflare dashboard.
+      observability: { enabled: true },
     },
   }
 })
