@@ -48,7 +48,7 @@ export type ResolvedExecutionLimits = {
 export type Options<Provided extends Record<string, unknown> = {}, Extensions extends ReadonlyArray<Extension> = []> = {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
-  /** Hooks around every tool and extension call the program makes; see `Hooks`. */
+  /** Host hooks for execution and tool/extension calls; see `Hooks`. */
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
   /** Host functions and objects exposed as globals, also importable by Node module name; see `Extension.make`. */
   extensions?: Extensions
