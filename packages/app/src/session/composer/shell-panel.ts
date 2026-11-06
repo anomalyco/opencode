@@ -29,14 +29,15 @@ export function createShellPanel(input: {
     ended: () => void
   }
 }) {
-  const work = () => ({ enabled: input.enabled(), subagents: input.subagents().length, shells: input.shells() })
+  const work = () => ({ enabled: input.enabled(), subagents: input.subagents(), shells: input.shells() })
   const initial = untrack(work)
 
   const [panelState, setPanelState] = createSignal(
-    createShellPanelState({ active: initial.enabled && initial.subagents + initial.shells.length > 0 }),
+    createShellPanelState({ active: initial.enabled && initial.subagents.length + initial.shells.length > 0 }),
   )
 
-  let timer: ReturnType<typeof setTimeout> | undefined
+  // One per Stop in flight, plus the shown shell's end lookup, keyed by attempt.
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
   let frame = 0
 
   const dispatch = (event: ShellPanelEvent) => {
@@ -49,7 +50,7 @@ export function createShellPanel(input: {
   const current = (attempt: number) => {
     const state = untrack(panelState)
 
-    return state.status !== "disposed" && state.attempt === attempt
+    return state.status !== "disposed" && state.focusAttempt === attempt
   }
 
   const later = (move: () => void) => {
@@ -77,24 +78,35 @@ export function createShellPanel(input: {
     }
 
     if (effect.type === "timer.start") {
-      clearTimeout(timer)
-      timer =
-        effect.phase === "stopping"
-          ? setTimeout(
-              () => dispatch({ type: "stop.timed-out", attempt: effect.attempt, work: untrack(work) }),
-              SHELL_STOP_TIMEOUT_MS,
+      clearTimeout(timers.get(effect.attempt))
+      timers.set(
+        effect.attempt,
+        setTimeout(
+          () => {
+            timers.delete(effect.attempt)
+            dispatch(
+              effect.phase === "stopping"
+                ? { type: "stop.timed-out", attempt: effect.attempt, work: untrack(work) }
+                : { type: "ended.timed-out", attempt: effect.attempt, now: Date.now() },
             )
-          : setTimeout(
-              () => dispatch({ type: "ended.timed-out", attempt: effect.attempt, now: Date.now() }),
-              SHELL_END_TIMEOUT_MS,
-            )
+          },
+          effect.phase === "stopping" ? SHELL_STOP_TIMEOUT_MS : SHELL_END_TIMEOUT_MS,
+        ),
+      )
 
       return
     }
 
     if (effect.type === "timer.cancel") {
-      clearTimeout(timer)
-      timer = undefined
+      if (effect.attempt === undefined) {
+        timers.forEach(clearTimeout)
+        timers.clear()
+
+        return
+      }
+
+      clearTimeout(timers.get(effect.attempt))
+      timers.delete(effect.attempt)
 
       return
     }
@@ -121,7 +133,8 @@ export function createShellPanel(input: {
     toggle: (open: boolean) => dispatch({ type: "menu.toggled", open, work: untrack(work) }),
     open: (item: SessionActivityItem) => dispatch({ type: "shell.selected", item, work: untrack(work) }),
     back: () => dispatch({ type: "back.requested", work: untrack(work) }),
-    stop: () => dispatch({ type: "stop.requested", work: untrack(work) }),
+    /** Without `item`, stops the shown shell. */
+    stop: (item?: SessionActivityItem) => dispatch({ type: "stop.requested", item, work: untrack(work) }),
   }
 }
 

@@ -1,0 +1,271 @@
+/* The arcade screen's CRT look (screen.tsx), in layers over the picture that move with the glass:
+   Settings › Design mode › Arcade CRT picks off, subtle (the default) or strong. Everything that
+   moves animates transform or opacity only, so it stays on the compositor. Low-power devices
+   (data-crt-lite) keep scanlines and the curvature shading; reduced motion keeps them still. */
+
+[data-component="arcade-404"] [data-component="arcade-screen"][data-crt] {
+  --crt-scan: 0;
+  --crt-mask: 0;
+  --crt-curve: 0;
+  --crt-flicker: 0;
+  --crt-roll: 0;
+  --crt-fringe: 0px;
+  --crt-bloom: 0;
+  --crt-sheen: 0.6;
+
+  &[data-crt="subtle"] {
+    --crt-scan: 0.3;
+    --crt-mask: 0.16;
+    --crt-curve: 0.85;
+    --crt-flicker: 0.03;
+    --crt-roll: 0.05;
+    --crt-fringe: 0.8px;
+    --crt-bloom: 0.6;
+    --crt-sheen: 1.2;
+  }
+
+  &[data-crt="strong"] {
+    --crt-scan: 0.5;
+    --crt-mask: 0.32;
+    --crt-curve: 1;
+    --crt-flicker: 0.07;
+    --crt-roll: 0.1;
+    --crt-fringe: 1.6px;
+    --crt-bloom: 1.4;
+    --crt-sheen: 1.8;
+  }
+
+  /* A running game sits under the whole tube: the game frame is the bottom layer, every CRT layer
+     above it lets the pointer, focus and gamepad through (pointer-events none) and only composites
+     (no filter over the frame). */
+  [data-component="arcade-game-frame"] {
+    z-index: 1;
+  }
+
+  /* --crt-scan is how dark each line is. */
+  [data-slot="scanlines"] {
+    background:
+      repeating-linear-gradient(to bottom, rgb(0 0 0 / var(--crt-scan)) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at 50% 50%, transparent 55%, rgb(0 0 0 / 0.55));
+    opacity: var(--scanlines, 1);
+  }
+
+  /* Off keeps the plain screen the page had before the CRT look. */
+  &[data-crt="off"] [data-slot="scanlines"] {
+    --crt-scan: 0.28;
+  }
+
+  /* Off: nothing over a running game. */
+  &[data-crt="off"][data-state="play"] [data-slot="scanlines"] {
+    display: none;
+  }
+
+  /* Phosphor bloom on bright strokes, and a red and blue fringe (chromatic aberration). */
+  &:not([data-crt="off"]) [data-component="pixel-text"] {
+    filter: drop-shadow(var(--crt-fringe) 0 0 rgb(255 60 70 / 0.35))
+      drop-shadow(calc(var(--crt-fringe) * -1) 0 0 rgb(60 170 255 / 0.35))
+      drop-shadow(0 0 0.06em color-mix(in srgb, var(--tone-glow-line) 90%, transparent))
+      drop-shadow(
+        0 0 calc(0.35em + var(--crt-bloom) * 0.25em) color-mix(in srgb, var(--tone-glow-far) 60%, transparent)
+      );
+  }
+
+  &:not([data-crt="off"]) [data-slot="boot"] {
+    text-shadow:
+      var(--crt-fringe) 0 0 rgb(255 60 70 / 0.3),
+      calc(var(--crt-fringe) * -1) 0 0 rgb(60 170 255 / 0.3),
+      var(--glow);
+  }
+
+  /* The shadow mask: a faint RGB aperture grille. */
+  [data-slot="mask"] {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to right,
+      rgb(255 70 70) 0 1px,
+      rgb(70 255 110) 1px 2px,
+      rgb(80 120 255) 2px 3px
+    );
+    mix-blend-mode: multiply;
+    opacity: var(--crt-mask);
+  }
+
+  /* The tube's curve: darker toward the rounded corners, a rim of light along the top edge. */
+  [data-slot="curve"] {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    opacity: var(--crt-curve);
+    background:
+      radial-gradient(ellipse 120% 70% at 50% -30%, rgb(255 255 255 / 0.05), transparent 60%),
+      radial-gradient(ellipse 75% 80% at 50% 50%, transparent 62%, rgb(0 0 0 / 0.5) 100%);
+    box-shadow:
+      inset 0 0 4cqw 0.6cqw rgb(0 0 0 / 0.55),
+      inset 0 0 0.6cqw 0.2cqw rgb(0 0 0 / 0.6);
+    border-radius: 6cqw / 9cqh;
+  }
+
+  /* The bezel lip shades the glass along the painted opening's edge: a dark stroke on the clip
+     outline, half inside the clip, softened. */
+  [data-slot="lip"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 6;
+    pointer-events: none;
+    overflow: visible;
+
+    [data-slot="lip-shadow"] {
+      fill: none;
+      stroke: rgb(0 0 0 / 0.75);
+      stroke-width: 1.4cqh;
+      filter: blur(0.6cqh);
+    }
+
+    [data-slot="lip-debug"] {
+      display: none;
+      fill: none;
+      stroke: #ff2bd6;
+      stroke-width: 2px;
+    }
+  }
+
+  /* A slow band of brightness rolling down the tube. */
+  [data-slot="roll"] {
+    position: absolute;
+    inset: -30% 0 auto;
+    height: 30%;
+    z-index: 6;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, rgb(255 255 255 / var(--crt-roll)) 50%, transparent);
+    animation: crt-roll 7.5s linear infinite;
+  }
+
+  /* Gentle flicker: a dark veil whose opacity wobbles. */
+  [data-slot="flicker"] {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    background: #000;
+    opacity: 0;
+    --crt-flicker-amount: calc(var(--crt-flicker) + var(--flicker, 0) * 0.25);
+    animation: crt-flicker 0.18s steps(2, jump-none) infinite;
+  }
+
+  [data-slot="sheen"] {
+    inset: 0 -18%;
+    opacity: var(--crt-sheen);
+  }
+
+  /* Power on: a bright line across the middle, then the picture opens out of it with a flash. */
+  [data-slot="power"] {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 50%, #fff, color-mix(in srgb, var(--phosphor) 70%, #fff));
+  }
+
+  &:not([data-crt="off"]):is([data-state="boot"], [data-state="mobile"]) {
+    [data-slot="power"] {
+      animation: crt-power 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+
+    > :is([data-slot="boot"], [data-slot="mobile"]) {
+      animation: crt-open 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+  }
+
+  /* Low-power devices: scanlines and the curve only. */
+  &[data-crt-lite] {
+    :is([data-slot="mask"], [data-slot="roll"], [data-slot="flicker"]) {
+      display: none;
+    }
+
+    [data-component="pixel-text"] {
+      filter: drop-shadow(0 0 0.06em color-mix(in srgb, var(--tone-glow-line) 90%, transparent));
+    }
+  }
+
+  &[data-crt="off"] :is([data-slot="mask"], [data-slot="curve"], [data-slot="roll"], [data-slot="flicker"]) {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :is([data-slot="roll"], [data-slot="flicker"], [data-slot="power"]) {
+      display: none;
+    }
+
+    > [data-slot="boot"] {
+      animation: none !important;
+    }
+
+    /* The phone's message simply fades on. */
+    > [data-slot="mobile"] {
+      animation: crt-fade 0.3s ease-out both !important;
+    }
+  }
+}
+
+@keyframes crt-roll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    /* Its own height is 30% of the tube: off the top to off the bottom. */
+    transform: translateY(434%);
+  }
+}
+
+@keyframes crt-flicker {
+  50% {
+    opacity: var(--crt-flicker-amount);
+  }
+}
+
+@keyframes crt-power {
+  0% {
+    opacity: 1;
+    transform: scale(0.02, 0.006);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1, 0.006);
+  }
+  55% {
+    opacity: 0.7;
+    transform: scale(1, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1, 1);
+  }
+}
+
+@keyframes crt-open {
+  0%,
+  30% {
+    opacity: 0;
+    transform: scale(1, 0.006);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes crt-fade {
+  from {
+    opacity: 0;
+  }
+}

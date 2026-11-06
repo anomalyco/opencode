@@ -3,6 +3,7 @@ import {
   createListState,
   listActive,
   listScrollTarget,
+  selectListEmptyState,
   transitionList,
   type ListEffect,
   type ListEvent,
@@ -117,11 +118,73 @@ test("a superseded or late load result is ignored", () => {
   expect(transitionList(ready, { type: "load.failed", attempt: 3 }, config).state).toBe(ready)
 })
 
-test("a failed load settles with no rows and keeps the list usable", () => {
+test("a rejected load reports a failure, not an empty result, and a reload or new query recovers", () => {
+  // `load.failed` used to settle as `ready` with no rows, so the list said "No results" for a server error.
   const loading = run(loaded(), { type: "items.reload" })
-  const failed = transitionList(loading.state, { type: "load.failed", attempt: 2 }, config).state
-  expect(failed).toMatchObject({ status: "ready", epoch: 2, rows: [], highlight: { activeKey: null } })
-  expect(settle(run(failed, { type: "items.reload" })).rows).toEqual(items)
+  const failed = transitionList(loading.state, { type: "load.failed", attempt: 2 }, config)
+  expect(failed.state).toMatchObject({ status: "failed", epoch: 2, rows: [], highlight: { activeKey: null } })
+  expect(failed.effects).toEqual([{ type: "cancel.load" }])
+  expect(selectListEmptyState(failed.state)).toEqual({ type: "failed" })
+
+  const empty = transitionList(loading.state, { type: "load.resolved", attempt: 2, items: [] }, config).state
+  expect(selectListEmptyState(empty)).toEqual({ type: "empty", query: "" })
+
+  expect(run(failed.state, { type: "items.reload" }).effects).toEqual([{ type: "load", attempt: 3, query: "" }])
+  expect(settle(run(failed.state, { type: "items.reload" }))).toMatchObject({ status: "ready", rows: items })
+  expect(settle(run(failed.state, { type: "query.change", value: "be" }))).toMatchObject({
+    status: "ready",
+    rows: ["Beta"],
+  })
+})
+
+test("a load that never settles times out into a failure", () => {
+  const typed = run(loaded(), { type: "query.change", value: "al" })
+  expect(selectListEmptyState(typed.state)).toEqual({ type: "loading" })
+
+  const timedOut = transitionList(typed.state, { type: "load.timed-out", attempt: 2 }, config)
+  expect(timedOut.state).toMatchObject({ status: "failed", epoch: 2, rows: [] })
+  expect(timedOut.effects).toEqual([{ type: "cancel.load" }])
+
+  // A superseded attempt's timeout does not fail the attempt that replaced it.
+  const retyped = run(typed.state, { type: "query.change", value: "alp" }).state
+  expect(transitionList(retyped, { type: "load.timed-out", attempt: 2 }, config).state).toBe(retyped)
+})
+
+test("a slow search that timed out still shows its results, unless a newer attempt started", () => {
+  const timedOut = transitionList(
+    run(loaded(), { type: "query.change", value: "al" }).state,
+    { type: "load.timed-out", attempt: 2 },
+    config,
+  ).state
+
+  const late = transitionList(timedOut, { type: "load.resolved", attempt: 2, items }, config)
+  expect(late.state).toMatchObject({ status: "ready", epoch: 2, rows: ["Alpha"], highlight: { activeKey: "Alpha" } })
+  expect(late.effects).toEqual([])
+  expect(transitionList(timedOut, { type: "load.failed", attempt: 2 }, config).state).toBe(timedOut)
+  expect(transitionList(timedOut, { type: "load.resolved", attempt: 1, items }, config).state).toBe(timedOut)
+
+  const reloading = run(timedOut, { type: "items.reload" }).state
+  expect(transitionList(reloading, { type: "load.resolved", attempt: 2, items }, config).state).toBe(reloading)
+
+  const reloaded = settle(run(timedOut, { type: "items.reload" }))
+  expect(transitionList(reloaded, { type: "load.resolved", attempt: 2, items }, config).state).toBe(reloaded)
+})
+
+test("disposing stops an in-flight load and ignores every later event", () => {
+  const loading = run(loaded(), { type: "items.reload" }).state
+  const disposed = transitionList(loading, { type: "disposed" }, config)
+  expect(disposed.state.status).toBe("disposed")
+  expect(disposed.effects).toEqual([{ type: "cancel.load" }])
+  expect(transitionList(loaded(), { type: "disposed" }, config).effects).toEqual([])
+
+  for (const event of [
+    { type: "load.resolved", attempt: 2, items },
+    { type: "load.failed", attempt: 2 },
+    { type: "query.change", value: "be" },
+    { type: "items.reload" },
+    key("ArrowDown"),
+  ] satisfies ListEvent<string>[])
+    expect(transitionList(disposed.state, event, config)).toMatchObject({ state: disposed.state, effects: [] })
 })
 
 test("the pointer takes the highlight without scrolling and any key gives it back", () => {

@@ -8,6 +8,7 @@ import { Schema } from "effect"
 import { holdRoute, provider, seed, SERVER } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
+import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { openSession } from "../utils/workspace"
 
 const sessionID = "ses_session_queue_regression"
@@ -170,6 +171,7 @@ async function openQueue(
   revert?: string,
   status: "idle" | "running" = "running",
   model = { id: "queue-model", name: "Queue Model" },
+  config: Pick<MockServerConfig, "beforeAgentsResponse"> = {},
 ) {
   const options: Parameters<typeof openSession>[1] = {
     name: "SessionQueueRegression",
@@ -191,6 +193,7 @@ async function openQueue(
     onBackground: mock.onBackground,
     shellCommands: () => mock.shells,
     events: mock.events,
+    ...config,
   }
 
   if (followUpBehavior) options.seed = { settings: { general: { followUpBehavior } } }
@@ -337,6 +340,37 @@ test("a steer shows as pending in the timeline as the composer clears, before th
   await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["steer while the model commits"])
   await expect(prompt).toHaveCount(1)
   await expect(prompt.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
+})
+
+test("a prompt sent while the session's agents and models load shows as pending at once and sends once they load", async ({
+  page,
+}) => {
+  const mock = createQueueMock(
+    [],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+
+  // The Location's agents load only once released, so the composer has no agent or model to send with yet.
+  const agents = Promise.withResolvers<void>()
+
+  const view = await openQueue(page, mock, "steer", undefined, "idle", undefined, {
+    beforeAgentsResponse: () => agents.promise,
+  })
+
+  const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+    hasText: "read the deploy logs",
+  })
+
+  await expect(userRow(page, "msg_queue_delivered")).toContainText("First prompt")
+  await view.input.fill("read the deploy logs")
+  await view.input.press("Enter")
+  await expect(prompt.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
+  await expect(view.input).toHaveText("")
+  expect(mock.prompts).toEqual([])
+
+  agents.resolve()
+  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["read the deploy logs"])
+  await expect(prompt).toHaveCount(1)
 })
 
 for (const row of [
@@ -1034,14 +1068,12 @@ test("reverting to another prompt replaces the file chips of an earlier restore"
   const view = await openQueue(page, mock)
   const chip = view.composer.locator('[data-slot="composer-context-file"]')
 
-  for (const [id, text, chips] of [
-    ["msg_queue_second", "Second prompt", 1],
-    ["msg_queue_first", "First prompt", 0],
+  // The newest prompt's revert is Undo. The mock never hides the reverted prompt, so the first stays an earlier one.
+  for (const [id, text, chips, action] of [
+    ["msg_queue_second", "Second prompt", 1, "Undo"],
+    ["msg_queue_first", "First prompt", 0, "Revert to here"],
   ] as const) {
-    const row = userRow(page, id)
-
-    await row.hover()
-    await row.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, userRow(page, id), action)
     await expect(view.input).toHaveText(text)
     await expect(chip).toHaveCount(chips)
   }
@@ -1087,8 +1119,7 @@ test("reverting a delivered prompt leaves queued prompts alone, as in the TUI", 
     (response) => new URL(response.url()).pathname === `/api/session/${sessionID}/revert/stage`,
   )
 
-  await delivered.hover()
-  await delivered.getByRole("button", { name: "Rewind to here" }).click()
+  await chooseUserMessageAction(page, delivered, "Undo")
   expect((await staged).ok()).toBe(true)
 
   await expect(view.input).toHaveText("First prompt")
@@ -1161,9 +1192,9 @@ for (const [action, status] of [
 
     if (status === "steering") await expect(message).toHaveAttribute("data-pending", "true")
     else await expect(message).not.toHaveAttribute("data-pending")
-    await pending.hover()
-    await expect(pending.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
-    await pending.getByRole("button", { name: action }).click()
+    const menu = await openUserMessageMenu(page, pending)
+    await expect(menu.getByRole("menuitem", { name: /^(Revert to here|Undo)$/ })).toHaveCount(0)
+    await menu.getByRole("menuitem", { name: action, exact: true }).click()
 
     await expect(pending).toHaveCount(0)
     expect(mock.changes).toEqual([{ inboxID, action: action === "Delete" ? "cancel" : "queue" }])
@@ -1175,7 +1206,7 @@ for (const [action, status] of [
   })
 }
 
-test("waiting steers group under one Pending line, each keeping its own actions beside its bubble", async ({
+test("waiting steers group under one Pending line, each keeping its own actions in its chevron menu", async ({
   page,
 }) => {
   const mock = createQueueMock(
@@ -1195,8 +1226,8 @@ test("waiting steers group under one Pending line, each keeping its own actions 
   await expect(first.locator('[data-slot="user-message-meta"]')).toBeHidden()
 
   await first.locator('[data-slot="user-message-text"]').hover()
-  await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
-  await first.getByRole("button", { name: "Move to queue" }).click()
+  await expect(first.locator('[data-slot="user-message-menu"]')).toHaveCSS("opacity", "1")
+  await chooseUserMessageAction(page, first, "Move to queue")
   await expect.poll(() => mock.changes).toEqual([{ inboxID: mock.rows[0].id, action: "queue" }])
 })
 
@@ -1334,8 +1365,10 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(bubble).toHaveCSS("color", colors.pending.text)
       await expect(bubble).toHaveCSS("transition-duration", "0s")
       await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
-      // The steer keeps U1's agent and model, so Pending is all its meta line says.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending$/, { useInnerText: true })
+      // Pending closes the meta line, after the agent and model that show on hover.
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model\s*·\s*Pending$/, {
+        useInnerText: true,
+      })
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 

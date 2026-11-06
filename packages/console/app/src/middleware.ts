@@ -45,7 +45,7 @@ export default createMiddleware({
         headers: { Location: "https://opencode.ai/console/login", "Cache-Control": "no-store" },
       })
 
-    // The Go, Zen, pricing, models and teams pages moved to the Console. Match the exact paths only: /zen/v1/* and
+    // The Go, Zen, pricing, models, teams and enterprise pages moved to the Console. Match the exact paths only: /zen/v1/* and
     // /zen/go/v1/* are the inference API, so a prefix match here would break API clients if the inference routes ever
     // stopped catching them.
     const moved = new Map([
@@ -55,6 +55,7 @@ export default createMiddleware({
       ["/pricing", "/console/go"],
       ["/models", "/console/models"],
       ["/teams", "/console/teams"],
+      ["/enterprise", "/console/enterprise"],
     ]).get(url.pathname.replace(/(.)\/$/, "$1"))
     if (moved && !locale && (event.request.method === "GET" || event.request.method === "HEAD"))
       return new Response(null, {

@@ -1,5 +1,6 @@
-import { DropdownMenu } from "@kobalte/core/dropdown-menu"
+import { DropdownMenu, type DropdownMenuTriggerProps } from "@kobalte/core/dropdown-menu"
 import { ContextMenu } from "@kobalte/core/context-menu"
+import type { PolymorphicProps } from "@kobalte/core/polymorphic"
 import {
   createComputed,
   createContext,
@@ -13,6 +14,7 @@ import {
   type ComponentProps,
   type JSX,
   type ParentProps,
+  type ValidComponent,
 } from "solid-js"
 import {
   createMenuState,
@@ -316,6 +318,14 @@ function MenuSeparator(props: ComponentProps<typeof DropdownMenu.Separator>) {
   )
 }
 
+// Kobalte drops `data-expanded` as the menu closes but returns focus to the trigger a task later, so for a frame the
+// trigger is neither expanded nor focused. `data-closing` covers that gap for UI revealed by either.
+function MenuTrigger<T extends ValidComponent = "button">(props: PolymorphicProps<T, DropdownMenuTriggerProps<T>>) {
+  const ctx = useMenuContext()
+
+  return <DropdownMenu.Trigger {...props} data-closing={ctx.state().status === "closing" ? "" : undefined} />
+}
+
 function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "onCloseAutoFocus", "onInteractOutside"])
@@ -439,7 +449,7 @@ const MenuContext = Object.assign(MenuContextRoot, {
 })
 
 export const Menu = Object.assign(MenuRoot, {
-  Trigger: DropdownMenu.Trigger,
+  Trigger: MenuTrigger,
   Portal: DropdownMenu.Portal,
   Content: MenuContent,
   Item: MenuItem,

@@ -33,6 +33,7 @@ const models = [
   { name: "Kimi K3.1 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Step 5 Preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Crouton Alpha Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Beam Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Iceman Contributor Free", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },

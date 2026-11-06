@@ -118,10 +118,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return keys
   })
 
-  const home = createMemo(
-    () =>
-      sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""),
-  )
+  const home = createMemo(() => sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""))
 
   const subtitle = createMemo(() => (servers.local(props.server) ? undefined : serverName(props.server)))
 
@@ -375,12 +372,15 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     if (query === undefined || signal.aborted) return directories.slice(0, 5)
 
     const files = await sdk.api.file
-      .find({
-        location: current,
-        query,
-        type: "file",
-        limit: 20,
-      })
+      .find(
+        {
+          location: current,
+          query,
+          type: "file",
+          limit: 20,
+        },
+        { signal },
+      )
       .then((result) => result.data)
       .catch(() => [])
 
@@ -567,6 +567,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   onCleanup(() => {
     dispatchTree({ type: "disposed" })
     dispatchCombobox({ type: "disposed" })
+    search.dispose()
     tree?.cleanUp()
   })
 

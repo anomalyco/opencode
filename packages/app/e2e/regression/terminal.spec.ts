@@ -189,6 +189,29 @@ test("a click into the composer while a new terminal is created keeps the focus 
   await expect(editor).toBeFocused()
 })
 
+// Both presses used to send a create, so two tabs both titled "Terminal 1" opened.
+test("pressing New terminal again while one is created creates one terminal", async ({ page }) => {
+  const { persistentPty, editor } = await openSession(page, { name: "Terminals", persistentPty: {} })
+
+  const create = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, {
+    method: "POST",
+  })
+
+  await editor.click()
+  await page.keyboard.press("Control+Alt+T")
+  await create.arrived
+  await page.keyboard.press("Control+Alt+T")
+  create.release()
+
+  await expect(side(page).getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await expect(terminalScreen(page, persistentPty.created[0]!.id).locator("textarea")).toBeFocused()
+  expect(create.requests).toHaveLength(1)
+  expect(persistentPty.created.map((info) => info.title)).toEqual(["Terminal 1"])
+})
+
 test("another client's control ends at a click, which resizes the terminal to the pane", async ({ page }) => {
   const { persistentPty } = await openSession(page, {
     name: "Terminals",
@@ -286,6 +309,37 @@ test("a terminal list that fails says why, and Try again lists the terminals", a
   await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect.poll(() => terminalText(page, screen)).toBe("still-here")
   await expect(side(page).getByText("Couldn't load terminals", { exact: true })).toHaveCount(0)
+})
+
+// A list the server accepted and never answered used to leave "Loading terminal." on screen with no way to retry.
+test("a terminal list the server never answers says so, and Try again lists the terminals", async ({ page }) => {
+  await openSession(page, {
+    name: "Terminals",
+    persistentPty: { initial: [{ id: "pty_build", sessionID: SESSION, title: "Build", output: "still-here\r\n" }] },
+  })
+
+  await openSide(page)
+  await side(page).getByRole("tab", { name: "Build", exact: true }).click()
+  const screen = terminalScreen(page, "pty_build")
+  await expect.poll(() => terminalText(page, screen)).toBe("still-here")
+
+  const list = await holdRoute(page, /\/api\/experimental\/session\/ses_terminals\/terminal(\?|$)/, { method: "GET" })
+  await page.clock.install()
+  await page.reload()
+  await list.arrived
+  await expect(side(page).getByText("Loading terminal…", { exact: true })).toBeVisible()
+  // The request budget, `TERMINAL_REQUEST_TIMEOUT_MS`.
+  await page.clock.fastForward(15_000)
+
+  const failure = side(page).getByRole("alert")
+  await expect(failure.getByText("Couldn't load terminals", { exact: true })).toBeVisible()
+  await expect(failure.getByText("The server took too long to answer", { exact: true })).toBeVisible()
+
+  list.release()
+  await failure.getByRole("button", { name: "Try again", exact: true }).click()
+
+  await expect(side(page).getByRole("tab", { name: "Build", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect.poll(() => terminalText(page, screen)).toBe("still-here")
 })
 
 test("after a server restart, showing the terminal again restores it from a new snapshot", async ({ page }) => {

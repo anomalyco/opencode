@@ -630,6 +630,37 @@ test("keeps a reader scrolled up in place when they submit a prompt", async ({ p
   await expect.poll(fromEnd).toBeLessThanOrEqual(1)
 })
 
+test("takes a reader scrolled up short of the jump button to their submitted prompt", async ({ page }) => {
+  await setupTimeline(page, {
+    reducedMotion: true,
+    sessionMessages: [
+      ...validateTimelineMessages([...historyMessages(18), userMessage()]),
+      { id: "msg_1002_timeline_idle", type: "idle", outcome: "succeeded", time: { created: 1700000003000 } },
+    ],
+  })
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] > [data-scrollable]')
+  const fromEnd = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+  const jump = page.getByRole("button", { name: "Jump to latest" })
+  const editor = page.locator('[data-component="composer"]').getByRole("textbox")
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+  await scroller.hover()
+
+  // Back-to-back prompts, each sent after a small scroll up, bring the reader down to the one just sent.
+  for (const text of ["First prompt sent just above the end.", "Second prompt sent right after."]) {
+    await page.mouse.wheel(0, -150)
+    await expect.poll(fromEnd).toBeGreaterThan(100)
+    // The hidden button only fades out, so its inert wrapper is what says it is not offered.
+    await expect(jump.locator("xpath=..")).toHaveAttribute("inert")
+    await editor.fill(text)
+    await editor.press("Enter")
+    await expect(editor).toHaveText("")
+    await expect(page.locator('[data-timeline-row="UserMessage"]').filter({ hasText: text })).toBeInViewport()
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  }
+})
+
 async function captureCardEdges(page: Page, card: Locator) {
   const box = await card.boundingBox()
 
@@ -853,9 +884,9 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
   await expect(first.locator('[data-slot="user-message-copy-wrapper"]')).toBeHidden()
   await expect(last.locator('[data-slot="user-message-copy-wrapper"]')).toBeVisible()
 
-  // The first message keeps its own actions, shown beside its bubble on hover.
+  // The first message keeps its own actions, in a chevron its bubble shows on hover.
   await bubble(first).hover()
-  await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
+  await expect(first.locator('[data-slot="user-message-menu"]')).toHaveCSS("opacity", "1")
   await expect(first.getByRole("button", { name: "More actions" })).toHaveCount(1)
 })
 

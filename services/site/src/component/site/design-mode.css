@@ -1,0 +1,168 @@
+/* Design mode: temporary development controls, like Settings. */
+
+[data-site] {
+  /* "Undid: …" after ⌘Z, centred at the bottom. Above the Settings panel and its backdrop. */
+  [data-component="history-toast"] {
+    position: fixed;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+
+    span {
+      display: block;
+      max-width: min(24rem, calc(100vw - 6rem));
+      padding: 0.3125rem 0.5rem;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      line-height: 1rem;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--bg);
+      background: var(--text-strong);
+      animation: history-toast 150ms ease-out;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="history-toast"] span {
+      animation: none;
+    }
+  }
+
+  /* Copies the copy options you added, as JSON, for moving into the code. In the top-right
+     corner, under the top bar on narrow screens. */
+  [data-component="design-export"] {
+    position: fixed;
+    top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    right: calc(0.75rem + env(safe-area-inset-right, 0px));
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+
+    @media (max-width: 60rem) {
+      top: calc(var(--topbar-height, 3.5rem) + env(safe-area-inset-top, 0px) + 0.5rem);
+    }
+
+    button {
+      height: 1.5rem;
+      padding-inline: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: #fff;
+      background: var(--link);
+    }
+  }
+
+  [data-design-copy][contenteditable] {
+    outline: none;
+    cursor: text;
+    caret-color: var(--link);
+  }
+
+  /* Drawn over the element without changing its layout; the page under it still takes clicks. */
+  [data-component="design-overlay"] {
+    position: fixed;
+    z-index: 18;
+    pointer-events: none;
+    outline: 2px solid var(--link);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--link) 8%, transparent);
+  }
+
+  [data-component="design-controls"] {
+    position: fixed;
+    z-index: 19;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    /* One gap between the controls and between the controls and the outline. The padding is
+       transparent and the box sits flush with the outline, so the pointer can cross the gap. */
+    --design-gap: 6px;
+    gap: var(--design-gap);
+    padding: var(--design-gap);
+    font-family: var(--font-mono);
+
+    /* A wider invisible margin that still counts as on the controls (reach in design-mode.tsx). */
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -14px;
+      /* Under the buttons, which stay clickable. */
+      z-index: -1;
+    }
+
+    /* Not over the selected element itself, so clicks near its edge still reach it (to edit copy). */
+    &[data-side="above"]::before {
+      bottom: 0;
+    }
+
+    &[data-side="below"]::before {
+      top: 0;
+    }
+    font-size: 0.6875rem;
+    line-height: 1;
+
+    [data-slot="control"] {
+      display: flex;
+      align-items: center;
+      height: 1.5rem;
+      color: #fff;
+      background: var(--link);
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    }
+
+    button {
+      display: grid;
+      place-items: center;
+      width: 1.5rem;
+      height: 100%;
+      color: inherit;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: rgb(255 255 255 / 0.18);
+        }
+      }
+
+      &:active {
+        background: rgb(255 255 255 / 0.18);
+      }
+
+      &:focus-visible {
+        outline: 2px solid #fff;
+        outline-offset: -3px;
+      }
+    }
+
+    [data-slot="remove"] {
+      border-left: 1px solid rgb(255 255 255 / 0.3);
+    }
+
+    [data-slot="value"] {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding-inline: 0.125rem;
+      white-space: nowrap;
+    }
+
+    [data-slot="label"],
+    [data-slot="count"] {
+      opacity: 0.75;
+    }
+  }
+}
+
+@keyframes history-toast {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+}

@@ -9,6 +9,21 @@ import { bareServerAddress, legacyPairingLink, pairingLink, serverAddress } from
  */
 export const SERVER_CONNECT_TIMEOUT_MS = 75_000
 
+/** A wedged camera daemon can leave `enumerateDevices` pending; past this the scan button gives way to the hint. */
+export const CAMERA_PROBE_TIMEOUT_MS = 3_000
+
+/** What the page can tell about the camera before probing: nothing to show off the web, or a probe to run. */
+export type ServerCameraSupport = "none" | "insecure" | "unavailable" | "probe"
+
+export type ServerCameraState =
+  /** Not the web app: the native apps pair by pasted link. */
+  | { readonly status: "hidden" }
+  /** A plain-HTTP page cannot open the camera. */
+  | { readonly status: "insecure" }
+  | { readonly status: "probing"; readonly attempt: number }
+  | { readonly status: "available" }
+  | { readonly status: "unavailable" }
+
 /** The saved server an edit form started from, as it is now. */
 export type ServerOriginal = {
   readonly url: string
@@ -48,6 +63,8 @@ export type ServerSaveAction =
 
 type Form = {
   readonly attempt: number
+  readonly cameraAttempt: number
+  readonly camera: ServerCameraState
   readonly target: ServerConnectTarget
   readonly draft: ServerConnectDraft
 }
@@ -69,6 +86,8 @@ export type ServerConnectState =
 export type ServerConnectEvent =
   | { readonly type: "method.changed"; readonly method: ConnectMethod }
   | { readonly type: "field.changed"; readonly field: ServerConnectField; readonly value: string }
+  | { readonly type: "camera.settled"; readonly attempt: number; readonly available: boolean }
+  | { readonly type: "camera.timed-out"; readonly attempt: number }
   | { readonly type: "scan.started" }
   | { readonly type: "scan.cancelled" }
   | { readonly type: "scan.completed"; readonly link: string }
@@ -92,6 +111,9 @@ export type ServerConnectEffect =
   | { readonly type: "connect.http"; readonly attempt: number; readonly http: ServerConnection.HttpBase }
   | { readonly type: "timer.start"; readonly attempt: number; readonly timeoutMs: number }
   | { readonly type: "timer.stop" }
+  /** Check for a camera, and dispatch `camera.timed-out` after `timeoutMs`. */
+  | { readonly type: "camera.probe"; readonly attempt: number; readonly timeoutMs: number }
+  | { readonly type: "camera.timer.stop" }
   | { readonly type: "save"; readonly action: ServerSaveAction }
   | { readonly type: "close"; readonly saved?: ServerConnection.Http }
 
@@ -100,8 +122,19 @@ export type ServerConnectTransition = {
   readonly effects: readonly ServerConnectEffect[]
 }
 
-export function createServerConnectState(target: ServerConnectTarget): ServerConnectState {
-  return { status: "editing", attempt: 0, target, draft: initialDraft(target) }
+export function startServerConnect(
+  target: ServerConnectTarget,
+  support: ServerCameraSupport = "none",
+): ServerConnectTransition {
+  const base = { status: "editing", attempt: 0, cameraAttempt: 0, target, draft: initialDraft(target) } as const
+
+  if (support === "probe")
+    return {
+      state: { ...base, cameraAttempt: 1, camera: { status: "probing", attempt: 1 } },
+      effects: [probe(1)],
+    }
+
+  return { state: { ...base, camera: { status: support === "none" ? "hidden" : support } }, effects: [] }
 }
 
 export function transitionServerConnect(state: ServerConnectState, event: ServerConnectEvent): ServerConnectTransition {
@@ -109,13 +142,35 @@ export function transitionServerConnect(state: ServerConnectState, event: Server
 
   if (state.status === "closed") return same
 
-  if (event.type === "disposed")
-    return { state: { ...form(state), status: "closed" }, effects: state.status === "submitting" ? [stop] : [] }
+  if (event.type === "disposed") return close(state, state.status === "submitting" ? [stop] : [])
 
   if (event.type === "original.synced") return synced(state, event.original)
 
+  if (event.type === "camera.settled" || event.type === "camera.timed-out") {
+    if (state.camera.status !== "probing" || state.camera.attempt !== event.attempt) return same
+    const available = event.type === "camera.settled" && event.available
+
+    return {
+      state: { ...state, camera: { status: available ? "available" : "unavailable" } },
+      effects: [{ type: "camera.timer.stop" }],
+    }
+  }
+
   if (state.status === "scanning") {
-    if (event.type === "scan.cancelled") return { state: { ...form(state), status: "editing" }, effects: [] }
+    // The scanner may have just been denied the camera, so it is checked again before Scan is offered.
+    if (event.type === "scan.cancelled") {
+      const cameraAttempt = state.cameraAttempt + 1
+
+      return {
+        state: {
+          ...form(state),
+          status: "editing",
+          cameraAttempt,
+          camera: { status: "probing", attempt: cameraAttempt },
+        },
+        effects: [probe(cameraAttempt)],
+      }
+    }
 
     if (event.type === "scan.completed") return submit(state, { ...state.draft, method: "link", link: event.link })
 
@@ -149,7 +204,11 @@ export function transitionServerConnect(state: ServerConnectState, event: Server
     return { state: editing(state, { ...state.draft, [event.field]: event.value }), effects: [] }
   }
 
-  if (event.type === "scan.started") return { state: { ...form(state), status: "scanning" }, effects: [] }
+  if (event.type === "scan.started") {
+    if (state.camera.status !== "available") return same
+
+    return { state: { ...form(state), status: "scanning" }, effects: [] }
+  }
 
   if (event.type === "submitted") return submit(state, state.draft)
 
@@ -165,11 +224,16 @@ export type ServerConnectErrorKey =
   | "server.connect.failed"
   | "dialog.server.add.error"
 
+export type ServerConnectViewKey =
+  | ServerConnectErrorKey
+  | "server.connect.camera.unavailable"
+  | "server.connect.camera.native"
+
 export type ServerConnectErrorContext = {
   readonly surface: "screen" | "dialog"
   /** Set on the web app, where an HTTPS page cannot reach a plain-HTTP address. */
   readonly pageHref: string | undefined
-  readonly t: (key: ServerConnectErrorKey) => string
+  readonly t: (key: ServerConnectViewKey) => string
 }
 
 export function formatServerConnectError(error: ServerConnectError, context: ServerConnectErrorContext) {
@@ -187,9 +251,15 @@ export function formatServerConnectError(error: ServerConnectError, context: Ser
 }
 
 export function selectServerConnectView(state: ServerConnectState, context: ServerConnectErrorContext) {
-  const primary = state.draft.method === "link" ? state.draft.link : state.draft.url
+  const link = state.draft.method === "link"
+  const primary = link ? state.draft.link : state.draft.url
+  const camera = state.camera.status
 
   return {
+    // Shown, disabled, while the camera check runs, so the hint does not flash in first.
+    showScan: link && (camera === "available" || camera === "probing"),
+    canScan: state.status === "editing" && link && camera === "available",
+    cameraHint: link ? cameraHint(camera, context) : undefined,
     scanning: state.status === "scanning",
     busy: state.status === "submitting",
     disabled: state.status !== "editing",
@@ -202,7 +272,28 @@ export function selectServerConnectView(state: ServerConnectState, context: Serv
 
 export type ServerConnectView = ReturnType<typeof selectServerConnectView>
 
+// QR codes carry JSON, not a link, so on a plain-HTTP page the pasted link is the way in.
+function cameraHint(camera: ServerCameraState["status"], context: ServerConnectErrorContext) {
+  if (camera === "insecure") return context.t("server.connect.camera.native")
+
+  if (camera === "unavailable") return context.t("server.connect.camera.unavailable")
+
+  return undefined
+}
+
 const stop = { type: "timer.stop" } as const
+
+function probe(attempt: number): ServerConnectEffect {
+  return { type: "camera.probe", attempt, timeoutMs: CAMERA_PROBE_TIMEOUT_MS }
+}
+
+/** Closes the form, stopping a camera check that is still running. */
+function close(state: Form, effects: readonly ServerConnectEffect[]): ServerConnectTransition {
+  return {
+    state: { ...form(state), status: "closed" },
+    effects: state.camera.status === "probing" ? [...effects, { type: "camera.timer.stop" }] : effects,
+  }
+}
 
 function initialDraft(target: ServerConnectTarget): ServerConnectDraft {
   if (target.kind !== "edit")
@@ -225,11 +316,17 @@ function initialDraft(target: ServerConnectTarget): ServerConnectDraft {
 }
 
 function form(state: Form): Form {
-  return { attempt: state.attempt, target: state.target, draft: state.draft }
+  return {
+    attempt: state.attempt,
+    cameraAttempt: state.cameraAttempt,
+    camera: state.camera,
+    target: state.target,
+    draft: state.draft,
+  }
 }
 
 function editing(state: Form, draft: ServerConnectDraft, error?: ServerConnectError): ServerConnectState {
-  return { status: "editing", attempt: state.attempt, target: state.target, draft, error }
+  return { ...form(state), status: "editing", draft, error }
 }
 
 // Where the form points: a pasted or scanned pairing link wins, in either field; else the address and password.
@@ -245,7 +342,7 @@ function submit(state: Form, draft: ServerConnectDraft): ServerConnectTransition
     const fallbackUrl = preferredUrl ?? link.urls[0] ?? value
 
     return {
-      state: { status: "submitting", attempt, target: state.target, draft, fallbackUrl },
+      state: { ...form(state), status: "submitting", attempt, draft, fallbackUrl },
       effects: [{ type: "connect.link", attempt, link: value, preferredUrl, fallbackUrl }, timer],
     }
   }
@@ -275,12 +372,12 @@ function submit(state: Form, draft: ServerConnectDraft): ServerConnectTransition
     (draft.name.trim() || undefined) === original.displayName &&
     password === original.password
   )
-    return { state: { ...form(state), draft, status: "closed" }, effects: [{ type: "close" }] }
+    return close({ ...state, draft }, [{ type: "close" }])
 
   const http = password ? { url, password } : { url }
 
   return {
-    state: { status: "submitting", attempt, target: state.target, draft, fallbackUrl: url },
+    state: { ...form(state), status: "submitting", attempt, draft, fallbackUrl: url },
     effects: [{ type: "connect.http", attempt, http }, timer],
   }
 }
@@ -300,10 +397,7 @@ function saved(state: Form, http: ServerConnection.HttpBase): ServerConnectTrans
       ? { type: "replace", originalUrl: original.url, connection }
       : { type: "add", connection }
 
-  return {
-    state: { ...form(state), status: "closed" },
-    effects: [stop, { type: "save", action }, { type: "close", saved: connection }],
-  }
+  return close(state, [stop, { type: "save", action }, { type: "close", saved: connection }])
 }
 
 function synced(
@@ -313,11 +407,7 @@ function synced(
   if (state.target.kind !== "edit") return { state, effects: [] }
 
   // The edited server was removed elsewhere: there is nothing left to save to.
-  if (!original)
-    return {
-      state: { ...form(state), status: "closed" },
-      effects: [...(state.status === "submitting" ? [stop] : []), { type: "close" }],
-    }
+  if (!original) return close(state, [...(state.status === "submitting" ? [stop] : []), { type: "close" }])
 
   const current = state.target.original
 

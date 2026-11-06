@@ -654,6 +654,22 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
+test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
+  const time = { created: T0, updated: T0, idle: T0 + 1 }
+
+  await mockWorkspace(page, {
+    name: "FailedTabs",
+    sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
+  })
+  await page.goto(sessionHref(a.id))
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+
+  await expect(tab(b.id).locator('[data-mark="failed"]')).toBeVisible()
+  await expect(tab(b.id).locator('[data-mark="unread"]')).toBeHidden()
+  await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
+  await expect(tab(c.id).locator('[data-mark="failed"]')).toBeHidden()
+})
+
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"
@@ -1830,12 +1846,67 @@ test("the inbox Archived dialog searches only archived sessions and restores the
   await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
   await search.fill("First archived")
   await expect(dialog.getByRole("option")).toHaveCount(1)
-  await expect(dialog.getByRole("option", { name: /First archived session/ })).toHaveAttribute("aria-selected", "true")
+  const option = dialog.getByRole("option", { name: /First archived session/ })
+  await expect(option).toHaveAttribute("aria-selected", "true")
+
+  // A second Enter while the restore is in flight restores and opens the session once.
+  const restore = await holdRoute(page, /\/api\/session\/ses_archive_0(\?|$)/, { method: "PATCH" })
   await search.press("Enter")
+  await restore.arrived
+  await expect(option).toHaveAttribute("aria-busy", "true")
+  await expect(option.getByRole("img", { name: "Loading", exact: true })).toBeVisible()
+  await search.press("Enter")
+  await expect(dialog).toBeVisible()
+  restore.release()
   await expect(dialog).toHaveCount(0)
+  expect(restore.requests).toHaveLength(1)
   await expectPath(page, sessionHref("ses_archive_0"))
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+})
+
+test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "DeleteInbox",
+    sessions: [
+      { id: "ses_delete_kept", title: "Kept inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_delete_target",
+        title: "Deleted inbox session",
+        time: { created: T0, updated: T0 + 1, idle: T0 + 1, viewed: T0 + 1 },
+      },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  const remove = await holdRoute(page, /\/api\/session\/ses_delete_target(\?|$)/, { method: "DELETE" })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+  await expect(rows).toHaveCount(2)
+  await rows.filter({ hasText: "Deleted inbox session" }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…", exact: true }).click()
+
+  const confirm = page.getByRole("dialog", { name: "Delete session" })
+  await confirm.getByRole("button", { name: "Delete session", exact: true }).click()
+  await remove.arrived
+  await expect(confirm).toHaveCount(0)
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Kept inbox session")
+
+  await page.getByRole("button", { name: "Search sessions", exact: true }).click()
+  const search = page.getByRole("dialog")
+  await expect(search.getByRole("combobox")).toBeFocused()
+
+  const removed = page.waitForResponse(
+    (response) => response.request().method() === "DELETE" && response.url().includes("/api/session/ses_delete_target"),
+  )
+
+  remove.release()
+  await removed
+  await expect(search.getByRole("combobox")).toBeFocused()
+  expect(remove.requests).toHaveLength(1)
 })
 
 test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {

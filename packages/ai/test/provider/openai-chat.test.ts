@@ -67,7 +67,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { streamUsage: false } }),
+          model: LanguageModel.update(model, { capabilities: { streamUsage: false } }),
           prompt: "Hello",
         }),
       )
@@ -89,7 +89,7 @@ describe("OpenAI Chat route", () => {
       const optedIn = yield* compileRequest(
         ai.request({
           model: LanguageModel.update(compatible.model("compatible-model"), {
-            compatibility: { supportsStore: true },
+            capabilities: { store: true },
           }),
           prompt: "Hello",
         }),
@@ -378,7 +378,7 @@ describe("OpenAI Chat route", () => {
         ai.request({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
-            .model({ id: "compatible-model", compatibility: { supportsPromptCacheKey: true } }),
+            .model({ id: "compatible-model", capabilities: { promptCacheKey: true } }),
           prompt: "Hello",
           promptCacheKey: "session_123",
         }),

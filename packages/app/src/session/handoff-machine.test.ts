@@ -5,6 +5,7 @@ import {
   HANDOFF_SEND_TIMEOUT_MS,
   HANDOFF_SYNC_TIMEOUT_MS,
   selectSessionHandoff,
+  selectSessionHandoffHeld,
   transitionSessionHandoff,
   type SessionHandoffEvent,
   type SessionHandoffState,
@@ -89,6 +90,39 @@ describe("transitionSessionHandoff", () => {
     ])
     expect(held(last(steps).state)).toBeUndefined()
     expect(last(steps).effects).toEqual([])
+  })
+
+  test("a prompt held for its Location shows with no timer until its send replaces it", () => {
+    const hold: SessionHandoffEvent = { type: "handoff.held", sessionID: "ses_1", handoff: handoff("msg_1") }
+
+    const steps = replay([
+      hold,
+      // Nothing is in flight, so a dropped stream or a settled send for it changes nothing.
+      { type: "connection.changed", connected: false },
+      { type: "connection.changed", connected: true },
+      { type: "prompt.settled", sessionID: "ses_1", messageID: "msg_1" },
+      set("msg_1"),
+    ])
+
+    expect(steps.map((step) => held(step.state)?.phase)).toEqual(["held", "held", "held", "held", "sending"])
+    expect(steps.slice(0, 4).flatMap((step) => step.effects)).toEqual([])
+    expect(selectSessionHandoffHeld(steps[0].state, "ses_1", "msg_1")).toBe(true)
+    expect(selectSessionHandoffHeld(steps[0].state, "ses_1", "msg_2")).toBe(false)
+    expect(selectSessionHandoffHeld(last(steps).state, "ses_1", "msg_1")).toBe(false)
+    expect(last(steps).effects).toEqual([
+      { type: "timer.set", sessionID: "ses_1", timer: "sending", attempt: 2, delayMs: HANDOFF_SEND_TIMEOUT_MS },
+    ])
+
+    // A cancelled hold clears it, and holding over a sending prompt stops that prompt's timer.
+    expect(
+      held(
+        transitionSessionHandoff(steps[0].state, { type: "handoff.cleared", sessionID: "ses_1", messageID: "msg_1" })
+          .state,
+      ),
+    ).toBeUndefined()
+    expect(transitionSessionHandoff(last(steps).state, hold).effects).toEqual([
+      { type: "timer.cancel", sessionID: "ses_1" },
+    ])
   })
 
   test("a connection change without a due echo writes only the connection", () => {

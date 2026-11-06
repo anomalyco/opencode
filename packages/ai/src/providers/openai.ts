@@ -1,8 +1,15 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import type { Route, CompactionOperations } from "../route/client.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, ToolDefinition, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
+import {
+  ProviderID,
+  ToolDefinition,
+  type ModelID,
+  type OpenString,
+  type ProviderOptions,
+  type RequestOptions,
+} from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -24,7 +31,7 @@ export const routes = [OpenAIResponses.route, OpenAIChat.route]
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
 // and default option normalization.
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly queryParams?: Record<string, string>
@@ -98,7 +105,7 @@ export const configure = (input: Config = {}) => {
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
       id,
-      compatibility: { supportsPromptCacheKey: true },
+      capabilities: { promptCacheKey: true },
     })
   const deployment = MediaRoute.deployment(input, auth(input))
   const media = {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   createPanelMotionState,
+  selectPanelMounted,
   selectPanelPresent,
   transitionPanelMotion,
   type PanelMotionEffect,
@@ -122,6 +123,36 @@ describe("panel motion", () => {
 
     const landed = transitionPanelMotion(closing, { type: "flight.landed", attempt: attempt(closing) }).state
     expect(selectPanelPresent(landed)).toBe(false)
+  })
+
+  // The side panel kept its own mounted flag, set by an effect after the first render, so a panel that started open
+  // rendered an empty box for a pass before its contents mounted.
+  test("a panel that starts open is mounted from the first render", () => {
+    const state = createPanelMotionState(true)
+
+    expect(selectPanelPresent(state)).toBe(true)
+    expect(selectPanelMounted(state)).toBe(true)
+  })
+
+  test("the first open mounts with the transition that makes it present, and a close keeps it mounted", () => {
+    const closed = resting(false)
+    expect(selectPanelMounted(closed)).toBe(false)
+
+    const opening = transitionPanelMotion(closed, target(true)).state
+    expect(selectPanelPresent(opening)).toBe(true)
+    expect(selectPanelMounted(opening)).toBe(true)
+
+    const closing = replay([{ type: "flight.landed", attempt: attempt(opening) }, target(false)], opening).state
+    const landed = transitionPanelMotion(closing, { type: "flight.landed", attempt: attempt(closing) }).state
+    expect(selectPanelPresent(landed)).toBe(false)
+    expect(selectPanelMounted(landed)).toBe(true)
+    expect(selectPanelMounted(transitionPanelMotion(landed, target(false, "b")).state)).toBe(true)
+    expect(selectPanelMounted(transitionPanelMotion(landed, { type: "disposed" }).state)).toBe(false)
+  })
+
+  test("a layout switch that shows the panel open mounts it", () => {
+    expect(selectPanelMounted(transitionPanelMotion(resting(false), target(true, "b")).state)).toBe(true)
+    expect(selectPanelMounted(transitionPanelMotion(resting(false), target(true, "a", true)).state)).toBe(true)
   })
 
   test("disposing mid-flight stops it, and later events are ignored", () => {

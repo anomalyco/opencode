@@ -238,7 +238,7 @@ describe("line comment editor machine", () => {
     expect(done.state.status).toBe("editing")
   })
 
-  test("the alternate submit follows the held modifier and clears on blur or when it goes away", () => {
+  test("click submission ignores stale modifiers", () => {
     const settings = config({ value: "Ship it", alternateSubmit: { disabled: false } })
 
     const held = transitionLineCommentEditor(createLineCommentEditorState(), {
@@ -250,7 +250,7 @@ describe("line comment editor machine", () => {
     expect(viewLineCommentEditor(held.state, settings).alternateActive).toBe(true)
     expect(
       transitionLineCommentEditor(held.state, { type: "action.clicked", modified: false, config: settings }).effects,
-    ).toEqual([{ type: "submit", mode: "alternate", value: "Ship it" }])
+    ).toEqual([{ type: "submit", mode: "primary", value: "Ship it" }])
 
     // Entering the action without the modifier clears a stale hold.
     const entered = transitionLineCommentEditor(held.state, {
@@ -279,6 +279,35 @@ describe("line comment editor machine", () => {
     })
 
     expect(unsupported.state).toMatchObject({ alternate: false })
+  })
+
+  test("a modified click uses the alternate submit without a tracked modifier", () => {
+    const settings = config({ value: "Ship it", alternateSubmit: { disabled: false } })
+
+    expect(
+      transitionLineCommentEditor(createLineCommentEditorState(), {
+        type: "action.clicked",
+        modified: true,
+        config: settings,
+      }).effects,
+    ).toEqual([{ type: "submit", mode: "alternate", value: "Ship it" }])
+  })
+
+  test.each([false, true])("empty draft clicks use the event modifier (tracked: %s)", (active) => {
+    const settings = config({ alternateSubmit: { disabled: false } })
+
+    const held = transitionLineCommentEditor(createLineCommentEditorState(), {
+      type: "modifier.changed",
+      active,
+      config: settings,
+    })
+
+    expect(
+      transitionLineCommentEditor(held.state, { type: "action.clicked", modified: false, config: settings }).effects,
+    ).toEqual([{ type: "cancel", blur: false }])
+    expect(
+      transitionLineCommentEditor(held.state, { type: "action.clicked", modified: true, config: settings }).effects,
+    ).toEqual([])
   })
 
   test("Mod+Enter with the list open sends through the alternate submit", () => {

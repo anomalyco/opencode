@@ -1,11 +1,18 @@
 import type {
   FormAnswer,
-  FormField,
   IntegrationCommandConnectOutput,
   IntegrationInfo,
   IntegrationMethod,
   IntegrationOauthConnectOutput,
 } from "@opencode/client/promise"
+import {
+  createProviderFormState,
+  selectProviderFormView,
+  transitionProviderForm,
+  type ProviderActiveForm,
+  type ProviderFormEvent,
+  type ProviderFormInput,
+} from "./form-machine"
 
 export type ProviderConnectMethod = Exclude<IntegrationMethod, { type: "env" }>
 
@@ -64,7 +71,7 @@ type Selection = {
 export type ProviderConnectState =
   | { readonly status: "loading"; readonly attempt: number }
   | { readonly status: "choosing"; readonly attempt: number; readonly catalog: ProviderCatalog }
-  | (Selection & { readonly status: "form" })
+  | (Selection & { readonly status: "form"; readonly form: ProviderActiveForm })
   | (Selection & { readonly status: "starting" })
   | (Selection & {
       readonly status: "entering"
@@ -94,7 +101,14 @@ export type ProviderConnectEvent =
       readonly manual: boolean
     }
   | { readonly type: "method.selected"; readonly index: number }
-  | { readonly type: "form.submitted"; readonly answer: FormAnswer }
+  | { readonly type: "form"; readonly event: ProviderFormInput }
+  /** `browser` is the form's attempt for this open; `opened` is false when it failed or did not answer in time. */
+  | {
+      readonly type: "form.browser.opened"
+      readonly attempt: number
+      readonly browser: number
+      readonly opened: boolean
+    }
   | { readonly type: "entry.submitted"; readonly value: string }
   | { readonly type: "oauth.started"; readonly attempt: number; readonly authorization: ProviderAuthorization }
   | { readonly type: "command.started"; readonly attempt: number; readonly command: ProviderCommandAttempt }
@@ -121,6 +135,13 @@ export type ProviderConnectEffect =
       readonly answer?: FormAnswer
     }
   | { readonly type: "open.browser"; readonly attemptID: string; readonly url: string }
+  | {
+      readonly type: "form.open.browser"
+      readonly attempt: number
+      readonly browser: number
+      readonly url: string
+      readonly timeoutMs: number
+    }
   | { readonly type: "poll"; readonly attempt: number; readonly signIn: ProviderPolledSignIn; readonly delay: boolean }
   | { readonly type: "poll.stop" }
   | { readonly type: "cancel"; readonly target: "oauth" | "command"; readonly attemptID: string }
@@ -146,26 +167,6 @@ export function connectMethods(integration: IntegrationInfo) {
   return integration.methods
     .filter((method): method is ProviderConnectMethod => method.type !== "env")
     .toSorted((a, b) => Number(a.type === "key") - Number(b.type === "key"))
-}
-
-export function providerFormDefaults(fields: ReadonlyArray<FormField> | undefined) {
-  return (fields ?? []).reduce<FormAnswer>((answer, field) => {
-    if (field.type === "external" || !field.hidden || field.default === undefined) return answer
-
-    const active = (field.when ?? []).every((condition) => {
-      const actual = answer[condition.key]
-
-      if (actual === undefined) return false
-
-      const equal = Array.isArray(actual) ? actual.some((item) => item === condition.value) : actual === condition.value
-
-      return condition.op === "eq" ? equal : !equal
-    })
-
-    if (!active) return answer
-
-    return Object.assign(answer, { [field.key]: field.default })
-  }, {})
 }
 
 export function startProviderConnect(): ProviderConnectTransition {
@@ -237,9 +238,11 @@ export function transitionProviderConnect(
   }
 
   if (state.status === "form") {
-    if (event.type !== "form.submitted") return unchanged(state)
+    if (event.type === "form") return form(state, event.event)
 
-    return select(state.catalog, state.methodIndex, state.attempt + 1, event.answer)
+    if (event.type !== "form.browser.opened") return unchanged(state)
+
+    return form(state, { type: "external.opened", attempt: event.browser, opened: event.opened })
   }
 
   if (state.status === "starting") return started(state, event)
@@ -328,6 +331,7 @@ export function selectProviderConnectView(state: ProviderConnectState) {
     authorization,
     browserFailed: signIn?.kind === "browser" && signIn.browserFailed,
     commandOutput: signIn?.kind === "command" ? signIn.output : "",
+    form: state.status === "form" ? selectProviderFormView(state.form) : undefined,
     entryError: state.status === "entering" ? state.error : undefined,
     // A typed secret is sent and the catalogs are refreshing: the form takes no second submit.
     submitting: state.status === "submitting" || state.status === "refreshing",
@@ -364,17 +368,40 @@ function select(
   answer?: FormAnswer,
 ): ProviderConnectTransition {
   const method = catalog.methods[methodIndex]
-  const form = method.type === "command" ? undefined : method.form
+  // An answered form already holds the defaults of its hidden fields; one with nothing to ask answers itself.
+  const form = answer ? undefined : createProviderFormState(method.type === "command" ? undefined : method.form)
 
-  if (!answer && (form ?? []).some((field) => field.type === "external" || !field.hidden))
-    return unchanged({ status: "form", attempt, catalog, methodIndex })
+  if (form?.status === "active") return unchanged({ status: "form", attempt, catalog, methodIndex, form })
 
-  const merged = { ...providerFormDefaults(form), ...answer }
-  const base = { attempt, catalog, methodIndex, answer: Object.keys(merged).length ? merged : undefined }
+  const resolved = answer ?? form?.answer ?? {}
+  const base = { attempt, catalog, methodIndex, answer: Object.keys(resolved).length ? resolved : undefined }
 
   if (method.type === "key") return unchanged({ ...base, status: "entering", signIn: { kind: "key", method } })
 
   return { state: { ...base, status: "starting" }, effects: [{ type: "start", attempt, method, answer: base.answer }] }
+}
+
+// Moves the form one step on; an answered form starts the method with the answer.
+function form(state: Extract<ProviderConnectState, { status: "form" }>, event: ProviderFormEvent) {
+  const next = transitionProviderForm(state.form, event)
+
+  if (next.state === state.form) return unchanged(state)
+
+  if (next.state.status === "completed")
+    return select(state.catalog, state.methodIndex, state.attempt + 1, next.state.answer)
+
+  return {
+    state: { ...state, form: next.state },
+    effects: next.effects.map(
+      (effect): ProviderConnectEffect => ({
+        type: "form.open.browser",
+        attempt: state.attempt,
+        browser: effect.attempt,
+        url: effect.url,
+        timeoutMs: effect.timeoutMs,
+      }),
+    ),
+  }
 }
 
 function started(
