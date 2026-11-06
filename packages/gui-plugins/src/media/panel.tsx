@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { ImagePreview } from "@opencode/ui/image-preview"
-import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
+import { Tabs } from "@opencode/ui/tabs"
 import { Select } from "@opencode/ui/select"
 import { SiteIcon } from "@opencode/session-ui/sources/site-icon"
 import { createLatest, usePlugin, type MountedSession } from "@opencode/plugin/gui"
@@ -41,9 +41,6 @@ export default function MediaPanel(props: { session: MountedSession }) {
   const media = createMemo(() => shown(all().media))
   const files = createMemo(() => shown(all().files))
   const links = createMemo(() => shown(all().links))
-  // Counts follow the sender filter, so each one says how many items its tab lists.
-  const lists = { media, files, links }
-  const count = (value: Kind) => lists[value]().length
 
   const empty = () => {
     if (from() !== "all") return ctx.t(from() === "user" ? "empty.user" : "empty.agent")
@@ -87,26 +84,21 @@ export default function MediaPanel(props: { session: MountedSession }) {
   return (
     <div data-component="media-panel">
       <div data-slot="media-panel-filters">
-        <SegmentedControl
+        <Tabs
+          variant="pill"
           value={kind()}
-          aria-label={ctx.t("kind.label")}
           onChange={(value) => {
             const next = KINDS.find((item) => item === value)
 
             if (next) setKind(next)
           }}
+          aria-label={ctx.t("kind.label")}
+          data-slot="media-panel-kinds"
         >
-          <For each={KINDS}>
-            {(value) => (
-              <SegmentedControlItem value={value}>
-                <span data-slot="media-panel-kind">
-                  {ctx.t(`kind.${value}`)}
-                  <span data-slot="media-panel-count">{count(value)}</span>
-                </span>
-              </SegmentedControlItem>
-            )}
-          </For>
-        </SegmentedControl>
+          <Tabs.List>
+            <For each={KINDS}>{(value) => <Tabs.Trigger value={value}>{ctx.t(`kind.${value}`)}</Tabs.Trigger>}</For>
+          </Tabs.List>
+        </Tabs>
         <Select
           options={[...FROM]}
           current={from()}
@@ -147,18 +139,20 @@ export default function MediaPanel(props: { session: MountedSession }) {
           </Match>
         </Switch>
         <Show when={messages().more(props.session.id)}>
-          <button
-            type="button"
-            data-slot="media-panel-more"
-            disabled={messages().loading(props.session.id)}
-            onClick={() =>
-              void messages()
-                .loadMore(props.session.id)
-                .catch(() => {})
-            }
-          >
-            {ctx.t(messages().loading(props.session.id) ? "load.loading" : "load.more")}
-          </button>
+          <div data-slot="media-panel-more">
+            <span>{ctx.t("load.note")}</span>
+            <button
+              type="button"
+              disabled={messages().loading(props.session.id)}
+              onClick={() =>
+                void messages()
+                  .loadMore(props.session.id)
+                  .catch(() => {})
+              }
+            >
+              {ctx.t(messages().loading(props.session.id) ? "load.loading" : "load.more")}
+            </button>
+          </div>
         </Show>
       </div>
     </div>

@@ -35,6 +35,7 @@ export default {
   "media.image": "Image",
   "day.today": "Today",
   "day.yesterday": "Yesterday",
-  "load.more": "Load earlier messages",
+  "load.note": "Only recent messages are loaded",
+  "load.more": "Load older",
   "load.loading": "Loading…",
 }
