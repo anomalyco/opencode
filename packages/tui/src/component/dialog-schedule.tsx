@@ -13,7 +13,7 @@ export function DialogSchedule(props: { sessionID: string }) {
   const client = useClient()
   const dialog = useDialog()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [selected, setSelected] = createSignal<SessionScheduleInfo>()
   const [deleting, setDeleting] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
@@ -108,7 +108,7 @@ function ScheduleForm(props: {
   const client = useClient()
   const dialog = useDialog()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
   const [focus, setFocus] = createSignal(0)
   const [busy, setBusy] = createSignal(false)

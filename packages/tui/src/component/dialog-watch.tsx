@@ -11,7 +11,7 @@ export function DialogWatch(props: { sessionID: string }) {
   const client = useClient()
   const dialog = useDialog()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
   const [focus, setFocus] = createSignal(0)
   const [position, setPosition] = createSignal(0)
