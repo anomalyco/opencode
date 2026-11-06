@@ -23,7 +23,7 @@ use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
 use opencode_store::location::{Catalog, Location, LocationData};
-use opencode_store::{Changes, Data};
+use opencode_store::{Changes, Data, Selected};
 use opencode_ui::bind;
 use opencode_ui::dialog::Dialogs;
 use opencode_ui::toast::{ToastOptions, Toasts, Variant};
@@ -210,19 +210,20 @@ impl Local {
         } else if changes.all || changes.location(&location) {
             self.notify();
         }
-        let sessions: Vec<String> = if changes.all {
+        let sessions: Vec<SessionID> = if changes.all {
             self.state
                 .borrow()
                 .commits
                 .keys()
                 .cloned()
                 .chain(self.state.borrow().agent_drafts.keys().cloned())
+                .map(SessionID)
                 .collect()
         } else {
-            changes.session.iter().map(|id| id.0.clone()).collect()
+            changes.session.iter().cloned().collect()
         };
         for id in sessions {
-            self.reconcile(&SessionID(id));
+            self.reconcile(&id, changes.selected.get(&id).map_or(&[], Vec::as_slice));
         }
     }
 
@@ -742,14 +743,22 @@ impl Local {
             Selection { model: Model::new(&model.provider_id.0, &model.id), variant: model.variant.clone() };
         self.state.borrow_mut().commits.insert(session.0.clone(), (agent.to_owned(), selection.key()));
         // An unchanged model emits no event; the agent may be the only durable change.
-        self.reconcile(session);
+        self.reconcile(session, &[]);
     }
 
-    // `reconcileSessionSelection` and the agent arm of `session.agent.selected`, from the session as the
-    // store holds it after the event.
-    fn reconcile(&self, id: &SessionID) {
+    // `reconcileSessionSelection` and the agent arm of `session.agent.selected`, once for the agent and
+    // model after each selection event of the batch, as TS handles each event, then for the session as the
+    // store holds it.
+    fn reconcile(&self, id: &SessionID, selected: &[Selected]) {
         let session = self.data.read(|state| state.session(id).cloned());
         let Some(session) = session else { return };
+        for (agent, model) in selected {
+            self.settle(id, &SessionInfo { agent: agent.clone(), model: model.clone(), ..session.clone() });
+        }
+        self.settle(id, &session);
+    }
+
+    fn settle(&self, id: &SessionID, session: &SessionInfo) {
         let agent = session.agent.as_ref().map(|agent| agent.0.clone());
         {
             let mut state = self.state.borrow_mut();
@@ -765,7 +774,7 @@ impl Local {
         let Some((expected_agent, expected_selection)) = expected else {
             return;
         };
-        let durable = Self::durable(Some(&session));
+        let durable = Self::durable(Some(session));
         if agent.as_ref() != Some(&expected_agent) || durable.is_none_or(|durable| durable.key() != expected_selection)
         {
             return;
