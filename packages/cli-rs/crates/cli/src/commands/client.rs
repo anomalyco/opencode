@@ -38,13 +38,19 @@ impl Connected {
 /// `ServerConnection.resolve()` with the command's `--server` and `--standalone`, and a client for it.
 /// Keep the result for as long as the command talks to the server.
 pub async fn connect(context: &Context) -> anyhow::Result<Connected> {
-    connect_in(context, &Paths::from_env()?, &Env::from_env(), false).await
+    connect_in(context, &Paths::from_env()?, &Env::from_env(), false, false, Arc::new(Reqwest::default())).await
+}
+
+/// [`connect`] for a long-lived command (`mini`): a managed service's client follows the service when it
+/// restarts on a new port or password (`service.reconnect`).
+pub async fn connect_following(context: &Context) -> anyhow::Result<Connected> {
+    connect_in(context, &Paths::from_env()?, &Env::from_env(), false, true, Arc::new(Reqwest::default())).await
 }
 
 /// `ServerConnection.resolve({ autostart: false })` (`run`): a running service, else a standalone server, so a
 /// one-off command never leaves a new service running.
 pub async fn connect_without_autostart(context: &Context) -> anyhow::Result<Connected> {
-    connect_in(context, &Paths::from_env()?, &Env::from_env(), true).await
+    connect_in(context, &Paths::from_env()?, &Env::from_env(), true, false, Arc::new(Reqwest::default())).await
 }
 
 impl Connected {
@@ -59,8 +65,9 @@ async fn connect_in(
     paths: &Paths,
     env: &Env,
     standalone_fallback: bool,
+    follow: bool,
+    transport: Arc<dyn Transport>,
 ) -> anyhow::Result<Connected> {
-    let transport: Arc<dyn Transport> = Arc::new(Reqwest::default());
     let connection = connect::resolve(
         transport.clone(),
         paths,
@@ -75,7 +82,12 @@ async fn connect_in(
         },
     )
     .await?;
-    Ok(Connected { client: connection.endpoint.client(transport)?, _connection: connection })
+    let client = if follow {
+        opencode_service::follow::client(transport, &connection, paths, env)?
+    } else {
+        connection.endpoint.client(transport)?
+    };
+    Ok(Connected { client, _connection: connection })
 }
 
 /// `{ location: { directory: process.cwd() } }`, the location every read command sends.
@@ -102,6 +114,60 @@ for await (const _ of Bun.stdin.stream()) {}
 process.exit(0)
 "#;
 
+    /// Answers `/api/info` on port 5000, and on 4096 only for the first request: the service then restarts.
+    #[derive(Default)]
+    struct Restarting(std::sync::Mutex<Vec<String>>);
+
+    impl Transport for Restarting {
+        fn send(
+            &self,
+            request: opencode_api::transport::Request,
+        ) -> opencode_api::transport::BoxFuture<'_, Result<opencode_api::transport::Response, String>> {
+            let mut sent = self.0.lock().unwrap();
+            sent.push(request.url.to_string());
+            let old = sent.iter().filter(|url| url.contains(":4096/")).count();
+            let up = request.url.port() == Some(5000) || old == 1;
+            Box::pin(async move {
+                if !up {
+                    return Err("connection refused".to_owned());
+                }
+                let body = r#"{"version":"2.0.0","pid":9,"urls":[],"paths":{"tmp":"/tmp"}}"#;
+                Ok(opencode_api::transport::Response {
+                    status: 200,
+                    headers: vec![("content-type".to_owned(), "application/json".to_owned())],
+                    body: Box::pin(futures_util::stream::iter([Ok(body.as_bytes().to_vec().into())])),
+                })
+            })
+        }
+    }
+
+    /// `mini` follows a background service that restarts on another port, as `service.reconnect` does.
+    #[tokio::test]
+    async fn a_following_client_finds_a_restarted_service() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_owned();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(root.clone().into()),
+            "XDG_STATE_HOME" => Some(root.join("state").into()),
+            _ => None,
+        })
+        .unwrap();
+        std::fs::create_dir_all(&paths.state).unwrap();
+        let register = |port: u16| {
+            let entry = format!(r#"{{"url":"http://127.0.0.1:{port}","pid":9,"password":"pw"}}"#);
+            std::fs::write(paths.state.join("service-oc-x.json"), entry).unwrap();
+        };
+        register(4096);
+        let env = Env { ts_bin: Some("/nonexistent/opencode-ts".to_owned()), ..Env::default() };
+        let context = Context { server: ServerFlags { standalone: false, server: None } };
+        let transport = Arc::new(Restarting::default());
+        let server = connect_in(&context, &paths, &env, false, true, transport.clone()).await.unwrap();
+        register(5000);
+        assert!(server.client.server_info().await.is_err());
+        assert_eq!(server.client.server_info().await.unwrap().version, "2.0.0");
+        assert!(transport.0.lock().unwrap().last().unwrap().starts_with("http://127.0.0.1:5000/"));
+    }
+
     #[tokio::test]
     async fn a_standalone_server_lives_as_long_as_the_connection() {
         if std::process::Command::new("bun").arg("--version").output().is_err() {
@@ -127,7 +193,7 @@ process.exit(0)
         let env = Env { ts_bin: Some(program.to_string_lossy().into_owned()), ..Env::default() };
         let context = Context { server: ServerFlags { standalone: true, server: None } };
         // The commands bind the result as these lines do; `let (_, client)` stopped the server here.
-        let server = connect_in(&context, &paths, &env, false).await.unwrap();
+        let server = connect_in(&context, &paths, &env, false, false, Arc::new(Reqwest::default())).await.unwrap();
         let info = server.client.server_info().await;
         assert_eq!(info.unwrap().version, "test");
     }
