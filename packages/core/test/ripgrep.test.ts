@@ -83,7 +83,7 @@ describe("Ripgrep", () => {
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "utf8.txt"), "needle\n"))
         yield* Effect.promise(() =>
-          fs.writeFile(path.join(tmp.path, "latin1.txt"), Buffer.from([...Buffer.from("needle caf"), 0xe9, 0x0a])),
+          fs.writeFile(path.join(tmp.path, "latin1.txt"), Buffer.from("needle café\n", "latin1")),
         )
 
         const ripgrep = yield* Ripgrep.Service
