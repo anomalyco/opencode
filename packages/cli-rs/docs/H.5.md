@@ -70,8 +70,9 @@ One file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with `export def
 - `applyMasks` from `parity/lib/app.ts` masks both sides, then the cells are compared one by one (symbol, fg, bg,
   attributes), as `opencode_parity::compare` does. The report lists the differing rows with markers and the first
   differing cells, in the H.1 report shape.
-- A checkpoint passes when the cells are equal, or when it lists deviation files and all of them exist. A listed
-  file that does not exist fails the checkpoint.
+- A checkpoint passes when the cells are equal, or when they differ in no more cells than its deviations allow
+  (H.2's `{ file, cells, styleOnly? }`) and all of their files exist. A listed file that does not exist fails the
+  checkpoint.
 - Requests: writes (anything but GET and plugin `get` RPCs, H.2's `isRead`) must match in order by method, path,
   and body after the plan 7.5 normalizers (prefixed IDs, the sandbox root, ports). Reads that one side sent and the
   other did not are listed, not failed, as in H.2. Bodies are compared as JSON values (key order does not count),
