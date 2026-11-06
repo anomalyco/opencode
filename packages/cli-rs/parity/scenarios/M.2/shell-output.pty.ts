@@ -62,15 +62,15 @@ export default definePty({
   setup: async (root) => {
     await Bun.write(
       `${root}/home/.config/opencode/cli.json`,
-      JSON.stringify({ animations: false, mini: { splash: "hide" } }),
+      // TS hides `!` shell turns while `tools` is `hide`, the default (`M07-mini-shell-tools.md`).
+      JSON.stringify({ animations: false, mini: { splash: "hide", tools: "show" } }),
     )
   },
   steps: [
     opened,
     { keys: "!echo hello", settle: 300 },
     { keys: "\r", settle: 400, checkpoint: "waiting" },
-    // The shell's output entry is not compared: TS holds it back past this scenario.
-    { until: { screen: /^build · model · demo/m }, settle: 400 },
+    { until: { screen: /^build · model · demo/m }, settle: 400, checkpoint: "output", scrollback: 4 },
     ...leave,
   ],
   exits: true,
