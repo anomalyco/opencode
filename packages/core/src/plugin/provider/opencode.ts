@@ -506,7 +506,8 @@ export const OpencodePlugin = define<
     const explain = (event: SessionHttpResponse) =>
       Effect.gen(function* () {
         if (event.response.status !== 401 && event.response.status !== 403) return
-        yield* check(Duration.seconds(30))
+        // Bounded like a prompt, so an unreachable Console can't hold the response through every retry.
+        yield* check(Duration.seconds(30), Duration.seconds(3))
         const status = reported
         if (!status) return
         void event.response.body?.cancel()
@@ -530,9 +531,14 @@ export const OpencodePlugin = define<
     })
     yield* guard(snapshot)
     // A prompt after the machine slept or the host suspended refreshes stale Console config, and the MCP gateway
-    // tokens it carries, before the turn's tool calls run. An unreachable Console delays the prompt by at most
-    // 3 seconds; the turn then runs on the config it has.
-    yield* ctx.session.hook("prompt", () => check(Duration.minutes(1), Duration.seconds(3)))
+    // tokens it carries. A host that suspends between prompts has no poll to fall back on, so the prompt waits up to
+    // 3 seconds for it before the turn's tool calls run. A polling host refreshes in the background instead, so an
+    // unreachable Console never delays its prompts.
+    yield* ctx.session.hook("prompt", () =>
+      settings.poll
+        ? check(Duration.minutes(1)).pipe(Effect.forkIn(scope), Effect.asVoid)
+        : check(Duration.minutes(1), Duration.seconds(3)),
+    )
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.

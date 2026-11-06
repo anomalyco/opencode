@@ -979,6 +979,56 @@ describe("OpencodePlugin", () => {
       ),
     )
 
+    it.effect("admits a prompt on a polling host without waiting while the Console doesn't answer", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            yield* connect(server, true)
+
+            state.hang = true
+            state.advertised = true
+            yield* TestClock.adjust("2 minutes")
+            yield* settle
+            // Returns without the clock moving, so it never waited on the hanging request, and runs on the config it has.
+            yield* prompt()
+            expect(yield* websearch.providers()).toEqual([])
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
+    it.effect("passes a rejected inference response through after 3 seconds when the Console doesn't answer", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            yield* connect(server)
+
+            state.hang = true
+            yield* TestClock.adjust("1 minute")
+            const rejected = yield* hooks
+              .trigger("session", "http.response", {
+                sessionID: Session.ID.make("ses_console"),
+                agent: Agent.ID.make("build"),
+                model: Model.Ref.make({ providerID: Provider.ID.opencode, id: Model.ID.make("model") }),
+                kind: "primary",
+                request: new Request("https://inference.example/v1/responses"),
+                response: Response.json({ error: { message: "Invalid API key" } }, { status: 401 }),
+              })
+              .pipe(inProcess(server), Effect.forkChild({ startImmediately: true }))
+            yield* settle
+            yield* TestClock.adjust("3 seconds")
+            expect((yield* Fiber.join(rejected)).response.status).toBe(401)
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
     it.effect("fetches again under a key replaced in place, even while the last config is fresh", () =>
       Effect.acquireUseRelease(
         serve(),
