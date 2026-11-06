@@ -97,6 +97,96 @@ denies it: the host function is never called, and the program catches the failur
 fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
 throws.
 
+### Bytecode VM and suspending/resuming a run (experimental, `engine: "vm"`)
+
+Pass `engine: "vm"` to `CodeMode.make` or `CodeMode.execute` to run programs on the bytecode VM instead of the default
+`"legacy"` AST interpreter. `runtime.execute(code, bindings?)` keeps the same `Effect<CodeMode.Result>` signature on
+both engines.
+
+On `engine: "vm"`, `runtime.start(code, bindings?, { runId? })` starts a program in the current scope and returns at
+once: `execution.result` waits for its outcome, and `execution.suspend` saves its state and stops it at once. Both
+give a `Result` or:
+
+```ts
+type Suspended = {
+  ok: "suspended"
+  state: CodeMode.Snapshot // JSON; CodeMode.toBytes / CodeMode.fromBytes convert it
+  pending: Array<{ key; path; args; handle? }> // the durable calls it waits on
+}
+
+const runtime = CodeMode.make({ tools, engine: "vm" })
+
+const suspended = Effect.scoped(
+  Effect.gen(function* () {
+    const execution = yield* runtime.start(source)
+    // ... once the run waits on a durable call:
+    return yield* execution.suspend
+  }),
+)
+// later, in this process or another one built from the same version:
+const result = Effect.scoped(
+  Effect.gen(function* () {
+    const resumed = yield* runtime.resume(state, { [pending[0].key]: { ok: true, value } })
+    return yield* resumed.result
+  }),
+)
+```
+
+A run can be suspended only while every host call it has running is a durable tool's work that has its handle. Any
+other call in progress blocks it: a tool call or `search`, any extension call (`fetch`, a method on a value it returned,
+a synchronous global, one queued but not started), and a durable call still in `start`. Then `execution.suspend` fails
+with a `CodeMode.SuspendError` naming each blocking call by its key and path (`tools.x.y`, `fetch`), and the run goes on
+untouched; try again later. Tool calls queued but not started don't block: they start on resume. Outcomes already
+waiting for the program are part of the state. A suspend after the run ended gives its result.
+
+The suspend is immediate: the program shares the thread with the caller, so it is at a step boundary. Its checks, saving
+the state, and checking it against `suspend.maxBytes` all happen before anything about the run changes, so a state that
+can't be saved or is too large fails the suspend the same way. Once saved, running durable calls are detached: their
+work runs on, `tool.after` doesn't see them, and `cancel` doesn't run.
+
+`resume` takes an outcome, `{ ok: true, value } | { ok: false, error }`, for every pending durable call, by key: the host
+waits on the work itself (with the call's `handle`). It fails with a `CodeMode.SnapshotError` when one is missing, or
+given for a key that isn't a pending durable call. A value is copied as JSON; an error rejects the call's promise with a
+tool error the program can catch. A resumed run keeps the limits it was saved with: `timeoutMs` counts active time
+across every resume, and `maxToolCalls` counts every call of the run. Every call has an idempotency key,
+`<runId>:<id>`.
+
+A state resumes only on the same build of this package, with the same extensions (and the same `snapshot` hooks; see
+`Extension.make`); `resume` fails with a `CodeMode.SnapshotError` otherwise, or when the state is malformed. Built-ins
+are saved by name and only their changes are copied. Closing the scope of a run that wasn't suspended cancels its
+running durable calls.
+
+A durable tool runs its work under the call's key and returns a JSON handle:
+
+```ts
+const build = Tool.make({
+  description: "Run a build",
+  input: Schema.Struct({ target: Schema.String }),
+  output: Schema.Struct({ ok: Schema.Boolean }),
+  durable: {
+    start: (input, { key }) => jobs.start(key, input), // launch the work, return a handle quickly
+    attach: (handle) => jobs.wait(handle), // its output; interrupting this detaches, never cancels
+    cancel: (handle) => jobs.stop(handle), // a run that ends with the call still running cancels it
+    lookup: (key) => jobs.find(key), // optional, for the host: the runtime doesn't call it
+  },
+})
+```
+
+`start` and `attach` also get `ctx.suspend`, which suspends the run with this call pending, for the host to finish the
+call and give its outcome to `resume` (an approval, say). It may be called at once, as `start` begins; calls queued
+after this one then stay queued, and start on resume. It never succeeds (the call's fiber is detached), and fails with a
+`SuspendError` inside the tool, leaving the run running, while another call blocks a suspend. Only a durable tool can
+suspend its run.
+
+Every call sees its key: a tool's `execute` gets it as `execute(input, { key })`, and both hooks as `call.key`. A durable
+call's `tool.before` runs when it starts and its `tool.after` when its work ends; a call detached by a suspend reports
+nothing, while one cancelled because its run ended reports `interrupted`.
+
+Nothing in OpenCode suspends runs yet; this is the capability a host builds on.
+
+Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests on the VM with every run saved to bytes and
+restored into a brand-new runtime at every host call and every few steps.
+
 ### `Extension.make`
 
 Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the
@@ -136,6 +226,29 @@ const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Ef
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
 copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
 extension throws at `CodeMode.make`.
+
+Functions inside a result have no data form, so a suspended run (`engine: "vm"`) loses them: after a resume, calling
+one throws a `TypeError`. An extension keeps them with `snapshot` hooks. `encode` gets a value one of its functions
+returned, as the host function returned it, and gives plain data (JSON values and `Uint8Array`s); `decode` gets that
+data back on resume, once per value, and gives a value of the same shape, whose functions the program's copies call
+from then on:
+
+```ts
+const data = Symbol("data")
+const response = (saved: { url: string; body: string }) => ({
+  [data]: saved,
+  url: saved.url,
+  text: async () => saved.body,
+})
+const web = Extension.make({
+  name: "web",
+  globals: { fetch: async (url: string) => response({ url, body: await (await globalThis.fetch(url)).text() }) },
+  snapshot: { encode: (value) => value[data], decode: (saved) => response(saved) },
+})
+```
+
+A suspend fails, and the run goes on, when `encode` throws or gives anything else. A state saved with an extension's
+hooks resumes only with an extension of the same name that has hooks too.
 
 A global can also be an object of functions, such as `fs`. Every function reachable from it is an entry point like a
 global, so calls fire the `extension` hooks with their path as the name (`fs.readFile`, `fs.promises.readFile`).
