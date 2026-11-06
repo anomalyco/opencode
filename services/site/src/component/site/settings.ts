@@ -1137,12 +1137,16 @@ const defaults = siteSettingsDefaults
  * has no Settings panel or Design mode, so it always uses the defaults: a designer's saved settings
  * never change what visitors see.
  */
-export const [siteSettings, setStore] = createStore<SiteSettings>(structuredClone(defaults))
+// Production reads every setting as its default's constant (script/fold-settings.ts, which fails the
+// build on any other read), so its store starts empty and the defaults stay out of the bundle.
+export const [siteSettings, setStore] = createStore<SiteSettings>(
+  import.meta.env.DEV ? structuredClone(defaults) : ({} as SiteSettings),
+)
 
 // Set once the saved settings are loaded in full, after hydration.
 let loaded = false
 // The values as of the last save, load or undo, so a save can record what it changed.
-let recorded = structuredClone(defaults)
+let recorded = /* @__PURE__ */ structuredClone(defaults)
 
 export function loadSiteSettings() {
   loaded = true

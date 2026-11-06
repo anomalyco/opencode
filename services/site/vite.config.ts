@@ -5,6 +5,7 @@ import { fromPathname } from "./src/lib/language"
 import variants from "./src/component/site/css-variants.json"
 import { docs } from "./src/docs/vite"
 import { i18nSlices } from "./script/i18n-plugin"
+import { foldSettingsForProduction } from "./script/fold-settings"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -118,6 +119,8 @@ function cssVariantsForProduction(): PluginOption {
 
 export default defineConfig({
   plugins: [
+    // Before Solid compiles JSX, in both the server and browser builds (script/fold-settings.ts).
+    foldSettingsForProduction(),
     solidStart({
       middleware: "./src/middleware.ts",
     }) as PluginOption,
