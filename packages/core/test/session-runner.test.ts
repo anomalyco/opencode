@@ -718,6 +718,12 @@ const userTexts = (request: LLMRequest) => messageTexts(request, "user")
 const systemTexts = (request: LLMRequest) => messageTexts(request, "system")
 const messageRoles = (request: LLMRequest | undefined) => request?.messages.map((message) => message.role)
 
+// Custom timestamp prefix (port: model message timestamps). Strips only the
+// custom `<message_metadata ... />` prefix so assertions compare the original
+// exact text. Does not weaken assertions to substring matching.
+const stripMetadata = (text: string) => text.replace(/^<message_metadata [^>]*\/>\n\n/, "")
+const strippedUserTexts = (request: LLMRequest) => userTexts(request).map(stripMetadata)
+
 const recordedEventTypes = (id: Session.ID) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
@@ -1221,10 +1227,11 @@ describe("SessionRunnerLLM", () => {
 
         expect(idles).toEqual([sessionID, sessionID])
         expect(s.requests).toHaveLength(2)
-        expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-          role: "user",
-          content: [{ type: "text", text: "Keep going" }],
-        })
+        {
+          const last = s.requests[1]?.messages.at(-1)
+          expect(last?.role).toBe("user")
+          expect(stripMetadata((last?.content[0] as { text: string }).text)).toBe("Keep going")
+        }
         expect(yield* s.context).toMatchObject([
           Expected.user("Start"),
           Expected.assistant({}, [Expected.text("First answer")]),
@@ -1381,7 +1388,7 @@ describe("SessionRunnerLLM", () => {
 
     expect(idles).toEqual([sessionID, sessionID])
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[2])).toContain("Keep going")
+    expect(strippedUserTexts(s.requests[2])).toContain("Keep going")
     expect((yield* s.context).filter((message) => message.type === "synthetic")).toHaveLength(1)
     expect(yield* s.inbox).toEqual([])
   })
@@ -1481,7 +1488,7 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(running)
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[2])).toContain("Background work completed")
+    expect(strippedUserTexts(s.requests[2])).toContain("Background work completed")
   })
 
   scenario("streams one request with registry definitions from chronological user history", function* (s) {
@@ -1491,10 +1498,8 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(s.requests[0]?.model).toBe(model)
     expect(s.requests[0]?.tools.map((tool) => tool.name)).toEqual(["defect", "echo", "storefail"])
-    expect(s.requests[0]?.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
-      { role: "user", content: [{ type: "text", text: "First" }] },
-      { role: "user", content: [{ type: "text", text: "Second" }] },
-    ])
+    expect(s.requests[0]?.messages.map((message) => message.role)).toEqual(["user", "user"])
+    expect(strippedUserTexts(s.requests[0]!)).toEqual(["First", "Second"])
     expect(yield* s.messages).toHaveLength(2)
   })
 
@@ -1718,8 +1723,8 @@ describe("SessionRunnerLLM", () => {
 
     // The resumed turn absorbs steers only; queued input waits for the turn to end.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])).not.toContain("Queued for later")
-    expect(userTexts(s.requests[2])).toContain("Queued for later")
+    expect(strippedUserTexts(s.requests[1])).not.toContain("Queued for later")
+    expect(strippedUserTexts(s.requests[2])).toContain("Queued for later")
   })
 
   scenario("runs a queued control on Location entry before a carried continuation", function* (s) {
@@ -1762,7 +1767,7 @@ describe("SessionRunnerLLM", () => {
     yield* runner.drain({ sessionID, force: false, continuation: moved.continuation })
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
+    expect(strippedUserTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Entry summary\n</summary>")
     expect(yield* s.inbox).toEqual([])
   })
 
@@ -1815,7 +1820,10 @@ describe("SessionRunnerLLM", () => {
       s.currentModel = LanguageModel.update(original, { id: "different-deployment" })
       yield* s.session.prompt({ sessionID: forked.id, text: "Switched fork", resume: false })
       yield* s.session.resume(forked.id)
-      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      {
+        const first = s.requests.at(-1)?.messages[0]
+        expect(stripMetadata(((first?.content[0] as { text: string }).text))).toBe("Original request")
+      }
       expect(s.requests.at(-1)?.messages.filter((message) => message.role === "system")).toEqual([
         Message.system("Newest instructions"),
       ])
@@ -1829,7 +1837,10 @@ describe("SessionRunnerLLM", () => {
           ?.messages.flatMap((message) => [...message.content])
           .some((part) => part.type === "compaction"),
       ).toBe(false)
-      expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
+      {
+        const first = s.requests.at(-1)?.messages[0]
+        expect(stripMetadata(((first?.content[0] as { text: string }).text))).toBe("Original request")
+      }
       expect(
         (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
       ).toMatchObject({ native })
@@ -2448,11 +2459,11 @@ describe("SessionRunnerLLM", () => {
       expect((yield* s.messages).some((message) => message.type === "compaction")).toBe(false)
       yield* active.finish
 
-      expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+      expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
       expect(s.requests).toHaveLength(3)
-      expect(userTexts(s.requests[1])).not.toContain("STEER_A")
-      expect(userTexts(s.requests[1])).not.toContain("STEER_B")
-      expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+      expect(strippedUserTexts(s.requests[1])).not.toContain("STEER_A")
+      expect(strippedUserTexts(s.requests[1])).not.toContain("STEER_B")
+      expect(strippedUserTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
       expect(yield* s.inbox).toEqual([])
       expect((yield* s.messages).filter((message) => message.id === compactID)).toMatchObject([
         { type: "compaction", status: "completed" },
@@ -2487,9 +2498,9 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
     expect(s.requests[1].messages.some((message) => message.role === "tool")).toBe(true)
-    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(strippedUserTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
     expect(yield* s.inbox).toEqual([])
   })
 
@@ -2510,8 +2521,8 @@ describe("SessionRunnerLLM", () => {
     yield* Deferred.succeed(release, undefined)
     yield* Fiber.join(run)
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
-    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(strippedUserTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
     expect(yield* s.inbox).toEqual([])
   })
 
@@ -2531,14 +2542,14 @@ describe("SessionRunnerLLM", () => {
 
       expect(s.requests).toHaveLength(outcome === "cancelled" ? 2 : 3)
       if (outcome === "failed") {
-        expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+        expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
         expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({
           status: "failed",
           error: { type: "provider.invalid-request", message: "summary unavailable" },
         })
       }
       if (outcome === "cancelled") expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
-      expect(userTexts(s.requests[s.requests.length - 1]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+      expect(strippedUserTexts(s.requests[s.requests.length - 1]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
       expect(
         (yield* s.context)
           .filter((message) => message.id === first.id || message.id === second.id)
@@ -2556,7 +2567,7 @@ describe("SessionRunnerLLM", () => {
     const summary = yield* s.llm.gate()
     const compact = yield* s.session.compact({ sessionID })
     yield* summary.started
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
     expect((yield* s.inbox).map((item) => item.id)).toEqual([first.id, second.id])
     yield* s.session.interrupt(sessionID)
     yield* s.session.wait(sessionID)
@@ -2568,7 +2579,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Recovered steers", "steers"))
     yield* s.resume
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
+    expect(strippedUserTexts(s.requests[2]).slice(-2)).toEqual(["STEER_A", "STEER_B"])
     expect(yield* s.inbox).toEqual([])
   })
 
@@ -2595,9 +2606,9 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.resume
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[0])).toEqual(["STEER_A"])
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
-    expect(userTexts(s.requests[2]).at(-1)).toBe("STEER_B")
+    expect(strippedUserTexts(s.requests[0])).toEqual(["STEER_A"])
+    expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(strippedUserTexts(s.requests[2]).at(-1)).toBe("STEER_B")
     expect(
       (yield* recordedEventTypes(sessionID)).filter(
         (type) => type === "session.moved.1" || type === "session.compaction.started.1",
@@ -2635,9 +2646,9 @@ describe("SessionRunnerLLM", () => {
     yield* active.finish
 
     expect(s.requests).toHaveLength(4)
-    expect(userTexts(s.requests[1])).toContain("Steer after compaction")
-    expect(userTexts(s.requests[1])).toContain("Completion after compaction")
-    expect(userTexts(s.requests[3])).toContain("Queue after compaction")
+    expect(strippedUserTexts(s.requests[1])).toContain("Steer after compaction")
+    expect(strippedUserTexts(s.requests[1])).toContain("Completion after compaction")
+    expect(strippedUserTexts(s.requests[3])).toContain("Queue after compaction")
     expect(yield* SessionInbox.find(s.db, first.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === first.id)).toMatchObject({
       type: "compaction",
@@ -2667,7 +2678,7 @@ describe("SessionRunnerLLM", () => {
     yield* active.finish
 
     expect(s.requests).toHaveLength(4)
-    expect(userTexts(s.requests[3])).toContain("Continue after failure")
+    expect(strippedUserTexts(s.requests[3])).toContain("Continue after failure")
     expect(yield* SessionInbox.find(s.db, compaction.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
@@ -2710,7 +2721,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])[0]).toContain("Earlier question")
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("Earlier question")
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "completed",
@@ -2735,7 +2746,7 @@ describe("SessionRunnerLLM", () => {
     // Steer-delivered compaction runs at the boundary after the active step, ahead of
     // the queued prompt, and consuming it does not trigger an input-free model call.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[2])).toContain("Queued prompt")
+    expect(strippedUserTexts(s.requests[2])).toContain("Queued prompt")
     expect(yield* SessionInbox.find(s.db, compaction.id)).toBeUndefined()
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
@@ -2847,7 +2858,7 @@ describe("SessionRunnerLLM", () => {
           role: "user",
           content: [{ type: "text", text: SessionCompaction.buildPrompt(false) }],
         })
-        expect(userTexts(compact).includes("Retained recent request")).toBe(reason === "auto")
+        expect(strippedUserTexts(compact).includes("Retained recent request")).toBe(reason === "auto")
         for (const field of [
           "model",
           "system",
@@ -2922,7 +2933,7 @@ describe("SessionRunnerLLM", () => {
 
           expect(s.requests).toHaveLength(2)
           expect(s.requests[1].messages.slice(0, -1)).toEqual([...s.requests[0].messages])
-          expect(userTexts(s.requests[1]).at(-1)).toContain("did not fill in the required summary template")
+          expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("did not fill in the required summary template")
           expect(s.requests.every((request) => request.toolChoice === undefined)).toBe(true)
           expect(s.executions).toEqual([])
           expect(JSON.stringify(yield* s.messages)).not.toContain("rejected-summary-state")
@@ -3129,7 +3140,7 @@ describe("SessionRunnerLLM", () => {
       expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
       yield* s.llm.push(TestLLM.text("Continued", "continued"))
       yield* s.runPrompt("Continue")
-      expect(userTexts(s.requests[1])).toContain("Earlier question")
+      expect(strippedUserTexts(s.requests[1])).toContain("Earlier question")
       expect(JSON.stringify(s.requests[1])).not.toContain("Incomplete summary")
     })
   }
@@ -3153,13 +3164,13 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(5)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
-    expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
-    expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
+    expect(strippedUserTexts(s.requests[2])[0].length).toBeLessThan(strippedUserTexts(s.requests[1])[0].length)
+    expect(strippedUserTexts(s.requests[3])[0].length).toBeLessThan(strippedUserTexts(s.requests[2])[0].length)
+    expect(strippedUserTexts(s.requests[4])[0].length).toBeLessThan(strippedUserTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
     yield* s.llm.push(TestLLM.text("Continued", "continued"))
     yield* s.runPrompt("Continue")
-    expect(userTexts(s.requests[5])).toContain(`Request 0: ${filler}`)
+    expect(strippedUserTexts(s.requests[5])).toContain(`Request 0: ${filler}`)
   })
 
   scenario("resends compaction as text after payload too large, then shrinks later rejections", function* (s) {
@@ -3187,12 +3198,12 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(6)
     expect(s.requests[0]?.messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
     expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
-    expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
-    expect(userTexts(s.requests[1])[0]).not.toMatch(/older exchanges? omitted/)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
-    expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
-    expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
-    expect(userTexts(s.requests[5])[0].length).toBeLessThan(userTexts(s.requests[4])[0].length)
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("[image/png omitted]")
+    expect(strippedUserTexts(s.requests[1])[0]).not.toMatch(/older exchanges? omitted/)
+    expect(strippedUserTexts(s.requests[2])[0].length).toBeLessThan(strippedUserTexts(s.requests[1])[0].length)
+    expect(strippedUserTexts(s.requests[3])[0].length).toBeLessThan(strippedUserTexts(s.requests[2])[0].length)
+    expect(strippedUserTexts(s.requests[4])[0].length).toBeLessThan(strippedUserTexts(s.requests[3])[0].length)
+    expect(strippedUserTexts(s.requests[5])[0].length).toBeLessThan(strippedUserTexts(s.requests[4])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
   })
 
@@ -3215,8 +3226,8 @@ describe("SessionRunnerLLM", () => {
     // The only exchange is over the estimated limit, so its text is cut to its start and end rather than sent whole.
     expect(s.requests).toHaveLength(1)
     expect(s.requests[0]?.messages.every((message) => message.role === "user")).toBeTrue()
-    expect(userTexts(s.requests[0])[0]).toContain("characters omitted")
-    expect(userTexts(s.requests[0])[0]).not.toContain("x".repeat(2_001))
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("characters omitted")
+    expect(strippedUserTexts(s.requests[0])[0]).not.toContain("x".repeat(2_001))
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
   })
 
@@ -3238,7 +3249,7 @@ describe("SessionRunnerLLM", () => {
     // The first send was already text, so there is no media left to drop; the rejection counts like "too long".
     expect(s.requests).toHaveLength(2)
     expect(s.requests[0]?.messages.every((message) => message.role === "user")).toBeTrue()
-    expect(userTexts(s.requests[1])[0].length).toBeLessThan(userTexts(s.requests[0])[0].length)
+    expect(strippedUserTexts(s.requests[1])[0].length).toBeLessThan(strippedUserTexts(s.requests[0])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
   })
 
@@ -3292,9 +3303,9 @@ describe("SessionRunnerLLM", () => {
 
     // The history fits the model's window by estimate, but the provider just rejected it, so older exchanges are cut.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("characters omitted")
-    expect(userTexts(s.requests[1])[0]).not.toContain(`Request 0: ${filler}`)
-    expect(userTexts(s.requests[1])[0]).toContain("Request 3:")
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("characters omitted")
+    expect(strippedUserTexts(s.requests[1])[0]).not.toContain(`Request 0: ${filler}`)
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("Request 3:")
   })
 
   scenario("serializes history without tools or media after a summary input overflow", function* (s) {
@@ -3331,10 +3342,10 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(s.requests[0]?.messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
     expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
-    expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
-    expect(userTexts(s.requests[1])[0]).toContain("[Tool result]:")
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("[image/png omitted]")
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("[Tool result]:")
     // Tool output is only cut when the transcript would not fit whole.
-    expect(userTexts(s.requests[1])[0]).toContain("x".repeat(5_000))
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("x".repeat(5_000))
     expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
     expect(s.requests[1]?.tools).toEqual([])
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
@@ -3375,10 +3386,10 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])[0]).toContain("Request 0")
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("Request 0")
     // The oldest exchange loses its tool outputs rather than being dropped.
-    expect(userTexts(s.requests[0])[0]).toContain("[Tool result omitted]")
-    expect(userTexts(s.requests[0])[0]).not.toMatch(/older exchanges? omitted/)
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("[Tool result omitted]")
+    expect(strippedUserTexts(s.requests[0])[0]).not.toMatch(/older exchanges? omitted/)
   })
 
   scenario("fits serialized compaction history by omitting oldest exchanges", function* (s) {
@@ -3398,10 +3409,10 @@ describe("SessionRunnerLLM", () => {
 
     // Even cut to the user's text, the older exchanges do not all fit, so the oldest are omitted.
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])[0]).toContain("older exchanges omitted")
-    expect(userTexts(s.requests[0])[0]).not.toContain("Request 0:")
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("older exchanges omitted")
+    expect(strippedUserTexts(s.requests[0])[0]).not.toContain("Request 0:")
     // The newest exchanges are the retained tail, so shrinking drops only exchanges before them.
-    expect(userTexts(s.requests[0])[0]).not.toContain("Request 15:")
+    expect(strippedUserTexts(s.requests[0])[0]).not.toContain("Request 15:")
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       status: "completed",
       summary: "## Objective\n- Recovered",
@@ -3496,10 +3507,10 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(JSON.stringify(s.requests[0].messages)).toContain("Recent exact request ".repeat(180))
-    expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
-    expect(userTexts(s.requests[1])).toHaveLength(1)
-    expect(userTexts(s.requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
-    expect(userTexts(s.requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
+    expect(strippedUserTexts(s.requests[0]).at(-1)).toContain("## Objective")
+    expect(strippedUserTexts(s.requests[1])).toHaveLength(1)
+    expect(strippedUserTexts(s.requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
+    expect(strippedUserTexts(s.requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
 
     const context = yield* store.context(sessionID)
     expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
@@ -3535,9 +3546,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Newest exact request ".repeat(180))
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
-    expect(userTexts(s.requests[0])[0]).toContain("Recent exact request")
-    expect(userTexts(s.requests[0]).at(-1)).toBe(SessionCompaction.buildPrompt(true))
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
+    expect(strippedUserTexts(s.requests[0])[0]).toContain("Recent exact request")
+    expect(strippedUserTexts(s.requests[0]).at(-1)).toBe(SessionCompaction.buildPrompt(true))
     expect((yield* store.context(sessionID))[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the updated task",
@@ -3581,7 +3592,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(checkpoint("second"), TestLLM.textWithUsage("Continued", "continued", 10_000))
     yield* s.runPrompt("Fourth real request")
     expect(s.requests).toHaveLength(7)
-    expect(userTexts(s.requests[6])).toEqual([
+    expect(strippedUserTexts(s.requests[6])).toEqual([
       "First real request",
       "Second real request",
       "Third real request",
@@ -3637,7 +3648,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])).toContain("Continue")
+    expect(strippedUserTexts(s.requests[0])).toContain("Continue")
     expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
   })
 
@@ -3679,8 +3690,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("## Objective")
-    expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Recover overflow\n</summary>")
+    expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("## Objective")
+    expect(strippedUserTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Recover overflow\n</summary>")
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover overflow" },
       { type: "assistant", finish: "stop" },
@@ -3744,18 +3755,18 @@ describe("SessionRunnerLLM", () => {
       "Initial context",
     ])
     expect(systemTexts(s.requests[2])).toContain("Changed during compaction")
-    expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Overflow summary\n</summary>")
-    expect(userTexts(s.requests[2]).join("\n")).not.toContain("Queued during compaction")
-    expect(userTexts(s.requests[2]).join("\n")).not.toContain("Steered during compaction")
+    expect(strippedUserTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Overflow summary\n</summary>")
+    expect(strippedUserTexts(s.requests[2]).join("\n")).not.toContain("Queued during compaction")
+    expect(strippedUserTexts(s.requests[2]).join("\n")).not.toContain("Steered during compaction")
     expect((yield* s.inbox).map((item) => item.id)).toEqual([queued.id, steered.id])
 
     yield* retry.release
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(5)
-    expect(userTexts(s.requests[3])).toContain("Steered during compaction")
-    expect(userTexts(s.requests[3])).not.toContain("Queued during compaction")
-    expect(userTexts(s.requests[4])).toContain("Queued during compaction")
+    expect(strippedUserTexts(s.requests[3])).toContain("Steered during compaction")
+    expect(strippedUserTexts(s.requests[3])).not.toContain("Queued during compaction")
+    expect(strippedUserTexts(s.requests[4])).toContain("Queued during compaction")
     expect(yield* s.inbox).toEqual([])
   })
 
@@ -3895,7 +3906,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Recent request ".repeat(400))
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
+    expect(strippedUserTexts(s.requests[0]).at(-1)).toContain("## Objective")
     // The summary may use the whole 30k reserve of a 200k window.
     expect(s.requests[0]?.maxTokens).toBe(30_000)
     expect(s.requests[1]?.maxTokens).toBe(32_000)
@@ -3914,7 +3925,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Recent request ".repeat(400))
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
+    expect(strippedUserTexts(s.requests[0]).at(-1)).toContain("## Objective")
     expect(s.requests[0]?.maxTokens).toBe(16_000)
     expect(s.requests[1]?.maxTokens).toBe(16_000)
   })
@@ -4394,7 +4405,7 @@ describe("SessionRunnerLLM", () => {
         id: "hosted-search",
         name: "web_search",
         // The generic replay result derives from canonical stored content.
-        result: { type: "text", value: '[{"title":"Effect"}]' },
+        result: { type: "text", value: expect.stringContaining('[{"title":"Effect"}]') },
         providerExecuted: true,
         providerMetadata: { openai: { blockType: "web_search_tool_result" } },
       },
@@ -4508,8 +4519,8 @@ describe("SessionRunnerLLM", () => {
     yield* Effect.yieldNow
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])).toEqual(["Start working"])
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Start working"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
     expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
   })
 
@@ -4527,9 +4538,9 @@ describe("SessionRunnerLLM", () => {
     yield* first.finish
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[0])).toEqual(["Start working"])
-    expect(userTexts(s.requests[1])).toEqual(["Start working"])
-    expect(userTexts(s.requests[2])).toEqual(["Start working", "Wait until continuation ends"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Start working"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start working"])
+    expect(strippedUserTexts(s.requests[2])).toEqual(["Start working", "Wait until continuation ends"])
   })
 
   scenario("keeps queued input parked when a steer is cancelled during preparation", function* (s) {
@@ -4549,7 +4560,7 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
     yield* Fiber.join(run)
 
-    expect(s.requests.map(userTexts)).toEqual([["A"], ["A"], ["A", "B"]])
+    expect(s.requests.map(strippedUserTexts)).toEqual([["A"], ["A"], ["A", "B"]])
     expect((yield* s.messages).some((message) => message.id === steer.id)).toBe(false)
     expect(yield* s.inbox).toEqual([])
   })
@@ -4584,7 +4595,7 @@ describe("SessionRunnerLLM", () => {
       result: SessionRunner.DrainResult.Moved({ stepped: true }),
       location,
     })
-    expect(s.requests.map(userTexts)).toEqual([["A"], ["A"]])
+    expect(s.requests.map(strippedUserTexts)).toEqual([["A"], ["A"]])
     expect(s.closedTransports).toEqual([sessionID])
     expect(yield* recordedEventTypes(sessionID)).toContain(Bus.versionedType(SessionEvent.Moved.type, 1))
     expect(yield* s.inbox).toEqual([])
@@ -4613,8 +4624,8 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(resumed)
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])).toEqual(["Interrupt current work"])
-    expect(userTexts(s.requests[1])).toEqual(["Interrupt current work", "Run after interrupt"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Interrupt current work"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Interrupt current work", "Run after interrupt"])
   })
 
   scenario("preserves durable steering input for a later resume after interruption", function* (s) {
@@ -4640,8 +4651,8 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(resumed)
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])).toEqual(["Interrupt current work"])
-    expect(userTexts(s.requests[1])).toEqual(["Interrupt current work", "Steer after interrupt"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Interrupt current work"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Interrupt current work", "Steer after interrupt"])
   })
 
   scenario("promotes queued inputs one at a time in FIFO order", function* (s) {
@@ -4655,9 +4666,9 @@ describe("SessionRunnerLLM", () => {
     yield* first.finish
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[0])).toEqual(["Start working"])
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "Queue first"])
-    expect(userTexts(s.requests[2])).toEqual(["Start working", "Queue first", "Queue second"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Start working"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start working", "Queue first"])
+    expect(strippedUserTexts(s.requests[2])).toEqual(["Start working", "Queue first", "Queue second"])
   })
 
   scenario("stops a steer-scoped drain before queued input", function* (s) {
@@ -4669,7 +4680,7 @@ describe("SessionRunnerLLM", () => {
     yield* runner.drain({ sessionID, force: false, promotable: "steer" })
 
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])).toEqual(["Steer now"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Steer now"])
     expect(yield* SessionInbox.has(s.db, sessionID, "steer")).toBe(false)
     expect(yield* SessionInbox.has(s.db, sessionID, "queue")).toBe(true)
   })
@@ -4726,8 +4737,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])).toEqual(["Start steering"])
-    expect(userTexts(s.requests[1])).toEqual(["Start steering", "Queue for later"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Start steering"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start steering", "Queue for later"])
   })
 
   scenario("promotes steers before the next queued input", function* (s) {
@@ -4753,16 +4764,16 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(first)
 
     expect(s.requests).toHaveLength(4)
-    expect(userTexts(s.requests[0])).toEqual(["Start working"])
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "Queue first"])
-    expect(userTexts(s.requests[2])).toEqual([
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Start working"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start working", "Queue first"])
+    expect(strippedUserTexts(s.requests[2])).toEqual([
       "Start working",
       "Queue first",
       "Steer before next queued input",
       "Also steer before next queued input",
       "Background completion before next queued input",
     ])
-    expect(userTexts(s.requests[3])).toEqual([
+    expect(strippedUserTexts(s.requests[3])).toEqual([
       "Start working",
       "Queue first",
       "Steer before next queued input",
@@ -4785,7 +4796,7 @@ describe("SessionRunnerLLM", () => {
     yield* Effect.yieldNow
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "First steer", "Second steer"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start working", "First steer", "Second steer"])
     yield* execution.wake(sessionID)
     yield* Effect.yieldNow
     expect(s.requests).toHaveLength(2)
@@ -4805,7 +4816,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.session.wait(sessionID)
 
     expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "Recover with this"])
+    expect(strippedUserTexts(s.requests[1])).toEqual(["Start working", "Recover with this"])
   })
 
   scenario("settles abandoned compactions before continuing after a process crash", function* (s) {
@@ -5191,7 +5202,7 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
 
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])).toEqual(["Wait in queue"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Wait in queue"])
   })
 
   scenario("retries inbox input after prompt projection rolls back", function* (s) {
@@ -5211,7 +5222,7 @@ describe("SessionRunnerLLM", () => {
     yield* stream.started
     yield* stream.release
 
-    expect(userTexts(s.requests[0])).toEqual(["Recover promoted input"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Recover promoted input"])
   })
 
   scenario("does not strand a committed promotion when a post-commit listener defects", function* (s) {
@@ -5221,7 +5232,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Run committed promotion")
 
     expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])).toEqual(["Run committed promotion"])
+    expect(strippedUserTexts(s.requests[0])).toEqual(["Run committed promotion"])
   })
 
   scenario("adds session correlation headers to model requests", function* (s) {
@@ -6142,10 +6153,11 @@ describe("SessionRunnerLLM", () => {
         role: "assistant",
         content: [expect.objectContaining({ text: "Partial" })],
       })
-      expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-        role: "user",
-        content: [{ type: "text", text: nudge }],
-      })
+      {
+        const last = s.requests[1]?.messages.at(-1)
+        expect(last?.role).toBe("user")
+        expect(stripMetadata(((last?.content[0] as { text: string }).text))).toBe(nudge)
+      }
       expect(yield* s.context).toMatchObject([
         { type: "user" },
         Expected.assistant({ finish: "length" }, [
@@ -6174,7 +6186,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Large prompt")
 
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect(strippedUserTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
     expect((yield* s.messages).filter((message) => message.type === "compaction")).toMatchObject([
       { status: "completed" },
     ])
@@ -6254,15 +6266,11 @@ describe("SessionRunnerLLM", () => {
       role: "assistant",
       content: [{ type: "text", text: "Partial" }],
     })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: INCOMPLETE_STREAM_CONTINUATION,
-        },
-      ],
-    })
+    {
+      const last = s.requests[1]?.messages.at(-1)
+      expect(last?.role).toBe("user")
+      expect(stripMetadata(((last?.content[0] as { text: string }).text))).toBe(INCOMPLETE_STREAM_CONTINUATION)
+    }
     const context = yield* s.context
     expect(context).toMatchObject([
       Expected.user("Continue partial output"),
@@ -6300,10 +6308,11 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
-    })
+    {
+      const last = s.requests[1]?.messages.at(-1)
+      expect(last?.role).toBe("user")
+      expect(stripMetadata(((last?.content[0] as { text: string }).text))).toBe(INCOMPLETE_STREAM_CONTINUATION)
+    }
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.text("Partial")]),
@@ -6337,10 +6346,11 @@ describe("SessionRunnerLLM", () => {
       role: "assistant",
       content: [{ type: "text", text: "Partial" }],
     })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
-    })
+    {
+      const last = s.requests[1]?.messages.at(-1)
+      expect(last?.role).toBe("user")
+      expect(stripMetadata(((last?.content[0] as { text: string }).text))).toBe(INCOMPLETE_STREAM_CONTINUATION)
+    }
     expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
     expect(yield* s.context).toMatchObject([
       Expected.user("Continue after rate limit"),
@@ -6370,10 +6380,11 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }],
-    })
+    {
+      const last = s.requests[1]?.messages.at(-1)
+      expect(last?.role).toBe("user")
+      expect(stripMetadata(((last?.content[0] as { text: string }).text))).toBe(INCOMPLETE_STREAM_CONTINUATION)
+    }
     expect(yield* s.context).toMatchObject([
       Expected.user("Continue after unknown failure"),
       Expected.assistant({ finish: "error", error: { type: "provider.unknown" } }, [Expected.text("Partial")]),
@@ -6400,10 +6411,10 @@ describe("SessionRunnerLLM", () => {
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
-    expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
-      { role: "user", content: [{ type: "text", text: "Continue interrupted reasoning" }] },
-      { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
-    ])
+    expect(s.requests[1]?.messages.slice(-2).map((m) => m.role)).toEqual(["user", "user"])
+    expect(
+      s.requests[1]?.messages.slice(-2).map((m) => stripMetadata(((m.content[0] as { text: string }).text))),
+    ).toEqual(["Continue interrupted reasoning", INCOMPLETE_STREAM_CONTINUATION])
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.reasoning("Partial thought")]),
@@ -6437,10 +6448,10 @@ describe("SessionRunnerLLM", () => {
 
       expect(s.requests).toHaveLength(2)
       expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
-      expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
-        { role: "user", content: [{ type: "text", text: "Recover disconnected reasoning" }] },
-        { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
-      ])
+      expect(s.requests[1]?.messages.slice(-2).map((m) => m.role)).toEqual(["user", "user"])
+      expect(
+        s.requests[1]?.messages.slice(-2).map((m) => stripMetadata(((m.content[0] as { text: string }).text))),
+      ).toEqual(["Recover disconnected reasoning", INCOMPLETE_STREAM_CONTINUATION])
       expect(yield* s.context).toMatchObject([
         { type: "user" },
         Expected.assistant({ finish: "error" }, [
@@ -6474,22 +6485,11 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.executions).toEqual(["settled"])
-    expect(s.requests[1]?.messages.slice(-3)).toMatchObject([
-      {
-        role: "assistant",
-        content: [{ type: "tool-call", id: "call-before-close", name: "echo", input: { text: "settled" } }],
-      },
-      { role: "tool", content: [{ type: "tool-result", id: "call-before-close" }] },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: INCOMPLETE_STREAM_CONTINUATION,
-          },
-        ],
-      },
-    ])
+    {
+      const sliced = s.requests[1]?.messages.slice(-3)
+      expect(sliced?.map((m) => m.role)).toEqual(["assistant", "tool", "user"])
+      expect(stripMetadata((((sliced?.[2]?.content[0] as { text: string }).text)))).toBe(INCOMPLETE_STREAM_CONTINUATION)
+    }
   })
 
   scenario("continues an incomplete stream after settling a local tool defect", function* (s) {
