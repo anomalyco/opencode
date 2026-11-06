@@ -98,7 +98,7 @@
           "y": 16,
           "width": 84,
           "height": 1,
-          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
+          "reason": "the placeholder example: random in TS and Rust"
         }
       ],
       "fixture": "rs-theme-colors/tokyonight-dark-events/home"
@@ -141,7 +141,7 @@
           "y": 16,
           "width": 84,
           "height": 1,
-          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
+          "reason": "the placeholder example: random in TS and Rust"
         }
       ],
       "fixture": "rs-theme-colors/tokyonight-dark-events/toast"
@@ -191,7 +191,7 @@
           "y": 16,
           "width": 84,
           "height": 1,
-          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
+          "reason": "the placeholder example: random in TS and Rust"
         }
       ],
       "fixture": "rs-theme-colors/tokyonight-dark-events/deleted"
@@ -218,7 +218,7 @@
           "y": 16,
           "width": 3,
           "height": 1,
-          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
+          "reason": "the placeholder example: random in TS and Rust"
         }
       ],
       "fixture": "rs-theme-colors/tokyonight-dark-events/command"

@@ -8,7 +8,7 @@ const placeholder = {
   y: 16,
   width: 84,
   height: 1,
-  reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+  reason: "the placeholder example: random in TS and Rust",
 }
 const leader = { press: "x", modifiers: { ctrl: true } } as const
 const remove = { press: "d", modifiers: { ctrl: true } } as const

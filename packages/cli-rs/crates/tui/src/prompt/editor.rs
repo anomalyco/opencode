@@ -37,6 +37,10 @@ use crate::app::Tui;
 const INTERRUPT_WINDOW: Duration = Duration::from_secs(5);
 /// Clearing a prompt keeps it in history from this many characters on (`DRAFT_RETENTION_MIN_CHARS`).
 const CLEAR_RETENTION_CHARS: usize = 20;
+/// The home prompt's examples (`routes/home.tsx:20-23`); a session's prompt passes none.
+const PLACEHOLDERS: [&str; 3] =
+    ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"];
+const SHELL_PLACEHOLDERS: [&str; 3] = ["ls -la", "git status", "pwd"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -121,6 +125,8 @@ pub struct Inner {
     /// The scanner, only while the session runs, as `<Show when={busy}>` mounts it; dropping it stops its timer.
     spinner: RefCell<Option<Spinner>>,
     pub(crate) mode: Cell<Mode>,
+    /// The random index of the placeholder example, picked again on entering shell mode.
+    pub(crate) placeholder: Cell<usize>,
     /// The `PromptInfo` being edited; `text` follows the textarea.
     pub(crate) prompt: RefCell<Value>,
     interrupt: Cell<u32>,
@@ -327,6 +333,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         busy: Cell::new(false),
         spinner: RefCell::new(None),
         mode: Cell::new(Mode::Normal),
+        placeholder: Cell::new(rand::random::<u32>() as usize),
         prompt: RefCell::new(empty_prompt()),
         interrupt: Cell::new(0),
         interrupt_timer: Cell::new(None),
@@ -648,6 +655,9 @@ impl Inner {
         self.frame.border_color(border);
         self.bottom.border_color(border);
         self.metadata.set(&theme, mode, &display, highlight, self.app.size().0);
+        if self.session.is_none() {
+            self.textarea.placeholder(self.placeholder_text());
+        }
 
         let running = self.running(tui);
         self.busy.set(running);
@@ -692,6 +702,27 @@ impl Inner {
         self.editor_file.set_text(vec![file.fg(color)]);
         self.mount_footer(tui);
         self.app.request_redraw();
+    }
+
+    /// `placeholderText`: the example cut to the textarea's width (`component/prompt/index.tsx:1617-1629`).
+    fn placeholder_text(&self) -> String {
+        let (label, examples) = match self.mode.get() {
+            Mode::Shell => ("Run a command…", SHELL_PLACEHOLDERS),
+            Mode::Normal => ("Ask anything…", PLACEHOLDERS),
+        };
+        let text = format!("{label} \"{}\"", examples[self.placeholder.get() % examples.len()]);
+        let width = usize::from(self.app.size().0);
+        let width =
+            if width < 44 { width.saturating_sub(5) } else { 75.min(width.saturating_sub(4)).saturating_sub(5) };
+        let mut used = 0;
+        let cut: String = text
+            .chars()
+            .take_while(|char| {
+                used += unicode_width::UnicodeWidthChar::width(*char).unwrap_or(0);
+                used <= width.max(1)
+            })
+            .collect();
+        cut.trim_end().to_owned()
     }
 
     /// The scanner in the agent's color, `[⋯]` with animations off (`component/prompt/index.tsx:1913-1919`). It

@@ -18,7 +18,12 @@ pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {
         Condition::when(move || weak.upgrade().is_some_and(|prompt| check(&prompt)))
     };
     let set = |mode: Mode| {
-        bind!(inner, |prompt, _: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| prompt.set_mode(mode))
+        bind!(inner, |prompt, _: Option<&str>, _: Option<&opentui::prelude::KeyEvent>| {
+            if mode == Mode::Shell {
+                prompt.placeholder.set(rand::random::<u32>() as usize);
+            }
+            prompt.set_mode(mode)
+        })
     };
     let inline = |key: &str, title: &str, mode: Mode| TuiCommand::inline(key, set(mode)).title(title).group("Prompt");
     vec![

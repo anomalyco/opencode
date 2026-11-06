@@ -228,7 +228,7 @@
           "y": 17,
           "width": 72,
           "height": 1,
-          "reason": "the home placeholder: random in TS, not drawn in Rust (T17-home-prompt)"
+          "reason": "the home placeholder example: random in TS and Rust"
         }
       ],
       "fixture": "E.12/tab-strip/new"

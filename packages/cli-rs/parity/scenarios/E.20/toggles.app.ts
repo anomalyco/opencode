@@ -9,17 +9,8 @@ const placeholder = {
   y: 16,
   width: 84,
   height: 1,
-  reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+  reason: "the placeholder example: random in TS and Rust",
 }
-// Beside a dialog, the placeholder shows its first word.
-const beside = {
-  x: 16,
-  y: 16,
-  width: 3,
-  height: 1,
-  reason: "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)",
-}
-const behind = { masks: [beside] }
 const clear = (text: string) => ({ keys: Array.from(text, () => "backspace") })
 
 export default defineApp({
@@ -41,20 +32,20 @@ export default defineApp({
       masks: [placeholder],
     },
     { keys: ["f5", "f6", "f7", "f8", "f9", "f10"] },
-    { checkpoint: "settings", until: "Search settings", ...behind },
+    { checkpoint: "settings", until: "Search settings" },
     { type: "animations" },
-    { checkpoint: "animations", until: "Animations", ...behind },
+    { checkpoint: "animations", until: "Animations" },
     clear("animations"),
     { type: "diff wrap" },
-    { checkpoint: "wrapping", until: "Wrapping", ...behind },
+    { checkpoint: "wrapping", until: "Wrapping" },
     clear("diff wrap"),
     { type: "editor context" },
-    { checkpoint: "editor", until: "Editor context", ...behind },
+    { checkpoint: "editor", until: "Editor context" },
     clear("editor context"),
     { type: "large pastes" },
-    { checkpoint: "pastes", until: "Large pastes", ...behind },
+    { checkpoint: "pastes", until: "Large pastes" },
     clear("large pastes"),
     { type: "window title" },
-    { checkpoint: "title", until: "Window title", ...behind },
+    { checkpoint: "title", until: "Window title" },
   ],
 })

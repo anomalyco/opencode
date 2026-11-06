@@ -408,6 +408,25 @@ fn home_prompt_creates_a_session_and_opens_it() {
 }
 
 #[test]
+fn home_prompt_shows_a_placeholder_example_and_a_shell_one_in_shell_mode() {
+    let setup = Setup::new(Route::Home);
+    setup.ready();
+    let screen = setup.wait_for("Ask anything… \"");
+    let examples = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"];
+    assert!(examples.iter().any(|example| screen.contains(&format!("Ask anything… \"{example}\""))), "{screen}");
+    setup.app.type_text("!");
+    let screen = setup.wait_for("Run a command… \"");
+    assert!(
+        ["ls -la", "git status", "pwd"].iter().any(|example| screen.contains(&format!("\"{example}\""))),
+        "{screen}"
+    );
+    // A session's prompt has none.
+    let setup = Setup::new(session_route());
+    setup.ready();
+    assert!(!setup.app.text().contains("Ask anything"), "{}", setup.app.text());
+}
+
+#[test]
 fn enter_before_the_catalog_loads_submits_once_it_has() {
     let setup = Setup::held(Route::Home);
     setup.app.type_text("Reply with ok");
