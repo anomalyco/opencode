@@ -128,15 +128,25 @@ impl Setup {
 
     /// A durable `ses_b` event, as another client's switch or this one's commit reports it.
     fn emit(&self, kind: &str, data: Value) {
-        self.seq.set(self.seq.get() + 1);
-        let event: V2Event = serde_json::from_value(json!({
-            "id": format!("evt_{}", self.seq.get()), "created": self.seq.get(), "type": kind,
-            "durable": { "aggregateID": "ses_b", "seq": self.seq.get(), "version": 1 },
-            "location": { "directory": "/project-b" },
-            "data": data,
-        }))
-        .unwrap();
-        self.tui.data.apply(&[event]);
+        self.emit_batch(&[(kind, data)]);
+    }
+
+    /// Durable `ses_b` events that the store applies in one batch.
+    fn emit_batch(&self, events: &[(&str, Value)]) {
+        let events: Vec<V2Event> = events
+            .iter()
+            .map(|(kind, data)| {
+                self.seq.set(self.seq.get() + 1);
+                serde_json::from_value(json!({
+                    "id": format!("evt_{}", self.seq.get()), "created": self.seq.get(), "type": kind,
+                    "durable": { "aggregateID": "ses_b", "seq": self.seq.get(), "version": 1 },
+                    "location": { "directory": "/project-b" },
+                    "data": data,
+                }))
+                .unwrap()
+            })
+            .collect();
+        self.tui.data.apply(&events);
     }
 
     fn file(&self, name: &str) -> String {
@@ -199,6 +209,30 @@ fn acknowledged_commits_clear_the_drafts() {
         "session.model.selected",
         json!({ "sessionID": "ses_b", "model": { "providerID": "anthropic", "id": "claude-haiku" } }),
     );
+    setup.wait("the other client's model", || {
+        setup.tui.local.current() == Some(Model::new("anthropic", "claude-haiku"))
+    });
+    setup.emit("session.agent.selected", json!({ "sessionID": "ses_b", "agent": "reviewer" }));
+    setup.wait("the other client's agent", || setup.agent().as_deref() == Some("reviewer"));
+}
+
+/// carbon-3: the acknowledgments and another client's switch in one batch: TS handles each event in turn, so
+/// the drafts give way and the switch shows.
+#[test]
+fn a_switch_batched_with_the_acknowledgments_shows() {
+    let setup = Setup::new(&[]);
+    setup.wait("the session's catalog", || setup.agent().as_deref() == Some("reviewer"));
+    setup.tui.local.set_agent("build");
+    setup.tui.local.set(&Model::new("openai", "gpt-5"), false);
+    setup.submit("switch", 1);
+    setup.emit_batch(&[
+        ("session.agent.selected", json!({ "sessionID": "ses_b", "agent": "build" })),
+        ("session.model.selected", json!({ "sessionID": "ses_b", "model": { "providerID": "openai", "id": "gpt-5" } })),
+        (
+            "session.model.selected",
+            json!({ "sessionID": "ses_b", "model": { "providerID": "anthropic", "id": "claude-haiku" } }),
+        ),
+    ]);
     setup.wait("the other client's model", || {
         setup.tui.local.current() == Some(Model::new("anthropic", "claude-haiku"))
     });
