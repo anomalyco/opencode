@@ -1,4 +1,0 @@
-/* Answers stay in the server HTML so they can be read without JavaScript and indexed. */
-[data-slot="faq-answer"][data-closed] {
-  display: none;
-}

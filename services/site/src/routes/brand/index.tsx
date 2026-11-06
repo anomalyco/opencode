@@ -21,7 +21,7 @@ import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd } from "~/component/structured-data"
 import { useLanguage } from "~/context/language"
 import { englishText, localize } from "~/i18n/content"
-import { source } from "~/i18n/content/source"
+import { brandSource } from "~/i18n/content/areas/brand"
 import { Site } from "~/component/site/site"
 import { useI18n } from "~/context/i18n"
 import {
@@ -34,12 +34,13 @@ import {
   colorFormats,
   type BadgeFont,
 } from "~/lib/brand-content"
-import { useMarkdown } from "~/component/site/use-markdown"
+import { useMarkdown, useMarkdownSource } from "~/component/site/use-markdown"
 import { siteSettings } from "~/component/site/settings"
 import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site/on-this-page"
 import { PageTitle } from "~/component/site/sticky-title"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { inlineKey } from "~/lib/direction"
+import { placeMenu } from "~/component/site/place-menu"
 
 export default function Brand() {
   const i18n = useI18n()
@@ -47,13 +48,14 @@ export default function Brand() {
   const [copied, setCopied] = createSignal<string>()
   const content = createMemo(() => localize(language.locale(), "brand", brandContent(i18n.t)))
   // Heading ids stay English in every locale, so links to /brand#naming keep working.
-  const english = createMemo(() => englishText(content(), source.brand))
+  const english = createMemo(() => englishText(content(), brandSource))
   const anchor = (text: string) => slug(english().get(text) ?? text)
   const lower = (text: string) => (language.locale() === "en" ? text.toLowerCase() : text)
   // A tone ("light", "dark") in the page's language, lower case in English as in a sentence.
   const tone = (value: string) => lower(themeName(value))
   const themeName = (value: string) => i18n.t(value === "dark" ? "site.theme.dark" : "site.theme.light")
   const markdown = useMarkdown("/brand", brandMarkdown)
+  const rules = useMarkdownSource("/brand", brandMarkdown)
 
   // The sections in page order, for the "Contents" list.
   const sections = createMemo(() =>
@@ -343,7 +345,11 @@ export default function Brand() {
               ? i18n.t("brand.ui.moreFormats", { detail: props.detail })
               : i18n.t("brand.ui.downloadAsset", { detail: props.detail })
           }
-          onClick={() => setOpen(!open())}
+          onClick={() => {
+            setOpen(!open())
+            const menu = state.root?.querySelector<HTMLElement>('[data-slot="menu"]')
+            if (menu) placeMenu(menu)
+          }}
         >
           <Show when={!props.chevronOnly}>{i18n.t("download.action.download")}</Show>
           <ChevronIcon />
@@ -698,7 +704,7 @@ export default function Brand() {
           <AgentRulesButton
             label={content().hero.copy.text}
             copied={content().hero.copy.copied}
-            source={markdown.source}
+            source={rules}
           />
         </div>
       </section>
@@ -937,15 +943,18 @@ export default function Brand() {
         <div data-slot="body">
           <p data-slot="text">{content().usage.body}</p>
           <ul data-component="usage">
-            <li data-slot="stroke" data-hidden={siteSettings.strokeDiagram === "off" ? "" : undefined}>
-              <div data-slot="figure">
-                <StrokeDiagrams />
-              </div>
-              <Heading level={3} id={`${anchor(content().usage.title)}-${anchor(content().usage.stroke.title)}`}>
-                {content().usage.stroke.title}
-              </Heading>
-              <span>{content().usage.stroke.body}</span>
-            </li>
+            {/* Production leaves it out while "off" is the default (script/fold-settings.ts). */}
+            <Show when={import.meta.env.DEV || siteSettings.strokeDiagram !== "off"}>
+              <li data-slot="stroke" data-hidden={siteSettings.strokeDiagram === "off" ? "" : undefined}>
+                <div data-slot="figure">
+                  <StrokeDiagrams />
+                </div>
+                <Heading level={3} id={`${anchor(content().usage.title)}-${anchor(content().usage.stroke.title)}`}>
+                  {content().usage.stroke.title}
+                </Heading>
+                <span>{content().usage.stroke.body}</span>
+              </li>
+            </Show>
             <li data-slot="clear-space">
               <div data-slot="figure">
                 <ClearSpace />

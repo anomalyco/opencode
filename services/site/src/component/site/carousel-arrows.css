@@ -1,0 +1,39 @@
+/* A carousel's previous and next buttons (carousel-arrows.tsx): 24px targets side by side, the
+   chevrons in the muted text colour, the ink on hover or press, and fainter at an end. */
+[data-site] [data-component="carousel-arrows"] {
+  display: flex;
+
+  button {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    color: var(--text-weak);
+    transition: color 150ms ease;
+
+    &:focus-visible {
+      outline-offset: -1px;
+    }
+
+    &[aria-disabled="true"] {
+      color: var(--text-weaker);
+      cursor: default;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:not([aria-disabled="true"]):hover {
+        color: var(--text-strong);
+      }
+    }
+
+    &:not([aria-disabled="true"]):active {
+      color: var(--text-strong);
+    }
+  }
+}
+
+/* The chevrons point the way the page reads. */
+[dir="rtl"] [data-site] [data-component="carousel-arrows"] svg {
+  scale: -1 1;
+}

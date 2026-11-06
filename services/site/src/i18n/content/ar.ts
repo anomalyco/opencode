@@ -235,7 +235,7 @@ export const content = {
   byos: {
     title: "اشتراكك الخاص",
     headline: "استخدم الاشتراكات التي لديك بالفعل.",
-    line: "سجّل الدخول عبر ChatGPT Plus أو Pro، أو GitHub Copilot، أو Claude Code. أو استخدم اشتراك OpenCode.",
+    line: "سجّل الدخول عبر ChatGPT Plus أو Pro، أو GitHub Copilot. أو استخدم اشتراك OpenCode.",
     yours: { label: "اشتراكك", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["اشتراك OpenCode", "OpenCode Go"],
     ours: { label: "خطط OpenCode" },
@@ -662,10 +662,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "أنشئ ملحقات Desktop وثبّتها وشاركها.",
       link: "اكتشف جديد 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "سجّل الدخول إلى OpenCode بحساب Claude Code.",
-      link: "شاهد v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "طرفيات Desktop تبقى الآن بعد إعادة التشغيل.",

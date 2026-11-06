@@ -71,6 +71,8 @@ export function navSavedLabel(entry: NavEntry | undefined, locale: string) {
  * has no default, so an empty label keeps the one it has.
  */
 export function setNavLabel(id: string, text: string, fallback: string) {
+  // Renaming is Design mode's, which is development only.
+  if (!import.meta.env.DEV) return
   // Pasted text can carry line breaks and zero-width characters; it renders on one line.
   const label = text
     .replace(/[\u200b\u2060]/g, "")
@@ -147,7 +149,7 @@ export function navCustomItems(config: readonly NavEntry[]) {
 }
 
 /** Saved versions of the nav list (versions.ts); switching animates the items to their places. */
-export const navVersions = createVersions<NavEntry[]>({
+export const navVersions = /* @__PURE__ */ createVersions<NavEntry[]>({
   versions: () => siteSettings.navVersions,
   active: () => siteSettings.navVersion,
   current: () => siteSettings.navConfig,
@@ -228,6 +230,8 @@ type Drag = {
  * `data-nav-id`; the list must render every item in `navList()` order.
  */
 export function sortableNav(list: HTMLUListElement) {
+  // Design mode is development only.
+  if (!import.meta.env.DEV) return
   const state: { drag?: Drag; swallow?: boolean } = {}
   const items = () => [...list.querySelectorAll<HTMLElement>(":scope > li")]
   const find = (id: string) => list.querySelector<HTMLElement>(`:scope > li[data-nav-id="${id}"]`)

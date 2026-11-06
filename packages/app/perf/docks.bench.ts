@@ -23,9 +23,9 @@ export default bench({
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: ({ playwright, mock, url }) =>
-        mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
+      prepare: (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
           historyTurns: 20,
           stream: true,
         }),

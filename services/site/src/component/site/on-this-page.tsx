@@ -120,11 +120,29 @@ export function ContentsMenu(props: { items: ContentsItem[] }) {
       menu.open = false
       menu.querySelector("summary")?.focus()
     }
+    // Pinned (its top at its sticky offset, once the page has scrolled), the bar shows its lines
+    // (data-stuck, on-this-page.css). Measured on scroll, so it works where CSS scroll-state queries
+    // don't (WebKit).
+    let frame = 0
+    const stuck = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        if (!menu) return
+        const top = parseFloat(getComputedStyle(menu).top)
+        menu.toggleAttribute("data-stuck", window.scrollY > 0 && menu.getBoundingClientRect().top <= top + 0.5)
+      })
+    }
     document.addEventListener("pointerdown", outside)
     document.addEventListener("keydown", escape)
+    window.addEventListener("scroll", stuck, { passive: true })
+    window.addEventListener("resize", stuck)
+    stuck()
     onCleanup(() => {
+      cancelAnimationFrame(frame)
       document.removeEventListener("pointerdown", outside)
       document.removeEventListener("keydown", escape)
+      window.removeEventListener("scroll", stuck)
+      window.removeEventListener("resize", stuck)
     })
   })
 

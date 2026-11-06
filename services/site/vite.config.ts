@@ -3,6 +3,9 @@ import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import { fromPathname } from "./src/lib/language"
 import variants from "./src/component/site/css-variants.json"
+import { docs } from "./src/docs/vite"
+import { i18nSlices } from "./script/i18n-plugin"
+import { foldSettingsForProduction } from "./script/fold-settings"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -33,6 +36,17 @@ function notFoundInDev(): PluginOption {
           res.end(await response.text())
         })
     },
+  }
+}
+
+// Production only: a stylesheet named *.dev.css is for development tools (Settings, Design mode) and
+// builds empty, so its rules never reach a page's render-blocking CSS.
+function devOnlyCss(): PluginOption {
+  return {
+    name: "dev-only-css",
+    apply: "build",
+    enforce: "pre",
+    load: (id) => (/\.dev\.css(\?|$)/.test(id) ? "" : undefined),
   }
 }
 
@@ -105,6 +119,8 @@ function cssVariantsForProduction(): PluginOption {
 
 export default defineConfig({
   plugins: [
+    // Before Solid compiles JSX, in both the server and browser builds (script/fold-settings.ts).
+    foldSettingsForProduction(),
     solidStart({
       middleware: "./src/middleware.ts",
     }) as PluginOption,
@@ -116,7 +132,10 @@ export default defineConfig({
       },
     }),
     notFoundInDev(),
+    devOnlyCss(),
     cssVariantsForProduction(),
+    docs(),
+    i18nSlices(),
   ],
   server: {
     allowedHosts: true,
@@ -145,6 +164,12 @@ export default defineConfig({
     minify: false,
     // The stylesheets the pages load are minified even though the Worker's code is not.
     cssMinify: true,
+    // Browsers with native light-dark() (and CSS nesting). For older targets the minifier lowers
+    // light-dark() to --lightningcss-light/--lightningcss-dark variables set only where a rule
+    // declares color-scheme, so the site's tokens freeze at the theme of the element that defines
+    // them: a forced-dark card or band (color-scheme: dark) kept the page's light tokens in
+    // production, though the dev server (no lowering) showed it right.
+    cssTarget: ["chrome123", "edge123", "firefox120", "safari17.5"],
   },
   environments: {
     // The browser bundles are minified; the Worker keeps readable code for its stack traces.
@@ -153,7 +178,9 @@ export default defineConfig({
         // Nitro copies public/ with fs.cp, which keeps the symlinks into packages/ui as links.
         // Letting Vite copy it first writes real files.
         copyPublicDir: true,
-        minify: "esbuild",
+        // Oxc, Vite 8's own minifier. "esbuild" here left the bundles unminified: Vite only adds its
+        // esbuild minifier when the top-level build.minify asks for it, and that stays off for the Worker.
+        minify: "oxc",
       },
     },
   },

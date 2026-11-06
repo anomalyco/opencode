@@ -21,20 +21,19 @@ import { PageTitle } from "~/component/site/sticky-title"
 import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
-import { productsMarkdown } from "~/lib/product-markdown"
-import { homeContent } from "~/lib/home-content"
 import { useI18n } from "~/context/i18n"
-import { localize, useContent } from "~/i18n/content"
+import { localize, useArea } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { siteSettings } from "~/component/site/settings"
 
 export default function Product() {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const extensionCopy = useArea("extensions", extensionsSource)
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
   const download = () => localize(language.locale(), "download", downloadContent(i18n.t, language.route))
-  const markdown = useMarkdown("/product", productsMarkdown)
+  const markdown = useMarkdown("/product", (context, pages) => pages.productsMarkdown(context))
 
   return (
     <Site page="products" markdown={markdown}>
@@ -53,11 +52,12 @@ export default function Product() {
           and the cards below land where the home page's do (hero-title.css). */}
       <section
         data-component="hero"
+        data-section="hero"
         data-design="hero heroTitleSize"
         data-variant={siteSettings.hero}
         data-title-size={siteSettings.heroTitleSize}
         style={{
-          "--title-chars": titleCells(designCopy("home.hero.title", homeContent(i18n.t, language.route).hero.title)),
+          "--title-chars": titleCells(designCopy("home.hero.title", i18n.t("home.hero.title"))),
         }}
       >
         <PageTitle title={i18n.t("site.nav.product")} />
@@ -70,14 +70,14 @@ export default function Product() {
 
       {/* Hidden while extensionPages is empty. */}
       <Show when={extensionPages.length > 0}>
-        <section data-component="block" data-slot="products-extensions">
+        <section data-component="block" data-slot="products-extensions" data-section="extensions">
           <SectionHeading id="extensions" title={i18n.t("site.extensions")} label />
           <div data-slot="body">
             {/* Each extension's page, with its install steps; a blank tile until one has an icon. */}
             <ProductList
               items={extensionPages.map((extension) => ({
-                name: content().extensions[extension.slug].name,
-                description: content().extensions[extension.slug].body,
+                name: extensionCopy()[extension.slug].name,
+                description: extensionCopy()[extension.slug].body,
                 href: language.route(`/extensions/${extension.slug}`),
                 icon: <BrowseMark />,
               }))}
@@ -87,7 +87,7 @@ export default function Product() {
       </Show>
 
       {/* /product#download lands here, the first of the download page's sections on this page. */}
-      <section data-component="block" data-slot="products-integrations">
+      <section data-component="block" data-slot="products-integrations" data-section="integrations">
         <SectionHeading id="download" title={download().integrations.title} label />
         <div data-slot="body">
           <ProductList

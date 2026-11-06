@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../src/index.js"
+import { CodeMode, Tool } from "./lib/index.js"
 
 // Callback acceptance is one gate shared by array methods, sort, string replacers,
 // Array.from mappers, Map/Set/URLSearchParams forEach, and promise reactions:

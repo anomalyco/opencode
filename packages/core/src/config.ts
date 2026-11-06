@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser"
-import { Context, Effect, FiberMap, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, FiberMap, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { Directory, Document, Info, type Patch, type Entry, Event } from "@opencode/schema/config"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
@@ -33,11 +33,6 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
-  /**
-   * The entries `entries()` returns, read synchronously. Transforms read this, so a reload that runs right after a
-   * config change, such as an integration replacing its document, sees the change before `config.updated` arrives.
-   */
-  readonly snapshot: () => Entry[]
   /** Compatibility roots consumed by internal compatibility plugins. */
   readonly compatibility?: () => Effect.Effect<{
     readonly claude: readonly AbsolutePath[]
@@ -96,24 +91,23 @@ export const testLayer = (
 ) =>
   Layer.effectContext(
     Effect.gen(function* () {
-      const state = { entries: initial, integrations: new Map<string, ConfigIntegration.Document>() }
+      const entries = yield* Ref.make(initial)
+      const integrations = yield* Ref.make(new Map<string, ConfigIntegration.Document>())
       const updates = yield* PubSub.unbounded<Watcher.Update>()
-      const snapshot = () => [...state.integrations.values(), ...state.entries]
       const service = Test.of({
-        entries: () => Effect.sync(snapshot),
-        snapshot,
+        entries: () =>
+          Effect.all([Ref.get(integrations), Ref.get(entries)]).pipe(
+            Effect.map(([documents, entries]) => [...documents.values(), ...entries]),
+          ),
         compatibility: () => Effect.succeed(compatibility),
         changes: () => Stream.fromPubSub(updates),
-        setEntries: (next) =>
-          Effect.sync(() => {
-            state.entries = next
-          }),
+        setEntries: (next) => Ref.set(entries, next),
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
         integration: (integrationID, document) =>
-          Effect.sync(() => {
-            const next = new Map(state.integrations)
+          Ref.update(integrations, (current) => {
+            const next = new Map(current)
             next.delete(integrationID)
-            state.integrations = document ? next.set(integrationID, document) : next
+            return document ? next.set(integrationID, document) : next
           }),
       })
       return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
@@ -495,7 +489,6 @@ export const layer = (options?: Options) =>
         entries: Effect.fnUntraced(function* () {
           return configs
         }),
-        snapshot: () => configs,
         compatibility: () =>
           Effect.all({
             claude: Effect.filter(sources.claude, fs.isDir),

@@ -13,11 +13,13 @@ import {
   dir as localeDir,
   label as localeLabel,
   localeFromCookieHeader,
+  localized,
   pageLocale,
   parseLocale,
   route as localeRoute,
   tag as localeTag,
 } from "~/lib/language"
+import { loadLanguage } from "~/i18n"
 
 function initial() {
   const evt = getRequestEvent()
@@ -44,17 +46,23 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locale: initial(),
     })
 
-    // Back and forward to a page with a locale prefix switch to that locale, as a fresh load would.
-    // Unprefixed pages keep the current one: the server picks theirs from the cookie.
+    // Back and forward switch to the address's language, as a fresh load would: its locale prefix,
+    // else English (an address that never takes a locale, such as the changelog, keeps the current
+    // one). The language's strings arrive first; if they can't, the page reloads.
     const location = useLocation()
     createEffect(
       on(
         () => location.pathname,
         (pathname) => {
-          const next = fromPathname(pathname)
-          if (!next || next === store.locale) return
-          setStore("locale", next)
-          document.cookie = cookie(next)
+          const next = fromPathname(pathname) ?? (localized(pathname) ? "en" : store.locale)
+          if (next === store.locale) return
+          void loadLanguage(next).then(
+            () => {
+              setStore("locale", next)
+              document.cookie = cookie(next)
+            },
+            () => window.location.reload(),
+          )
         },
         { defer: true },
       ),

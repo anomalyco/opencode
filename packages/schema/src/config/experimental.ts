@@ -23,6 +23,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
   }),
+  codemode_vm: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter. Defaults to false.",
+  }),
   image_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({

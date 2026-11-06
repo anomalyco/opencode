@@ -275,18 +275,10 @@
     [data-slot="bars"] button:hover > [data-slot="bar"] {
       background: var(--link);
     }
-
-    [data-slot="arrows"] button:hover {
-      color: var(--text-strong);
-    }
   }
 
   [data-slot="bars"] button:active > [data-slot="bar"] {
     background: var(--link);
-  }
-
-  [data-slot="arrows"] button:active {
-    color: var(--text-strong);
   }
 
   /* bars + count: "1/3" at the right end of the row. */
@@ -297,7 +289,8 @@
     color: var(--text-weak);
   }
 
-  /* bars + arrows: previous and next at the right end, their icons lined up with the media edge. */
+  /* bars + arrows: previous and next (carousel-arrows.tsx) at the right end, their icons lined up
+     with the media edge. */
   [data-slot="arrows"] {
     display: flex;
     margin-inline-start: auto;

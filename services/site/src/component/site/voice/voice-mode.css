@@ -773,9 +773,16 @@
     padding: 0.5rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
     font-size: var(--fs-body);
 
+    /* The square's top on the title's cap height, not its line box: Inter's cap top sits 0.2646 of
+       the 19px title below the line's top at this line height (measured), Arabic's ink top 0.2778. */
     [data-slot="hex-tile"] {
       width: 2.75rem;
       height: 2.75rem;
+      margin-top: calc(1.1875rem * 0.2646);
+
+      &:lang(ar) {
+        margin-top: calc(1.1875rem * 0.2778);
+      }
 
       svg {
         width: 1.5rem;

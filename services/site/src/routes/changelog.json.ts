@@ -1,4 +1,5 @@
-import { feedWait, loadChangelog, type ChangelogData } from "~/lib/changelog"
+import type { ChangelogData } from "~/lib/changelog"
+import { feedWait, loadChangelog } from "~/lib/changelog-releases"
 
 const cors = {
   "Access-Control-Allow-Origin": "*",

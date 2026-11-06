@@ -11,6 +11,7 @@ import { createErrorValue } from "../../src/interpreter/intrinsics.js"
 import { constructor, fn, methods } from "../../src/interpreter/native.js"
 import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/interpreter/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
+import { runVm } from "./run-vm.js"
 
 export const root = import.meta.dir
 
@@ -33,6 +34,12 @@ const limits = { timeoutMs: 5000, maxToolCalls: undefined, maxOutputBytes: undef
 const prepared = ToolRuntime.prepare<never>({})
 
 export const run = async (file: string): Promise<Outcome> => {
+  if (
+    typeof process !== "undefined" &&
+    (process.env.CODEMODE_ENGINE === "vm" || process.env.CODEMODE_ROUNDTRIP === "1")
+  ) {
+    return runVm(file)
+  }
   const source = await Bun.file(path.join(root, file)).text()
   const start = source.indexOf("/*---")
   const meta = Bun.YAML.parse(source.slice(start + 5, source.indexOf("---*/", start))) as Frontmatter

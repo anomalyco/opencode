@@ -23,7 +23,7 @@ Niektóre serwery MCP, takie jak serwer MCP GitHub, mają szerokie możliwości 
 
 ## Włączać
 
-Dostępny serwery MCP w [opencode Config](https://opencode.ai/docs/config/) w `mcp`. Dodaj każdy MCP z unikalną nazwą. Możesz zgłosić się do tego MCP po nazwie, pytając LLM.
+Dostępny serwery MCP w [opencode Config](/docs/config/) w `mcp`. Dodaj każdy MCP z unikalną nazwą. Możesz zgłosić się do tego MCP po nazwie, pytając LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {

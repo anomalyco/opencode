@@ -1,6 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
 import fileRoutes from "solid-start:routes"
-import { feedWait, loadChangelog, type ChangelogData } from "~/lib/changelog"
+import type { ChangelogData } from "~/lib/changelog"
+import { feedWait, loadChangelog } from "~/lib/changelog-releases"
 import { sitemapPages, sitemapXml } from "~/lib/sitemap"
 
 const ok = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=86400"
