@@ -374,6 +374,7 @@ const trim = (left: string, right: string) => left.trim() === right.trim()
 const normalized = (left: string, right: string) => normalize(left.trim()) === normalize(right.trim())
 const normalize = (value: string) =>
   value
+    .normalize("NFC")
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
     .replace(/[‐‑‒–—―−]/g, "-")
