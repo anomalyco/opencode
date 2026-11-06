@@ -46,13 +46,13 @@ const PermissionParams = {
   ),
 }
 
-const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
-  description: "OpenCode command line interface",
+const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "harpcode", {
+  description: "harpcode command line interface",
   params: {
     ...ServerParams,
     ...PermissionParams,
     directory: Argument.String("directory").pipe(
-      Argument.withDescription("Directory to start OpenCode in"),
+      Argument.withDescription("Directory to start harpcode in"),
       Argument.optional,
     ),
     continue: Flag.Boolean("continue").pipe(

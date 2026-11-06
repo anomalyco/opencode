@@ -9,7 +9,7 @@ import { Location } from "../location.js"
 import { AbsolutePath } from "../schema.js"
 import type { Options } from "../config.js"
 
-export const names = ["opencode.json", "opencode.jsonc"]
+export const names = ["opencode.json", "opencode.jsonc", "harpcode.json", "harpcode.jsonc"]
 
 /** Eligible sources in priority order, including paths that may appear later. */
 export interface Sources {
@@ -26,9 +26,9 @@ export interface Sources {
 
 /** Platform system configuration directory (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`). */
 export function systemDirectory(platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env) {
-  if (platform === "darwin") return AbsolutePath.make("/Library/Application Support/opencode")
-  if (platform === "win32") return AbsolutePath.make(path.join(env.ProgramData || "C:\\ProgramData", "opencode"))
-  return AbsolutePath.make("/etc/opencode")
+  if (platform === "darwin") return AbsolutePath.make("/Library/Application Support/harpcode")
+  if (platform === "win32") return AbsolutePath.make(path.join(env.ProgramData || "C:\\ProgramData", "harpcode"))
+  return AbsolutePath.make("/etc/harpcode")
 }
 
 /** macOS MDM managed preferences plists, most specific first; the first one present wins. */

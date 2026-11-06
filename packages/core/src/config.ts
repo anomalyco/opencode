@@ -19,6 +19,7 @@ import { ConfigDiscovery } from "./config/discovery.js"
 import { ConfigWatch } from "./config/watch.js"
 import { ConfigIntegration } from "./config/integration.js"
 import { ConfigManaged } from "./config/managed.js"
+import { ConfigDefaults } from "./config/defaults.js"
 import { ManagedPolicy } from "./managed-policy.js"
 import { Connection } from "@opencode/schema/connection"
 import { WellKnown } from "./wellknown.js"
@@ -303,6 +304,17 @@ export const layer = (options?: Options) =>
                 Effect.orDie,
               )
             : []
+        // Built-in harpcode settings sit below every file, so any config overrides them.
+        const defaults = yield* ConfigVariable.substitute({
+          type: "virtual",
+          source: "harpcode defaults",
+          dir: location.directory,
+          text: ConfigDefaults.text,
+        }).pipe(
+          Effect.flatMap((text) => parseInfo(text, "harpcode defaults")),
+          Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
+          Effect.orDie,
+        )
 
         // Managed settings load last so they override everything, and MDM
         // preferences outrank the system directory as in V1. Policies evaluate
@@ -368,6 +380,7 @@ export const layer = (options?: Options) =>
         )
         return [
           ...managedPolicies,
+          ...defaults,
           ...integrated,
           ...wellknownDocuments.flat(),
           ...globalSupplementary,
@@ -473,7 +486,7 @@ export const layer = (options?: Options) =>
           const directory = initial.global ?? AbsolutePath.make(globalService.config)
           const candidates = ConfigDiscovery.names.map((name) => path.join(directory, name))
           const filepath =
-            (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
+            (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "harpcode.jsonc")
           const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
           const updated = yield* Effect.try({
             try: () =>
