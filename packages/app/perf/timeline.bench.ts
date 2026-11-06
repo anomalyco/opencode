@@ -20,6 +20,7 @@ const drag = "drag the review's edge"
 // The divider between the session and the side panel, read once the review is open. The session panel keeps at least
 // 400px, the side panel 320px and the 8px gap.
 const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]'
+
 let divider: Divider | undefined
 
 export default bench({

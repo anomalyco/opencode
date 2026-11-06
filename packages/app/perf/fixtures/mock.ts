@@ -53,7 +53,7 @@ function playwrightPage(ctx: Pick<PrepareContext<unknown>, "playwright">): Page 
 // The members of a page the e2e mock server and the fixtures use, over strobe's calls. `route` is set by `cached`.
 function standIn(addInitScript: PrepareContext<unknown>["addInitScript"]) {
   const page = {
-    addInitScript: (script: string | ((arg: unknown) => unknown), arg?: unknown) => addInitScript(script, arg),
+    addInitScript,
     // The block's browser closes with the block.
     on: () => page,
     isClosed: () => false,
