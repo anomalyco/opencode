@@ -3,8 +3,9 @@
 //!
 //! M.1 owns the shell: the split-footer lifecycle (`shell`), the scrollback writer (`scrollback`), the
 //! transcript and its replay (`replay`), the theme and monochrome output (`theme`), piped stdin (`stdin`), and
-//! signals and traces (`signals`). The prompt (`prompt`, M.2), the request footers (`footers`, M.3), and the
-//! tool output, settings, spinners, splash, and variants (M.4) fill the stubs M.1 leaves.
+//! signals and traces (`signals`). The prompt (`prompt`, M.2), the request footers (`footers`, M.3), the
+//! tool output, settings, spinners, splash, and variants (M.4), and the child sessions (`subagents`, M.5) fill
+//! the stubs M.1 leaves.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -23,6 +24,7 @@ pub mod signals;
 pub mod spinners;
 pub mod splash;
 pub mod stdin;
+pub mod subagents;
 pub mod theme;
 pub mod tools;
 pub mod variants;

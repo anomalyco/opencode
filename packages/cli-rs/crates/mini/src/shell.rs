@@ -430,7 +430,12 @@ impl Mini {
         *self.session.borrow_mut() = Some(session.clone());
         self.prompt.set_agent(session.agent.as_deref().unwrap_or_default());
         self.prompt.open(&self.client, &session.id, &session.directory, target.resume);
-        self.footers.open(&self.client, &session.id, &session.directory);
+        self.footers.open(
+            &self.client,
+            &session.id,
+            &session.directory,
+            self.settings.get().thinking == Visibility::Show,
+        );
         if target.resume {
             self.reset_for_replay(cx);
         }
@@ -690,6 +695,7 @@ impl Mini {
         if self.state.borrow().closed {
             return;
         }
+        let mut hydrated = None;
         let output = {
             let mut transcript = self.transcript.borrow_mut();
             let Some(transcript) = transcript.as_mut() else {
@@ -697,8 +703,12 @@ impl Mini {
             };
             match incoming {
                 Incoming::Hydrated { messages, active } => {
-                    self.trace("recv.hydrate", json!({ "messages": messages.len(), "active": active }));
-                    transcript.hydrate(&messages, active)
+                    let running = active.contains(&transcript.session_id);
+                    self.trace("recv.hydrate", json!({ "messages": messages.len(), "active": running }));
+                    let reconnect = !transcript.initial;
+                    let output = transcript.hydrate(&messages, running);
+                    hydrated = Some((messages, active, reconnect));
+                    output
                 }
                 Incoming::Event(event) => {
                     self.trace("recv.event", serde_json::to_value(&event).unwrap_or_default());
@@ -718,10 +728,13 @@ impl Mini {
                 }
             }
         };
-        let hydrated =
+        let connected =
             output.patch.is_some() && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
         self.output(cx, output);
-        if hydrated {
+        if let Some((messages, active, reconnect)) = hydrated {
+            self.footers.subagent_hydrate(&messages, &active, reconnect);
+        }
+        if connected {
             self.send_waiting(cx);
         }
     }
@@ -741,6 +754,9 @@ impl Mini {
                 self.paint_status();
             }
             self.footers.event(event);
+        }
+        for event in &output.subagents {
+            self.footers.subagent_event(event);
         }
         if let Some(title) = &output.title {
             if let Some(session) = self.session.borrow_mut().as_mut() {
@@ -1357,7 +1373,10 @@ impl Mini {
             let output = match result {
                 Ok((messages, active)) => {
                     mini.reset_for_replay(cx);
-                    mini.transcript.borrow_mut().as_mut().map(|transcript| transcript.replayed(&messages, active))
+                    mini.transcript
+                        .borrow_mut()
+                        .as_mut()
+                        .map(|transcript| transcript.replayed(&messages, active.contains(&transcript.session_id)))
                 }
                 // Nothing was cleared; the events that waited still apply.
                 Err(error) => {
@@ -1525,12 +1544,23 @@ impl Mini {
         };
         let shown = details && !shell;
         let queued = self.prompt.queued().len();
-        let work = match shortcut("session.queued_prompts") {
+        let mut work = match shortcut("session.queued_prompts") {
             Some(key) if shown && queued > 0 => {
                 vec![(status::Id::Queued, status::Action { key, label: format!("{queued} pending"), expanded: None })]
             }
             _ => Vec::new(),
         };
+        let (running, foreground) = self.footers.running_subagents();
+        if let Some(key) = shortcut("session.child.first").filter(|_| shown && running > 0) {
+            let plural = if running == 1 { "" } else { "s" };
+            let label = format!("{running} sub");
+            let expanded = Some(format!("{running} subagent{plural}"));
+            work.push((status::Id::Subagents, status::Action { key, label, expanded }));
+        }
+        if let Some(key) = shortcut("session.background").filter(|_| shown && foreground) {
+            let action = status::Action { key, label: "bg".into(), expanded: Some("background".into()) };
+            work.push((status::Id::Background, action));
+        }
         let usage = state.usage.as_ref().filter(|_| details);
         status::policy(&status::Input {
             width,
@@ -1600,6 +1630,10 @@ impl Mini {
         let queued = self.prompt.queued().len();
         if queued > 0 {
             details.push(format!("{queued} pending"));
+        }
+        let (running, _) = self.footers.running_subagents();
+        if running > 0 {
+            details.push(format!("{running} subagent{}", if running == 1 { "" } else { "s" }));
         }
         details.join(if self.settings.get().mono { " - " } else { " · " })
     }

@@ -714,79 +714,11 @@ impl Writer {
 
     /// The widget of a finished entry (`RunEntryContent`).
     pub fn entry_widget(&self, commit: &Commit, body: &Body) -> AnyWidget {
-        let app = self.scrollback.app();
-        let theme = &self.theme;
-        if commit.compaction {
-            let rule = |app: &App| View::new(app).border_sides(Sides::TOP).border_color(theme.block.muted).grow(1.0);
-            let label = View::new(app).padding_x(1).child(&Text::new(app, commit.text.clone()).fg(theme.block.muted));
-            return View::new(app)
-                .direction(FlexDirection::Row)
-                .align_items(Align::Center)
-                .child(&rule(app))
-                .child(&label)
-                .child(&rule(app))
-                .as_any();
-        }
-        match body {
-            Body::Text(content) => {
-                let (fg, attributes) = entry_look(commit, theme);
-                Text::new(app, content.clone()).wrap(WrapMode::Word).fg(fg).attributes(attributes).as_any()
-            }
-            Body::Markdown(content) | Body::Code { content, .. } => {
-                let markdown = self.markdown(commit, body, false);
-                markdown.set_markdown(content.clone());
-                markdown.as_any()
-            }
-            Body::Structured(snapshot) => tools::structured_widget(app, snapshot, theme, self.mono),
-            Body::None => Text::new(app, "").as_any(),
-        }
+        entry_content(self.scrollback.app(), &self.theme, self.mono, commit, body)
     }
 
-    /// Markdown for assistant text, and for code bodies in Markdown such as reasoning. Code in other languages (an
-    /// unknown tool's metadata as JSON) renders as Markdown text too (`parity/deviations/M06-mini-output.md`).
     fn markdown(&self, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
-        let app = self.scrollback.app();
-        let theme = &self.theme;
-        let color = entry_color(commit, theme);
-        let code = matches!(body, Body::Code { .. });
-        // A code body draws in one color (`<code fg>`); the conceal of the TS view hides its markers.
-        let (colors, syntax) = if code || theme.syntax.is_none() {
-            (
-                MarkdownColors {
-                    text: color,
-                    heading: color,
-                    emphasis: color,
-                    code: color,
-                    code_bg: Color::TRANSPARENT,
-                    link: color,
-                    quote: color,
-                    marker: color,
-                    rule: color,
-                },
-                SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color)),
-            )
-        } else {
-            (MarkdownColors { text: color, ..theme.markdown }, theme.syntax.clone().unwrap_or_default())
-        };
-        let table = if self.mono {
-            MarkdownTableOptions {
-                style: MarkdownTableStyle::Columns,
-                width_mode: Some(ColumnWidthMode::Content),
-                borders: Some(false),
-                ..MarkdownTableOptions::default()
-            }
-        } else {
-            MarkdownTableOptions { width_mode: Some(ColumnWidthMode::Content), ..MarkdownTableOptions::default() }
-        };
-        let syntax = if code { recolor(syntax, color) } else { syntax };
-        opencode_ui::grammars::register();
-        Markdown::new(app)
-            .colors(colors)
-            .syntax_theme(syntax)
-            .scope_styles(true)
-            .conceal(true)
-            .table_options(table)
-            .streaming(streaming)
+        entry_markdown(self.scrollback.app(), &self.theme, self.mono, commit, body, streaming)
     }
 
     fn summary_widget(&self, summary: &TurnSummary) -> Text {
@@ -802,6 +734,79 @@ impl Writer {
         .wrap(WrapMode::None)
         .truncate(true)
     }
+}
+
+/// The widget of a finished entry (`RunEntryContent`).
+pub fn entry_content(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body: &Body) -> AnyWidget {
+    if commit.compaction {
+        let rule = |app: &App| View::new(app).border_sides(Sides::TOP).border_color(theme.block.muted).grow(1.0);
+        let label = View::new(app).padding_x(1).child(&Text::new(app, commit.text.clone()).fg(theme.block.muted));
+        return View::new(app)
+            .direction(FlexDirection::Row)
+            .align_items(Align::Center)
+            .child(&rule(app))
+            .child(&label)
+            .child(&rule(app))
+            .as_any();
+    }
+    match body {
+        Body::Text(content) => {
+            let (fg, attributes) = entry_look(commit, theme);
+            Text::new(app, content.clone()).wrap(WrapMode::Word).fg(fg).attributes(attributes).as_any()
+        }
+        Body::Markdown(content) | Body::Code { content, .. } => {
+            let markdown = entry_markdown(app, theme, mono, commit, body, false);
+            markdown.set_markdown(content.clone());
+            markdown.as_any()
+        }
+        Body::Structured(snapshot) => tools::structured_widget(app, snapshot, theme, mono),
+        Body::None => Text::new(app, "").as_any(),
+    }
+}
+
+/// Markdown for assistant text, and for code bodies in Markdown such as reasoning. Code in other languages (an
+/// unknown tool's metadata as JSON) renders as Markdown text too (`parity/deviations/M06-mini-output.md`).
+fn entry_markdown(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
+    let color = entry_color(commit, theme);
+    let code = matches!(body, Body::Code { .. });
+    // A code body draws in one color (`<code fg>`); the conceal of the TS view hides its markers.
+    let (colors, syntax) = if code || theme.syntax.is_none() {
+        (
+            MarkdownColors {
+                text: color,
+                heading: color,
+                emphasis: color,
+                code: color,
+                code_bg: Color::TRANSPARENT,
+                link: color,
+                quote: color,
+                marker: color,
+                rule: color,
+            },
+            SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color)),
+        )
+    } else {
+        (MarkdownColors { text: color, ..theme.markdown }, theme.syntax.clone().unwrap_or_default())
+    };
+    let table = if mono {
+        MarkdownTableOptions {
+            style: MarkdownTableStyle::Columns,
+            width_mode: Some(ColumnWidthMode::Content),
+            borders: Some(false),
+            ..MarkdownTableOptions::default()
+        }
+    } else {
+        MarkdownTableOptions { width_mode: Some(ColumnWidthMode::Content), ..MarkdownTableOptions::default() }
+    };
+    let syntax = if code { recolor(syntax, color) } else { syntax };
+    opencode_ui::grammars::register();
+    Markdown::new(app)
+        .colors(colors)
+        .syntax_theme(syntax)
+        .scope_styles(true)
+        .conceal(true)
+        .table_options(table)
+        .streaming(streaming)
 }
 
 /// Every style of `syntax` in `color`, keeping attributes.
