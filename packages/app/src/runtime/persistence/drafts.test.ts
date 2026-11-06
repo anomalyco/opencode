@@ -142,32 +142,43 @@ describe("draft store text externalization", () => {
     // Clipboard tools hand over temp files and delete them on the next copy; reads then fail.
     class DiskFile extends File {
       gone = false
+
       private check() {
         if (this.gone) throw new DOMException("file is gone", "NotReadableError")
       }
+
       override arrayBuffer() {
         this.check()
+
         return super.arrayBuffer()
       }
+
       override text() {
         this.check()
+
         return super.text()
       }
+
       override stream() {
         this.check()
+
         return super.stream()
       }
+
       override slice(...args: Parameters<File["slice"]>) {
         this.check()
+
         return super.slice(...args)
       }
     }
+
     const memory = memoryDriver()
     const store = createDraftStore(memory.driver)
     const file = new DiskFile([new Uint8Array([1, 2, 3])], "1793877187508_d.png", { type: "image/png" })
     const image = await store.putBlob(file)
     file.gone = true
-    expect(memory.blobs.get(image.id)).not.toBeInstanceOf(File)
+    // happy-dom's FileReader reads a blob's internal buffer, so only a public read can notice the deleted file.
+    expect(new Uint8Array(await memory.blobs.get(image.id)!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
     expect(await blobDataUrl(image, "image/png")).toBe("data:image/png;base64,AQID")
   })
 
