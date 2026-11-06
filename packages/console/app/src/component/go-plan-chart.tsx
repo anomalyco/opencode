@@ -122,9 +122,12 @@ export function GoPlanChart(props: { href: string; audience?: "individuals" | "t
                           <small>{i18n.t("go.graph.limitedTime")}</small>
                         </Show>
                         <Show when={model.regions}>
-                          <a href="https://dev.meta.ai/legal/geographic-use-policy">
-                            {i18n.t("go.graph.limitedRegions")}
-                          </a>
+                          <Show
+                            when={model.regionPolicyUrl}
+                            fallback={<small>{i18n.t("go.graph.limitedRegions")}</small>}
+                          >
+                            {(href) => <a href={href()}>{i18n.t("go.graph.limitedRegions")}</a>}
+                          </Show>
                         </Show>
                       </span>
                     </Show>

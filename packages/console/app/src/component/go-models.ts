@@ -8,7 +8,11 @@ type GoModel = {
   fresh?: boolean
   limitedTime?: boolean
   regions?: boolean
+  // Provider policy that defines the region limit; omit it to show the label without a link.
+  regionPolicyUrl?: string
 }
+
+const metaGeographicUsePolicy = "https://dev.meta.ai/legal/geographic-use-policy"
 
 // Requests are per 5 hours; allowances are monthly usage at official API prices.
 export const goModels: GoModel[] = [
@@ -70,6 +74,7 @@ export const goModels: GoModel[] = [
     allowance: 60,
     featured: true,
     regions: true,
+    regionPolicyUrl: metaGeographicUsePolicy,
   },
   {
     id: "muse-spark-1.2-contributor",
@@ -77,6 +82,7 @@ export const goModels: GoModel[] = [
     requests: 45300,
     allowance: 60,
     regions: true,
+    regionPolicyUrl: metaGeographicUsePolicy,
   },
   {
     id: "crouton-alpha-free",

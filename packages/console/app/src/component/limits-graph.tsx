@@ -1,5 +1,6 @@
 import "./limits-graph.css"
 import { For, Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { goModels } from "./go-models"
@@ -92,9 +93,11 @@ export function LimitsGraph(props: { href: string }) {
                     <span data-slot="badge">{i18n.t("go.graph.limitedTime")}</span>
                   </Show>
                   <Show when={model.regions}>
-                    <a
+                    <Dynamic
+                      component={model.regionPolicyUrl ? "a" : "span"}
                       data-slot="region"
-                      href="https://dev.meta.ai/legal/geographic-use-policy"
+                      href={model.regionPolicyUrl}
+                      role={model.regionPolicyUrl ? undefined : "img"}
                       aria-label={`${model.name}: ${i18n.t("go.graph.limitedRegions")}`}
                       title={i18n.t("go.graph.limitedRegions")}
                     >
@@ -103,7 +106,7 @@ export function LimitsGraph(props: { href: string }) {
                         <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" />
                         <path d="M2 8h12" stroke="currentColor" />
                       </svg>
-                    </a>
+                    </Dynamic>
                   </Show>
                 </div>
                 <div role="cell" data-slot="usage-value">

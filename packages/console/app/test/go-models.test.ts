@@ -23,6 +23,12 @@ describe("goPlanModels", () => {
     }
   })
 
+  test("links only Meta models to Meta's geographic use policy", () => {
+    const linked = goPlanModels.filter((model) => model.regionPolicyUrl?.includes("meta.ai")).map((model) => model.id)
+    expect(linked).toEqual(["muse-spark-1.3-contributor", "muse-spark-1.2-contributor"])
+    expect(goPlanModels.find((model) => model.id === "crouton-alpha-free")?.regionPolicyUrl).toBeUndefined()
+  })
+
   test.each([...LOCALES])("translates Go Teams plan copy for %s", (locale) => {
     const dict = i18n(locale)
     for (const key of [
