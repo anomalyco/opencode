@@ -157,7 +157,8 @@ type Watched<W = opencode_local::watch::Watch> = (PathBuf, Option<u64>, W);
 /// Watches the loader's directories: keeps the watches that still see them, and replaces one whose directory
 /// went away or was made again, which the old watch no longer sees.
 fn watch(tui: &Tui, loader: &Loader<Tui>, watches: &RefCell<Vec<Watched>>) {
-    for (dir, id) in unwatched(&mut watches.borrow_mut(), loader.watch_dirs()) {
+    let fresh = unwatched(&mut watches.borrow_mut(), loader.watch_dirs());
+    for (dir, id) in fresh {
         let proxy = tui.app.proxy();
         let watch = opencode_local::watch::watch(
             &dir,
