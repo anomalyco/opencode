@@ -43,7 +43,7 @@
     padding: 12px;
   }
 
-  [data-slot="media-panel-gallery"] {
+  [data-slot="media-panel-days"] {
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -186,22 +186,22 @@
     white-space: nowrap;
   }
 
-  /* Rows pad their own content, so the list reaches past the body padding to line text up with the filters. */
+  /* Rows pad their own content, so the list reaches past the body padding to line text up with the headings. */
   [data-slot="media-panel-list"] {
-    margin-inline: -8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    margin-inline: -8px;
   }
 
-  [data-slot="media-panel-row"] {
+  [data-slot="media-row"] {
     display: grid;
-    grid-template-columns: 16px minmax(0, 1fr) auto;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
     align-items: center;
-    column-gap: 10px;
+    column-gap: 12px;
     width: 100%;
     padding: 8px;
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--v2-text-text-base);
     text-align: start;
     text-decoration: none;
@@ -219,51 +219,95 @@
     }
   }
 
-  [data-slot="media-panel-row-icon"] {
-    display: inline-flex;
+  [data-slot="media-row-icon"] {
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background-color: var(--v2-background-bg-layer-02);
+    box-shadow: inset 0 0 0 1px var(--v2-border-border-muted);
+
+    > svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* A link's site fills its tile, as a coloured letter square rather than a small circle. */
+    > [data-component="site-icon"] {
+      --site-icon-size: 36px;
+      border-radius: 9px;
+      font-size: 15px;
+    }
   }
 
-  [data-slot="media-panel-row-text"] {
+  [data-slot="media-row-text"] {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     min-width: 0;
   }
 
-  [data-slot="media-panel-row-title"],
-  [data-slot="media-panel-row-detail"] {
+  [data-slot="media-row-title"] {
     overflow: hidden;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  [data-slot="media-panel-row-title"] {
-    font-size: 13px;
-  }
-
-  [data-slot="media-panel-row-detail"] {
-    color: var(--v2-text-text-muted);
-    font-size: 12px;
-  }
-
-  [data-slot="media-panel-row-path"] {
-    margin-inline-start: 6px;
-    color: var(--v2-text-text-faint);
-  }
-
-  [data-slot="media-panel-row-meta"] {
+  [data-slot="media-row-detail"] {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
+    gap: 5px;
+    min-width: 0;
     color: var(--v2-text-text-faint);
-    font-size: 11px;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  /* The place gives way first, so who did what always shows. */
+  [data-slot="media-row-place"] {
+    overflow: hidden;
+    color: var(--v2-text-text-muted);
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="media-row-separator"],
+  [data-slot="media-row-action"] {
+    flex: none;
+  }
+
+  /* The time, swapped for an open arrow while the row is hovered or focused. */
+  [data-slot="media-row-end"] {
+    display: grid;
+    justify-items: end;
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+
+    > * {
+      grid-area: 1 / 1;
+      transition: opacity 120ms ease-out;
+    }
+
+    > [data-slot="icon-svg"] {
+      opacity: 0;
+      color: var(--v2-text-text-muted);
+    }
+  }
+
+  [data-slot="media-row"]:is(:hover, :focus-visible) [data-slot="media-row-end"]:has([data-slot="icon-svg"]) {
+    > time {
+      opacity: 0;
+    }
+
+    > [data-slot="icon-svg"] {
+      opacity: 1;
+    }
   }
 
   [data-slot="media-panel-empty"] {
@@ -306,5 +350,10 @@
 
   [data-slot="media-card"]:hover [data-slot="media-card-frame"] > img {
     transform: none;
+  }
+
+  [data-slot="media-row"],
+  [data-slot="media-row-end"] > * {
+    transition: none;
   }
 }

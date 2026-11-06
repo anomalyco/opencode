@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, mapArray, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import { createMemo, createSignal, For, mapArray, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -133,14 +133,14 @@ export default function MediaPanel(props: { session: MountedSession }) {
             />
           </Match>
           <Match when={kind() === "files" && files().length > 0}>
-            <div data-slot="media-panel-list">
-              <For each={files()}>{(item) => <FileRow item={item} openPath={openPath} />}</For>
-            </div>
+            <DayGroups items={files()} layout="list">
+              {(item) => <FileRow item={item} directory={props.session.directory} openPath={openPath} />}
+            </DayGroups>
           </Match>
           <Match when={kind() === "links" && links().length > 0}>
-            <div data-slot="media-panel-list">
-              <For each={links()}>{(item) => <LinkRow item={item} openURL={openURL} />}</For>
-            </div>
+            <DayGroups items={links()} layout="list">
+              {(item) => <LinkRow item={item} openURL={openURL} />}
+            </DayGroups>
           </Match>
           <Match when={true}>
             <div data-slot="media-panel-empty">{empty()}</div>
@@ -174,9 +174,33 @@ function MediaGrid(props: {
   view: (id: string) => void
   thumbnail: (id: string, element: HTMLImageElement | undefined) => void
 }) {
-  const ctx = usePlugin<typeof Media>()
+  return (
+    <DayGroups items={props.items} layout="grid">
+      {(item) => (
+        <MediaCard
+          item={item}
+          session={props.session}
+          load={props.load}
+          openURL={props.openURL}
+          openPath={props.openPath}
+          view={props.view}
+          thumbnail={props.thumbnail}
+        />
+      )}
+    </DayGroups>
+  )
+}
 
-  // Keyed by day and id strings: a streaming reply derives new item objects, and its cards must not load again.
+/**
+ * Items under a heading per local day, newest first as given. Keyed by day and id strings: a streaming reply derives new
+ * item objects, and their rows must not mount again.
+ */
+function DayGroups<T extends { readonly id: string; readonly time: number }>(props: {
+  items: readonly T[]
+  layout: "grid" | "list"
+  children: (item: T) => JSX.Element
+}) {
+  const ctx = usePlugin<typeof Media>()
   const byID = createMemo(() => new Map(props.items.map((item) => [item.id, item])))
 
   const days = createMemo(() =>
@@ -203,28 +227,14 @@ function MediaGrid(props: {
   }
 
   return (
-    <div data-slot="media-panel-gallery">
+    <div data-slot="media-panel-days">
       <For each={[...days().keys()]}>
         {(day) => (
           <section data-slot="media-panel-day">
             <h3 data-slot="media-panel-day-title">{label(day)}</h3>
-            <div data-slot="media-panel-grid">
+            <div data-slot={props.layout === "grid" ? "media-panel-grid" : "media-panel-list"}>
               <For each={days().get(day) ?? []}>
-                {(id) => (
-                  <Show when={byID().get(id)}>
-                    {(item) => (
-                      <MediaCard
-                        item={item()}
-                        session={props.session}
-                        load={props.load}
-                        openURL={props.openURL}
-                        openPath={props.openPath}
-                        view={props.view}
-                        thumbnail={props.thumbnail}
-                      />
-                    )}
-                  </Show>
-                )}
+                {(id) => <Show when={byID().get(id)}>{(item) => props.children(item())}</Show>}
               </For>
             </div>
           </section>
@@ -435,7 +445,7 @@ const yearFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: 
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
 
-function FileRow(props: { item: FileItem; openPath: (path: string) => void }) {
+function FileRow(props: { item: FileItem; directory: string; openPath: (path: string) => void }) {
   const ctx = usePlugin<typeof Media>()
 
   const href = () => {
@@ -444,34 +454,41 @@ function FileRow(props: { item: FileItem; openPath: (path: string) => void }) {
     return source?.type === "url" ? source.url : undefined
   }
 
+  // The folder the file sits in, relative to the session's directory when it is inside it.
+  const folder = () => {
+    const path = props.item.path
+
+    if (!path) return undefined
+    const root = props.directory.replace(/\/+$/, "") + "/"
+    const relative = path.startsWith(root) ? path.slice(root.length) : path
+    const split = relative.lastIndexOf("/")
+
+    return split > 0 ? relative.slice(0, split) : undefined
+  }
+
   const content = () => (
-    <>
-      <span data-slot="media-panel-row-icon">
-        <FileIcon node={{ path: props.item.name, type: "file" }} class="size-4" />
-      </span>
-      <span data-slot="media-panel-row-text">
-        <span data-slot="media-panel-row-title">{props.item.name}</span>
-        <span data-slot="media-panel-row-detail">
-          {ctx.t(`file.${props.item.action}`)}
-          <Show when={props.item.path}>{(path) => <span data-slot="media-panel-row-path">{path()}</span>}</Show>
-        </span>
-      </span>
-      <Meta from={props.item.from} time={props.item.time} />
-    </>
+    <Row
+      icon={<FileIcon node={{ path: props.item.name, type: "file" }} />}
+      title={props.item.name}
+      place={folder()}
+      action={ctx.t(`file.${props.item.from}.${props.item.action}`)}
+      time={props.item.time}
+      opens={!!props.item.path || !!href()}
+    />
   )
 
   return (
-    <Switch fallback={<div data-slot="media-panel-row">{content()}</div>}>
+    <Switch fallback={<div data-slot="media-row">{content()}</div>}>
       <Match when={props.item.path}>
         {(path) => (
-          <button type="button" data-slot="media-panel-row" title={path()} onClick={() => props.openPath(path())}>
+          <button type="button" data-slot="media-row" title={path()} onClick={() => props.openPath(path())}>
             {content()}
           </button>
         )}
       </Match>
       <Match when={href()}>
         {(url) => (
-          <a data-slot="media-panel-row" href={url()} download={props.item.name}>
+          <a data-slot="media-row" href={url()} download={props.item.name}>
             {content()}
           </a>
         )}
@@ -483,9 +500,16 @@ function FileRow(props: { item: FileItem; openPath: (path: string) => void }) {
 function LinkRow(props: { item: LinkItem; openURL: (url: string) => void }) {
   const ctx = usePlugin<typeof Media>()
 
+  // The page without its scheme, `www.` or trailing slash, as the address bar would show it.
+  const page = () => {
+    const url = new URL(props.item.url)
+
+    return `${url.pathname.replace(/\/+$/, "")}${url.search}`
+  }
+
   return (
     <a
-      data-slot="media-panel-row"
+      data-slot="media-row"
       href={props.item.url}
       title={props.item.url}
       onClick={(event) => {
@@ -493,37 +517,52 @@ function LinkRow(props: { item: LinkItem; openURL: (url: string) => void }) {
         props.openURL(props.item.url)
       }}
     >
-      <span data-slot="media-panel-row-icon">
-        <SiteIcon site={props.item.site} host={props.item.host} mode="letters" />
-      </span>
-      <span data-slot="media-panel-row-text">
-        <span data-slot="media-panel-row-title">{props.item.title ?? props.item.url}</span>
-        <span data-slot="media-panel-row-detail">
-          {props.item.site}
-          <span data-slot="media-panel-row-path">{ctx.t(`link.${props.item.via}`)}</span>
-        </span>
-      </span>
-      <Meta from={props.item.from} time={props.item.time} />
+      <Row
+        icon={<SiteIcon site={props.item.site} host={props.item.host} mode="letters" />}
+        title={props.item.title ?? `${props.item.site}${page()}`}
+        place={props.item.title ? `${props.item.site}${page()}` : undefined}
+        action={ctx.t(`link.${props.item.from}.${props.item.via}`)}
+        time={props.item.time}
+        opens
+      />
     </a>
   )
 }
 
-const format = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-})
-
-function Meta(props: { from: Sender; time: number }) {
-  const ctx = usePlugin<typeof Media>()
-
+/** A file or link row's content: its icon tile, title, where it is and who did what, and the time. */
+function Row(props: {
+  icon: JSX.Element
+  title: string
+  place?: string
+  action: string
+  time: number
+  opens: boolean
+}) {
   return (
-    <span data-slot="media-panel-row-meta">
-      <span data-slot="media-panel-badge" data-from={props.from}>
-        {ctx.t(props.from === "user" ? "from.user" : "from.agent")}
+    <>
+      <span data-slot="media-row-icon">{props.icon}</span>
+      <span data-slot="media-row-text">
+        <span data-slot="media-row-title">{props.title}</span>
+        <span data-slot="media-row-detail">
+          <Show when={props.place}>
+            {(place) => (
+              <>
+                <span data-slot="media-row-place">{place()}</span>
+                <span data-slot="media-row-separator" aria-hidden="true">
+                  ·
+                </span>
+              </>
+            )}
+          </Show>
+          <span data-slot="media-row-action">{props.action}</span>
+        </span>
       </span>
-      <time datetime={new Date(props.time).toISOString()}>{format.format(props.time)}</time>
-    </span>
+      <span data-slot="media-row-end">
+        <time datetime={new Date(props.time).toISOString()}>{timeFormat.format(props.time)}</time>
+        <Show when={props.opens}>
+          <Icon name="outline-arrow-up-right" size="small" />
+        </Show>
+      </span>
+    </>
   )
 }
