@@ -35,6 +35,8 @@ export default {
   "media.image": "Image",
   "day.today": "Today",
   "day.yesterday": "Yesterday",
-  "load.more": "Load earlier messages",
-  "load.loading": "Loading…",
+  "count.more": "{{count}}+",
+  "history.loading": "Looking through earlier messages…",
+  "history.failed": "Couldn't load earlier messages",
+  "history.retry": "Try again",
 }
