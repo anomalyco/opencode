@@ -1,7 +1,7 @@
 //! The spinner: `component/spinner.tsx` and `component/spinner-renderable.ts`.
 
 use super::text::{paint_shaded, shimmer_strength_at};
-use super::{Clock, OneCellMotion, channels, millis, rgba, running, tick_every, tick_frames};
+use super::{Clock, OneCellMotion, channels, millis, one_cell_frame, rgba, running, tick_every, tick_frames};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
@@ -67,6 +67,8 @@ struct SpinnerView {
     animations: bool,
     still: String,
     clock: Clock,
+    /// A sequenced one-cell motion and the age it starts at: its frame and level follow the time, not the glyphs.
+    sequence: Option<(OneCellMotion, Duration)>,
     /// Painted since the last tick of the stepped driver.
     painted: Rc<Cell<bool>>,
 }
@@ -82,6 +84,7 @@ impl Spinner {
             animations: true,
             still: "⋯".to_owned(),
             clock: Clock::default(),
+            sequence: None,
             painted: Rc::new(Cell::new(false)),
         };
         let spinner = Self { widget: Custom::measured(app, view).shrink(0.0), app: app.clone() };
@@ -89,24 +92,34 @@ impl Spinner {
         spinner
     }
 
-    /// A looping one-cell motion (`OneCellSpinner` for a motion that is not [sequenced]), each frame at its level's
-    /// share of `color`'s alpha.
+    /// A one-cell motion (`OneCellSpinner`), each frame at its level's share of `color`'s alpha. A [sequenced]
+    /// motion plays its intro and pace from [`Self::age`] on, ticking as often as TS does.
     ///
     /// [sequenced]: OneCellMotion::sequenced
     pub fn one_cell(app: &App, motion: &OneCellMotion, color: Color) -> Self {
         let clip = &motion.clip;
-        let color = match clip.levels.clone() {
-            Some(levels) => {
-                let [r, g, b, a] = channels(color);
-                SpinnerColor::Each(Rc::new(move |frame, _, _, _| rgba(r, g, b, a * levels[frame])))
-            }
-            None => SpinnerColor::Solid(color),
+        let interval = match motion.sequenced() {
+            true => (clip.interval / motion.pace.map_or(1.0, |pace| pace.initial)).clamp(1000.0 / 60.0, 40.0),
+            false => clip.interval,
         };
-        Self::new(app)
+        let spinner = Self::new(app)
             .frames(&clip.frames)
-            .interval(Duration::from_secs_f64(clip.interval / 1000.0))
-            .color(color)
-            .still("\u{25aa}")
+            .interval(Duration::from_secs_f64(interval / 1000.0))
+            .color(one_cell_color(motion, color))
+            .still("\u{25aa}");
+        let sequence = motion.sequenced().then(|| (motion.clone(), Duration::ZERO));
+        spinner.widget.update(|view| view.sequence = sequence);
+        spinner
+    }
+
+    /// Where a sequenced one-cell motion starts: the time its work has run so far.
+    pub fn age(self, age: Duration) -> Self {
+        self.widget.update(|view| {
+            if let Some(sequence) = view.sequence.as_mut() {
+                sequence.1 = age;
+            }
+        });
+        self
     }
 
     /// Replaces the frames and starts over at the first.
@@ -234,6 +247,12 @@ impl Component for SpinnerView {
             paint_shaded(painter, &self.line(), base, shimmer, |column, end| shimmer_strength_at(elapsed, column, end));
             return;
         }
+        if let Some((motion, age)) = &self.sequence {
+            let frame = one_cell_frame(motion, millis(*age + self.clock.get()));
+            let [r, g, b, a] = channels(base);
+            painter.text(0, 0, &frame.glyph, Style::new().fg(rgba(r, g, b, a * frame.level)).bg(Color::TRANSPARENT));
+            return;
+        }
         let index = self.frame();
         let Some(glyphs) = self.glyphs.get(index) else {
             return;
@@ -269,6 +288,17 @@ impl Component for SpinnerView {
         };
         let label = self.label.as_deref().map_or(0.0, |label| 1.0 + text(label));
         (width.apply(glyph + label), height.apply(1.0))
+    }
+}
+
+/// The color of a [`Spinner::one_cell`] in `color`: a sequenced motion applies its levels as it paints.
+pub fn one_cell_color(motion: &OneCellMotion, color: Color) -> SpinnerColor {
+    match motion.clip.levels.clone().filter(|_| !motion.sequenced()) {
+        Some(levels) => {
+            let [r, g, b, a] = channels(color);
+            SpinnerColor::Each(Rc::new(move |frame, _, _, _| rgba(r, g, b, a * levels[frame])))
+        }
+        None => SpinnerColor::Solid(color),
     }
 }
 
