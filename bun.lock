@@ -971,10 +971,10 @@
         "@solidjs/meta": "catalog:",
         "@solidjs/router": "catalog:",
         "@solidjs/start": "catalog:",
-        "@textjs/app": "1.6.0",
-        "@textjs/core": "1.6.0",
-        "@textjs/opencode": "1.6.0",
-        "@textjs/react": "1.6.0",
+        "@textjs/app": "1.6.1",
+        "@textjs/core": "1.6.1",
+        "@textjs/opencode": "1.6.1",
+        "@textjs/react": "1.6.1",
         "fuzzysort": "3.1.0",
         "nitro": "3.0.260903-beta",
         "number-flow": "0.6.2",
@@ -2556,13 +2556,13 @@
 
     "@tanstack/virtual-core": ["@tanstack/virtual-core@3.17.8", "", {}, "sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA=="],
 
-    "@textjs/app": ["@textjs/app@1.6.0", "", { "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "@textjs/core": "1.6.0", "@textjs/opencode": "1.6.0", "@textjs/react": "1.6.0", "@vitejs/plugin-react": "^4.5.2", "vite": "^6.3.5", "zod": "^4" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "bin": { "text": "bin/text.js" } }, "sha512-aK0NR5IQQTDpBTG4FXVVIal2KfuYlT+O/B/Yle51oDodf/HdAQq7cYbEBSiBXkeGnS3aUiRJw2OE/+tFQYLC6g=="],
+    "@textjs/app": ["@textjs/app@1.6.1", "", { "dependencies": { "@modelcontextprotocol/sdk": "^1.32.2", "@textjs/core": "1.6.1", "@textjs/opencode": "1.6.1", "@textjs/react": "1.6.1", "@vitejs/plugin-react": "^4.5.2", "vite": "^6.3.5", "zod": "^4" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "bin": { "text": "bin/text.js" } }, "sha512-67ulJUsraW0sq8Vvj1eoXF1bag9NNGnLA26HRQ/f0jDlgcT/IJsQOLVAryLzN/YHIGzGBeYiyhWpZYyaIgNThQ=="],
 
-    "@textjs/core": ["@textjs/core@1.6.0", "", { "dependencies": { "yoga-layout": "3.2.1" } }, "sha512-ubN6p4PAjQpurUlIP/EyA/2pEGgB/UXb3sMCTDmj3nqtw9dGBbiOEzwuLCc232Nqk5VuaAE8VcZHG/Wvs7GVFw=="],
+    "@textjs/core": ["@textjs/core@1.6.1", "", { "dependencies": { "yoga-layout": "3.2.1" } }, "sha512-uCMPzetps3mqNoFCvw3QYn0dB9K02lApQvsvkkH0aB7mCm+02VL4j8wZVrb0srshOyoC+8q0JAMxLLOC2MRsCQ=="],
 
-    "@textjs/opencode": ["@textjs/opencode@1.6.0", "", { "bin": { "textjs-opencode": "bin/textjs-opencode.js" } }, "sha512-Aa6Z8rDQxZAHFFKpAzNhb34Y90Ko7gyhOpkDxjdv2LeisZLtKuggL1nZW7s4AkVHpe858rTgqkoc2PVlwUA3WQ=="],
+    "@textjs/opencode": ["@textjs/opencode@1.6.1", "", { "bin": { "textjs-opencode": "bin/textjs-opencode.js" } }, "sha512-Axoj9PUXqsDqJ/Zx/IXkTUWdHB9tMjG1ZmfHfiv+nkNedpArmVm4+gMkV98yHFrpQQfgON+wGBe21JsctmcBcg=="],
 
-    "@textjs/react": ["@textjs/react@1.6.0", "", { "dependencies": { "@textjs/core": "1.6.0", "react-reconciler": "^0.34.0", "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "optionalPeers": ["react-dom"] }, "sha512-KBNGzUBgyV0v+vLQ02M8Efew2SPujL8L9UUDrhFQv4CZdFP/OxJ/JNi+V2KTj6MQanIRypZqm8TRNdP+ZtKdsQ=="],
+    "@textjs/react": ["@textjs/react@1.6.1", "", { "dependencies": { "@textjs/core": "1.6.1", "react-reconciler": "^0.34.0", "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }, "optionalPeers": ["react-dom"] }, "sha512-iu2GdVulz9oWRr942VCc3uq11WCGxWZpYwtLUWPQuDhgnUU6acWqdA9jRRXXQWxB+W1HBo6aGPnvLFa9f2D/cg=="],
 
     "@trickfilm400/rollup-plugin-off-main-thread": ["@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1", "", { "dependencies": { "ejs": "^3.1.10", "json5": "^2.2.3", "magic-string": "^0.30.21", "string.prototype.matchall": "^4.0.12" } }, "sha512-/67zpWDBLV+oYAEL682s1ktXL0HgqX76f6gaVGkGnVZlBbm1zd0v4Bz8MFF2GGhoX9rvfq3KSQHubFHwa6w6/Q=="],
 
