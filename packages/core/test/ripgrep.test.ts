@@ -78,6 +78,24 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("greps lines that are not valid UTF-8", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "utf8.txt"), "needle\n"))
+        yield* Effect.promise(() =>
+          fs.writeFile(path.join(tmp.path, "latin1.txt"), Buffer.from([...Buffer.from("needle caf"), 0xe9, 0x0a])),
+        )
+
+        const ripgrep = yield* Ripgrep.Service
+        const result = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10 })
+        expect(result.map((match) => [match.entry.path, match.text, match.submatches[0]?.text]).sort()).toEqual([
+          [RelativePath.make("latin1.txt"), "needle caf\uFFFD\n", "needle"],
+          [RelativePath.make("utf8.txt"), "needle\n", "needle"],
+        ])
+      }),
+    ),
+  )
+
   it.live("keeps ignored files out of catch-all find results", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
