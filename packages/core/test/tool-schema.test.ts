@@ -568,6 +568,22 @@ test("missing external input schemas fall back to an empty schema", () => {
     type: "tool",
     name: "external",
     description: "External tool",
-    inputSchema: {},
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
   })
 })
+
+test("empty struct inputs normalize to an empty object schema", () => {
+  const tool: Info = {
+    name: "empty",
+    description: "Empty tool",
+    input: Schema.Struct({}),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool)).toEqual({
+    type: "tool",
+    name: "empty",
+    description: "Empty tool",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  })
+}))

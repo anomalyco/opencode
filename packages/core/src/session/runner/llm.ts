@@ -33,6 +33,7 @@ import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
+import { SessionShellBatch } from "../shell-batch.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
@@ -250,13 +251,16 @@ const layer = Layer.effect(
         }
         yield* compaction.precompute(Effect.succeed(loaded), estimate)
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
-        const transcript = SessionModelRequest.baseTranscript({
-          agent: loaded.agent.info,
-          model: loaded.model,
-          tools: loaded.tools,
-          initial: loaded.initial,
-          messages: loaded.messages,
-        })
+        const transcript = SessionShellBatch.prepare(
+          SessionModelRequest.baseTranscript({
+            agent: loaded.agent.info,
+            model: loaded.model,
+            tools: loaded.tools,
+            initial: loaded.initial,
+            messages: loaded.messages,
+          }),
+          loaded.tools.definitions.some((tool) => tool.name === "shell"),
+        )
         const prepared = yield* context.request
           .primary({
             session: loaded.session,

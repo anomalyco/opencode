@@ -87,6 +87,7 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { SessionShellBatch } from "@opencode/core/session/shell-batch"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -1090,6 +1091,37 @@ describe("SessionRunnerLLM", () => {
     expect(JSON.stringify(s.requests[4]?.messages)).toContain("First prompt")
     expect(JSON.stringify(s.requests[4]?.messages)).not.toContain("Third prompt")
     expect((yield* s.session.get(sessionID)).title).toBe("Generated title")
+  })
+
+  scenario("uses shell batching guidance while hiding dedicated file tools", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      Object.fromEntries(
+        ["shell", "read", "write", "edit", "patch", "glob", "grep"].map((name) => [
+          name,
+          {
+            name,
+            description: name,
+            input: Schema.Struct({}),
+            output: Schema.Struct({}),
+            execute: () => Effect.succeed({ output: {}, content: "done" }),
+          },
+        ]),
+      ),
+      { codemode: false },
+    )
+    yield* s.admit("作業を実行")
+    yield* s.llm.push(TestLLM.tool("call-shell", "shell", {}), TestLLM.text("完了", "done"))
+    yield* s.resume
+
+    const request = s.requests[0]!
+    expect(request.tools.map((tool) => tool.name)).toContain("shell")
+    for (const name of ["read", "write", "edit", "patch", "glob", "grep"])
+      expect(request.tools.map((tool) => tool.name)).not.toContain(name)
+    expect(request.system.some((part) => part.text === SessionShellBatch.prompt)).toBe(true)
+    expect(request.messages[0]?.content).toContainEqual(Message.text(SessionShellBatch.prompt))
+    expect(s.requests).toHaveLength(2)
   })
 
   scenario("advertises and executes a location registered tool", function* (s) {
