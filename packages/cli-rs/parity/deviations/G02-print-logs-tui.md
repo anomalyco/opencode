@@ -8,7 +8,8 @@ and none after it. They stay on the screen until the next redraw of those cells 
 
 Rust: `opencode_tui::run` sets `AppOptions::capture_stderr`. While the TUI runs, whatever the process writes to
 stderr (log records, stray `eprintln!`) goes to the opentui console, and is written to the real stderr after
-the terminal is restored. The same PTY run, with a record written to the process's stderr during the TUI, shows
+the terminal is restored. "Toggle console" in the palette (`app.console`, unbound by default, as in TS) shows
+the console while the TUI runs. The same PTY run, with a record written to the process's stderr during the TUI, shows
 no record on the screen and the record after the alternate screen is left:
 
 ```
