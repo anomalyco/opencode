@@ -462,7 +462,7 @@ export const content = {
   byos: {
     title: "Trae tu suscripción",
     headline: "Usa las suscripciones que ya tienes.",
-    line: "Inicia sesión con ChatGPT Plus o Pro, GitHub Copilot o Claude Code. O usa una suscripción de OpenCode.",
+    line: "Inicia sesión con ChatGPT Plus o Pro, o con GitHub Copilot. O usa una suscripción de OpenCode.",
     yours: {
       label: "Tu suscripción",
       items: {
@@ -1226,10 +1226,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "Crea, instala y comparte plugins de escritorio.",
       link: "Novedades de la 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Usa tu sesión de Claude Code en OpenCode.",
-      link: "Ver v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "Las terminales de escritorio ya sobreviven a los reinicios.",

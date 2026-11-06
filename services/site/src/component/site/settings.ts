@@ -173,9 +173,7 @@ export const homeSections = [
   "byos",
   "tools",
   "openSource",
-  "privacy",
   "faq",
-  "signup",
   "console",
 ] as const
 export type HomeSection = (typeof homeSections)[number]
@@ -529,9 +527,6 @@ export const ossProofs = ["stats", "section", "off"] as const
 // The open source section as it is, or with a "fork it" block (terminal transcript and what a fork
 // lets you do) and a "Fork on GitHub" button.
 export const ossVariants = ["current", "fork"] as const
-// The home email sign-up (signup.tsx): a sentence whose address is typed in place, a standard field
-// and button, or a terminal prompt.
-export const signupStyles = ["sentence", "input", "terminal"] as const
 // "section" lays the Console out like the other home sections: title, then copy, no dots.
 export const consoleSections = ["section", "panel", "inline", "slim", "split", "corner", "off"] as const
 export const consoleHeights = ["auto", "card", "half", "compact"] as const
@@ -793,9 +788,6 @@ function createSchema() {
     stats: z.enum(statsModes).catch("slot"),
     ossProof: z.enum(ossProofs).catch("stats"),
     ossVariant: z.enum(ossVariants).catch("current"),
-    // The home email sign-up is hidden for now; "on" shows it again.
-    signupSection: z.enum(toggles).catch("off"),
-    signupStyle: z.enum(signupStyles).catch("sentence"),
     avatarAnimation: z.enum(avatarAnimations).catch("same as logos"),
     avatarLink: z.enum(avatarLinks).catch("commits"),
     // Milliseconds between one avatar's reveal and the next, in the diagonal wash.
@@ -1049,7 +1041,6 @@ function createSchema() {
     whatColumns: z.enum(sectionColumns).catch("2 columns"),
     toolsColumns: z.enum(sectionColumns).catch("2 columns"),
     openSourceColumns: z.enum(sectionColumns).catch("2 columns"),
-    privacyColumns: z.enum(sectionColumns).catch("2 columns"),
     faqColumns: z.enum(sectionColumns).catch("2 columns"),
     consoleColumns: z.enum(sectionColumns).catch("2 columns"),
     // The intro copy (lead or Console headline) beside the body columns above; the section body is
@@ -1196,7 +1187,6 @@ if (import.meta.env.DEV && !isServer) {
       heroText,
       stats,
       ossProof,
-      signupStyle,
       avatarLink,
       cornerButton,
       wordmarkNodes,

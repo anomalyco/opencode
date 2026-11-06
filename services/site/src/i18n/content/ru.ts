@@ -331,7 +331,7 @@ export const content = {
   byos: {
     title: "Своя подписка",
     headline: "Используйте подписки, которые у вас уже есть.",
-    line: "Войдите через ChatGPT Plus или Pro, GitHub Copilot или Claude Code. Или используйте подписку OpenCode.",
+    line: "Войдите через ChatGPT Plus или Pro либо через GitHub Copilot. Или используйте подписку OpenCode.",
     yours: { label: "Ваша подписка", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["подписку OpenCode", "OpenCode Go"],
     ours: { label: "Планы OpenCode" },
@@ -761,10 +761,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "Создавайте, устанавливайте и публикуйте плагины для Desktop.",
       link: "Что нового в 2.2",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Входите в OpenCode через Claude Code.",
-      link: "Смотреть v2.2.3",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "Терминалы в Desktop теперь переживают перезапуск.",

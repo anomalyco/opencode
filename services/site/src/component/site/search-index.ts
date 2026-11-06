@@ -156,7 +156,6 @@ export function buildSearchIndex(
       home.tools.items.map((i) => i.name).join(" "),
     ),
     section(names.home, "/", home.openSource.title, stripTags(home.openSource.lead)),
-    section(names.home, "/", home.privacy.title, plainRich(home.privacy.body)),
     section(names.home, "/", home.faq.title, undefined, "questions"),
     section(names.home, "/", home.console.title, `${home.console.headline} ${home.console.body}`),
   ]

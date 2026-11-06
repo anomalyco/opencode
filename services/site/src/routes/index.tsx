@@ -43,7 +43,6 @@ import { announcementsSource } from "~/i18n/content/areas/announcements"
 import "~/component/site/byos.css"
 import { getStarted } from "~/lib/get-started"
 import "~/component/site/get-started.css"
-import { SignupSection } from "~/component/site/signup"
 import { installs } from "~/component/site/product-data"
 import { isMobile } from "~/lib/platform"
 import { LocaleLinks } from "~/component/locale-links"
@@ -451,22 +450,6 @@ export default function Home() {
 
       <section
         data-component="block"
-        data-section="privacy"
-        data-design="privacyColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
-        data-columns={siteSettings.privacyColumns.charAt(0)}
-      >
-        <h2 data-slot="label" data-design-copy="home.privacy.title">
-          {designCopy("home.privacy.title", content().privacy.title)}
-        </h2>
-        <div data-slot="body">
-          <p data-slot="lead" data-design-copy="home.privacy.body">
-            <Rich value={richCopy("home.privacy.body", content().privacy.body, content().copyLinks)} />
-          </p>
-        </div>
-      </section>
-
-      <section
-        data-component="block"
         data-section="faq"
         data-design="faqColumns spacer spacerLength spacerCount spacerStartDash spacerStartGap spacerCurve ditherHeight ditherOrientation ditherDirection ditherLength ditherPixel ditherPattern ditherDensity ditherOpacity ditherCurve ditherLine"
         data-columns={siteSettings.faqColumns.charAt(0)}
@@ -495,10 +478,6 @@ export default function Home() {
           </ul>
         </div>
       </section>
-
-      <Show when={import.meta.env.DEV || siteSettings.signupSection === "on"}>
-        <SignupSection />
-      </Show>
 
       <section
         data-component="block"
@@ -1129,7 +1108,7 @@ function GetStarted() {
                       )}
                     </For>
                   </span>
-                  ChatGPT, Copilot, Claude Code
+                  ChatGPT, Copilot
                 </span>
                 <span data-slot="price">{i18n.t("home.getStarted.yourPlan")}</span>
                 <ChevronRight />

@@ -6,10 +6,6 @@ export const content = {
       text: "Crie, instale e compartilhe plugins no desktop.",
       link: "Veja as novidades da 2.2",
     },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Use seu login do Claude Code no OpenCode.",
-      link: "Ver v2.2.3",
-    },
     "desktop-terminals-now-survive-restarts": {
       text: "Os terminais do desktop agora sobrevivem a reinícios.",
       link: "Ver v2.2.4",
@@ -476,9 +472,6 @@ export const content = {
       "github-copilot": {
         name: "GitHub Copilot",
       },
-      "claude-code": {
-        name: "Claude Code",
-      },
     },
     plans: {
       "opencode-go": {
@@ -508,7 +501,7 @@ export const content = {
   byos: {
     title: "Use suas assinaturas",
     headline: "Use as assinaturas que você já tem.",
-    line: "Entre com ChatGPT Plus ou Pro, GitHub Copilot ou Claude Code. Ou use uma assinatura OpenCode.",
+    line: "Entre com ChatGPT Plus ou Pro, ou com GitHub Copilot. Ou use uma assinatura OpenCode.",
     yours: {
       label: "Sua assinatura",
       items: {
@@ -517,9 +510,6 @@ export const content = {
         },
         "github-copilot": {
           name: "GitHub Copilot",
-        },
-        "claude-code": {
-          name: "Claude Code",
         },
       },
     },

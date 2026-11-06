@@ -346,7 +346,7 @@ export const content = {
   byos: {
     title: "サブスクリプションを持ち込む",
     headline: "すでにお持ちのサブスクリプションを使えます。",
-    line: "ChatGPT PlusまたはPro、GitHub Copilot、Claude Codeでログインできます。OpenCodeのサブスクリプションも使えます。",
+    line: "ChatGPT PlusまたはPro、あるいはGitHub Copilotでログインできます。OpenCodeのサブスクリプションも使えます。",
     yours: { label: "お使いのサブスクリプション", items: { "chatgpt-plus-pro": { name: "ChatGPT Plus/Pro" } } },
     planLinks: ["OpenCodeのサブスクリプション", "OpenCode Go"],
     ours: { label: "OpenCodeのプラン" },
@@ -794,10 +794,6 @@ export const content = {
     "create-install-and-share-desktop-plugins": {
       text: "デスクトッププラグインを作成、インストール、共有できます。",
       link: "2.2の新機能を見る",
-    },
-    "use-your-claude-code-login-in-opencode": {
-      text: "Claude CodeのログインでOpenCodeを使えます。",
-      link: "v2.2.3を見る",
     },
     "desktop-terminals-now-survive-restarts": {
       text: "Desktopのターミナルが再起動後も残るようになりました。",
