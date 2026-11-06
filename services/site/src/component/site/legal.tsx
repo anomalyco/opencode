@@ -21,6 +21,7 @@ import {
   type LegalNode,
 } from "~/lib/legal"
 import { legalSummaries } from "~/lib/legal/summaries"
+import { AnalyticsChoice } from "./analytics-choice"
 import { CheckIcon, Chevron, CopyIcon, DownloadIcon, ExternalArrow, NewTab } from "./icons"
 import { copySelection } from "~/lib/clipboard"
 import { architectLabelCases, architectRules, legalHistoryViews, legalPrintStyles, siteSettings } from "./settings"
@@ -705,6 +706,7 @@ function LegalBody(props: {
 }) {
   if (typeof props.node === "string") return props.node
   const node = props.node
+  if (node[0] === "analytics-choice") return <AnalyticsChoice />
   if (published(node)) return <LegalElement node={node} anchors={props.anchors} />
   // A note to the legal reviewers in a draft: shown only with Settings › Legal review notes.
   return (
