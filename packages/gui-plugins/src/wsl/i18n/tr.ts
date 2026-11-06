@@ -40,6 +40,7 @@ export default {
   "error.installDistro": "Dağıtım kurulamadı: {{distro}}",
   "error.installOpencode": "OpenCode kurulamadı",
   "error.alreadyAdded": "{{distro}} zaten eklendi",
+  "error.busy": "{{distro}} başka bir işle meşgul. Bittiğinde tekrar deneyin.",
   "error.opencodeMissing": "opencode bu dağıtımda kurulu değil",
   "error.opencodeCannotRun": "opencode kurulu ancak çalıştırılamadı",
   "error.opencodeNotInstalled": "OpenCode, {{distro}} içinde kurulu değil",
