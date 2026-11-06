@@ -3,6 +3,8 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
+import { SessionSchedule } from "@opencode/schema/session-schedule"
+import { SessionWatch } from "@opencode/schema/session-watch"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
 import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
@@ -122,6 +124,72 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
   formLocationMiddleware: Context.Key<FormI, FormS>,
 ) =>
   HttpApiGroup.make("server.session")
+    .add(
+      HttpApiEndpoint.get("session.watchGet", "/api/session/:sessionID/watch", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.NullOr(SessionWatch.Info) }),
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.watchGet", summary: "Get member stop notifications" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.put("session.watchSave", "/api/session/:sessionID/watch", {
+        params: { sessionID: Session.ID },
+        payload: SessionWatch.Input,
+        success: Schema.Struct({ data: SessionWatch.Info }),
+        error: [SessionNotFoundError, InvalidRequestError],
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.watchSave", summary: "Configure member stop notifications" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.watchRemove", "/api/session/:sessionID/watch", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.watchRemove", summary: "Remove member stop notifications" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.scheduleList", "/api/session/:sessionID/schedule", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(SessionSchedule.Info) }),
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.scheduleList", summary: "List scheduled messages" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.scheduleCreate", "/api/session/:sessionID/schedule", {
+        params: { sessionID: Session.ID },
+        payload: SessionSchedule.Input,
+        success: Schema.Struct({ data: SessionSchedule.Info }),
+        error: [SessionNotFoundError, InvalidRequestError],
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.scheduleCreate", summary: "Create a scheduled message" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.put("session.scheduleUpdate", "/api/session/:sessionID/schedule/:scheduleID", {
+        params: { sessionID: Session.ID, scheduleID: Schema.String },
+        payload: SessionSchedule.Input,
+        success: Schema.Struct({ data: SessionSchedule.Info }),
+        error: [SessionNotFoundError, InvalidRequestError],
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.scheduleUpdate", summary: "Edit or pause a scheduled message" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.scheduleRemove", "/api/session/:sessionID/schedule/:scheduleID", {
+        params: { sessionID: Session.ID, scheduleID: Schema.String },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.scheduleRemove", summary: "Delete a scheduled message" }),
+      ),
+    )
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
         query: SessionsQuery,
