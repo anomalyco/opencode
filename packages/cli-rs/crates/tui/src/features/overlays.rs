@@ -41,8 +41,7 @@ pub fn connected(tui: &Tui) -> bool {
 
 pub fn install(_tui: &Tui) {}
 
-/// Shows or hides the reconnecting overlay after its grace period, and resyncs the location on a new
-/// connection (`server.connected`).
+/// Shows or hides the reconnecting overlay after its grace period.
 pub fn connection_changed(tui: &Tui, state: &State) {
     let overlays = &tui.overlays;
     if let Some(timer) = overlays.timer.take() {
@@ -50,7 +49,6 @@ pub fn connection_changed(tui: &Tui, state: &State) {
     }
     let connected = state.status == Status::Connected;
     if connected && !overlays.connected.replace(true) {
-        crate::features::location::reconnected(tui);
         // TS polls 1 s after mount whatever the connection; polling from the first connection keeps a
         // server that is still starting from showing "Data migration failed".
         if !overlays.polling.replace(true) {

@@ -27,6 +27,7 @@ mod permission;
 mod plugins;
 mod prompt;
 mod queue;
+mod reconnect;
 mod review_ms1;
 mod review_ms34;
 mod root;

@@ -10,6 +10,7 @@ use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
 use opencode_api::generated::SessionID;
+use opencode_store::location::Catalog;
 use opencode_store::{Error, Location};
 use opencode_ui::bind;
 
@@ -109,7 +110,14 @@ fn sync(tui: &Tui, location: Option<Location>) {
         async move {
             let mut tries = 0;
             loop {
-                match data.location_sync(target.as_ref()).await {
+                // The TUI's `location.sync` also reads the config (`context/data.tsx`).
+                let read = async {
+                    data.location_sync_info(target.as_ref()).await?;
+                    let config = data.catalog_sync(Catalog::Config, target.as_ref());
+                    let (sync, config) = futures_util::future::join(data.location_sync(target.as_ref()), config).await;
+                    sync.and(config)
+                };
+                match read.await {
                     Ok(()) => return Ok(()),
                     Err(error) if tries + 1 < ATTEMPTS && !not_found(&error) => {
                         tokio::time::sleep(DELAY * 2u32.pow(tries)).await;
