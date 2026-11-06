@@ -49,6 +49,13 @@ export type PluginState = { status: "active" } | { status: "failed"; error: stri
 
 export type PluginGuiBundle = { code: string; revision: string; options: { [x: string]: JsonValue } }
 
+export type SessionGoal = {
+  objective: string
+  status: "active" | "paused" | "blocked" | "complete"
+  reason?: string
+  awaitingApproval?: boolean
+}
+
 export type SessionID = string
 
 export type SessionMessageID = string
@@ -321,24 +328,6 @@ export type SessionStatus =
 
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
-export type ScheduleID = string
-
-export type ScheduleDuration = string
-
-export type ScheduleWhenAt = { type: "at"; at: string; tz?: string }
-
-export type ScheduleWhenCron = { type: "cron"; cron: string; tz?: string }
-
-export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; matches?: string; changes?: boolean }
-
-export type ScheduleConditionCode = { type: "code"; code: string }
-
-export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
-
-export type ScheduleStatus = "active" | "paused" | "done"
-
-export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
-
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
 export type ArtifactID = string
@@ -412,6 +401,19 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+
+export type SessionGoalMonitor = { goal: SessionGoal | null; continuationCount: number; approvalWaits: number }
+
+export type SessionWatchInfo = { members: Array<SessionID>; text: string; enabled: boolean; sessionID: SessionID }
+
+export type SessionScheduleInfo = {
+  text: string
+  intervalMinutes: number
+  enabled: boolean
+  id: string
+  sessionID: SessionID
+  nextAt: number | null
+}
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -921,14 +923,6 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
-export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
-
-export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: string }
-
-export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
-
-export type ScheduleAction = ScheduleActionPrompt
-
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
 export type ArtifactInfo = {
@@ -1163,6 +1157,51 @@ export type FormState =
   | { status: "pending" }
   | { status: "answered"; answer: FormAnswer }
   | { status: "cancelled"; message?: string }
+
+export type SessionGoalSet = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.goal.set"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; objective: string }
+}
+
+export type SessionGoalEdited = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.goal.edited"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; objective: string }
+}
+
+export type SessionGoalStatusChanged = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.goal.status_changed"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    status: "active" | "paused" | "blocked" | "complete"
+    reason?: string
+    awaitingApproval?: boolean
+  }
+}
+
+export type SessionGoalCleared = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.goal.cleared"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID }
+}
 
 export type SessionAgentSelected = {
   id: EventID
@@ -2228,8 +2267,6 @@ export type FormReplied = {
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
 }
 
-export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
-
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
 export type JobInfo = JobShell | JobSubagent | JobImage
@@ -2326,6 +2363,7 @@ export type SessionInfo = {
   title?: string
   subpath?: RelativePath
   metadata?: SessionMetadata
+  goal?: SessionGoal
   permissions?: PermissionRuleset
   revert?: SessionRevert
   location: LocationPublicRef
@@ -2643,26 +2681,6 @@ export type CredentialEntry = {
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
 
-export type ScheduleInfo = {
-  id: ScheduleID
-  sessionID?: SessionID
-  name?: string
-  when: ScheduleWhen
-  tz: string
-  if?: ScheduleCondition
-  until?: ScheduleCondition
-  action: ScheduleAction
-  status: ScheduleStatus
-  nextDueAt?: number
-  endsAt?: number
-  remainingRuns?: number
-  runCount: number
-  lastFiredAt?: number
-  lastOutcome?: ScheduleOutcome
-  lastOutput?: string
-  time: { created: number; updated: number }
-}
-
 export type AgentInfo = {
   id: AgentID
   name: string
@@ -2794,6 +2812,10 @@ export type IntegrationInfo = {
 
 export type SessionEventDurable =
   | SessionCreated
+  | SessionGoalSet
+  | SessionGoalEdited
+  | SessionGoalStatusChanged
+  | SessionGoalCleared
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -2851,6 +2873,10 @@ export type V2Event =
   | ModelUpdated
   | AgentUpdated
   | SessionCreated
+  | SessionGoalSet
+  | SessionGoalEdited
+  | SessionGoalStatusChanged
+  | SessionGoalCleared
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -2988,10 +3014,6 @@ export type PluginNotFoundError = {
 export const isPluginNotFoundError = (value: unknown): value is PluginNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PluginNotFoundError"
 
-export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
-export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
-
 export type SessionNotFoundError = {
   readonly _tag: "SessionNotFoundError"
   readonly sessionID: string
@@ -2999,6 +3021,10 @@ export type SessionNotFoundError = {
 }
 export const isSessionNotFoundError = (value: unknown): value is SessionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionNotFoundError"
+
+export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
+export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
 
 export type MessageNotFoundError = {
   readonly _tag: "MessageNotFoundError"
@@ -3223,14 +3249,6 @@ export type PtyFeatureUnsupportedError = {
 export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
 
-export type ScheduleNotFoundError = {
-  readonly _tag: "ScheduleNotFoundError"
-  readonly scheduleID: string
-  readonly message: string
-}
-export const isScheduleNotFoundError = (value: unknown): value is ScheduleNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ScheduleNotFoundError"
-
 export type ArtifactNotFoundError = {
   readonly _tag: "ArtifactNotFoundError"
   readonly artifactID: string
@@ -3308,6 +3326,76 @@ export type PluginUpdateInput = {
 }
 
 export type PluginUpdateOutput = void
+
+export type SessionContextLimitGetInput = { readonly sessionID: string }
+
+export type SessionContextLimitGetOutput = { data: number | null }["data"]
+
+export type SessionContextLimitSetInput = { readonly sessionID: string; readonly tokens: number | null }
+
+export type SessionContextLimitSetOutput = void
+
+export type SessionGoalGetInput = { readonly sessionID: string }
+
+export type SessionGoalGetOutput = { data: SessionGoalMonitor }["data"]
+
+export type SessionGoalSaveInput = {
+  readonly sessionID: string
+  readonly objective?: string | undefined
+  readonly status?: "active" | "paused" | "blocked" | "complete" | undefined
+  readonly reason?: string | undefined
+  readonly awaitingApproval?: boolean | undefined
+}
+
+export type SessionGoalSaveOutput = void
+
+export type SessionGoalRemoveInput = { readonly sessionID: string }
+
+export type SessionGoalRemoveOutput = void
+
+export type SessionWatchGetInput = { readonly sessionID: string }
+
+export type SessionWatchGetOutput = { data: SessionWatchInfo | null }["data"]
+
+export type SessionWatchSaveInput = {
+  readonly sessionID: string
+  readonly members: ReadonlyArray<string>
+  readonly text: string
+  readonly enabled: boolean
+}
+
+export type SessionWatchSaveOutput = { data: SessionWatchInfo }["data"]
+
+export type SessionWatchRemoveInput = { readonly sessionID: string }
+
+export type SessionWatchRemoveOutput = void
+
+export type SessionScheduleListInput = { readonly sessionID: string }
+
+export type SessionScheduleListOutput = { data: Array<SessionScheduleInfo> }["data"]
+
+export type SessionScheduleCreateInput = {
+  readonly sessionID: string
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+}
+
+export type SessionScheduleCreateOutput = { data: SessionScheduleInfo }["data"]
+
+export type SessionScheduleUpdateInput = {
+  readonly sessionID: string
+  readonly scheduleID: string
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+}
+
+export type SessionScheduleUpdateOutput = { data: SessionScheduleInfo }["data"]
+
+export type SessionScheduleRemoveInput = { readonly sessionID: string; readonly scheduleID: string }
+
+export type SessionScheduleRemoveOutput = void
 
 export type SessionListInput = {
   readonly limit?: number | undefined
@@ -3827,6 +3915,12 @@ export type ExperimentalSessionImportInput = {
     readonly title?: string
     readonly subpath?: string
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly goal?: {
+      readonly objective: string
+      readonly status: "active" | "paused" | "blocked" | "complete"
+      readonly reason?: string
+      readonly awaitingApproval?: boolean
+    }
     readonly permissions?: ReadonlyArray<{
       readonly action: string
       readonly resource: string
@@ -4343,6 +4437,10 @@ export type EventSubscribeInput = {
         | "model.updated"
         | "agent.updated"
         | "session.created"
+        | "session.goal.set"
+        | "session.goal.edited"
+        | "session.goal.status_changed"
+        | "session.goal.cleared"
         | "session.agent.selected"
         | "session.model.selected"
         | "session.moved"
@@ -4538,103 +4636,6 @@ export type ExperimentalPersistentPtyConnectTokenOutput = { data: PtyTicketConne
 export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
-
-export type ExperimentalScheduleCreateInput = {
-  readonly sessionID: string
-  readonly name?: string | undefined
-  readonly when?:
-    | (
-        | {
-            readonly in: string
-            readonly at?: never
-            readonly every?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly at: string
-            readonly in?: never
-            readonly every?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly every: string
-            readonly in?: never
-            readonly at?: never
-            readonly cron?: never
-            readonly tz?: string
-          }
-        | {
-            readonly cron: string
-            readonly in?: never
-            readonly at?: never
-            readonly every?: never
-            readonly tz?: string
-          }
-      )
-    | undefined
-  readonly if?:
-    | (
-        | {
-            readonly run: string
-            readonly is?: string
-            readonly matches?: string
-            readonly changes?: boolean
-            readonly code?: never
-          }
-        | {
-            readonly code: string
-            readonly run?: never
-            readonly is?: never
-            readonly matches?: never
-            readonly changes?: never
-          }
-      )
-    | undefined
-  readonly until?:
-    | (
-        | {
-            readonly run: string
-            readonly is?: string
-            readonly matches?: string
-            readonly changes?: boolean
-            readonly code?: never
-          }
-        | {
-            readonly code: string
-            readonly run?: never
-            readonly is?: never
-            readonly matches?: never
-            readonly changes?: never
-          }
-      )
-    | undefined
-  readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
-  readonly prompt: string
-}
-
-export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]
-
-export type ExperimentalScheduleListInput = { readonly sessionID: string }
-
-export type ExperimentalScheduleListOutput = { data: Array<ScheduleInfo> }["data"]
-
-export type ExperimentalScheduleGetInput = { readonly scheduleID: string }
-
-export type ExperimentalScheduleGetOutput = { data: ScheduleInfo }["data"]
-
-export type ExperimentalSchedulePauseInput = { readonly scheduleID: string }
-
-export type ExperimentalSchedulePauseOutput = { data: ScheduleInfo }["data"]
-
-export type ExperimentalScheduleResumeInput = { readonly scheduleID: string }
-
-export type ExperimentalScheduleResumeOutput = { data: ScheduleInfo }["data"]
-
-export type ExperimentalScheduleDeleteInput = { readonly scheduleID: string }
-
-export type ExperimentalScheduleDeleteOutput = void
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined

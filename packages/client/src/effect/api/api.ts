@@ -37,7 +37,6 @@ import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
-import type { Schedule } from "@opencode/schema/schedule"
 import type { Artifact } from "@opencode/schema/artifact"
 import type { Job } from "@opencode/schema/job"
 import type { Reference } from "@opencode/schema/reference"
@@ -129,6 +128,138 @@ export interface PluginApi<E = never> {
   readonly check: PluginCheckOperation<E>
   readonly update: PluginUpdateOperation<E>
 }
+
+export type SessionContextLimitGetInput = { readonly sessionID: Session.ID }
+export type SessionContextLimitGetOutput = number | null
+export type SessionContextLimitGetOperation<E = never> = (
+  input: SessionContextLimitGetInput,
+) => Effect.Effect<SessionContextLimitGetOutput, E>
+
+export type SessionContextLimitSetInput = { readonly sessionID: Session.ID; readonly tokens: number | null }
+export type SessionContextLimitSetOutput = void
+export type SessionContextLimitSetOperation<E = never> = (
+  input: SessionContextLimitSetInput,
+) => Effect.Effect<SessionContextLimitSetOutput, E>
+
+export type SessionGoalGetInput = { readonly sessionID: Session.ID }
+export type SessionGoalGetOutput = {
+  readonly goal: {
+    readonly objective: string
+    readonly status: "active" | "paused" | "blocked" | "complete"
+    readonly reason?: string
+    readonly awaitingApproval?: boolean
+  } | null
+  readonly continuationCount: number
+  readonly approvalWaits: number
+}
+export type SessionGoalGetOperation<E = never> = (input: SessionGoalGetInput) => Effect.Effect<SessionGoalGetOutput, E>
+
+export type SessionGoalSaveInput = {
+  readonly sessionID: Session.ID
+  readonly objective?: string
+  readonly status?: "active" | "paused" | "blocked" | "complete"
+  readonly reason?: string
+  readonly awaitingApproval?: boolean
+}
+export type SessionGoalSaveOutput = void
+export type SessionGoalSaveOperation<E = never> = (
+  input: SessionGoalSaveInput,
+) => Effect.Effect<SessionGoalSaveOutput, E>
+
+export type SessionGoalRemoveInput = { readonly sessionID: Session.ID }
+export type SessionGoalRemoveOutput = void
+export type SessionGoalRemoveOperation<E = never> = (
+  input: SessionGoalRemoveInput,
+) => Effect.Effect<SessionGoalRemoveOutput, E>
+
+export type SessionWatchGetInput = { readonly sessionID: Session.ID }
+export type SessionWatchGetOutput = {
+  readonly members: ReadonlyArray<Session.ID>
+  readonly text: string
+  readonly enabled: boolean
+  readonly sessionID: Session.ID
+} | null
+export type SessionWatchGetOperation<E = never> = (
+  input: SessionWatchGetInput,
+) => Effect.Effect<SessionWatchGetOutput, E>
+
+export type SessionWatchSaveInput = {
+  readonly sessionID: Session.ID
+  readonly members: ReadonlyArray<Session.ID>
+  readonly text: string
+  readonly enabled: boolean
+}
+export type SessionWatchSaveOutput = {
+  readonly members: ReadonlyArray<Session.ID>
+  readonly text: string
+  readonly enabled: boolean
+  readonly sessionID: Session.ID
+}
+export type SessionWatchSaveOperation<E = never> = (
+  input: SessionWatchSaveInput,
+) => Effect.Effect<SessionWatchSaveOutput, E>
+
+export type SessionWatchRemoveInput = { readonly sessionID: Session.ID }
+export type SessionWatchRemoveOutput = void
+export type SessionWatchRemoveOperation<E = never> = (
+  input: SessionWatchRemoveInput,
+) => Effect.Effect<SessionWatchRemoveOutput, E>
+
+export type SessionScheduleListInput = { readonly sessionID: Session.ID }
+export type SessionScheduleListOutput = ReadonlyArray<{
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+  readonly id: string
+  readonly sessionID: Session.ID
+  readonly nextAt: number | null
+}>
+export type SessionScheduleListOperation<E = never> = (
+  input: SessionScheduleListInput,
+) => Effect.Effect<SessionScheduleListOutput, E>
+
+export type SessionScheduleCreateInput = {
+  readonly sessionID: Session.ID
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+}
+export type SessionScheduleCreateOutput = {
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+  readonly id: string
+  readonly sessionID: Session.ID
+  readonly nextAt: number | null
+}
+export type SessionScheduleCreateOperation<E = never> = (
+  input: SessionScheduleCreateInput,
+) => Effect.Effect<SessionScheduleCreateOutput, E>
+
+export type SessionScheduleUpdateInput = {
+  readonly sessionID: Session.ID
+  readonly scheduleID: string
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+}
+export type SessionScheduleUpdateOutput = {
+  readonly text: string
+  readonly intervalMinutes: number
+  readonly enabled: boolean
+  readonly id: string
+  readonly sessionID: Session.ID
+  readonly nextAt: number | null
+}
+export type SessionScheduleUpdateOperation<E = never> = (
+  input: SessionScheduleUpdateInput,
+) => Effect.Effect<SessionScheduleUpdateOutput, E>
+
+export type SessionScheduleRemoveInput = { readonly sessionID: Session.ID; readonly scheduleID: string }
+export type SessionScheduleRemoveOutput = void
+export type SessionScheduleRemoveOperation<E = never> = (
+  input: SessionScheduleRemoveInput,
+) => Effect.Effect<SessionScheduleRemoveOutput, E>
 
 export type SessionListInput = {
   readonly limit?: number | undefined
@@ -401,6 +532,18 @@ export type SessionViewOutput = void
 export type SessionViewOperation<E = never> = (input: SessionViewInput) => Effect.Effect<SessionViewOutput, E>
 
 export interface SessionApi<E = never> {
+  readonly contextLimitGet: SessionContextLimitGetOperation<E>
+  readonly contextLimitSet: SessionContextLimitSetOperation<E>
+  readonly goalGet: SessionGoalGetOperation<E>
+  readonly goalSave: SessionGoalSaveOperation<E>
+  readonly goalRemove: SessionGoalRemoveOperation<E>
+  readonly watchGet: SessionWatchGetOperation<E>
+  readonly watchSave: SessionWatchSaveOperation<E>
+  readonly watchRemove: SessionWatchRemoveOperation<E>
+  readonly scheduleList: SessionScheduleListOperation<E>
+  readonly scheduleCreate: SessionScheduleCreateOperation<E>
+  readonly scheduleUpdate: SessionScheduleUpdateOperation<E>
+  readonly scheduleRemove: SessionScheduleRemoveOperation<E>
   readonly list: SessionListOperation<E>
   readonly create: SessionCreateOperation<E>
   readonly active: SessionActiveOperation<E>
@@ -633,6 +776,55 @@ export type ExperimentalSessionLogOutput =
             readonly permissions?: Permission.Ruleset | undefined
             readonly version: string
           }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.goal.set"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly objective: string }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.goal.edited"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly objective: string }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.goal.status_changed"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly status: "active" | "paused" | "blocked" | "complete"
+            readonly reason?: string
+            readonly awaitingApproval?: boolean
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.goal.cleared"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID }
         }
       | {
           readonly id: Event.ID
@@ -2057,6 +2249,10 @@ export type EventSubscribeInput = {
         | "model.updated"
         | "agent.updated"
         | "session.created"
+        | "session.goal.set"
+        | "session.goal.edited"
+        | "session.goal.status_changed"
+        | "session.goal.cleared"
         | "session.agent.selected"
         | "session.model.selected"
         | "session.moved"
@@ -2381,50 +2577,6 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
-export type ExperimentalScheduleCreateInput = {
-  readonly sessionID: Session.ID
-  readonly name?: string | undefined
-  readonly when?: Schedule.WhenInput | undefined
-  readonly if?: Schedule.ConditionInput | undefined
-  readonly until?: Schedule.ConditionInput | undefined
-  readonly ends?: Schedule.Ends | undefined
-  readonly prompt: string
-}
-export type ExperimentalScheduleCreateOutput = Schedule.Info
-export type ExperimentalScheduleCreateOperation<E = never> = (
-  input: ExperimentalScheduleCreateInput,
-) => Effect.Effect<ExperimentalScheduleCreateOutput, E>
-
-export type ExperimentalScheduleListInput = { readonly sessionID: Session.ID }
-export type ExperimentalScheduleListOutput = ReadonlyArray<Schedule.Info>
-export type ExperimentalScheduleListOperation<E = never> = (
-  input: ExperimentalScheduleListInput,
-) => Effect.Effect<ExperimentalScheduleListOutput, E>
-
-export type ExperimentalScheduleGetInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalScheduleGetOutput = Schedule.Info
-export type ExperimentalScheduleGetOperation<E = never> = (
-  input: ExperimentalScheduleGetInput,
-) => Effect.Effect<ExperimentalScheduleGetOutput, E>
-
-export type ExperimentalSchedulePauseInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalSchedulePauseOutput = Schedule.Info
-export type ExperimentalSchedulePauseOperation<E = never> = (
-  input: ExperimentalSchedulePauseInput,
-) => Effect.Effect<ExperimentalSchedulePauseOutput, E>
-
-export type ExperimentalScheduleResumeInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalScheduleResumeOutput = Schedule.Info
-export type ExperimentalScheduleResumeOperation<E = never> = (
-  input: ExperimentalScheduleResumeInput,
-) => Effect.Effect<ExperimentalScheduleResumeOutput, E>
-
-export type ExperimentalScheduleDeleteInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalScheduleDeleteOutput = void
-export type ExperimentalScheduleDeleteOperation<E = never> = (
-  input: ExperimentalScheduleDeleteInput,
-) => Effect.Effect<ExperimentalScheduleDeleteOutput, E>
-
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
 }
@@ -2516,14 +2668,6 @@ export interface ExperimentalApi<E = never> {
     readonly snapshot: ExperimentalPersistentPtySnapshotOperation<E>
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
-  }
-  readonly schedule: {
-    readonly create: ExperimentalScheduleCreateOperation<E>
-    readonly list: ExperimentalScheduleListOperation<E>
-    readonly get: ExperimentalScheduleGetOperation<E>
-    readonly pause: ExperimentalSchedulePauseOperation<E>
-    readonly resume: ExperimentalScheduleResumeOperation<E>
-    readonly delete: ExperimentalScheduleDeleteOperation<E>
   }
   readonly artifacts: {
     readonly providers: ExperimentalArtifactsProvidersOperation<E>

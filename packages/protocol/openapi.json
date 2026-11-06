@@ -863,6 +863,829 @@
         }
       }
     },
+    "/api/session/{sessionID}/context-limit": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "v2.session.contextLimitGet",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get session context limit"
+      },
+      "put": {
+        "tags": ["session"],
+        "operationId": "v2.session.contextLimitSet",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Set or reset session context limit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tokens": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["tokens"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/session/{sessionID}/goal": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "v2.session.goalGet",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Session.Goal.Monitor"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get session goal"
+      },
+      "put": {
+        "tags": ["session"],
+        "operationId": "v2.session.goalSave",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Set or update session goal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Session.Goal.Update"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["session"],
+        "operationId": "v2.session.goalRemove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove session goal"
+      }
+    },
+    "/api/session/{sessionID}/watch": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "v2.session.watchGet",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/SessionWatch.Info"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get member stop notifications"
+      },
+      "put": {
+        "tags": ["session"],
+        "operationId": "v2.session.watchSave",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionWatch.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Configure member stop notifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionWatch.Input"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["session"],
+        "operationId": "v2.session.watchRemove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove member stop notifications"
+      }
+    },
+    "/api/session/{sessionID}/schedule": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "v2.session.scheduleList",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SessionSchedule.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List scheduled messages"
+      },
+      "post": {
+        "tags": ["session"],
+        "operationId": "v2.session.scheduleCreate",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionSchedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a scheduled message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionSchedule.Input"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/session/{sessionID}/schedule/{scheduleID}": {
+      "put": {
+        "tags": ["session"],
+        "operationId": "v2.session.scheduleUpdate",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionSchedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Edit or pause a scheduled message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionSchedule.Input"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["session"],
+        "operationId": "v2.session.scheduleRemove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a scheduled message"
+      }
+    },
     "/api/session": {
       "get": {
         "tags": ["session"],
@@ -10102,6 +10925,10 @@
                     "model.updated",
                     "agent.updated",
                     "session.created",
+                    "session.goal.set",
+                    "session.goal.edited",
+                    "session.goal.status_changed",
+                    "session.goal.cleared",
                     "session.agent.selected",
                     "session.model.selected",
                     "session.moved",
@@ -10211,6 +11038,10 @@
                           "model.updated",
                           "agent.updated",
                           "session.created",
+                          "session.goal.set",
+                          "session.goal.edited",
+                          "session.goal.status_changed",
+                          "session.goal.cleared",
                           "session.agent.selected",
                           "session.model.selected",
                           "session.moved",
@@ -12090,460 +12921,6 @@
         },
         "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
         "summary": "Read media blob"
-      }
-    },
-    "/api/experimental/schedule": {
-      "post": {
-        "tags": ["experimental"],
-        "operationId": "experimental.schedule.create",
-        "parameters": [],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Create schedule",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Schedule.CreatePayload"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "get": {
-        "tags": ["experimental"],
-        "operationId": "experimental.schedule.list",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Schedule.Info"
-                      }
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "List schedules"
-      }
-    },
-    "/api/experimental/schedule/{scheduleID}": {
-      "get": {
-        "tags": ["experimental"],
-        "operationId": "experimental.schedule.get",
-        "parameters": [
-          {
-            "name": "scheduleID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ScheduleNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Get schedule"
-      },
-      "delete": {
-        "tags": ["experimental"],
-        "operationId": "experimental.schedule.delete",
-        "parameters": [
-          {
-            "name": "scheduleID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ScheduleNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Delete schedule"
-      }
-    },
-    "/api/experimental/schedule/{scheduleID}/pause": {
-      "post": {
-        "tags": ["experimental"],
-        "operationId": "experimental.schedule.pause",
-        "parameters": [
-          {
-            "name": "scheduleID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ScheduleNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Pause schedule"
-      }
-    },
-    "/api/experimental/schedule/{scheduleID}/resume": {
-      "post": {
-        "tags": ["experimental"],
-        "operationId": "experimental.schedule.resume",
-        "parameters": [
-          {
-            "name": "scheduleID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ScheduleNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Resume schedule"
       }
     },
     "/api/experimental/artifacts/providers": {
@@ -22284,454 +22661,6 @@
         "required": ["_tag", "type", "message"],
         "additionalProperties": false
       },
-      "Schedule.Action": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.Action.Prompt"
-          }
-        ]
-      },
-      "Schedule.Action.Prompt": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["prompt"]
-          },
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "prompt"],
-        "additionalProperties": false
-      },
-      "Schedule.Condition": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.Condition.Shell"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.Condition.Code"
-          }
-        ]
-      },
-      "Schedule.Condition.Code": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["code"]
-          },
-          "code": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "code"],
-        "additionalProperties": false
-      },
-      "Schedule.Condition.Shell": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["shell"]
-          },
-          "run": {
-            "type": "string"
-          },
-          "is": {
-            "type": "string"
-          },
-          "matches": {
-            "type": "string"
-          },
-          "changes": {
-            "type": "boolean"
-          }
-        },
-        "required": ["type", "run"],
-        "additionalProperties": false
-      },
-      "Schedule.ConditionInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "run": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
-              },
-              "is": {
-                "type": "string"
-              },
-              "matches": {
-                "type": "string"
-              },
-              "changes": {
-                "type": "boolean"
-              },
-              "code": {
-                "not": {}
-              }
-            },
-            "required": ["run"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
-              },
-              "run": {
-                "not": {}
-              },
-              "is": {
-                "not": {}
-              },
-              "matches": {
-                "not": {}
-              },
-              "changes": {
-                "not": {}
-              }
-            },
-            "required": ["code"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "Schedule.CreatePayload": {
-        "type": "object",
-        "properties": {
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "name": {
-            "type": "string"
-          },
-          "when": {
-            "$ref": "#/components/schemas/Schedule.WhenInput"
-          },
-          "if": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
-          },
-          "until": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
-          },
-          "ends": {
-            "$ref": "#/components/schemas/Schedule.Ends"
-          },
-          "prompt": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The message the Session receives when the schedule wakes."
-          }
-        },
-        "required": ["sessionID", "prompt"],
-        "additionalProperties": false
-      },
-      "Schedule.Duration": {
-        "type": "string",
-        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
-      },
-      "Schedule.Ends": {
-        "type": "object",
-        "properties": {
-          "after": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "at": {
-            "type": "string"
-          },
-          "times": {
-            "type": "integer",
-            "maximum": 9007199254740991,
-            "exclusiveMinimum": 0
-          }
-        },
-        "additionalProperties": false
-      },
-      "Schedule.ID": {
-        "type": "string",
-        "pattern": "^sch_"
-      },
-      "Schedule.Info": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Schedule.ID"
-          },
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "name": {
-            "type": "string"
-          },
-          "when": {
-            "$ref": "#/components/schemas/Schedule.When"
-          },
-          "tz": {
-            "type": "string"
-          },
-          "if": {
-            "$ref": "#/components/schemas/Schedule.Condition"
-          },
-          "until": {
-            "$ref": "#/components/schemas/Schedule.Condition"
-          },
-          "action": {
-            "$ref": "#/components/schemas/Schedule.Action"
-          },
-          "status": {
-            "$ref": "#/components/schemas/Schedule.Status"
-          },
-          "nextDueAt": {
-            "type": "number"
-          },
-          "endsAt": {
-            "type": "number"
-          },
-          "remainingRuns": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "runCount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "lastFiredAt": {
-            "type": "number"
-          },
-          "lastOutcome": {
-            "$ref": "#/components/schemas/Schedule.Outcome"
-          },
-          "lastOutput": {
-            "type": "string"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              },
-              "updated": {
-                "type": "number"
-              }
-            },
-            "required": ["created", "updated"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "when", "tz", "action", "status", "runCount", "time"],
-        "additionalProperties": false
-      },
-      "Schedule.Outcome": {
-        "type": "string",
-        "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
-      },
-      "Schedule.Status": {
-        "type": "string",
-        "enum": ["active", "paused", "done"]
-      },
-      "Schedule.When": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.When.In"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.At"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.Every"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.Cron"
-          }
-        ]
-      },
-      "Schedule.When.At": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["at"]
-          },
-          "at": {
-            "type": "string"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "at"],
-        "additionalProperties": false
-      },
-      "Schedule.When.Cron": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["cron"]
-          },
-          "cron": {
-            "type": "string"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "cron"],
-        "additionalProperties": false
-      },
-      "Schedule.When.Every": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["every"]
-          },
-          "every": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "every"],
-        "additionalProperties": false
-      },
-      "Schedule.When.In": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["in"]
-          },
-          "in": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "in"],
-        "additionalProperties": false
-      },
-      "Schedule.WhenInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "in": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["in"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["at"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "every": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["every"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "cron": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["cron"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ScheduleNotFoundErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ScheduleNotFoundError"]
-          },
-          "scheduleID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "scheduleID", "message"],
-        "additionalProperties": false
-      },
       "ServerInfo": {
         "type": "object",
         "properties": {
@@ -22824,6 +22753,18 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/session.created"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.set"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.edited"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.status_changed"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.cleared"
           },
           {
             "$ref": "#/components/schemas/session.agent.selected"
@@ -22996,6 +22937,86 @@
             "additionalProperties": false
           }
         ]
+      },
+      "Session.Goal": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "blocked", "complete"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "awaitingApproval": {
+            "type": "boolean"
+          }
+        },
+        "required": ["objective", "status"],
+        "additionalProperties": false
+      },
+      "Session.Goal.Monitor": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Session.Goal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "continuationCount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "approvalWaits": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["goal", "continuationCount", "approvalWaits"],
+        "additionalProperties": false
+      },
+      "Session.Goal.Update": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "blocked", "complete"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "awaitingApproval": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "Session.ID": {
         "type": "string",
@@ -23383,6 +23404,9 @@
           },
           "metadata": {
             "$ref": "#/components/schemas/Session.Metadata"
+          },
+          "goal": {
+            "$ref": "#/components/schemas/Session.Goal"
           },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
@@ -24476,6 +24500,62 @@
         "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
+      "SessionSchedule.Info": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "intervalMinutes": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "nextAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["text", "intervalMinutes", "enabled", "id", "sessionID", "nextAt"],
+        "additionalProperties": false
+      },
+      "SessionSchedule.Input": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "intervalMinutes": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["text", "intervalMinutes", "enabled"],
+        "additionalProperties": false
+      },
       "SessionStats.Activity": {
         "type": "object",
         "properties": {
@@ -24830,6 +24910,49 @@
           }
         },
         "required": ["info", "messages"],
+        "additionalProperties": false
+      },
+      "SessionWatch.Info": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "minItems": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          }
+        },
+        "required": ["members", "text", "enabled", "sessionID"],
+        "additionalProperties": false
+      },
+      "SessionWatch.Input": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "minItems": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["members", "text", "enabled"],
         "additionalProperties": false
       },
       "SessionsCursor": {
@@ -25321,6 +25444,18 @@
           },
           {
             "$ref": "#/components/schemas/session.created"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.set"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.edited"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.status_changed"
+          },
+          {
+            "$ref": "#/components/schemas/session.goal.cleared"
           },
           {
             "$ref": "#/components/schemas/session.agent.selected"
@@ -27885,6 +28020,220 @@
               }
             },
             "required": ["sessionID", "parentID", "boundary"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.goal.cleared": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.goal.cleared"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.goal.edited": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.goal.edited"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "objective": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["sessionID", "objective"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.goal.set": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.goal.set"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "objective": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["sessionID", "objective"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.goal.status_changed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.goal.status_changed"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["active", "paused", "blocked", "complete"]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "awaitingApproval": {
+                "type": "boolean"
+              }
+            },
+            "required": ["sessionID", "status"],
             "additionalProperties": false
           }
         },

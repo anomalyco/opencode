@@ -18,6 +18,30 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
+  SessionContextLimitGetInput,
+  SessionContextLimitGetOutput,
+  SessionContextLimitSetInput,
+  SessionContextLimitSetOutput,
+  SessionGoalGetInput,
+  SessionGoalGetOutput,
+  SessionGoalSaveInput,
+  SessionGoalSaveOutput,
+  SessionGoalRemoveInput,
+  SessionGoalRemoveOutput,
+  SessionWatchGetInput,
+  SessionWatchGetOutput,
+  SessionWatchSaveInput,
+  SessionWatchSaveOutput,
+  SessionWatchRemoveInput,
+  SessionWatchRemoveOutput,
+  SessionScheduleListInput,
+  SessionScheduleListOutput,
+  SessionScheduleCreateInput,
+  SessionScheduleCreateOutput,
+  SessionScheduleUpdateInput,
+  SessionScheduleUpdateOutput,
+  SessionScheduleRemoveInput,
+  SessionScheduleRemoveOutput,
   SessionListInput,
   SessionListOutput,
   SessionCreateInput,
@@ -243,18 +267,6 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
-  ExperimentalScheduleCreateInput,
-  ExperimentalScheduleCreateOutput,
-  ExperimentalScheduleListInput,
-  ExperimentalScheduleListOutput,
-  ExperimentalScheduleGetInput,
-  ExperimentalScheduleGetOutput,
-  ExperimentalSchedulePauseInput,
-  ExperimentalSchedulePauseOutput,
-  ExperimentalScheduleResumeInput,
-  ExperimentalScheduleResumeOutput,
-  ExperimentalScheduleDeleteInput,
-  ExperimentalScheduleDeleteOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -600,6 +612,148 @@ export function make(options: ClientOptions) {
         ),
     },
     session: {
+      contextLimitGet: (input: SessionContextLimitGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionContextLimitGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-limit`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      contextLimitSet: (input: SessionContextLimitSetInput, requestOptions?: RequestOptions) =>
+        request<SessionContextLimitSetOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/context-limit`,
+            body: { tokens: input["tokens"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      goalGet: (input: SessionGoalGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionGoalGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/goal`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      goalSave: (input: SessionGoalSaveInput, requestOptions?: RequestOptions) =>
+        request<SessionGoalSaveOutput>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/goal`,
+            body: {
+              objective: input["objective"],
+              status: input["status"],
+              reason: input["reason"],
+              awaitingApproval: input["awaitingApproval"],
+            },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      goalRemove: (input: SessionGoalRemoveInput, requestOptions?: RequestOptions) =>
+        request<SessionGoalRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/goal`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      watchGet: (input: SessionWatchGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionWatchGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/watch`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      watchSave: (input: SessionWatchSaveInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionWatchSaveOutput }>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/watch`,
+            body: { members: input["members"], text: input["text"], enabled: input["enabled"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      watchRemove: (input: SessionWatchRemoveInput, requestOptions?: RequestOptions) =>
+        request<SessionWatchRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/watch`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      scheduleList: (input: SessionScheduleListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionScheduleListOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/schedule`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      scheduleCreate: (input: SessionScheduleCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionScheduleCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/schedule`,
+            body: { text: input["text"], intervalMinutes: input["intervalMinutes"], enabled: input["enabled"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      scheduleUpdate: (input: SessionScheduleUpdateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionScheduleUpdateOutput }>(
+          {
+            method: "PUT",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/schedule/${encodeURIComponent(input.scheduleID)}`,
+            body: { text: input["text"], intervalMinutes: input["intervalMinutes"], enabled: input["enabled"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      scheduleRemove: (input: SessionScheduleRemoveInput, requestOptions?: RequestOptions) =>
+        request<SessionScheduleRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/schedule/${encodeURIComponent(input.scheduleID)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
       list: (input?: SessionListInput, requestOptions?: RequestOptions) =>
         request<SessionListOutput>(
           {
@@ -1501,84 +1655,6 @@ export function make(options: ClientOptions) {
               declaredStatuses: [400, 401, 404],
               empty: false,
               binary: true,
-            },
-            requestOptions,
-          ),
-      },
-      schedule: {
-        create: (input: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleCreateOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/schedule`,
-              body: {
-                sessionID: input["sessionID"],
-                name: input["name"],
-                when: input["when"],
-                if: input["if"],
-                until: input["until"],
-                ends: input["ends"],
-                prompt: input["prompt"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        list: (input: ExperimentalScheduleListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleListOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/schedule`,
-              query: { sessionID: input["sessionID"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        get: (input: ExperimentalScheduleGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleGetOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        pause: (input: ExperimentalSchedulePauseInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalSchedulePauseOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/pause`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        resume: (input: ExperimentalScheduleResumeInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleResumeOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/resume`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        delete: (input: ExperimentalScheduleDeleteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalScheduleDeleteOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: true,
             },
             requestOptions,
           ),

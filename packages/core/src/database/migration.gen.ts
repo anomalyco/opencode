@@ -45,19 +45,22 @@ import m42 from "./migration/20260812181746_session_inbox.js"
 import m43 from "./migration/20260812213948_worktree.js"
 import m44 from "./migration/20260819222447_session_viewed_state.js"
 import m45 from "./migration/20260823191254_nullable_workspace_binding.js"
-import m46 from "./migration/20260910120000_clear_v1_session_permission.js"
-import m47 from "./migration/20260923013825_project_time_active.js"
-import m48 from "./migration/20261007190000_azure_cli_external_credential.js"
-import m49 from "./migration/20261010180456_project_time_archived.js"
-import m50 from "./migration/20261024002554_session_allowance.js"
-import m51 from "./migration/20261024175301_drop_session_allowance.js"
-import m52 from "./migration/20261025123711_blob.js"
-import m53 from "./migration/20261025154125_drop_session_pending.js"
-import m54 from "./migration/20261026223005_schedule.js"
-import m55 from "./migration/20261029002625_session_part.js"
-import m56 from "./migration/20261029073502_session_time_busy.js"
-import m57 from "./migration/20261029165540_schedule_checks.js"
-import m58 from "./migration/20261030054400_job.js"
+import m46 from "./migration/20260905051414_subagent_team.js"
+import m47 from "./migration/20260910120000_clear_v1_session_permission.js"
+import m48 from "./migration/20260923013825_project_time_active.js"
+import m49 from "./migration/20261007190000_azure_cli_external_credential.js"
+import m50 from "./migration/20261008150751_session-goal.js"
+import m51 from "./migration/20261010180456_project_time_archived.js"
+import m52 from "./migration/20261024002554_session_allowance.js"
+import m53 from "./migration/20261024175301_drop_session_allowance.js"
+import m54 from "./migration/20261025123711_blob.js"
+import m55 from "./migration/20261025154125_drop_session_pending.js"
+import m56 from "./migration/20261026223005_schedule.js"
+import m57 from "./migration/20261029002625_session_part.js"
+import m58 from "./migration/20261029073502_session_time_busy.js"
+import m59 from "./migration/20261029165540_schedule_checks.js"
+import m60 from "./migration/20261030054400_job.js"
+import m61 from "./migration/20261106230500_drop_schedule.js"
 
 export const migrations = [
   m00,
@@ -119,4 +122,7 @@ export const migrations = [
   m56,
   m57,
   m58,
+  m59,
+  m60,
+  m61,
 ] satisfies DatabaseMigration.Migration[]

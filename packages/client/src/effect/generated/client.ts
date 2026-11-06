@@ -24,6 +24,30 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
+  SessionContextLimitGetInput,
+  SessionContextLimitGetOutput,
+  SessionContextLimitSetInput,
+  SessionContextLimitSetOutput,
+  SessionGoalGetInput,
+  SessionGoalGetOutput,
+  SessionGoalSaveInput,
+  SessionGoalSaveOutput,
+  SessionGoalRemoveInput,
+  SessionGoalRemoveOutput,
+  SessionWatchGetInput,
+  SessionWatchGetOutput,
+  SessionWatchSaveInput,
+  SessionWatchSaveOutput,
+  SessionWatchRemoveInput,
+  SessionWatchRemoveOutput,
+  SessionScheduleListInput,
+  SessionScheduleListOutput,
+  SessionScheduleCreateInput,
+  SessionScheduleCreateOutput,
+  SessionScheduleUpdateInput,
+  SessionScheduleUpdateOutput,
+  SessionScheduleRemoveInput,
+  SessionScheduleRemoveOutput,
   SessionListInput,
   SessionListOutput,
   SessionCreateInput,
@@ -243,18 +267,6 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
-  ExperimentalScheduleCreateInput,
-  ExperimentalScheduleCreateOutput,
-  ExperimentalScheduleListInput,
-  ExperimentalScheduleListOutput,
-  ExperimentalScheduleGetInput,
-  ExperimentalScheduleGetOutput,
-  ExperimentalSchedulePauseInput,
-  ExperimentalSchedulePauseOutput,
-  ExperimentalScheduleResumeInput,
-  ExperimentalScheduleResumeOutput,
-  ExperimentalScheduleDeleteInput,
-  ExperimentalScheduleDeleteOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -426,6 +438,109 @@ const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
   check: EndpointPluginCheck(raw),
   update: EndpointPluginUpdate(raw),
 })
+
+const EndpointSessionContextLimitGet = (raw: RawClient["server.session"]) => (input: SessionContextLimitGetInput) =>
+  preserveEffect<SessionContextLimitGetOutput>()(
+    raw["session.contextLimitGet"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionContextLimitSet = (raw: RawClient["server.session"]) => (input: SessionContextLimitSetInput) =>
+  preserveEffect<SessionContextLimitSetOutput>()(
+    raw["session.contextLimitSet"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { tokens: input["tokens"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSessionGoalGet = (raw: RawClient["server.session"]) => (input: SessionGoalGetInput) =>
+  preserveEffect<SessionGoalGetOutput>()(
+    raw["session.goalGet"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionGoalSave = (raw: RawClient["server.session"]) => (input: SessionGoalSaveInput) =>
+  preserveEffect<SessionGoalSaveOutput>()(
+    raw["session.goalSave"]({
+      params: { sessionID: input["sessionID"] },
+      payload: {
+        objective: input["objective"],
+        status: input["status"],
+        reason: input["reason"],
+        awaitingApproval: input["awaitingApproval"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSessionGoalRemove = (raw: RawClient["server.session"]) => (input: SessionGoalRemoveInput) =>
+  preserveEffect<SessionGoalRemoveOutput>()(
+    raw["session.goalRemove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSessionWatchGet = (raw: RawClient["server.session"]) => (input: SessionWatchGetInput) =>
+  preserveEffect<SessionWatchGetOutput>()(
+    raw["session.watchGet"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionWatchSave = (raw: RawClient["server.session"]) => (input: SessionWatchSaveInput) =>
+  preserveEffect<SessionWatchSaveOutput>()(
+    raw["session.watchSave"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { members: input["members"], text: input["text"], enabled: input["enabled"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionWatchRemove = (raw: RawClient["server.session"]) => (input: SessionWatchRemoveInput) =>
+  preserveEffect<SessionWatchRemoveOutput>()(
+    raw["session.watchRemove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSessionScheduleList = (raw: RawClient["server.session"]) => (input: SessionScheduleListInput) =>
+  preserveEffect<SessionScheduleListOutput>()(
+    raw["session.scheduleList"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionScheduleCreate = (raw: RawClient["server.session"]) => (input: SessionScheduleCreateInput) =>
+  preserveEffect<SessionScheduleCreateOutput>()(
+    raw["session.scheduleCreate"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { text: input["text"], intervalMinutes: input["intervalMinutes"], enabled: input["enabled"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionScheduleUpdate = (raw: RawClient["server.session"]) => (input: SessionScheduleUpdateInput) =>
+  preserveEffect<SessionScheduleUpdateOutput>()(
+    raw["session.scheduleUpdate"]({
+      params: { sessionID: input["sessionID"], scheduleID: input["scheduleID"] },
+      payload: { text: input["text"], intervalMinutes: input["intervalMinutes"], enabled: input["enabled"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointSessionScheduleRemove = (raw: RawClient["server.session"]) => (input: SessionScheduleRemoveInput) =>
+  preserveEffect<SessionScheduleRemoveOutput>()(
+    raw["session.scheduleRemove"]({ params: { sessionID: input["sessionID"], scheduleID: input["scheduleID"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
 
 const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: SessionListInput) =>
   preserveEffect<SessionListOutput>()(
@@ -749,6 +864,18 @@ const EndpointSessionView = (raw: RawClient["server.session"]) => (input: Sessio
   )
 
 const adaptGroupSession = (raw: RawClient["server.session"]) => ({
+  contextLimitGet: EndpointSessionContextLimitGet(raw),
+  contextLimitSet: EndpointSessionContextLimitSet(raw),
+  goalGet: EndpointSessionGoalGet(raw),
+  goalSave: EndpointSessionGoalSave(raw),
+  goalRemove: EndpointSessionGoalRemove(raw),
+  watchGet: EndpointSessionWatchGet(raw),
+  watchSave: EndpointSessionWatchSave(raw),
+  watchRemove: EndpointSessionWatchRemove(raw),
+  scheduleList: EndpointSessionScheduleList(raw),
+  scheduleCreate: EndpointSessionScheduleCreate(raw),
+  scheduleUpdate: EndpointSessionScheduleUpdate(raw),
+  scheduleRemove: EndpointSessionScheduleRemove(raw),
   list: EndpointSessionList(raw),
   create: EndpointSessionCreate(raw),
   active: EndpointSessionActive(raw),
@@ -1582,67 +1709,6 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
-const EndpointExperimentalScheduleCreate =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
-    preserveEffect<ExperimentalScheduleCreateOutput>()(
-      raw["schedule.create"]({
-        payload: {
-          sessionID: input["sessionID"],
-          name: input["name"],
-          when: input["when"],
-          if: input["if"],
-          until: input["until"],
-          ends: input["ends"],
-          prompt: input["prompt"],
-        },
-      }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalScheduleList =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleListInput) =>
-    preserveEffect<ExperimentalScheduleListOutput>()(
-      raw["schedule.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalScheduleGet =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleGetInput) =>
-    preserveEffect<ExperimentalScheduleGetOutput>()(
-      raw["schedule.get"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalSchedulePause =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalSchedulePauseInput) =>
-    preserveEffect<ExperimentalSchedulePauseOutput>()(
-      raw["schedule.pause"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalScheduleResume =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleResumeInput) =>
-    preserveEffect<ExperimentalScheduleResumeOutput>()(
-      raw["schedule.resume"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
-        Effect.mapError(mapClientError),
-        Effect.map((value) => value.data),
-      ),
-    )
-
-const EndpointExperimentalScheduleDelete =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleDeleteInput) =>
-    preserveEffect<ExperimentalScheduleDeleteOutput>()(
-      raw["schedule.delete"]({ params: { scheduleID: input["scheduleID"] } }).pipe(Effect.mapError(mapClientError)),
-    )
-
 const EndpointExperimentalArtifactsProviders =
   (raw: RawClient["server.experimental"]) => (input?: ExperimentalArtifactsProvidersInput) =>
     preserveEffect<ExperimentalArtifactsProvidersOutput>()(
@@ -1727,14 +1793,6 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     snapshot: EndpointExperimentalPersistentPtySnapshot(raw),
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
-  },
-  schedule: {
-    create: EndpointExperimentalScheduleCreate(raw),
-    list: EndpointExperimentalScheduleList(raw),
-    get: EndpointExperimentalScheduleGet(raw),
-    pause: EndpointExperimentalSchedulePause(raw),
-    resume: EndpointExperimentalScheduleResume(raw),
-    delete: EndpointExperimentalScheduleDelete(raw),
   },
   artifacts: {
     providers: EndpointExperimentalArtifactsProviders(raw),
