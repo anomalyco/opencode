@@ -97,7 +97,7 @@ describe("buildPromptRequest", () => {
     })
   })
 
-  test("deduplicates context files and adds files for existing @mentions inside comment text", () => {
+  test("deduplicates context files and adds files for @mentions inside comment text", () => {
     const prompt: Prompt = [{ type: "file", path: "src/foo.ts", content: "@src/foo.ts", start: 0, end: 11 }]
 
     const result = buildPromptRequest({
@@ -109,13 +109,12 @@ describe("buildPromptRequest", () => {
           key: "ctx:comment-mention",
           type: "file",
           path: "src/review.ts",
-          comment: "Compare with @src/shared.ts and @src/review.ts, or should I use @here?",
+          comment: "Compare with @src/shared.ts and @src/review.ts.",
         },
       ],
       images: [],
       text: "@src/foo.ts",
       sessionDirectory: "/repo",
-      existingMentions: new Set(["src/shared.ts", "src/review.ts"]),
     })
 
     expect(result.files.map((file) => file.uri)).toEqual([
