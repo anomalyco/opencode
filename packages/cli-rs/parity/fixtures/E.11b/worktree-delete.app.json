@@ -113,15 +113,6 @@
     {
       "checkpoint": "changes",
       "until": "old.txt",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.11b/worktree-delete/changes"
     },
     {

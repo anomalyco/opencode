@@ -3,14 +3,13 @@
 // option is chosen: copying and opening reach the system, which the Rust tests cover with a sink.
 import { defineApp } from "../../lib/app"
 
-// The home prompt behind the dialog: its placeholder is random in TS and not drawn in Rust yet
-// (T17-home-prompt).
+// The home prompt behind the dialog: its placeholder example is random.
 const placeholder = {
   x: 16,
   y: 16,
   width: 84,
   height: 1,
-  reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+  reason: "the placeholder example: random in TS and Rust",
 }
 
 export default defineApp({
