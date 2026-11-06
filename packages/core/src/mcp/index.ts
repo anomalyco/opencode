@@ -100,6 +100,8 @@ type ServerEntry = {
   readonly startup: Latch.Latch
   // The connection attempt in flight: when it began and a latch that opens once it settles.
   attempt?: { readonly started: number; readonly settled: Latch.Latch }
+  // The fiber running that attempt, so disconnect can interrupt it instead of waiting out its timeouts.
+  starting?: Fiber.Fiber<void>
   readonly connection: McpConnection.Connection
   // The connection's tool list tagged for this server, rebuilt only when the connection lists again.
   tagged?: { readonly source: ReadonlyArray<McpClient.Tool>; readonly tools: ReadonlyArray<Tool> }
@@ -232,6 +234,25 @@ export const layer = (options?: Options) =>
       // still interrupts it.
       const transition = <E>(effect: Effect.Effect<void, E>) =>
         Effect.forkIn(effect, root, { startImmediately: true }).pipe(Effect.flatMap(Fiber.join))
+      // Runs a connection attempt as its own fiber and records it, so disconnect can interrupt a pending
+      // attempt. Interrupted, the attempt leaves its scope for the following stop to close.
+      const startConnection = (entry: ServerEntry) =>
+        Effect.gen(function* () {
+          const fiber = yield* entry.connection.start.pipe(Effect.forkChild({ startImmediately: true }))
+          entry.starting = fiber
+          const exit = yield* Fiber.await(fiber)
+          if (entry.starting === fiber) entry.starting = undefined
+          // An attempt interrupted before it reached its own settle, such as a pooled start still selecting
+          // its key, must not leave readers waiting on its latches. Settling twice is harmless.
+          if (Exit.isFailure(exit)) yield* settle(entry)
+        })
+      // Every start runs under the server lock, so the attempt read here is the one it began.
+      const settle = (entry: ServerEntry) =>
+        Effect.suspend(() => {
+          const attempt = entry.attempt
+          entry.attempt = undefined
+          return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
+        })
       // Attached connections lock separately so a configured server of the same name never contends.
       const attachedLocks = KeyedMutex.makeUnsafe<ServerName>()
       // Legacy era only: pending URL-mode elicitation forms, settled by notifications/elicitation/complete.
@@ -458,12 +479,7 @@ export const layer = (options?: Options) =>
                   yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
                   yield* bus.publish(McpEvent.StatusChanged, { server: name })
                 }),
-              // Every start runs under the server lock, so the attempt read here is the one it began.
-              settled: Effect.suspend(() => {
-                const attempt = entry.attempt
-                entry.attempt = undefined
-                return (attempt ? attempt.settled.open : Effect.void).pipe(Effect.ensuring(entry.startup.open))
-              }),
+              settled: Effect.suspend(() => settle(entry)),
               closed: (reason) =>
                 Effect.gen(function* () {
                   entry.status = { status: "failed", error: reason }
@@ -536,7 +552,7 @@ export const layer = (options?: Options) =>
             yield* bus.publish(McpEvent.StatusChanged, { server: name })
             return
           }
-          yield* entry.connection.start
+          yield* startConnection(entry)
         }).pipe(
           // Settle startup even when registration fails or replacement is interrupted, so readers cannot hang.
           Effect.ensuring(entry.startup.open),
@@ -671,7 +687,7 @@ export const layer = (options?: Options) =>
               Effect.gen(function* () {
                 // connect() or disconnect() may have settled the server while this startup waited to run.
                 if (entry.status.status !== "pending") return yield* entry.startup.open
-                yield* entry.connection.start
+                yield* startConnection(entry)
               }).pipe(locks.withLock(name)),
             )
           }
@@ -701,7 +717,7 @@ export const layer = (options?: Options) =>
             if (!entry || entry.integrationID !== integrationID) return
             if (entry.status.status === "disabled") return
             yield* entry.connection.stop
-            yield* entry.connection.start
+            yield* startConnection(entry)
           }).pipe(locks.withLock(name))
         })
       fork(
@@ -763,7 +779,7 @@ export const layer = (options?: Options) =>
             Effect.gen(function* () {
               const entry = yield* requireServer(name)
               yield* entry.connection.stop
-              yield* entry.connection.start
+              yield* startConnection(entry)
             }).pipe(locks.withLock(name)),
           )
         }),
@@ -771,11 +787,16 @@ export const layer = (options?: Options) =>
           const name = ServerName.make(server)
           yield* transition(
             Effect.gen(function* () {
-              const entry = yield* requireServer(name)
-              yield* entry.connection.stop
-              entry.status = { status: "disabled" }
-              yield* bus.publish(McpEvent.StatusChanged, { server: name })
-            }).pipe(locks.withLock(name)),
+              // A pending connect holds the server lock until it settles; interrupt it so disabling is immediate.
+              const running = entries.get(name)?.starting
+              if (running) yield* Fiber.interrupt(running)
+              yield* Effect.gen(function* () {
+                const entry = yield* requireServer(name)
+                yield* entry.connection.stop
+                entry.status = { status: "disabled" }
+                yield* bus.publish(McpEvent.StatusChanged, { server: name })
+              }).pipe(locks.withLock(name))
+            }),
           )
         }),
         remove: Effect.fn("MCP.remove")(function* (server) {
