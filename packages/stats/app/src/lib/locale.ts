@@ -150,7 +150,7 @@ function suffix(pathname: string) {
   }
 }
 
-export function docs(locale: Locale, pathname: string) {
+function docs(locale: Locale, pathname: string) {
   const value = DOCS[locale]
   const next = suffix(pathname)
   if (next.path !== "/docs" && next.path !== "/docs/" && !next.path.startsWith("/docs/")) {
@@ -186,7 +186,7 @@ export function fromPathname(pathname: string) {
   return parseLocale(fix(pathname).split("/")[1])
 }
 
-export function fromDocsPathname(pathname: string) {
+function fromDocsPathname(pathname: string) {
   const next = fix(pathname)
   const value = next.split("/")[2]?.toLowerCase()
   if (!value) return null
@@ -322,17 +322,6 @@ export function localeFromRequest(request: Request) {
   return (
     localeFromCookieHeader(request.headers.get("cookie")) ??
     detectFromAcceptLanguage(request.headers.get("accept-language"))
-  )
-}
-
-// Pages take their language from the URL alone, so one URL serves the same language to people, crawlers and caches.
-export function pageLocale(request: Request) {
-  const pathname = new URL(request.url).pathname
-  return (
-    parseLocale(request.headers.get(LOCALE_HEADER)) ??
-    fromPathname(pathname) ??
-    fromDocsPathname(pathname) ??
-    ("en" satisfies Locale)
   )
 }
 
