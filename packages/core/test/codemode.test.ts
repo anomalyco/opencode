@@ -2,10 +2,16 @@ import { describe, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Tool } from "@opencode/core/tool"
 import { Effect, Schema } from "effect"
 import type { Info } from "@opencode/schema/tool"
 import { it } from "./lib/effect"
+
+// Catalog tools render their signature lazily; spreading reads it, so the copy compares as plain data.
+const plain = (catalog: CodeModeCatalog.Inventory): CodeModeCatalog.Inventory => ({
+  tools: catalog.tools.map((entry) => (entry.type === "tool" ? { ...entry } : { ...entry, ...plain(entry) })),
+})
 
 const toolNode = AppNodeBuilder.build(Tool.node, [
   Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
@@ -29,7 +35,7 @@ describe("CodeMode", () => {
 
       const snapshot = yield* tools.snapshot()
       expect(snapshot.definitions.some((tool) => tool.name === "execute")).toBe(true)
-      expect(snapshot.codeModeCatalog).toStrictEqual({
+      expect(plain(snapshot.codeModeCatalog!)).toStrictEqual({
         tools: [
           {
             type: "tool",
@@ -37,6 +43,7 @@ describe("CodeMode", () => {
             description: "Echo text",
             signature: "tools.echo({\n  text: string,\n}): Promise<string>",
             pinned: true,
+            parameters: ["text"],
           },
           {
             type: "namespace",
@@ -67,11 +74,12 @@ describe("CodeMode", () => {
       })
 
       const snapshot = yield* tools.snapshot()
-      expect(snapshot.codeModeCatalog?.tools).toEqual([
+      expect(plain(snapshot.codeModeCatalog!).tools).toEqual([
         {
           type: "tool",
           name: "measure",
           description: "Measure",
+          parameters: ["ref", "amount", "sentinel"],
           signature: [
             "tools.measure({",
             "  /** Element ref */",

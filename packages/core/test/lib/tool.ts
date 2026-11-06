@@ -17,8 +17,19 @@ export const toolIdentity = {
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
 
-export const codeModeListings = (catalog: CodeModeCatalog.Inventory) =>
-  CodeModeCatalog.summarize(catalog, { budget: Infinity }).namespaces.flatMap((namespace) => namespace.entries)
+/** Every Code Mode tool in an inventory with its full signature, whether or not the catalog prints it. */
+export const codeModeListings = (catalog: CodeModeCatalog.Inventory) => {
+  const walk = (
+    entries: CodeModeCatalog.Inventory["tools"],
+    path: ReadonlyArray<string>,
+  ): Array<{ readonly path: string; readonly line: string }> =>
+    entries.flatMap((entry) =>
+      entry.type === "tool"
+        ? [{ path: [...path, entry.name].join("."), line: entry.signature }]
+        : walk(entry.tools, [...path, entry.name]),
+    )
+  return walk(catalog.tools, [])
+}
 
 export function waitForTool(registry: Tool.Interface, name: string, remaining = 1000): Effect.Effect<void, Error> {
   return Effect.gen(function* () {
