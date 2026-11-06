@@ -6,10 +6,12 @@ import {
   createUniqueId,
   For,
   Match,
+  lazy,
   on,
   onCleanup,
   onMount,
   Show,
+  Suspense,
   Switch,
   type JSX,
 } from "solid-js"
@@ -58,6 +60,9 @@ import { imageSources, loadStill, posterFile, Still, stillSizes, VideoSources } 
 import { inlineKey } from "~/lib/direction"
 
 export { installs, products, sdkSnippet, type ProductSlug } from "./product-data"
+
+// Loaded only for a fine pointer once the carousel's cards overflow (ProductCarousel).
+const ProductsArrows = lazy(() => import("./products-arrows"))
 
 /**
  * Loads a video again once it is on the page. A client-rendered video gets its src while it still
@@ -245,8 +250,22 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
   const productCopy = useArea("products", productsSource)
   const navigate = useNavigate()
   let track: HTMLDivElement | undefined
+  // A mouse wheel can't scroll the cards sideways, so a fine pointer gets arrows, loaded once the
+  // cards overflow (products-arrows.tsx). Touch screens swipe and never load them.
+  const [arrows, setArrows] = createSignal(false)
 
-  onMount(() => trackScroll("/", track))
+  onMount(() => {
+    trackScroll("/", track)
+    const check = () => {
+      if (!track || track.scrollWidth - track.clientWidth < 2 || !matchMedia("(pointer: fine)").matches) return
+      setArrows(true)
+      window.removeEventListener("resize", check)
+    }
+    check()
+    if (arrows()) return
+    window.addEventListener("resize", check)
+    onCleanup(() => window.removeEventListener("resize", check))
+  })
 
   // The visitor's order (Mobile first on a phone or tablet), fixed at the first render.
   const order = deviceOrder(products)
@@ -375,6 +394,13 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
           </article>
         </Show>
       </div>
+      <Show when={arrows() && track}>
+        {(element) => (
+          <Suspense>
+            <ProductsArrows track={element()} />
+          </Suspense>
+        )}
+      </Show>
     </section>
   )
 }

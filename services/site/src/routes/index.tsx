@@ -41,6 +41,7 @@ import { byos } from "~/lib/byos"
 import { localize, useArea } from "~/i18n/content"
 import { announcementsSource } from "~/i18n/content/areas/announcements"
 import "~/component/site/byos.css"
+import { ByosOptionLeads, ByosOptions } from "~/component/site/byos-options"
 import { getStarted } from "~/lib/get-started"
 import "~/component/site/get-started.css"
 import { installs } from "~/component/site/product-data"
@@ -1254,6 +1255,17 @@ function BringYourOwnSubs() {
               )}
             />
           </span>
+          {/* Spelled out so the production build folds it (script/fold-settings.ts). */}
+          <Show
+            when={
+              import.meta.env.DEV ||
+              siteSettings.subsStyle === "A rows" ||
+              siteSettings.subsStyle === "B wall" ||
+              siteSettings.subsStyle === "C names"
+            }
+          >
+            <ByosOptionLeads />
+          </Show>
         </p>
 
         {/* "grid": the providers' grid. */}
@@ -1307,6 +1319,18 @@ function BringYourOwnSubs() {
               {providers()}
             </div>
           </div>
+        </Show>
+
+        {/* A, B and C: showing that OpenCode works with nearly every subscription, provider and model. */}
+        <Show
+          when={
+            import.meta.env.DEV ||
+            siteSettings.subsStyle === "A rows" ||
+            siteSettings.subsStyle === "B wall" ||
+            siteSettings.subsStyle === "C names"
+          }
+        >
+          <ByosOptions />
         </Show>
       </div>
     </section>

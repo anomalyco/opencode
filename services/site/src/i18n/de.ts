@@ -284,6 +284,8 @@ export const dict = {
   "site.newTab": "{{label}} (öffnet in neuem Tab)",
   "site.products.label": "Produkte",
   "site.products.gridLabel": "OpenCode-Produkte",
+  "site.products.previous": "Zurück",
+  "site.products.next": "Weiter",
   "site.action.forOs": "Download[ für {{os}}](os)",
   "site.action.copy": "Kopieren",
   "site.action.copied": "Kopiert",
