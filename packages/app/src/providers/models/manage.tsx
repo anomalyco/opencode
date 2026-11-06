@@ -11,9 +11,11 @@ import { popularProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { DialogConnectProvider } from "@/providers/connect/dialog"
+import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { decode64 } from "@/runtime/persistence/base64"
 import { consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
 import "@/settings/settings.css"
+import "@/settings/search.css"
 import "@/shell/search-list.css"
 import "./manage.css"
 
@@ -32,8 +34,21 @@ export const DialogManageModels: Component = () => {
 
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
 
-  const providerVisible = (providerID: string) =>
-    providerList(providerID).every((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id }))
+  const enabledCount = (providerID: string) =>
+    providerList(providerID).filter((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id })).length
+
+  const providerVisible = (providerID: string) => enabledCount(providerID) === providerList(providerID).length
+
+  const providerStatus = (providerID: string) => {
+    const count = enabledCount(providerID)
+    const total = providerList(providerID).length
+
+    if (count === 0) return language.t("dialog.model.manage.status.none")
+
+    if (count === total) return language.t("dialog.model.manage.status.all")
+
+    return language.t("dialog.model.manage.status.some", { count, total })
+  }
 
   const setProviderVisibility = (providerID: string, checked: boolean) => {
     providerList(providerID).forEach((x) => {
@@ -80,6 +95,7 @@ export const DialogManageModels: Component = () => {
           {(item) => (
             <div
               class="search-list-row"
+              data-enabled={visible(item) ? "" : undefined}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => setModelVisibility(item, !visible(item))}
             >
@@ -145,12 +161,16 @@ export const DialogManageModels: Component = () => {
               <Show
                 when={list.flat().length > 0}
                 fallback={
-                  <div class="settings-models-status">
-                    <span>{language.t("dialog.model.empty")}</span>
-                    <Show when={list.filter()}>
-                      <span class="settings-models-status-filter">&quot;{list.filter()}&quot;</span>
-                    </Show>
-                  </div>
+                  <Show
+                    when={list.filter()}
+                    fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
+                  >
+                    {(query) => (
+                      <div class="settings-tab-search-empty manage-models-empty">
+                        <SettingsSearchEmpty query={query()} />
+                      </div>
+                    )}
+                  </Show>
                 }
               >
                 <ProviderModelSections
@@ -160,15 +180,27 @@ export const DialogManageModels: Component = () => {
                   disabled={searching()}
                   onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
                   onSetVisibility={setProviderVisibility}
+                  detail={(group) => <span class="manage-models-status">{providerStatus(group.category)}</span>}
                   action={(group) => (
-                    <Switch
-                      class="me-6"
-                      checked={providerVisible(group.category)}
-                      onChange={(checked) => setProviderVisibility(group.category, checked)}
-                      hideLabel
+                    // When only some models are enabled, the action enables the rest.
+                    <Button
+                      variant="ghost-muted"
+                      size="small"
+                      class="manage-models-bulk"
+                      aria-label={language.t(
+                        providerVisible(group.category)
+                          ? "dialog.model.manage.disableAll.label"
+                          : "dialog.model.manage.enableAll.label",
+                        { provider: group.items[0].provider.name },
+                      )}
+                      onClick={() => setProviderVisibility(group.category, !providerVisible(group.category))}
                     >
-                      {group.items[0].provider.name}
-                    </Switch>
+                      {language.t(
+                        providerVisible(group.category)
+                          ? "dialog.model.manage.disableAll"
+                          : "dialog.model.manage.enableAll",
+                      )}
+                    </Button>
                   )}
                   rows={(items) => <ModelRows items={items} />}
                 />

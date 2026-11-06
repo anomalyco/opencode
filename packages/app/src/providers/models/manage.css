@@ -1,6 +1,19 @@
-.manage-models-search {
+/* Below the title, the search is a field of its own: no hairline, and a fill while it is focused or has a query. */
+.settings-manage-models-dialog .manage-models-search {
   flex-shrink: 0;
-  padding: 0 6px 8px;
+  padding: 4px 8px 12px;
+
+  &::after {
+    display: none;
+  }
+
+  [data-component="text-input-v2"] {
+    border-radius: 6px;
+  }
+
+  [data-component="text-input-v2"]:is(:focus-within, :has(input:not(:placeholder-shown))):not([data-disabled]) {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
 }
 
 [data-component="dialog-v2"]:has(.settings-manage-models-dialog) [data-slot="dialog-container"] {
@@ -10,21 +23,53 @@
 
 .settings-manage-models-dialog .settings-panel.settings-models {
   height: 100%;
-  gap: 0;
+  gap: 6px;
   padding: 0 8px 8px;
 }
 
+/* Each provider is a card; its models sit inside it while it is open. */
 .settings-manage-models-dialog .settings-models .settings-section {
-  gap: 4px;
-  padding-block: 8px;
+  gap: 0;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--v2-background-bg-layer-01) 50%, var(--v2-background-bg-base));
 }
 
 .settings-manage-models-dialog .settings-models .settings-section[data-expanded] {
-  padding-bottom: 8px;
+  padding-bottom: 6px;
 }
 
-.settings-manage-models-dialog .settings-models .settings-section + .settings-section {
-  border-top: 0.5px solid var(--v2-border-border-base);
+.settings-manage-models-dialog .settings-models-group-header {
+  height: 36px;
+  padding-inline-end: 8px;
+}
+
+.settings-manage-models-dialog .settings-models-group-trigger {
+  flex: 1;
+  height: 36px;
+  border-radius: 6px;
+}
+
+.manage-models-status {
+  margin-inline-start: 8px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  font-weight: 440;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The label lines up with the model toggles; its hover reaches the same edge as a model row's. */
+.settings-manage-models-dialog [data-component="button-v2"].manage-models-bulk {
+  flex-shrink: 0;
+  margin-inline-end: -8px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.manage-models-empty {
+  padding-block: 48px;
 }
 
 .settings-manage-models-dialog .provider-model-groups {
@@ -81,33 +126,25 @@
 .manage-models-rows {
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
 
 .manage-models-rows .search-list-row {
-  position: relative;
-  height: 36px;
+  height: 32px;
   padding-inline: 8px;
   border-radius: 6px;
 }
 
-.manage-models-rows .search-list-row:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  inset-inline: 8px;
-  bottom: -0.75px;
-  height: 0.5px;
-  background: var(--v2-border-border-base);
-  pointer-events: none;
+/* Model names line up with their provider's name: the trigger's 4px inset, 20px chevron, 4px gap, 16px icon, 8px gap. */
+.settings-manage-models-dialog [data-component="settings-models-provider"] .manage-models-rows .search-list-row {
+  padding-inline-start: 52px;
+}
+
+.manage-models-rows .search-list-row:not([data-enabled]) .search-list-title {
+  color: var(--v2-text-text-faint);
 }
 
 @media (hover: hover) {
   .manage-models-rows .search-list-row:hover {
     background: var(--v2-overlay-simple-overlay-hover);
-  }
-
-  .manage-models-rows .search-list-row:hover::after,
-  .manage-models-rows .search-list-row:has(+ .search-list-row:hover)::after {
-    opacity: 0;
   }
 }

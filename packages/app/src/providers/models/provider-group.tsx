@@ -25,6 +25,7 @@ function CustomManagedProviderIcon(props: { class?: string }) {
 }
 
 export function ProviderModelIcon(props: { provider: ModelProvider; class?: string }) {
+  // SAFETY: the cast only lets `includes` look up any string; the type guard narrows on the result.
   const icon = () =>
     [
       props.provider.canonical,
@@ -62,6 +63,8 @@ export function ProviderModelSections<T extends ModelItem>(props: {
   rows: (items: T[]) => JSX.Element
   /** Trailing control in a direct provider's header. */
   action?: (group: ModelGroup<T>) => JSX.Element
+  /** Text after a direct provider's name, such as how many of its models are enabled. */
+  detail?: (group: ModelGroup<T>) => JSX.Element
   onSetVisibility?: (providerID: string, visible: boolean) => void
   ref?: (providerID: string, element: HTMLElement) => void
 }) {
@@ -95,7 +98,14 @@ export function ProviderModelSections<T extends ModelItem>(props: {
       ? language.t("provider.connect.opencode.freeName")
       : group.items[0].provider.name
 
-  function Header(input: { id: string; icon: JSX.Element; title: JSX.Element; badge?: string; action?: JSX.Element }) {
+  function Header(input: {
+    id: string
+    icon: JSX.Element
+    title: JSX.Element
+    badge?: string
+    detail?: JSX.Element
+    action?: JSX.Element
+  }) {
     return (
       <h3 class="settings-models-group-header" classList={{ "justify-between": !!input.action }}>
         <button
@@ -112,6 +122,7 @@ export function ProviderModelSections<T extends ModelItem>(props: {
             {input.icon}
             <bdi class="settings-models-group-title">{input.title}</bdi>
             <Show when={input.badge}>{(badge) => <Badge>{badge()}</Badge>}</Show>
+            {input.detail}
           </span>
         </button>
         {input.action}
@@ -137,6 +148,7 @@ export function ProviderModelSections<T extends ModelItem>(props: {
                     id={group().category}
                     icon={<ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />}
                     title={name(group())}
+                    detail={props.detail?.(group())}
                     action={props.action?.(group())}
                   />
                   <Show when={props.expanded(group().category)}>{props.rows(group().items)}</Show>

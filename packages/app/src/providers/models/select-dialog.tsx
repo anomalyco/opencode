@@ -944,11 +944,6 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           dispatch({ type: "row.left", into, point: { x: event.clientX, y: event.clientY }, flyout: flyoutRect() })
         }}
       >
-        <span data-slot="model-dialog-check">
-          <Show when={selected()}>
-            <Icon name="check" size="small" />
-          </Show>
-        </span>
         <span data-slot="model-dialog-name">
           <span class="min-w-0 truncate">
             <SearchHighlight text={item().name} />
