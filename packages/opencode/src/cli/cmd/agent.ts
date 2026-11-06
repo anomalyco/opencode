@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { modelOptionWithAlias } from "@/cli/model-option"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
@@ -53,11 +54,7 @@ const AgentCreateCommand = effectCmd({
         alias: ["tools"],
         describe: `comma-separated list of permissions to allow (default: all). Available: "${AVAILABLE_PERMISSIONS.join(", ")}"`,
       })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      }),
+      .option("model", modelOptionWithAlias),
   handler: Effect.fn("Cli.agent.create")(function* (args) {
     const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
     const { Agent } = yield* Effect.promise(() => import("../../agent/agent"))

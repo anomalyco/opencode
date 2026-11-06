@@ -1,4 +1,5 @@
 import { cmd } from "@/cli/cmd/cmd"
+import { modelOptionWithAlias } from "@/cli/model-option"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "../tui/worker"
 import path from "path"
@@ -117,11 +118,7 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "path to start opencode in",
       })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
+      .option("model", modelOptionWithAlias)
       .option("continue", {
         alias: ["c"],
         describe: "continue the last session",

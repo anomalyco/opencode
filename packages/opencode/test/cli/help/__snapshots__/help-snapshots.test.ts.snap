@@ -8,6 +8,7 @@ start ACP (Agent Client Protocol) server
 Options:
   -h, --help         show help                                                             [boolean]
   -v, --version      show version number                                                   [boolean]
+      --model        model to use in the format of provider/model                           [string]
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
@@ -36,6 +37,7 @@ Commands:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -52,6 +54,7 @@ Positionals:
 Options:
   -h, --help          show help                                                            [boolean]
   -v, --version       show version number                                                  [boolean]
+      --model         model to use in the format of provider/model                          [string]
       --print-logs    print logs to stderr                                                 [boolean]
       --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure          run without external plugins                                         [boolean]
@@ -78,6 +81,7 @@ Positionals:
 Options:
   -h, --help         show help                                                             [boolean]
   -v, --version      show version number                                                   [boolean]
+  -m, --model        model to use in the format of provider/model                           [string]
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
@@ -85,7 +89,6 @@ Options:
   -c, --continue     continue the last session                                             [boolean]
   -s, --session      session id to continue                                                 [string]
       --fork         fork the session before continuing (requires --continue or --session) [boolean]
-  -m, --model        model to use in the format of provider/model                           [string]
       --agent        agent to use                                                           [string]
       --format       format: default (formatted) or json (raw JSON events)
                                           [string] [choices: "default", "json"] [default: "default"]
@@ -129,6 +132,7 @@ Commands:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -147,6 +151,7 @@ Commands:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -164,6 +169,7 @@ Commands:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -180,6 +186,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -196,6 +203,7 @@ uninstall opencode and remove all related files
 Options:
   -h, --help         show help                                                             [boolean]
   -v, --version      show version number                                                   [boolean]
+      --model        model to use in the format of provider/model                           [string]
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
@@ -213,6 +221,7 @@ starts a headless opencode server
 Options:
   -h, --help         show help                                                             [boolean]
   -v, --version      show version number                                                   [boolean]
+      --model        model to use in the format of provider/model                           [string]
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
@@ -233,6 +242,7 @@ start opencode server and open web interface
 Options:
   -h, --help         show help                                                             [boolean]
   -v, --version      show version number                                                   [boolean]
+      --model        model to use in the format of provider/model                           [string]
       --print-logs   print logs to stderr                                                  [boolean]
       --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure         run without external plugins                                          [boolean]
@@ -256,6 +266,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -271,6 +282,7 @@ show token usage and cost statistics
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -292,6 +304,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -309,6 +322,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -326,6 +340,7 @@ Commands:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -342,6 +357,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -359,6 +375,7 @@ Commands:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -375,6 +392,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -397,6 +415,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -411,6 +430,7 @@ list MCP servers and their status
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -427,6 +447,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -449,6 +470,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -465,6 +487,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -478,6 +501,7 @@ list providers and credentials
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -494,6 +518,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -512,6 +537,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -525,6 +551,7 @@ create a new agent
 Options:
   -h, --help                  show help                                                    [boolean]
   -v, --version               show version number                                          [boolean]
+  -m, --model                 model to use in the format of provider/model                  [string]
       --print-logs            print logs to stderr                                         [boolean]
       --log-level             log level         [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure                  run without external plugins                                 [boolean]
@@ -533,8 +560,7 @@ Options:
       --mode                  agent mode            [string] [choices: "all", "primary", "subagent"]
       --permissions, --tools  comma-separated list of permissions to allow (default: all).
                               Available: "bash, read, edit, glob, grep, webfetch, task, todowrite,
-                              websearch, lsp, skill"                                        [string]
-  -m, --model                 model to use in the format of provider/model                  [string]"
+                              websearch, lsp, skill"                                        [string]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode agent list --help 1`] = `
@@ -545,6 +571,7 @@ list all available agents
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -558,6 +585,7 @@ list sessions
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -576,6 +604,7 @@ Positionals:
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -589,6 +618,7 @@ install the GitHub agent
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"
@@ -602,6 +632,7 @@ run the GitHub agent
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
@@ -617,6 +648,7 @@ print the database path
 Options:
   -h, --help        show help                                                              [boolean]
   -v, --version     show version number                                                    [boolean]
+      --model       model to use in the format of provider/model                            [string]
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]"

@@ -1,4 +1,5 @@
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { modelOptionWithAlias } from "@/cli/model-option"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 // CLI entry point for `opencode run` and `opencode --mini`.
 //
@@ -163,11 +164,7 @@ export const RunCommand = effectCmd({
         describe: "deprecated: session sharing was discontinued",
         hidden: true,
       })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
+      .option("model", modelOptionWithAlias)
       .option("agent", {
         type: "string",
         describe: "agent to use",

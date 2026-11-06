@@ -29,6 +29,7 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { modelOption } from "./cli/model-option"
 
 const args = hideBin(process.argv)
 
@@ -50,6 +51,7 @@ const cli = yargs(args)
   .alias("help", "h")
   .version("version", "show version number", InstallationVersion)
   .alias("version", "v")
+  .option("model", modelOption)
   .option("print-logs", {
     describe: "print logs to stderr",
     type: "boolean",
