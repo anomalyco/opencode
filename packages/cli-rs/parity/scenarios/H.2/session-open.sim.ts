@@ -21,18 +21,13 @@ export default defineSim({
   steps: [
     // The TS footer shows "Finishing startup…" until startup ends, then the working directory.
     { until: "/work " },
-    {
-      checkpoint: "open",
-      until: "The parser drops the last token.",
-      masks: [duration],
-      deviation: ["P15-metadata-gap-fg"],
-    },
+    { checkpoint: "open", until: "The parser drops the last token.", masks: [duration] },
     { until: "Simulated Model" },
     { type: "Fix it" },
     { until: "Fix it" },
     { enter: true },
-    { checkpoint: "streaming", until: "Moving the bound.", masks: [duration], deviation: ["P15-metadata-gap-fg"] },
+    { checkpoint: "streaming", until: "Moving the bound.", masks: [duration] },
     { release: "stream" },
-    { checkpoint: "streamed", until: "Fixed.", masks: [duration], deviation: ["P15-metadata-gap-fg"] },
+    { checkpoint: "streamed", until: "Fixed.", masks: [duration] },
   ],
 })

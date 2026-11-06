@@ -52,7 +52,7 @@ export default defineSim({
       checkpoint: "open",
       until: "Fixed the lexer.",
       masks: [duration],
-      deviation: ["P15-metadata-gap-fg", "P16-diff-markdown-heading"],
+      deviation: ["P16-diff-markdown-heading"],
     },
   ],
 })

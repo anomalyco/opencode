@@ -5,7 +5,6 @@
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
-const deviation = ["P15-metadata-gap-fg"]
 const click = (x: number, y: number) =>
   (["down", "up"] as const).map((action) => ({ mouse: { action, x, y, button: "left" as const } }))
 
@@ -16,14 +15,14 @@ export default defineSim({
     { type: "/goal Ship the sidebar with every built-in section" },
     { until: "built-in section" },
     { enter: true },
-    { checkpoint: "status", until: "◎ goal", deviation },
+    { checkpoint: "status", until: "◎ goal" },
     ...click(75, 28),
-    { checkpoint: "dialog", until: "pause p", deviation },
+    { checkpoint: "dialog", until: "pause p" },
     { press: "p" },
-    { checkpoint: "paused", until: "Paused by the user", deviation },
+    { checkpoint: "paused", until: "Paused by the user" },
     { press: "escape" },
-    { checkpoint: "footer", until: "goal paused", deviation },
+    { checkpoint: "footer", until: "goal paused" },
     { release: "round" },
-    { checkpoint: "ended", until: "Build · Simulated Model ·", masks: [duration], deviation },
+    { checkpoint: "ended", until: "Build · Simulated Model ·", masks: [duration] },
   ],
 })

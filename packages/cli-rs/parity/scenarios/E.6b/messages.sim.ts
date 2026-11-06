@@ -5,7 +5,6 @@
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
-const deviation = ["P15-metadata-gap-fg"]
 
 export default defineSim({
   height: 40,
@@ -24,11 +23,11 @@ export default defineSim({
     { type: "/compact" },
     { until: "/compact" },
     { enter: true },
-    { checkpoint: "compacted", until: "Fix the parser.", masks: [duration], deviation },
+    { checkpoint: "compacted", until: "Fix the parser.", masks: [duration] },
     { type: "Try again" },
     { until: "Try again" },
     { enter: true },
-    { checkpoint: "failed", until: "Request too large", masks: [duration], deviation },
+    { checkpoint: "failed", until: "Request too large", masks: [duration] },
     { type: "Rewrite the lexer" },
     { until: "Rewrite the lexer" },
     { enter: true },
@@ -36,6 +35,6 @@ export default defineSim({
     { type: "/undo" },
     { until: "/undo" },
     { enter: true },
-    { checkpoint: "reverted", until: "reverted", masks: [duration], deviation },
+    { checkpoint: "reverted", until: "reverted", masks: [duration] },
   ],
 })
