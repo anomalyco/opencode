@@ -3,6 +3,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
 import { Slash } from "@opencode/ui/slash"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
+import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { formatKeybind } from "@/shell/commands/command"
@@ -22,12 +23,14 @@ export function SubagentBar(props: {
 }) {
   const language = useLanguage()
   const [now, setNow] = createSignal(Date.now())
+  // The model name takes the row's leftover width; below `sm` the way back needs it more.
+  const compact = createMediaQuery("(max-width: 639px)")
 
   // Only what is known shows, with one separator between neighbours.
   const parts = () => [
     ...(props.status ? (["status", "elapsed"] as const) : []),
     ...(props.agent ? (["agent"] as const) : []),
-    ...(props.model ? (["model"] as const) : []),
+    ...(props.model && !compact() ? (["model"] as const) : []),
   ]
 
   createEffect(() => {
@@ -42,7 +45,7 @@ export function SubagentBar(props: {
     // The timeline scrolls on underneath, so the line keeps its surface and fades the text passing into it.
     <div
       data-component="subagent-bar"
-      class="relative flex h-8 w-full min-w-0 items-center gap-2 bg-v2-background-bg-base ps-3 pe-1.5 text-[12px] font-[440] leading-4 tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-faint before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-[linear-gradient(to_top,var(--v2-background-bg-base),transparent)]"
+      class="relative flex h-8 w-full min-w-0 items-center gap-2 bg-v2-background-bg-base ps-3 pe-1.5 text-[12px] font-[440] leading-4 tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-faint before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-[linear-gradient(to_top,var(--v2-background-bg-base),transparent)] pointer-coarse:h-11"
     >
       <Show when={props.status}>
         <span class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-faint">
@@ -62,7 +65,7 @@ export function SubagentBar(props: {
           </Switch>
         </span>
       </Show>
-      <div class="flex min-w-0 flex-1 items-center gap-1.5">
+      <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
         <For each={parts()}>
           {(part, index) => (
             <>
@@ -92,7 +95,7 @@ export function SubagentBar(props: {
                       <Show when={model().variant !== "default" && model().variant}>
                         {(variant) => (
                           <>
-                            <span class="sr-only">{" "}</span>
+                            <span class="sr-only"> </span>
                             <span class="ms-1 shrink-0 capitalize opacity-[0.66]">{variant()}</span>
                           </>
                         )}
@@ -105,7 +108,15 @@ export function SubagentBar(props: {
           )}
         </For>
       </div>
-      <Button type="button" variant="ghost-faint" size="small" class="shrink-0 gap-1.5 px-1.5" onClick={props.onBack}>
+      <Button
+        data-action="subagent-back"
+        type="button"
+        variant="outline"
+        size="small"
+        class="shrink-0 gap-1.5 px-2 text-[12px] text-v2-text-text-base pointer-coarse:h-11 pointer-coarse:px-3"
+        onClick={props.onBack}
+      >
+        <Icon name="arrow-left" size="small" />
         {language.t("session.child.backToParent")}
         <span class="hidden sm:block">
           <Keybind keys={[formatKeybind("esc", language.t)]} variant="neutral" />

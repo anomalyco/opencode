@@ -27,3 +27,22 @@ story("a subagent with no recorded outcome starts its line at the agent", async 
   await expect(bar.locator(":scope > span")).toHaveCount(0)
   await expect(bar).toHaveText(/^surveyor·Anthropic/)
 })
+
+story.describe("on a touch viewport", () => {
+  story.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+
+  story("keeps the way back clear and tappable", async ({ mount, page }) => {
+    await mount("app-current-session-surface--child-session")
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true)
+
+    const bar = page.locator('[data-component="subagent-bar"]')
+    const back = bar.getByRole("button", { name: /main session/i })
+    // The model gives the row to the agent and the way back instead of painting under the button.
+    await expect(bar.locator('[data-slot="subagent-model"]')).toHaveCount(0)
+    await expect(bar).toHaveCSS("height", "44px")
+    await expect(back).toHaveCSS("height", "44px")
+
+    await back.tap()
+    await expect(page.getByText("Opened the parent Session locally")).toBeVisible()
+  })
+})
