@@ -343,6 +343,20 @@ fn a_filter_typed_before_the_limits_arrive_stays() {
 }
 
 #[test]
+fn a_search_with_spaces_ranks_by_its_words_across_title_and_provider() {
+    let h = mount();
+    h.app.press("ctrl+x");
+    h.app.press("m");
+    h.wait_for("Search models");
+    // fuzzysort's default score sums each word's best key: "Grok Code" (OpenCode) before "Claude Haiku".
+    h.app.type_text("o c");
+    let screen = h.wait_for("Grok Code");
+    let at = |name: &str| screen.find(name).unwrap_or_else(|| panic!("no {name}:\n{screen}"));
+    assert!(at("Grok Code") < at("Claude Haiku"), "{screen}");
+    assert!(at("Claude Haiku") < at("Claude Sonnet"), "{screen}");
+}
+
+#[test]
 fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
     let h = mount();
     h.app.press("ctrl+x");
