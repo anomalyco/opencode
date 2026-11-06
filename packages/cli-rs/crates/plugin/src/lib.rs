@@ -228,6 +228,9 @@ pub struct Entry {
     pub target: Option<String>,
     pub source: Source,
     pub status: Status,
+    /// Whether the plugin has an activation, failed or not (TS `registered().active`): the plugin manager offers
+    /// to disable it.
+    pub active: bool,
 }
 
 /// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
@@ -438,6 +441,7 @@ impl<H: Host> Registry<H> {
                 (Some(_), None) => Status::Active,
                 (None, _) => Status::Inactive,
             },
+            active: plugin.active.is_some(),
         });
         let unloaded = self.unloaded.borrow();
         let unloaded = unloaded.iter().map(|(target, status)| Entry {
@@ -445,6 +449,7 @@ impl<H: Host> Registry<H> {
             target: Some(target.clone()),
             source: Source::Configured,
             status: status.clone(),
+            active: false,
         });
         active.chain(unloaded).collect()
     }

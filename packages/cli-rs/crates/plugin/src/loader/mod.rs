@@ -75,11 +75,13 @@ pub struct Loader<H: Host> {
     cwd: PathBuf,
     configured: Vec<Configured>,
     seen: RefCell<HashMap<String, Seen>>,
+    /// The targets of the last reconcile, so a removed one leaves the registry whatever its status.
+    listed: RefCell<Vec<String>>,
 }
 
 impl<H: Host> Loader<H> {
     pub fn new(backend: Rc<dyn Backend<H>>, config_dir: PathBuf, cwd: PathBuf, configured: Vec<Configured>) -> Self {
-        Self { backend, config_dir, cwd, configured, seen: RefCell::default() }
+        Self { backend, config_dir, cwd, configured, seen: RefCell::default(), listed: RefCell::default() }
     }
 
     /// The discovered directories, then the configured entries, merged by local path (TS `mergePluginTargets`:
@@ -111,16 +113,16 @@ impl<H: Host> Loader<H> {
         targets
     }
 
-    /// The directories whose changes can change the targets: the `plugins` directories (or, while one is
-    /// missing, the directory it would be made in), each local target's directory, and the directory of each
-    /// configured library. Missing ones are left out.
+    /// The directories whose changes can change the targets: the `plugins` directories and `cwd`'s (or, while
+    /// one is missing, the nearest of its `.opencode` directory and the one above that exists), each local
+    /// target's directory,
+    /// and the directory of each configured library. Missing ones are left out.
     pub fn watch_dirs(&self) -> Vec<PathBuf> {
-        let mut dirs: Vec<PathBuf> = plugin_directories(&self.config_dir, &self.cwd)
-            .into_iter()
-            .map(|dir| match (dir.is_dir(), dir.parent()) {
-                (false, Some(parent)) => parent.to_path_buf(),
-                _ => dir,
-            })
+        let mut directories = plugin_directories(&self.config_dir, &self.cwd);
+        directories.push(self.cwd.join(".opencode/plugins"));
+        let mut dirs: Vec<PathBuf> = directories
+            .iter()
+            .filter_map(|dir| dir.ancestors().take(3).find(|dir| dir.is_dir()).map(Path::to_path_buf))
             .collect();
         for target in self.targets() {
             let Some(local) = target.local else { continue };
@@ -148,12 +150,20 @@ impl<H: Host> Loader<H> {
             .filter(|target| !targets.iter().any(|known| known.target == **target && known.library().is_some()))
             .cloned()
             .collect();
-        for target in stale {
+        let removed = self
+            .listed
+            .borrow()
+            .iter()
+            .filter(|target| !targets.iter().any(|known| known.target == **target))
+            .cloned()
+            .collect::<Vec<_>>();
+        for target in stale.into_iter().chain(removed) {
             self.seen.borrow_mut().remove(&target);
             registry.unload(&target);
             registry.set_unloaded(&target, None);
             changed = true;
         }
+        self.listed.replace(targets.iter().map(|target| target.target.clone()).collect());
         for target in &targets {
             changed |= self.reconcile_target(host, registry, target);
         }
@@ -208,6 +218,18 @@ impl<H: Host> Loader<H> {
         let failure = {
             let reload = reload.clone();
             Rc::new(move || error().or_else(|| reload.borrow().clone()))
+        };
+        // Starting the plugin again (the plugin manager) starts this build; the failed build is old news.
+        let setup = definition.setup.clone();
+        let definition = Definition {
+            setup: Rc::new({
+                let reload = reload.clone();
+                move |registering: &mut crate::Setup<'_, H>| {
+                    reload.take();
+                    setup(registering);
+                }
+            }),
+            ..definition
         };
         self.seen.borrow_mut().insert(name.to_owned(), Seen { digest, reload });
         registry.load(host, definition.external(name, failure));

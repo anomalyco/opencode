@@ -212,6 +212,13 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     // The same broken build is not retried.
     assert!(!loader.reconcile(&host, &registry));
     assert_eq!(fake.loads.get(), 3);
+    // The running version can be disabled, and enabling it starts it afresh without the stale failure.
+    assert!(entry(&registry.entries(), &lib_target).active);
+    assert!(registry.set_active(&host, "fake", false));
+    assert_eq!(entry(&registry.entries(), &lib_target).status, Status::Inactive);
+    assert!(registry.set_active(&host, "fake", true));
+    assert_eq!(entry(&registry.entries(), &lib_target).status, Status::Active);
+    assert_eq!(fake.active.get(), 2);
 
     // A fixed build replaces it in place, under its new ID.
     write(&lib_dir.join(entry_file()), "id=fake2");
@@ -235,6 +242,15 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED.to_owned()));
     assert!(!entries.iter().any(|entry| entry.id == "fake2"));
     assert_eq!(fake.active.get(), 1);
+
+    // Deleted directories leave the list, whether they were skipped or loaded.
+    fs::remove_dir_all(&lib_dir).unwrap();
+    fs::remove_dir_all(&ts_dir).unwrap();
+    assert!(loader.reconcile(&host, &registry));
+    let entries = registry.entries();
+    let gone = |entry: &Entry| entry.target.as_ref().is_some_and(|target| [&lib_target, &ts_target].contains(&target));
+    assert!(!entries.iter().any(gone), "{entries:?}");
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED.to_owned()));
 }
 
 #[test]
@@ -288,4 +304,24 @@ fn directives_after_an_entry_disable_an_external_plugin() {
     // `-one` comes before its entry, `-*` after it; `two` is discovered, so every directive applies.
     assert_eq!(status("one"), Status::Inactive);
     assert_eq!(status("two"), Status::Active);
+}
+
+// Expected: while `<cwd>/.opencode/plugins` is missing, the directory it would be made in is watched, even when
+// `<cwd>/.opencode` is missing too and `cwd` is below the project root.
+#[test]
+fn watch_dirs_cover_a_plugins_directory_made_later() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config");
+    let project = root.path().join("repo");
+    let cwd = project.join("a");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(&cwd).unwrap();
+    let loader = Loader::<TestHost>::new(Rc::new(Fake::default()), config, cwd.clone(), Vec::new());
+    let dirs = loader.watch_dirs();
+    assert!(dirs.contains(&cwd) && dirs.contains(&project), "{dirs:?}");
+    fs::create_dir_all(cwd.join(".opencode")).unwrap();
+    assert!(loader.watch_dirs().contains(&cwd.join(".opencode")));
+    fs::create_dir_all(cwd.join(".opencode/plugins")).unwrap();
+    let dirs = loader.watch_dirs();
+    assert!(dirs.contains(&cwd.join(".opencode/plugins")) && !dirs.contains(&cwd), "{dirs:?}");
 }

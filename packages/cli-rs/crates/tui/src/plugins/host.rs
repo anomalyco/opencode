@@ -143,7 +143,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     let loader =
         Rc::new(Loader::new(Rc::new(Native) as Rc<dyn Backend<Tui>>, external.config_dir, external.cwd, configured));
     loader.reconcile(tui, &tui.plugins);
-    let watches: Rc<RefCell<Vec<(PathBuf, opencode_local::watch::Watch)>>> = Rc::default();
+    let watches: Rc<RefCell<Vec<Watched>>> = Rc::default();
     watch(tui, &loader, &watches);
     tui.app.on_message(bind!(tui, |tui, _, _: &PluginsChanged| {
         loader.reconcile(&tui, &tui.plugins);
@@ -151,13 +151,13 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     }));
 }
 
-/// Watches the loader's directories that are not watched yet. A watch that stops seeing its directory costs a
-/// handle until the TUI exits, as in TS.
-fn watch(tui: &Tui, loader: &Loader<Tui>, watches: &RefCell<Vec<(PathBuf, opencode_local::watch::Watch)>>) {
-    for dir in loader.watch_dirs() {
-        if watches.borrow().iter().any(|(known, _)| *known == dir) {
-            continue;
-        }
+/// A watched directory, the identity of the directory it watches, and the watch.
+type Watched<W = opencode_local::watch::Watch> = (PathBuf, Option<u64>, W);
+
+/// Watches the loader's directories: keeps the watches that still see them, and replaces one whose directory
+/// went away or was made again, which the old watch no longer sees.
+fn watch(tui: &Tui, loader: &Loader<Tui>, watches: &RefCell<Vec<Watched>>) {
+    for (dir, id) in unwatched(&mut watches.borrow_mut(), loader.watch_dirs()) {
         let proxy = tui.app.proxy();
         let watch = opencode_local::watch::watch(
             &dir,
@@ -168,9 +168,36 @@ fn watch(tui: &Tui, loader: &Loader<Tui>, watches: &RefCell<Vec<(PathBuf, openco
             },
         );
         if let Some(watch) = watch {
-            watches.borrow_mut().push((dir, watch));
+            watches.borrow_mut().push((dir, id, watch));
         }
     }
+}
+
+/// Drops the watches of directories that are no longer in `dirs` or are not the directory they watched, and
+/// returns the directories to watch, with their identity.
+fn unwatched<W>(watches: &mut Vec<Watched<W>>, dirs: Vec<PathBuf>) -> Vec<(PathBuf, Option<u64>)> {
+    let dirs: Vec<(PathBuf, Option<u64>)> = dirs
+        .into_iter()
+        .map(|dir| {
+            let id = identity(&dir);
+            (dir, id)
+        })
+        .collect();
+    watches.retain(|(known, id, _)| dirs.iter().any(|(dir, current)| dir == known && current == id));
+    dirs.into_iter().filter(|(dir, _)| !watches.iter().any(|(known, _, _)| known == dir)).collect()
+}
+
+/// What tells a directory from one made again at its path.
+#[cfg(unix)]
+fn identity(dir: &std::path::Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(dir).ok().map(|metadata| metadata.ino())
+}
+
+#[cfg(not(unix))]
+fn identity(dir: &std::path::Path) -> Option<u64> {
+    let created = std::fs::metadata(dir).ok()?.created().ok()?;
+    created.duration_since(std::time::UNIX_EPOCH).ok().map(|since| since.as_nanos() as u64)
 }
 
 /// Adds and activates one more plugin, then remounts the route so its claims show.
@@ -193,4 +220,29 @@ pub fn route(tui: &Tui, id: &str, name: &str) -> Option<Box<dyn Slotted<Tui>>> {
 /// The plugins' Markdown code-block renderers in the page theme.
 pub fn code_blocks(tui: &Tui) -> CodeBlockRenderers {
     tui.plugins.code_blocks(&tui.page())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected: a watched directory that is removed and made again gets a fresh watch, and a directory that left
+    // the list loses its watch.
+    #[test]
+    fn a_directory_made_again_is_watched_again() {
+        let root = tempfile::tempdir().unwrap();
+        let (a, b) = (root.path().join("a"), root.path().join("b"));
+        std::fs::create_dir(&a).unwrap();
+        std::fs::create_dir(&b).unwrap();
+        let mut watches: Vec<Watched<()>> = Vec::new();
+        let fresh = unwatched(&mut watches, vec![a.clone(), b.clone()]);
+        watches.extend(fresh.into_iter().map(|(dir, id)| (dir, id, ())));
+        assert!(unwatched(&mut watches, vec![a.clone(), b.clone()]).is_empty());
+        // Keep the old directory alive under another name, so the new one cannot reuse its inode.
+        std::fs::rename(&a, root.path().join("old")).unwrap();
+        std::fs::create_dir(&a).unwrap();
+        let fresh = unwatched(&mut watches, vec![a.clone()]);
+        assert_eq!(fresh.iter().map(|(dir, _)| dir).collect::<Vec<_>>(), [&a]);
+        assert!(watches.is_empty());
+    }
 }
