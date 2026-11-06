@@ -65,6 +65,7 @@ import {
   promptAttachmentLabel,
 } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
+import { DialogContextLimit } from "../dialog-context-limit"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
 import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
@@ -627,6 +628,35 @@ export function Prompt(props: PromptProps) {
         slash: { name: "worktrees" },
         run: () => {
           move.open()
+        },
+      },
+      {
+        title: "総コンテキスト上限",
+        name: "session.context-limit",
+        category: "Session",
+        slash: { name: "context" },
+        run: async () => {
+          if (props.sessionID) {
+            dialog.replace(() => <DialogContextLimit sessionID={props.sessionID!} />)
+            return
+          }
+          const selection = local.model.selection()
+          const newSessionID = args.takeNewSessionID()
+          const created = data.session.create({
+            id: newSessionID,
+            location: currentLocation.ref ?? data.location.default(),
+            agent: local.agent.current()?.id,
+            model: selection
+              ? { providerID: selection.providerID, id: selection.modelID, variant: local.model.variant.current() }
+              : undefined,
+          })
+          if (newSessionID !== undefined) created.request.catch(() => args.restoreNewSessionID(newSessionID))
+          await created.request
+            .then(() => {
+              route.navigate({ type: "session", sessionID: created.id })
+              dialog.replace(() => <DialogContextLimit sessionID={created.id} />)
+            })
+            .catch(toast.error)
         },
       },
     ].map(

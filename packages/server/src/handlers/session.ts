@@ -4,6 +4,7 @@ import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { SessionContextLimit } from "@opencode/core/session/context-limit"
 import { Form } from "@opencode/core/form"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpServerResponse } from "effect/http"
@@ -40,6 +41,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
     const transfer = yield* SessionTransfer.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
+    const contextLimits = yield* SessionContextLimit.Service
     const requireSession = (sessionID: Session.ID) =>
       session.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
@@ -161,6 +163,21 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           return {
             data: Object.fromEntries(Array.from(active, (sessionID) => [sessionID, { type: "running" as const }])),
           }
+        }),
+      )
+      .handle(
+        "session.contextLimitGet",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: yield* contextLimits.get(ctx.params.sessionID) }
+        }),
+      )
+      .handle(
+        "session.contextLimitSet",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          yield* contextLimits.set(ctx.params.sessionID, ctx.payload.tokens)
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

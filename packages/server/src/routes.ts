@@ -22,6 +22,7 @@ import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
+import { SessionContextLimit } from "@opencode/core/session/context-limit"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -59,6 +60,7 @@ const applicationServiceNodes = [
   FSUtil.node,
   Database.node,
   KV.node,
+  SessionContextLimit.node,
   Bus.node,
   EventLogger.node,
   httpClient,
