@@ -20,5 +20,8 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+opencode-local.workspace = true
+opencode-service.workspace = true
 serde.workspace = true
+tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
