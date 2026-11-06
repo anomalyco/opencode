@@ -362,12 +362,20 @@ export const authorize = (input: {
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
-    // Reuse the client registered by an earlier login; the SDK discards it if the issuer changed.
     const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
-    if (previous?.type === "oauth") {
-      const client = clientFromCredential(previous)
-      if (client) yield* Effect.promise(() => store.saveClientInformation(client))
-    }
+    const previousClient = previous?.type === "oauth" ? clientFromCredential(previous) : undefined
+    const registeredUri =
+      previousClient && "redirect_uris" in previousClient && Array.isArray(previousClient.redirect_uris)
+        ? (previousClient.redirect_uris.find((uri) => typeof uri === "string") as string | undefined)
+        : undefined
+    const registeredPort = (() => {
+      if (!registeredUri) return undefined
+      try {
+        return Number(new URL(registeredUri).port) || undefined
+      } catch {
+        return undefined
+      }
+    })()
     const code = yield* Deferred.make<{ code: string; iss: string | undefined; response?: ServerResponse }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
@@ -411,15 +419,38 @@ export const authorize = (input: {
         response.writeHead(409).end("OAuth callback already received")
     })
 
-    // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
+    // callback_port, else the port pinned by redirect_uri, else registered loopback port, else ephemeral.
     const redirectPort = Number(redirect?.port) || undefined
     const port = yield* Effect.callback<number, Error>((resume) => {
-      server.once("error", (error) => resume(Effect.fail(error)))
-      server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        resume(Effect.succeed((server.address() as AddressInfo).port))
-      })
+      const listen = (target: number, fallback: boolean) => {
+        const onError = (error: Error) => {
+          if (fallback) {
+            server.removeListener("error", onError)
+            listen(0, false)
+            return
+          }
+          resume(Effect.fail(error))
+        }
+        server.once("error", onError)
+        server.listen(target, "127.0.0.1", () => {
+          server.removeListener("error", onError)
+          resume(Effect.succeed((server.address() as AddressInfo).port))
+        })
+      }
+      const target = oauth?.callback_port ?? redirectPort ?? registeredPort ?? 0
+      listen(target, !oauth?.callback_port && !redirectPort && Boolean(registeredPort))
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
+
+    const callbackUrl = oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`
+    // Reuse the client registered by an earlier login only when its registered redirect URIs include our callback.
+    const clientMatches =
+      previousClient &&
+      (!("redirect_uris" in previousClient) ||
+        !Array.isArray(previousClient.redirect_uris) ||
+        previousClient.redirect_uris.length === 0 ||
+        previousClient.redirect_uris.includes(callbackUrl))
+    if (clientMatches && previousClient) yield* Effect.promise(() => store.saveClientInformation(previousClient))
 
     // The server's 401 names where its resource metadata lives and which scopes it wants; without it
     // discovery can only guess the well-known path, which not every server layout answers.
@@ -471,7 +502,7 @@ export const authorize = (input: {
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
-        url: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
+        url: callbackUrl,
         state,
         open: (url) => {
           authorizationUrl = url
