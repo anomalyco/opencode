@@ -155,10 +155,11 @@ const validateStandard = (
   )
 
 const inputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
-  if (schema === undefined || schema === null) return {}
+  if (schema === undefined || schema === null) return { type: "object", properties: {}, additionalProperties: false }
   if (isStandardSchema(schema)) return standardJsonSchema(schema, "input")
-  if (!Schema.isSchema(schema)) return schema
-  return emptyInputJsonSchema(schema) ?? toJsonSchema(schema)
+  if (Schema.isSchema(schema)) return emptyInputJsonSchema(schema) ?? toJsonSchema(schema)
+  if (isEmptyStructSchema(schema)) return { type: "object", properties: {}, additionalProperties: false }
+  return schema
 }
 
 const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema => {
@@ -185,7 +186,22 @@ const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
       ? document.schema
       : { ...document.schema, $defs: document.definitions },
   )
-  return dropDefinitionsIfResolved(inlineLocalReferences(normalized)) as JsonSchema.JsonSchema
+  const resolved = dropDefinitionsIfResolved(inlineLocalReferences(normalized))
+  if (isEmptyStructSchema(resolved)) return { type: "object", properties: {}, additionalProperties: false }
+  return resolved as JsonSchema.JsonSchema
+}
+
+const isEmptyStructSchema = (value: unknown): boolean => {
+  // `Schema.Struct({})` emits `{ anyOf: [{ type: "object" }, { type: "array" }] }`,
+  // which OpenAI rejects for function tools ("must be a JSON Schema of type object").
+  // Normalize that single case to an explicit empty object schema.
+  if (!isRecord(value)) return false
+  if (Object.keys(value).length !== 1) return false
+  const anyOf = value.anyOf
+  if (!Array.isArray(anyOf) || anyOf.length !== 2) return false
+  const hasObject = anyOf.some((item) => isRecord(item) && item.type === "object" && Object.keys(item).length === 1)
+  const hasArray = anyOf.some((item) => isRecord(item) && item.type === "array" && Object.keys(item).length === 1)
+  return hasObject && hasArray
 }
 
 const flattenAllOf = (value: unknown): unknown => {
