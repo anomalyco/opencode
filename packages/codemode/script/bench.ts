@@ -80,7 +80,7 @@ const argument = (flag: string) => {
 }
 const iterations = Number(argument("--iterations") ?? 7)
 const filter = argument("--filter")
-const engine = (argument("--engine") as CodeMode.Engine | undefined) ?? "vm"
+const engine = (argument("--engine") as "legacy" | "vm" | undefined) ?? "vm"
 const mixed = process.argv.includes("--mixed")
 const jsc = mixed || process.argv.includes("--jsc")
 const exec = Vm.prototype["exec"]

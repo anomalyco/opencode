@@ -70,33 +70,6 @@ export class SnapshotError extends Error {
   override readonly name = "SnapshotError"
 }
 
-/**
- * Where a function inside a value an extension returned came from, so a saved state can name it instead of losing it:
- * the extension, the value its function returned (`root`), which the extension's `snapshot` hooks save, and the path
- * from there to the function.
- */
-export type HostOrigin = {
-  readonly extension: string
-  readonly root: object
-  readonly path: ReadonlyArray<string | number>
-  /** What the program calls it, for its errors (`fetch.text`). */
-  readonly label: string
-}
-
-/** The extension bridge's side of saving and restoring those functions; see `extensionGlobals`. */
-export type HostBridge = {
-  /** Each extension's name, and whether it has `snapshot` hooks: a state resumes only where both match. */
-  readonly extensions: ReadonlyArray<{ readonly name: string; readonly hooked: boolean }>
-  /** Where a program function wrapping a host function came from, when its extension can save it. */
-  readonly origin: (value: object) => HostOrigin | undefined
-  /** A returned value as its extension saves it. */
-  readonly encode: (extension: string, root: object) => unknown
-  /** A returned value back from what `encode` gave. */
-  readonly decode: (extension: string, data: unknown) => object
-  /** Makes `target`, a restored program function, call the host function `origin` leads to. */
-  readonly rewrap: (target: Native, origin: HostOrigin) => void
-}
-
 /** What the encoder asks of the runtime whose state it saves. */
 export type EncodeEnv = {
   /** The name of a built-in or host global object. */
@@ -109,7 +82,6 @@ export type EncodeEnv = {
   /** Values with no data form are reported here; strict encoding throws on the first instead. */
   readonly lost: Array<string>
   readonly strict: boolean
-  readonly hosts?: HostBridge | undefined
   /** More classes to save, an engine's own (the VM's frames and closures), after the built-in ones. */
   readonly specs?: ReadonlyArray<ClassSpec> | undefined
   /** The data an engine names an object or symbol by, saved as `["x", data]`, instead of copying it. */
@@ -123,7 +95,6 @@ export type DecodeEnv = {
   readonly node: (source: string, index: number) => AstNode | undefined
   /** An `Interruption` (it holds an Effect cause, which this module does not make). */
   readonly interruption: () => Interruption
-  readonly hosts?: HostBridge | undefined
   readonly specs?: ReadonlyArray<ClassSpec> | undefined
   /** What `EncodeEnv.external` named. */
   readonly external?: ((data: Json) => unknown) | undefined
@@ -250,7 +221,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   {
     name: "HostCall",
     ctor: HostCall,
-    fields: ["status", "handle", "id", "key", "request", "label", "blocking", "result", "resolving", "site"],
+    fields: ["status", "id", "request", "label", "blocking", "result", "resolving", "site"],
   },
   { name: "Resolving", ctor: Resolving, fields: ["done", "scheduler", "promise", "site"] },
   { name: "Throw", ctor: Throw, fields: ["value"] },
@@ -264,7 +235,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
     ctor: Interpreter,
     anchor: "ctx",
     fields: ["logs", "globalScope", "modules", "namespaces"],
-    skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "hosts", "sources", "prelude"],
+    skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "sources", "prelude"],
   },
 ]
 
@@ -280,9 +251,9 @@ const builtinRegistry = () => {
   return builtins
 }
 
-// A function an extension returned: saved through its extension's hooks (`HostFunction`), or lost (`LostNative`).
+// A function an extension made while the program ran, which has no data form: saved as `LostNative`.
 const hostFunction: ClassSpec = {
-  name: "HostFunction",
+  name: "LostNative",
   ctor: Native,
   fields: ["length"],
   obj: true,
@@ -337,8 +308,6 @@ class Encoder {
   // A URL's `searchParams` is the same host object its URLSearchParams wraps; it is encoded once every URL is known.
   private readonly owners = new Map<URLSearchParams, URL>()
   private readonly params: Array<readonly [number, URLSearchParams]> = []
-  // One `HostValue` record per value an extension returned, however many of its functions the state holds.
-  private readonly roots = new Map<object, Encoded>()
   private readonly specs: { readonly byCtor: Map<Function, ClassSpec>; readonly byName: Map<string, ClassSpec> }
 
   constructor(private readonly env: EncodeEnv) {
@@ -440,14 +409,7 @@ class Encoder {
       return { t: spec.name, ...this.fields(object, spec) }
     }
     if (object instanceof Native) {
-      // A host function made while the program ran: inside a value an extension returned. Its extension saves that
-      // value when it has `snapshot` hooks; otherwise its name says what was lost.
-      const origin = this.env.hosts?.origin(object)
-      if (origin !== undefined) {
-        const root = this.hostValue(origin.extension, origin.root)
-        const fields = this.fields(object, hostFunction, hostFunction.fields)
-        return { t: "HostFunction", e: origin.extension, h: root, k: [...origin.path], l: origin.label, ...fields }
-      }
+      // A host function made while the program ran, inside a value an extension returned: its name says what was lost.
       this.lose(`the function ${functionName(object)}`)
       return { t: "LostNative", ...this.fields(object, hostFunction, hostFunction.fields) }
     }
@@ -476,20 +438,6 @@ class Encoder {
     const what = typeof object === "function" ? "a host function" : `a host ${object.constructor?.name ?? "object"}`
     this.lose(what)
     return { t: "Lost", f: [what] }
-  }
-
-  // A value an extension returned, as its `snapshot.encode` saves it: plain data, checked before it is copied.
-  private hostValue(extension: string, root: object): Encoded {
-    const known = this.roots.get(root)
-    if (known !== undefined) return known
-    const data = this.env.hosts!.encode(extension, root)
-    plainData(data, extension, new Set())
-    const id = this.records.length
-    const ref: Encoded = ["r", id]
-    this.roots.set(root, ref)
-    this.records.push(undefined)
-    this.records[id] = { t: "HostValue", e: extension, d: this.value(data) }
-    return ref
   }
 
   private lose(what: string): void {
@@ -596,10 +544,6 @@ class Decoder {
   private readonly filled: Array<boolean>
   // Derived state is rebuilt once every record is filled in, since it reads other records.
   private readonly resets: Array<() => void> = []
-  // Functions inside values extensions returned, wrapped again once every record is filled in.
-  private readonly hostFunctions: Array<readonly [Native, { readonly [field: string]: unknown }]> = []
-  // Those values, given back once each by their extension's `snapshot.decode`, by `HostValue` record.
-  private readonly hostValues = new Map<number, object>()
   private readonly specs: { readonly byCtor: Map<Function, ClassSpec>; readonly byName: Map<string, ClassSpec> }
 
   constructor(
@@ -645,10 +589,7 @@ class Decoder {
         return named
       }
       case "LostNative":
-      case "HostFunction":
         return Object.create(Native.prototype)
-      case "HostValue":
-        return {}
       case "Interruption":
         return this.env.interruption()
       case "Error": {
@@ -779,11 +720,6 @@ class Decoder {
         native.callback = true
         return
       }
-      case "HostFunction":
-        this.fillClass(target, record, hostFunction, false)
-        this.hostFunctions.push([target as unknown as Native, record])
-        return
-      case "HostValue":
       case "Interruption":
       case "URL":
       case "URLSearchParams":
@@ -823,34 +759,6 @@ class Decoder {
 
   finish(): void {
     for (const reset of this.resets) reset()
-    if (this.hostFunctions.length === 0) return
-    const hosts =
-      this.env.hosts ?? invalid("a function from an extension is saved, and this runtime has no extensions.")
-    for (const [target, record] of this.hostFunctions) {
-      const extension = text(record.e, "an extension")
-      const path = list(record.k, "a path").map((key) =>
-        typeof key === "number" ? count(key, "a path index") : text(key, "a path key"),
-      )
-      hosts.rewrap(target, {
-        extension,
-        root: this.hostValue(hosts, record.h, extension),
-        path,
-        label: text(record.l, "a label"),
-      })
-    }
-  }
-
-  // A value an extension returned, given back once by its `snapshot.decode` from the data it saved.
-  private hostValue(hosts: HostBridge, ref: unknown, extension: string): object {
-    const id =
-      Array.isArray(ref) && ref[0] === "r" ? count(ref[1], "a record id") : invalid("a host value is not a record.")
-    const known = this.hostValues.get(id)
-    if (known !== undefined) return known
-    const record = id < this.records.length ? this.at(id) : invalid(`record ${id} does not exist.`)
-    if (record.t !== "HostValue" || record.e !== extension) invalid(`record ${id} is not a value of ${extension}.`)
-    const root = hosts.decode(extension, this.value(record.d))
-    this.hostValues.set(id, root)
-    return root
   }
 
   // An object's prototype, extensibility, and properties. A named object's accessors stay the ones it was made with.
@@ -939,28 +847,6 @@ class Decoder {
     }
     return invalid(`unknown tag ${String(value[0])}.`)
   }
-}
-
-// What an extension's `snapshot.encode` gives must be plain data the codec copies and hands back to `decode`: JSON
-// values and Uint8Arrays.
-const plainData = (data: unknown, extension: string, seen: Set<object>): void => {
-  if (data === null || typeof data === "string" || typeof data === "boolean" || data instanceof Uint8Array) return
-  if (typeof data === "number" && Number.isFinite(data)) return
-  const fail = (what: string): never => {
-    throw new SnapshotError(
-      `The extension "${extension}" saved a value it returned as data holding ${what}; snapshot.encode must give plain data (JSON values and Uint8Arrays).`,
-    )
-  }
-  if (typeof data !== "object") return fail(typeof data === "number" ? String(data) : `a ${typeof data}`)
-  if (seen.has(data)) return fail("a circular reference")
-  const proto = Object.getPrototypeOf(data)
-  if (!Array.isArray(data) && proto !== Object.prototype && proto !== null) {
-    const name = (data as { constructor?: { name?: string } }).constructor?.name ?? "object"
-    return fail(`${/^[AEIOU]/.test(name) ? "an" : "a"} ${name}`)
-  }
-  seen.add(data)
-  for (const item of Object.values(data)) plainData(item, extension, seen)
-  seen.delete(data)
 }
 
 const functionName = (fn: Obj): string => {

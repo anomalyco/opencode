@@ -25,9 +25,4 @@ describe("build id", () => {
     expect(ids[1]).toBe(ids[0]!)
     expect(ids[2]).toBe(ids[0]!)
   })
-
-  // A process with the test262 harness loaded saves the run; the child that resumes it has not loaded it.
-  test("a run saved with the test262 harness loaded resumes in another process", async () => {
-    await output(["bun", "test", "--preload", "./test/test262/run.ts", "test/vm/suspend.test.ts", "-t", "another process"])
-  }, 15_000)
 })

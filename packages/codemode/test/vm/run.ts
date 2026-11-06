@@ -103,12 +103,7 @@ export const runProgram = (code: string, options?: RunOptions): Result => {
     const stop = vm.run()
     if (stop.kind === "slice") {
       if (roundTrip !== undefined && vm.tripEvery > 0) {
-        const { snapshot } = vm.capture({
-          runId: "",
-          limits: { timeoutMs: null, maxToolCalls: null, maxOutputBytes: null },
-          activeMs: 0,
-          strict: true,
-        })
+        const { snapshot } = vm.capture({ strict: true })
         options?.onTrip?.(snapshot)
         ctx = runtime(undefined)
         vm = ctx.vm

@@ -78,14 +78,12 @@ export type HostRequest =
 /**
  * One step of a call to an extension function: its `extension.before` hook (`before`), settling what the host function
  * returned or threw (`settle`: `host` is that), or calling an async host function and settling its result (`run`:
- * `host` is the function). `invocation` is what the hooks see, for a global or a global object's function, and
- * `extension` names the extension the function came from, whose `snapshot` hooks save the values it returns. The host
+ * `host` is the function). `invocation` is what the hooks see, for a global or a global object's function. The host
  * function and what it returns are live host values with no data form, dropped once the call completes.
  */
 export type ExtensionRequest = {
   readonly stage: "before" | "settle" | "run"
   readonly label: string
-  readonly extension: string | undefined
   invocation: ExtensionInvocation | undefined
   host: unknown
   args: ReadonlyArray<unknown>
@@ -98,18 +96,10 @@ export type ExtensionRequest = {
  * later job; a blocking call stops the VM, and no other job runs until it ends.
  */
 export class HostCall {
-  /**
-   * Where the call is: `queued` (written ahead, not started), `starting` (the host may have started it; a durable
-   * tool's handle is not known yet), `started` (a durable tool returned `handle`, so its work can be reattached), or
-   * `completed`.
-   */
-  status: "queued" | "starting" | "started" | "completed" = "queued"
-  /** A durable tool's handle on its running work, once started. */
-  handle: Json | undefined = undefined
+  /** Where the call is: `queued` (written ahead, not started), `running`, or `completed`. */
+  status: "queued" | "running" | "completed" = "queued"
   constructor(
     readonly id: number,
-    /** The idempotency key, `<run id>:<id>`, which a durable tool also names its work by. */
-    readonly key: string,
     readonly request: HostRequest,
     /** What runs: a tool path, or an extension function's label. */
     readonly label: string,

@@ -68,7 +68,6 @@ export class HostCalls {
   /** The synchronous extension call the program is in the middle of: see `Engine.activeExtension`. */
   extension: { readonly path: string } | undefined = undefined
   extensionResume: ((completion: Completion) => HostResult) | undefined = undefined
-  runId = ""
 
   constructor(
     private readonly ctx: Interpreter<unknown>,
@@ -117,7 +116,7 @@ export class HostCalls {
     site: AstNode | undefined,
   ): HostCall {
     const id = this.nextID++
-    const call = new HostCall(id, `${this.runId}:${id}`, request, label, blocking, result, resolving, site)
+    const call = new HostCall(id, request, label, blocking, result, resolving, site)
     this.queued.push(call)
     return call
   }
@@ -177,11 +176,6 @@ export class HostCalls {
       )
     }
     return true
-  }
-
-  /** The blocking call whose outcome waits to continue the job, or the one it waits on. */
-  get blockingKey(): string {
-    return this.input?.call.key ?? this.blocked?.key ?? ""
   }
 }
 
@@ -259,8 +253,8 @@ const arrayOf = (vm: HostVm, values: Array<Value>) => new Arr(vm.ctx.builtins.Ar
 /**
  * A synchronous extension function's call, staged here so its host values never enter a frame: the `extension.before`
  * hook (blocking), then the host function; what it returns settles now (blocking) unless it is an Effect or a Promise,
- * which the program holds a promise for. The call is active, blocking a suspend, until its result is a program value
- * or its concurrent call is queued.
+ * which the program holds a promise for. The call is active, holding live host values, until its result is a program
+ * value or its concurrent call is queued.
  */
 export const callExtension = (
   ctx: Interpreter<unknown>,
@@ -274,7 +268,6 @@ export const callExtension = (
     args: slots[1] as ReadonlyArray<unknown>,
     label,
     invocation: slots[3] as ExtensionInvocation | undefined,
-    extension: slots[4] as string | undefined,
   }
   if (call.host instanceof Lost) throw lostError(`The function ${label}`)
   hosts.extension = { path: label }

@@ -18,20 +18,6 @@ import type { Effect } from "effect"
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
   readonly globals: Globals
-  /** How a suspended run saves the values this extension's functions returned; see `Snapshot`. */
-  readonly snapshot?: Snapshot | undefined
-}
-
-/**
- * Lets a suspended run keep the functions inside values this extension's functions returned (a response's `text`,
- * say). `encode` gets such a value, as the host function returned it, and gives plain data: JSON values and
- * `Uint8Array`s. On resume, `decode` gets that data back, once per value, and gives a value of the same shape, whose
- * functions the program's copies call from then on. Without it, those functions are lost on resume: calling one
- * throws. A suspend fails, and the run goes on, when `encode` throws or gives anything else.
- */
-export type Snapshot = {
-  readonly encode: (value: unknown) => unknown
-  readonly decode: (data: unknown) => unknown
 }
 
 /** The Effect environment required by an extension's Effect-returning functions, at the top level or one level in. */
@@ -53,11 +39,7 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
       throw new TypeError(`Extension "${options.name}" global "${name}" must be a function or an object.`)
     }
   }
-  return {
-    name: options.name,
-    globals: { ...options.globals },
-    ...(options.snapshot === undefined ? {} : { snapshot: options.snapshot }),
-  }
+  return { name: options.name, globals: { ...options.globals } }
 }
 
 const asyncGlobals = new WeakSet<Function>()

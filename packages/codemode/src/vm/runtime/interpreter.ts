@@ -1,6 +1,5 @@
 import type { ToolRuntime } from "../../tool-runtime.js"
 import type { ExtensionRequest } from "../scheduler.js"
-import type { HostBridge } from "../snapshot/codec.js"
 import { Vm } from "../vm.js"
 import { globals } from "./globals.js"
 import type { Builtins } from "./intrinsics.js"
@@ -25,8 +24,6 @@ export class Interpreter<R> {
   readonly prelude: Prelude
   /** Makes the Effect an extension function's host work runs as; set by the extension bridge. */
   extensionWork: ((request: ExtensionRequest) => unknown) | undefined
-  /** Saves and restores the functions inside values extensions returned; set by the extension bridge. */
-  hosts: HostBridge | undefined
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
   readonly sources = new Map<string, Source>()
   /** The global bindings: the intrinsics, the host's globals, and the program's bindings. */

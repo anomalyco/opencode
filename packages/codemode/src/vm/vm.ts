@@ -219,10 +219,10 @@ export class VmInternalFn {
  * Runs a runtime's program code: the job stack, the job queue, promises, and host calls. `execute.ts` and the driver
  * use only its host surface:
  *
- * - **Starting.** Exactly one of `start(source)` (a new run) or `restore(saved, …)` (a saved one), once, with `runId`
- *   set first: it prefixes every host call's idempotency key, `<runId>:<id>`, and ids count up in program order.
+ * - **Starting.** Exactly one of `start(source)` (a new run) or `restore(saved, …)` (a saved one), once. Host call
+ *   ids count up in program order.
  * - **Running.** `run()` is synchronous, runs no host work, and returns a `Stop`:
- *   - `host(calls)`: start these queued calls now (they are `queued`; the driver marks them `starting`, `started`),
+ *   - `host(calls)`: start these queued calls now (they are `queued`; the driver marks them `running`),
  *     then call `run()` again; `host([])` means wait until `ready` (a blocking call or the inbox has input) and call
  *     `run()` again;
  *   - `slice`: the time slice is over; yield to the host scheduler and call `run()` again;
@@ -234,8 +234,8 @@ export class VmInternalFn {
  *   promise in a later job, in completion order. Unknown or completed ids are ignored. `call(id)`/`calls()` list the
  *   calls handed over and not completed, in the order they were made.
  * - **Snapshots.** `capture` and `restore` run only between `run()`s, synchronously. A capture changes nothing a
- *   later `run()` sees; it fails (throws) only on a codec gap or a refusing extension hook. Whether a suspend is
- *   allowed at all is the driver's call (`Driver.blocking`), from `calls()` and `activeExtension`.
+ *   later `run()` sees; it fails (throws) only on a codec gap. A state holding live host values (`calls()` with an
+ *   extension call, or `activeExtension`) can't be restored faithfully.
  */
 export class Vm {
   readonly frames: Array<Frame> = contiguous<Frame>()
@@ -282,15 +282,6 @@ export class Vm {
     if (p !== undefined) return p
     if (this.intrinsics.size === 0) this.initIntrinsics()
     return this.intrinsics.get(name)
-  }
-
-  /** Names this run's host calls: each key is `<runId>:<id>`. */
-  get runId(): string {
-    return this.hosts.runId
-  }
-
-  set runId(runId: string) {
-    this.hosts.runId = runId
   }
 
   /** Queues the program's body as the root frame. */
@@ -427,12 +418,10 @@ export class Vm {
 
   /**
    * A synchronous extension call the program is in the middle of, from its `before` hook until its result is a
-   * program value or its concurrent call is running: it holds live host values, so it blocks a suspend. `key` is the
-   * blocking host call's key, or "" before one exists.
+   * program value or its concurrent call is running: it holds live host values.
    */
-  get activeExtension(): { readonly key: string; readonly path: string } | undefined {
-    const extension = this.hosts.extension
-    return extension === undefined ? undefined : { key: this.hosts.blockingKey, path: extension.path }
+  get activeExtension(): { readonly path: string } | undefined {
+    return this.hosts.extension
   }
 
   /** Saves the run's state as it is now. */
