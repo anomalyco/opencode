@@ -119,7 +119,10 @@ export function foldModule(code: string, file: string, cards: Record<string, unk
   if (!file.startsWith(root + path.sep) || !/\.(ts|tsx)$/.test(file)) return
   if (file === settingsModule || designModules.includes(file)) return
   if (!candidate.test(code)) return
-  return transformSync(code, {
+  // Babel installs its own Error.prepareStackTrace on first use, which breaks Error.captureStackTrace
+  // for non-Error objects under Bun (vite's errors, in the same test process); keep the original.
+  const prepare = Error.prepareStackTrace
+  const result = transformSync(code, {
     filename: file,
     babelrc: false,
     configFile: false,
@@ -127,6 +130,8 @@ export function foldModule(code: string, file: string, cards: Record<string, unk
     parserOpts: { plugins: ["jsx", "typescript"] },
     plugins: [foldSettings(file, cards, trimImports)],
   })
+  Error.prepareStackTrace = prepare
+  return result
 }
 
 type Imports = {
