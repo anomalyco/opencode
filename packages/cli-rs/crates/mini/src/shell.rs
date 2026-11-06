@@ -738,12 +738,13 @@ impl Mini {
                 return;
             };
             match incoming {
-                Incoming::Hydrated { messages, active } => {
+                Incoming::Hydrated { messages, active, inbox } => {
                     let running = active.contains(&transcript.session_id);
                     self.trace("recv.hydrate", json!({ "messages": messages.len(), "active": running }));
                     let reconnect = !transcript.initial;
-                    let output = transcript.hydrate(&messages, running);
-                    hydrated = Some((messages, active, reconnect));
+                    transcript.inbox(&inbox);
+                    let output = self.blocked(transcript.hydrate(&messages, running));
+                    hydrated = Some((messages, active, inbox, reconnect));
                     output
                 }
                 Incoming::Event(event) => {
@@ -767,12 +768,33 @@ impl Mini {
         let connected =
             output.patch.is_some() && self.transcript.borrow().as_ref().is_some_and(|transcript| transcript.connected);
         self.output(cx, output);
-        if let Some((messages, active, reconnect)) = hydrated {
+        if let Some((messages, active, inbox, reconnect)) = hydrated {
+            self.queued(&inbox);
+            // The first hydration's requests were listed when the session opened.
+            if reconnect {
+                self.footers.hydrate();
+            }
             self.footers.subagent_hydrate(&messages, &active, reconnect);
         }
         if connected {
             self.send_waiting(cx);
         }
+    }
+
+    /// A hydration's idle status names the request shown (`blockerStatus`).
+    fn blocked(&self, mut output: Output) -> Output {
+        if let Some(patch) = output.patch.as_mut().filter(|patch| patch.running == Some(false)) {
+            patch.status = Some(self.footers.blocker_status().to_owned());
+        }
+        output
+    }
+
+    /// The pending prompts a hydration listed (`syncPending`).
+    fn queued(self: &Rc<Self>, inbox: &[opencode_api::generated::SessionInboxUser]) {
+        self.prompt.set_queued(inbox);
+        self.footers.queue_changed();
+        self.schedule_height();
+        self.paint_status();
     }
 
     /// Writes a transcript output: footer events, commits, then the status.
@@ -1494,12 +1516,15 @@ impl Mini {
         let mini = self.clone();
         self.app.spawn(async move { replay::hydration(&client, &session, limit).await }, move |cx, result| {
             let output = match result {
-                Ok((messages, active)) => {
+                Ok((messages, active, inbox)) => {
                     mini.reset_for_replay(cx);
-                    mini.transcript
-                        .borrow_mut()
-                        .as_mut()
-                        .map(|transcript| transcript.replayed(&messages, active.contains(&transcript.session_id)))
+                    mini.queued(&inbox);
+                    mini.footers.hydrate();
+                    let output = mini.transcript.borrow_mut().as_mut().map(|transcript| {
+                        transcript.inbox(&inbox);
+                        transcript.replayed(&messages, active.contains(&transcript.session_id))
+                    });
+                    output.map(|output| mini.blocked(output))
                 }
                 // Nothing was cleared; the events that waited still apply.
                 Err(error) => {

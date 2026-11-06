@@ -332,6 +332,14 @@ impl Footers {
             self.0.close_route();
         }
         self.0.sync();
+        self.hydrate();
+    }
+
+    /// Lists the session's pending requests and the forms of no session at its location again, replacing what
+    /// was known (`hydrate` on connect, reconnect, and resize).
+    pub fn hydrate(&self) {
+        let Some(target) = self.0.target.borrow().clone() else { return };
+        let (client, session, directory) = (&target.client, target.session.as_str(), target.directory.as_str());
         let weak = Rc::downgrade(&self.0);
         let input = FormListInput { location: Some(LocationQueryInput { directory: Some(directory.to_owned()) }) };
         let globals = client.clone();
@@ -367,6 +375,15 @@ impl Footers {
                 inner.sync();
             },
         );
+    }
+
+    /// `blockerStatus`: the status of the request shown, if any.
+    pub fn blocker_status(&self) -> &'static str {
+        match self.0.state.borrow().shown {
+            Some(Shown::Permission(_)) => "awaiting permission",
+            Some(Shown::Form(_)) => "awaiting form",
+            _ => "",
+        }
     }
 
     /// A permission or form event of the session, or a form event of no session.

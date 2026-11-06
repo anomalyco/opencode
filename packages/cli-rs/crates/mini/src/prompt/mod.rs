@@ -27,7 +27,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use opencode_api::client::Client;
-use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, V2Event};
+use opencode_api::generated::{SessionInboxDelivery, SessionInboxItem, SessionInboxUser, V2Event};
 use opencode_local::cli_config::Info;
 use opencode_ui::dialog::{DialogKeymap, route_keys};
 use opencode_ui::keymap::{Keybinds, KeymapLayer, TuiCommand};
@@ -382,20 +382,12 @@ impl Prompt {
                 inner.refresh();
             }
         });
-        let Some(target) = self.0.target.borrow().clone() else {
-            return;
-        };
-        let weak = Rc::downgrade(&self.0);
-        let client = target.client.clone();
-        let session = target.session.clone();
-        self.0.app.spawn(async move { inbox(&client, &session).await }, move |_, queued| {
-            if let Some(inner) = weak.upgrade() {
-                inner.state.borrow_mut().queued = queued;
-            }
-        });
         if !resume {
             return;
         }
+        let Some(target) = self.0.target.borrow().clone() else {
+            return;
+        };
         let weak = Rc::downgrade(&self.0);
         self.0.app.spawn(async move { api::history(&target.client, &target.session).await }, move |_, history| {
             if let Some(inner) = weak.upgrade() {
@@ -437,6 +429,18 @@ impl Prompt {
             }
             _ => {}
         }
+    }
+
+    /// The session's pending prompts as a hydration listed them (`syncPending`).
+    pub fn set_queued(&self, items: &[SessionInboxUser]) {
+        self.0.state.borrow_mut().queued = items
+            .iter()
+            .map(|item| Queued {
+                id: item.id.as_str().to_owned(),
+                delivery: delivery(&item.delivery),
+                prompt: RunPrompt::from_message(&serde_json::to_value(&item.payload).unwrap_or_default()),
+            })
+            .collect();
     }
 
     /// A prompt this client admitted (`mergePending`).
@@ -1683,31 +1687,6 @@ fn delivery(value: &SessionInboxDelivery) -> Delivery {
         SessionInboxDelivery::Queue => Delivery::Queue,
         _ => Delivery::Steer,
     }
-}
-
-/// `session.inbox.list`: the session's pending user prompts.
-async fn inbox(client: &Client, session: &str) -> Vec<Queued> {
-    let input = opencode_api::generated::SessionInboxListInput { session_id: session.into() };
-    let Ok(call) = Client::session_inbox_list_call(&input) else {
-        return Vec::new();
-    };
-    client
-        .json::<Value>(call)
-        .await
-        .map(|value| {
-            value["data"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|item| item["type"] == "user")
-                .map(|item| Queued {
-                    id: item["id"].as_str().unwrap_or_default().to_owned(),
-                    delivery: delivery(&item["delivery"].as_str().unwrap_or_default().into()),
-                    prompt: RunPrompt::from_message(&item["payload"]),
-                })
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

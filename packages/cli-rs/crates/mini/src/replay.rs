@@ -18,12 +18,13 @@ use opencode_api::client::Client;
 use opencode_api::error::Error;
 use opencode_api::generated::{
     ExperimentalSessionWaitInput, LocationQueryInput, MessageListInput, MessageListInputOrder, ModelDefaultInput,
-    PromptFileAttachment, PromptFileSource, SessionID, SessionInboxItem, SessionInterruptInput,
-    SessionMessageAssistant, SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool,
-    SessionMessageAssistantToolState, SessionMessageAssistantToolState as ToolPartState,
-    SessionMessageAssistantToolTime, SessionMessageCompaction, SessionMessageInfo, SessionMessageShellExit,
-    SessionMessageShellOutput, SessionMessageToolStateCompleted, SessionMessageToolStateError,
-    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError, V2Event,
+    PromptFileAttachment, PromptFileSource, SessionID, SessionInboxInfo, SessionInboxItem, SessionInboxListInput,
+    SessionInboxUser, SessionInterruptInput, SessionMessageAssistant,
+    SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantTool, SessionMessageAssistantToolState,
+    SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
+    SessionMessageInfo, SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted,
+    SessionMessageToolStateError, SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
+    SessionStructuredError, V2Event,
 };
 use opentui::app::ProxyError;
 use opentui::prelude::*;
@@ -372,6 +373,17 @@ impl Transcript {
             usage: None,
         });
         output
+    }
+
+    /// The listed pending prompts replace the pending ones (`hydrate`), so each prints once it is delivered.
+    pub fn inbox(&mut self, items: &[SessionInboxUser]) {
+        self.pending = items
+            .iter()
+            .map(|item| {
+                let files = item.payload.files.clone().unwrap_or_default();
+                (item.id.as_str().to_owned(), Pending { text: item.payload.text.clone(), files })
+            })
+            .collect();
     }
 
     /// Starts a resize replay: events wait until [`Self::replayed`].
@@ -1417,6 +1429,8 @@ pub enum Incoming {
         messages: Vec<SessionMessageInfo>,
         /// The sessions running now (`session.active`).
         active: Vec<String>,
+        /// The session's pending prompts (`session.inbox.list`).
+        inbox: Vec<SessionInboxUser>,
     },
     Event(Box<V2Event>),
     /// The stream dropped; it reconnects.
@@ -1451,14 +1465,30 @@ pub async fn active(client: &Client) -> Vec<String> {
     client.session_active().await.map(|active| active.into_keys().collect()).unwrap_or_default()
 }
 
-/// Lists the messages and the running sessions, as a hydration does.
-pub async fn hydration(
-    client: &Client,
-    session: &str,
-    limit: u32,
-) -> Result<(Vec<SessionMessageInfo>, Vec<String>), String> {
-    let messages = messages(client, session, limit).await?;
-    Ok((messages, active(client).await))
+/// The session's pending user prompts (`session.inbox.list`); none when the read fails.
+pub async fn inbox(client: &Client, session: &str) -> Vec<SessionInboxUser> {
+    let input = SessionInboxListInput { session_id: SessionID(session.to_owned()) };
+    let items = client.session_inbox_list(&input).await.unwrap_or_else(|error| {
+        log::warn!("mini could not list the inbox: {error}");
+        Vec::new()
+    });
+    items
+        .into_iter()
+        .filter_map(|item| match item {
+            SessionInboxInfo::User(user) => Some(user),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What a hydration lists: the messages, the running sessions, and the pending prompts.
+pub type Hydration = (Vec<SessionMessageInfo>, Vec<String>, Vec<SessionInboxUser>);
+
+/// Lists the messages, the running sessions, and the pending prompts, as a hydration does.
+pub async fn hydration(client: &Client, session: &str, limit: u32) -> Result<Hydration, String> {
+    let (messages, active, inbox) =
+        futures_util::future::join3(messages(client, session, limit), active(client), inbox(client, session)).await;
+    Ok((messages?, active, inbox))
 }
 
 /// `connect`: subscribes, hydrates after `server.connected`, then forwards events, reconnecting after 250 ms
@@ -1485,8 +1515,8 @@ async fn stream(client: &Client, session: &str, limit: u32, proxy: &AppProxy) ->
         _ => return Err("Event stream disconnected".into()),
     }
     // Events that arrive meanwhile wait in the stream, so they reach the UI after the hydration.
-    let (messages, active) = hydration(client, session, limit).await?;
-    if !post(proxy, Incoming::Hydrated { messages, active }).await {
+    let (messages, active, inbox) = hydration(client, session, limit).await?;
+    if !post(proxy, Incoming::Hydrated { messages, active, inbox }).await {
         return Ok(());
     }
     while let Some(event) = events.next().await {
