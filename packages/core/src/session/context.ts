@@ -24,6 +24,7 @@ import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
+import { SessionContextLimit } from "./context-limit.js"
 
 export interface Selection {
   readonly session: SessionSchema.Info
@@ -88,8 +89,13 @@ const layer = Layer.effect(
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
+    const contextLimits = yield* SessionContextLimit.Service
 
-    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+    const resolveModel = Effect.fn("SessionContext.resolveModel")(function* (session: SessionSchema.Info) {
+      const model = yield* models.resolve(session, model.available)
+      const context = yield* contextLimits.get(session.id)
+      return context === null ? model : { ...model, limit: { ...model.limit, context, input: context } }
+    })
 
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
       const agent = yield* agents.get(Agent.ID.make("title"))
@@ -227,6 +233,7 @@ export const node = makeLocationNode({
     SessionRunnerModel.node,
     SessionModelRequest.node,
     SessionStore.node,
+    SessionContextLimit.node,
     SkillInstructions.node,
     Tool.node,
   ],
