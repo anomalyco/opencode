@@ -12,6 +12,8 @@
 //! - [`PluginApi`] and [`HostApi`] start with their own size and version. New entries are only ever added at the
 //!   end, and each new entry is optional (an `Option` of a function, null when absent). A reader treats entries
 //!   past the other side's size as absent, so a plugin built against an older minor version loads and works.
+//!   Every callback is an `Option` of a function, which has the layout of a nullable C function pointer, so a
+//!   null from C code is checked rather than called; the host refuses a plugin that leaves a required one null.
 //! - JSON payloads only gain optional fields, and readers ignore fields they do not know.
 //! - A newer plugin on an older host uses what the host offers: the host answers an unknown [`HostRequest`] with an
 //!   error, and a plugin that cannot work without a newer host sets [`PluginApi::requires_minor`], which the host
@@ -117,10 +119,11 @@ pub struct HostApi {
     pub major: u32,
     pub minor: u32,
     pub ctx: *mut c_void,
-    /// Handles a [`HostRequest`] and writes the JSON result into `out`.
-    pub call: unsafe extern "C" fn(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32,
+    /// Handles a [`HostRequest`] and writes the JSON result into `out`. A plugin treats a null entry, or a null
+    /// `free`, as a host that answers every request with an error.
+    pub call: Option<unsafe extern "C" fn(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32>,
     /// Frees a buffer `call` wrote.
-    pub free: unsafe extern "C" fn(owned: Owned),
+    pub free: Option<unsafe extern "C" fn(owned: Owned)>,
     // 1.2
     /// Whether the page theme is dark ([`THEME_DARK`]) or light ([`THEME_LIGHT`]), as TS plugins read
     /// `api.themeMode`.
@@ -140,8 +143,8 @@ pub struct HostApiV1_1 {
     pub major: u32,
     pub minor: u32,
     pub ctx: *mut c_void,
-    pub call: unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32,
-    pub free: unsafe extern "C" fn(Owned),
+    pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
+    pub free: Option<unsafe extern "C" fn(Owned)>,
 }
 
 /// Dark or light, from [`Host::theme_mode`].
@@ -163,14 +166,16 @@ pub struct PluginApi {
     /// The oldest host minor version the plugin works with; 0 for any.
     pub requires_minor: u32,
     /// Runs the plugin's setup with `options` (the JSON of its `plugins` entry's options, or empty). On [`OK`] it
-    /// sets `instance` and writes the [`Manifest`] JSON into `out`.
-    pub create:
+    /// sets `instance` and writes the [`Manifest`] JSON into `out`. Required: the host refuses a null entry.
+    pub create: Option<
         unsafe extern "C" fn(host: *const HostApi, options: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32,
-    /// Handles a [`Request`] and writes the JSON result into `out`.
-    pub call: unsafe extern "C" fn(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32,
-    pub destroy: unsafe extern "C" fn(instance: *mut c_void),
-    /// Frees a buffer `create` or `call` wrote.
-    pub free: unsafe extern "C" fn(owned: Owned),
+    >,
+    /// Handles a [`Request`] and writes the JSON result into `out`. Required.
+    pub call: Option<unsafe extern "C" fn(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32>,
+    /// Destroys an instance. Optional: a plugin without per-instance state leaves it null.
+    pub destroy: Option<unsafe extern "C" fn(instance: *mut c_void)>,
+    /// Frees a buffer `create`, `call`, or `describe` wrote. Required.
+    pub free: Option<unsafe extern "C" fn(owned: Owned)>,
     // 1.1
     /// Writes the plugin's [`Metadata`] JSON into `out`.
     pub describe: Option<unsafe extern "C" fn(out: *mut Owned) -> i32>,
@@ -185,10 +190,10 @@ pub struct PluginApiV1_0 {
     pub major: u32,
     pub minor: u32,
     pub requires_minor: u32,
-    pub create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-    pub call: unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32,
-    pub destroy: unsafe extern "C" fn(*mut c_void),
-    pub free: unsafe extern "C" fn(Owned),
+    pub create: Option<unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32>,
+    pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
+    pub destroy: Option<unsafe extern "C" fn(*mut c_void)>,
+    pub free: Option<unsafe extern "C" fn(Owned)>,
 }
 
 /// What [`PluginApi::describe`] returns (1.1).
@@ -358,11 +363,15 @@ impl Host {
         let json = serde_json::to_vec(request).map_err(|error| error.to_string())?;
         let mut out = Owned::EMPTY;
         // SAFETY: the host keeps `api` alive until it destroys the instance this handle belongs to.
+        let api = unsafe { self.api.as_ref() }.ok_or("no host")?;
+        let (Some(call), Some(free)) = (api.call, api.free) else {
+            return Err("the host takes no requests".to_owned());
+        };
+        // SAFETY: `call` writes `out`, which `free` takes back.
         let (status, bytes) = unsafe {
-            let api = &*self.api;
-            let status = (api.call)(api.ctx, Bytes::new(&json), &mut out);
+            let status = call(api.ctx, Bytes::new(&json), &mut out);
             let bytes = out.to_vec();
-            (api.free)(out);
+            free(out);
             (status, bytes)
         };
         match status {
@@ -400,7 +409,7 @@ impl Host {
     pub fn theme_mode(&self) -> Option<ThemeMode> {
         // SAFETY: the host keeps `api` alive until it destroys the instance; `size` says which entries it has.
         let mode = unsafe {
-            let api = &*self.api;
+            let api = self.api.as_ref()?;
             let end = std::mem::offset_of!(HostApi, theme_mode) + size_of::<Option<unsafe extern "C" fn()>>();
             if api.size < end {
                 return None;
@@ -520,10 +529,10 @@ macro_rules! export_plugin {
                 major: $major,
                 minor: $minor,
                 requires_minor: $requires,
-                create,
-                call: $crate::runtime::call,
-                destroy: $crate::runtime::destroy,
-                free: $crate::runtime::free,
+                create: Some(create),
+                call: Some($crate::runtime::call),
+                destroy: Some($crate::runtime::destroy),
+                free: Some($crate::runtime::free),
                 describe: Some(describe),
             };
             &API
@@ -539,10 +548,10 @@ macro_rules! export_plugin {
                 major: 1,
                 minor: 0,
                 requires_minor: 0,
-                create,
-                call: $crate::runtime::call,
-                destroy: $crate::runtime::destroy,
-                free: $crate::runtime::free,
+                create: Some(create),
+                call: Some($crate::runtime::call),
+                destroy: Some($crate::runtime::destroy),
+                free: Some($crate::runtime::free),
             };
             (&API as *const $crate::PluginApiV1_0).cast()
         }
@@ -591,9 +600,12 @@ pub mod runtime {
                 routes: Vec::new(),
                 commands: Vec::new(),
             };
+            if instance.is_null() {
+                return Err("no instance pointer".to_owned());
+            }
             setup(&mut registered)?;
             let manifest = serde_json::to_vec(&registered.manifest).map_err(|error| error.to_string())?;
-            // SAFETY: `instance` is valid for writes during the call.
+            // SAFETY: `instance` is non-null and valid for writes during the call.
             unsafe { *instance = Box::into_raw(Box::new(registered)).cast() };
             Ok(manifest)
         })
@@ -609,11 +621,12 @@ pub mod runtime {
     }
 
     /// # Safety
-    /// `instance` must come from [`create`] and not be destroyed.
+    /// `instance` must come from [`create`] and not be destroyed, or be null.
     pub unsafe extern "C" fn call(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: as documented.
-        let (setup, request) = unsafe { (&*instance.cast::<Setup>(), request.as_slice()) };
+        let (setup, request) = unsafe { (instance.cast::<Setup>().as_ref(), request.as_slice()) };
         guard(out, || {
+            let setup = setup.ok_or("no instance")?;
             let request: Request = serde_json::from_slice(request).map_err(|error| error.to_string())?;
             let value = setup.handle(request)?;
             serde_json::to_vec(&value).map_err(|error| error.to_string())
@@ -621,8 +634,11 @@ pub mod runtime {
     }
 
     /// # Safety
-    /// `instance` must come from [`create`] and not be destroyed.
+    /// `instance` must come from [`create`] and not be destroyed, or be null.
     pub unsafe extern "C" fn destroy(instance: *mut c_void) {
+        if instance.is_null() {
+            return;
+        }
         // SAFETY: as documented.
         let setup = unsafe { Box::from_raw(instance.cast::<Setup>()) };
         let _ = catch_unwind(AssertUnwindSafe(move || drop(setup)));
@@ -635,13 +651,18 @@ pub mod runtime {
         drop(unsafe { owned.into_vec() });
     }
 
+    /// Runs `f` and writes its result into `out`. With a null `out` nothing runs: there is nowhere to put the
+    /// result.
     fn guard(out: *mut Owned, f: impl FnOnce() -> Result<Vec<u8>, String>) -> i32 {
+        if out.is_null() {
+            return ERROR;
+        }
         let (status, bytes) = match catch_unwind(AssertUnwindSafe(f)) {
             Ok(Ok(bytes)) => (OK, bytes),
             Ok(Err(error)) => (ERROR, error.into_bytes()),
             Err(panic) => (PANIC, panic_message(&*panic).into_bytes()),
         };
-        // SAFETY: `out` is valid for writes during the call.
+        // SAFETY: `out` is non-null and valid for writes during the call.
         unsafe { *out = Owned::from_vec(bytes) };
         status
     }
@@ -676,6 +697,7 @@ mod tests {
     #[test]
     fn the_theme_mode_is_read_only_when_the_host_offers_it() {
         let ctx = std::ptr::null_mut();
+        let (call, free) = (Some(call as _), Some(free as _));
         let current =
             HostApi { size: size_of::<HostApi>(), major: 1, minor: 2, ctx, call, free, theme_mode: Some(light) };
         assert_eq!(Host { api: &current }.theme_mode(), Some(ThemeMode::Light));
@@ -683,5 +705,52 @@ mod tests {
         assert_eq!(Host { api: &null }.theme_mode(), None);
         let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
         assert_eq!(Host { api: std::ptr::from_ref(&old).cast() }.theme_mode(), None);
+    }
+
+    // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
+    #[test]
+    fn a_null_host_or_host_callback_is_an_error() {
+        let host = Host { api: std::ptr::null() };
+        assert_eq!(host.storage_get("count"), None);
+        assert_eq!(host.storage_set("count", "{}"), Err("no host".to_owned()));
+        assert_eq!(host.theme_mode(), None);
+        let ctx = std::ptr::null_mut();
+        let api =
+            HostApi { size: size_of::<HostApi>(), major: 1, minor: 2, ctx, call: None, free: None, theme_mode: None };
+        assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+        let api = HostApi { call: Some(call), ..api };
+        assert_eq!(Host { api: &api }.storage_set("count", "{}"), Err("the host takes no requests".to_owned()));
+    }
+
+    // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never
+    // dereference either.
+    #[test]
+    fn the_shims_check_null_pointers() {
+        let request = serde_json::to_vec(&Request::Route { name: "x".to_owned() }).unwrap();
+        let mut out = Owned::EMPTY;
+        // SAFETY: null pointers are what is under test; `out` is freed by the same library.
+        unsafe {
+            assert_eq!(runtime::call(std::ptr::null_mut(), Bytes::new(&request), &mut out), ERROR);
+            assert_eq!(out.to_vec(), b"no instance");
+            runtime::free(out);
+            assert_eq!(runtime::call(std::ptr::null_mut(), Bytes::new(&request), std::ptr::null_mut()), ERROR);
+            runtime::destroy(std::ptr::null_mut());
+            let mut out = Owned::EMPTY;
+            let status =
+                runtime::create("x", |_| Ok(()), std::ptr::null(), Bytes::new(b""), std::ptr::null_mut(), &mut out);
+            assert_eq!((status, out.to_vec()), (ERROR, b"no instance pointer".to_vec()));
+            runtime::free(out);
+            let mut instance = std::ptr::null_mut();
+            let status = runtime::create(
+                "x",
+                |_| Ok(()),
+                std::ptr::null(),
+                Bytes::new(b""),
+                &mut instance,
+                std::ptr::null_mut(),
+            );
+            assert_eq!(status, ERROR);
+            assert!(instance.is_null());
+        }
     }
 }

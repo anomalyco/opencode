@@ -115,7 +115,7 @@ struct Library {
     minor: u32,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
     call: unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32,
-    destroy: unsafe extern "C" fn(*mut c_void),
+    destroy: Option<unsafe extern "C" fn(*mut c_void)>,
     free: unsafe extern "C" fn(Owned),
     describe: Option<unsafe extern "C" fn(*mut Owned) -> i32>,
 }
@@ -136,18 +136,27 @@ impl Library {
         let entry = unsafe { library.get::<abi::EntryFn>(abi::ENTRY.as_bytes()) }
             .map_err(|_| format!("not an opencode-rs plugin: no `{}` symbol", abi::ENTRY))?;
         // SAFETY: as above; the table it returns lives as long as the library.
-        let api = unsafe { entry() };
+        let opened = Self::from_table(unsafe { entry() })?;
+        std::mem::forget(library);
+        Ok(opened)
+    }
+
+    /// Checks the table `api` points to and takes its entries. Nothing past the `size` it declares is read.
+    fn from_table(api: *const PluginApi) -> Result<Self, String> {
         if api.is_null() {
             return Err(format!("`{}` returned no table", abi::ENTRY));
         }
-        // SAFETY: every table of any version starts with `size`, `major`, and `minor`.
-        let (size, major, minor) = unsafe {
-            (
-                std::ptr::addr_of!((*api).size).read(),
-                std::ptr::addr_of!((*api).major).read(),
-                std::ptr::addr_of!((*api).minor).read(),
-            )
-        };
+        if !api.is_aligned() {
+            return Err("plugin table is not aligned".to_owned());
+        }
+        // SAFETY: every table of any version starts with `size`, and `api` is aligned and non-null.
+        let size = unsafe { std::ptr::addr_of!((*api).size).read() };
+        if size < offset_of!(PluginApiV1_0, requires_minor) {
+            return Err(format!("plugin table is {size} bytes, shorter than its version header"));
+        }
+        // SAFETY: `size` covers `major` and `minor`.
+        let (major, minor) =
+            unsafe { (std::ptr::addr_of!((*api).major).read(), std::ptr::addr_of!((*api).minor).read()) };
         if major != ABI_MAJOR {
             return Err(format!(
                 "plugin ABI {major}.{minor} is not supported: this opencode-rs loads ABI {ABI_MAJOR}.x plugins \
@@ -157,7 +166,7 @@ impl Library {
         if size < size_of::<PluginApiV1_0>() {
             return Err(format!("plugin table is {size} bytes, shorter than the ABI {ABI_MAJOR}.0 core"));
         }
-        // SAFETY: the 1.0 core is within `size`.
+        // SAFETY: the 1.0 core is within `size`; its callbacks are nullable.
         let core = unsafe { &*api.cast::<PluginApiV1_0>() };
         if core.requires_minor > HOST_MINOR {
             return Err(format!(
@@ -166,14 +175,15 @@ impl Library {
                 core.requires_minor
             ));
         }
+        let required = |name: &str| format!("plugin table has a null `{name}` callback");
+        let create = core.create.ok_or_else(|| required("create"))?;
+        let call = core.call.ok_or_else(|| required("call"))?;
+        let free = core.free.ok_or_else(|| required("free"))?;
         let describe = has::<Option<unsafe extern "C" fn(*mut Owned) -> i32>>(size, offset_of!(PluginApi, describe))
             // SAFETY: `size` covers the entry.
             .then(|| unsafe { std::ptr::addr_of!((*api).describe).read() })
             .flatten();
-        let opened =
-            Self { minor, create: core.create, call: core.call, destroy: core.destroy, free: core.free, describe };
-        std::mem::forget(library);
-        Ok(opened)
+        Ok(Self { minor, create, call, destroy: core.destroy, free, describe })
     }
 
     /// The plugin's version, when it has `describe` (1.1).
@@ -230,8 +240,8 @@ impl<H: Host> Instance<H> {
             major: ABI_MAJOR,
             minor: HOST_MINOR,
             ctx: std::ptr::from_ref::<RefCell<Ctx<H>>>(&ctx).cast_mut().cast(),
-            call: host_call::<H>,
-            free: host_free,
+            call: Some(host_call::<H>),
+            free: Some(host_free),
             theme_mode: Some(host_theme_mode::<H>),
         });
         let mut handle = std::ptr::null_mut();
@@ -289,16 +299,23 @@ impl<H: Host> Instance<H> {
 
 impl<H: Host> Drop for Instance<H> {
     fn drop(&mut self) {
-        // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
-        unsafe { (self.library.destroy)(self.handle) };
+        if let Some(destroy) = self.library.destroy {
+            // SAFETY: `handle` came from `create` and is destroyed once; the plugin catches its own panics.
+            unsafe { destroy(self.handle) };
+        }
     }
 }
 
 /// The host's side of [`HostApi::call`]. Catches the host's panics.
 unsafe extern "C" fn host_call<H: Host>(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-    // SAFETY: `ctx` is the `RefCell<Ctx<H>>` this instance was created with; `request` is valid for the call.
-    let (ctx, request) = unsafe { (&*ctx.cast::<RefCell<Ctx<H>>>(), request.as_slice()) };
+    if out.is_null() {
+        return abi::ERROR;
+    }
+    // SAFETY: `ctx` is the `RefCell<Ctx<H>>` this instance was created with, or null; `request` is valid for the
+    // call.
+    let (ctx, request) = unsafe { (ctx.cast::<RefCell<Ctx<H>>>().as_ref(), request.as_slice()) };
     let result = catch_unwind(AssertUnwindSafe(|| {
+        let ctx = ctx.ok_or("no host context")?;
         let request: HostRequest = serde_json::from_slice(request)
             .map_err(|error| format!("unsupported host request (host ABI {ABI_MAJOR}.{HOST_MINOR}): {error}"))?;
         let mut ctx = ctx.try_borrow_mut().map_err(|_| "the host is busy".to_owned())?;
@@ -316,9 +333,9 @@ unsafe extern "C" fn host_call<H: Host>(ctx: *mut c_void, request: Bytes, out: *
 
 /// The host's side of [`HostApi::theme_mode`]. A host that is gone or panics answers dark.
 unsafe extern "C" fn host_theme_mode<H: Host>(ctx: *mut c_void) -> u32 {
-    // SAFETY: `ctx` is the `RefCell<Ctx<H>>` this instance was created with.
-    let ctx = unsafe { &*ctx.cast::<RefCell<Ctx<H>>>() };
-    let host = ctx.try_borrow().ok().and_then(|ctx| ctx.host.upgrade());
+    // SAFETY: `ctx` is the `RefCell<Ctx<H>>` this instance was created with, or null.
+    let ctx = unsafe { ctx.cast::<RefCell<Ctx<H>>>().as_ref() };
+    let host = ctx.and_then(|ctx| ctx.try_borrow().ok()).and_then(|ctx| ctx.host.upgrade());
     let light = catch_unwind(AssertUnwindSafe(|| host.is_some_and(|host| host.theme_mode() == ThemeMode::Light)));
     if light.unwrap_or(false) { abi::THEME_LIGHT } else { abi::THEME_DARK }
 }
