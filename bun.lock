@@ -249,7 +249,6 @@
         "jose": "6.0.11",
         "jsonc-parser": "3.3.1",
         "mime-types": "3.0.2",
-        "undici": "8.12.3",
         "which": "6.0.1",
         "zod": "catalog:",
       },
@@ -860,6 +859,7 @@
         "npm-package-arg": "13.0.2",
         "open": "11.0.4",
         "pacote": "21.5.1",
+        "undici": "8.12.3",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",

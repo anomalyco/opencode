@@ -4,6 +4,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import * as NodePath from "@effect/platform-node/NodePath"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
+import { UndiciFetch } from "../undici-fetch.js"
 import { makeGlobalNode } from "./app-node.js"
 
 export const filesystem = makeGlobalNode({ service: FileSystem.FileSystem, layer: NodeFileSystem.layer, deps: [] })
@@ -12,14 +13,16 @@ export const path = makeGlobalNode({ service: Path.Path, layer: NodePath.layer, 
 export type Fetch = (input: Request | string | URL, init?: RequestInit) => Promise<Response>
 /**
  * The fetch behind `httpClient`, AI SDK providers and remote MCP servers: `fetch` when given, so an embedder can route requests through
- * e.g. a Service Binding, otherwise the `FetchHttpClient.Fetch` in scope when the graph is built.
+ * e.g. a Service Binding. Otherwise undici's fetch on Node, whose default 300s headers and body timeouts would cut slow providers, and
+ * elsewhere the `FetchHttpClient.Fetch` in scope when the graph is built.
  */
-export const fetchLayer = (fetch?: Fetch) =>
+export const fetchLayer = (fetch?: Fetch, runtime: () => typeof globalThis.fetch | undefined = UndiciFetch.shared) =>
   Layer.effect(
     FetchHttpClient.Fetch,
     Effect.gen(function* () {
       // Bun's `typeof fetch` adds `preconnect`, which nothing here calls.
-      return fetch ? (fetch as typeof globalThis.fetch) : yield* FetchHttpClient.Fetch
+      if (fetch) return fetch as typeof globalThis.fetch
+      return runtime() ?? (yield* FetchHttpClient.Fetch)
     }),
   )
 export const httpFetch = makeGlobalNode({ service: FetchHttpClient.Fetch, layer: fetchLayer(), deps: [] })
