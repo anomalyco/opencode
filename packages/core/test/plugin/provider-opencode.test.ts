@@ -26,7 +26,6 @@ import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
-import { Skill } from "@opencode/core/skill"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
@@ -52,11 +51,6 @@ const consoleDocument = (config: Config.Interface) =>
       ),
     )
 const consoleSearch = { id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" }
-// A Console skill archive as the plugin downloads it: the version's files, with SKILL.md carrying the frontmatter.
-const skillBundle = {
-  slug: "deploy",
-  files: [{ path: "SKILL.md", content: "---\nname: Deploy\ndescription: Deploys the service.\n---\n\n# Deploy\n" }],
-}
 const consolePolicies = (config: Config.Interface) =>
   consoleDocument(config).pipe(Effect.map((document) => document?.info.policies ?? []))
 
@@ -1553,107 +1547,6 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.live("downloads a skill through a redirect without sending credentials to another origin", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const downloads: Array<{ path: string; search: string; authorization: string | null; orgID: string | null }> =
-          []
-        const server = Bun.serve({
-          port: 0,
-          fetch: (request) => {
-            const url = new URL(request.url)
-            downloads.push({
-              path: url.pathname,
-              search: url.search,
-              authorization: request.headers.get("authorization"),
-              orgID: request.headers.get("x-org-id"),
-            })
-            if (url.pathname === "/api/v2/config") {
-              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
-            }
-            if (url.pathname === "/api/v2/library/skills/deploy") {
-              // Skill archives come from presigned storage on its own host, where the signature covers the encoding.
-              const target = new URL("/archive/deploy.json?expires=1&sig=a%20b~c", url)
-              target.hostname = "127.0.0.1"
-              return Response.redirect(target.toString(), 302)
-            }
-            return Response.json(skillBundle)
-          },
-        })
-        return { downloads, server }
-      }),
-      ({ downloads, server }) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const skills = yield* Skill.Service
-          yield* credentials.create({
-            integrationID: Integration.ID.make("opencode"),
-            value: Credential.Key.make({
-              type: "key",
-              key: "secret",
-              metadata: { server: server.url.origin, orgID: "org_test" },
-            }),
-          })
-          yield* addPlugin()
-
-          yield* eventually(skills.list(), (list) => list.some((skill) => skill.id === Skill.ID.make("deploy")))
-          expect(downloads).toContainEqual({
-            path: "/api/v2/library/skills/deploy",
-            search: "",
-            authorization: "Bearer secret",
-            orgID: "org_test",
-          })
-          expect(downloads.at(-1)).toEqual({
-            path: "/archive/deploy.json",
-            search: "?expires=1&sig=a%20b~c",
-            authorization: null,
-            orgID: null,
-          })
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.live("keeps credentials on a same-origin skill redirect", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const downloads: Array<{ path: string; authorization: string | null }> = []
-        const server = Bun.serve({
-          port: 0,
-          fetch: (request) => {
-            const url = new URL(request.url)
-            downloads.push({ path: url.pathname, authorization: request.headers.get("authorization") })
-            if (url.pathname === "/api/v2/config") {
-              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
-            }
-            if (url.pathname === "/api/v2/library/skills/deploy")
-              return Response.redirect(`${url.origin}/assets/deploy.json`, 302)
-            return Response.json(skillBundle)
-          },
-        })
-        return { downloads, server }
-      }),
-      ({ downloads, server }) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const skills = yield* Skill.Service
-          yield* credentials.create({
-            integrationID: Integration.ID.make("opencode"),
-            value: Credential.Key.make({
-              type: "key",
-              key: "secret",
-              metadata: { server: server.url.origin, orgID: "org_test" },
-            }),
-          })
-          yield* addPlugin()
-
-          yield* eventually(skills.list(), (list) => list.some((skill) => skill.id === Skill.ID.make("deploy")))
-          expect(downloads.at(-1)).toEqual({ path: "/assets/deploy.json", authorization: "Bearer secret" })
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
   it.live("closes a rejected hosted search response without waiting for its body", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -2029,7 +1922,7 @@ describe("OpencodePlugin with a Console config", () => {
   )
 
   it.effect(
-    "passes only providers, remote MCP servers, policies, and the web search selection, without credentials",
+    "passes only providers, remote MCP servers, policies, web search, and remote instructions and skills, without credentials",
     () =>
       Effect.acquireUseRelease(
         Effect.sync(() =>
@@ -2064,7 +1957,20 @@ describe("OpencodePlugin with a Console config", () => {
                 commands: { console: { template: "Console command" } },
                 permissions: [{ action: "shell", resource: "*", effect: "allow" }],
                 formatter: { console: { command: ["/tmp/console-formatter"] } },
-                instructions: ["/tmp/console-instructions.md"],
+                instructions: [
+                  "/tmp/console-instructions.md",
+                  "{file:~/.ssh/id_rsa}",
+                  { url: "file:///etc/passwd" },
+                  "https://remote/instructions.md",
+                  { url: "https://remote/team.md", headers: { authorization: "Bearer library" } },
+                ],
+                skills: [
+                  "~/.ssh",
+                  "../secret",
+                  "**/*.md",
+                  { url: "{env:HOME}" },
+                  { url: "https://remote/skills/", headers: { authorization: "Bearer library" } },
+                ],
               }),
           }),
         ),
@@ -2080,10 +1986,20 @@ describe("OpencodePlugin with a Console config", () => {
 
             const info = required(yield* consoleDocument(config)).info
             expect(Object.keys(Schema.encodeSync(Info)(info)).toSorted()).toEqual([
+              "instructions",
               "mcp",
               "policies",
               "providers",
+              "skills",
               "websearch",
+            ])
+            // Remote config reads no local files, so only HTTP(S) instructions and skills remain.
+            expect(info.instructions).toEqual([
+              "https://remote/instructions.md",
+              { url: "https://remote/team.md", headers: { authorization: "Bearer library" } },
+            ])
+            expect(info.skills).toEqual([
+              { url: "https://remote/skills/", headers: { authorization: "Bearer library" } },
             ])
             expect(Object.keys(info.mcp?.servers ?? {})).toEqual(["remote"])
             const remote = required(info.providers?.remote)

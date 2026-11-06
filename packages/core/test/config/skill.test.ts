@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
@@ -16,6 +17,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Location } from "@opencode/core/location"
+import { IntegrationID } from "@opencode/schema/integration-id"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillDiscovery } from "@opencode/core/skill/discovery"
@@ -246,6 +248,60 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Deploy")
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Second")
           expect(pulls).toEqual(["https://example.test/skills/"])
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads integration skills first so local skills override them, sending each URL's latest headers", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project", ".opencode")
+          const cached = path.join(tmp.path, "cache")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(project, "skills", "review"), { recursive: true })
+            await fs.mkdir(path.join(cached, "review"), { recursive: true })
+            await fs.mkdir(path.join(cached, "deploy"), { recursive: true })
+            await write(path.join(project, "skills"), "review", "Project")
+            await write(cached, "review", "Workspace")
+            await write(cached, "deploy", "Workspace deploy")
+          })
+          const pulls: { url: string; headers?: Readonly<Record<string, string>> }[] = []
+          const discovery = SkillDiscovery.Service.of({
+            pull: (url, headers) => {
+              pulls.push({ url, ...(headers ? { headers } : {}) })
+              return Effect.succeed([
+                AbsolutePath.make(path.join(cached, "review")),
+                AbsolutePath.make(path.join(cached, "deploy")),
+              ])
+            },
+          })
+          const workspace = "https://console.example.test/skills/"
+
+          const skill = yield* startEntries(
+            [
+              ConfigIntegration.make({
+                integrationID: IntegrationID.make("opencode"),
+                connection: { type: "env", name: "OPENCODE_API_KEY" },
+                info: { skills: [{ url: workspace, headers: { authorization: "Bearer old" } }] },
+              }),
+              new Directory({ type: "directory", path: AbsolutePath.make(project) }),
+              new Document({
+                type: "document",
+                info: decode({
+                  skills: [{ url: workspace, headers: { authorization: "Bearer new" } }, { url: "file:///etc" }],
+                }),
+              }),
+            ],
+            tmp.path,
+            tmp.path,
+            discovery,
+          )
+          expect(pulls).toEqual([{ url: workspace, headers: { authorization: "Bearer new" } }])
+          const list = yield* skill.list()
+          expect(list.find((item) => item.id === "review")?.description).toBe("Project")
+          expect(list.find((item) => item.id === "deploy")?.description).toBe("Workspace deploy")
         }),
       ),
     ),

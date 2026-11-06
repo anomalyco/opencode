@@ -1,12 +1,13 @@
 export * as ConfigIntegration from "./integration.js"
 
 import { Option, Schema, SchemaGetter } from "effect"
-import { Config, type Entry } from "@opencode/schema/config"
+import { Config, type Entry, type Source } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Connection } from "@opencode/schema/connection"
 import { IntegrationID } from "@opencode/schema/integration-id"
+import { RemoteHttp } from "../remote-http.js"
 
 // Drop statements whose action or effect is a value this version does not know, so a newer remote source can
 // extend either enum. Malformed statements still fail validation.
@@ -34,6 +35,8 @@ export const Remote = Schema.Struct({
   mcp: Config.Info.fields.mcp,
   policies: Policies.pipe(Schema.optional),
   websearch: Config.Info.fields.websearch,
+  instructions: Config.Info.fields.instructions,
+  skills: Config.Info.fields.skills,
 })
 export type Remote = typeof Remote.Type
 
@@ -68,8 +71,8 @@ export function suppliers(entries: readonly Entry[]) {
 
 /**
  * Builds an integration document from the allow-listed keys of a remote config: providers, remote MCP servers,
- * policies, and the web search selection. A remote source can never load plugins, run commands, or change any
- * other local behavior through config.
+ * policies, the web search selection, and HTTP(S) instructions and skills. A remote source can never load plugins,
+ * run commands, read local files, or change any other local behavior through config.
  */
 export function make(input: {
   readonly integrationID: IntegrationID
@@ -120,8 +123,16 @@ export function make(input: {
         }),
       policies: input.info.policies,
       websearch: input.info.websearch,
+      // Paths would read files on this machine. Remote config is never variable-substituted, so `{file:...}` stays
+      // a literal that fails the URL check too.
+      instructions: input.info.instructions?.filter(isRemote),
+      skills: input.info.skills?.filter(isRemote),
     }),
   })
+}
+
+function isRemote(source: Source) {
+  return RemoteHttp.isHttpUrl(typeof source === "string" ? source : source.url)
 }
 
 function withoutCredentials<Value>(settings: Readonly<Record<string, Value>> | undefined) {

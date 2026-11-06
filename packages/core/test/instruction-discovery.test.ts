@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, PlatformError, PubSub, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Logger, PlatformError, PubSub, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import fs from "fs/promises"
 import path from "path"
@@ -11,7 +11,7 @@ import { Watcher } from "@opencode/core/filesystem/watcher"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
-import { Document, Info } from "@opencode/schema/config"
+import { Document, Info, type Source } from "@opencode/schema/config"
 import { Event } from "@opencode/schema/event"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -30,7 +30,7 @@ const instructionLayer = (input: {
   home?: string
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
-  instructions?: string[]
+  instructions?: Source[]
   http?: HttpClient.HttpClient
   project?: boolean
 }) => {
@@ -74,7 +74,7 @@ const start = Effect.fnUntraced(function* (ctx = host()) {
   return yield* InstructionDiscovery.Service
 })
 
-const configured = (instructions: string[]) => new Document({ type: "document", info: new Info({ instructions }) })
+const configured = (instructions: Source[]) => new Document({ type: "document", info: new Info({ instructions }) })
 
 const readFailure = (tag: "NotFound" | "Unknown", code: string, file: string) =>
   PlatformError.systemError({
@@ -404,6 +404,128 @@ describe("ConfigInstructionPlugin.Plugin", () => {
               config: path.join(tmp.path, "global"),
               instructions: [first, remote],
               http: respond(() => responses.shift() ?? new Response(null, { status: 500 })),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("sends a remote source's headers only to its own origin and keeps them out of paths and logs", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const same = "https://example.test/team.md"
+        const cross = "https://example.test/moved.md"
+        const failing = "https://example.test/private.md"
+        const requests: { url: string; authorization?: string; token?: string; accept?: string }[] = []
+        const logs: string[] = []
+        return Effect.gen(function* () {
+          const discovery = yield* start()
+          const initialized = yield* readInitial(yield* discovery.load())
+          expect(initialized.text).toBe(
+            [`Instructions from: ${same}\nteam`, `Instructions from: ${cross}\nmoved`].join("\n\n"),
+          )
+          expect(requests.toSorted((a, b) => a.url.localeCompare(b.url))).toEqual([
+            // Another origin gets none of the source's headers, credential or not.
+            { url: "https://cdn.example.test/moved.md" },
+            {
+              url: "https://example.test/moved.md",
+              authorization: "Bearer one",
+              token: "two",
+              accept: "text/markdown",
+            },
+            { url: "https://example.test/private.md", authorization: "Bearer one", token: "two" },
+            { url: "https://example.test/redirected/team.md", authorization: "Bearer one", token: "two" },
+            { url: "https://example.test/team.md", authorization: "Bearer one", token: "two" },
+          ])
+          expect(logs.join("\n")).toContain(failing)
+          expect(logs.join("\n")).not.toContain("Bearer one")
+          expect(logs.join("\n")).not.toMatch(/"two"/)
+        }).pipe(
+          Effect.provide(
+            Logger.layer([Logger.map(Logger.formatStructured, (entry) => logs.push(JSON.stringify(entry)))]),
+          ),
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: [
+                { url: same, headers: { authorization: "Bearer one", "X-Token": "two" } },
+                {
+                  url: cross,
+                  headers: { authorization: "Bearer one", "X-Token": "two", accept: "text/markdown" },
+                },
+                { url: failing, headers: { authorization: "Bearer one", "X-Token": "two" } },
+                { url: path.join(tmp.path, "local.md") },
+              ],
+              http: HttpClient.make((request) =>
+                Effect.sync(() => {
+                  requests.push({
+                    url: request.url,
+                    ...(request.headers.authorization ? { authorization: request.headers.authorization } : {}),
+                    ...(request.headers["x-token"] ? { token: request.headers["x-token"] } : {}),
+                    ...(request.headers.accept ? { accept: request.headers.accept } : {}),
+                  })
+                  const response =
+                    request.url === same
+                      ? Response.redirect("https://example.test/redirected/team.md", 302)
+                      : request.url === cross
+                        ? Response.redirect("https://cdn.example.test/moved.md", 307)
+                        : request.url === failing
+                          ? new Response(null, { status: 401 })
+                          : new Response(request.url.endsWith("team.md") ? "team" : "moved")
+                  return HttpClientResponse.fromWeb(request, response)
+                }),
+              ),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("renders a diff when a remote source's content changes as its headers rotate", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const remote = "https://example.test/team.md"
+        const lines = Array.from({ length: 20 }, (_, index) => `keep ${index}`)
+        const contents: Record<string, string> = {
+          "Bearer one": ["old", ...lines].join("\n"),
+          "Bearer two": ["new", ...lines].join("\n"),
+        }
+        return Effect.gen(function* () {
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const config = yield* Config.Test
+          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          const initialized = yield* readInitial(yield* discovery.load())
+
+          yield* config.setEntries([configured([{ url: remote, headers: { authorization: "Bearer two" } }])])
+          yield* triggerAndWait(PubSub.publish(events, configUpdated()).pipe(Effect.asVoid))
+          const updated = (yield* readUpdate(yield* discovery.load(), initialized)).text
+          expect(updated).toContain(`The instructions from ${remote} changed. Here's the diff:`)
+          expect(updated).toContain("-old\n+new")
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: [{ url: remote, headers: { authorization: "Bearer one" } }],
+              http: HttpClient.make((request) =>
+                Effect.succeed(
+                  HttpClientResponse.fromWeb(
+                    request,
+                    new Response(contents[request.headers.authorization ?? ""] ?? null, {
+                      status: request.headers.authorization ? 200 : 401,
+                    }),
+                  ),
+                ),
+              ),
               locationServiceLayer: Layer.succeed(
                 Location.Service,
                 Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),

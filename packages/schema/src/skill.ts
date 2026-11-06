@@ -21,6 +21,7 @@ export interface UrlSource extends Schema.Schema.Type<typeof UrlSource> {}
 export const UrlSource = Schema.Struct({
   type: Schema.tag("url"),
   url: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
 }).annotate({ identifier: "Skill.UrlSource" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
@@ -49,6 +50,7 @@ export const Source = Object.assign(
     Schema.annotate({ identifier: "Skill.Source" }),
   ),
   {
+    // Neither `equals` nor `key` reads headers: they can carry credentials, and the key is logged.
     equals: (a: Source, b: Source) => {
       if (a.type !== b.type) return false
       if (a.type === "directory" && b.type === "directory") return a.path === b.path

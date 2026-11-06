@@ -1,21 +1,23 @@
 export * as ConfigSkillPlugin from "./skill.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import type { Entry } from "@opencode/schema/config"
+import type { Entry, Source } from "@opencode/schema/config"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import path from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
+import { ConfigIntegration } from "../integration.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
+import { RemoteHttp } from "../../remote-http.js"
 import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { SkillFile } from "./skill-file.js"
 import { SkillScan } from "./skill-scan.js"
 
-type Source = Skill.DirectorySource | Skill.UrlSource
+type SkillSource = Skill.DirectorySource | Skill.UrlSource
 
 export const Plugin = define({
   id: "opencode.config.skill",
@@ -77,22 +79,26 @@ export const Plugin = define({
       return [target]
     })
 
-    const sources = () => {
-      const result: Source[] = []
-      const add = (source: Source) => {
-        if (result.some((item) => Skill.Source.equals(item, source))) return
-        result.push(source)
+    // Later sources win a skill ID, so skills an integration delivers load first and the member's own skill
+    // directories and config override them.
+    const sources = Effect.fnUntraced(function* () {
+      const result: SkillSource[] = []
+      const add = (source: SkillSource) => {
+        const index = result.findIndex((item) => Skill.Source.equals(item, source))
+        if (index === -1) result.push(source)
+        // A URL listed again keeps its first position and takes the later, higher-precedence entry's headers.
+        else result[index] = source
       }
-      const directories = loaded.entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
-      const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
-      for (const directory of directories) {
-        add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }))
-        add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }))
-      }
-      for (const item of items) {
-        if (URL.canParse(item) && /^(https?:)$/.test(new URL(item).protocol)) {
+      const addItem = Effect.fnUntraced(function* (item: Source) {
+        if (typeof item !== "string") {
+          if (!RemoteHttp.isHttpUrl(item.url))
+            return yield* Effect.logWarning("skipped skill source without an HTTP(S) url", { url: item.url })
+          add(Skill.UrlSource.make({ type: "url", url: item.url, headers: item.headers }))
+          return
+        }
+        if (RemoteHttp.isHttpUrl(item)) {
           add(Skill.UrlSource.make({ type: "url", url: item }))
-          continue
+          return
         }
         const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
         add(
@@ -101,15 +107,26 @@ export const Plugin = define({
             path: AbsolutePath.make(path.isAbsolute(expanded) ? expanded : path.join(location.directory, expanded)),
           }),
         )
+      })
+      const delivered = (entry: Entry) =>
+        entry instanceof ConfigIntegration.Document || entry instanceof ConfigIntegration.WellKnownDocument
+      const items = (entries: Entry[]) =>
+        entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
+      yield* Effect.forEach(items(loaded.entries.filter(delivered)), addItem, { discard: true })
+      for (const entry of loaded.entries) {
+        if (entry.type !== "directory") continue
+        add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(entry.path, "skill")) }))
+        add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(entry.path, "skills")) }))
       }
+      yield* Effect.forEach(items(loaded.entries.filter((entry) => !delivered(entry))), addItem, { discard: true })
       return result
-    }
+    })
 
-    const load = Effect.fn("ConfigSkillPlugin.load")(function* (source: Source) {
+    const load = Effect.fn("ConfigSkillPlugin.load")(function* (source: SkillSource) {
       const directories =
         source.type === "directory"
           ? [source.path]
-          : yield* discovery.pull(source.url).pipe(
+          : yield* discovery.pull(source.url, source.headers).pipe(
               Effect.catchCause((cause) =>
                 Effect.logWarning("failed to load skill source", {
                   source: Skill.Source.key(source),
@@ -150,7 +167,7 @@ export const Plugin = define({
       function* (file?: string) {
         yield* FiberMap.clear(watches)
         const skills = new Map<Skill.ID, Skill.Info>()
-        const current = sources()
+        const current = yield* sources()
         for (const source of current) {
           for (const skill of yield* load(source)) skills.set(skill.id, skill)
         }

@@ -9,7 +9,10 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { AbsolutePath } from "../schema.js"
 import { Hash } from "@opencode/util/hash"
+import { RemoteHttp } from "../remote-http.js"
 
+/** Records the version of a downloaded skill inside its cache directory. It is not part of the skill. */
+export const versionFile = ".opencode-version"
 const skillConcurrency = 4
 const fileConcurrency = 8
 
@@ -56,7 +59,12 @@ class Index extends Schema.Class<Index>("SkillDiscovery.Index")({
 }) {}
 
 export interface Interface {
-  readonly pull: (url: string) => Effect.Effect<AbsolutePath[]>
+  /**
+   * Downloads the skills listed in `<url>/index.json` into the cache and returns their directories. `headers` go with
+   * every request to the source and its same-origin redirects. The cache is keyed by URL alone, so rotating headers
+   * reuses it.
+   */
+  readonly pull: (url: string, headers?: Readonly<Record<string, string>>) => Effect.Effect<AbsolutePath[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillDiscovery") {}
@@ -72,14 +80,17 @@ const layer = Layer.effect(
         times: 2,
         schedule: Schedule.exponential(200).pipe(Schedule.jittered),
       }),
-      HttpClient.filterStatusOk,
     )
 
-    const download = Effect.fn("SkillDiscovery.download")(function* (url: string, destination: string) {
+    const download = Effect.fn("SkillDiscovery.download")(function* (
+      url: string,
+      destination: string,
+      headers: Readonly<Record<string, string>> | undefined,
+    ) {
       if (yield* fs.exists(destination).pipe(Effect.orDie)) return true
-      return yield* HttpClientRequest.get(url).pipe(
-        http.execute,
+      return yield* RemoteHttp.get(http, url, headers).pipe(
         Effect.flatMap((response) => response.arrayBuffer),
+        Effect.scoped,
         Effect.flatMap((body) => fs.writeWithDirs(destination, new Uint8Array(body))),
         Effect.as(true),
         Effect.catch((error) =>
@@ -89,14 +100,17 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      pull: Effect.fn("SkillDiscovery.pull")(function* (url) {
+      pull: Effect.fn("SkillDiscovery.pull")(function* (url, headers) {
         const base = url.endsWith("/") ? url : `${url}/`
         const source = new URL(base)
         const index = new URL("index.json", source).href
-        const data = yield* HttpClientRequest.get(index).pipe(
-          HttpClientRequest.acceptJson,
-          http.execute,
+        const data = yield* RemoteHttp.follow(
+          http,
+          HttpClientRequest.get(index).pipe(HttpClientRequest.setHeaders(headers ?? {}), HttpClientRequest.acceptJson),
+          Object.keys(headers ?? {}),
+        ).pipe(
           Effect.flatMap(HttpClientResponse.schemaBodyJson(Index)),
+          Effect.scoped,
           Effect.catch((error) =>
             Effect.logError("failed to fetch skill index", { url: index, error }).pipe(Effect.as(undefined)),
           ),
@@ -119,7 +133,7 @@ const layer = Layer.effect(
             }
 
             const skillUrl = new URL(`${encodeURIComponent(skill.name)}/`, source)
-            const versionFile = path.join(root, ".opencode-version")
+            const marker = path.join(root, versionFile)
             const files = skill.files.map((file) => {
               if (!isSafeRelativePath(file)) return undefined
               let resource: URL
@@ -140,17 +154,17 @@ const layer = Layer.effect(
             })
             if (!files.every((file): file is { url: string; destination: string; file: string } => file !== undefined))
               return []
-            return [{ skill, root, versionFile, files }]
+            return [{ skill, root, marker, files }]
           }),
-          ({ skill, root, versionFile, files }) =>
+          ({ skill, root, marker, files }) =>
             Effect.gen(function* () {
               const version = skill.version
               const current =
                 version === undefined
                   ? undefined
-                  : yield* fs.readFileStringSafe(versionFile).pipe(Effect.orElseSucceed(() => undefined))
+                  : yield* fs.readFileStringSafe(marker).pipe(Effect.orElseSucceed(() => undefined))
               if (version === undefined || current === version) {
-                yield* Effect.forEach(files, (file) => download(file.url, file.destination), {
+                yield* Effect.forEach(files, (file) => download(file.url, file.destination, headers), {
                   concurrency: fileConcurrency,
                   discard: true,
                 })
@@ -161,7 +175,7 @@ const layer = Layer.effect(
                 yield* Effect.gen(function* () {
                   const downloaded = yield* Effect.forEach(
                     files,
-                    (file) => download(file.url, path.resolve(staging, file.file)),
+                    (file) => download(file.url, path.resolve(staging, file.file), headers),
                     { concurrency: fileConcurrency },
                   )
                   if (!downloaded.every(Boolean)) return
@@ -169,7 +183,7 @@ const layer = Layer.effect(
                     (yield* fs.exists(path.join(staging, "SKILL.md")).pipe(Effect.orDie)) ||
                     (yield* fs.exists(path.join(staging, `${skill.name}.md`)).pipe(Effect.orDie))
                   if (!exists) return
-                  yield* fs.writeFileString(path.join(staging, ".opencode-version"), version)
+                  yield* fs.writeFileString(path.join(staging, versionFile), version)
                   yield* Effect.uninterruptible(
                     Effect.gen(function* () {
                       const cached = yield* fs.exists(root).pipe(Effect.orDie)

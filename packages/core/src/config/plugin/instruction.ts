@@ -6,12 +6,13 @@ import { Global } from "@opencode/util/global"
 import { sameDirectory } from "@opencode/util/path"
 import path, { dirname, join } from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/http"
+import { HttpClient } from "effect/http"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Instructions } from "../../instructions/index.js"
 import { Location } from "../../location.js"
+import { RemoteHttp } from "../../remote-http.js"
 
 type Loaded =
   | { readonly type: "available"; readonly files: InstructionDiscovery.File[] }
@@ -27,7 +28,7 @@ export const Plugin = define({
       const config = yield* Config.Service
       const fs = yield* FSUtil.Service
       const global = yield* Global.Service
-      const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
+      const http = yield* HttpClient.HttpClient
       const location = yield* Location.Service
       const watcher = yield* Watcher.Service
       const changes = yield* PubSub.sliding<string>(1)
@@ -121,7 +122,7 @@ export const Plugin = define({
         const files: InstructionDiscovery.File[] = []
         const watched = new Set<string>()
         for (const source of configured.sources) {
-          if (isUrl(source)) {
+          if (RemoteHttp.isHttpUrl(source)) {
             const file = configured.remote.get(source)
             if (file) files.push(file)
             continue
@@ -151,16 +152,29 @@ export const Plugin = define({
       const reconfigure = Effect.fn("ConfigInstructionPlugin.reconfigure")(
         function* () {
           const entries = yield* config.entries()
-          const sources = Array.from(
-            new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
-          )
+          // Sources keep their first-seen order. A URL listed again takes the later, higher-precedence entry's
+          // headers.
+          const sources = new Set<string>()
+          const remotes = new Map<string, Readonly<Record<string, string>> | undefined>()
+          for (const source of entries.flatMap((entry) =>
+            entry.type === "document" ? (entry.info.instructions ?? []) : [],
+          )) {
+            const url = typeof source === "string" ? source : source.url
+            if (typeof source !== "string" && !RemoteHttp.isHttpUrl(url)) {
+              yield* Effect.logWarning("skipped instruction source without an HTTP(S) url", { url })
+              continue
+            }
+            sources.add(url)
+            if (RemoteHttp.isHttpUrl(url)) remotes.set(url, typeof source === "string" ? undefined : source.headers)
+          }
           const fetched = yield* Effect.forEach(
-            sources.filter(isUrl),
-            (url) =>
-              HttpClientRequest.get(url).pipe(
-                http.execute,
+            remotes,
+            ([url, headers]) =>
+              RemoteHttp.get(http, url, headers).pipe(
                 Effect.flatMap((response) => response.text),
+                Effect.scoped,
                 Effect.timeout("5 seconds"),
+                // Instructions name their source by URL alone, so headers never reach the model.
                 Effect.map((content) => new InstructionDiscovery.File({ path: url, content })),
                 Effect.catchCause((cause) =>
                   Effect.logWarning("failed to fetch instruction url", { url, cause }).pipe(
@@ -170,7 +184,7 @@ export const Plugin = define({
               ),
             { concurrency: 4 },
           )
-          configured.sources = sources
+          configured.sources = Array.from(sources)
           configured.remote = new Map(
             fetched.filter((file) => file !== undefined).map((file) => [file.path, file] as const),
           )
@@ -247,8 +261,4 @@ export const Plugin = define({
 function ancestorDirectories(start: string, stop: string): string[] {
   if (sameDirectory(start, stop)) return [start]
   return [start, ...ancestorDirectories(dirname(start), stop)]
-}
-
-function isUrl(source: string) {
-  return URL.canParse(source) && /^https?:$/.test(new URL(source).protocol)
 }
