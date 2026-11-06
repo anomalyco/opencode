@@ -109,7 +109,7 @@ describe("buildPromptRequest", () => {
           key: "ctx:comment-mention",
           type: "file",
           path: "src/review.ts",
-          comment: "Compare with @src/shared.ts and @src/review.ts.",
+          comment: "Compare with @src/shared.ts and @src/review.ts, or should I use @here?",
         },
       ],
       images: [],

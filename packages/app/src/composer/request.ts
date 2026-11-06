@@ -70,6 +70,8 @@ const parseCommentMentions = (comment: string) => {
 
     if (!path || parseSessionMention(`@${path}`)) return []
 
+    if (!path.startsWith("~") && !/[\\/.#]/.test(path)) return []
+
     return [path]
   })
 }
