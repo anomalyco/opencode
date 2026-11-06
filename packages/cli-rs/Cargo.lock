@@ -1167,8 +1167,11 @@ dependencies = [
  "indexmap",
  "log",
  "opencode-api",
+ "opencode-local",
+ "opencode-service",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-util",
 ]

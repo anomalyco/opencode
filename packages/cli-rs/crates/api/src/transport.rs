@@ -77,6 +77,13 @@ pub trait Transport: Send + Sync {
     fn endpoint(&self, url: url::Url, auth: Option<&Auth>) -> (url::Url, Option<Auth>) {
         (self.route(url), auth.cloned())
     }
+
+    /// Finds the server again after the event stream disconnected (the TS `service.reconnect`). Returns true when
+    /// a server was resolved. The connection loop runs this between stream attempts, outside the connect timeout,
+    /// so a managed service has time to start a replacement.
+    fn reconnect(&self) -> BoxFuture<'_, bool> {
+        Box::pin(async { false })
+    }
 }
 
 /// The checked response of a server-sent events endpoint: status and content type are verified, and

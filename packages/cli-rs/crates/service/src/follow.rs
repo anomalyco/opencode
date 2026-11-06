@@ -7,7 +7,8 @@
 //! origin the client was built for go to the current service with its current password. A request
 //! that fails to connect or is refused with 401 finds the service again, through
 //! [`connect::reconnect`], before it returns its error. The request is not retried, so a request
-//! that may have reached the old service is never sent twice; the event stream retries itself.
+//! that may have reached the old service is never sent twice. The event stream retries itself and
+//! finds the service through [`Transport::reconnect`], between attempts.
 
 use std::sync::{Arc, RwLock};
 
@@ -67,13 +68,23 @@ impl Transport for Follow {
             if request.url.origin() != self.origin {
                 return self.inner.send(request).await;
             }
+            // The event stream opens under the connection loop's connect timeout, which would cancel a
+            // service start; the loop finds the service through `Transport::reconnect` instead.
+            let stream = request.url.path() == "/api/event";
             let generation = self.reroute(&mut request);
             let result = self.inner.send(request).await;
             // A transport error or 401.
-            if !result.as_ref().is_ok_and(|response| response.status != 401) {
-                self.reconnect(generation).await;
+            if !stream && !result.as_ref().is_ok_and(|response| response.status != 401) {
+                self.resolve(generation).await;
             }
             result
+        })
+    }
+
+    fn reconnect(&self) -> BoxFuture<'_, bool> {
+        Box::pin(async move {
+            let generation = self.route.read().expect("route lock").generation;
+            self.resolve(generation).await
         })
     }
 
@@ -122,26 +133,27 @@ impl Follow {
         route.generation
     }
 
-    // Finds the service again, unless another request did since `generation`.
-    async fn reconnect(&self, generation: u64) {
+    // Finds the service again, unless another request did since `generation`. True when it is found.
+    async fn resolve(&self, generation: u64) -> bool {
         let _resolving = self.resolving.lock().await;
         if self.route.read().expect("route lock").generation != generation {
-            return;
+            return true;
         }
         let found = connect::reconnect(self.inner.clone(), &self.paths, &self.env).await;
         let endpoint = match found {
             Ok(found) => found.service.endpoint,
             Err(error) => {
                 log::warn!("service.reconnect failed: {error}");
-                return;
+                return false;
             }
         };
         let Ok(url) = url::Url::parse(&endpoint.url) else {
             log::warn!("service.reconnect found an invalid url: {}", endpoint.url);
-            return;
+            return false;
         };
         log::info!("service.reconnect url={url}");
         *self.route.write().expect("route lock") = Route { url, auth: endpoint.auth, generation: generation + 1 };
+        true
     }
 }
 

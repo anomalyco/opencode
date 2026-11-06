@@ -8,6 +8,7 @@ use futures_util::stream::BoxStream;
 use opencode_api::client::Client;
 use opencode_api::events::{self, Activity, Connection, Source, Status};
 use opencode_api::generated::*;
+use opencode_api::transport::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
@@ -380,6 +381,10 @@ impl Source<V2Event> for Events {
             Err(error) => futures_util::stream::once(async move { Err(error) }).boxed(),
         })
         .boxed()
+    }
+
+    fn reconnect(&mut self) -> BoxFuture<'_, bool> {
+        self.client.transport().reconnect()
     }
 }
 
