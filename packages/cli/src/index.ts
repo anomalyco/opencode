@@ -134,11 +134,7 @@ Effect.gen(function* () {
   Effect.provide(Updater.layer),
   Effect.provide(
     LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node, EffectFlock.node]), {
-      replacements: [
-        Global.node.replace(
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
-        ),
-      ],
+      replacements: [Global.node.replace(Global.layerWith(Global.configDirectory(process.env.OPENCODE_CONFIG_DIR)))],
     }),
   ),
   Effect.provide(

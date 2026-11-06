@@ -61,6 +61,7 @@ function testLayer(
   credentialNode = emptyCredentialNode,
   wellknownNode = emptyWellknownNode,
   options?: Config.Options,
+  configDirs?: readonly string[],
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
@@ -74,7 +75,13 @@ function testLayer(
   const built = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
     Config.node.replace(Config.configured({ system: false, ...options })),
     Location.node.replace(locationLayer),
-    Global.node.replace(Global.layerWith({ config: globalDirectory, home: path.join(globalDirectory, "home") })),
+    Global.node.replace(
+      Global.layerWith({
+        config: globalDirectory,
+        home: path.join(globalDirectory, "home"),
+        ...(configDirs ? { configDirs } : {}),
+      }),
+    ),
     Credential.node.replace(credentialNode),
     WellKnown.node.replace(wellknownNode),
     Watcher.node.replace(watcher),
@@ -284,6 +291,60 @@ describe("Config", () => {
           Effect.andThen(once.pipe(Effect.provide(testLayer(link, global, real)))),
           // Same spelling on both sides: still exactly once.
           Effect.andThen(once.pipe(Effect.provide(testLayer(real, global, real)))),
+        )
+      }),
+    ),
+  )
+
+  it.live("merges an OPENCODE_CONFIG_DIR override with the XDG default, override wins", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const primary = path.join(tmp.path, "config-override")
+        const xdg = path.join(tmp.path, "xdg-config")
+        const project = path.join(tmp.path, "project")
+        const dirs = [primary, xdg]
+        const once = (documents: string[], shell: string) =>
+          Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+            // The XDG default loads first, the override after it, and the override wins the merge.
+            expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual(documents)
+            expect(Config.latest(entries, "shell")).toBe(shell)
+            expect(entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))).toEqual([
+              AbsolutePath.make(xdg),
+              AbsolutePath.make(primary),
+            ])
+            const watcher = yield* Watcher.Test
+            expect(
+              (yield* watcher.subscriptions())
+                .filter((subscription) => subscription.type === "directory")
+                .map((subscription) => subscription.path),
+            ).toEqual([primary, xdg])
+          })
+        const layer = () =>
+          testLayer(
+            project,
+            primary,
+            project,
+            undefined,
+            Watcher.testLayer,
+            emptyCredentialNode,
+            emptyWellknownNode,
+            undefined,
+            dirs,
+          )
+        return Effect.promise(async () => {
+          await fs.mkdir(primary, { recursive: true })
+          await fs.mkdir(xdg, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(path.join(xdg, "opencode.json"), JSON.stringify({ shell: "xdg" }))
+          await fs.writeFile(path.join(primary, "opencode.json"), JSON.stringify({ shell: "primary" }))
+        }).pipe(
+          Effect.andThen(once(["xdg", "primary"], "primary").pipe(Effect.provide(layer()))),
+          // With the override's document removed the XDG default still applies; before the fix
+          // the override directory replaced it entirely.
+          Effect.andThen(Effect.promise(() => fs.rm(path.join(primary, "opencode.json")))),
+          Effect.andThen(once(["xdg"], "xdg").pipe(Effect.provide(layer()))),
         )
       }),
     ),

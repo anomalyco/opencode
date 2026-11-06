@@ -133,7 +133,9 @@ function makeRoutes<AuthError, AuthServices>(
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
     FileWatch.node.replace(FileWatch.configured({ enabled: options.fs?.filewatcher })),
     FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: options.fs?.fff })),
-    Global.node.replace(Global.layerWith(options.config?.directory ? { config: options.config.directory } : {})),
+    Global.node.replace(
+      Global.layerWith(Global.configDirectory(options.config?.directory ?? process.env.OPENCODE_CONFIG_DIR)),
+    ),
     Config.node.replace(
       Config.configured({
         project: options.config?.project,

@@ -320,8 +320,11 @@ async function themeSource(
 ): Promise<ThemeDocumentSource> {
   if (name === "system" && colors) return generateSystem(colors, mode)
   const { Global } = await import("@opencode/util/global")
+  // Directories run lowest priority first because `discoverThemes` lets later ones win: the XDG
+  // default leads and the `OPENCODE_CONFIG_DIR` override outranks it (opencode#32825).
+  const override = process.env.OPENCODE_CONFIG_DIR
   const custom = await discoverThemes(
-    configDirectories(process.env.OPENCODE_CONFIG_DIR ?? Global.Path.config, process.cwd()),
+    configDirectories(override ? [Global.Path.config, override] : [Global.Path.config], process.cwd()),
   )
   const source = custom[name] ?? allThemes()[name] ?? getOpenCodeTheme()
   return isThemeSource(source) ? source : getOpenCodeTheme()

@@ -23,7 +23,11 @@ export default Runtime.handler(
     const global = yield* Global.Service
     const info = yield* config.get()
     const discovered = yield* Effect.promise(() =>
-      localPluginDirectories(process.cwd(), global.config).then(discoverPluginTargets),
+      // Every global config directory contributes plugins: the override and the XDG default
+      // both count, while repeated project directories only appear once.
+      Promise.all(global.configDirs.map((directory) => localPluginDirectories(process.cwd(), directory))).then(
+        (groups) => discoverPluginTargets([...new Set(groups.flat())]),
+      ),
     )
     const npm = yield* Npm.Service
     const configured = yield* Effect.forEach([...(info.plugins ?? []), ...discovered], (entry) =>
