@@ -41,7 +41,7 @@ function spawnWindows(options: Parameters<NonNullable<Options["spawnClaudeCodePr
     cwd: options.cwd,
     env: options.env,
     signal: options.signal,
-    stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "ignore"] as ["pipe", "pipe", "ignore"],
     windowsHide: true,
   }
   if (!isBatchFile(options.command)) return spawn(options.command, options.args, stdio)
@@ -53,9 +53,18 @@ function spawnWindows(options: Parameters<NonNullable<Options["spawnClaudeCodePr
 }
 
 // cmd.exe drops the first and last quote of a quoted `/c` command line, so the whole line is wrapped once more. Each
-// argument is quoted the way CommandLineToArgvW reads it back, which also keeps cmd.exe metacharacters literal.
+// argument is quoted the way CommandLineToArgvW reads it back, then escaped for cmd.exe: the command once, each
+// argument twice, because a batch launcher parses the line again when it expands `%*`.
 export function batchCommand(command: string, args: readonly string[]) {
-  return `"${[command, ...args].map(quoteArgument).join(" ")}"`
+  const quoted = args.map((arg) => escapeCmd(escapeCmd(quoteArgument(arg)))).join(" ")
+  return `"${escapeCmd(command)} ${quoted}"`
+}
+
+// Without these, cmd.exe treats `&`, `|`, `<`, `>` and `^` as syntax and expands `%NAME%`, even inside quotes.
+const CMD_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/g
+
+function escapeCmd(value: string) {
+  return value.replace(CMD_METACHARACTERS, "^$1")
 }
 
 function isBatchFile(file: string) {
