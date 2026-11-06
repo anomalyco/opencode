@@ -4,7 +4,7 @@ import { staticNames, unchanged } from "./runtime/intrinsic-names.js"
 import { Fn, Obj } from "./runtime/objects.js"
 import { nodeId, type Source } from "./runtime/source.js"
 import { type ClassSpec, codecShape, decode, encode, type Json, SnapshotError } from "./snapshot/codec.js"
-import { FORMAT, hash, hostsId, type Snapshot, validate } from "./snapshot/snapshot.js"
+import { FORMAT, type Header, hash, hostsId, type Snapshot, validate } from "./snapshot/snapshot.js"
 import { AsyncFromSyncCloseTarget, FinallyTarget, VmScheduler } from "./async.js"
 import { Code, hashOf } from "./code.js"
 import { COMPILER_VERSION, compileSource } from "./compiler/compile.js"
@@ -25,6 +25,9 @@ import { CustomIter, Frame, Mode, Vm, VmInternalFn } from "./vm.js"
 // - New VM state must be listed in the `Vm` spec: an unknown own field is a codec gap, so nothing is silently dropped.
 
 export type CaptureOptions = {
+  readonly limits?: Header["limits"]
+  /** Active milliseconds used so far, across every resume. */
+  readonly activeMs?: number
   /** Throw on the first value with no data form, instead of reporting it in `lost`. */
   readonly strict: boolean
 }
@@ -163,6 +166,8 @@ export const captureVm = (
         hash: hash(source.code),
         bytecode: vm.sourceCodes.get(source.id)![0]!.source.hash,
       })),
+      limits: options.limits ?? { timeoutMs: null, maxToolCalls: null, maxOutputBytes: null },
+      budget: { activeMs: options.activeMs ?? 0, toolCalls: ctx.tools.calls.length },
       toolCalls: ctx.tools.calls.map((call) => ({ name: call.name })),
     },
     roots: encoded.roots,

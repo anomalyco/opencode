@@ -3,5 +3,17 @@ export * as Extension from "./extension.js"
 export * as Namespace from "./namespace.js"
 export * as Tool from "./tool.js"
 export * as OpenAPI from "./openapi/index.js"
-export { searchSignature, toolExpression } from "./codemode.js"
+export {
+  fromBytes,
+  searchSignature,
+  SnapshotError,
+  SuspendError,
+  toBytes,
+  toolExpression,
+  type Execution,
+  type Snapshot,
+  type SnapshotHeader,
+  type Suspended,
+  type SuspendOptions,
+} from "./codemode.js"
 export { ToolError, toolError } from "./tool-error.js"

@@ -66,9 +66,9 @@ export type Encoded = string | number | boolean | null | ReadonlyArray<Json>
 export type Record = { readonly t: string; readonly [field: string]: Json }
 
 /** A saved state can't be read, or doesn't fit this runtime. */
-export class SnapshotError extends Error {
-  override readonly name = "SnapshotError"
-}
+import { SnapshotError } from "../../suspend-error.js"
+
+export { SnapshotError }
 
 /** What the encoder asks of the runtime whose state it saves. */
 export type EncodeEnv = {

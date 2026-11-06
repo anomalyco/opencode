@@ -1,15 +1,19 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, type Scope } from "effect"
 import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
 import { scanTools } from "./scan.js"
+import { fromBytes, SnapshotError, SuspendError, toBytes } from "./suspend-error.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
 import type { VmEngine } from "./vm/index.js"
 
-export { scanTools }
+export { fromBytes, scanTools, SnapshotError, SuspendError, toBytes }
+export type SnapshotHeader = VmEngine.SnapshotHeader
+export type Snapshot = VmEngine.Snapshot
+export type Execution = VmEngine.Execution
 
 /** A tool call admitted during an execution. */
 export type {
@@ -45,6 +49,15 @@ export type ResolvedExecutionLimits = {
   readonly maxOutputBytes: number | undefined
 }
 
+/** Execution engine: the default AST generator interpreter (`"legacy"`) or the experimental bytecode VM (`"vm"`). */
+export type Engine = "legacy" | "vm"
+
+/** How suspending a run saves its state (`engine: "vm"` only). */
+export type SuspendOptions = {
+  /** The most bytes a saved state may take; a larger one fails the suspend, and the run goes on. */
+  readonly maxBytes?: number
+}
+
 /** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
 export type Options<Provided extends Record<string, unknown> = {}, Extensions extends ReadonlyArray<Extension> = []> = {
   /** Explicit tools exposed to the program as `tools`. */
@@ -53,10 +66,12 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
   /** Host functions and objects exposed as globals, also importable by Node module name; see `Extension.make`. */
   extensions?: Extensions
-  /** Resource limits enforced on each execution. */
+  /** Resource limits enforced on each execution. Time counts active time only, across every resume of a run. */
   limits?: ExecutionLimits
   /** Interpreter that runs programs. `"vm"` is the experimental bytecode VM; the default is `"legacy"`. */
-  engine?: "legacy" | "vm"
+  engine?: Engine
+  /** How `execution.suspend` saves a run (`engine: "vm"` only); see `Runtime.start`. */
+  suspend?: SuspendOptions
 }
 
 /** The Effect environment an execution needs: what the tools and the extensions' Effect globals require. */
@@ -134,10 +149,31 @@ export const Result = Schema.Union([Success, Failure])
 /** Result of executing a CodeMode program. Program failures are data, not Effect failures. */
 export type Result = typeof Result.Type
 
+/** A run stopped by `execution.suspend`: its whole state, to resume with `Runtime.resume`. */
+export type Suspended = {
+  readonly ok: "suspended"
+  readonly state: Snapshot
+}
+
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
   readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
+  /**
+   * Starts a program in the current scope and returns at once (experimental, requires `engine: "vm"`):
+   * `execution.result` waits for its outcome, and `execution.suspend` saves its state. Closing the scope interrupts the
+   * program.
+   */
+  readonly start: (
+    code: string,
+    bindings?: Readonly<Record<string, DataValue>>,
+  ) => Effect.Effect<Execution, never, R | Scope.Scope>
+  /**
+   * Continues a suspended run (its `state`, or that state as bytes) in this runtime (experimental, requires
+   * `engine: "vm"`), which must be the same build with the same extensions, as `start` starts one. Fails with a
+   * `SnapshotError` when the state can't be resumed here.
+   */
+  readonly resume: (state: Snapshot | Uint8Array) => Effect.Effect<Execution, SnapshotError, R | Scope.Scope>
 }
 
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
@@ -182,22 +218,65 @@ export const make = <
       bound.add(name)
     }
   }
+  for (const [name, value] of Object.entries(options.suspend ?? {})) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+      throw new RangeError(`suspend.${name} must be a safe integer greater than or equal to 0.`)
+    }
+  }
+  if (options.engine !== "vm") {
+    return {
+      get catalog() {
+        return prepared.catalog
+      },
+      execute: (code, bindings) =>
+        executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
+          ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+          ...extensionGlobals(ctx, extensions),
+        ]),
+      start: () => {
+        throw new Error('CodeMode.Runtime.start requires `engine: "vm"`.')
+      },
+      resume: () => {
+        throw new Error('CodeMode.Runtime.resume requires `engine: "vm"`.')
+      },
+    }
+  }
+  let setup: VmEngine.Setup<Environment<Provided, Extensions>> | undefined
+  const getSetup = (vm: typeof VmEngine) =>
+    (setup ??= {
+      prepared,
+      limits,
+      hooks: options.hooks ?? {},
+      globals: extensions.length === 0 ? undefined : (ctx) => vm.extensionGlobals(ctx, extensions),
+      lossy: extensions.length > 0,
+      suspend: options.suspend,
+    })
+  const data = (vm: typeof VmEngine, bindings: Readonly<Record<string, DataValue>> | undefined) =>
+    bindings === undefined
+      ? undefined
+      : (ctx: Parameters<typeof vm.fromJson>[0]) =>
+          Object.entries(bindings).map(([name, value]) => [name, vm.fromJson(ctx, value)] as const)
   return {
     get catalog() {
       return prepared.catalog
     },
     execute: (code, bindings) =>
-      options.engine === "vm"
-        ? Effect.flatMap(loadVm(), (vm) =>
-            vm.execute(code, prepared, limits, options.hooks ?? {}, extensions, bindings),
-          )
-        : executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
-            ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-            ...extensionGlobals(ctx, extensions),
-          ]),
+      Effect.flatMap(loadVm(), (vm) => vm.finishExecution(vm.startProgram(getSetup(vm), code, data(vm, bindings)))),
+    start: (code, bindings) =>
+      Effect.flatMap(loadVm(), (vm) => vm.startProgram(getSetup(vm), code, data(vm, bindings))),
+    resume: (state) => Effect.flatMap(loadVm(), (vm) => vm.resumeProgram(getSetup(vm), state)),
   }
 }
 
 // The VM is loaded on first use so the default engine pulls in none of its code.
+let vmLoaded: typeof VmEngine | undefined
 let vmEngine: Promise<typeof VmEngine> | undefined
-const loadVm = () => Effect.promise(() => (vmEngine ??= import("./vm/index.js")))
+const loadVm = () =>
+  vmLoaded !== undefined
+    ? Effect.succeed(vmLoaded)
+    : Effect.promise(() =>
+        (vmEngine ??= import("./vm/index.js").then((mod) => {
+          vmLoaded = mod
+          return mod
+        })),
+      )
