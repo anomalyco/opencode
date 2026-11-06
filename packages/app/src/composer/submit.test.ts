@@ -152,6 +152,7 @@ function session(input: {
         },
       },
     },
+    file: { list: async () => ({ data: [{ path: "src/api.ts", type: "file" as const }] }) },
     data: {
       location: { command: { list: () => [] } },
       session: {

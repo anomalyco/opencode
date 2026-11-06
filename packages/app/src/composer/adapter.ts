@@ -83,6 +83,11 @@ export type ComposerSession = {
       ) => ReturnType<ServerSDK["api"]["session"]["revert"]["commit"]>
     }
   }
+  file: {
+    list: (
+      input: Parameters<ServerSDK["api"]["file"]["list"]>[0],
+    ) => Promise<{ data: readonly { path: string; type: "file" | "directory" }[] }>
+  }
   data: {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
