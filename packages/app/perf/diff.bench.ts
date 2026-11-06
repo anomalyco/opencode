@@ -25,8 +25,9 @@ export default bench({
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      async prepare({ case: name, playwright, mock, url }) {
-        const page = cached(playwright.page, mock)
+      async prepare(ctx) {
+        const { case: name, url } = ctx
+        const page = cached(ctx)
         const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
         await serveDiffs(page, changes(name))
 
