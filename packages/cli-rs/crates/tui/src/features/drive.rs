@@ -24,8 +24,7 @@ pub fn run(manifest: Manifest, options: AppOptions, launch: Launch) -> opentui::
         // Nothing draws over stderr without a terminal, and the driver reads the endpoint line from it.
         app: AppOptions { capture_stderr: false, ..options },
     })?;
-    let version =
-        Some(launch.args.version.clone()).filter(|version| !version.is_empty()).unwrap_or_else(|| "unknown".into());
+    let version = launch.args.version.clone();
     crate::app::run_on(app, launch, |tui| {
         let server = start(tui, manifest.ui_addr(), version)?;
         eprintln!("opencode drive ui websocket: {}", server.url());

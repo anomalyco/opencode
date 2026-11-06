@@ -158,7 +158,8 @@ pub enum Role {
     Backend,
 }
 
-/// `Handshake.dispatch` for the `ui` role, after the checks `Handshake.Params` makes while decoding.
+/// `Handshake.dispatch` for the `ui` role, after the checks `Handshake.Params` makes while decoding. An empty
+/// `version` reports `unknown`, as `SimulationServer.start` defaults it: the schema takes no empty string.
 pub fn handshake(params: &HandshakeParams, version: &str) -> Result<Value, String> {
     check(params)?;
     if params.expected_role != Role::Ui {
@@ -179,7 +180,7 @@ pub fn handshake(params: &HandshakeParams, version: &str) -> Result<Value, Strin
     Ok(json!({
         "protocolVersion": 1,
         "role": "ui",
-        "server": { "name": "opencode", "version": version },
+        "server": { "name": "opencode", "version": if version.is_empty() { "unknown" } else { version } },
         "capabilities": CAPABILITIES,
     }))
 }
@@ -225,6 +226,10 @@ mod tests {
         assert_eq!(ok["protocolVersion"], 1);
         assert_eq!(ok["server"], json!({ "name": "opencode", "version": "9.9.9" }));
         assert_eq!(ok["capabilities"].as_array().unwrap().len(), CAPABILITIES.len());
+        let Request::Handshake(params) = decode(&handshake_request("ui", "[1]", "[]")).unwrap().request else {
+            panic!("not a handshake")
+        };
+        assert_eq!(handshake(&params, "").unwrap()["server"]["version"], "unknown");
         assert_eq!(
             answer(&handshake_request("backend", "[1]", "[]")).unwrap_err(),
             "Expected simulation endpoint role backend, received ui"
