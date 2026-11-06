@@ -1,4 +1,5 @@
-import { JsonPointer, Schema } from "effect"
+import { JsonPointer, Option, Result, Schema, SchemaRepresentation } from "effect"
+import type { Json } from "./data.js"
 import type { Tool, JsonSchema, SchemaType } from "./tool.js"
 
 const isEffectSchema = (schema: SchemaType): schema is Schema.Decoder<unknown> & Schema.Top => Schema.isSchema(schema)
@@ -250,33 +251,98 @@ export type InputProperty = {
   readonly required: boolean
 }
 
-export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
+function inspectInput<A>(
+  input: SchemaType,
+  read: (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>) => A,
+) {
   try {
-    const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
+    const document = isEffectSchema(input)
+      ? (Schema.toJsonSchemaDocument(input, { onExcessProperty: "error" }) as {
           readonly schema: JsonSchema
           readonly definitions: Readonly<Record<string, JsonSchema>>
         })
       : {
-          schema: tool.input,
-          definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
+          schema: input,
+          definitions: { ...(input.definitions ?? {}), ...(input.$defs ?? {}) },
         }
-    let schema = document.schema
-    if (schema.$ref !== undefined) {
+    const resolve = (schema: JsonSchema) => {
+      if (schema.$ref === undefined) return schema
       const name = definitionName(schema.$ref)
-      const resolved = name === undefined ? undefined : document.definitions[name]
-      if (resolved === undefined) return []
-      schema = resolved
+      return name === undefined ? undefined : document.definitions[name]
     }
-    const required = new Set(schema.required ?? [])
-    return Object.entries(schema.properties ?? {}).map(([name, value]) => ({
-      name,
-      description: typeof value.description === "string" ? value.description : undefined,
-      required: required.has(name),
-    }))
+    const root = resolve(document.schema)
+    return root && read(root, document.definitions)
   } catch {
-    return []
+    return undefined
   }
+}
+
+export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
+  return (
+    inspectInput(tool.input, (schema) => {
+      const required = new Set(schema.required ?? [])
+      return Object.entries(schema.properties ?? {}).map(([name, value]) => ({
+        name,
+        description: typeof value.description === "string" ? value.description : undefined,
+        required: required.has(name),
+      }))
+    }) ?? []
+  )
+}
+
+const reserved = new Set(
+  "arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield".split(
+    " ",
+  ),
+)
+
+export function flatParameters(input: SchemaType) {
+  return inspectInput(input, (schema, definitions) => {
+    if ((schema.type !== undefined && schema.type !== "object") || schema.anyOf || schema.oneOf || schema.allOf) return
+    const properties = schema.properties
+    if (!properties || Object.hasOwn(properties, "__proto__")) return
+    const fields = Object.entries(properties)
+    if (fields.length === 0 || schema.required?.some((key) => !Object.hasOwn(properties, key))) return
+    const required = new Set(schema.required)
+    const lastRequired = fields.findLastIndex(([key]) => required.has(key))
+    const firstType = fields[0]![1].type
+    const objectFirst =
+      firstType === undefined || firstType === "object" || (Array.isArray(firstType) && firstType.includes("object"))
+    let matches: ((value: unknown) => boolean) | undefined
+    return {
+      length: fields.length,
+      get signature() {
+        const named = fields.every(([key]) => identifierSegment.test(key) && !reserved.has(key))
+        const parameters = fields.map(([key, field], i) => {
+          const label = named ? key : `arg${i + 1}`
+          const type = renderSchema(field, { definitions, pretty: false })
+          if (i > lastRequired) return `${label}?: ${type}`
+          return `${label}: ${required.has(key) ? type : `${type} | undefined`}`
+        })
+        return `(${parameters.join(", ")})`
+      },
+      bind(args: ReadonlyArray<Json | undefined>) {
+        const object = Object.fromEntries(args.flatMap((arg, i) => (arg === undefined ? [] : [[fields[i]![0], arg]])))
+        const first = args[0]
+        if (args.length !== 1 || first === null || typeof first !== "object" || Array.isArray(first)) return object
+        // A lone object can be either the old named call or the first positional value. Prefer the
+        // named call when both match. Probe only the wire schema; run the tool's actual decoder once.
+        if (!objectFirst || lastRequired > 0) return first
+        matches ??= Result.try(() => {
+          const document = SchemaRepresentation.fromJsonSchemaDocument({
+            dialect: "draft-2020-12",
+            schema,
+            definitions,
+          })
+          const decode = Schema.decodeUnknownOption(Schema.make<Schema.Codec<unknown>>(document.ast), {
+            onExcessProperty: "error",
+          })
+          return (value: unknown) => Option.isSome(decode(value))
+        }).pipe(Result.getOrElse(() => () => true)) // Preserve named calls if a render-only schema cannot be compiled.
+        return matches(first) || !matches(object) ? first : object
+      },
+    }
+  })
 }
 
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
@@ -298,8 +364,8 @@ export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
       ? toTypeScript(tool.output, true, pretty)
       : jsonSchemaToTypeScript(tool.output, pretty)
 
-export const decodeInput = <R>(tool: Tool<R>, value: unknown): unknown =>
-  isEffectSchema(tool.input) ? Schema.decodeUnknownSync(tool.input)(value) : value
+export const decodeInput = <R>(tool: Tool<R>, input: unknown): unknown =>
+  isEffectSchema(tool.input) ? Schema.decodeUnknownSync(tool.input)(input) : input
 
 export const decodeOutput = <R>(tool: Tool<R>, value: unknown): unknown =>
   tool.output === undefined

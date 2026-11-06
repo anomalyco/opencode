@@ -1010,6 +1010,25 @@ execute: async ({ url }, context) => {
 }
 ```
 
+#### Freeform tool input
+
+A direct tool with exactly one required string field can let the model write that string without a JSON wrapper. Set `freeform` to `{ type: "text" }`, `{ type: "regex", pattern }`, or `{ type: "lark", grammar }`.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+If the selected model's API lists `regex` in models.dev, the model can write `OPS-42` directly. Otherwise Core omits **only** `freeform`: the model still has the `ticket` tool and calls it with `{"id":"OPS-42"}`. Missing or empty format lists mean no freeform support. The executor receives `{ id }` either way.
+
+If you expose the same tool inside Code Mode (`codemode: true`), its JavaScript signature takes one string: `await tools.ticket("OPS-42")`. Code Mode also accepts `await tools.ticket({ id: "OPS-42" })` for existing scripts. Both forms work independently of the model's freeform support.
+
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
 changing their order; it does not rerun plugin setup.
 

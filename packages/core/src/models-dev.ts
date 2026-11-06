@@ -4,6 +4,7 @@ import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
+import { FreeformFormat } from "@opencode/schema/tool"
 import { App } from "./app.js"
 import { Hash } from "@opencode/util/hash"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -69,6 +70,11 @@ type SourceCost = typeof SourceCost.Type
 // entry this version doesn't understand is skipped instead of failing the model.
 const SourceApi = Schema.Struct({
   base_url: Schema.optional(Schema.String),
+  capabilities: Schema.optional(
+    Schema.Struct({
+      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.Unknown)) })),
+    }),
+  ),
   sdk: Schema.optional(
     Schema.Struct({ aisdk: Schema.optional(Schema.String), opencodeai: Schema.optional(Schema.String) }),
   ),
@@ -136,6 +142,7 @@ const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
 const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
 const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
+const knownFreeformFormat = Schema.is(FreeformFormat)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 export type Snapshot = {
@@ -146,6 +153,7 @@ export type Snapshot = {
 
 type Route = {
   readonly package: string
+  readonly freeform?: readonly FreeformFormat[]
   readonly baseURL?: string
   readonly compatibility?: Model.Compatibility
 }
@@ -272,6 +280,7 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
   }
   return {
     package: packageName,
+    freeform: api.capabilities?.tools?.freeform?.filter(knownFreeformFormat),
     // An empty base_url is how models.dev says it has no URL for the API.
     ...(BUILDS_OWN_URL.has(packageName) || !api.base_url ? {} : { baseURL: api.base_url }),
     ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
@@ -441,6 +450,7 @@ function modelInfo(
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.capabilities.tools.supported,
+      ...(source.route.freeform && { freeform: source.route.freeform }),
       input: modalities(model.modalities.input),
       output: modalities(model.modalities.output),
       temperature: model.capabilities.temperature,

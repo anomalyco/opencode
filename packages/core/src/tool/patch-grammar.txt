@@ -1,0 +1,15 @@
+start: "*** Begin Patch" LF file+ "*** End Patch" LF?
+
+file: add | delete | update
+add: "*** Add File: " path LF addition*
+delete: "*** Delete File: " path LF
+update: "*** Update File: " path LF move? context? lines (context lines)*
+move: "*** Move to: " path LF
+context: "@@" (" " TEXT)? LF
+lines: (addition | removal | unchanged)+ ("*** End of File" LF)?
+addition: "+" TEXT? LF
+removal: "-" TEXT? LF
+unchanged: " " TEXT? LF
+path: TEXT
+TEXT: /[^\r\n]+/
+%import common.LF

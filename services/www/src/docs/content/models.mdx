@@ -212,6 +212,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
           "name": "Coding default",
           "capabilities": {
             "tools": true,
+            "freeform": ["text", "lark"],
             "input": ["text", "image"],
             "output": ["text"],
           },
@@ -229,9 +230,11 @@ Use `modelID` to give an API model a friendlier catalog ID:
 Here, `openai/coding-default` is the selectable reference and `gpt-6.1-sol` is sent to the provider. For a model that is not
 already in the catalog, OpenCode assumes:
 
-- Tool support, text and image input, and text output.
+- JSON tool support, text and image input, and text output. No freeform tool input unless `capabilities.freeform` lists the format.
 - A 200,000-token context limit and 32,000-token output limit.
 - An unspecified input limit.
+
+OpenCode recognizes `text`, `regex`, and `lark`. Other format names from models.dev are ignored without dropping the model or its tools. If you configure a different endpoint (`settings.baseURL`) or provider package, set `capabilities.freeform` on the model to opt back in for that route.
 
 These are fallback assumptions, not detected capabilities. Set accurate `capabilities` and `limit` values when known;
 explicit values replace the fallbacks. Add `disabled: true` to hide a model from the available catalog:

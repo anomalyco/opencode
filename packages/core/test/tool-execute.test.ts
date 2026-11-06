@@ -25,6 +25,55 @@ const allowAll = permissionService({ assert: () => Effect.void })
 const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
 
+test("Code Mode lists one string argument for freeform tools and executes both input shapes", async () => {
+  const input = Schema.Struct({ text: Schema.NonEmptyString })
+  const echo = {
+    name: "echo",
+    description: "Echo text",
+    input,
+    output: Schema.String,
+    execute: ({ text }) => Effect.succeed({ output: text }),
+  } satisfies Info<typeof input, typeof Schema.String>
+  const tools = new Map<string, Info>([
+    ["echo", echo],
+    ["send", { ...echo, name: "send", freeform: { type: "text" } }],
+  ])
+  const sendSignature = "tools.send(text: string): Promise<string>"
+  expect(CodeModeTool.catalog({ tools }).tools).toContainEqual(expect.objectContaining({ signature: sendSignature }))
+  const run = (code: string) =>
+    Effect.runPromise(createCodeMode(tools).execute({ code }, context)).then((r) => r.output)
+  expect((await run('return search({ query: "tools.send" }).items[0].signature')).output).toBe(sendSignature)
+  const calls = await run('return [await tools.send("first"), await tools.send({text: "second"})]')
+  expect(JSON.parse(calls.output)).toEqual(["first", "second"])
+  expect(calls.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+  expect((await run('return await tools.send("")')).error).toBe(true)
+  expect((await run('return await tools.echo("object required")')).error).toBe(true)
+})
+
+test("a freeform declaration on a multi-field Core tool keeps the named input", async () => {
+  const tool = {
+    name: "scan",
+    description: "Scan a path",
+    freeform: { type: "text" },
+    input: Schema.Struct({ path: Schema.String, options: Schema.Struct({ recursive: Schema.Boolean }) }),
+    output: Schema.String,
+    execute: ({ path, options }) => Effect.succeed({ output: `${path}:${options.recursive}` }),
+  } satisfies Info
+  const tools = new Map([[tool.name, tool]])
+  const codeMode = createCodeMode(tools)
+  const positional = await Effect.runPromise(
+    codeMode.execute({ code: 'return await tools.scan("src", {recursive:true})' }, context),
+  )
+  expect(positional.output.error).toBe(true)
+  const result = await Effect.runPromise(
+    codeMode.execute({ code: 'return await tools.scan({path:"src", options:{recursive:true}})' }, context),
+  )
+  expect(result.output).toMatchObject({
+    output: "src:true",
+    toolCalls: [{ input: { path: "src", options: { recursive: true } } }],
+  })
+})
+
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [

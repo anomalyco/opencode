@@ -1,6 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
+import { ToolDefinition, ToolFailure } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
@@ -305,6 +305,7 @@ function inventoryTools(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
+      flat: child.freeform !== undefined && ToolDefinition.freeformField(child.inputSchema) !== undefined,
       output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })

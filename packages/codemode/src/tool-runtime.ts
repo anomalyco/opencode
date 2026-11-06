@@ -179,11 +179,16 @@ const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
       // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
       return (signature ??= [
         toolExpression(visible.path),
-        isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`,
+        inputSignature(visible.tool),
         `: Promise<${outputTypeScript(visible.tool, true)}>`,
       ].join(""))
     },
   }
+}
+
+function inputSignature<R>(tool: Tool<R>) {
+  if (tool.parameters) return tool.parameters.signature
+  return isEmptyInput(tool) ? "()" : `(${inputTypeScript(tool, true)})`
 }
 
 /** Tools indexed once per runtime, with discovery materialized on demand. */
@@ -401,11 +406,14 @@ export const make = <R>(
 
   const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
     Effect.gen(function* () {
-      const normalized = args.length === 0 ? [{}] : args
-      if (normalized.length !== 1)
-        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
+      const limit = tool.parameters?.length ?? 1
+      if (args.length > limit)
+        throw new ToolRuntimeError(
+          "InvalidToolInput",
+          `Tool '${name}' expects at most ${limit === 1 ? "one argument" : `${limit} arguments`}.`,
+        )
       const input = yield* Effect.try({
-        try: () => decodeToolInput(tool, normalized[0]),
+        try: () => decodeToolInput(tool, tool.parameters ? tool.parameters.bind(args) : args.length ? args[0] : {}),
         catch: (cause) =>
           new ToolRuntimeError(
             "InvalidToolInput",
