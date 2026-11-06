@@ -208,9 +208,19 @@ pub fn refresh(tui: &Tui) {
     tui.app.request_redraw();
 }
 
+/// Starts the pulses' ticks after this frame, for a pulse that began to move in a paint.
+pub(crate) fn wake(tui: &Tui) {
+    if !tui.frame.ticking.get() {
+        tui.app.defer(bind!(tui.weak(), |tui, _| tick(&tui)));
+    }
+}
+
 /// Runs the pulses at 20 fps while any moves.
 fn tick(tui: &Tui) {
     let frame = &tui.frame;
+    let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+    strip::set_animations(&frame.strip, animations);
+    rail::set_animations(&frame.rail, animations);
     if frame.ticking.get() || !(strip::animating(&frame.strip) || rail::animating(&frame.rail)) {
         return;
     }

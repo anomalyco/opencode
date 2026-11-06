@@ -1,7 +1,7 @@
 //! The spinner: `component/spinner.tsx` and `component/spinner-renderable.ts`.
 
 use super::text::{paint_shaded, shimmer_strength_at};
-use super::{Clock, OneCellMotion, channels, millis, rgba, tick_every, tick_frames};
+use super::{Clock, OneCellMotion, channels, millis, rgba, running, tick_every, tick_frames};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
@@ -164,6 +164,7 @@ impl Spinner {
         self
     }
 
+    /// Its own switch, over the thread's ([`running`](super::running)): off holds it still whatever the thread's.
     pub fn animations(self, enabled: bool) -> Self {
         self.set_animations(enabled);
         self
@@ -201,12 +202,17 @@ impl Spinner {
 }
 
 impl SpinnerView {
+    /// Whether it moves: its own switch and the thread's.
+    fn moving(&self) -> bool {
+        self.animations && running()
+    }
+
     fn frame(&self) -> usize {
         spinner_frame(self.glyphs.len(), self.interval, self.clock.get())
     }
 
     fn line(&self) -> String {
-        let glyph = if self.animations { self.glyphs.get(self.frame()).map(|glyphs| glyphs.concat()) } else { None };
+        let glyph = if self.moving() { self.glyphs.get(self.frame()).map(|glyphs| glyphs.concat()) } else { None };
         let glyph = glyph.unwrap_or_else(|| self.still.clone());
         match &self.label {
             Some(label) => format!("{glyph} {label}"),
@@ -219,7 +225,7 @@ impl Component for SpinnerView {
     fn paint(&self, painter: &mut Painter<'_>) {
         self.painted.set(true);
         let base = self.color.base();
-        if !self.animations {
+        if !self.moving() {
             painter.text(0, 0, &self.line(), Style::new().fg(base).bg(Color::TRANSPARENT));
             return;
         }
@@ -256,7 +262,7 @@ impl Component for SpinnerView {
 
     fn measure(&self, width: Constraint, height: Constraint) -> (f32, f32) {
         let text = |text: &str| unicode_width::UnicodeWidthStr::width(text) as f32;
-        let glyph = if self.animations {
+        let glyph = if self.moving() {
             self.glyphs.iter().map(|glyphs| text(&glyphs.concat())).fold(0.0, f32::max)
         } else {
             text(&self.still)

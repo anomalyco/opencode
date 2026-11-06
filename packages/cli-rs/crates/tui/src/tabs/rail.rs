@@ -85,6 +85,11 @@ pub fn animating(rail: &Custom<Rail>) -> bool {
     rail.with(|rail| rail.pulses.borrow().values().any(Pulse::live))
 }
 
+/// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
+pub fn set_animations(rail: &Custom<Rail>, enabled: bool) {
+    rail.with(|rail| rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
+}
+
 pub fn tick(rail: &Custom<Rail>, delta: std::time::Duration) {
     rail.update(|rail| rail.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(delta)));
 }
@@ -488,6 +493,9 @@ impl Component for Rail {
             draw_chars(painter, prefix as i32, y + 1, &visible, |character| {
                 Style::new().fg(if fades { fade(detail_color, pulse_bg, character, length, 0.0) } else { detail_color })
             });
+        }
+        if pulses.values().any(Pulse::live) {
+            crate::frame::wake(&tui);
         }
         drop(pulses);
 

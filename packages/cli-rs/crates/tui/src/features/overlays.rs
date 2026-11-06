@@ -88,10 +88,11 @@ fn reconnecting(tui: &Tui) -> View {
     let app = &tui.app;
     let theme = tui.page();
     let managed = tui.startup.args.managed;
-    let spinner = Spinner::new(app)
-        .color(theme.text.base)
-        .label(if managed { "Restarting service…" } else { "Connection lost…" })
-        .animations(opencode_ui::motion::enabled(tui.config().info.animations));
+    let spinner = Spinner::new(app).color(theme.text.base).label(if managed {
+        "Restarting service…"
+    } else {
+        "Connection lost…"
+    });
     let note = Text::new(
         app,
         if managed { "Your session will resume automatically." } else { "Reconnecting to the server automatically." },
@@ -184,10 +185,7 @@ fn set_migration(tui: &Tui, progress: Option<String>) {
     };
     let app = &tui.app;
     let theme = tui.page();
-    let spinner = Spinner::new(app)
-        .color(theme.text.feedback.info.base)
-        .label(progress)
-        .animations(opencode_ui::motion::enabled(tui.config().info.animations));
+    let spinner = Spinner::new(app).color(theme.text.feedback.info.base).label(progress);
     let view = View::new(app)
         .absolute()
         .z_index(10_000)

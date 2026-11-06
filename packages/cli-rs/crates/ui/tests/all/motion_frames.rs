@@ -5,7 +5,8 @@
 
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::motion::{
-    FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, scanner_colors, scanner_frames, work_spinner,
+    FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, scanner_colors, scanner_frames, set_running,
+    work_spinner,
 };
 use opentui::AppOptions;
 use opentui::prelude::*;
@@ -141,6 +142,37 @@ fn toggling_animations_resumes_the_spinner() {
     spinner.set_animations(true);
     app.advance(Duration::from_millis(170));
     assert_eq!((spinner.frame(), app.text()), (2, "⠹ Working".to_owned()));
+}
+
+#[test]
+fn the_thread_switch_stops_and_resumes_every_driver() {
+    let app = test_app(40);
+    let row = View::new(&app).row();
+    let spinner = Spinner::new(&app).label("Working");
+    let shimmer = Spinner::new(&app).shimmer(Some(TEXT)).label("Check");
+    row.add(&spinner);
+    row.add(&shimmer);
+    app.root().add(&row);
+    app.advance(Duration::from_millis(80));
+    app.render();
+    set_running(app.app(), false);
+    assert_eq!(app.render().text().trim_end(), "⋯ Working⋯ Check");
+    // One tick may land before a driver sees the switch.
+    app.advance(Duration::from_millis(80));
+    app.render();
+    app.advance(Duration::from_millis(500));
+    assert!(!app.needs_frame(), "a driver ran with motion off");
+    // A spinner made while off starts once motion is back.
+    let late = Spinner::new(&app);
+    row.add(&late);
+    app.advance(Duration::from_millis(500));
+    app.render();
+    assert!(!app.needs_frame());
+    set_running(app.app(), true);
+    app.render();
+    app.advance(Duration::from_millis(80));
+    assert!(app.needs_frame(), "motion did not resume");
+    assert_eq!((spinner.frame(), late.frame()), (2, 1));
 }
 
 #[test]

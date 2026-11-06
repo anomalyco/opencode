@@ -350,7 +350,6 @@ fn render(tui: &Tui) {
     } else {
         format!(" to install v{}", notice.version)
     };
-    let animations = opencode_ui::motion::enabled(tui.settings.info().animations);
     let total = (if remote { 0 } else { command.len() } + rest.chars().count()) as f64;
     let (width, height) = app.size();
     let row = View::new(app)
@@ -373,7 +372,7 @@ fn render(tui: &Tui) {
             .sweep(if remote { 0.0 } else { command.len() as f64 }, Some(total)),
     );
     for part in &parts {
-        text.add(&part.clone().backdrop(backdrop).enabled(animations));
+        text.add(&part.clone().backdrop(backdrop));
     }
     row.add(&text);
     let (weak, styled) = (tui.weak(), row.clone());
