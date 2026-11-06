@@ -305,7 +305,7 @@ it.live("serves file reads as downloads with explicit content headers", () =>
       await fs.writeFile(path.join(tmp.path, "app.js"), "export {}")
       await fs.writeFile(path.join(tmp.path, "photo.png"), "png")
       await fs.writeFile(path.join(tmp.path, "clip.mp4"), "0123456789")
-      await fs.writeFile(path.join(tmp.path, 'naïve "q" (1).txt'), "text")
+      await fs.writeFile(path.join(tmp.path, "naïve 100% (1).txt"), "text")
     })
     const server = yield* startServer(path.join(tmp.path, "config"))
     const request = (file: string, init?: BunFetchRequestInit) =>
@@ -361,9 +361,9 @@ it.live("serves file reads as downloads with explicit content headers", () =>
     expect(cached.status).toBe(304)
     expectDownload(cached, "clip.mp4")
 
-    const named = yield* request('naïve "q" (1).txt')
+    const named = yield* request("naïve 100% (1).txt")
     expect(named.headers.get("content-disposition")).toBe(
-      `attachment; filename="na_ve _q_ (1).txt"; filename*=UTF-8''na%C3%AFve%20%22q%22%20%281%29.txt`,
+      `attachment; filename="na_ve 100_ (1).txt"; filename*=UTF-8''na%C3%AFve%20100%25%20%281%29.txt`,
     )
   }),
 )
