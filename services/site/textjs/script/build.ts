@@ -2,10 +2,10 @@
 // public/textjs/, with a manifest.json that maps each app to its hashed entry file.
 //
 // - picker: opencode.install.pick(), from src/picker.tsx.
-// - lite: opencode.try(), OpenCode Lite. Its source is the opencode-console app in
-//   anomalyco/textjs (MIT), which isn't published to npm; it is downloaded at the pinned commit into
-//   .upstream/. If the download fails the build still writes the picker, and try() falls back to a
-//   link to textjs.org/opencode.
+// - lite: OpenCode Lite, which starts when DevTools opens or from opencode.try(). Its source is the
+//   opencode-console app in anomalyco/textjs (MIT), which isn't published to npm; it is downloaded
+//   at the pinned commit into .upstream/. If the download fails the build still writes the picker,
+//   and try() falls back to a link to textjs.org/opencode.
 import { createHash } from "node:crypto"
 import { mkdir, rm } from "node:fs/promises"
 import path from "node:path"
