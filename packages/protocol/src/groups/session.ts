@@ -3,6 +3,7 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
+import { SessionGoal } from "@opencode/schema/session-goal"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
 import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
@@ -143,6 +144,30 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           summary: "Set or reset session context limit",
         }),
       ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.goalGet", "/api/session/:sessionID/goal", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: SessionGoal.Monitor }),
+        error: SessionNotFoundError,
+      }).annotateMerge(OpenApi.annotations({ identifier: "v2.session.goalGet", summary: "Get session goal" })),
+    )
+    .add(
+      HttpApiEndpoint.put("session.goalSave", "/api/session/:sessionID/goal", {
+        params: { sessionID: Session.ID },
+        payload: SessionGoal.Update,
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, InvalidRequestError],
+      }).annotateMerge(
+        OpenApi.annotations({ identifier: "v2.session.goalSave", summary: "Set or update session goal" }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.goalRemove", "/api/session/:sessionID/goal", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(OpenApi.annotations({ identifier: "v2.session.goalRemove", summary: "Remove session goal" })),
     )
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {

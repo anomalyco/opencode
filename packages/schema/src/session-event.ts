@@ -25,6 +25,7 @@ import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
 import { Permission } from "./permission.js"
+import { SessionGoal } from "./session-goal.js"
 
 const Base = {
   sessionID: SessionID,
@@ -36,6 +37,36 @@ const options = {
     version: 1,
   },
 } as const
+export const GoalSet = Event.durable({
+  type: "session.goal.set",
+  ...options,
+  schema: { ...Base, objective: SessionGoal.Info.fields.objective },
+})
+export type GoalSet = typeof GoalSet.Type
+export const GoalStatusChanged = Event.durable({
+  type: "session.goal.status_changed",
+  ...options,
+  schema: {
+    ...Base,
+    status: SessionGoal.Status,
+    reason: Schema.optionalKey(Schema.String),
+    awaitingApproval: Schema.optionalKey(Schema.Boolean),
+  },
+})
+export type GoalStatusChanged = typeof GoalStatusChanged.Type
+export const GoalEdited = Event.durable({
+  type: "session.goal.edited",
+  ...options,
+  schema: { ...Base, objective: SessionGoal.Info.fields.objective },
+})
+export type GoalEdited = typeof GoalEdited.Type
+export const GoalCleared = Event.durable({
+  type: "session.goal.cleared",
+  ...options,
+  schema: Base,
+})
+export type GoalCleared = typeof GoalCleared.Type
+
 export const Created = Event.durable({
   type: "session.created",
   ...options,
@@ -653,6 +684,10 @@ export namespace RevertEvent {
 
 export const Definitions = Event.inventory(
   Created,
+  GoalSet,
+  GoalEdited,
+  GoalStatusChanged,
+  GoalCleared,
   AgentSelected,
   ModelSelected,
   Moved,
