@@ -294,7 +294,7 @@ export const toolGrids = ["tiles", "outline"] as const
 export const logoLayouts = ["label + 6", "label + 7", "8 logos", "label above + 8", "section"] as const
 // The logo row's label, in every layout with one. Design mode copy (home.logos.label) can override it.
 export const logoLabels = [
-  "Trusted by 16M+ developers",
+  "Trusted by 22M+ developers",
   "Trusted by",
   "Trusted worldwide",
   "Trusted by users worldwide",
@@ -982,7 +982,7 @@ const schema = z.object({
   // The section dividers above the logo row and below it (on whichever section follows it).
   logoDividers: z.enum(toggles).catch("off"),
   logoLayout: z.enum(logoLayouts).catch("label + 6"),
-  logoLabel: z.enum(logoLabels).catch("Trusted by 16M+ developers"),
+  logoLabel: z.enum(logoLabels).catch("Trusted by 22M+ developers"),
   logoAnimation: z.enum(logoAnimations).catch("dither"),
   // How strong the one-colour logos and their label are, in percent of the strong text colour. 60
   // keeps the label at 4.7:1 on the light background (WCAG AA); 55 was 4.0:1.

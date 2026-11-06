@@ -78,13 +78,23 @@ export const frontGlass: Quad = [
   { x: glass.x, y: glass.y + glass.h },
 ]
 
+/** The cabinet's centre line in the room shot, in its pixels (layers.css centres the first paint on it too). */
+export const cabinetCentre = 1355
+
 // Camera framings, as world rectangles to fit into the viewport.
 export const framing = {
   sceneWide: scene,
-  // Portrait phones crop the room to the cabinet and the token beside it (full height, so it covers).
+  // Portrait phones crop the room to the cabinet and the token beside it (full height, so it covers),
+  // centred on the cabinet: its body (layers.json › cabinet, 1133 to 1577 px) and its glass share x 1355.
   sceneTall: (() => {
-    const a = fromScene(1045, 0)
-    const b = fromScene(1755, 1536)
+    const a = fromScene(cabinetCentre - 355, 0)
+    const b = fromScene(cabinetCentre + 355, 1536)
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }
+  })(),
+  // Landscape phones: the widest crop centred on the cabinet (the room's left edge to as far right).
+  sceneCentred: (() => {
+    const a = fromScene(0, 0)
+    const b = fromScene(cabinetCentre * 2, 1536)
     return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }
   })(),
   door: { x: 1110, y: 3290, w: 840, h: 900 },

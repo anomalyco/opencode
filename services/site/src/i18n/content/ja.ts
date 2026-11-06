@@ -540,7 +540,7 @@ export const content = {
     about: {
       title: "OpenCodeについて",
       boilerplate: {
-        long: "OpenCodeはオープンソースのコーディングエージェントです。デスクトップアプリ、モバイルアプリ、ターミナルUI、SDKとして提供され、Claude、GPT、Geminiなど、あらゆるプロバイダーのモデルで動作します。OpenCodeはMITライセンスで、Anomalyが開発しています。GitHubスターは220,000以上、コントリビューターは1,000人以上で、毎月1,600万人以上の開発者が利用しています。",
+        long: "OpenCodeはオープンソースのコーディングエージェントです。デスクトップアプリ、モバイルアプリ、ターミナルUI、SDKとして提供され、Claude、GPT、Geminiなど、あらゆるプロバイダーのモデルで動作します。OpenCodeはMITライセンスで、Anomalyが開発しています。GitHubスターは220,000以上、コントリビューターは1,000人以上で、毎月2,200万人以上の開発者が利用しています。",
         short:
           "OpenCodeはAnomalyが開発するオープンソースのコーディングエージェントで、デスクトップ、モバイル、ターミナル向けのアプリとSDKがあります。",
       },

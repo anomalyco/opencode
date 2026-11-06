@@ -56,8 +56,10 @@ const preloadRules: [string, string, (s: SiteSettings, el: HTMLElement, d: SiteS
   [
     "",
     "data-docs-variants",
+    // A page that fixes its docs options (/dev/docs, data-docs-fixed) keeps the server's value. The
+    // build's default-attributes pass (css-variants.ts) hands in a stub without getAttribute.
     (s, el) =>
-      el.hasAttribute("data-docs-fixed")
+      el.hasAttribute("data-docs-fixed") && typeof el.getAttribute === "function"
         ? el.getAttribute("data-docs-variants")
         : Object.entries(s.docsVariants)
             .filter((entry) => entry[1] !== "1")

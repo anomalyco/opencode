@@ -1,6 +1,7 @@
 import { Rich } from "~/component/site/rich-text"
 import { rich } from "~/i18n/rich"
 import { Marked } from "~/component/site/marked"
+import "~/component/site/doc-list.css"
 import "./index.css"
 import { Title, Meta } from "@solidjs/meta"
 import { createAsync } from "@solidjs/router"
@@ -34,6 +35,7 @@ import { brandContent, brandMarkdown } from "~/lib/brand-content"
 import { pressContent, pressMarkdown, pressReleases } from "~/lib/press-content"
 import { MediaGallery } from "./media-gallery"
 import { PageTitle } from "~/component/site/sticky-title"
+import { ExternalArrow } from "~/component/site/icons"
 
 // One-line Anomaly projects for Settings › Press Anomaly projects "list".
 const projectLines: Record<string, string> = {
@@ -446,7 +448,14 @@ export default function Press() {
             <Rich value={rich(content().company.more, content().company.links)} />
           </p>
         </div>
-        <ul data-component="product-list" data-variant="cards" data-style={siteSettings.pressCompany}>
+        {/* The legal index's list (doc-list.css): the same rows, type, spacing and hover. */}
+        <ul
+          data-component="legal-list"
+          data-style="rows"
+          data-hover={siteSettings.legalRowHover}
+          data-slot="projects"
+          data-design="pressCompany legalRowHover"
+        >
           <For each={content().company.projects}>
             {(project) => {
               // OpenCode is this site; the other projects open in a new tab.
@@ -457,21 +466,17 @@ export default function Press() {
                     href={project.href}
                     target={external ? "_blank" : undefined}
                     rel={external ? "noopener" : undefined}
-                    data-slot="row-link"
                     aria-label={external ? i18n.t("site.newTab", { label: project.name }) : project.name}
                     aria-describedby={`project-${slug(project.name)}`}
                   >
-                    <strong>
+                    <span data-slot="title">
                       {project.name}
-                      {/* The site's new-tab arrow, after the name. */}
+                      {/* The nav's new-tab arrow, 6px after the name. */}
                       <Show when={external}>
-                        <span data-slot="external" aria-hidden="true">
-                          {" "}
-                          ↗
-                        </span>
+                        <ExternalArrow />
                       </Show>
-                    </strong>
-                    <span id={`project-${slug(project.name)}`}>
+                    </span>
+                    <span data-slot="description" id={`project-${slug(project.name)}`}>
                       {siteSettings.pressCompany === "list" ? projectLines[project.name] : project.body}
                     </span>
                   </a>

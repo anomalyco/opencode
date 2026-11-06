@@ -1033,10 +1033,16 @@ html:has([data-site][data-theme="dark"]) {
     }
   }
 
+  /* One row height for the accordion rows and the bars that sit with them on phones (the sticky
+     Contents bar and its open list, the docs section menu): a single-line question, 10px above and
+     below its 1.55 line of large text. */
+  --row-height: calc(1.25rem + 1.55 * var(--fs-large));
+
   [data-component="faq"] {
     [data-slot="faq-question"] {
       --padding-top: 0.625rem;
       position: relative;
+      min-height: var(--row-height);
       width: 100%;
       display: flex;
       align-items: center;
@@ -1061,6 +1067,15 @@ html:has([data-site][data-theme="dark"]) {
         height: 1px;
         background: var(--text-weak);
         transition: background-color 150ms ease;
+      }
+
+      /* Phones: the plus centred under the menu button in the top bar, whose 44px box sits 12px in
+         from the screen edge (its centre 34px in), so every plus shares the menu icon's column. */
+      @media (max-width: 40rem) {
+        &::before,
+        &::after {
+          inset-inline-end: calc(34px - var(--edge) - 6px);
+        }
       }
 
       /* The vertical bar shrinks into the center, leaving the minus. */
@@ -1091,6 +1106,7 @@ html:has([data-site][data-theme="dark"]) {
     /* Start the first question level with the section label. */
     li:first-child [data-slot="faq-question"] {
       --padding-top: 0px;
+      min-height: 0;
     }
 
     /* Padding sits on the inner wrapper so the height animation can close to zero. */
@@ -1661,8 +1677,10 @@ html:has([data-site][data-theme="dark"]) {
 
   [data-component="language-picker"] {
     /* The chevron shows only on hover, keyboard focus or while the menu is open (always on touch).
-       It flips instantly when the menu opens. */
+       It flips instantly when the menu opens. It takes the label's colour, so it follows its
+       hover, pressed and open states (dropdown.css's own grey is brighter than the label in dark). */
     [data-slot="chevron"] {
+      color: inherit;
       opacity: 0;
       transition: opacity 150ms ease;
     }
@@ -2248,10 +2266,10 @@ html:has([data-site][data-theme="dark"]) {
     }
   }
 
-  /* Small-screen header and menu. Hidden on wide screens, where the sidebar holds the nav. */
+  /* Small-screen header and menu. Hidden on wide screens, where the sidebar holds the nav. The menu
+     button and its sheet are in phone-menu.css. */
 
   [data-component="topbar"],
-  [data-component="site-menu-sheet"],
   [data-slot="section-toggle"] {
     display: none;
   }
@@ -2334,123 +2352,10 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
-    /* Two lines that turn into an X. The lines end on the page edge; the button extends past it
-       so the tap target is 44px square. */
-    [data-component="menu-toggle"] {
-      position: relative;
-      width: 2.75rem;
-      height: 2.75rem;
-      margin-inline-end: -0.75rem;
-
-      [data-slot="line"] {
-        position: absolute;
-        inset-inline-start: 0.75rem;
-        inset-inline-end: 0.75rem;
-        top: calc(50% - 0.5px);
-        height: 1px;
-        background: var(--text-strong);
-        transition: transform 200ms var(--ease-out);
-
-        &:first-child {
-          transform: translateY(-4.5px);
-        }
-
-        &:last-child {
-          transform: translateY(4.5px);
-        }
-      }
-
-      &[aria-expanded="true"] [data-slot="line"] {
-        &:first-child {
-          transform: rotate(45deg);
-        }
-
-        &:last-child {
-          transform: rotate(-45deg);
-        }
-      }
-    }
-
-    /* Opens down from under the header and covers the page. Closed, it stays in place but hidden,
-       so the transitions can be interrupted and reversed. */
-    [data-component="site-menu-sheet"] {
-      position: fixed;
-      inset: calc(var(--topbar-height) + env(safe-area-inset-top, 0px)) 0 0;
-      z-index: 9;
-      display: block;
-      visibility: hidden;
-      transition: visibility 0s linear 150ms;
-
-      [data-slot="backdrop"] {
-        position: absolute;
-        inset: 0;
-        background: var(--bg);
-        opacity: 0;
-        transition: opacity 150ms ease-out;
-      }
-
-      [data-slot="panel"] {
-        position: relative;
-        max-height: 100%;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        padding: 0.5rem calc(var(--edge) + env(safe-area-inset-right, 0px))
-          calc(1.5rem + env(safe-area-inset-bottom, 0px)) calc(var(--edge) + env(safe-area-inset-left, 0px));
-        font-family: var(--font-mono);
-        /* The sheet's one job is this list: a step above the body copy, like a native menu. */
-        font-size: var(--fs-large);
-        line-height: 24px;
-        opacity: 0;
-        transform: translateY(-0.5rem);
-        transition:
-          opacity 150ms ease-out,
-          transform 150ms var(--ease-out);
-      }
-
-      a {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        min-height: 3.25rem;
-        color: var(--text);
-        transition: color 150ms ease;
-
-        &[aria-current="page"] {
-          color: var(--text-strong);
-        }
-
-        &:active {
-          color: var(--text-strong);
-        }
-      }
-
-      /* --text-muted, not --text-faint: 4.5:1 at this size. */
-      [data-slot="index"] {
-        color: var(--text-muted);
-      }
-
-      a[aria-current="page"] [data-slot="index"] {
-        color: var(--text-strong);
-      }
-
-      /* Touch has no hover to reveal the arrow, so it always shows. */
-      [data-slot="external"] {
-        flex-shrink: 0;
-        margin-inline-start: calc(4px - 0.625rem);
-        translate: 0 -2px;
-      }
-
-      &[data-open] {
-        visibility: visible;
-        transition: visibility 0s;
-
-        [data-slot="backdrop"],
-        [data-slot="panel"] {
-          opacity: 1;
-          transform: none;
-          transition-duration: 200ms;
-        }
-      }
+    /* While the menu is open the bar and the menu are one surface: no hairline between them. It
+       goes with the toggle's state, so it is cut, never faded. */
+    [data-component="topbar"]:has([data-component="menu-toggle"][aria-expanded="true"])::after {
+      display: none;
     }
 
     [data-component="sidebar"] {
@@ -2478,7 +2383,7 @@ html:has([data-site][data-theme="dark"]) {
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        min-height: 3rem;
+        min-height: var(--row-height);
         font-family: var(--font-mono);
         font-size: var(--mono-size);
         color: var(--text-strong);
@@ -2541,11 +2446,16 @@ html:has([data-site][data-theme="dark"]) {
       --gaps: 2;
     }
 
-    /* Stacked, the title sits as close to its copy as a feature title to its description. */
+    /* Stacked, the title sits as close to its copy as a feature title to its description; on phones
+       2px further (David, 6 Nov). */
     [data-component="block"] {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+
+      @media (max-width: 40rem) {
+        gap: 0.625rem;
+      }
     }
 
     [data-component="hero"] {
@@ -3592,6 +3502,17 @@ html:has([data-site][data-theme="dark"]) {
     }
   }
 
+  /* Bare pages (the font page) have no top bar on small screens, but their logo row stands in for
+     it: the bar's 30px logo box, centred in its 56px. So the logo, and the GitHub mark and the
+     controls level with it, sit exactly where the bar puts them on every other page, and the logo
+     doesn't move between pages. */
+  @media (max-width: 60rem) {
+    &[data-bare] {
+      --top: calc((var(--topbar-height) - var(--phone-logo-height)) / 2);
+      --logo-height: var(--phone-logo-height);
+    }
+  }
+
   /* --logo-box is only set beside the sidebar; the phone bar's box follows its own --logo-height. */
   &[data-logo-size] [data-slot="logo"] [data-slot="icon"] {
     --box: var(--logo-box, calc(var(--logo-height) * 4 / 5));
@@ -3606,10 +3527,13 @@ html:has([data-site][data-theme="dark"]) {
     margin-bottom: calc(var(--logo-height) - var(--logo-mark-h));
   }
 
-  /* The sidebar logo starts at --edge less the bracket bearing, and layout rounds both down to
-     1/64px, which leaves the box 1/64px short of the edge. Rounding the bearing up here puts the
-     mark back on a whole pixel. */
-  &[data-logo-size] [data-component="sidebar"] [data-slot="logo"] [data-slot="icon"] {
+  /* The sidebar logo (and the bare pages' logo in its place) starts at --edge less the bracket
+     bearing, and layout rounds both down to 1/64px, which leaves the box 1/64px short of the edge.
+     Rounding the bearing up here puts the mark back on a whole pixel. */
+  &[data-logo-size]
+    :is([data-component="sidebar"], [data-component="bare-chrome"])
+    [data-slot="logo"]
+    [data-slot="icon"] {
     margin-inline-start: round(up, var(--bracket-bearing), 1px / 64);
   }
 }
