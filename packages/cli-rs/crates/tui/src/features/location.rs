@@ -28,6 +28,8 @@ pub struct LocationState {
     generation: Cell<u64>,
     /// Where the next home works, from the open dialog or `session.new` (TS `HomeRoute.location`).
     home: RefCell<Option<Location>>,
+    /// The default location the home follows, `None` while it works where [`navigate_home`] sent it.
+    followed: RefCell<Option<Location>>,
     /// The session whose environment was uploaded on this connection.
     uploaded: RefCell<Option<SessionID>>,
 }
@@ -50,13 +52,23 @@ pub fn navigate_home(tui: &Tui, location: Option<Location>) {
 
 /// The home route's location: the one [`navigate_home`] passed, else the default.
 pub fn home(tui: &Tui) {
-    let target = tui
-        .location
-        .home
-        .borrow_mut()
-        .take()
-        .unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()));
-    set(tui, target);
+    let explicit = tui.location.home.borrow_mut().take();
+    let default = tui.data.read(|state| state.default_location().clone());
+    *tui.location.followed.borrow_mut() = explicit.is_none().then(|| default.clone());
+    set(tui, explicit.unwrap_or(default));
+}
+
+/// A home without a location of its own moves with the default, as a read adopts the server's directory
+/// (`home.tsx`'s effect). A `/cd` holds until the default changes.
+pub fn follow_default(tui: &Tui) {
+    let default = tui.data.read(|state| state.default_location().clone());
+    let mut followed = tui.location.followed.borrow_mut();
+    if followed.as_ref().is_none_or(|followed| *followed == default) {
+        return;
+    }
+    *followed = Some(default.clone());
+    drop(followed);
+    set(tui, default);
 }
 
 /// The session route's location, once the session is known; and its environment upload.
