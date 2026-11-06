@@ -1379,8 +1379,9 @@ html:has([data-site][data-theme="dark"]) {
       flex: 0 0 calc((100% - 4 * 2px) / 5 - 1px);
       background: var(--status-ok);
 
+      /* As on the status page: degraded is the positive green, muted, not a warning color. */
       &[data-state="degraded"] {
-        background: var(--status-degraded);
+        background: color-mix(in srgb, var(--status-ok) 40%, transparent);
       }
 
       &[data-state="outage"] {
