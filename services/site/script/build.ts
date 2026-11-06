@@ -16,6 +16,7 @@ import {
 import { resolveAndParseConfig } from "@cloudflare/config"
 import { mediaFile } from "../src/lib/media"
 import { stageHeaders } from "../src/lib/noindex"
+import { retainAssets } from "./retain-assets"
 
 const root = path.resolve(import.meta.dir, "..")
 const modeIndex = process.argv.indexOf("--mode")
@@ -71,6 +72,8 @@ if (fixed.length) throw new Error(`fixed-URL files missing from Worker assets: $
 // The stage's headers for the assets the Worker never sees; its own responses get them from src/lib/noindex.ts.
 const headers = Object.entries(stageHeaders(mode)).map(([name, value]) => `  ${name}: ${value}\n`)
 if (headers.length) await appendFile(path.join(assets, "_headers"), `\n/*\n${headers.join("")}`)
+// Open pages from earlier builds keep loading their code after this deploy (script/retain-assets.ts).
+await retainAssets(assets, mode === "dev" ? "https://dev.opencode.ai" : "https://opencode.ai")
 await writeAssets({ root, sourceDirectory: assets })
 
 const bundle = getWorkerBundleDir(root)
