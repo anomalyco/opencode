@@ -93,6 +93,7 @@ To add a rule, add one line under its group. Mark a rule that is still being dec
 - Make tap targets at least 44px on coarse pointers (`tap-targets.css`).
 - Close menus on Escape, an outside click and a choice, and return focus to the trigger. → [Language picker](/dev/components#language-picker)
 - Test platform UI with the device preview's `_device` parameter, not a narrow window. → [ProductAction](/dev/components#product-action)
+- On phones the 404 arcade centres the cabinet and has no Insert coin or Back button: a tap on the coin inserts it, and the site's own GitHub mark, menu button and sheet (`phone-menu.tsx`) sit in the top bar beside the logo.
 
 ## Motion
 
@@ -127,9 +128,10 @@ Motion decisions follow Emil Kowalski's skills ([emilkowalski/skills](https://gi
 ## i18n and RTL
 
 - Put new copy in `src/i18n/en.ts` (or `src/i18n/content`), never hard-coded in a component.
-- Follow the translators' rules in `i18n/packets.md` (keep names, params, code and prices; stay within 140% in tight places).
+- Name a key in full where the page shows it (`i18n.t("home.hero.title")`, or a template that starts it, such as `` `site.theme.${name}` ``): each page's browser bundle gets only the keys its code names (`script/i18n-slices.ts`).
+- Follow the translators' rules in `.opencode/agent/translator.md` (keep names, params, code and prices; stay within 140% in tight places), and check a locale with `bun src/i18n/check.ts <locale>`.
 - Lay out with logical properties (`padding-inline-start`, `inset-inline-end`), never left and right; the site ships 17 locales with right to left.
-- Keep the locale prefix on internal links with `language.route()`.
+- Keep the locale prefix on internal links with `language.route()`; it leaves the docs, the Console and the English-only pages unprefixed (`localized` in `src/lib/language.ts`).
 
 ## Options and flags
 

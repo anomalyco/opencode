@@ -572,7 +572,7 @@ export const content = {
     about: {
       title: "Über OpenCode",
       boilerplate: {
-        long: "OpenCode ist ein Open-Source-Coding-Agent. Es gibt ihn als Desktop-App, Mobile-App, Terminal-UI und SDK, und er funktioniert mit Modellen jedes Anbieters, darunter Claude, GPT und Gemini. OpenCode ist MIT-lizenziert und wird von Anomaly entwickelt. Es hat über 220.000 GitHub-Sterne und mehr als 1.000 Mitwirkende, und über 16 Millionen Entwickler nutzen es jeden Monat.",
+        long: "OpenCode ist ein Open-Source-Coding-Agent. Es gibt ihn als Desktop-App, Mobile-App, Terminal-UI und SDK, und er funktioniert mit Modellen jedes Anbieters, darunter Claude, GPT und Gemini. OpenCode ist MIT-lizenziert und wird von Anomaly entwickelt. Es hat über 220.000 GitHub-Sterne und mehr als 1.000 Mitwirkende, und über 22 Millionen Entwickler nutzen es jeden Monat.",
         short:
           "OpenCode ist ein Open-Source-Coding-Agent von Anomaly, mit Apps für Desktop, Mobile und Terminal sowie einem SDK.",
       },

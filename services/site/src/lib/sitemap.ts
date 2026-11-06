@@ -1,7 +1,7 @@
 import { config } from "~/config"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
-import { LOCALES, route, tag } from "~/lib/language"
+import { LOCALES, localized, route, tag } from "~/lib/language"
 import { legalDocuments, legalVersions } from "~/lib/legal"
 
 /**
@@ -10,7 +10,7 @@ import { legalDocuments, legalVersions } from "~/lib/legal"
  */
 export const sitemapFiles = [
   "/sitemap-pages.xml", // this app's pages, built below
-  "/v2/sitemap.xml", // the V2 docs, from the docs app (served under /v2 on opencode.ai)
+  "/v2/sitemap.xml", // the V2 docs (src/docs)
   "/data/sitemap.xml", // the Data pages, from the stats app
   "/console/sitemap.xml", // the Console pages, from the Console app
 ]
@@ -77,7 +77,7 @@ export function sitemapPages(routes: string[], data: SitemapData): SitemapPage[]
     .flatMap((path) => {
       if (path in dynamicRoutes) return dynamicRoutes[path](data)
       if (/[:*]/.test(path)) return []
-      return [{ path, ...details(path, data) }]
+      return [{ path, ...(localized(path) ? {} : { englishOnly: true }), ...details(path, data) }]
     })
 }
 
@@ -106,10 +106,9 @@ ${pages.flatMap((page) => (page.englishOnly ? [url(page)("en")] : LOCALES.map(ur
 `
 }
 
-/** The changelog, the font and the legal pages are English only; dates come from the releases and the legal text history. */
+/** The legal pages are English only (as are the addresses that never take a locale); dates come from the releases and the legal text history. */
 function details(path: string, data: SitemapData): Omit<SitemapPage, "path"> {
-  if (path === "/font") return { englishOnly: true }
-  if (path === "/changelog") return { englishOnly: true, lastmod: changelogTimeline(data.releases)[0]?.date }
+  if (path === "/changelog") return { lastmod: changelogTimeline(data.releases)[0]?.date }
   if (path === "/legal") {
     const dates = legalDocuments.flatMap((document) => legalVersions(document.path)[0]?.date ?? [])
     return { englishOnly: true, lastmod: dates.toSorted().at(-1) }

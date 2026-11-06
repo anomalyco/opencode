@@ -1,7 +1,7 @@
 import { productDetails, products, type ProductSlug } from "~/component/site/product-data"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { brandAssets } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import { pressEmail } from "~/lib/contact"
 import type { ChangelogRelease } from "~/lib/changelog"
 import pressMedia from "../../public/press-media/manifest.json"

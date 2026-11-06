@@ -109,7 +109,7 @@ export const copyVariants = {
     label: "Logo row label",
     lines: 1,
     options: [
-      "Trusted by 16M+ developers",
+      "Trusted by 22M+ developers",
       "Trusted worldwide",
       "Trusted by",
       "Used and trusted by developers",

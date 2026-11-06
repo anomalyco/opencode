@@ -33,11 +33,13 @@ import { useI18n } from "~/context/i18n"
 import type { Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
 import { strip } from "~/lib/language"
-import { brandAssets } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import { status, type ServiceStatus } from "~/lib/status"
 import { useViewportCover } from "~/lib/viewport"
 import { LiveMeta } from "~/component/head-meta"
-import { Chevron, ChevronRight, ExternalArrow, GitHubMark, NewTab, ThemeIcon, themes } from "./icons"
+import { Chevron, ChevronRight, ExternalArrow, NewTab, ThemeIcon, themes } from "./icons"
+import { GitHubLink } from "./github-link"
+import { MenuSheet, MenuToggle } from "./phone-menu"
 import { siteLinks } from "./links"
 import {
   navEditing,
@@ -125,14 +127,33 @@ const markdownKey = "opencode-markdown-view"
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
 
-// Pages of this site that render client-side; everything else keeps a full page load.
-// Of the docs, only the Intro (/docs) is a page of this app; the other docs pages are served
-// separately, so links to them take a full page load.
-const clientPages =
-  /^\/(?:desktop|mobile|terminal|sdk|download|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?|docs)?\/?$/
+// Pages of this site that render client-side; everything else keeps a full page load. The docs
+// (/docs and /v2/docs) are served separately, and /download redirects on the server.
+const clientPages = /^\/(?:desktop|mobile|terminal|sdk|changelog(?:\/v\d[\w.+-]*)?|brand|press|legal(?:\/.*)?)?\/?$/
 function clientPage(pathname: string) {
   return clientPages.test(strip(pathname))
 }
+// The full page loads a link here can lead to on this domain (this site's other pages, in any
+// language, the docs and Stats), fetched once the pointer rests on the link so the page opens sooner.
+// Only addresses that are safe to request ahead of time: never the Console or a download, and never a
+// language link (hreflang), whose page sets the language cookie. Browsers without Speculation Rules
+// ignore it.
+const speculationRules = JSON.stringify({
+  prefetch: [
+    {
+      source: "document",
+      eagerness: "moderate",
+      where: {
+        and: [
+          {
+            href_matches: ["{/:locale}?/:page(product|ide|mini|font)", "{/:locale}?/extensions/*", "/v2/*", "/data{/*}?"],
+          },
+          { not: { selector_matches: "[hreflang]" } },
+        ],
+      },
+    },
+  ],
+})
 
 // Labels and headlines match status.opencode.ai.
 const statusLabel = {
@@ -583,7 +604,7 @@ export function Site(props: {
     // Once the page is idle, load the code for the main pages so the first click is instant too.
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
     idle(() =>
-      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/docs", "/changelog"].forEach((path) =>
+      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/changelog"].forEach((path) =>
         preloadRoute(language.route(path), { preloadData: false }),
       ),
     )
@@ -932,18 +953,8 @@ export function Site(props: {
 
   // The repo, as a GitHub mark: fixed in the top-right corner beside the sidebar (and at every
   // width on bare pages), in the top bar on small screens.
-  const githubLink = (owner: "corner" | "topbar") => (
-    <a
-      href={links().github.href}
-      target="_blank"
-      rel="noopener"
-      data-component="github-link"
-      data-owner={owner}
-      aria-label={i18n.t("site.githubLabel")}
-    >
-      <GitHubMark />
-    </a>
-  )
+  const githubLink = (owner: "corner" | "topbar") => <GitHubLink owner={owner} />
+
   const logoLink = (owner: "sidebar" | "topbar") => (
     <A
       href={language.route("/")}
@@ -1174,6 +1185,7 @@ export function Site(props: {
       <script
         innerHTML={`if(!document.posterLoads){document.posterLoads=1;document.addEventListener("load",(e)=>{const t=e.target;if(t instanceof HTMLImageElement&&t.hasAttribute("data-poster"))t.setAttribute("data-loaded","")},true);const scan=()=>{document.querySelectorAll("img[data-poster]:not([data-seen])").forEach((i)=>{i.setAttribute("data-seen","");if(i.complete&&i.naturalWidth){i.setAttribute("data-instant","");i.setAttribute("data-loaded","")}});if(document.readyState!=="complete")requestAnimationFrame(scan)};requestAnimationFrame(scan)}`}
       />
+      <script type="speculationrules" innerHTML={speculationRules} />
       <Show when={props.markdown?.href}>{(href) => <Link rel="alternate" type="text/markdown" href={href()} />}</Show>
       {/* Hidden until it has keyboard focus. It moves focus itself, before the router sees the click.
           First in the page, before the banner's link, so it is the first Tab stop. */}
@@ -1209,37 +1221,19 @@ export function Site(props: {
         <header data-component="topbar">
           {logoLink("topbar")}
           {githubLink("topbar")}
-          <button
-            ref={menuToggle}
-            type="button"
-            data-component="menu-toggle"
-            aria-expanded={menu() ? "true" : "false"}
-            aria-controls="site-menu"
-            aria-label={menu() ? i18n.t("site.closeMenu") : i18n.t("nav.openMenu")}
-            onClick={() => {
+          <MenuToggle
+            ref={(element) => (menuToggle = element)}
+            open={menu()}
+            onToggle={() => {
               setLogoMenu(undefined)
               setMenu(!menu())
             }}
-          >
-            <span data-slot="line" />
-            <span data-slot="line" />
-          </button>
+          />
           {logoMenuView("topbar")}
         </header>
-        <div data-component="site-menu-sheet" id="site-menu" data-open={menu() ? "" : undefined}>
-          <div data-slot="backdrop" onClick={() => setMenu(false)} />
-          <nav
-            data-slot="panel"
-            aria-label={i18n.t("site.landmark.primary")}
-            onClick={(event) => {
-              if ((event.target as Element).closest("a")) setMenu(false)
-            }}
-          >
-            <ul ref={sortableNav} data-sortable={designMode() ? "" : undefined}>
-              <For each={navAll()}>{(item, index) => navItem(item, index)}</For>
-            </ul>
-          </nav>
-        </div>
+        <MenuSheet open={menu()} onClose={() => setMenu(false)} listRef={sortableNav} sortable={designMode()}>
+          <For each={navAll()}>{(item, index) => navItem(item, index)}</For>
+        </MenuSheet>
       </Show>
       <LanguageSheet />
 

@@ -4,10 +4,11 @@ import { FileRoutes } from "@solidjs/start/router"
 import { Show, Suspense } from "solid-js"
 import { Favicon } from "@opencode/ui/favicon"
 import { Font } from "@opencode/ui/font"
-import "./style/ibm-plex-mono.css"
+import "./style/ibm-plex-mono.dev.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider, useI18n } from "~/context/i18n"
+import { preloadStrings } from "~/i18n/preload"
 import { config } from "~/config"
 import { ogImage } from "~/lib/og"
 import { strip } from "~/lib/language"
@@ -46,6 +47,7 @@ function AppMeta() {
   const matches = useCurrentMatches()
   // The 404 route and its /dev/404 previews (the dev server shows one for bad URLs).
   const notFound = () => matches().some((match) => match.route.pattern.includes("404"))
+  preloadStrings()
   return (
     <>
       <Title>opencode</Title>

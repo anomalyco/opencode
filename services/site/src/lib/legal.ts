@@ -196,6 +196,41 @@ export function published(node: LegalNode) {
   return typeof node === "string" || node[1]["data-review"] === undefined
 }
 
+/**
+ * The ⌘K search's entries for the legal documents: each one's title and description, and its h2s
+ * and h3s with the text up to the next heading. script/legal-search.ts writes them to
+ * component/site/legal-search.json, so the search loads those instead of the documents.
+ */
+export function legalSearch() {
+  return [privacyPolicy, termsOfService].map((document) => ({
+    title: document.title,
+    path: document.path,
+    description: document.description,
+    headings: legalHeadings(document),
+  }))
+}
+
+function legalText(node: LegalNode): string {
+  if (typeof node === "string") return node
+  const [, , ...children] = node
+  return children.filter(published).map(legalText).join("")
+}
+
+/** Each h2 and h3 of a legal document, with the text up to the next heading. */
+function legalHeadings(document: LegalDocumentContent) {
+  return document.body
+    .filter(published)
+    .reduce<{ id: string; title: string; body: string; path: string; document: string }[]>((acc, node) => {
+      if (typeof node !== "string" && (node[0] === "h2" || node[0] === "h3") && node[1].id) {
+        acc.push({ id: node[1].id, title: legalText(node), body: "", path: document.path, document: document.title })
+        return acc
+      }
+      const last = acc.at(-1)
+      if (last && last.body.length < 600) last.body = `${last.body} ${legalText(node)}`.slice(0, 600)
+      return acc
+    }, [])
+}
+
 function elements(node: LegalElement) {
   return childrenOf(node).filter((child) => typeof child !== "string")
 }

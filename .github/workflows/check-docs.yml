@@ -1,0 +1,42 @@
+name: check-docs
+
+# Builds the V2 docs on their own (services/site/src/docs/script/build.ts): compiles every MDX page,
+# prerenders it, builds search, checks every link and that pages load nothing from outside /v2. The
+# site's deploy runs the same step, so a broken page fails here instead of blocking the deploy.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - services/site/**
+      - packages/protocol/openapi.json
+      - packages/cli/src/config/**
+      - .github/workflows/check-docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: docs build
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/site
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/setup-bun
+
+      # The API reference and the config schema the pages link (/v2/openapi.json, /v2/cli.json).
+      - name: Generate
+        run: bun run generate
+
+      - name: Build docs
+        run: bun src/docs/script/build.ts --mode dev --out "$RUNNER_TEMP/docs"
