@@ -95,6 +95,8 @@ export interface MockServerConfig {
   vcsDiff?: unknown[] | ((input: { mode?: string; directory: string; context?: string }) => unknown[])
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   beforeAgentsResponse?: () => Promise<void>
+  // The Location's primary agents; omitted for the single built-in `build` agent.
+  agents?: Resolvable<unknown[]>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
@@ -794,16 +796,18 @@ function mockHandlers(
           Effect.promise(async () => config.beforeAgentsResponse?.()).pipe(
             Effect.as({
               location: location(config, requestDirectory(config, ctx.request)),
-              data: [
-                {
-                  id: "build",
-                  name: "Build",
-                  mode: "primary",
-                  hidden: false,
-                  request: { settings: {}, headers: {}, body: {} },
-                  permissions: [],
-                },
-              ],
+              data: resolve(
+                config.agents ?? [
+                  {
+                    id: "build",
+                    name: "Build",
+                    mode: "primary",
+                    hidden: false,
+                    request: { settings: {}, headers: {}, body: {} },
+                    permissions: [],
+                  },
+                ],
+              ),
             }),
           ),
         provider: () =>

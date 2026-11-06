@@ -463,6 +463,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               <Show when={view.agent} keyed>
                 {(control) => (
                   <ComposerEditorConfiguredSelect
+                    mobileDrawer
                     fitMenuToOptions
                     title={i18n.t("ui.promptInput.chooseAgent")}
                     keybind={["Mod", "."]}

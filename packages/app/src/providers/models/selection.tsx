@@ -1,6 +1,7 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { base64Encode } from "@opencode/util/encode"
 import { useParams } from "@solidjs/router"
+import { createMediaQuery } from "@solid-primitives/media"
 import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup, untrack } from "solid-js"
 import { Predicate, Schema, SchemaGetter } from "effect"
 import { useModels } from "@/providers/models/models"
@@ -334,7 +335,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       void syncWhileBooting(() => data.location.agent.sync({ directory })).catch(() => undefined)
     })
 
-    const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
+    // A touch client has no hardware keyboard for the agent-cycle keybind, so it keeps the picker whenever
+    // another primary agent exists even if the per-device "Show agent" preference is off.
+    const touch = createMediaQuery("(hover: none) and (pointer: coarse)")
+
+    const agentsVisible = createMemo(
+      () => settings.visibility.customAgents() || hasCustomAgent(list()) || (touch() && list().length > 1),
+    )
+
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
     // The location object is rebuilt whenever its info loads, so key on the folder: reopening the same workspace
