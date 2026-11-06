@@ -6,6 +6,7 @@ import { monoFontDefault } from "./mono-fonts"
 import type { PressIconName } from "./press-icons"
 import { productPages, type PageSlug } from "./product-data"
 import docsChoices from "~/lib/docs-choices.json"
+import defaultSettings from "./settings-defaults.json"
 
 export const navVariants = ["index", "rail"] as const
 export const logoVariants = ["wordmark", "icon"] as const
@@ -701,407 +702,412 @@ export const carouselPresetNames = [
   "custom",
 ] as const
 
-// Per-style tuning for the logo row's animations (Settings › Logo animation). Every style has a
-// duration (the arriving logo's; the leaving one takes 60% of it) and a delay before the new logo
-// arrives; the rest are the style's own.
-const number = (min: number, max: number, value: number) => z.number().min(min).max(max).catch(value)
-const timing = (duration: number, delay: number) => ({
-  duration: number(80, 1500, duration),
-  delay: number(0, 1000, delay),
-})
-const eased = (duration: number, delay: number, easing: (typeof logoEasings)[number] = "ease-out") => ({
-  ...timing(duration, delay),
-  easing: z.enum(logoEasings).catch(easing),
-})
-function tuning<T extends z.ZodRawShape>(shape: T) {
-  const style = z.object(shape)
-  return style.catch(style.parse({}))
+// The settings and how each one falls back, as a zod schema. It is built on first use, by the
+// development server, Settings and tests: production renders the defaults from
+// settings-defaults.json, so the browser's bundle never builds it and leaves zod out.
+function createSchema() {
+  // Per-style tuning for the logo row's animations (Settings › Logo animation). Every style has a
+  // duration (the arriving logo's; the leaving one takes 60% of it) and a delay before the new logo
+  // arrives; the rest are the style's own.
+  const number = (min: number, max: number, value: number) => z.number().min(min).max(max).catch(value)
+  const timing = (duration: number, delay: number) => ({
+    duration: number(80, 1500, duration),
+    delay: number(0, 1000, delay),
+  })
+  const eased = (duration: number, delay: number, easing: (typeof logoEasings)[number] = "ease-out") => ({
+    ...timing(duration, delay),
+    easing: z.enum(logoEasings).catch(easing),
+  })
+  function tuning<T extends z.ZodRawShape>(shape: T) {
+    const style = z.object(shape)
+    return style.catch(style.parse({}))
+  }
+  const docsVariant = (key: DocsVariantKey) =>
+    z
+      .enum(docsVariantOptions)
+      .refine((value) => docsVariantOptionsFor(key).includes(value))
+      .catch(docsVariantRecommended[key] ?? "1")
+  const docsVariants = z.object(
+    Object.fromEntries(docsVariantKeys.map((key) => [key, docsVariant(key)])) as Record<
+      DocsVariantKey,
+      ReturnType<typeof docsVariant>
+    >,
+  )
+  const logoTuning = z.object({
+    fade: tuning(eased(450, 200)),
+    blur: tuning({ ...eased(450, 200), blur: number(0, 16, 6) }),
+    rise: tuning({ ...eased(550, 0), rise: number(0, 32, 12), blur: number(0, 16, 4) }),
+    scale: tuning({ ...eased(450, 200), scale: number(50, 100, 85) }),
+    flip: tuning({ ...eased(450, 250), perspective: number(100, 1200, 320), axis: z.enum(["x", "y"]).catch("x") }),
+    pixel: tuning({ ...timing(300, 120), block: number(2, 8, 4), steps: number(2, 16, 8) }),
+    dither: tuning({
+      ...timing(280, 90),
+      dot: number(1, 4, 3),
+      pattern: z.enum(["bayer 4×4", "bayer 2×2"]).catch("bayer 2×2"),
+      steps: number(2, 16, 8),
+    }),
+    scanline: tuning({
+      ...timing(400, 200),
+      spacing: number(2, 8, 2),
+      direction: z.enum(["down", "up"]).catch("down"),
+      steps: number(2, 16, 8),
+    }),
+    type: tuning({
+      ...timing(420, 240),
+      steps: number(2, 20, 10),
+      direction: z.enum(["left to right", "right to left"]).catch("left to right"),
+    }),
+    wipe: tuning({
+      ...eased(520, 0, "ease-in-out"),
+      thickness: number(1, 4, 1),
+      direction: z.enum(["left to right", "right to left"]).catch("left to right"),
+      line: z.enum(toggles).catch("on"),
+    }),
+    glitch: tuning({ ...timing(420, 220), slices: number(2, 6, 4), offset: number(1, 12, 4) }),
+  })
+
+  // Each field falls back on its own, so one stale or renamed value doesn't reset everything.
+  return z.object({
+    nav: z.enum(navVariants).catch("index"),
+    logo: z.enum(logoVariants).catch("icon"),
+    status: z.enum(statusPreviews).catch("live"),
+    // Pop-ups follow the page theme by default; light or dark forces one (the ⌘K search always follows).
+    popover: z.enum(popoverThemes).catch("auto"),
+    hero: z.enum(heroVariants).catch("three-up"),
+    subtitleWidth: z.enum(subtitleWidths).catch("3 columns"),
+    heroTitleSize: z.enum(heroTitleSizes).catch("fitted"),
+    heroText: z.enum(heroTextModes).catch("static"),
+    heroInstall: z.enum(heroInstalls).catch("off"),
+    // The "New" bar at the top of the home page, level with the logo. ⌘N (Ctrl+N) toggles it there.
+    homeAnnouncement: z.enum(toggles).catch("off"),
+    announcementStyle: z.enum(announcementStyles).catch("text"),
+    bannerLabel: z.enum(bannerLabels).catch("badge"),
+    providerLogos: z.enum(providerLogoStyles).catch("none"),
+    subsStyle: z.enum(subsStyles).catch("grid"),
+    getStartedStyle: z.enum(getStartedStyles).catch("steps"),
+    phoneFeatures: z.enum(phoneFeatureLists).catch("accordion"),
+    installRowStyle: z.enum(installRowStyles).catch("inline"),
+    // Page title size, in percent of the 48px default.
+    heroSize: z.number().min(50).max(150).catch(100),
+    stickyTitle: z.enum(stickyTitles).catch("off"),
+    stats: z.enum(statsModes).catch("slot"),
+    ossProof: z.enum(ossProofs).catch("stats"),
+    ossVariant: z.enum(ossVariants).catch("current"),
+    // The home email sign-up is hidden for now; "on" shows it again.
+    signupSection: z.enum(toggles).catch("off"),
+    signupStyle: z.enum(signupStyles).catch("sentence"),
+    avatarAnimation: z.enum(avatarAnimations).catch("same as logos"),
+    avatarLink: z.enum(avatarLinks).catch("commits"),
+    // Milliseconds between one avatar's reveal and the next, in the diagonal wash.
+    avatarStagger: z.number().min(10).max(120).catch(30),
+    spacer: z.enum(spacerStyles).catch("line"),
+    // The "dot gradient" spacer: where the dashes end (in label columns), how many there are, the
+    // first dash and gap in px (gaps shrink to nothing), and the easing exponent the dashes grow by
+    // (higher stays dotty for longer).
+    spacerLength: z.number().min(0.5).max(4).catch(2),
+    spacerCount: z.number().int().min(6).max(40).catch(20),
+    spacerStartDash: z.number().int().min(1).max(6).catch(4),
+    spacerStartGap: z.number().int().min(2).max(40).catch(16),
+    spacerCurve: z.number().min(1).max(4).catch(1),
+    // The "dither gradient" spacer: band height and dot size in px, the density at the dense end and
+    // the dots' strength (both percent), the falloff exponent, and a solid line on the dense edge.
+    ditherHeight: z.number().int().min(4).max(96).catch(4),
+    ditherOrientation: z.enum(ditherOrientations).catch("horizontal"),
+    ditherDirection: z.enum(ditherDirections).catch("right to left"),
+    ditherLength: z.enum(ditherLengths).catch("full width"),
+    ditherPixel: z.number().int().min(1).max(4).catch(1),
+    ditherPattern: z.enum(ditherPatterns).catch("bayer 4×4"),
+    ditherDensity: z.number().min(20).max(100).catch(50),
+    ditherOpacity: z.number().min(10).max(100).catch(20),
+    ditherCurve: z.number().min(1).max(4).catch(1),
+    ditherLine: z.enum(toggles).catch("off"),
+    // The Console section between the FAQ and the footer on the home page.
+    consoleSection: z.enum(consoleSections).catch("panel"),
+    consoleHeight: z.enum(consoleHeights).catch("compact"),
+    consoleLabel: z.enum(consoleLabels).catch("left"),
+    consoleLayout: z.enum(consoleLayouts).catch("block"),
+    cornerButton: z.enum(cornerButtons).catch("neutral"),
+    // Inline Console: how much the dots thin out behind the copy, in percent.
+    consoleClearing: z.number().min(0).max(100).catch(65),
+    sidebar: z.enum(sidebarWidths).catch("fifth column"),
+    bodyWeight: z.enum(bodyWeights).catch("400"),
+    // The mono stack's first family (mono-fonts.ts): OpenTUI Mono, IBM Plex Mono, or a monospaced
+    // font installed on this computer, by its family name.
+    monoFont: z
+      .string()
+      .regex(/^[\w .+&()-]{1,64}$/)
+      .catch(monoFontDefault),
+    // Footer wordmark: gap between hatch lines (drawing units) and corner node points.
+    wordmarkHatch: z.number().min(1).max(8).catch(1),
+    wordmarkNodes: z.enum(toggles).catch("on"),
+    // The large OpenCode wordmark at the bottom of the footer.
+    footerWordmark: z.enum(toggles).catch("on"),
+    footerWordmarkAnimation: z.enum(footerWordmarkAnimations).catch("draw"),
+    // A multiplier on the entrance's timing: 2 plays it in half the time.
+    footerWordmarkSpeed: z.number().min(0.5).max(2).catch(1),
+    footerWordmarkPlay: z.enum(footerWordmarkPlays).catch("drag"),
+    // window.opencode and its DevTools greeting (lib/console-api.ts), loaded once the page is idle.
+    consoleApi: z.enum(toggles).catch("on"),
+    // The light, dark and system switch at the bottom of the footer.
+    themeSwitcher: z.enum(toggles).catch("on"),
+    themeSwitcherStyle: z.enum(themeSwitcherStyles).catch("cycle"),
+    logoMenu: z.enum(logoMenus).catch("fan"),
+    logoMenuHover: z.enum(logoMenuHovers).catch("blue"),
+    logoMenuItem: z.enum(logoMenuItems).catch("card"),
+    pressIcon: z.enum(pressIconNames).catch("folder"),
+    // Sends the Data and Console nav items to the /data-demo and /console-demo header demos.
+    // On by default only in dev: production links the real products, and the setting turns the demos on.
+    productNavDemo: z.enum(toggles).catch(import.meta.env.DEV ? "on" : "off"),
+    footerLayout: z.enum(footerLayouts).catch("list"),
+    footerLinks: z.enum(footerLinkSets).catch("community"),
+    statusBars: z.enum(statusBarCounts).catch("4"),
+    navGroups: z.enum(navGroups).catch("flat"),
+    navNumbers: z.enum(navNumbers).catch("1"),
+    // Design mode: the primary nav's items, in order, each shown or hidden and optionally renamed.
+    navConfig: z
+      .array(z.unknown())
+      .transform((saved) => normalizeNavConfig(navDefaults, saved) as NavEntry[])
+      .catch(defaultNavConfig()),
+    // Design mode: saved versions of the nav list (versions.ts), and the active one ("default" is the
+    // built-in Default). navConfig holds the live list; switching copies a version into it.
+    navVersions: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          config: z
+            .array(z.unknown())
+            .transform((saved) => normalizeNavConfig(navDefaults, saved) as NavEntry[])
+            .catch(defaultNavConfig()),
+        }),
+      )
+      .catch([]),
+    navVersion: z.string().catch("default"),
+    // Design mode: the /product grid, dragged into this order.
+    productsOrder: z
+      .array(z.string())
+      .transform(normalizeProductsOrder)
+      .catch([...productIds]),
+    linkBlue: z.enum(linkBlues).catch("console"),
+    darkBlue: z.enum(darkBlues).catch("6b8fff"),
+    logoScale: z.enum(logoScales).catch("20×25"),
+    menuActive: z.enum(menuActives).catch("bar"),
+    menuColor: z.enum(menuColors).catch("grey"),
+    buttonHover: z.enum(buttonHovers).catch("blue"),
+    productButton: z.enum(productButtons).catch("grey"),
+    pairStyle: z.enum(pairStyles).catch("steps"),
+    menuAlign: z.enum(menuAligns).catch("edge"),
+    wideAlign: z.enum(wideAligns).catch("centred"),
+    sectionMenuStyle: z.enum(sectionMenuStyles).catch("list"),
+    productChevron: z.enum(productChevrons).catch("hidden"),
+    lightBackground: z.enum(lightBackgrounds).catch("#fbfbfb"),
+    // Footer copyright: the Anomaly signature logo or the word "Anomaly".
+    copyrightMark: z.enum(copyrightMarks).catch("text"),
+    brandPalette: z.enum(brandPalettes).catch("blue + clay"),
+    variantBackground: z.enum(variantBackgrounds).catch("mesh"),
+    // Brand page judgement calls: the "Works with OpenCode" badge.
+    brandBadge: z.enum(toggles).catch("on"),
+    badgeFont: z.enum(badgeFonts).catch("sans"),
+    badgeLayout: z.enum(badgeLayouts).catch("tabs"),
+    badgeTabStyle: z.enum(badgeTabStyles).catch("underline"),
+    strokeDiagram: z.enum(strokeDiagrams).catch("off"),
+    agentButtonCopied: z.enum(agentButtonCopiedStyles).catch("check only"),
+    filmPoster: z.enum(filmPosters).catch("inverted"),
+    brandAssetActions: z.enum(brandAssetActionStyles).catch("svg copy"),
+    // How the legal index lists the documents (see legalHubStyles).
+    legalHubStyle: z.enum(legalHubStyles).catch("grouped"),
+    legalRowHover: z.enum(legalRowHovers).catch("grey"),
+    // Shows the notes to legal reviewers in the draft legal documents. Off for readers.
+    legalReviewNotes: z.enum(toggles).catch("off"),
+    legalHistoryView: z.enum(legalHistoryViews).catch("tabs"),
+    legalPrintStyle: z.enum(legalPrintStyles).catch("architect"),
+    architectCover: z.enum(architectCovers).catch("c3"),
+    architectInterior: z.enum(architectInteriors).catch("plain"),
+    architectRule: z.enum(architectRules).catch("solid"),
+    architectLabelCase: z.enum(architectLabelCases).catch("sentence"),
+    architectPattern: z.enum(architectPatterns).catch("aligned-grid"),
+    legalSummaryStyle: z.enum(legalSummaryStyles).catch("box"),
+    // Press page judgement calls (see the press page's Settings rows).
+    pressToc: z.enum(toggles).catch("on"),
+    pressBoilerplate: z.enum(pressBoilerplates).catch("long + short"),
+    pressMilestones: z.enum(toggles).catch("on"),
+    pressNews: z.enum(toggles).catch("on"),
+    pressMedia: z.enum(toggles).catch("on"),
+    pressCompany: z.enum(pressCompanyStyles).catch("grid"),
+    pressContact: z.enum(pressContactStyles).catch("rows"),
+    pressCopyStyle: z.enum(pressCopyStyles).catch("label"),
+    // Renamed from pressMediaStyle, so older saved values (the filmstrip with a big image) no longer
+    // mask the new default.
+    pressMediaLayout: z.enum(pressMediaLayouts).catch("products"),
+    // Text selection: solid blue with white text, or a translucent blue that keeps the text colour.
+    selection: z.enum(selectionStyles).catch("blue"),
+    selectionOpacity: z.number().min(0).max(100).catch(10),
+    searchStyle: z.enum(searchStyles).catch("palette"),
+    searchBackdrop: z.enum(searchBackdrops).catch("none"),
+    searchMotion: z.enum(searchMotions).catch("scale"),
+    searchResults: z.enum(searchResultModes).catch("grouped"),
+    searchHint: z.enum(searchHints).catch("off"),
+    // On in development; off in production until it ships.
+    // On everywhere, production included: for launch the orb is the Hex promo (voice/flag.ts).
+    voiceOrb: z.enum(voiceOrbModes).catch("always"),
+    voiceCaptions: z.enum(voiceCaptionModes).catch("popover"),
+    // The orb's layered shadow, percent: 0 none, 50 the designed look, 100 strong but still soft.
+    voiceOrbShadow: z.number().min(0).max(100).catch(50),
+    // The search's look. The defaults are the "dim" backdrop on a solid pop-up panel. Blur is px, the
+    // rest percent; saturation and brightness filter the page behind the backdrop.
+    searchBlur: z.number().min(0).max(24).catch(0),
+    searchDimLight: z.number().min(0).max(80).catch(0),
+    searchDimDark: z.number().min(0).max(80).catch(0),
+    searchTint: z.enum(searchTints).catch("neutral"),
+    searchSaturate: z.number().min(50).max(200).catch(100),
+    searchBrightness: z.number().min(50).max(120).catch(100),
+    // Below 100 the panel shows the page through it, blurred by the panel blur (frosted glass).
+    searchPanelOpacity: z.number().min(60).max(100).catch(100),
+    searchPanelBlur: z.number().min(0).max(40).catch(16),
+    searchShadow: z.number().min(0).max(200).catch(100),
+    // A product video set id from public/product-videos.
+    productVideos: z.string().catch("locked"),
+    cardVideo: z.enum(cardVideoModes).catch("hover · fade"),
+    cardHover: z.enum(cardHoverModes).catch("fade"),
+    cardLoopSpeed: z.literal(cardVideoSpeeds).catch(1),
+    cardVideoCut: z.enum(cardVideoCuts).catch("angled"),
+    // Marks settings saved after angled became the default card cut (see migrateSettings).
+    cardVideoRevision: z.literal(2).catch(2),
+    cardHoverEntry: z.enum(cardHoverEntries).catch("demo"),
+    mobileCover: z.enum(mobileCovers).catch("orb"),
+    productBadges: z.enum(productBadgeModes).catch("hide"),
+    mobileOrbShade: z.literal(mobileOrbShades).catch(75),
+    cardTone: z.enum(cardTones).catch("color"),
+    cardInfo: z.enum(cardInfoLayouts).catch("stacked"),
+    phoneCardContent: z.enum(phoneCardContents).catch("overlay"),
+    // A fifth carousel card for the editor extensions (VS Code, and Zed and others through ACP).
+    extensionsCard: z.enum(toggles).catch("off"),
+    // Home: the logo row under the hero, and "Bring your own tools".
+    logoWall: z.enum(logoRows).catch("companies"),
+    // The section dividers above the logo row and below it (on whichever section follows it).
+    logoDividers: z.enum(toggles).catch("off"),
+    logoLayout: z.enum(logoLayouts).catch("label + 6"),
+    logoLabel: z.enum(logoLabels).catch("Trusted by 22M+ developers"),
+    logoAnimation: z.enum(logoAnimations).catch("dither"),
+    // How strong the one-colour logos and their label are, in percent of the strong text colour. 60
+    // keeps the label at 4.7:1 on the light background (WCAG AA); 55 was 4.0:1.
+    logoOpacity: z.number().min(20).max(100).catch(30),
+    logoTuning: logoTuning.catch(logoTuning.parse({})),
+    docsVariants: docsVariants.catch(docsVariants.parse({})),
+    // Milliseconds between one logo's entrance and the next, in the left-to-right wash when the row
+    // first scrolls into view.
+    // With only two to six logos on show, a wide stagger is what makes the wash readable.
+    logoStagger: z.number().min(20).max(400).catch(160),
+    // Seconds between swaps.
+    logoInterval: z.number().min(1).max(8).catch(2.2),
+    toolsSection: z.enum(toggles).catch("on"),
+    homeOrder: z
+      .array(z.string())
+      .transform(normalizeHomeOrder)
+      .catch([...homeSections]),
+    toolTiles: z.enum(toolTileStyles).catch("logo"),
+    toolsAnimation: z.enum(toolsAnimations).catch("same as logos"),
+    // Milliseconds between one tile's entrance and the next, in the diagonal wash.
+    toolsStagger: z.number().min(20).max(300).catch(60),
+    toolGrid: z.enum(toolGrids).catch("outline"),
+    cardTransition: z.enum(cardTransitions).catch("grow"),
+    // Card to page timing, in ms: the card growing into the hero and the hero shrinking back, the
+    // new page fading in (and how long after the start), and the image the box changes into. The
+    // durations are for a long trip; shorter ones take down to three quarters of it. Going back is
+    // quicker than opening: the system answering, not the user choosing.
+    cardGrowDuration: z.number().min(200).max(800).catch(380),
+    cardShrinkDuration: z.number().min(70).max(800).catch(340),
+    cardEasing: z.enum(cardEasings).catch("drawer"),
+    cardPageFade: z.number().min(80).max(600).catch(220),
+    cardPageDelay: z.number().min(0).max(300).catch(60),
+    cardImageFade: z.number().min(60).max(400).catch(160),
+    // Product page feature clips: the full app UI, or only the UI that tells each feature's story
+    // (Desktop only for now; other products keep the full clips).
+    featureClipStyle: z.enum(featureClipStyles).catch("focused"),
+    featureClipCount: z.enum(featureClipCounts).catch("4"),
+    companionStyle: z.enum(companionStyles).catch("outline"),
+    // Changelog timeline: an entry's date and title stay in view while its notes scroll past.
+    changelogSticky: z.enum(toggles).catch("on"),
+    changelogMarker: z.enum(changelogMarkers).catch("active square"),
+    changelogTitle: z.enum(changelogTitles).catch("sans"),
+    changelogTitleSize: z.enum(changelogTitleSizes).catch("26 · 500"),
+    changelogCarousel: z.enum(changelogCarousels).catch("bars"),
+    changelogFilters: z.enum(changelogFilters).catch("areas"),
+    productFeatureColumns: z.enum(productFeatureColumns).catch("4 columns"),
+    // Per screen width, like the carousel: "3 columns" leaves the fourth column blank.
+    sectionWidth: z
+      .object({
+        xl: z.enum(sectionWidths),
+        lg: z.enum(sectionWidths),
+        md: z.enum(sectionWidths),
+        sm: z.enum(sectionWidths),
+        xs: z.enum(sectionWidths),
+      })
+      .catch({ xl: "4 columns", lg: "4 columns", md: "4 columns", sm: "4 columns", xs: "4 columns" }),
+    // Per home section, from 80rem up: the content beside the title spans two or three card columns.
+    whatColumns: z.enum(sectionColumns).catch("2 columns"),
+    toolsColumns: z.enum(sectionColumns).catch("2 columns"),
+    openSourceColumns: z.enum(sectionColumns).catch("2 columns"),
+    privacyColumns: z.enum(sectionColumns).catch("2 columns"),
+    faqColumns: z.enum(sectionColumns).catch("2 columns"),
+    consoleColumns: z.enum(sectionColumns).catch("2 columns"),
+    // The intro copy (lead or Console headline) beside the body columns above; the section body is
+    // as wide as the wider of the two.
+    whatCopyColumns: z.enum(sectionColumns).catch("2 columns"),
+    toolsCopyColumns: z.enum(sectionColumns).catch("2 columns"),
+    openSourceCopyColumns: z.enum(sectionColumns).catch("2 columns"),
+    consoleCopyColumns: z.enum(sectionColumns).catch("2 columns"),
+    docsSwitcher: z.enum(docsSwitchers).catch("lockup"),
+    docsSubmenu: z.enum(docsSubmenus).catch("flyout"),
+    docsNav: z.enum(docsNavs).catch("split"),
+    docsVersionNotice: z.enum(docsVersionNotices).catch("frosted top"),
+    terminalInstall: z.enum(terminalInstalls).catch("button"),
+    carouselPreset: z.enum(carouselPresetNames).catch("four across"),
+    carousel: z
+      .object({ xl: z.number(), lg: z.number(), md: z.number(), sm: z.number(), xs: z.number() })
+      .catch({ ...carouselPresets["four across"] }),
+    // The 404 arcade (component/site/arcade). Keys stay prefixed `arcade`; the three.js version adds
+    // its own here too. Volumes and amounts are percent, multipliers are ×, times are ms.
+    arcadeVersion: z.enum(arcadeVersions).catch("3D"),
+    // Supersedes arcadeVersion, which stays only so older saved settings still parse.
+    arcadeMode: z.enum(arcadeModes).catch("layers"),
+    // Marks settings saved after layers became the default mode (see migrateSettings).
+    arcadeModeRevision: z.literal(2).catch(2),
+    // Marks settings saved after OpenTUI Mono became the default mono font (see migrateSettings).
+    monoFontRevision: z.literal(2).catch(2),
+    // The locked docs choices these settings last took (migrateSettings applies the ones that changed).
+    docsChoicesApplied: z.record(z.string(), z.string()).catch({ ...docsVariantRecommended }),
+    arcadeCrt: z.enum(arcadeCrts).catch("subtle"),
+    arcadeMobileCopy: z.enum(arcadeMobileCopies).catch("not available"),
+    arcadeLogoReveal: z.enum(arcadeLogoReveals).catch("pixels"),
+    // The colour grade (arcade/tone.ts): percent of the paintings' saturation, and white balance from
+    // −100 (cool) to 100 (warm).
+    arcadeSaturation: z.number().min(0).max(100).catch(35),
+    arcadeWhiteBalance: z.number().min(-100).max(100).catch(0),
+    arcadeVolume: z.number().min(0).max(100).catch(80),
+    arcadeAmbience: z.number().min(0).max(100).catch(100),
+    arcadeSfx: z.number().min(0).max(100).catch(100),
+    arcadeCoinSize: z.number().min(0.5).max(3).catch(1),
+    arcadeGlisten: z.number().min(0).max(100).catch(100),
+    // Seconds between twinkles.
+    arcadeGlistenRate: z.number().min(1).max(8).catch(2.8),
+    arcadeCameraSpeed: z.number().min(0.5).max(2).catch(1),
+    arcadeDoorZoom: z.number().min(0.6).max(1.6).catch(1),
+    arcadeScreenZoom: z.number().min(0.7).max(1.4).catch(1),
+    arcadeScanlines: z.number().min(0).max(100).catch(100),
+    arcadeFlicker: z.number().min(0).max(100).catch(0),
+    arcadeGlitch: z.number().min(300).max(2000).catch(900),
+    arcadeBoot: z.number().min(2000).max(8000).catch(4600),
+    // 0 waits for a press.
+    arcadeStartDelay: z.number().min(0).max(10000).catch(3200),
+    arcadeNavBlend: z.enum(arcadeNavBlends).catch("screen"),
+    arcadeShade: z.number().min(0).max(100).catch(100),
+    // The three.js version's live controls (arcade3d/tuning.ts validates them).
+    arcade3d: z.record(z.string(), z.unknown()).catch({}),
+  })
 }
-const docsVariant = (key: DocsVariantKey) =>
-  z
-    .enum(docsVariantOptions)
-    .refine((value) => docsVariantOptionsFor(key).includes(value))
-    .catch(docsVariantRecommended[key] ?? "1")
-const docsVariants = z.object(
-  Object.fromEntries(docsVariantKeys.map((key) => [key, docsVariant(key)])) as Record<
-    DocsVariantKey,
-    ReturnType<typeof docsVariant>
-  >,
-)
-const logoTuning = z.object({
-  fade: tuning(eased(450, 200)),
-  blur: tuning({ ...eased(450, 200), blur: number(0, 16, 6) }),
-  rise: tuning({ ...eased(550, 0), rise: number(0, 32, 12), blur: number(0, 16, 4) }),
-  scale: tuning({ ...eased(450, 200), scale: number(50, 100, 85) }),
-  flip: tuning({ ...eased(450, 250), perspective: number(100, 1200, 320), axis: z.enum(["x", "y"]).catch("x") }),
-  pixel: tuning({ ...timing(300, 120), block: number(2, 8, 4), steps: number(2, 16, 8) }),
-  dither: tuning({
-    ...timing(280, 90),
-    dot: number(1, 4, 3),
-    pattern: z.enum(["bayer 4×4", "bayer 2×2"]).catch("bayer 2×2"),
-    steps: number(2, 16, 8),
-  }),
-  scanline: tuning({
-    ...timing(400, 200),
-    spacing: number(2, 8, 2),
-    direction: z.enum(["down", "up"]).catch("down"),
-    steps: number(2, 16, 8),
-  }),
-  type: tuning({
-    ...timing(420, 240),
-    steps: number(2, 20, 10),
-    direction: z.enum(["left to right", "right to left"]).catch("left to right"),
-  }),
-  wipe: tuning({
-    ...eased(520, 0, "ease-in-out"),
-    thickness: number(1, 4, 1),
-    direction: z.enum(["left to right", "right to left"]).catch("left to right"),
-    line: z.enum(toggles).catch("on"),
-  }),
-  glitch: tuning({ ...timing(420, 220), slices: number(2, 6, 4), offset: number(1, 12, 4) }),
-})
 
-// Each field falls back on its own, so one stale or renamed value doesn't reset everything.
-const schema = z.object({
-  nav: z.enum(navVariants).catch("index"),
-  logo: z.enum(logoVariants).catch("icon"),
-  status: z.enum(statusPreviews).catch("live"),
-  // Pop-ups follow the page theme by default; light or dark forces one (the ⌘K search always follows).
-  popover: z.enum(popoverThemes).catch("auto"),
-  hero: z.enum(heroVariants).catch("three-up"),
-  subtitleWidth: z.enum(subtitleWidths).catch("3 columns"),
-  heroTitleSize: z.enum(heroTitleSizes).catch("fitted"),
-  heroText: z.enum(heroTextModes).catch("static"),
-  heroInstall: z.enum(heroInstalls).catch("off"),
-  // The "New" bar at the top of the home page, level with the logo. ⌘N (Ctrl+N) toggles it there.
-  homeAnnouncement: z.enum(toggles).catch("off"),
-  announcementStyle: z.enum(announcementStyles).catch("text"),
-  bannerLabel: z.enum(bannerLabels).catch("badge"),
-  providerLogos: z.enum(providerLogoStyles).catch("none"),
-  subsStyle: z.enum(subsStyles).catch("grid"),
-  getStartedStyle: z.enum(getStartedStyles).catch("steps"),
-  phoneFeatures: z.enum(phoneFeatureLists).catch("accordion"),
-  installRowStyle: z.enum(installRowStyles).catch("inline"),
-  // Page title size, in percent of the 48px default.
-  heroSize: z.number().min(50).max(150).catch(100),
-  stickyTitle: z.enum(stickyTitles).catch("off"),
-  stats: z.enum(statsModes).catch("slot"),
-  ossProof: z.enum(ossProofs).catch("stats"),
-  ossVariant: z.enum(ossVariants).catch("current"),
-  // The home email sign-up is hidden for now; "on" shows it again.
-  signupSection: z.enum(toggles).catch("off"),
-  signupStyle: z.enum(signupStyles).catch("sentence"),
-  avatarAnimation: z.enum(avatarAnimations).catch("same as logos"),
-  avatarLink: z.enum(avatarLinks).catch("commits"),
-  // Milliseconds between one avatar's reveal and the next, in the diagonal wash.
-  avatarStagger: z.number().min(10).max(120).catch(30),
-  spacer: z.enum(spacerStyles).catch("line"),
-  // The "dot gradient" spacer: where the dashes end (in label columns), how many there are, the
-  // first dash and gap in px (gaps shrink to nothing), and the easing exponent the dashes grow by
-  // (higher stays dotty for longer).
-  spacerLength: z.number().min(0.5).max(4).catch(2),
-  spacerCount: z.number().int().min(6).max(40).catch(20),
-  spacerStartDash: z.number().int().min(1).max(6).catch(4),
-  spacerStartGap: z.number().int().min(2).max(40).catch(16),
-  spacerCurve: z.number().min(1).max(4).catch(1),
-  // The "dither gradient" spacer: band height and dot size in px, the density at the dense end and
-  // the dots' strength (both percent), the falloff exponent, and a solid line on the dense edge.
-  ditherHeight: z.number().int().min(4).max(96).catch(4),
-  ditherOrientation: z.enum(ditherOrientations).catch("horizontal"),
-  ditherDirection: z.enum(ditherDirections).catch("right to left"),
-  ditherLength: z.enum(ditherLengths).catch("full width"),
-  ditherPixel: z.number().int().min(1).max(4).catch(1),
-  ditherPattern: z.enum(ditherPatterns).catch("bayer 4×4"),
-  ditherDensity: z.number().min(20).max(100).catch(50),
-  ditherOpacity: z.number().min(10).max(100).catch(20),
-  ditherCurve: z.number().min(1).max(4).catch(1),
-  ditherLine: z.enum(toggles).catch("off"),
-  // The Console section between the FAQ and the footer on the home page.
-  consoleSection: z.enum(consoleSections).catch("panel"),
-  consoleHeight: z.enum(consoleHeights).catch("compact"),
-  consoleLabel: z.enum(consoleLabels).catch("left"),
-  consoleLayout: z.enum(consoleLayouts).catch("block"),
-  cornerButton: z.enum(cornerButtons).catch("neutral"),
-  // Inline Console: how much the dots thin out behind the copy, in percent.
-  consoleClearing: z.number().min(0).max(100).catch(65),
-  sidebar: z.enum(sidebarWidths).catch("fifth column"),
-  bodyWeight: z.enum(bodyWeights).catch("400"),
-  // The mono stack's first family (mono-fonts.ts): OpenTUI Mono, IBM Plex Mono, or a monospaced
-  // font installed on this computer, by its family name.
-  monoFont: z
-    .string()
-    .regex(/^[\w .+&()-]{1,64}$/)
-    .catch(monoFontDefault),
-  // Footer wordmark: gap between hatch lines (drawing units) and corner node points.
-  wordmarkHatch: z.number().min(1).max(8).catch(1),
-  wordmarkNodes: z.enum(toggles).catch("on"),
-  // The large OpenCode wordmark at the bottom of the footer.
-  footerWordmark: z.enum(toggles).catch("on"),
-  footerWordmarkAnimation: z.enum(footerWordmarkAnimations).catch("draw"),
-  // A multiplier on the entrance's timing: 2 plays it in half the time.
-  footerWordmarkSpeed: z.number().min(0.5).max(2).catch(1),
-  footerWordmarkPlay: z.enum(footerWordmarkPlays).catch("drag"),
-  // window.opencode and its DevTools greeting (lib/console-api.ts), loaded once the page is idle.
-  consoleApi: z.enum(toggles).catch("on"),
-  // The light, dark and system switch at the bottom of the footer.
-  themeSwitcher: z.enum(toggles).catch("on"),
-  themeSwitcherStyle: z.enum(themeSwitcherStyles).catch("cycle"),
-  logoMenu: z.enum(logoMenus).catch("fan"),
-  logoMenuHover: z.enum(logoMenuHovers).catch("blue"),
-  logoMenuItem: z.enum(logoMenuItems).catch("card"),
-  pressIcon: z.enum(pressIconNames).catch("folder"),
-  // Sends the Data and Console nav items to the /data-demo and /console-demo header demos.
-  // On by default only in dev: production links the real products, and the setting turns the demos on.
-  productNavDemo: z.enum(toggles).catch(import.meta.env.DEV ? "on" : "off"),
-  footerLayout: z.enum(footerLayouts).catch("list"),
-  footerLinks: z.enum(footerLinkSets).catch("community"),
-  statusBars: z.enum(statusBarCounts).catch("4"),
-  navGroups: z.enum(navGroups).catch("flat"),
-  navNumbers: z.enum(navNumbers).catch("1"),
-  // Design mode: the primary nav's items, in order, each shown or hidden and optionally renamed.
-  navConfig: z
-    .array(z.unknown())
-    .transform((saved) => normalizeNavConfig(navDefaults, saved) as NavEntry[])
-    .catch(defaultNavConfig()),
-  // Design mode: saved versions of the nav list (versions.ts), and the active one ("default" is the
-  // built-in Default). navConfig holds the live list; switching copies a version into it.
-  navVersions: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        config: z
-          .array(z.unknown())
-          .transform((saved) => normalizeNavConfig(navDefaults, saved) as NavEntry[])
-          .catch(defaultNavConfig()),
-      }),
-    )
-    .catch([]),
-  navVersion: z.string().catch("default"),
-  // Design mode: the /product grid, dragged into this order.
-  productsOrder: z
-    .array(z.string())
-    .transform(normalizeProductsOrder)
-    .catch([...productIds]),
-  linkBlue: z.enum(linkBlues).catch("console"),
-  darkBlue: z.enum(darkBlues).catch("6b8fff"),
-  logoScale: z.enum(logoScales).catch("20×25"),
-  menuActive: z.enum(menuActives).catch("bar"),
-  menuColor: z.enum(menuColors).catch("grey"),
-  buttonHover: z.enum(buttonHovers).catch("blue"),
-  productButton: z.enum(productButtons).catch("grey"),
-  pairStyle: z.enum(pairStyles).catch("steps"),
-  menuAlign: z.enum(menuAligns).catch("edge"),
-  wideAlign: z.enum(wideAligns).catch("centred"),
-  sectionMenuStyle: z.enum(sectionMenuStyles).catch("list"),
-  productChevron: z.enum(productChevrons).catch("hidden"),
-  lightBackground: z.enum(lightBackgrounds).catch("#fbfbfb"),
-  // Footer copyright: the Anomaly signature logo or the word "Anomaly".
-  copyrightMark: z.enum(copyrightMarks).catch("text"),
-  brandPalette: z.enum(brandPalettes).catch("blue + clay"),
-  variantBackground: z.enum(variantBackgrounds).catch("mesh"),
-  // Brand page judgement calls: the "Works with OpenCode" badge.
-  brandBadge: z.enum(toggles).catch("on"),
-  badgeFont: z.enum(badgeFonts).catch("sans"),
-  badgeLayout: z.enum(badgeLayouts).catch("tabs"),
-  badgeTabStyle: z.enum(badgeTabStyles).catch("underline"),
-  strokeDiagram: z.enum(strokeDiagrams).catch("off"),
-  agentButtonCopied: z.enum(agentButtonCopiedStyles).catch("check only"),
-  filmPoster: z.enum(filmPosters).catch("inverted"),
-  brandAssetActions: z.enum(brandAssetActionStyles).catch("svg copy"),
-  // How the legal index lists the documents (see legalHubStyles).
-  legalHubStyle: z.enum(legalHubStyles).catch("grouped"),
-  legalRowHover: z.enum(legalRowHovers).catch("grey"),
-  // Shows the notes to legal reviewers in the draft legal documents. Off for readers.
-  legalReviewNotes: z.enum(toggles).catch("off"),
-  legalHistoryView: z.enum(legalHistoryViews).catch("tabs"),
-  legalPrintStyle: z.enum(legalPrintStyles).catch("architect"),
-  architectCover: z.enum(architectCovers).catch("c3"),
-  architectInterior: z.enum(architectInteriors).catch("plain"),
-  architectRule: z.enum(architectRules).catch("solid"),
-  architectLabelCase: z.enum(architectLabelCases).catch("sentence"),
-  architectPattern: z.enum(architectPatterns).catch("aligned-grid"),
-  legalSummaryStyle: z.enum(legalSummaryStyles).catch("box"),
-  // Press page judgement calls (see the press page's Settings rows).
-  pressToc: z.enum(toggles).catch("on"),
-  pressBoilerplate: z.enum(pressBoilerplates).catch("long + short"),
-  pressMilestones: z.enum(toggles).catch("on"),
-  pressNews: z.enum(toggles).catch("on"),
-  pressMedia: z.enum(toggles).catch("on"),
-  pressCompany: z.enum(pressCompanyStyles).catch("grid"),
-  pressContact: z.enum(pressContactStyles).catch("rows"),
-  pressCopyStyle: z.enum(pressCopyStyles).catch("label"),
-  // Renamed from pressMediaStyle, so older saved values (the filmstrip with a big image) no longer
-  // mask the new default.
-  pressMediaLayout: z.enum(pressMediaLayouts).catch("products"),
-  // Text selection: solid blue with white text, or a translucent blue that keeps the text colour.
-  selection: z.enum(selectionStyles).catch("blue"),
-  selectionOpacity: z.number().min(0).max(100).catch(10),
-  searchStyle: z.enum(searchStyles).catch("palette"),
-  searchBackdrop: z.enum(searchBackdrops).catch("none"),
-  searchMotion: z.enum(searchMotions).catch("scale"),
-  searchResults: z.enum(searchResultModes).catch("grouped"),
-  searchHint: z.enum(searchHints).catch("off"),
-  // On in development; off in production until it ships.
-  // On everywhere, production included: for launch the orb is the Hex promo (voice/flag.ts).
-  voiceOrb: z.enum(voiceOrbModes).catch("always"),
-  voiceCaptions: z.enum(voiceCaptionModes).catch("popover"),
-  // The orb's layered shadow, percent: 0 none, 50 the designed look, 100 strong but still soft.
-  voiceOrbShadow: z.number().min(0).max(100).catch(50),
-  // The search's look. The defaults are the "dim" backdrop on a solid pop-up panel. Blur is px, the
-  // rest percent; saturation and brightness filter the page behind the backdrop.
-  searchBlur: z.number().min(0).max(24).catch(0),
-  searchDimLight: z.number().min(0).max(80).catch(0),
-  searchDimDark: z.number().min(0).max(80).catch(0),
-  searchTint: z.enum(searchTints).catch("neutral"),
-  searchSaturate: z.number().min(50).max(200).catch(100),
-  searchBrightness: z.number().min(50).max(120).catch(100),
-  // Below 100 the panel shows the page through it, blurred by the panel blur (frosted glass).
-  searchPanelOpacity: z.number().min(60).max(100).catch(100),
-  searchPanelBlur: z.number().min(0).max(40).catch(16),
-  searchShadow: z.number().min(0).max(200).catch(100),
-  // A product video set id from public/product-videos.
-  productVideos: z.string().catch("locked"),
-  cardVideo: z.enum(cardVideoModes).catch("hover · fade"),
-  cardHover: z.enum(cardHoverModes).catch("fade"),
-  cardLoopSpeed: z.literal(cardVideoSpeeds).catch(1),
-  cardVideoCut: z.enum(cardVideoCuts).catch("angled"),
-  // Marks settings saved after angled became the default card cut (see migrateSettings).
-  cardVideoRevision: z.literal(2).catch(2),
-  cardHoverEntry: z.enum(cardHoverEntries).catch("demo"),
-  mobileCover: z.enum(mobileCovers).catch("orb"),
-  productBadges: z.enum(productBadgeModes).catch("hide"),
-  mobileOrbShade: z.literal(mobileOrbShades).catch(75),
-  cardTone: z.enum(cardTones).catch("color"),
-  cardInfo: z.enum(cardInfoLayouts).catch("stacked"),
-  phoneCardContent: z.enum(phoneCardContents).catch("overlay"),
-  // A fifth carousel card for the editor extensions (VS Code, and Zed and others through ACP).
-  extensionsCard: z.enum(toggles).catch("off"),
-  // Home: the logo row under the hero, and "Bring your own tools".
-  logoWall: z.enum(logoRows).catch("companies"),
-  // The section dividers above the logo row and below it (on whichever section follows it).
-  logoDividers: z.enum(toggles).catch("off"),
-  logoLayout: z.enum(logoLayouts).catch("label + 6"),
-  logoLabel: z.enum(logoLabels).catch("Trusted by 22M+ developers"),
-  logoAnimation: z.enum(logoAnimations).catch("dither"),
-  // How strong the one-colour logos and their label are, in percent of the strong text colour. 60
-  // keeps the label at 4.7:1 on the light background (WCAG AA); 55 was 4.0:1.
-  logoOpacity: z.number().min(20).max(100).catch(30),
-  logoTuning: logoTuning.catch(logoTuning.parse({})),
-  docsVariants: docsVariants.catch(docsVariants.parse({})),
-  // Milliseconds between one logo's entrance and the next, in the left-to-right wash when the row
-  // first scrolls into view.
-  // With only two to six logos on show, a wide stagger is what makes the wash readable.
-  logoStagger: z.number().min(20).max(400).catch(160),
-  // Seconds between swaps.
-  logoInterval: z.number().min(1).max(8).catch(2.2),
-  toolsSection: z.enum(toggles).catch("on"),
-  homeOrder: z
-    .array(z.string())
-    .transform(normalizeHomeOrder)
-    .catch([...homeSections]),
-  toolTiles: z.enum(toolTileStyles).catch("logo"),
-  toolsAnimation: z.enum(toolsAnimations).catch("same as logos"),
-  // Milliseconds between one tile's entrance and the next, in the diagonal wash.
-  toolsStagger: z.number().min(20).max(300).catch(60),
-  toolGrid: z.enum(toolGrids).catch("outline"),
-  cardTransition: z.enum(cardTransitions).catch("grow"),
-  // Card to page timing, in ms: the card growing into the hero and the hero shrinking back, the
-  // new page fading in (and how long after the start), and the image the box changes into. The
-  // durations are for a long trip; shorter ones take down to three quarters of it. Going back is
-  // quicker than opening: the system answering, not the user choosing.
-  cardGrowDuration: z.number().min(200).max(800).catch(380),
-  cardShrinkDuration: z.number().min(70).max(800).catch(340),
-  cardEasing: z.enum(cardEasings).catch("drawer"),
-  cardPageFade: z.number().min(80).max(600).catch(220),
-  cardPageDelay: z.number().min(0).max(300).catch(60),
-  cardImageFade: z.number().min(60).max(400).catch(160),
-  // Product page feature clips: the full app UI, or only the UI that tells each feature's story
-  // (Desktop only for now; other products keep the full clips).
-  featureClipStyle: z.enum(featureClipStyles).catch("focused"),
-  featureClipCount: z.enum(featureClipCounts).catch("4"),
-  companionStyle: z.enum(companionStyles).catch("outline"),
-  // Changelog timeline: an entry's date and title stay in view while its notes scroll past.
-  changelogSticky: z.enum(toggles).catch("on"),
-  changelogMarker: z.enum(changelogMarkers).catch("active square"),
-  changelogTitle: z.enum(changelogTitles).catch("sans"),
-  changelogTitleSize: z.enum(changelogTitleSizes).catch("26 · 500"),
-  changelogCarousel: z.enum(changelogCarousels).catch("bars"),
-  changelogFilters: z.enum(changelogFilters).catch("areas"),
-  productFeatureColumns: z.enum(productFeatureColumns).catch("4 columns"),
-  // Per screen width, like the carousel: "3 columns" leaves the fourth column blank.
-  sectionWidth: z
-    .object({
-      xl: z.enum(sectionWidths),
-      lg: z.enum(sectionWidths),
-      md: z.enum(sectionWidths),
-      sm: z.enum(sectionWidths),
-      xs: z.enum(sectionWidths),
-    })
-    .catch({ xl: "4 columns", lg: "4 columns", md: "4 columns", sm: "4 columns", xs: "4 columns" }),
-  // Per home section, from 80rem up: the content beside the title spans two or three card columns.
-  whatColumns: z.enum(sectionColumns).catch("2 columns"),
-  toolsColumns: z.enum(sectionColumns).catch("2 columns"),
-  openSourceColumns: z.enum(sectionColumns).catch("2 columns"),
-  privacyColumns: z.enum(sectionColumns).catch("2 columns"),
-  faqColumns: z.enum(sectionColumns).catch("2 columns"),
-  consoleColumns: z.enum(sectionColumns).catch("2 columns"),
-  // The intro copy (lead or Console headline) beside the body columns above; the section body is
-  // as wide as the wider of the two.
-  whatCopyColumns: z.enum(sectionColumns).catch("2 columns"),
-  toolsCopyColumns: z.enum(sectionColumns).catch("2 columns"),
-  openSourceCopyColumns: z.enum(sectionColumns).catch("2 columns"),
-  consoleCopyColumns: z.enum(sectionColumns).catch("2 columns"),
-  docsSwitcher: z.enum(docsSwitchers).catch("lockup"),
-  docsSubmenu: z.enum(docsSubmenus).catch("flyout"),
-  docsNav: z.enum(docsNavs).catch("split"),
-  docsVersionNotice: z.enum(docsVersionNotices).catch("frosted top"),
-  terminalInstall: z.enum(terminalInstalls).catch("button"),
-  carouselPreset: z.enum(carouselPresetNames).catch("four across"),
-  carousel: z
-    .object({ xl: z.number(), lg: z.number(), md: z.number(), sm: z.number(), xs: z.number() })
-    .catch({ ...carouselPresets["four across"] }),
-  // The 404 arcade (component/site/arcade). Keys stay prefixed `arcade`; the three.js version adds
-  // its own here too. Volumes and amounts are percent, multipliers are ×, times are ms.
-  arcadeVersion: z.enum(arcadeVersions).catch("3D"),
-  // Supersedes arcadeVersion, which stays only so older saved settings still parse.
-  arcadeMode: z.enum(arcadeModes).catch("layers"),
-  // Marks settings saved after layers became the default mode (see migrateSettings).
-  arcadeModeRevision: z.literal(2).catch(2),
-  // Marks settings saved after OpenTUI Mono became the default mono font (see migrateSettings).
-  monoFontRevision: z.literal(2).catch(2),
-  // The locked docs choices these settings last took (migrateSettings applies the ones that changed).
-  docsChoicesApplied: z.record(z.string(), z.string()).catch({ ...docsVariantRecommended }),
-  arcadeCrt: z.enum(arcadeCrts).catch("subtle"),
-  arcadeMobileCopy: z.enum(arcadeMobileCopies).catch("not available"),
-  arcadeLogoReveal: z.enum(arcadeLogoReveals).catch("pixels"),
-  // The colour grade (arcade/tone.ts): percent of the paintings' saturation, and white balance from
-  // −100 (cool) to 100 (warm).
-  arcadeSaturation: z.number().min(0).max(100).catch(35),
-  arcadeWhiteBalance: z.number().min(-100).max(100).catch(0),
-  arcadeVolume: z.number().min(0).max(100).catch(80),
-  arcadeAmbience: z.number().min(0).max(100).catch(100),
-  arcadeSfx: z.number().min(0).max(100).catch(100),
-  arcadeCoinSize: z.number().min(0.5).max(3).catch(1),
-  arcadeGlisten: z.number().min(0).max(100).catch(100),
-  // Seconds between twinkles.
-  arcadeGlistenRate: z.number().min(1).max(8).catch(2.8),
-  arcadeCameraSpeed: z.number().min(0.5).max(2).catch(1),
-  arcadeDoorZoom: z.number().min(0.6).max(1.6).catch(1),
-  arcadeScreenZoom: z.number().min(0.7).max(1.4).catch(1),
-  arcadeScanlines: z.number().min(0).max(100).catch(100),
-  arcadeFlicker: z.number().min(0).max(100).catch(0),
-  arcadeGlitch: z.number().min(300).max(2000).catch(900),
-  arcadeBoot: z.number().min(2000).max(8000).catch(4600),
-  // 0 waits for a press.
-  arcadeStartDelay: z.number().min(0).max(10000).catch(3200),
-  arcadeNavBlend: z.enum(arcadeNavBlends).catch("screen"),
-  arcadeShade: z.number().min(0).max(100).catch(100),
-  // The three.js version's live controls (arcade3d/tuning.ts validates them).
-  arcade3d: z.record(z.string(), z.unknown()).catch({}),
-})
-
-export type SiteSettings = z.infer<typeof schema>
+export type SiteSettings = z.infer<ReturnType<typeof createSchema>>
 
 // A saved preset name follows the preset, so changing a preset's values reaches everyone using it.
 function withPreset(settings: SiteSettings): SiteSettings {
@@ -1113,9 +1119,16 @@ function withPreset(settings: SiteSettings): SiteSettings {
 
 // Bump the version when defaults change so old saved values do not mask them.
 const key = "opencode-site-settings-v3"
+let schema: ReturnType<typeof createSchema> | undefined
 // For tests that walk every setting (test/preload-settings.test.ts).
-export const siteSettingsSchema = schema
-export const siteSettingsDefaults = schema.parse({})
+export function siteSettingsSchema() {
+  return (schema ??= createSchema())
+}
+// The same values as parsing nothing (test/settings-defaults.test.ts). Regenerate the file with
+// `bun script/settings-defaults.ts` after changing a default.
+export const siteSettingsDefaults: SiteSettings = import.meta.env.PROD
+  ? (defaultSettings as SiteSettings)
+  : siteSettingsSchema().parse({})
 const defaults = siteSettingsDefaults
 
 /**
@@ -1139,7 +1152,7 @@ export function loadSiteSettings() {
   // Saves the migration, so a cut picked after it isn't migrated again on the next load.
   if (typeof migrated === "object" && migrated !== null && JSON.stringify(migrated) !== raw)
     localStorage.setItem(key, JSON.stringify(migrated))
-  const parsed = schema.safeParse(migrated)
+  const parsed = siteSettingsSchema().safeParse(migrated)
   if (!parsed.success) return
   // Hydration keeps the server's attribute values while the bindings remember the values they saw,
   // so a setting that was already loaded before hydration never reaches the DOM. Pass through the
@@ -1157,7 +1170,7 @@ export function loadSiteSettings() {
 // elements render (logo, nav, status, docs switcher, product videos, wordmark nodes and play) or that no pre-paint script
 // applies (console section and height) wait for mount to keep hydration aligned.
 if (import.meta.env.DEV && !isServer) {
-  const parsed = schema.safeParse(migrateSettings(parseJson(localStorage.getItem(key) ?? "")))
+  const parsed = siteSettingsSchema().safeParse(migrateSettings(parseJson(localStorage.getItem(key) ?? "")))
   if (parsed.success) {
     const {
       nav,
@@ -1233,7 +1246,7 @@ if (import.meta.env.DEV && !isServer) {
   // only the logo size follows, as the rest could switch what renders during hydration.
   window.addEventListener("storage", (event) => {
     if (event.key !== key) return
-    const next = schema.safeParse(migrateSettings(parseJson(event.newValue ?? "{}")))
+    const next = siteSettingsSchema().safeParse(migrateSettings(parseJson(event.newValue ?? "{}")))
     if (!next.success) return
     if (loaded) setStore(reconcile(withPreset(next.data)))
     if (!loaded) setStore("logoScale", next.data.logoScale)
@@ -1534,7 +1547,7 @@ export function setLogoTuning<
 export function parseSiteSettings(raw: unknown) {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined
   if (!Object.keys(raw).some((name) => name in defaults)) return undefined
-  const parsed = schema.safeParse(migrateSettings(raw))
+  const parsed = siteSettingsSchema().safeParse(migrateSettings(raw))
   if (!parsed.success) return undefined
   return withPreset(parsed.data)
 }
