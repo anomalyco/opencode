@@ -25,12 +25,12 @@
       "until": "Ask anything",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 84,
+          "height": 1,
+          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/reload/home"
     },
@@ -44,12 +44,12 @@
       "until": "Configuration reloaded",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 84,
+          "height": 1,
+          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/reload/reloaded"
     }

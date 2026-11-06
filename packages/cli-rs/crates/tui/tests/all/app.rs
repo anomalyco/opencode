@@ -140,7 +140,9 @@ fn run(recording: &Recording) -> (bool, String) {
                         continue;
                     }
                 };
-                let (ok, line) = verdict(result.comparison.is_equal(), &checkpoint.deviation);
+                let files: Vec<String> = checkpoint.deviation.iter().map(|entry| entry.file.clone()).collect();
+                let allowed = app::allows(&checkpoint.deviation, &result.comparison);
+                let (ok, line) = verdict(result.comparison.is_equal(), allowed, &files);
                 passed &= ok;
                 if result.comparison.is_equal() {
                     let _ = writeln!(report, "  checkpoint {}: {line}", checkpoint.checkpoint);
@@ -170,7 +172,7 @@ fn run(recording: &Recording) -> (bool, String) {
     let unmatched: Vec<Sent> = log.iter().filter(|logged| logged.unmatched).map(sent).collect();
     let requests = app::compare_requests(recording, &all, &unmatched);
     let deviation: Vec<String> = recording.deviation.iter().cloned().collect();
-    let (ok, line) = verdict(requests.is_equal(), &deviation);
+    let (ok, line) = verdict(requests.is_equal(), !deviation.is_empty(), &deviation);
     passed &= ok;
     let _ = writeln!(report, "  requests: {line}");
     if let Some(writes) = &requests.writes_differ {
@@ -188,7 +190,7 @@ fn run(recording: &Recording) -> (bool, String) {
         );
     }
     if let (Some(expected), Some(ide)) = (&recording.ide, &ide) {
-        let (ok, line) = verdict(handshake(expected) == handshake(&ide.received.lock().unwrap()), &[]);
+        let (ok, line) = verdict(handshake(expected) == handshake(&ide.received.lock().unwrap()), false, &[]);
         passed &= ok;
         let _ = writeln!(report, "  ide: {line}");
     }
@@ -374,17 +376,18 @@ fn settle(app: &TestApp, memory: &Memory, until: Option<&str>) -> Fixture {
     }
 }
 
-/// Whether a comparison passes, and the line that says why.
-fn verdict(equal: bool, deviation: &[String]) -> (bool, String) {
+/// Whether a comparison passes, and the line that says why. `allowed`: the deviations allow the difference.
+fn verdict(equal: bool, allowed: bool, deviation: &[String]) -> (bool, String) {
     let missing: Vec<&String> = deviation.iter().filter(|name| !app::deviation_exists(name)).collect();
     if !missing.is_empty() {
         return (false, format!("deviation files missing: {missing:?}"));
     }
-    match (equal, deviation.is_empty()) {
-        (true, true) => (true, "equal".to_owned()),
-        (true, false) => (true, format!("equal; remove the deviations {deviation:?}")),
-        (false, false) => (true, format!("differs, allowed by {deviation:?}")),
-        (false, true) => (false, "differs".to_owned()),
+    match (equal, deviation.is_empty(), allowed) {
+        (true, true, _) => (true, "equal".to_owned()),
+        (true, false, _) => (true, format!("equal; remove the deviations {deviation:?}")),
+        (false, true, _) => (false, "differs".to_owned()),
+        (false, false, true) => (true, format!("differs, allowed by {deviation:?}")),
+        (false, false, false) => (false, format!("differs beyond {deviation:?}")),
     }
 }
 

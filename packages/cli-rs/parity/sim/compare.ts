@@ -1,6 +1,7 @@
 // P-TUI comparison (docs/H.5.md): captures become H.1 cell fixtures, masked with H.2's `applyMasks`, and compared
 // cell by cell as `opencode_parity::compare` does. Requests follow H.2's P-REQ rule.
 import type { Frontend } from "@opencode/protocol/simulation"
+import type { Deviation } from "../lib/app"
 import type { Fixture } from "../lib/cells"
 import { normalize } from "../cli/client"
 import type { Logged } from "./proxy"
@@ -57,7 +58,8 @@ export function text(fixture: Fixture) {
     .join("\n")
 }
 
-export type Comparison = { equal: boolean; differences: number; colorOnly: number; report: string }
+// `text`: the differing cells whose symbols differ.
+export type Comparison = { equal: boolean; differences: number; text: number; colorOnly: number; report: string }
 
 // Cells differ when their symbol, colors, or attributes differ. The report has the shape of crates/parity's:
 // each differing row from both sides with markers, then the first differing cells.
@@ -66,6 +68,7 @@ export function compareFixtures(expected: Fixture, actual: Fixture): Comparison 
     return {
       equal: false,
       differences: expected.width * expected.height,
+      text: expected.width * expected.height,
       colorOnly: 0,
       report: `size ${expected.width}x${expected.height} expected, ${actual.width}x${actual.height} actual`,
     }
@@ -77,9 +80,15 @@ export function compareFixtures(expected: Fixture, actual: Fixture): Comparison 
     ),
   )
   if (differences.length === 0)
-    return { equal: true, differences: 0, colorOnly: 0, report: `all ${expected.width * expected.height} cells equal` }
-  // A deviation allows a whole checkpoint, so name the cells whose text matches and whose colors do not, as
-  // crates/parity's summary does: a background, or a foreground behind a visible symbol.
+    return {
+      equal: true,
+      differences: 0,
+      text: 0,
+      colorOnly: 0,
+      report: `all ${expected.width * expected.height} cells equal`,
+    }
+  // The cells whose text matches and whose colors do not, as crates/parity's summary counts them: a background, or
+  // a foreground behind a visible symbol.
   const colorOnly = differences.filter(({ want, got }) => {
     if (want.symbol !== got.symbol) return false
     const [wantFg, wantBg] = want.style.split(" ")
@@ -112,7 +121,22 @@ export function compareFixtures(expected: Fixture, actual: Fixture): Comparison 
     }),
     ...(differences.length > REPORT_CELLS ? [`... and ${differences.length - REPORT_CELLS} more cells`] : []),
   ]
-  return { equal: false, differences: differences.length, colorOnly, report: lines.join("\n") }
+  return {
+    equal: false,
+    differences: differences.length,
+    text: differences.filter(({ want, got }) => want.symbol !== got.symbol).length,
+    colorOnly,
+    report: lines.join("\n"),
+  }
+}
+
+// Whether `deviation` allows `comparison`: at most the cells its entries add up to, and cells whose symbols differ
+// only within the entries that are not `styleOnly`.
+export function allows(deviation: Deviation[], comparison: Comparison) {
+  const sum = (entries: Deviation[]) => entries.reduce((total, entry) => total + entry.cells, 0)
+  return (
+    comparison.differences <= sum(deviation) && comparison.text <= sum(deviation.filter((entry) => !entry.styleOnly))
+  )
 }
 
 function cells(fixture: Fixture) {

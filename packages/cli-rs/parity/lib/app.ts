@@ -11,6 +11,10 @@ export type Mask = ({ x: number; y: number; width: number; height: number } | { 
   reason: string
 }
 
+// A `parity/deviations/<file>.md` that allows a checkpoint at most `cells` differing cells. With `styleOnly`, only
+// cells whose symbols match: their colors or attributes differ. A checkpoint's deviations add up.
+export type Deviation = { file: string; cells: number; styleOnly?: boolean }
+
 export type Step =
   // Shortcuts in opentui-rust's syntax: "enter", "ctrl+x", "a".
   | { keys: string[] }
@@ -37,8 +41,7 @@ export type Step =
       // Text the TS frame contains once it is ready.
       until?: string
       masks?: Mask[]
-      // The `parity/deviations/<name>.md` files that allow this checkpoint to differ, one per row.
-      deviation?: string[]
+      deviation?: Deviation[]
     }
 
 export type AppScenario = {

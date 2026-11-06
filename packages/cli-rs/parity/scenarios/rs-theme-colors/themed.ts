@@ -1,8 +1,8 @@
 // Reruns another step's scenario in a pinned theme, so P-APP compares the colors of every surface it shows in
 // themes other than the default. `deviation` replaces the deviations of every checkpoint.
-import type { AppScenario } from "../../lib/app"
+import type { AppScenario, Deviation } from "../../lib/app"
 
-export function themed(base: AppScenario, name: string, mode: "dark" | "light", deviation?: string[]) {
+export function themed(base: AppScenario, name: string, mode: "dark" | "light", deviation?: Deviation[]) {
   return {
     ...base,
     config: { ...base.config, theme: { name, mode } },

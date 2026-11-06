@@ -4,8 +4,22 @@
 // per checkpoint. P-FILE in `crates/tui/tests/all/system_commands.rs` checks the file bytes against TS.
 import { defineApp } from "../../lib/app"
 
-const placeholder = { line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }
-const behind = { masks: [placeholder], deviation: ["T17-home-prompt"] }
+const placeholder = {
+  x: 16,
+  y: 16,
+  width: 84,
+  height: 1,
+  reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+}
+// Beside a dialog, the placeholder shows its first word.
+const beside = {
+  x: 16,
+  y: 16,
+  width: 3,
+  height: 1,
+  reason: "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)",
+}
+const behind = { masks: [beside] }
 const clear = (text: string) => ({ keys: Array.from(text, () => "backspace") })
 
 export default defineApp({
@@ -25,7 +39,6 @@ export default defineApp({
       checkpoint: "home",
       until: "Ask anything",
       masks: [placeholder],
-      deviation: ["T17-home-prompt"],
     },
     { keys: ["f5", "f6", "f7", "f8", "f9", "f10"] },
     { checkpoint: "settings", until: "Search settings", ...behind },

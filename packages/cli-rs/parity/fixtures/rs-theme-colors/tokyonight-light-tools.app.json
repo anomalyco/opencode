@@ -187,7 +187,11 @@
       "checkpoint": "open",
       "until": "unused variable",
       "deviation": [
-        "H06-pinned-theme-diff-syntax"
+        {
+          "file": "H06-pinned-theme-diff-syntax",
+          "cells": 105,
+          "styleOnly": true
+        }
       ],
       "fixture": "rs-theme-colors/tokyonight-light-tools/open"
     }

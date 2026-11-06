@@ -31,7 +31,7 @@ export default defineApp({
     {
       checkpoint: "streamed",
       until: "Fixed.",
-      deviation: ["V01-plain-transcript"],
+      deviation: [{ file: "V01-plain-transcript", cells: 70 }],
     },
   ],
 })
