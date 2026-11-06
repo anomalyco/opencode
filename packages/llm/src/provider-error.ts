@@ -21,6 +21,8 @@ const patterns = [
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
   /request entity too large/i,
+  /request body too large/i,
+  /multimodal data size is too large/i,
   /context length is only \d+ tokens/i,
   /input length.*exceeds.*context length/i,
   /prompt too long; exceeded (?:max )?context length/i,
