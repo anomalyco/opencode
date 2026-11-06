@@ -270,4 +270,20 @@ describe("Skill", () => {
         expect(yield* skill.files(Skill.ID.make("review"))).toBeUndefined()
       }),
   )
+
+  it.effect("lists a skill's files without SKILL.md or a download's version marker", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const skill = Skill.Info.make({ ...info("deploy", "Deploy"), path: AbsolutePath.make("/cache/deploy/SKILL.md") })
+      const prepared = yield* Skill.prepare(
+        {
+          ...fs,
+          scan: () =>
+            Effect.succeed(["/cache/deploy/SKILL.md", "/cache/deploy/.opencode-version", "/cache/deploy/guide.md"]),
+        },
+        skill,
+      )
+      expect(prepared.output).toBe(Skill.toModelOutput(skill, ["/cache/deploy/guide.md"]))
+    }),
+  )
 })

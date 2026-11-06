@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode/core/config"
@@ -15,6 +16,7 @@ import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Global } from "@opencode/util/global"
 import { FileAccess } from "@opencode/core/file-access"
 import { location } from "./fixture/location"
+import { tmpdir } from "./fixture/tmpdir"
 import { Tool } from "@opencode/core/tool"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
@@ -1175,6 +1177,88 @@ describe("ReadTool", () => {
           }
         }),
       )
+    }),
+  )
+
+  it.effect("reads an external skill's supporting files from this host under skill and read permissions", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const registry = yield* Tool.Service
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const root = path.join(tmp.path, "cache", "deploy")
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      )
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(root, "references"), { recursive: true })
+        await fs.writeFile(path.join(root, "SKILL.md"), "# Deploy")
+        await fs.writeFile(path.join(root, "references", "guide.md"), "Line 1\nLine 2")
+        await fs.writeFile(path.join(root, "logo.png"), png)
+        await fs.writeFile(path.join(root, ".opencode-version"), "1")
+        await fs.writeFile(path.join(tmp.path, "secret.md"), "secret")
+        await fs.symlink(path.join(tmp.path, "secret.md"), path.join(root, "escape.md"))
+      })
+      yield* skills.transform((editor) =>
+        editor.add(
+          Skill.Info.make({
+            id: Skill.ID.make("deploy"),
+            name: Skill.Name.make("Deploy"),
+            path: AbsolutePath.make(path.join(root, "SKILL.md")),
+            content: "# Deploy",
+          }),
+        ),
+      )
+      const read = (file: string) =>
+        executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: `call-${file}`, name: "read", input: { path: file } },
+        })
+      const guide = path.join(root, "references", "guide.md")
+
+      expect(yield* read(guide)).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: `Read file ${guide}, lines 1-2\n1: Line 1\n2: Line 2` }],
+      })
+      expect(yield* read(path.join(root, "logo.png"))).toMatchObject({
+        status: "completed",
+        output: { type: "file", encoding: "base64", mime: "image/png" },
+      })
+      expect(yield* read(root)).toMatchObject({
+        status: "completed",
+        content: [
+          {
+            type: "text",
+            text: `Read directory ${root}, entries 1-4\nreferences${path.sep}\nescape.md\nlogo.png\nSKILL.md`,
+          },
+        ],
+      })
+      // The session's environment never served these reads, and no external_directory approval was asked.
+      expect(readCalls).toEqual([])
+      expect(assertions.map((item) => item.action)).toEqual(["skill", "read", "skill", "read", "skill", "read"])
+      expect(assertions.slice(0, 2)).toMatchObject([
+        { sessionID, action: "skill", resources: ["deploy"], save: ["deploy"] },
+        { sessionID, action: "read", resources: [guide.replaceAll("\\", "/")], save: ["*"] },
+      ])
+
+      // The version marker and a link out of the skill get no skill exemption.
+      for (const file of [path.join(root, ".opencode-version"), path.join(root, "escape.md")]) {
+        assertions.length = 0
+        yield* read(file)
+        expect(assertions[0]).toMatchObject({ action: "external_directory" })
+      }
+
+      deniedResource = "deploy"
+      expect(yield* read(guide)).toEqual({
+        status: "error",
+        error: { type: "permission.rejected", message: "Permission denied: skill" },
+      })
+      deniedResource = guide.replaceAll("\\", "/")
+      expect(yield* read(guide)).toEqual({
+        status: "error",
+        error: { type: "permission.rejected", message: "Permission denied: read" },
+      })
     }),
   )
 })

@@ -7,6 +7,7 @@ import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
 import { Permission } from "./permission.js"
+import { SkillDiscovery } from "./skill/discovery.js"
 import { State } from "./state.js"
 
 export const DirectorySource = Skill.DirectorySource
@@ -56,6 +57,8 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
   ].join("\n")
 }
 
+const hidden = new Set(["SKILL.md", SkillDiscovery.versionFile])
+
 export const prepare = Effect.fn("Skill.prepare")(function* (
   fs: FSUtil.Interface,
   skill: Info,
@@ -83,7 +86,7 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
           dot: true,
           ignore: FSUtil.ignoreGlobs,
         }))
-          .filter((file) => path.basename(file) !== "SKILL.md")
+          .filter((file) => !hidden.has(path.basename(file)))
           .toSorted()
           .slice(0, 10)
       : []

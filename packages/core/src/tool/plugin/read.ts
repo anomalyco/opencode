@@ -1,9 +1,10 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, join } from "path"
+import { basename, dirname, join, parse } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
+import { ChildProcessSpawner } from "effect/process"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
@@ -80,6 +81,32 @@ export const Plugin = {
                   { discard: true },
                 )
                 const output = yield* ReadToolFileSystem.read(virtualFs, AbsolutePath.make(parsed.target), input.path, {
+                  offset: input.offset,
+                  limit: input.limit,
+                }).pipe(
+                  Effect.catchIf(
+                    (error) => error instanceof Environment.NotFound,
+                    () => Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                  ),
+                )
+                return { output, path: input.path }
+              }
+
+              const skillFile = yield* activeSkillFile(input.path)
+              if (skillFile) {
+                yield* permission.assert({
+                  action: "skill",
+                  resources: [skillFile.skill.id],
+                  save: [skillFile.skill.id],
+                  ...Permission.invocation(context),
+                })
+                yield* permission.assert({
+                  action: "read",
+                  resources: [skillFile.absolute.replaceAll("\\", "/")],
+                  save: ["*"],
+                  ...Permission.invocation(context),
+                })
+                const output = yield* ReadToolFileSystem.read(skillFiles, skillFile.target, skillFile.absolute, {
                   offset: input.offset,
                   limit: input.limit,
                 }).pipe(
@@ -173,6 +200,43 @@ export const Plugin = {
         }),
       )
       .pipe(Effect.orDie)
+
+    // A skill's supporting files sit beside its SKILL.md. A skill from a URL source is cached on this host, outside
+    // the project and, for a session in a remote workspace, outside its environment too. So a file under an active
+    // skill's directory outside the location reads from this host under the `skill` and `read` permissions, not
+    // `external_directory`.
+    const activeSkillFile = Effect.fn("ReadTool.activeSkillFile")(function* (file: string) {
+      const absolute = AbsolutePath.make(FileAccess.resolvePath(location.directory, file))
+      const project = location.project.directory
+      if (
+        FSUtil.contains(location.directory, absolute) ||
+        (project !== parse(project).root && FSUtil.contains(project, absolute))
+      )
+        return
+      const skill = (yield* skills.list()).find(
+        (item) =>
+          !Skill.isUri(item.path) &&
+          basename(item.path) === "SKILL.md" &&
+          FSUtil.contains(dirname(item.path), absolute),
+      )
+      if (!skill) return
+      // Resolve links so a symlink inside the skill can't reach a file outside it.
+      const target = AbsolutePath.make(yield* fs.resolve(absolute))
+      if (!FSUtil.contains(yield* fs.resolve(dirname(skill.path)), target)) return
+      if (basename(target) === SkillDiscovery.versionFile) return
+      return { skill, absolute, target }
+    })
+    const host = Environment.makeFiles(
+      // Reading never spawns a process, so these host files need no spawner.
+      Environment.makeLocalDriver(ChildProcessSpawner.make(() => Effect.die("host skill files never spawn"))),
+    )
+    const skillFiles: Environment.Files = {
+      ...host,
+      list: (directory) =>
+        host
+          .list(directory)
+          .pipe(Effect.map((entries) => entries.filter((entry) => entry.name !== SkillDiscovery.versionFile))),
+    }
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
       const canonical = (name: string) =>
