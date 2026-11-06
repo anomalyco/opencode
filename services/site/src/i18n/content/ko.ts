@@ -33,38 +33,25 @@ export const content = {
     desktop: {
       title: "OpenCode | macOS, Windows, Linux용 데스크톱 앱",
       description:
-        "여러 OpenCode 에이전트를 각자의 탭에서 동시에 실행하세요. 모든 변경 사항을 diff로 검토하고, 원하는 줄에 댓글을 달고, 내장 브라우저에서 결과를 미리 보세요.",
+        "원하는 만큼 OpenCode 에이전트를 병렬로 실행하고, 옆 브라우저에서 모든 변경 사항을 확인하고, 어떤 기기에서든 이어서 작업하세요. macOS, Windows, Linux용.",
       intro:
         "여러 에이전트를 동시에 실행하고, 세션마다 각자의 탭을 쓰세요. 모든 변경 사항을 diff로 검토하고, 원하는 줄에 댓글을 달고, 내장 브라우저에서 결과를 확인하세요. macOS, Windows, Linux를 지원합니다.",
-      features: {
-        "built-in-terminal": { title: "내장 터미널", body: "세션 옆 터미널 탭에서 명령어를 실행하세요." },
-        "ssh-servers": { title: "SSH 서버", body: "SSH로 다른 컴퓨터에 연결해 그곳의 프로젝트를 작업하세요." },
-        extensions: { title: "확장 프로그램", body: "MCP 서버, 플러그인, 스킬을 한 메뉴에서 관리하세요." },
-        wsl: { title: "WSL", body: "Windows에서 세션을 네이티브 대신 WSL 2 배포판에서 실행하세요." },
-        "office-files": { title: "Office 파일", body: "Word, Excel, PowerPoint 파일을 세션 옆에서 여세요." },
-        "keyboard-shortcuts": {
-          title: "키보드 단축키",
-          body: "모든 작업에 단축키가 있고, 원하는 대로 바꿀 수 있습니다.",
-        },
-        "updates-itself": { title: "자동 업데이트", body: "새 버전을 앱에서 바로 다운로드하고 설치합니다." },
-        "all-your-projects": { title: "모든 프로젝트", body: "한 창에서 프로젝트와 세션을 오가며 작업하세요." },
-      },
       showcase: {
-        "pair-your-phone": {
-          title: "휴대폰 페어링",
-          body: "OpenCode Mobile에서 QR 코드를 스캔해 iPhone으로 세션을 조종하세요.",
-        },
-        "sessions-in-tabs": {
-          title: "탭으로 나뉜 세션",
-          body: "여러 에이전트를 동시에 일하게 하세요. 세션마다 탭이 따로 있습니다.",
-        },
-        "review-and-comment": {
-          title: "검토와 댓글",
-          body: "변경 사항을 diff로 읽고, 줄에 댓글을 달아 다시 보내세요.",
+        "parallel-agents": {
+          title: "병렬 에이전트",
+          body: "원하는 만큼 에이전트를 시작하고 모두 병렬로 작업하게 하세요. 작업이 끝나는 대로 에이전트 사이를 오가세요.",
         },
         "see-it-in-the-browser": {
           title: "브라우저에서 확인",
-          body: "에이전트의 결과물이 나오는 대로 세션 옆 브라우저에서 열립니다.",
+          body: "앱이 에이전트 옆 브라우저에서 열리므로, 당신과 에이전트 모두 모든 변경 사항을 바로 확인할 수 있습니다.",
+        },
+        "on-every-device": {
+          title: "모든 기기에서",
+          body: "모든 기기에서 에이전트를 시작하고, 데스크톱 앱, 터미널, 휴대폰에서 이어서 작업하세요.",
+        },
+        "extend-it": {
+          title: "확장하기",
+          body: "도구와 서비스를 연결해 에이전트가 무엇이든 다룰 수 있게 하세요. 또는 OpenCode가 스스로 플러그인을 만들게 하고, 사이드바에 전용 UI를 띄우세요.",
         },
       },
     },

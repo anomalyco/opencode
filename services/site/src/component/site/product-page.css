@@ -501,6 +501,27 @@
       [data-slot="still"][data-hidden] {
         opacity: 0;
       }
+
+      /* A row with no footage yet: the logo mark, dimmed, in the middle of the black frame. */
+      [data-slot="placeholder"] {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+
+        svg {
+          width: 2.5rem;
+          height: auto;
+        }
+
+        [data-slot="code"] {
+          fill: rgb(255 255 255 / 0.16);
+        }
+
+        [data-slot="inner"] {
+          fill: rgb(255 255 255 / 0.06);
+        }
+      }
     }
 
     [data-slot="copy"] {

@@ -59,59 +59,25 @@ export const content = {
     desktop: {
       title: "OpenCode | Aplikacja desktopowa na macOS, Windows i Linux",
       description:
-        "Uruchamiaj kilku agentów OpenCode naraz, każdego w osobnej karcie. Przeglądaj każdą zmianę jako diff, komentuj dowolną linię i sprawdzaj wynik we wbudowanej przeglądarce.",
+        "Uruchamiaj równolegle tylu agentów OpenCode, ilu chcesz, oglądaj każdą zmianę w przeglądarce obok i kontynuuj na dowolnym urządzeniu. Na macOS, Windows i Linux.",
       intro:
         "Uruchamiaj kilku agentów naraz, każdą sesję w osobnej karcie. Przeglądaj każdą zmianę jako diff, komentuj dowolną linię i sprawdzaj wynik we wbudowanej przeglądarce. Na macOS, Windows i Linux.",
-      features: {
-        "built-in-terminal": {
-          title: "Wbudowany terminal",
-          body: "Uruchamiaj polecenia w karcie terminala obok sesji.",
-        },
-        "ssh-servers": {
-          title: "Serwery SSH",
-          body: "Połącz się z inną maszyną przez SSH i pracuj nad jej projektami.",
-        },
-        extensions: {
-          title: "Rozszerzenia",
-          body: "Zarządzaj serwerami MCP, pluginami i skillami w jednym menu.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "W Windows uruchamiaj sesje w dystrybucji WSL 2 zamiast natywnie.",
-        },
-        "office-files": {
-          title: "Pliki Office",
-          body: "Otwieraj pliki Word, Excel i PowerPoint obok sesji.",
-        },
-        "keyboard-shortcuts": {
-          title: "Skróty",
-          body: "Każda akcja ma skrót klawiszowy, a każdy z nich możesz zmienić.",
-        },
-        "updates-itself": {
-          title: "Aktualizacje",
-          body: "Nowe wersje pobierają się i instalują z poziomu aplikacji.",
-        },
-        "all-your-projects": {
-          title: "Wszystkie projekty",
-          body: "Przełączaj się między projektami i ich sesjami w jednym oknie.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sesje w kartach",
-          body: "Niech kilku agentów pracuje naraz, każda sesja w osobnej karcie.",
-        },
-        "review-and-comment": {
-          title: "Przeglądaj i komentuj",
-          body: "Czytaj każdą zmianę jako diff, skomentuj linię i odeślij ją.",
+        "parallel-agents": {
+          title: "Agenci równolegle",
+          body: "Uruchom tylu agentów, ilu chcesz, i pozwól im pracować równolegle. Przełączaj się między nimi, gdy kończą.",
         },
         "see-it-in-the-browser": {
           title: "Zobacz w przeglądarce",
-          body: "Praca agenta otwiera się w przeglądarce obok sesji na bieżąco.",
+          body: "Twoja aplikacja otwiera się w przeglądarce obok agenta, więc oboje widzicie każdą zmianę na bieżąco.",
         },
-        "pair-your-phone": {
-          title: "Sparuj telefon",
-          body: "Zeskanuj kod QR w OpenCode Mobile, aby sterować sesjami z iPhone'a.",
+        "on-every-device": {
+          title: "Na każdym urządzeniu",
+          body: "Uruchamiaj agentów na wszystkich swoich urządzeniach i kontynuuj w aplikacji desktopowej, terminalu lub na telefonie.",
+        },
+        "extend-it": {
+          title: "Rozszerzaj",
+          body: "Podłącz swoje narzędzia i usługi, aby agent mógł pracować ze wszystkim. Albo pozwól OpenCode zbudować wtyczki dla samego siebie, z własnym interfejsem w panelu bocznym.",
         },
       },
     },

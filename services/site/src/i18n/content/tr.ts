@@ -59,59 +59,25 @@ export const content = {
     desktop: {
       title: "OpenCode | macOS, Windows ve Linux için masaüstü uygulaması",
       description:
-        "Birden fazla OpenCode ajanını aynı anda, her birini kendi sekmesinde çalıştırın. Her değişikliği diff olarak inceleyin, satırlara yorum yapın ve sonucu yerleşik tarayıcıda görün.",
+        "İstediğiniz kadar OpenCode ajanını paralel çalıştırın, her değişikliği yanlarındaki tarayıcıda görün ve her cihazdan devam edin. macOS, Windows ve Linux için.",
       intro:
         "Birden fazla ajanı aynı anda, her oturumu kendi sekmesinde çalıştırın. Her değişikliği diff olarak inceleyin, istediğiniz satıra yorum yapın ve sonucu yerleşik tarayıcıda kontrol edin. macOS, Windows ve Linux için.",
-      features: {
-        "built-in-terminal": {
-          title: "Yerleşik terminal",
-          body: "Komutları oturumun yanındaki bir terminal sekmesinde çalıştırın.",
-        },
-        "ssh-servers": {
-          title: "SSH sunucuları",
-          body: "SSH ile başka bir makineye bağlanın ve oradaki projelerde çalışın.",
-        },
-        extensions: {
-          title: "Eklentiler",
-          body: "MCP sunucularını, eklentileri ve becerileri tek menüden yönetin.",
-        },
-        wsl: {
-          title: "WSL",
-          body: "Windows'ta oturumları yerel yerine bir WSL 2 dağıtımında çalıştırın.",
-        },
-        "office-files": {
-          title: "Office dosyaları",
-          body: "Word, Excel ve PowerPoint dosyalarını oturumun yanında açın.",
-        },
-        "keyboard-shortcuts": {
-          title: "Kısayollar",
-          body: "Her eylemin bir klavye kısayolu var ve hepsini değiştirebilirsiniz.",
-        },
-        "updates-itself": {
-          title: "Kendini günceller",
-          body: "Yeni sürümler uygulamanın içinden iner ve kurulur.",
-        },
-        "all-your-projects": {
-          title: "Tüm projeleriniz",
-          body: "Projeler ve oturumları arasında tek pencerede geçiş yapın.",
-        },
-      },
       showcase: {
-        "sessions-in-tabs": {
-          title: "Sekmelerde oturumlar",
-          body: "Birden fazla ajanı aynı anda, her biri kendi sekmesinde çalıştırın.",
-        },
-        "review-and-comment": {
-          title: "İncele ve yorumla",
-          body: "Değişiklikleri diff olarak okuyun, satıra yorum yapıp geri gönderin.",
+        "parallel-agents": {
+          title: "Paralel ajanlar",
+          body: "İstediğiniz kadar ajan başlatın ve hepsinin paralel çalışmasına izin verin. Bitirdikçe aralarında geçiş yapın.",
         },
         "see-it-in-the-browser": {
           title: "Tarayıcıda gör",
-          body: "Ajanın işi geldikçe oturumun yanındaki bir tarayıcıda açılır.",
+          body: "Uygulamanız ajanın yanında bir tarayıcıda açılır, böylece ikiniz de her değişikliği anında görürsünüz.",
         },
-        "pair-your-phone": {
-          title: "Telefonu eşle",
-          body: "Oturumları iPhone'unuzdan yönetmek için OpenCode Mobile'da bir QR kodu okutun.",
+        "on-every-device": {
+          title: "Her cihazda",
+          body: "Tüm cihazlarınızda ajan başlatın ve masaüstü uygulamasından, terminalden ya da telefonunuzdan devam edin.",
+        },
+        "extend-it": {
+          title: "Genişletin",
+          body: "Araçlarınızı ve hizmetlerinizi bağlayın, ajan her şeyle çalışabilsin. Ya da OpenCode'un kendisi için kenar çubuğunda kendi arayüzü olan eklentiler yapmasını sağlayın.",
         },
       },
     },

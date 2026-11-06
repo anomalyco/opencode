@@ -32,9 +32,10 @@ export function productMarkdown(slug: PageSlug) {
     return blocks(
       `# ${product.name}`,
       productDetails[slug].intro,
-      // The clips the page shows: the first three, and a fourth once its footage exists.
+      // The clips the page shows: the first three, and a fourth once its footage exists or when it
+      // has no clip at all (a row whose clip is still to come).
       ...productDetails[slug].showcase
-        .filter((row, index) => index < 3 || fourthClips.includes(row.clip?.split("/").pop() ?? ""))
+        .filter((row, index) => index < 3 || !row.clip || fourthClips.includes(row.clip.split("/").pop() ?? ""))
         .map((row) => blocks(`## ${row.title}`, row.body).trimEnd()),
       ...(productDetails[slug].features.length > 0
         ? [
