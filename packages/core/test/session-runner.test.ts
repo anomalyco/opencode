@@ -46,6 +46,11 @@ import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Money } from "@opencode/schema/money"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionGoal } from "@opencode/core/session/goal"
+import { GoalPlugin } from "@opencode/core/plugin/goal"
+import { Command } from "@opencode/core/command"
+import { KV } from "@opencode/core/kv"
+import { SessionTeam } from "@opencode/core/session/team"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionRunnerLLM } from "@opencode/core/session/runner/llm"
@@ -480,6 +485,10 @@ const layer = Layer.unwrap(
         SessionProjector.node,
         SessionStore.node,
         SessionInbox.node,
+        SessionGoal.node,
+        SessionTeam.node,
+        Command.node,
+        KV.node,
         Agent.node,
         Model.node,
         Tool.node,
@@ -613,6 +622,63 @@ const scenario = (
       return yield* body(s)
     }),
   )
+
+scenario("goal continues after a text response and stops on update_goal", function* (s) {
+  const goals = yield* SessionGoal.Service
+  const commands = yield* Command.Service
+  const tools = yield* Tool.Service
+  const hooks = yield* PluginHooks.Service
+  yield* GoalPlugin.Plugin.effect(
+    host({
+      tool: {
+        transform: tools.transform,
+        reload: tools.reload,
+        list: tools.list,
+        hook: (name, callback) => hooks.register("tool", name, callback),
+      },
+      session: { hook: (name, callback) => hooks.register("session", name, callback) },
+    }),
+  )
+  yield* s.admit("Work on the goal")
+  yield* s.llm.push(
+    TestLLM.toolCall("goal-create", "create_goal", { objective: "最初のゴール" }),
+    TestLLM.toolCall("goal-read", "get_goal", {}),
+    TestLLM.toolCall("goal-edit", "update_goal", { objective: "テストを通す" }),
+    TestLLM.text("Still working", "goal-progress"),
+    TestLLM.toolCall("goal-complete", "update_goal", { status: "complete" }),
+    TestLLM.text("Verified", "goal-done"),
+  )
+  yield* s.resume
+  expect(s.requests).toHaveLength(6)
+  expect(yield* goals.get(sessionID)).toEqual({ objective: "テストを通す", status: "complete" })
+  expect(
+    (yield* s.context).some(
+      (message) => message.type === "synthetic" && message.text === SessionGoal.continuation("テストを通す"),
+    ),
+  ).toBe(true)
+  expect(yield* s.inbox).toEqual([])
+
+  yield* goals.status(sessionID, "active")
+  expect(yield* goals.enqueue(sessionID)).toBe(true)
+  yield* goals.status(sessionID, "paused")
+  expect((yield* goals.get(sessionID))?.status).toBe("paused")
+  expect(yield* s.inbox).toEqual([])
+  expect(yield* goals.enqueue(sessionID)).toBe(false)
+  yield* goals.status(sessionID, "active")
+  expect(yield* goals.enqueue(sessionID)).toBe(true)
+  yield* goals.clear(sessionID)
+  expect(yield* goals.get(sessionID)).toBeUndefined()
+  expect(yield* s.inbox).toEqual([])
+  expect((yield* commands.list()).some((command) => command.name === "goal")).toBe(false)
+  expect(s.requests.at(-1)?.system).toEqual(s.requests[0].system)
+  expect(
+    s.requests.every(
+      (request) =>
+        JSON.stringify(request.messages.slice(0, s.requests[0].messages.length)) ===
+        JSON.stringify(s.requests[0].messages),
+    ),
+  ).toBe(true)
+})
 
 // Nominal retry gaps: exponential from 2s capped at 10s, for 10 retries.
 const RETRY_GAPS = [2_000, 4_000, 8_000, ...Array<number>(7).fill(10_000)]

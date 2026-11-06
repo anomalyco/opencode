@@ -26,6 +26,7 @@ import { SessionTeam } from "@opencode/core/session/team"
 import { SessionGoal } from "@opencode/core/session/goal"
 import { SessionWatch } from "@opencode/core/session/watch"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -36,6 +37,121 @@ const it = testEffect(
 )
 
 describe("SessionExecution lifecycle", () => {
+  it.effect("goal edits append notifications; the sliding limit pauses and resume resets counters", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const goals = yield* SessionGoal.Service
+      const inbox = yield* SessionInbox.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const id = Session.ID.make("ses_goal_limit")
+      yield* seedSessions(database, [id])
+      yield* goals.set(id, "First objective")
+      const original = yield* store.context(id)
+      yield* goals.update(id, { objective: "Second objective" })
+      const edited = yield* store.context(id)
+      expect(edited.slice(0, original.length)).toEqual(original)
+      expect(edited.at(-1)).toMatchObject({ text: expect.stringContaining("+ Second objective") })
+      const cycle = Effect.gen(function* () {
+        expect(yield* goals.enqueue(id)).toBe(true)
+        for (const item of yield* inbox.list(id))
+          yield* bus.publish(SessionEvent.InboxCancelled, { sessionID: id, inboxID: item.id })
+      })
+      yield* Effect.repeat(cycle, { times: 48 })
+      expect((yield* goals.get(id))?.status).toBe("active")
+      yield* TestClock.adjust("10 minutes")
+      yield* cycle
+      expect((yield* goals.inspect(id)).continuationCount).toBe(1)
+      yield* Effect.repeat(cycle, { times: 48 })
+      expect((yield* goals.get(id))?.status).toBe("paused")
+      expect(yield* goals.enqueue(id)).toBe(false)
+      yield* goals.status(id, "active")
+      expect((yield* goals.inspect(id)).continuationCount).toBe(0)
+    }),
+  )
+
+  it.effect("three consecutive approval waits block the goal", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const goals = yield* SessionGoal.Service
+      const inbox = yield* SessionInbox.Service
+      const bus = yield* Bus.Service
+      const id = Session.ID.make("ses_goal_approval")
+      yield* seedSessions(database, [id])
+      yield* goals.set(id, "Finish")
+      yield* goals.update(id, { awaitingApproval: true, reason: "Waiting for approval" })
+      for (let index = 0; index < 3; index++) {
+        expect(yield* goals.enqueue(id)).toBe(true)
+        for (const item of yield* inbox.list(id))
+          yield* bus.publish(SessionEvent.InboxCancelled, { sessionID: id, inboxID: item.id })
+      }
+      expect((yield* goals.get(id))?.status).toBe("blocked")
+      expect((yield* goals.inspect(id)).approvalWaits).toBe(3)
+      expect(yield* goals.enqueue(id)).toBe(false)
+      yield* goals.status(id, "active")
+      expect((yield* goals.inspect(id)).approvalWaits).toBe(0)
+      expect((yield* goals.get(id))?.awaitingApproval).toBeUndefined()
+    }),
+  )
+
+  it.effect("a team goal waits for the last member to stop before waking its leader", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const teams = yield* SessionTeam.Service
+      const goals = yield* SessionGoal.Service
+      const inbox = yield* SessionInbox.Service
+      const parent = Session.ID.make("ses_goal_boss")
+      const leader = Session.ID.make("ses_goal_leader")
+      const member = Session.ID.make("ses_goal_member")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [leader, member], { parent_id: parent })
+      yield* teams.register({ parentID: parent, teamID: "test-team", sessionID: leader })
+      yield* teams.register({ parentID: parent, teamID: "test-team", sessionID: member })
+      yield* goals.set(leader, "Finish the team task")
+      expect(yield* goals.enqueue(leader)).toBe(false)
+
+      const running = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const continued = yield* Deferred.make<readonly SessionInbox.Item[]>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      let leaderDrains = 0
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        Effect.gen(function* () {
+          if (sessionID === member) {
+            yield* Deferred.succeed(running, undefined)
+            yield* Deferred.await(release)
+            return
+          }
+          leaderDrains++
+          if (leaderDrains === 1) return
+          yield* Deferred.succeed(continued, yield* inbox.list(leader))
+          yield* goals.status(leader, "complete").pipe(Effect.orDie)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.wake(member)
+      yield* Deferred.await(running)
+      yield* execution.resume(leader)
+      expect(leaderDrains).toBe(1)
+      expect(yield* inbox.list(leader)).toEqual([])
+
+      yield* Deferred.succeed(release, undefined)
+      const pending = yield* Deferred.await(continued)
+      yield* execution.awaitIdle(member)
+      yield* execution.awaitIdle(leader)
+      expect(leaderDrains).toBe(2)
+      expect(pending).toHaveLength(1)
+      expect(pending[0]?.type).toBe("synthetic")
+      expect(yield* inbox.list(leader)).toEqual([])
+      expect(yield* goals.enqueue(leader, new Set())).toBe(false)
+      yield* goals.status(leader, "paused")
+      expect(yield* goals.enqueue(leader, new Set())).toBe(false)
+      yield* goals.status(leader, "active")
+      yield* seedInbox(database, member, ["steer"])
+      expect(yield* goals.enqueue(leader, new Set())).toBe(false)
+    }),
+  )
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(
