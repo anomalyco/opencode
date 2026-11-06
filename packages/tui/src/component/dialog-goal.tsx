@@ -10,7 +10,7 @@ export function DialogGoal(props: { sessionID: string }) {
   const client = useClient()
   const dialog = useDialog()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [focus, setFocus] = createSignal(0)
   const [busy, setBusy] = createSignal(false)
   const [deleting, setDeleting] = createSignal(false)

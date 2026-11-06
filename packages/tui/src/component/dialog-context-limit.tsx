@@ -10,7 +10,7 @@ export function DialogContextLimit(props: { sessionID: string }) {
   const client = useClient()
   const dialog = useDialog()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [busy, setBusy] = createSignal(false)
   const [editor, setEditor] = createSignal<TextareaRenderable>()
   const [loaded] = createResource(async () => ({ tokens: await client.api.session.contextLimitGet(props) }))
