@@ -318,28 +318,16 @@
     text-wrap: balance;
   }
 
-  [data-slot="media-panel-end"] {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    min-height: 1px;
-    padding-block: 16px 8px;
-    color: var(--v2-text-text-faint);
-    font-size: 12px;
-
-    &:empty {
-      padding: 0;
-    }
-  }
-
-  [data-slot="media-panel-retry"] {
-    padding: 2px 8px;
+  [data-slot="media-panel-more"] {
+    display: block;
+    margin: 12px auto 4px;
+    padding: 4px 10px;
     border-radius: 6px;
     color: var(--v2-text-text-muted);
+    font-size: 12px;
     cursor: default;
 
-    &:hover {
+    &:not(:disabled):hover {
       background-color: var(--v2-overlay-simple-overlay-hover);
       color: var(--v2-text-text-base);
     }

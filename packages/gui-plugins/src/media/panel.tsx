@@ -2,12 +2,11 @@ import { createMemo, createSignal, For, mapArray, Match, onCleanup, Show, Switch
 import { useDialog } from "@opencode/ui/context/dialog"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
-import { Loader } from "@opencode/ui/loader"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { Select } from "@opencode/ui/select"
 import { SiteIcon } from "@opencode/session-ui/sources/site-icon"
-import { createKeyed, createLatest, usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import { createLatest, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { Browser } from "@opencode/plugin/gui/browser"
 import type Media from "./index"
 import { combineMedia, messageMedia, type FileItem, type LinkItem, type MediaItem, type Sender } from "./collect"
@@ -50,40 +49,6 @@ export default function MediaPanel(props: { session: MountedSession }) {
     if (from() !== "all") return ctx.t(from() === "user" ? "empty.user" : "empty.agent")
 
     return ctx.t(`empty.${kind()}`)
-  }
-
-  // The app keeps only a session's recent messages, so older items arrive as the panel pages in history. Paging runs
-  // whenever the end of the list is on screen: as the user scrolls down, and again after each page while a short or
-  // empty list still leaves the end visible. Every tab reads the same messages, so a page fills all three.
-  const [end, setEnd] = createSignal(false)
-  const [failed, setFailed] = createSignal(false)
-  // Counts settled page requests. A request can add nothing, for example when it joins the timeline's own load, so
-  // each settle is a new chance to page while the end is still on screen.
-  const [settled, setSettled] = createSignal(0)
-  const more = () => messages().more(props.session.id)
-  const loading = () => messages().loading(props.session.id)
-
-  const page = () => {
-    setFailed(false)
-    void messages()
-      .loadMore(props.session.id)
-      .then(
-        () => setSettled((count) => count + 1),
-        () => setFailed(true),
-      )
-  }
-
-  // Syncs with the server: one page at a time while the end is visible, so it stops once a page pushes the end off
-  // screen, the history ends, or a load fails.
-  createKeyed(() => end() && more() && !loading() && !failed() && `${props.session.id}:${settled()}`, page)
-
-  const observeEnd = (element: HTMLElement) => {
-    const observer = new IntersectionObserver((entries) => setEnd(entries.some((entry) => entry.isIntersecting)), {
-      rootMargin: "300px",
-    })
-
-    observer.observe(element)
-    onCleanup(() => observer.disconnect())
   }
 
   const openURL = (url: string) => {
@@ -136,9 +101,7 @@ export default function MediaPanel(props: { session: MountedSession }) {
               <SegmentedControlItem value={value}>
                 <span data-slot="media-panel-kind">
                   {ctx.t(`kind.${value}`)}
-                  <span data-slot="media-panel-count">
-                    {more() ? ctx.t("count.more", { count: count(value) }) : count(value)}
-                  </span>
+                  <span data-slot="media-panel-count">{count(value)}</span>
                 </span>
               </SegmentedControlItem>
             )}
@@ -179,24 +142,24 @@ export default function MediaPanel(props: { session: MountedSession }) {
               {(item) => <LinkRow item={item} openURL={openURL} />}
             </DayGroups>
           </Match>
-          <Match when={!more()}>
+          <Match when={true}>
             <div data-slot="media-panel-empty">{empty()}</div>
           </Match>
         </Switch>
-        <div ref={observeEnd} data-slot="media-panel-end">
-          <Switch>
-            <Match when={failed()}>
-              <span>{ctx.t("history.failed")}</span>
-              <button type="button" data-slot="media-panel-retry" onClick={page}>
-                {ctx.t("history.retry")}
-              </button>
-            </Match>
-            <Match when={more()}>
-              <Loader width={14} height={14} />
-              <span>{ctx.t("history.loading")}</span>
-            </Match>
-          </Switch>
-        </div>
+        <Show when={messages().more(props.session.id)}>
+          <button
+            type="button"
+            data-slot="media-panel-more"
+            disabled={messages().loading(props.session.id)}
+            onClick={() =>
+              void messages()
+                .loadMore(props.session.id)
+                .catch(() => {})
+            }
+          >
+            {ctx.t(messages().loading(props.session.id) ? "load.loading" : "load.more")}
+          </button>
+        </Show>
       </div>
     </div>
   )
