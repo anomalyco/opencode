@@ -116,11 +116,13 @@ async function runScenario(name: string, scenario: SimScenario) {
     }
   }
   const requests = compareRequests(results[0].requests, results[1].requests, box.root)
-  const requestsPass = requests.equal || scenario.requests !== undefined
+  const requestsMissing = scenario.requests !== undefined && !deviationExists(scenario.requests.deviation)
+  const requestsPass = !requestsMissing && (requests.equal || scenario.requests !== undefined)
   ok &&= requestsPass
   lines.push(
     `  requests: ${requests.equal ? "writes equal" : requestsPass ? "writes differ, allowed" : "writes differ"}`,
   )
+  if (requestsMissing) lines.push(`    deviation file missing: ${JSON.stringify(scenario.requests?.deviation)}`)
   if (!requests.equal) {
     lines.push(...requests.writes.a.map((write) => `    - ${labels[0]} | ${write}`))
     lines.push(...requests.writes.b.map((write) => `    + ${labels[1]} | ${write}`))

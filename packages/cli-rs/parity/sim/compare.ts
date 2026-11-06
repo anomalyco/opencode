@@ -163,17 +163,24 @@ export type RequestComparison = {
   onlyB: string[]
 }
 
-// Writes must match in order after the normalizers; reads one side sent and the other did not are listed only.
+// Writes must match in order after the normalizers, with their sorted query and any status other than 2xx; reads
+// one side sent and the other did not are listed only.
 export function compareRequests(a: Logged[], b: Logged[], root: string): RequestComparison {
   // A live server stamps real times, so epoch milliseconds are normalized too (plan 7.5, timestamps).
   // Bodies are compared as JSON values, so key order does not count.
-  const line = (entry: Logged) =>
-    normalize(
-      `${entry.method} ${entry.path}${entry.body === undefined ? "" : " " + JSON.stringify(sorted(entry.body))}`,
-      { root },
-    )
+  const line = (entry: Logged) => {
+    const query = new URLSearchParams(
+      Object.keys(entry.query)
+        .toSorted()
+        .flatMap((key) => entry.query[key].map((value) => [key, value])),
+    ).toString()
+    const status =
+      entry.status === undefined || (entry.status >= 200 && entry.status < 300) ? "" : ` -> ${entry.status}`
+    const body = entry.body === undefined ? "" : " " + JSON.stringify(sorted(entry.body))
+    return normalize(`${entry.method} ${entry.path}${query ? "?" + query : ""}${body}${status}`, { root })
       .replace(minted, "<$1>")
       .replace(/\b1\d{12}\b/g, "<epoch>")
+  }
   const writes = (log: Logged[]) => log.filter((entry) => !isRead(entry.method, entry.path)).map(line)
   const reads = (log: Logged[]) => [
     ...new Set(
