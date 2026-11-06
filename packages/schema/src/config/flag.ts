@@ -15,5 +15,7 @@ export const registry = {
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
+  session_media:
+    "Show a Media panel in the desktop and web app that lists the images, videos, files and links shared in a session, by you or the agent.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

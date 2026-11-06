@@ -1,0 +1,409 @@
+import { createMemo, createSignal, For, mapArray, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
+import { ImagePreview } from "@opencode/ui/image-preview"
+import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
+import { Select } from "@opencode/ui/select"
+import { SiteIcon } from "@opencode/session-ui/sources/site-icon"
+import { createLatest, usePlugin, type MountedSession } from "@opencode/plugin/gui"
+import { Browser } from "@opencode/plugin/gui/browser"
+import type Media from "./index"
+import { combineMedia, messageMedia, type FileItem, type LinkItem, type MediaItem, type Sender } from "./collect"
+import { createMediaLoader, type MediaLoader } from "./source"
+
+type Kind = "media" | "files" | "links"
+
+type From = "all" | Sender
+
+const KINDS: readonly Kind[] = ["media", "files", "links"]
+
+const FROM: readonly From[] = ["all", "user", "agent"]
+
+export default function MediaPanel(props: { session: MountedSession }) {
+  const ctx = usePlugin<typeof Media>()
+  const load = createMediaLoader()
+  const [kind, setKind] = createSignal<Kind>("media")
+  const [from, setFrom] = createSignal<From>("all")
+  const messages = () => props.session.server.data.session.message
+
+  // One memo per message, so a streaming reply derives its own items again rather than the whole session's.
+  const perMessage = mapArray(
+    () => messages().list(props.session.id),
+    (message) => createMemo(() => messageMedia(message)),
+  )
+
+  const all = createMemo(() => combineMedia(perMessage().map((items) => items())))
+
+  const shown = <T extends { readonly from: Sender }>(items: readonly T[]) =>
+    from() === "all" ? items : items.filter((item) => item.from === from())
+
+  const media = createMemo(() => shown(all().media))
+  const files = createMemo(() => shown(all().files))
+  const links = createMemo(() => shown(all().links))
+  // Counts follow the sender filter, so each one says how many items its tab lists.
+  const lists = { media, files, links }
+  const count = (value: Kind) => lists[value]().length
+
+  const empty = () => {
+    if (from() !== "all") return ctx.t(from() === "user" ? "empty.user" : "empty.agent")
+
+    return ctx.t(`empty.${kind()}`)
+  }
+
+  const openURL = (url: string) => {
+    const pane = ctx.use(Browser)()
+
+    if (pane.status === "active" && pane.value.canOpen(props.session)) return pane.value.open(props.session, url)
+    ctx.system.openExternal(url)
+  }
+
+  const openPath = (path: string) => ctx.links.open({ href: path, exact: true, session: props.session })
+
+  return (
+    <div data-component="media-panel">
+      <div data-slot="media-panel-filters">
+        <SegmentedControl
+          value={kind()}
+          aria-label={ctx.t("kind.label")}
+          onChange={(value) => {
+            const next = KINDS.find((item) => item === value)
+
+            if (next) setKind(next)
+          }}
+        >
+          <For each={KINDS}>
+            {(value) => (
+              <SegmentedControlItem value={value}>
+                <span data-slot="media-panel-kind">
+                  {ctx.t(`kind.${value}`)}
+                  <span data-slot="media-panel-count">{count(value)}</span>
+                </span>
+              </SegmentedControlItem>
+            )}
+          </For>
+        </SegmentedControl>
+        <Select
+          options={[...FROM]}
+          current={from()}
+          label={(value) => ctx.t(`from.${value}`)}
+          onSelect={(value) => value && setFrom(value)}
+          appearance="inline"
+          placement="bottom-end"
+          gutter={6}
+          aria-label={ctx.t("from.label")}
+          class="shrink-0"
+        />
+      </div>
+      <div data-slot="media-panel-body" data-scrollable>
+        <Switch>
+          <Match when={kind() === "media" && media().length > 0}>
+            <MediaGrid items={media()} session={props.session} load={load} openURL={openURL} openPath={openPath} />
+          </Match>
+          <Match when={kind() === "files" && files().length > 0}>
+            <div data-slot="media-panel-list">
+              <For each={files()}>{(item) => <FileRow item={item} openPath={openPath} />}</For>
+            </div>
+          </Match>
+          <Match when={kind() === "links" && links().length > 0}>
+            <div data-slot="media-panel-list">
+              <For each={links()}>{(item) => <LinkRow item={item} openURL={openURL} />}</For>
+            </div>
+          </Match>
+          <Match when={true}>
+            <div data-slot="media-panel-empty">{empty()}</div>
+          </Match>
+        </Switch>
+        <Show when={messages().more(props.session.id)}>
+          <button
+            type="button"
+            data-slot="media-panel-more"
+            disabled={messages().loading(props.session.id)}
+            onClick={() =>
+              void messages()
+                .loadMore(props.session.id)
+                .catch(() => {})
+            }
+          >
+            {ctx.t(messages().loading(props.session.id) ? "load.loading" : "load.more")}
+          </button>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
+function MediaGrid(props: {
+  items: readonly MediaItem[]
+  session: MountedSession
+  load: MediaLoader
+  openURL: (url: string) => void
+  openPath: (path: string) => void
+}) {
+  const ctx = usePlugin<typeof Media>()
+
+  // Keyed by day and id strings: a streaming reply derives new item objects, and its cards must not load again.
+  const byID = createMemo(() => new Map(props.items.map((item) => [item.id, item])))
+
+  const days = createMemo(() =>
+    props.items.reduce((result, item) => {
+      const key = dayKey(item.time)
+
+      result.set(key, [...(result.get(key) ?? []), item.id])
+
+      return result
+    }, new Map<string, string[]>()),
+  )
+
+  const label = (key: string) => {
+    const now = Date.now()
+
+    if (key === dayKey(now)) return ctx.t("day.today")
+
+    if (key === dayKey(now - 86_400_000)) return ctx.t("day.yesterday")
+    const time = props.items.find((item) => dayKey(item.time) === key)?.time ?? now
+
+    return new Date(time).getFullYear() === new Date(now).getFullYear()
+      ? dayFormat.format(time)
+      : yearFormat.format(time)
+  }
+
+  return (
+    <div data-slot="media-panel-gallery">
+      <For each={[...days().keys()]}>
+        {(day) => (
+          <section data-slot="media-panel-day">
+            <h3 data-slot="media-panel-day-title">{label(day)}</h3>
+            <div data-slot="media-panel-grid">
+              <For each={days().get(day) ?? []}>
+                {(id) => (
+                  <Show when={byID().get(id)}>
+                    {(item) => (
+                      <MediaCard
+                        item={item()}
+                        session={props.session}
+                        load={props.load}
+                        openURL={props.openURL}
+                        openPath={props.openPath}
+                      />
+                    )}
+                  </Show>
+                )}
+              </For>
+            </div>
+          </section>
+        )}
+      </For>
+    </div>
+  )
+}
+
+function MediaCard(props: {
+  item: MediaItem
+  session: MountedSession
+  load: MediaLoader
+  openURL: (url: string) => void
+  openPath: (path: string) => void
+}) {
+  const ctx = usePlugin<typeof Media>()
+  const dialog = useDialog()
+  const [visible, setVisible] = createSignal(false)
+  const [playing, setPlaying] = createSignal(false)
+
+  // Loads once the card nears the viewport; the item's id names the same bytes for as long as the card lives.
+  const src = createLatest(
+    () => visible() && props.item.id,
+    () => untrack(() => props.load(props.session, props.item.source, props.item.mime)),
+  )
+
+  // A load that rejects, or that finds no bytes (e.g. a deleted file), leaves the card with its caption.
+  const failed = () => !!src.error || (visible() && !src.loading && src.latest === undefined)
+  const state = () => (failed() ? "failed" : src.latest ? "loaded" : "loading")
+  const name = () => props.item.name ?? ctx.t(props.item.kind === "video" ? "media.video" : "media.image")
+  let image: HTMLImageElement | undefined
+  let video: HTMLVideoElement | undefined
+
+  const observe = (element: HTMLElement) => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        setVisible(true)
+        observer.disconnect()
+      },
+      { rootMargin: "200px" },
+    )
+
+    observer.observe(element)
+    onCleanup(() => observer.disconnect())
+  }
+
+  const open = () => {
+    const url = src.latest
+
+    if (props.item.kind === "image") {
+      if (url) dialog.show(() => <ImagePreview src={url} alt={name()} origin={image} />)
+
+      return
+    }
+
+    // A video file opens in its own tab, a web video in the browser; anything else plays where it is.
+    if (props.item.source.type === "path") return void props.openPath(props.item.source.path)
+
+    if (props.item.source.type === "url" && /^https?:/.test(props.item.source.url))
+      return props.openURL(props.item.source.url)
+
+    setPlaying(true)
+    void video?.play().catch(() => {})
+  }
+
+  return (
+    <button
+      type="button"
+      ref={observe}
+      data-slot="media-card"
+      data-kind={props.item.kind}
+      data-playing={playing() ? "" : undefined}
+      title={props.item.name}
+      onClick={open}
+    >
+      <span data-slot="media-card-frame" data-state={state()}>
+        <Switch>
+          <Match when={failed()}>
+            <span data-slot="media-card-failed">
+              <Icon name={props.item.kind === "video" ? "outline-video" : "outline-photo"} size="small" />
+              {ctx.t("media.failed")}
+            </span>
+          </Match>
+          <Match when={props.item.kind === "image" && src.latest}>
+            {(url) => <img ref={image} src={url()} alt="" decoding="async" draggable={false} />}
+          </Match>
+          <Match when={props.item.kind === "video" && src.latest}>
+            {(url) => (
+              <video ref={video} src={url()} muted={!playing()} controls={playing()} preload="metadata" playsinline />
+            )}
+          </Match>
+        </Switch>
+        <Show when={props.item.kind === "video" && !playing() && !failed()}>
+          <span data-slot="media-card-play">
+            <Icon name="outline-video" />
+          </span>
+        </Show>
+      </span>
+      <span data-slot="media-card-caption">
+        <span data-slot="media-card-name">{name()}</span>
+        <span data-slot="media-card-meta">
+          <span data-slot="media-panel-badge" data-from={props.item.from}>
+            {ctx.t(props.item.from === "user" ? "from.user" : "from.agent")}
+          </span>
+          <time datetime={new Date(props.item.time).toISOString()}>{timeFormat.format(props.item.time)}</time>
+        </span>
+      </span>
+    </button>
+  )
+}
+
+// A local calendar day, so items group the way the user's clock reads them.
+function dayKey(time: number) {
+  const date = new Date(time)
+
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+}
+
+const dayFormat = new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric" })
+
+const yearFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long", day: "numeric" })
+
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
+
+function FileRow(props: { item: FileItem; openPath: (path: string) => void }) {
+  const ctx = usePlugin<typeof Media>()
+
+  const href = () => {
+    const source = props.item.source
+
+    return source?.type === "url" ? source.url : undefined
+  }
+
+  const content = () => (
+    <>
+      <span data-slot="media-panel-row-icon">
+        <FileIcon node={{ path: props.item.name, type: "file" }} class="size-4" />
+      </span>
+      <span data-slot="media-panel-row-text">
+        <span data-slot="media-panel-row-title">{props.item.name}</span>
+        <span data-slot="media-panel-row-detail">
+          {ctx.t(`file.${props.item.action}`)}
+          <Show when={props.item.path}>{(path) => <span data-slot="media-panel-row-path">{path()}</span>}</Show>
+        </span>
+      </span>
+      <Meta from={props.item.from} time={props.item.time} />
+    </>
+  )
+
+  return (
+    <Switch fallback={<div data-slot="media-panel-row">{content()}</div>}>
+      <Match when={props.item.path}>
+        {(path) => (
+          <button type="button" data-slot="media-panel-row" title={path()} onClick={() => props.openPath(path())}>
+            {content()}
+          </button>
+        )}
+      </Match>
+      <Match when={href()}>
+        {(url) => (
+          <a data-slot="media-panel-row" href={url()} download={props.item.name}>
+            {content()}
+          </a>
+        )}
+      </Match>
+    </Switch>
+  )
+}
+
+function LinkRow(props: { item: LinkItem; openURL: (url: string) => void }) {
+  const ctx = usePlugin<typeof Media>()
+
+  return (
+    <a
+      data-slot="media-panel-row"
+      href={props.item.url}
+      title={props.item.url}
+      onClick={(event) => {
+        event.preventDefault()
+        props.openURL(props.item.url)
+      }}
+    >
+      <span data-slot="media-panel-row-icon">
+        <SiteIcon site={props.item.site} host={props.item.host} mode="letters" />
+      </span>
+      <span data-slot="media-panel-row-text">
+        <span data-slot="media-panel-row-title">{props.item.title ?? props.item.url}</span>
+        <span data-slot="media-panel-row-detail">
+          {props.item.site}
+          <span data-slot="media-panel-row-path">{ctx.t(`link.${props.item.via}`)}</span>
+        </span>
+      </span>
+      <Meta from={props.item.from} time={props.item.time} />
+    </a>
+  )
+}
+
+const format = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+})
+
+function Meta(props: { from: Sender; time: number }) {
+  const ctx = usePlugin<typeof Media>()
+
+  return (
+    <span data-slot="media-panel-row-meta">
+      <span data-slot="media-panel-badge" data-from={props.from}>
+        {ctx.t(props.from === "user" ? "from.user" : "from.agent")}
+      </span>
+      <time datetime={new Date(props.time).toISOString()}>{format.format(props.time)}</time>
+    </span>
+  )
+}
