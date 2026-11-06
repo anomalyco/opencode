@@ -1,6 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { config } from "~/config"
-import { feedWait, loadChangelog, type ChangelogData } from "~/lib/changelog"
+import type { ChangelogData } from "~/lib/changelog"
+import { feedWait, loadChangelog } from "~/lib/changelog-releases"
 import {
   areaKeys,
   areaLabel,

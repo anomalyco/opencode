@@ -12,6 +12,9 @@
   Cache-Control: public, max-age=31536000, immutable
 /textjs/picker-*
   Cache-Control: public, max-age=31536000, immutable
+# Yoga's WebAssembly, named by a hash of its bytes (textjs/script/build.ts).
+/textjs/yoga-*
+  Cache-Control: public, max-age=31536000, immutable
 # The V2 docs' stylesheet, script and fonts, named by a hash of their contents (src/docs/script/build.ts).
 /v2/_build/*
   Cache-Control: public, max-age=31536000, immutable

@@ -2,8 +2,6 @@ import { joinSentences, rich, sentenceGap } from "~/i18n/rich"
 import "./index.css"
 import "~/component/site/hero-title.css"
 import { rollsByCharacter, titleCells } from "~/component/site/hero-title"
-import "@kitlangton/rolling-number/styles.css"
-import { RollingNumber, RollingText } from "@kitlangton/rolling-number/solid"
 import { Title, Meta } from "@solidjs/meta"
 import { createAsync } from "@solidjs/router"
 import {
@@ -72,6 +70,8 @@ import { copyOnClick } from "~/lib/clipboard"
 
 // Only rendered inside the settings panel, so it loads with it.
 // Settings rows are a development tool (component/site/settings-panel.tsx), left out of production.
+const HeroTitle = lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.HeroTitle })))
+const RollingStat = lazy(() => import("~/component/site/rolling").then((module) => ({ default: module.RollingStat })))
 const PageSettings = import.meta.env.DEV ? lazy(() => import("~/component/site/page-settings")) : () => undefined
 
 export default function Home() {
@@ -151,7 +151,9 @@ export default function Home() {
                     <SlotStat value={values[index()] ?? stat.value} start={openSourceStart()} stat={index()} />
                   </Match>
                   <Match when={siteSettings.stats === "rolling"}>
-                    <RollingStat value={values[index()] ?? stat.value} visible={statsVisible()} />
+                    <Suspense>
+                      <RollingStat value={values[index()] ?? stat.value} visible={statsVisible()} />
+                    </Suspense>
                   </Match>
                   <Match when={siteSettings.stats === "odometer"}>
                     <Odometer value={values[index()] ?? stat.value} />
@@ -238,7 +240,9 @@ export default function Home() {
           when={siteSettings.heroText !== "static" && rollsByCharacter(title()) && !designEditing("home.hero.title")}
           fallback={<h1 data-design-copy="home.hero.title">{title()}</h1>}
         >
-          <HeroTitle text={title()} mode={siteSettings.heroText === "flap" ? "flap" : "roll"} />
+          <Suspense fallback={<h1 data-design-copy="home.hero.title">{title()}</h1>}>
+            <HeroTitle text={title()} mode={siteSettings.heroText === "flap" ? "flap" : "roll"} />
+          </Suspense>
         </Show>
         <p
           data-design-copy="home.hero.subtitle"
@@ -845,44 +849,6 @@ function CheckIcon() {
 // Rolls every digit up through at least one full turn, like an odometer, once the parent sets
 // data-visible. Digits after the first spin an extra turn so smaller place values move faster;
 // letters and symbols rise in as the digits settle.
-// Letters and digits roll through a wheel; other glyphs crossfade in place.
-const heroCharset = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
-
-/**
- * The hero title shuffled in with rolling-number: it starts as blank slots of the same length and
- * rolls (or flaps) into the title once the page is on screen. Words are separate hosts so the
- * title still wraps between them.
- */
-function HeroTitle(props: { text: string; mode: "roll" | "flap" }) {
-  const [shown, setShown] = createSignal(false)
-  onMount(() => requestAnimationFrame(() => setShown(true)))
-  const words = () => props.text.split(" ")
-  return (
-    <h1 aria-label={props.text} data-design-copy="home.hero.title" data-rolling={props.mode}>
-      <For each={words()}>
-        {(word, index) => (
-          <>
-            {index() > 0 ? " " : ""}
-            <RollingText
-              aria-hidden="true"
-              text={shown() ? word : " ".repeat(word.length)}
-              mode={props.mode}
-              charset={heroCharset}
-              stagger="start"
-              duration={1400}
-              motionBlur
-            />
-          </>
-        )}
-      </For>
-    </h1>
-  )
-}
-
-/**
- * A stat like "205K" or "1K+": the number rolls up from zero with rolling-number when the stats
- * come into view, and the suffix sits after it.
- */
 /**
  * A stat like "224K" as a slot machine (Settings › Stats "slot"). It shows the final value until
  * `start` (a performance.now() time, set as the stats near the window), then each digit spins a
@@ -950,49 +916,6 @@ function SlotDigit(props: { digit: number; start?: number; place: number; stat: 
       <span data-slot="strip" ref={strip}>
         <Index each={reel()}>{(digit) => <span>{digit()}</span>}</Index>
       </span>
-    </span>
-  )
-}
-
-function RollingStat(props: { value: string; visible: boolean }) {
-  const parts = () => /^([\d.,]+)(.*)$/.exec(props.value)
-  // Start the roll a beat after the stats come into view, once the library has measured them.
-  // A digit only rolls when it changes, so a 0 in the target (the middle of "205") would sit still.
-  // Each 0 first heads towards 5, then the roll retargets upwards and carries on round to 0.
-  const [stage, setStage] = createSignal<"start" | "spin" | "done">("start")
-  createEffect(() => {
-    if (!props.visible) return
-    const spin = setTimeout(() => setStage("spin"), 100)
-    const done = setTimeout(() => setStage("done"), 350)
-    onCleanup(() => {
-      clearTimeout(spin)
-      clearTimeout(done)
-    })
-  })
-  const digits = () => (parts()?.[1] ?? "0").replace(/,/g, "")
-  const value = () => {
-    if (stage() === "start") return 0
-    return Number(stage() === "spin" ? digits().replace(/0/g, "5") : digits())
-  }
-  return (
-    <span data-component="rolling-stat" aria-label={props.value} role="img">
-      <RollingNumber
-        aria-hidden="true"
-        value={value()}
-        direction="up"
-        locales="en-US"
-        // Every digit slot is there from the start ("000" for 205), so the digits only roll in
-        // place and nothing slides in from the side.
-        format={{ minimumIntegerDigits: (parts()?.[1] ?? "0").replace(/\D/g, "").length, useGrouping: false }}
-        // About as long as the avatars' wash (~1.3s), which starts at the same moment.
-        duration={1200}
-        stagger="start"
-        motionBlur
-        // The stats observer already waits until they're on screen; the library's own offscreen
-        // check would otherwise race it and skip the roll.
-        pauseOffscreen={false}
-      />
-      <span aria-hidden="true">{parts()?.[2] ?? ""}</span>
     </span>
   )
 }

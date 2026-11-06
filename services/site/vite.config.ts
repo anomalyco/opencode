@@ -167,7 +167,9 @@ export default defineConfig({
         // Nitro copies public/ with fs.cp, which keeps the symlinks into packages/ui as links.
         // Letting Vite copy it first writes real files.
         copyPublicDir: true,
-        minify: "esbuild",
+        // Oxc, Vite 8's own minifier. "esbuild" here left the bundles unminified: Vite only adds its
+        // esbuild minifier when the top-level build.minify asks for it, and that stays off for the Worker.
+        minify: "oxc",
       },
     },
   },
