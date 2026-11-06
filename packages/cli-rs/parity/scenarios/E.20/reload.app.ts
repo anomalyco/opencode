@@ -3,7 +3,13 @@
 // replaces "Reloading configuration…" (`app.tsx:1104-1119`).
 import { defineApp } from "../../lib/app"
 
-const placeholder = { line: "Ask anything….*", reason: "the prompt placeholder is picked at random" }
+const placeholder = {
+  x: 16,
+  y: 16,
+  width: 84,
+  height: 1,
+  reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+}
 
 export default defineApp({
   config: { experimental: { "new-designs": true }, keybinds: { "location.reload": "f5" } },
@@ -13,14 +19,12 @@ export default defineApp({
       checkpoint: "home",
       until: "Ask anything",
       masks: [placeholder],
-      deviation: ["T17-home-prompt"],
     },
     { keys: ["f5"] },
     {
       checkpoint: "reloaded",
       until: "Configuration reloaded",
       masks: [placeholder],
-      deviation: ["T17-home-prompt"],
     },
   ],
 })

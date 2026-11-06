@@ -52,7 +52,7 @@ export default defineSim({
       checkpoint: "open",
       until: "Fixed the lexer.",
       masks: [duration],
-      deviation: ["P16-diff-markdown-heading"],
+      deviation: [{ file: "P16-diff-markdown-heading", cells: 7, styleOnly: true }],
     },
   ],
 })

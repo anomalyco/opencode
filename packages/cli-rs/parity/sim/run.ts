@@ -14,7 +14,7 @@ import { applyMasks } from "../lib/app"
 import { writeFixture, type Fixture } from "../lib/cells"
 import { buildRust, command, parseSides, parityRoot, sandbox, type Sandbox, type Side } from "../cli/client"
 import { startBackend, type Invocation, type Reply } from "./backend"
-import { compareFixtures, compareRequests, text, toFixture } from "./compare"
+import { allows, compareFixtures, compareRequests, text, toFixture } from "./compare"
 import { connectDrive } from "./drive"
 import { startProxy, type Logged } from "./proxy"
 import type { SimScenario, Step } from "./scenario"
@@ -90,12 +90,21 @@ async function runScenario(name: string, scenario: SimScenario) {
     }
     const comparison = compareFixtures(a, b)
     const deviation = checkpoint.deviation ?? []
-    const missing = deviation.filter((file) => !Bun.file(path.join(parityRoot, "deviations", `${file}.md`)).size)
-    const pass = missing.length === 0 && (comparison.equal || deviation.length > 0)
+    const missing = deviation.map((entry) => entry.file).filter((file) => !deviationExists(file))
+    const allowed = allows(deviation, comparison)
+    const pass = missing.length === 0 && allowed
     ok &&= pass
-    const summary = comparison.equal
-      ? comparison.report
-      : `${comparison.report.split("\n")[0]}; ${pass ? `differs, allowed by ${JSON.stringify(deviation)}` : "differs"}`
+    const named = JSON.stringify(deviation)
+    const verdict =
+      deviation.length === 0
+        ? "differs"
+        : comparison.equal
+          ? `remove the deviations ${named}`
+          : allowed
+            ? `differs, allowed by ${named}`
+            : `differs beyond ${named}`
+    const summary =
+      comparison.equal && deviation.length === 0 ? comparison.report : `${comparison.report.split("\n")[0]}; ${verdict}`
     lines.push(`  checkpoint ${checkpoint.checkpoint}: ${summary}`)
     if (missing.length) lines.push(`    deviation files missing: ${JSON.stringify(missing)}`)
     if (!pass || process.env.PARITY_VERBOSE) lines.push(indent(comparison.report, 4))
@@ -445,6 +454,10 @@ async function freePort(_: number) {
   const port = listener.port
   listener.stop(true)
   return port
+}
+
+function deviationExists(file: string) {
+  return Bun.file(path.join(parityRoot, "deviations", `${file}.md`)).size > 0
 }
 
 function indent(value: string, spaces: number) {

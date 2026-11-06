@@ -111,7 +111,10 @@
       "checkpoint": "streamed",
       "until": "Fixed.",
       "deviation": [
-        "V01-plain-transcript"
+        {
+          "file": "V01-plain-transcript",
+          "cells": 70
+        }
       ],
       "fixture": "H.2/session-open/streamed"
     }

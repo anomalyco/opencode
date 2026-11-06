@@ -6,7 +6,13 @@ const location = {
   project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
 }
 // The home prompt's placeholder is random in TS and not drawn in Rust yet.
-const placeholder = { line: "Ask anything….*", reason: "the prompt placeholder is picked at random (T17-home-prompt)" }
+const placeholder = {
+  x: 16,
+  y: 16,
+  width: 84,
+  height: 1,
+  reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+}
 
 export default defineApp({
   config: { experimental: { "new-designs": true } },
@@ -23,5 +29,5 @@ export default defineApp({
       },
     },
   ],
-  steps: [{ checkpoint: "counts", until: "2 MCP", masks: [placeholder], deviation: ["T17-home-prompt"] }],
+  steps: [{ checkpoint: "counts", until: "2 MCP", masks: [placeholder] }],
 })

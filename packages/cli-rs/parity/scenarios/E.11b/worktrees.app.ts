@@ -25,8 +25,12 @@ export default defineApp({
     { keys: ["down", "ctrl+d"] },
     { checkpoint: "marked", until: "again to confirm" },
     { keys: ["down", "ctrl+a"] },
-    // The home prompt behind the dialog draws no placeholder yet.
-    { checkpoint: "name", until: "Name worktree", deviation: ["T17-home-prompt"] },
+    // Beside the dialog, the placeholder shows its first word.
+    {
+      checkpoint: "name",
+      until: "Name worktree",
+      masks: [{ ...placeholder[0], width: 3, reason: "not drawn yet in Rust (T17-home-prompt)" }],
+    },
     { type: "My Spike" },
     { keys: ["enter"] },
     { checkpoint: "staged", until: "(new worktree)", masks: placeholder },
