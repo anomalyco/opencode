@@ -858,6 +858,7 @@ export function configured(options?: Options) {
               const marker: EventLog.Synced = {
                 type: "log.synced",
                 aggregateID: input.aggregateID,
+                persist,
                 ...(target >= 0 ? { seq: Event.Seq.make(target) } : {}),
               }
               const replay: Stream.Stream<LogItem> = readThrough(target).pipe(Stream.concat(Stream.make(marker)))

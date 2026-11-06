@@ -40,7 +40,12 @@ describe("Session.log", () => {
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id })))
 
       expect(items.map((item) => item.type)).toEqual(["session.created", "session.renamed", "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1) })
+      expect(items.at(-1)).toEqual({
+        type: "log.synced",
+        aggregateID: created.id,
+        seq: Event.Seq.make(1),
+        persist: true,
+      })
     }),
   )
 
@@ -89,7 +94,12 @@ describe("Session.log", () => {
       expect(
         items.map((item): number | string | undefined => (Bus.isSynced(item) ? item.type : item.durable?.seq)),
       ).toEqual([3, 4, "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(4) })
+      expect(items.at(-1)).toEqual({
+        type: "log.synced",
+        aggregateID: created.id,
+        seq: Event.Seq.make(4),
+        persist: true,
+      })
     }),
   )
 
@@ -117,7 +127,7 @@ describe("Session.log", () => {
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID })))
 
-      expect(items).toEqual([{ type: "log.synced", aggregateID: sessionID }])
+      expect(items).toEqual([{ type: "log.synced", aggregateID: sessionID, persist: true }])
     }),
   )
 })

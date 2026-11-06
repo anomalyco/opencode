@@ -49,4 +49,12 @@ describe("public event schemas", () => {
       aggregateID: "ses_test",
     })
   })
+
+  test("synced marker distinguishes disabled persistence from an older server", () => {
+    const marker = { type: "log.synced", aggregateID: "ses_test" } as const
+    expect(Schema.decodeUnknownSync(EventLog.Synced)({ ...marker, persist: false }).persist).toBe(false)
+    expect(Schema.decodeUnknownSync(EventLog.Synced)({ ...marker, persist: true }).persist).toBe(true)
+    expect(Schema.decodeUnknownSync(EventLog.Synced)(marker).persist).toBeUndefined()
+    expect(Schema.encodeSync(EventLog.Synced)({ ...marker, persist: undefined })).toEqual(marker)
+  })
 })

@@ -664,7 +664,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "experimental.session.log",
           summary: "Read the session log",
           description:
-            "Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.",
+            "Experimental: may change without compatibility guarantees. Reads retained durable session events after an exclusive aggregate sequence. The log.synced marker reports whether this process currently persists event payloads; persistence is off by default, and enabling it cannot recover earlier discarded events. With follow=true, tails retained durable events and sends SSE heartbeat comments every 15 seconds. Heartbeats do not advance the cursor. Live status, permission/form requests, and usage updates are not included.",
         }),
       ),
     )
