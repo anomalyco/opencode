@@ -1441,7 +1441,7 @@ pub async fn default_model(client: &Client, directory: &str) -> Option<(String, 
 /// `experimental.session.wait`: returns once the session is idle.
 pub async fn wait(client: &Client, session: &str) -> Result<(), String> {
     let input = ExperimentalSessionWaitInput { session_id: SessionID(session.to_owned()) };
-    client.experimental_session_wait(&input).await.map_err(|error| error.to_string())
+    client.experimental_session_wait(&input).await.map_err(|error| error.tui_message())
 }
 
 /// `session.interrupt`, for mini's two-press gesture (`resume: true`) and run's shutdown.
