@@ -39,7 +39,7 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
 
 /// The sample, loaded from `library` and active in a fresh registry.
 fn active(host: &Rc<TestHost>, library: &[u8]) -> Registry<TestHost> {
-    let (definition, error) = Backend::<TestHost>::load(&Native, library, None).unwrap();
+    let (definition, error) = Native.load(host, library, None).unwrap();
     assert_eq!(definition.id, "sample");
     let registry = Registry::new(Vec::new(), []);
     registry.load(host, definition.external("sample.so", error));
@@ -149,7 +149,7 @@ fn a_panicking_command_fails_the_plugin() {
 
 #[test]
 fn versions_follow_the_abi_rules() {
-    let load = |library: &[u8], options: Option<&str>| Backend::<TestHost>::load(&Native, library, options).err();
+    let load = |library: &[u8], options: Option<&str>| Native.load(&host(), library, options).err();
     // The current build is 1.2; a 1.0 build has the shorter table and still loads and works on this 1.2 host.
     let current = build("");
     assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 1, minor: 2, version: Some("0.1.0".to_owned()) });
@@ -239,4 +239,20 @@ fn a_malformed_table_is_refused_without_reading_it() {
     let api = PluginApi { free: Some(abi::runtime::free), ..api };
     let library = Library::from_table(&api).unwrap();
     assert!(library.destroy.is_none() && library.describe.is_none());
+}
+
+// Expected: setup runs against the live host, under its ID: it reads and writes a storage key it declared, reads
+// the theme mode, and its toast shows once the plugin is active.
+#[test]
+fn setup_reaches_the_host() {
+    let host = host();
+    host.mode.set(ThemeMode::Light);
+    host.storage.borrow_mut().insert("plugin.sample.count".to_owned(), "{\"count\":5}".to_owned());
+    let (definition, error) = Native.load(&host, &build(""), Some("{\"probe\":true}")).unwrap();
+    let registry = Registry::new(Vec::new(), []);
+    registry.load(&host, definition.external("sample.so", error));
+    assert_eq!(status(&registry), Status::Active);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(*host.toasts.borrow(), [(Toast::Info, None, "sample setup: count 5, light, stored".to_owned())]);
+    assert_eq!(host.storage.borrow().get("plugin.sample.count").map(String::as_str), Some("{\"count\":6}"));
 }

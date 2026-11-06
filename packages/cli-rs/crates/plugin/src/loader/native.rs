@@ -59,20 +59,23 @@ impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
         let library = Library::open(library)?;
-        Ok(Inspected { major: ABI_MAJOR, minor: library.minor, version: library.version() })
+        Ok(Inspected { major: ABI_MAJOR, minor: library.minor, version: library.metadata().version })
     }
 }
 
 impl<H: Host> Backend<H> for Native {
-    fn load(&self, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
+    fn load(&self, host: &Rc<H>, library: &[u8], options: Option<&str>) -> Result<(Definition<H>, ErrorFn), String> {
         let library = Rc::new(Library::open(library)?);
-        if let Some(version) = library.version() {
+        let metadata = library.metadata();
+        if let Some(version) = &metadata.version {
             log::info!("plugin library version {version}, ABI {ABI_MAJOR}.{}", library.minor);
         }
         let options = options.map(str::to_owned);
         // Setup runs once now, to check the build and learn its ID; the first activation takes this instance.
-        let first = Instance::<H>::create(&library, Weak::new(), options.as_deref())?;
+        // It has the host already, and the ID when `describe` gives it, so setup may use storage and the theme.
+        let first = Instance::create(&library, Rc::downgrade(host), metadata.id.as_deref(), options.as_deref())?;
         let id = first.1.id.clone();
+        let hint = metadata.id;
         let failure: Rc<RefCell<Option<String>>> = Rc::default();
         let prepared = RefCell::new(Some(first));
         let definition = Definition::new(id, {
@@ -84,7 +87,7 @@ impl<H: Host> Backend<H> for Native {
                         first.0.ctx.borrow_mut().host = host.clone();
                         Ok(first)
                     }
-                    None => Instance::create(&library, host.clone(), options.as_deref()),
+                    None => Instance::create(&library, host.clone(), hint.as_deref(), options.as_deref()),
                 };
                 let (instance, manifest) = match instance {
                     Ok(instance) => instance,
@@ -103,6 +106,9 @@ impl<H: Host> Backend<H> for Native {
                     id: setup.id().to_owned(),
                 });
                 register(setup, &guest, &manifest);
+                // What setup asked for (toasts, routes) happens now that the plugin is active.
+                let effects = std::mem::take(&mut guest.instance.ctx.borrow_mut().effects);
+                guest.apply(effects);
             }
         });
         let error: ErrorFn = Rc::new(move || failure.borrow().clone());
@@ -186,9 +192,11 @@ impl Library {
         Ok(Self { minor, create, call, destroy: core.destroy, free, describe })
     }
 
-    /// The plugin's version, when it has `describe` (1.1).
-    fn version(&self) -> Option<String> {
-        let describe = self.describe?;
+    /// What the plugin says about itself, when it has `describe` (1.1).
+    fn metadata(&self) -> abi::Metadata {
+        let Some(describe) = self.describe else {
+            return abi::Metadata::default();
+        };
         let mut out = Owned::EMPTY;
         // SAFETY: `describe` writes `out`, which `free` takes back.
         let (status, bytes) = unsafe {
@@ -197,10 +205,7 @@ impl Library {
             (self.free)(out);
             (status, bytes)
         };
-        (status == abi::OK)
-            .then(|| serde_json::from_slice::<abi::Metadata>(&bytes).ok())
-            .flatten()
-            .and_then(|metadata| metadata.version)
+        (status == abi::OK).then(|| serde_json::from_slice(&bytes).ok()).flatten().unwrap_or_default()
     }
 }
 
@@ -233,8 +238,15 @@ struct Instance<H: Host> {
 }
 
 impl<H: Host> Instance<H> {
-    fn create(library: &Rc<Library>, host: Weak<H>, options: Option<&str>) -> Result<(Self, Manifest), String> {
-        let ctx = Box::new(RefCell::new(Ctx { host, id: String::new(), keys: Vec::new(), effects: Vec::new() }));
+    /// Runs setup. `id` is the plugin's ID from its metadata, if it gave one, so setup may use storage.
+    fn create(
+        library: &Rc<Library>,
+        host: Weak<H>,
+        id: Option<&str>,
+        options: Option<&str>,
+    ) -> Result<(Self, Manifest), String> {
+        let id = id.unwrap_or_default().to_owned();
+        let ctx = Box::new(RefCell::new(Ctx { host, id, keys: Vec::new(), effects: Vec::new() }));
         let api = Box::new(HostApi {
             size: size_of::<HostApi>(),
             major: ABI_MAJOR,
@@ -347,6 +359,9 @@ unsafe extern "C" fn host_free(owned: Owned) {
 
 fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json::Value, String> {
     let key = |ctx: &Ctx<H>, key: &str| {
+        if ctx.id.is_empty() {
+            return Err("the plugin ID is not known during setup".to_owned());
+        }
         ctx.keys
             .iter()
             .any(|known| known == key)
@@ -383,6 +398,11 @@ fn handle<H: Host>(ctx: &mut Ctx<H>, request: HostRequest) -> Result<serde_json:
             host.storage_write(&stored, &value)?;
         }
         HostRequest::OpenRoute { name } => ctx.effects.push(Effect::Route(name)),
+        HostRequest::StorageKey { key } => {
+            if !ctx.keys.contains(&key) {
+                ctx.keys.push(key);
+            }
+        }
     }
     Ok(serde_json::Value::Null)
 }
