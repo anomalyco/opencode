@@ -12,6 +12,11 @@ story("reveals turn speed with the response footer", async ({ mount, page }) => 
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   await expect(meta.locator('[data-slot="text-part-meta-item"]').last()).toHaveText("5m 2s")
   await expect(speed).toHaveText("·60.0 tok/s")
+  // The turn ends when its last step completes, 302 seconds after the prompt.
+  await expect(meta.locator('[data-slot="text-part-meta-time"] time')).toHaveAttribute(
+    "datetime",
+    "2025-01-01T00:05:02.000Z",
+  )
   await timeline.getByText("The timeline checks passed.", { exact: false }).hover()
   await expect(footer).toHaveCSS("opacity", "1")
   await expect(speed).toBeVisible()
