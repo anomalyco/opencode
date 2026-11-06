@@ -937,15 +937,18 @@ export default function Brand() {
         <div data-slot="body">
           <p data-slot="text">{content().usage.body}</p>
           <ul data-component="usage">
-            <li data-slot="stroke" data-hidden={siteSettings.strokeDiagram === "off" ? "" : undefined}>
-              <div data-slot="figure">
-                <StrokeDiagrams />
-              </div>
-              <Heading level={3} id={`${anchor(content().usage.title)}-${anchor(content().usage.stroke.title)}`}>
-                {content().usage.stroke.title}
-              </Heading>
-              <span>{content().usage.stroke.body}</span>
-            </li>
+            {/* Production leaves it out while "off" is the default (script/fold-settings.ts). */}
+            <Show when={import.meta.env.DEV || siteSettings.strokeDiagram !== "off"}>
+              <li data-slot="stroke" data-hidden={siteSettings.strokeDiagram === "off" ? "" : undefined}>
+                <div data-slot="figure">
+                  <StrokeDiagrams />
+                </div>
+                <Heading level={3} id={`${anchor(content().usage.title)}-${anchor(content().usage.stroke.title)}`}>
+                  {content().usage.stroke.title}
+                </Heading>
+                <span>{content().usage.stroke.body}</span>
+              </li>
+            </Show>
             <li data-slot="clear-space">
               <div data-slot="figure">
                 <ClearSpace />
