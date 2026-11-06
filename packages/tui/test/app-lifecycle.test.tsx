@@ -991,7 +991,14 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
     fetch: async (url, request) => {
       requests.push(url)
       if (url.searchParams.has("location[directory]") && url.searchParams.get("location[directory]") !== target)
-        return json({ message: "Directory does not exist on the server" }, { status: 500 })
+        return json(
+          {
+            _tag: "LocationNotFoundError",
+            location: { directory: url.searchParams.get("location[directory]") },
+            message: "Directory does not exist on the server",
+          },
+          { status: 404 },
+        )
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/agent")
