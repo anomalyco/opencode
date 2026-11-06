@@ -1,6 +1,8 @@
 //! A port of `fuzzysort` 3.1's `go` with `keys`, `scoreFn`, and `threshold`, as `DialogSelect` calls it: the same
-//! scores and the same order, ties included. Strings are compared in UTF-16 code units, as JavaScript does.
-//! Accents are not removed from Latin letters (TS `remove_accents`).
+//! scores and the same order, ties included. Strings are compared in UTF-16 code units, as JavaScript does, after
+//! Latin letters lose their accents (`remove_accents`).
+
+mod accents;
 
 const NEG: f64 = f64::NEG_INFINITY;
 
@@ -152,7 +154,7 @@ fn denormalize(score: f64) -> f64 {
 }
 
 fn lower_info(text: &str) -> (Vec<u16>, u32, bool) {
-    let lower: Vec<u16> = text.to_lowercase().encode_utf16().collect();
+    let lower: Vec<u16> = remove_accents(text).to_lowercase().encode_utf16().collect();
     let mut bitflags = 0u32;
     let mut space = false;
     for &code in &lower {
@@ -193,8 +195,23 @@ fn prepare(target: &str) -> Prepared {
     Prepared { lower, bitflags, next: next_beginnings(target) }
 }
 
+/// `remove_accents`: Latin letters decomposed, and the marks U+0300 to U+036F dropped.
+fn remove_accents(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.is_ascii() {
+        return text.into();
+    }
+    let folded = text.chars().fold(String::with_capacity(text.len()), |mut out, char| {
+        match accents::FOLD.binary_search_by_key(&char, |(from, _)| *from) {
+            Ok(index) => out.push_str(accents::FOLD[index].1),
+            Err(_) => out.push(char),
+        }
+        out
+    });
+    folded.into()
+}
+
 fn next_beginnings(target: &str) -> Vec<usize> {
-    let codes: Vec<u16> = target.encode_utf16().collect();
+    let codes: Vec<u16> = remove_accents(target).encode_utf16().collect();
     let mut beginnings = Vec::new();
     let (mut was_upper, mut was_alnum) = (false, false);
     for (i, &code) in codes.iter().enumerate() {
@@ -474,5 +491,36 @@ impl Heap {
             a = f;
         }
         self.items[a] = v;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accents_fold_before_matching_as_remove_accents_does() {
+        let score = |search: &str, target: &str| {
+            let seen = std::cell::Cell::new(None);
+            let keep = |_: &[f64; 1], score, _| {
+                seen.set(Some(score));
+                score
+            };
+            go_scored(search, &[target], |target| [Some(*target)], keep, 0.0, 1);
+            seen.get()
+        };
+        // An accented letter, a decomposed one, and an accented search score as their plain forms.
+        for (search, target, plain) in [
+            ("cafe", "Café crème", "Cafe creme"),
+            ("ang", "Ångström", "Angstrom"),
+            ("cafe", "Cafe\u{301}", "Cafe"),
+            ("crème", "cream creme", "cream creme"),
+        ] {
+            assert_eq!(score(search, target), score(search, plain), "{search:?} in {target:?}");
+            assert!(score(search, target).is_some(), "{search:?} in {target:?}");
+        }
+        // Letters without a decomposition and other scripts stay.
+        assert_eq!(score("o", "Ø"), None);
+        assert_eq!(score("α", "ά"), None);
     }
 }
