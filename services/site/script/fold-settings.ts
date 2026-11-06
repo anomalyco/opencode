@@ -560,12 +560,18 @@ function plainRead(argument: types.Node): boolean {
 function known(expression: NodePath): unknown {
   if (!expression.isExpression()) return missing
   let effects = false
+  // `void work()` evaluates to undefined, but the work still has to run.
+  const discards = (node: types.Node) =>
+    types.isUnaryExpression(node, { operator: "void" }) && !types.isLiteral(node.argument)
   expression.traverse({
     "SequenceExpression|AssignmentExpression|UpdateExpression|AwaitExpression|YieldExpression"() {
       effects = true
     },
+    UnaryExpression(unary) {
+      if (discards(unary.node)) effects = true
+    },
   })
-  if (effects || expression.isSequenceExpression()) return missing
+  if (effects || expression.isSequenceExpression() || discards(expression.node)) return missing
   const result = expression.evaluate()
   if (!result.confident) return missing
   const value = result.value
