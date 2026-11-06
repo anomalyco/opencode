@@ -86,7 +86,6 @@ export const goModels: GoModel[] = [
     featured: true,
     fresh: true,
     limitedTime: true,
-    regions: true,
   },
   {
     id: "beam-free",
