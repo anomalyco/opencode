@@ -1,0 +1,71 @@
+name: Build OpenCode2
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: windows-x64
+            runner: windows-latest
+          - name: macos-x64
+            runner: macos-15-intel
+          - name: macos-arm64
+            runner: macos-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Use the public npm registry
+        shell: bash
+        run: node -e "const fs = require('fs'); const file = 'bun.lock'; fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('https://npm.flatt.tech/', 'https://registry.npmjs.org/'))"
+      - uses: ./.github/actions/setup-bun
+      - name: Build CLI with web UI
+        working-directory: packages/cli
+        run: bun run script/build.ts --single --skip-install
+      - name: Archive binary
+        shell: bash
+        run: tar -czf opencode2-${{ matrix.name }}.tar.gz -C packages/cli/dist .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode2-${{ matrix.name }}
+          path: opencode2-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish preview release
+    if: github.ref == 'refs/heads/v2-custom'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: opencode2-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="preview-${GITHUB_SHA:0:12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" artifacts/*.tar.gz --clobber
+          else
+            gh release create "$tag" artifacts/*.tar.gz --target "$GITHUB_SHA" --prerelease \
+              --title "OpenCode2 preview ${GITHUB_SHA:0:12}" \
+              --notes "Build for commit $GITHUB_SHA."
+          fi

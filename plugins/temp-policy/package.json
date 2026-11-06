@@ -1,0 +1,13 @@
+{
+  "name": "opencode-temp-policy",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./server.ts",
+    "./server": "./server.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsgo --noEmit"
+  }
+}
