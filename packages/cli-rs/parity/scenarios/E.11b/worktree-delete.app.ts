@@ -41,8 +41,12 @@ export default defineApp({
     { keys: ["enter"] },
     { checkpoint: "list", until: "opencode-spike" },
     { keys: ["down", "ctrl+d", "ctrl+d"] },
-    // The home prompt behind the dialog draws no placeholder yet.
-    { checkpoint: "changes", until: "old.txt", deviation: ["T17-home-prompt"] },
+    // Beside the dialog, the placeholder shows its first word.
+    {
+      checkpoint: "changes",
+      until: "old.txt",
+      masks: [{ ...placeholder[0], width: 3, reason: "not drawn yet in Rust (T17-home-prompt)" }],
+    },
     { keys: ["d"] },
     { checkpoint: "failed", until: "Failed to delete worktree" },
   ],

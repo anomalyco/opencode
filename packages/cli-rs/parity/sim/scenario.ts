@@ -2,10 +2,10 @@
 // `export default defineSim({...})`. parity/sim/run.ts runs each one through both clients against the simulated
 // server.
 import type { Frontend } from "@opencode/protocol/simulation"
-import type { Mask } from "../lib/app"
+import type { Deviation, Mask } from "../lib/app"
 import type { Reply } from "./backend"
 
-export type { Mask, Reply }
+export type { Deviation, Mask, Reply }
 
 export type Step =
   | { type: string }
@@ -26,8 +26,7 @@ export type Step =
       // Text the screen shows once it is ready.
       until?: string
       masks?: Mask[]
-      // The `parity/deviations/<name>.md` files that allow this checkpoint to differ, one per row.
-      deviation?: string[]
+      deviation?: Deviation[]
     }
 
 export type SimScenario = {

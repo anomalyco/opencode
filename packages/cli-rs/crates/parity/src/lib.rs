@@ -88,6 +88,16 @@ impl Comparison {
     pub fn is_equal(&self) -> bool {
         !self.size_differs && self.differences.is_empty()
     }
+
+    /// The differing cells whose symbols differ.
+    pub fn text_differences(&self) -> usize {
+        self.differences
+            .iter()
+            .filter(|&&(x, y)| {
+                self.expected.cell(x, y).map(|cell| &cell.symbol) != self.actual.cell(x, y).map(|cell| &cell.symbol)
+            })
+            .count()
+    }
 }
 
 impl fmt::Display for Comparison {
@@ -111,7 +121,7 @@ impl fmt::Display for Comparison {
             expected.width,
             expected.height
         )?;
-        // A deviation allows a whole checkpoint, so name the cells whose text matches and whose colors do not.
+        // The cells whose text matches and whose colors do not.
         let colors = self
             .differences
             .iter()

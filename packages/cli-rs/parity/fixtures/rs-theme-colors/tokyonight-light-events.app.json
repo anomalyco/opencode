@@ -162,9 +162,6 @@
     {
       "checkpoint": "selected",
       "until": "The parser drops the last token.",
-      "deviation": [
-        "V01-plain-transcript"
-      ],
       "fixture": "rs-theme-colors/tokyonight-light-events/selected"
     },
     {
@@ -217,12 +214,12 @@
       "until": "Help",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "rs-theme-colors/tokyonight-light-events/command"
     }

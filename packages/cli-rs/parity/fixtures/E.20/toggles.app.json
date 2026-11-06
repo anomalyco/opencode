@@ -25,12 +25,12 @@
       "until": "Ask anything",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 84,
+          "height": 1,
+          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/home"
     },
@@ -49,12 +49,12 @@
       "until": "Search settings",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/settings"
     },
@@ -66,12 +66,12 @@
       "until": "Animations",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/animations"
     },
@@ -97,12 +97,12 @@
       "until": "Wrapping",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/wrapping"
     },
@@ -127,12 +127,12 @@
       "until": "Editor context",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/editor"
     },
@@ -162,12 +162,12 @@
       "until": "Large pastes",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/pastes"
     },
@@ -195,12 +195,12 @@
       "until": "Window title",
       "masks": [
         {
-          "line": "Ask anything….*",
-          "reason": "the prompt placeholder is picked at random"
+          "x": 16,
+          "y": 16,
+          "width": 3,
+          "height": 1,
+          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
-      ],
-      "deviation": [
-        "T17-home-prompt"
       ],
       "fixture": "E.20/toggles/title"
     }

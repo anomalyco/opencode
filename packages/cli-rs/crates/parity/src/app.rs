@@ -203,9 +203,26 @@ pub struct Checkpoint {
     #[serde(default)]
     pub masks: Vec<Mask>,
     #[serde(default)]
-    pub deviation: Vec<String>,
+    pub deviation: Vec<Deviation>,
     /// The cell file under `parity/fixtures`, without `.json`.
     pub fixture: String,
+}
+
+/// A `parity/deviations/<file>.md` that allows a checkpoint at most `cells` differing cells; with `style_only`, only
+/// cells whose symbols match. A checkpoint's deviations add up (`Deviation` in `parity/lib/app.ts`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Deviation {
+    pub file: String,
+    pub cells: usize,
+    #[serde(default, rename = "styleOnly")]
+    pub style_only: bool,
+}
+
+/// Whether `deviation` allows `comparison`: at most the cells its entries add up to, and cells whose symbols
+/// differ only within the entries that are not `style_only`.
+pub fn allows(deviation: &[Deviation], comparison: &Comparison) -> bool {
+    let sum = |text: bool| deviation.iter().filter(|entry| !text || !entry.style_only).map(|entry| entry.cells).sum();
+    !comparison.size_differs && comparison.differences.len() <= sum(false) && comparison.text_differences() <= sum(true)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -338,9 +355,11 @@ pub struct CheckpointResult {
     pub actual: String,
 }
 
-/// Masks the capture and compares it with the checkpoint's recorded cells.
+/// Masks the capture and compares it with the checkpoint's recorded cells. The recorded cells are masked again, so a
+/// rectangle edited into a recording covers both sides.
 pub fn compare_checkpoint(checkpoint: &Checkpoint, actual: Fixture) -> Result<CheckpointResult, String> {
-    let expected = Fixture::load(fixtures_dir().join(format!("{}.json", checkpoint.fixture)))?;
+    let mut expected = Fixture::load(fixtures_dir().join(format!("{}.json", checkpoint.fixture)))?;
+    apply_masks(&mut expected, &checkpoint.masks)?;
     let mut actual = actual;
     apply_masks(&mut actual, &checkpoint.masks)?;
     Ok(CheckpointResult { comparison: compare(&expected, &actual), actual: actual.to_json() })
@@ -473,6 +492,20 @@ mod tests {
         assert_eq!(text(&fixture), ["                  ab", "took      here      "]);
         assert_eq!(*fixture.cell(0, 0).unwrap(), masked());
         assert_ne!(*fixture.cell(18, 0).unwrap(), masked());
+    }
+
+    #[test]
+    fn deviations_bound_the_cells_they_allow() {
+        let expected = grid(&["abcd"]);
+        let mut actual = grid(&["abXd"]);
+        actual.cell_mut(0, 0).unwrap().fg = Color::rgba(1, 2, 3, 255);
+        let comparison = compare(&expected, &actual);
+        let deviation = |cells, style_only| Deviation { file: "x".into(), cells, style_only };
+        assert!(allows(&[deviation(2, false)], &comparison));
+        assert!(!allows(&[deviation(1, false)], &comparison));
+        assert!(!allows(&[deviation(2, true)], &comparison));
+        assert!(allows(&[deviation(1, true), deviation(1, false)], &comparison));
+        assert!(allows(&[], &compare(&expected, &expected)));
     }
 
     #[test]
