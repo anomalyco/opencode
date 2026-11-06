@@ -63,6 +63,7 @@ async function expectDistroLayout(dialog: Locator) {
       dialog.locator(".settings-wsl-distro-row").evaluateAll((rows) =>
         rows.every((row, index) => {
           const previous = rows[index - 1]?.getBoundingClientRect()
+
           if (previous && Math.abs(row.getBoundingClientRect().top - previous.bottom) > 1) return false
           const control = row.querySelector('[data-slot="radio-v2-item-control"]')
           const label = row.querySelector('[data-slot="radio-v2-item-label-text"]')

@@ -187,7 +187,7 @@
   width: 100%;
 }
 
-.settings-wsl-distro-group [data-slot="radio-v2-items"] {
+.settings-wsl-distro-group[data-component="radio-v2"] [data-slot="radio-v2-items"] {
   width: 100%;
   gap: 0;
 }
