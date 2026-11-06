@@ -849,6 +849,7 @@ async function existingMentions(session: ComposerSession, mentions: string[]) {
     [...new Set(mentions)].map(async (path) => {
       const target = path.replace(/[\\/]+$/, "")
       const parent = /[\\/]/.test(target) ? getDirectory(target) : undefined
+
       const found = await session.file
         .list({ path: parent, location: { directory: session.directory } })
         .then((result) => result.data.some((entry) => getFilename(entry.path) === getFilename(target)))
