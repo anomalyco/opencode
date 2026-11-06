@@ -394,22 +394,30 @@ pub fn is_read(method: &str, path: &str) -> bool {
             .is_some_and(|plugin| !plugin.is_empty() && !plugin.contains('/'))
 }
 
-/// `actual` holds every Rust request in order; `unmatched` the ones no route answered. Bodies are compared
-/// with client-minted IDs normalized (plan 7.5).
+/// `actual` holds every Rust request in order; `unmatched` the ones no route answered. Writes are compared by
+/// method, path, sorted query, and body, with client-minted IDs normalized (plan 7.5). Both sides get the status
+/// of the same recorded route, so it is not compared.
 pub fn compare_requests(recording: &Recording, actual: &[Sent], unmatched: &[Sent]) -> RequestComparison {
-    let writes: Vec<(&str, &str, Option<Value>)> = actual
+    // Bodies stay JSON values, so key order does not count.
+    let write = |method: &str, path: &str, query: &Query, body: Option<&Value>| {
+        let query: Vec<String> =
+            query.iter().flat_map(|(key, values)| values.iter().map(move |value| format!("{key}={value}"))).collect();
+        let query = if query.is_empty() { String::new() } else { format!("?{}", query.join("&")) };
+        (format!("{method} {path}{query}"), body.map(minted))
+    };
+    let writes: Vec<(String, Option<Value>)> = actual
         .iter()
         .filter(|sent| !is_read(&sent.method, &sent.path))
-        .map(|sent| (sent.method.as_str(), sent.path.as_str(), sent.body.as_ref().map(minted)))
+        .map(|sent| write(&sent.method, &sent.path, &sent.query, sent.body.as_ref()))
         .collect();
-    let expected: Vec<(&str, &str, Option<Value>)> = recording
+    let expected: Vec<(String, Option<Value>)> = recording
         .requests
         .writes
         .iter()
-        .map(|sent| (sent.method.as_str(), sent.path.as_str(), sent.body.as_ref().map(minted)))
+        .map(|sent| write(&sent.method, &sent.path, &sent.query, sent.body.as_ref()))
         .collect();
-    let line = |(method, path, body): &(&str, &str, Option<Value>)| {
-        format!("{method} {path}{}", body.as_ref().map(|body| format!(" {body}")).unwrap_or_default())
+    let line = |(head, body): &(String, Option<Value>)| {
+        format!("{head}{}", body.as_ref().map(|body| format!(" {body}")).unwrap_or_default())
     };
     let writes_differ = (writes != expected).then(|| {
         let mut out = String::from("writes differ\n");
@@ -533,6 +541,14 @@ mod tests {
             serde_json::json!({ "id": "<msg>", "s": ["ses_new", "a_b"] })
         );
         assert_eq!(result.not_sent, ["GET /api/vcs"]);
+
+        let queried = [Sent { query: Query::from([("resume".into(), vec!["true".into()])]), ..same[0].clone() }];
+        assert!(
+            compare_requests(&recording, &queried, &[])
+                .writes_differ
+                .unwrap()
+                .contains("+ rs | POST /api/a?resume=true")
+        );
 
         let other = [sent("POST", "/api/a", Some(serde_json::json!({ "n": 2 })))];
         let missing = [sent("GET", "/api/nope", None)];
