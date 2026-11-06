@@ -1,5 +1,6 @@
 export * as ShellResult from "./result.js"
 
+import os from "os"
 import type { Shell } from "@opencode/schema/shell"
 
 export type Result = {
@@ -33,16 +34,19 @@ function notice(output: Pick<Output, "exit" | "signal" | "timeout">) {
   if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`
 }
 
-// The status leads the output so a long or cut log can't hide it.
 export function report(output: Output, timeout?: number) {
-  return `${status(output, timeout)}\nOutput:\n${output.output || "(no output)"}`
+  return [
+    `Exit code: ${exitCode(output)}`,
+    ...(output.timeout ? [`Command timed out${timeout ? ` after ${timeout / 1_000}s` : ""}`] : []),
+    `Output:\n${output.output || "(no output)"}`,
+  ].join("\n")
 }
 
-function status(output: Output, timeout?: number) {
-  if (output.timeout)
-    return `Timed out${timeout ? ` after ${timeout / 1_000}s` : ""}. Retry with a larger timeout if the command is expected to take longer.`
-  if (output.signal !== undefined) return `Killed by ${output.signal}`
-  return `Exit code: ${output.exit ?? "unknown"}`
+// A signal reads as the shell's 128 + signal number convention.
+function exitCode(output: Output) {
+  if (output.exit !== undefined) return output.exit
+  const signal = output.signal === undefined ? undefined : os.constants.signals[output.signal as NodeJS.Signals]
+  return signal === undefined ? "unknown" : 128 + signal
 }
 
 export function metadata(output: Output) {

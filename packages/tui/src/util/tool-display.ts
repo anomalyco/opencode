@@ -61,10 +61,10 @@ export function toolDisplayContent(state: SessionMessageAssistantTool["state"]) 
   return state.content ?? []
 }
 
-// A completed shell result leads with a one-line model-facing status, then `Output:`, then the command output.
+// A completed shell result leads with a model-facing `Exit code: ` header, then `Output:`, then the command output.
 export function shellOutputText(text: string) {
   const index = text.indexOf("\nOutput:\n")
-  if (index === -1 || text.lastIndexOf("\n", index - 1) !== -1) return text
+  if (index === -1 || !text.startsWith("Exit code: ")) return text
   return text.slice(index + "\nOutput:\n".length)
 }
 

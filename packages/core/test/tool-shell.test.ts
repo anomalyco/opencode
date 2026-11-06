@@ -189,6 +189,11 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const startingCommand = isWindows
+  ? "[Console]::Out.Write('server starting'); Start-Sleep -Seconds 60"
+  : "printf 'server starting'; sleep 60"
+// A timeout kills the process group with SIGTERM, which the result reports as 128 + 15.
+const timedOutExit = isWindows ? "\\S+" : "143"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -1291,25 +1296,33 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("leads with the timeout when a foreground command times out", () =>
-    withTempDir((tmp) => {
-      reset()
-      return withSession(tmp.path, (registry) =>
-        executeTool(registry, call({ command: idleCommand, timeout: 50 }, "call-foreground-timeout")),
-      ).pipe(
-        Effect.andThen((settled) =>
-          Effect.sync(() => {
-            expect(settled.metadata).toMatchObject({ timeout: true })
-            expect(settled.content).toEqual([
-              {
-                type: "text",
-                text: "Timed out after 0.05s. Retry with a larger timeout if the command is expected to take longer.\nOutput:\n(no output)",
-              },
-            ])
-          }),
-        ),
-      )
-    }),
+  it.live(
+    "reports the exit code and the timeout with partial output when a foreground command times out",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        // Long enough for the command to print before it is killed.
+        const timeout = isWindows ? 5_000 : 500
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: startingCommand, timeout }, "call-foreground-timeout")),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.metadata).toMatchObject({ timeout: true })
+              expect(settled.content).toEqual([
+                Expected.text(
+                  expect.stringMatching(
+                    new RegExp(
+                      `^Exit code: ${timedOutExit}\\nCommand timed out after ${timeout / 1_000}s\\nOutput:\\nserver starting$`,
+                    ),
+                  ),
+                ),
+              ])
+            }),
+          ),
+        )
+      }),
+    { timeout: 15_000 },
   )
 
   it.live(
@@ -1439,10 +1452,16 @@ describe("ShellTool", () => {
             },
           ])
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
-          expect((yield* shell.wait(id)).status).toBe("timeout")
+          const timedOut = yield* shell.wait(id)
+          expect(timedOut.status).toBe("timeout")
+          // The timeout keeps its status but still records how the killed process exited.
+          expect(timedOut.exit !== undefined || timedOut.signal !== undefined).toBe(true)
+          if (!isWindows) expect(timedOut).toMatchObject({ signal: "SIGTERM" })
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining(
-              "\nTimed out after 0.05s. Retry with a larger timeout if the command is expected to take longer.\nOutput:\n(no output)\n</shell>",
+            text: expect.stringMatching(
+              new RegExp(
+                `\\nExit code: ${timedOutExit}\\nCommand timed out after 0\\.05s\\nOutput:\\n\\(no output\\)\\n</shell>$`,
+              ),
             ),
             description: idleCommand,
             metadata: {
@@ -1597,7 +1616,10 @@ describe("ShellTool", () => {
                   yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
                   yield* shell.timeout(info.id, 1)
                   // Completion must reap the process, not only mark the command as timed out.
-                  expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
+                  expect(yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).toMatchObject({
+                    status: "timeout",
+                    signal: "SIGKILL",
+                  })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
                   expect(() => process.kill(pid, 0)).toThrow()
@@ -1616,18 +1638,25 @@ describe("ShellTool", () => {
     { timeout: 30_000 },
   )
 
-  it.live("leads every result with its status and an Output line", () =>
+  it.live("leads every result with its exit code and an Output line", () =>
     Effect.sync(() => {
       expect(ShellResult.report({ output: "ok\n", truncated: false, exit: 0 })).toBe("Exit code: 0\nOutput:\nok\n")
       expect(ShellResult.report({ output: "bad", truncated: false, exit: 7 })).toBe("Exit code: 7\nOutput:\nbad")
-      expect(ShellResult.report({ output: "", truncated: false, exit: 143, signal: "SIGTERM" })).toBe(
-        "Killed by SIGTERM\nOutput:\n(no output)",
+      expect(ShellResult.report({ output: "", truncated: false, signal: "SIGTERM" })).toBe(
+        "Exit code: 143\nOutput:\n(no output)",
       )
-      expect(ShellResult.report({ output: "partial", truncated: false, timeout: true }, 120_000)).toBe(
-        "Timed out after 120s. Retry with a larger timeout if the command is expected to take longer.\nOutput:\npartial",
+      expect(ShellResult.report({ output: "", truncated: false, signal: "SIGKILL" })).toBe(
+        "Exit code: 137\nOutput:\n(no output)",
       )
-      expect(ShellResult.report({ output: "partial", truncated: false, timeout: true })).toStartWith(
-        "Timed out. Retry with a larger timeout",
+      expect(ShellResult.report({ output: "", truncated: false, signal: "SIGNOPE" })).toBe(
+        "Exit code: unknown\nOutput:\n(no output)",
+      )
+      expect(ShellResult.report({ output: "", truncated: false })).toBe("Exit code: unknown\nOutput:\n(no output)")
+      expect(
+        ShellResult.report({ output: "server starting", truncated: false, signal: "SIGTERM", timeout: true }, 120_000),
+      ).toBe("Exit code: 143\nCommand timed out after 120s\nOutput:\nserver starting")
+      expect(ShellResult.report({ output: "partial", truncated: false, timeout: true })).toBe(
+        "Exit code: unknown\nCommand timed out\nOutput:\npartial",
       )
     }),
   )

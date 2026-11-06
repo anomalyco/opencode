@@ -26,13 +26,10 @@ describe("Mini tool presentation", () => {
     ).toBe("build failed\nOutput:\nagain\n")
     expect(
       toolOutputText("shell", [
-        {
-          type: "text",
-          text: "Timed out after 120s. Retry with a larger timeout if the command is expected to take longer.\nOutput:\npartial",
-        },
+        { type: "text", text: "Exit code: 143\nCommand timed out after 120s\nOutput:\nserver starting" },
       ]),
-    ).toBe("partial")
-    expect(toolOutputText("shell", [{ type: "text", text: "Killed by SIGTERM\nOutput:\n(no output)" }])).toBe(
+    ).toBe("server starting")
+    expect(toolOutputText("shell", [{ type: "text", text: "Exit code: 143\nOutput:\n(no output)" }])).toBe(
       "(no output)",
     )
     expect(
