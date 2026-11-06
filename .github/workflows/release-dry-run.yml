@@ -132,7 +132,6 @@ jobs:
         env:
           BUN_COMPILE_RELEASE: bun-v1.4.4
           OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
-          OPENCODE_RELEASE_NOTES: ${{ needs.plan.outputs.channel == 'latest' && inputs.release_notes || '' }}
           GH_TOKEN: ${{ github.token }} # read-only; raises the rate limit for Bun release downloads
       - name: Verify bundled models catalog
         run: bun packages/cli/script/catalog-smoke.ts packages/cli/dist/cli-linux-x64/bin/opencode

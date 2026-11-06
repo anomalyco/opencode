@@ -5,12 +5,17 @@ export type TuiHighlight = Readonly<{
   body: string
 }>
 
+export type TuiReleaseHighlights = Readonly<{
+  version: string
+  items: ReadonlyArray<TuiHighlight>
+}>
+
 export type TuiApp = Readonly<{
   name: string
   version: string
   channel: string
-  /** The current release's highlights, embedded only in stable release builds. */
-  highlights?: ReadonlyArray<TuiHighlight>
+  /** The newest releases' highlights, newest first, embedded only in stable release builds. */
+  highlights?: ReadonlyArray<TuiReleaseHighlights>
 }>
 
 export type TuiPaths = Readonly<{

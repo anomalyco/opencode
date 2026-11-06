@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { parse } from "../src/highlights"
+import { history, parse } from "../src/highlights"
 
 describe("highlights", () => {
   test("parses the v2.0.27 release notes", async () => {
@@ -76,5 +76,64 @@ describe("highlights", () => {
     expect(result.items[0].body.length).toBeLessThanOrEqual(300)
     expect(result.items[0].body.endsWith("…")).toBe(true)
     expect(result.problems).toEqual(["Kept the first 5 of 7 highlights"])
+  })
+
+  test("reads the newest releases with highlights from CHANGELOG.md, newest first", async () => {
+    const changelog = await Bun.file(path.resolve(import.meta.dir, "../../../CHANGELOG.md")).text()
+    const versions = [...changelog.matchAll(/^## v(\d+\.\d+\.\d+) /gm)].map((match) => match[1])
+    const result = history(changelog)
+
+    expect(result.problems).toEqual([])
+    expect(result.releases).toHaveLength(5)
+    expect(result.releases[0].version).toBe(versions[0])
+    // Releases keep the changelog's newest-first order.
+    expect(result.releases.map((release) => versions.indexOf(release.version))).toEqual(
+      result.releases.map((release) => versions.indexOf(release.version)).toSorted((a, b) => a - b),
+    )
+    expect(result.releases.every((release) => release.items.length > 0 && release.items.length <= 5)).toBe(true)
+  })
+
+  test("skips releases without highlights and reports problems only for the newest", () => {
+    const release = (version: string, highlights: string) =>
+      [`## v${version} — 2026-10-30`, "", "### Highlights", "", highlights, "", "### Core", "", "- A fix."].join("\n")
+    const result = history(
+      [
+        "# Changelog",
+        "",
+        release("2.0.3", "- Plain bullet without a title."),
+        release("2.0.2", "- **Two**: The second release."),
+        release("2.0.1", "- Another plain bullet."),
+        "## v2.0.0-beta.1 — 2026-10-01",
+        "",
+        "### Highlights",
+        "",
+        "- **Beta**: Not a release.",
+        release("1.9.0", "- **One**: The first release."),
+      ].join("\r\n"),
+    )
+
+    expect(result.releases).toEqual([
+      { version: "2.0.2", items: [{ title: "Two", body: "The second release." }] },
+      { version: "1.9.0", items: [{ title: "One", body: "The first release." }] },
+    ])
+    expect(result.problems).toEqual([
+      "Skipped a highlight without a bold title and description: Plain bullet without a title.",
+      "The Highlights section has no highlights in the expected format",
+    ])
+  })
+
+  test("keeps the newest five releases", () => {
+    const changelog = Array.from(
+      { length: 7 },
+      (_, index) => `## v2.0.${7 - index}\n\n### Highlights\n\n- **Release ${7 - index}**: Text.\n`,
+    ).join("\n")
+
+    expect(history(changelog).releases.map((release) => release.version)).toEqual([
+      "2.0.7",
+      "2.0.6",
+      "2.0.5",
+      "2.0.4",
+      "2.0.3",
+    ])
   })
 })

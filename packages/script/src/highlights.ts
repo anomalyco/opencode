@@ -1,6 +1,8 @@
+import path from "path"
+
 export type Highlight = { title: string; body: string }
 
-const LIMIT = { items: 5, title: 60, body: 300 }
+const LIMIT = { releases: 5, items: 5, title: 60, body: 300 }
 
 /**
  * Extracts the `### Highlights` bullets from reviewed release notes. Each bullet is expected to look like
@@ -58,11 +60,35 @@ function truncate(value: string, limit: number) {
   return `${(space > limit / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
 }
 
-/** Returns the JSON a stable release build embeds as `OPENCODE_RELEASE_HIGHLIGHTS`, warning about malformed notes. */
-export function embed(notes: string | undefined) {
-  if (!notes?.trim()) return
-  const result = parse(notes)
+/**
+ * Splits CHANGELOG.md at its `## vX.Y.Z` release headings and parses each release's Highlights. Returns the newest
+ * releases that have highlights, newest first, with the problems in the newest release's notes only: older releases
+ * have shipped, so their problems are no longer actionable.
+ */
+export function history(changelog: string) {
+  const sections = changelog
+    .replace(/\r\n/g, "\n")
+    .split(/^(?=## v\d+\.\d+\.\d+(?:\s|$))/m)
+    .flatMap((section) => {
+      const version = section.match(/^## v(\d+\.\d+\.\d+)(?:\s|$)/)?.[1]
+      return version ? [{ version, ...parse(section) }] : []
+    })
+  return {
+    releases: sections
+      .filter((section) => section.items.length > 0)
+      .slice(0, LIMIT.releases)
+      .map((section) => ({ version: section.version, items: section.items })),
+    problems: sections[0]?.problems ?? [],
+  }
+}
+
+/**
+ * Returns the JSON a stable release build embeds as `OPENCODE_RELEASE_HIGHLIGHTS`: the newest releases' highlights
+ * from the repository's CHANGELOG.md, which the release commit has already extended with this release's notes.
+ */
+export async function embed() {
+  const result = history(await Bun.file(path.resolve(import.meta.dir, "../../../CHANGELOG.md")).text())
   result.problems.forEach((problem) => console.warn(`release highlights: ${problem}`))
-  if (!result.items.length) return
-  return JSON.stringify(result.items)
+  if (!result.releases.length) return
+  return JSON.stringify(result.releases)
 }

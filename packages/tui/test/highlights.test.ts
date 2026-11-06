@@ -5,18 +5,25 @@ import { createStorage } from "../src/context/storage"
 import { claim, decide } from "../src/util/highlights"
 import { tmpdir } from "./fixture/fixture"
 
-const input = { version: "2.0.27", count: 5, history: true }
+const input = { version: "2.0.27", releases: ["2.0.27", "2.0.26"], history: true }
 
 test("first run shows highlights to existing users and records new installs silently", () => {
   expect(decide(input)).toBe("show")
   expect(decide({ ...input, history: false })).toBe("record")
-  expect(decide({ ...input, count: 0 })).toBe("record")
+  expect(decide({ ...input, releases: [] })).toBe("record")
 })
 
 test("newer versions show highlights or record silently when there are none", () => {
   expect(decide({ ...input, seen: "2.0.26" })).toBe("show")
   expect(decide({ ...input, seen: "1.99.99", history: false })).toBe("show")
-  expect(decide({ ...input, seen: "2.0.26", count: 0 })).toBe("record")
+  expect(decide({ ...input, seen: "2.0.26", releases: [] })).toBe("record")
+})
+
+test("an update that skipped releases shows their highlights even when it has none of its own", () => {
+  const update = { ...input, version: "2.0.29", releases: ["2.0.28", "2.0.27"] }
+  expect(decide({ ...update, seen: "2.0.26" })).toBe("show")
+  expect(decide({ ...update, seen: "2.0.27" })).toBe("show")
+  expect(decide({ ...update, seen: "2.0.28" })).toBe("record")
 })
 
 test("the same version, downgrades, and unstable versions do nothing", () => {
