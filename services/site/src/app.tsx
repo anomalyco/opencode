@@ -15,6 +15,7 @@ import { ogImage } from "~/lib/og"
 import { strip } from "~/lib/language"
 import { HeadMetaProvider, LiveMeta } from "~/component/head-meta"
 import { viewportContent } from "~/lib/viewport"
+import { quietPreloads } from "~/lib/route-preloads"
 // Before the router, so its popstate listener comes first.
 import "~/component/site/popstate"
 import { monoFontFaces } from "~/component/site/mono-fonts"
@@ -82,6 +83,10 @@ if (!isServer) {
   })
 }
 
+// The file routes, with preloads that leave the page alone when they fail (lib/route-preloads.ts). A
+// component on both sides, as <FileRoutes /> was, so hydration counts it the same.
+const Routes = () => (isServer ? FileRoutes() : quietPreloads(FileRoutes()))
+
 export default function App() {
   return (
     <Router
@@ -105,7 +110,7 @@ export default function App() {
         </LanguageProvider>
       )}
     >
-      <FileRoutes />
+      <Routes />
     </Router>
   )
 }
