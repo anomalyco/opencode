@@ -70,9 +70,10 @@ function scan(file: string): Module {
     const prefix = match[1] ?? match[2]
     if (prefix.includes(".")) keys.filter((key) => key.startsWith(prefix)).forEach((key) => module.keys.add(key))
   }
-  // Page copy is read through content/index.ts (useContent, siteContent, localize), so only its
-  // importers can name an area; elsewhere `products` or `.brand` is the data's own field.
-  if (module.imports.includes(path.join(src, "i18n/content/index.ts")))
+  // Page copy is read through content/index.ts (useContent, siteContent, localize), so only modules
+  // that import it, or take its types to read copy passed to them, can name an area; elsewhere
+  // `products` or `.brand` is the data's own field.
+  if (/["']~\/i18n\/content["']|["'][./]+(i18n\/)?content(\/index)?["']/.test(text))
     for (const area of areas) if (new RegExp(`(\\.${area}\\b|["'\`]${area}["'\`])`).test(code)) module.areas.add(area)
   return module
 }
@@ -98,15 +99,13 @@ const routes = [...new Bun.Glob("routes/**/*.tsx").scanSync(src)]
   .map((file) => path.join(src, file))
   .filter((file) => /export default/.test(readFileSync(file, "utf8")))
 const client = closure([...shellRoots, ...routes], true)
-const statics = new Set([...client].flatMap((file) => scan(file).imports))
-// Lazy boundaries: the page routes and every module the client only ever loads with import().
-// (The development loader's imports of the source files, in src/i18n, don't count.)
+// Lazy boundaries: the page routes and every module the client loads with import(), even one that is
+// also imported statically elsewhere (an import() can still be the first to load it). The development
+// loader's imports of the source files, in src/i18n, don't count.
 const boundaries = [
   ...new Set([
     ...routes,
-    ...[...client]
-      .flatMap((file) => scan(file).dynamic)
-      .filter((file) => !statics.has(file) && !file.startsWith(path.join(src, "i18n"))),
+    ...[...client].flatMap((file) => scan(file).dynamic).filter((file) => !file.startsWith(path.join(src, "i18n"))),
   ]),
 ].toSorted()
 
@@ -183,7 +182,8 @@ const locales = Object.fromEntries(
 
 export const result = {
   shared,
-  boundaries: Object.fromEntries(boundaries.map((file) => [file, sliceId(file)])),
+  // By path with forward slashes, as Vite writes module ids on every platform.
+  boundaries: Object.fromEntries(boundaries.map((file) => [file.replaceAll("\\", "/"), sliceId(file)])),
   english: Object.fromEntries([...recorded].toSorted().map((key) => [key, english[key]])),
   locales,
 }

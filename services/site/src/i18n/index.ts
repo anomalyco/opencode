@@ -114,5 +114,7 @@ function missing(locale: Locale, what: string) {
   if (isServer || complete.has(locale)) return
   if (!reported.has(`${locale} ${what}`)) console.error(`i18n: ${what} wasn't loaded for ${locale}; loading all of it`)
   reported.add(`${locale} ${what}`)
-  void loadLanguage(locale).then(() => setVersion((value) => value + 1))
+  void loadLanguage(locale)
+    .then(() => setVersion((value) => value + 1))
+    .catch(() => {})
 }

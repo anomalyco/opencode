@@ -18,7 +18,7 @@ export function preloadStrings() {
   const files = preloads[language.locale()]
   const routes = matches().flatMap((match) => {
     const src = (match.route.key as { $component?: { src?: string } }).$component?.src
-    return src ? [files.routes[src.replace(/^src\//, "").replace(/\?.*$/, "")]] : []
+    return src ? [files.routes[src.replaceAll("\\", "/").replace(/^src\//, "").replace(/\?.*$/, "")]] : []
   })
   const hrefs = [files.table, ...routes].filter((href) => typeof href === "string")
   useAssets(() => ssr(hrefs.map((href) => `<link href="${href}" rel="modulepreload" />`).join("")) as unknown as Element)

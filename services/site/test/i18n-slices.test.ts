@@ -38,3 +38,31 @@ test("English slices carry no page copy, and the English for the copy source is 
   for (const payload of Object.values(result.locales.en.slices)) expect(payload.content).toEqual({})
   for (const [key, value] of Object.entries(result.english)) expect(value).toBe((en as Record<string, string>)[key])
 })
+
+// The build finds a page's keys by their literal text (script/i18n-slices.ts), so the two call
+// shapes it can't see must not appear: i18n.translated() with anything but one key literal, and a key
+// built from a template that doesn't start with its literal prefix.
+const sources = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(src)]
+  .filter((file) => !file.startsWith("i18n/") && !file.startsWith("context/"))
+  .map((file) => ({ file, text: readFileSync(path.join(src, file), "utf8") }))
+
+test("i18n.translated() names one key literally", () => {
+  const calls = sources.flatMap(({ file, text }) =>
+    [...text.matchAll(/\.translated\(([^)]*)\)/g)].map((match) => ({ file, argument: match[1].trim() })),
+  )
+  expect(calls.length).toBeGreaterThan(0)
+  expect(
+    calls.filter(({ argument }) => {
+      const key = argument.match(/^(["'`])([\w.-]+)\1$/)?.[2]
+      return !key || !(key in en)
+    }),
+  ).toEqual([])
+})
+
+test("no key is built from a template without its literal start", () => {
+  expect(
+    sources.flatMap(({ file, text }) =>
+      [...text.matchAll(/(?:^|[^\w$])(?:t|\.t)\(\s*`\$\{/g)].map((match) => `${file}: ${match[0].trim()}`),
+    ),
+  ).toEqual([])
+})

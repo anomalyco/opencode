@@ -22,7 +22,6 @@ import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
 import { productsMarkdown } from "~/lib/product-markdown"
-import { homeContent } from "~/lib/home-content"
 import { useI18n } from "~/context/i18n"
 import { localize, useContent } from "~/i18n/content"
 import { siteSettings } from "~/component/site/settings"
@@ -57,7 +56,7 @@ export default function Product() {
         data-variant={siteSettings.hero}
         data-title-size={siteSettings.heroTitleSize}
         style={{
-          "--title-chars": titleCells(designCopy("home.hero.title", homeContent(i18n.t, language.route).hero.title)),
+          "--title-chars": titleCells(designCopy("home.hero.title", i18n.t("home.hero.title"))),
         }}
       >
         <PageTitle title={i18n.t("site.nav.product")} />

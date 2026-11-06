@@ -20,10 +20,14 @@ import type { result as Result } from "./i18n-slices"
 
 type Slices = typeof Result
 
-const root = fileURLToPath(new URL("..", import.meta.url))
-const runtime = path.join(root, "src/i18n/index.ts")
-const tablesFile = path.join(root, "src/i18n/tables.ts")
-const englishFile = path.join(root, "src/i18n/english.ts")
+// Vite ids use forward slashes on every platform.
+const slashes = (file: string) => file.replaceAll("\\", "/")
+const root = slashes(fileURLToPath(new URL("..", import.meta.url)))
+const runtime = path.posix.join(root, "src/i18n/index.ts")
+const tablesFile = path.posix.join(root, "src/i18n/tables.ts")
+const englishFile = path.posix.join(root, "src/i18n/english.ts")
+// An import() of a module, with any spaces or comments (such as /* @vite-ignore */) inside.
+const dynamicImport = /\bimport\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'])([^"'`]+)\1\s*\)/g
 
 export function i18nSlices(): Plugin {
   let build = false
@@ -38,7 +42,10 @@ export function i18nSlices(): Plugin {
     slices = JSON.parse(run.stdout.toString()) as Slices
     return slices
   }
-  const boundary = (id: string) => analyze().boundaries[id.split("?")[0]]
+  const boundary = (id: string) => analyze().boundaries[slashes(id).split("?")[0]]
+  const routes = () => Object.keys(analyze().boundaries).filter((file) => file.startsWith(`${root}src/routes/`))
+  // The page routes whose import() in SolidStart's route list loads their slice (checked in generateBundle).
+  const routed = new Set<string>()
 
   return {
     name: "i18n-slices",
@@ -76,26 +83,32 @@ export function i18nSlices(): Plugin {
       return `export default {\n  slices: {\n${entries.join("\n")}\n  },\n  all: () => import("virtual:i18n/${match[1]}/all"),\n}`
     },
     async transform(code, id) {
-      if (!client(this.environment) || id.startsWith("\0") || id.includes("/src/i18n/")) return
-      const imports = /\bimport\((["'])([^"'`]+)\1\)/g
+      if (!client(this.environment) || id.startsWith("\0") || slashes(id).includes("/src/i18n/")) return
       const slices = new Map<string, string>()
-      for (const match of code.matchAll(imports)) {
+      for (const match of code.matchAll(dynamicImport)) {
         const target = await this.resolve(match[2], id)
         const slice = target && boundary(target.id)
-        if (slice) slices.set(match[0], slice)
+        if (!target || !slice) continue
+        slices.set(match[0], slice)
+        if (id === "solid-start:routes") routed.add(slashes(target.id).split("?")[0])
       }
       if (!slices.size) return
       return {
         code: [
           `import { loadSlice as __i18nSlice } from ${JSON.stringify(runtime)};`,
           "const __i18nWith = (module, slice) => Promise.all([module, __i18nSlice(slice).catch(() => {})]).then((loaded) => loaded[0]);",
-          code.replace(imports, (text) => (slices.has(text) ? `__i18nWith(${text}, ${JSON.stringify(slices.get(text))})` : text)),
+          code.replace(dynamicImport, (text) => (slices.has(text) ? `__i18nWith(${text}, ${JSON.stringify(slices.get(text))})` : text)),
         ].join("\n"),
         map: null,
       }
     },
     generateBundle(_, bundle) {
       if (!client(this.environment)) return
+      // A page route whose import() wasn't rewritten would run before its strings arrive: fail the
+      // build instead (a change in how SolidStart writes its route list, for example).
+      const missed = routes().filter((file) => !routed.has(file))
+      if (missed.length)
+        throw new Error(`i18n-slices: SolidStart's route list doesn't load the strings of ${missed.join(", ")}`)
       for (const chunk of Object.values(bundle))
         if (chunk.type === "chunk" && chunk.facadeModuleId?.startsWith("\0virtual:i18n/"))
           files.set(chunk.facadeModuleId.slice(1), `/${chunk.fileName}`)
@@ -105,7 +118,7 @@ export function i18nSlices(): Plugin {
   /** For each locale, the files a page in it loads before hydration: its table (with the shell's strings) and its route's slice. */
   function preloads() {
     const data = analyze()
-    const src = path.join(root, "src")
+    const src = `${root}src/`
     return Object.fromEntries(
       Object.keys(data.locales).map((locale) => [
         locale,
@@ -113,9 +126,9 @@ export function i18nSlices(): Plugin {
           table: files.get(`virtual:i18n/${locale}`),
           routes: Object.fromEntries(
             Object.entries(data.boundaries)
-              .filter(([file]) => file.startsWith(path.join(src, "routes")))
+              .filter(([file]) => file.startsWith(`${src}routes/`))
               .map(([file, slice]) => [
-                path.relative(src, file),
+                file.slice(src.length),
                 files.get(`virtual:i18n/${locale}/${data.shared[slice]}`) ?? null,
               ]),
           ),

@@ -10,7 +10,7 @@ import {
 import type { Translate } from "~/i18n"
 import { v1DocsUrl } from "~/lib/docs"
 import { desktopBuilds, desktopInstall, getDownloadHref } from "~/lib/download"
-import { homeFaq } from "~/lib/home-content"
+import { homeFaq } from "~/lib/faq-content"
 import { sdkInstalls } from "~/lib/install-commands"
 import { blocks, codeFence, link, richToMarkdown, type MarkdownContext } from "~/lib/markdown"
 
