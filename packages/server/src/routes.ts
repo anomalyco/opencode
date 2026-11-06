@@ -34,7 +34,8 @@ import { ConsoleAccess } from "@opencode/core/console-access"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionGoal } from "@opencode/core/session/goal"
 import { SessionExecution } from "@opencode/core/session/execution"
-import { Schedule } from "@opencode/core/schedule"
+import { SessionSchedule } from "@opencode/core/session/schedule"
+import { SessionWatch } from "@opencode/core/session/watch"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
@@ -87,7 +88,8 @@ const applicationServiceNodes = [
   SessionRestart.node,
   SessionGoal.node,
   SessionExecution.node,
-  Schedule.node,
+  SessionSchedule.node,
+  SessionWatch.node,
   Workspace.node,
   FileWatch.node,
 ] as const

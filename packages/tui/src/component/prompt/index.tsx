@@ -37,6 +37,8 @@ import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
+import { DialogSchedule } from "../dialog-schedule"
+import { DialogWatch } from "../dialog-watch"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
@@ -619,6 +621,60 @@ export function Prompt(props: PromptProps) {
               }}
             />
           ))
+        },
+      },
+      {
+        title: "定期送信",
+        name: "session.schedule",
+        category: "Session",
+        slash: { name: "schedule" },
+        run: async () => {
+          const sessionID = props.sessionID
+          if (sessionID) {
+            dialog.replace(() => <DialogSchedule sessionID={sessionID} />)
+            return
+          }
+          const selection = local.model.selection()
+          const created = data.session.create({
+            location: currentLocation.ref ?? data.location.default(),
+            agent: local.agent.current()?.id,
+            model: selection
+              ? { providerID: selection.providerID, id: selection.modelID, variant: local.model.variant.current() }
+              : undefined,
+          })
+          await created.request
+            .then(() => {
+              route.navigate({ type: "session", sessionID: created.id })
+              dialog.replace(() => <DialogSchedule sessionID={created.id} />)
+            })
+            .catch(toast.error)
+        },
+      },
+      {
+        title: "メンバーの停止通知",
+        name: "session.watch",
+        category: "Session",
+        slash: { name: "watch" },
+        run: async () => {
+          const sessionID = props.sessionID
+          if (sessionID) {
+            dialog.replace(() => <DialogWatch sessionID={sessionID} />)
+            return
+          }
+          const selection = local.model.selection()
+          const created = data.session.create({
+            location: currentLocation.ref ?? data.location.default(),
+            agent: local.agent.current()?.id,
+            model: selection
+              ? { providerID: selection.providerID, id: selection.modelID, variant: local.model.variant.current() }
+              : undefined,
+          })
+          await created.request
+            .then(() => {
+              route.navigate({ type: "session", sessionID: created.id })
+              dialog.replace(() => <DialogWatch sessionID={created.id} />)
+            })
+            .catch(toast.error)
         },
       },
       {

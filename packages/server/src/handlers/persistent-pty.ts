@@ -22,7 +22,6 @@ import { makeArtifact } from "./artifact"
 import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
-import { makeSchedule } from "./schedule"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
@@ -32,7 +31,6 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const artifact = yield* makeArtifact
     const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
-    const schedule = yield* makeSchedule
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -44,12 +42,6 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("artifacts.update", (ctx) => artifact.update(ctx.params.artifactID, ctx.query, ctx.payload, ctx.request))
       .handle("artifacts.delete", (ctx) => artifact.remove(ctx.params.artifactID, ctx.query, ctx.request))
       .handleRaw("artifacts.view", (ctx) => artifact.view(ctx.params.artifactID, ctx.query, ctx.request))
-      .handle("schedule.create", (ctx) => schedule.create(ctx.payload))
-      .handle("schedule.list", (ctx) => schedule.list(ctx.query.sessionID))
-      .handle("schedule.get", (ctx) => schedule.get(ctx.params.scheduleID))
-      .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
-      .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
-      .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

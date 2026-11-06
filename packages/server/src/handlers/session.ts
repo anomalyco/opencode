@@ -5,6 +5,8 @@ import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { SessionGoal } from "@opencode/core/session/goal"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionSchedule } from "@opencode/core/session/schedule"
+import { SessionWatch } from "@opencode/core/session/watch"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionContextLimit } from "@opencode/core/session/context-limit"
 import { Form } from "@opencode/core/form"
@@ -43,6 +45,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
     const transfer = yield* SessionTransfer.Service
     const goals = yield* SessionGoal.Service
     const execution = yield* SessionExecution.Service
+    const schedules = yield* SessionSchedule.Service
+    const watches = yield* SessionWatch.Service
+    yield* Effect.forkScoped(schedules.run)
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
     const contextLimits = yield* SessionContextLimit.Service
@@ -70,6 +75,71 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       )
 
     return handlers
+      .handle(
+        "session.watchGet",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: yield* watches.get(ctx.params.sessionID) }
+        }),
+      )
+      .handle(
+        "session.watchSave",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return {
+            data: yield* watches
+              .save(ctx.params.sessionID, ctx.payload)
+              .pipe(
+                Effect.catchTag("SessionWatch.Error", (error) => new InvalidRequestError({ message: error.message })),
+              ),
+          }
+        }),
+      )
+      .handle(
+        "session.watchRemove",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          yield* watches.remove(ctx.params.sessionID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.scheduleList",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: yield* schedules.list(ctx.params.sessionID) }
+        }),
+      )
+      .handle(
+        "session.scheduleCreate",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* schedules.save(ctx.params.sessionID, ctx.payload).pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("SessionSchedule.Error", (error) => new InvalidRequestError({ message: error.message })),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.scheduleUpdate",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* schedules.save(ctx.params.sessionID, ctx.payload, ctx.params.scheduleID).pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("SessionSchedule.Error", (error) => new InvalidRequestError({ message: error.message })),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.scheduleRemove",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          yield* schedules.remove(ctx.params.sessionID, ctx.params.scheduleID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
       .handle(
         "session.goalGet",
         Effect.fn(function* (ctx) {
