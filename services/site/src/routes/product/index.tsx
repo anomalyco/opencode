@@ -21,7 +21,6 @@ import { PageTitle } from "~/component/site/sticky-title"
 import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
-import { productsMarkdown } from "~/lib/product-markdown"
 import { useI18n } from "~/context/i18n"
 import { localize, useArea } from "~/i18n/content"
 import { extensionsSource } from "~/i18n/content/areas/extensions"
@@ -34,7 +33,7 @@ export default function Product() {
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
   const download = () => localize(language.locale(), "download", downloadContent(i18n.t, language.route))
-  const markdown = useMarkdown("/product", productsMarkdown)
+  const markdown = useMarkdown("/product", (context, pages) => pages.productsMarkdown(context))
 
   return (
     <Site page="products" markdown={markdown}>

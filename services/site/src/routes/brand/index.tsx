@@ -34,7 +34,7 @@ import {
   colorFormats,
   type BadgeFont,
 } from "~/lib/brand-content"
-import { useMarkdown } from "~/component/site/use-markdown"
+import { useMarkdown, useMarkdownSource } from "~/component/site/use-markdown"
 import { siteSettings } from "~/component/site/settings"
 import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site/on-this-page"
 import { PageTitle } from "~/component/site/sticky-title"
@@ -54,6 +54,7 @@ export default function Brand() {
   const tone = (value: string) => lower(themeName(value))
   const themeName = (value: string) => i18n.t(value === "dark" ? "site.theme.dark" : "site.theme.light")
   const markdown = useMarkdown("/brand", brandMarkdown)
+  const rules = useMarkdownSource("/brand", brandMarkdown)
 
   // The sections in page order, for the "Contents" list.
   const sections = createMemo(() =>
@@ -698,7 +699,7 @@ export default function Brand() {
           <AgentRulesButton
             label={content().hero.copy.text}
             copied={content().hero.copy.copied}
-            source={markdown.source}
+            source={rules}
           />
         </div>
       </section>

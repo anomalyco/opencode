@@ -13,7 +13,6 @@ import { useI18n } from "~/context/i18n"
 import { useArea } from "~/i18n/content"
 import { productDetailsSource } from "~/i18n/content/areas/product-details"
 import { productsSource } from "~/i18n/content/areas/products"
-import { productMarkdown } from "~/lib/product-markdown"
 import { ChangelogSettings, ChangelogTimeline, ChangelogUnavailable } from "./changelog-entry"
 import { MoreFromAnomaly } from "./product-list"
 import { moreProducts, productAreas, productDetails, type PageSlug } from "./product-data"
@@ -102,7 +101,9 @@ export function ProductPage(props: { slug: PageSlug }) {
       .map((row, index) => ({ ...row, ...detail().showcase[index] }))
       .slice(0, Number(siteSettings.featureClipCount))
       .filter((row) => row.clip || !moreProducts.some((item) => item.slug === props.slug))
-  const markdown = useMarkdown(`/${props.slug}`, productMarkdown(props.slug), { changelog: data })
+  const markdown = useMarkdown(`/${props.slug}`, (context, pages) => pages.productMarkdown(props.slug)(context), {
+    changelog: data,
+  })
 
   return (
     <Site

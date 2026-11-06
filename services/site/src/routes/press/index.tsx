@@ -22,7 +22,7 @@ import {
   siteSettings,
   toggles,
 } from "~/component/site/settings"
-import { useMarkdown } from "~/component/site/use-markdown"
+import { useMarkdown, useMarkdownSource } from "~/component/site/use-markdown"
 import { Faq } from "~/component/faq"
 import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site/on-this-page"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
@@ -77,7 +77,7 @@ export default function Press() {
     onCleanup(() => window.removeEventListener("hashchange", reveal))
   })
   // "Copy rules for your agent" copies the Brand page's own Markdown, so the two never drift.
-  const brandRules = useMarkdown("/brand", brandMarkdown)
+  const brandRules = useMarkdownSource("/brand", brandMarkdown)
   const rulesLabel = createMemo(() => localize(language.locale(), "brand", brandContent(i18n.t)).hero.copy)
 
   // The sections in page order, for "Contents". Hidden sections leave the list too.
@@ -403,7 +403,7 @@ export default function Press() {
             {content().brand.all.text}
             <DownloadIcon />
           </a>
-          <AgentRulesButton label={rulesLabel().text} copied={rulesLabel().copied} source={brandRules.source} />
+          <AgentRulesButton label={rulesLabel().text} copied={rulesLabel().copied} source={brandRules} />
         </div>
       </Section>
 
