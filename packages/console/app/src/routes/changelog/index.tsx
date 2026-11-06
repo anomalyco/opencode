@@ -53,15 +53,15 @@ function HighlightSection(props: { group: HighlightGroup }) {
           <div data-slot="highlight-item">
             <p data-slot="title">{item.title}</p>
             <p>{item.description}</p>
-            <Show when={item.media.type === "video"}>
-              <video src={item.media.src} controls autoplay loop muted playsinline />
+            <Show when={item.media?.type === "video"}>
+              <video src={item.media?.src} controls autoplay loop muted playsinline />
             </Show>
-            <Show when={item.media.type === "image"}>
+            <Show when={item.media?.type === "image"}>
               <img
-                src={item.media.src}
+                src={item.media?.src}
                 alt={item.title}
-                width={(item.media as { width: string }).width}
-                height={(item.media as { height: string }).height}
+                width={(item.media as { width: string } | undefined)?.width}
+                height={(item.media as { height: string } | undefined)?.height}
               />
             </Show>
           </div>
