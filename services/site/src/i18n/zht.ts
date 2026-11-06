@@ -285,6 +285,8 @@ export const dict = {
   "site.newTab": "{{label}}（在新分頁中開啟）",
   "site.products.label": "產品",
   "site.products.gridLabel": "OpenCode 產品",
+  "site.products.previous": "上一個",
+  "site.products.next": "下一個",
   "site.action.forOs": "下載[ {{os}} 版](os)",
   "site.action.copy": "複製",
   "site.action.copied": "已複製",

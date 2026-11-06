@@ -280,6 +280,8 @@ export const dict = {
   "site.newTab": "{{label}} (відкриється в новій вкладці)",
   "site.products.label": "Продукти",
   "site.products.gridLabel": "Продукти OpenCode",
+  "site.products.previous": "Назад",
+  "site.products.next": "Далі",
   "site.action.copy": "Копіювати",
   "site.action.copied": "Скопійовано",
   "site.action.desktopDownloads": "Завантаження Desktop",

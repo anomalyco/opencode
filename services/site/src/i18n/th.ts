@@ -285,6 +285,8 @@ export const dict = {
   "site.newTab": "{{label}} (เปิดในแท็บใหม่)",
   "site.products.label": "ผลิตภัณฑ์",
   "site.products.gridLabel": "ผลิตภัณฑ์ OpenCode",
+  "site.products.previous": "ก่อนหน้า",
+  "site.products.next": "ถัดไป",
   "site.action.forOs": "ดาวน์โหลด[สำหรับ {{os}}](os)",
   "site.action.copy": "คัดลอก",
   "site.action.copied": "คัดลอกแล้ว",

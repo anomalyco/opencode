@@ -285,6 +285,8 @@ export const dict = {
   "site.newTab": "{{label}} (yeni sekmede açılır)",
   "site.products.label": "Ürünler",
   "site.products.gridLabel": "OpenCode ürünleri",
+  "site.products.previous": "Önceki",
+  "site.products.next": "Sonraki",
   "site.action.forOs": "[{{os}} için ](os)İndir",
   "site.action.copy": "Kopyala",
   "site.action.copied": "Kopyalandı",

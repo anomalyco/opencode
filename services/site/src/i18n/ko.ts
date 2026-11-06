@@ -285,6 +285,8 @@ export const dict = {
   "site.newTab": "{{label}} (새 탭에서 열림)",
   "site.products.label": "제품",
   "site.products.gridLabel": "OpenCode 제품",
+  "site.products.previous": "이전",
+  "site.products.next": "다음",
   "site.action.forOs": "[{{os}}용 ](os)다운로드",
   "site.action.copy": "복사",
   "site.action.copied": "복사됨",
