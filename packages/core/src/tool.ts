@@ -257,6 +257,13 @@ const layer = Layer.effect(
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
+          // Shell batching replaces file tools: when shell is available the
+          // model must use it for file operations, so hide the replaced
+          // builtins from both direct definitions and the Code Mode catalog
+          // (ported from v2-custom; `read` stays available for execution).
+          if (active.has("shell")) {
+            for (const name of ["glob", "grep", "edit", "write", "patch"]) active.delete(name)
+          }
           const codeModeEnabled = !whollyDisabled("execute", rules)
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const direct = codeModeEnabled
