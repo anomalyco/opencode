@@ -69,6 +69,21 @@ describe("MiniMax provider", () => {
     }),
   )
 
+  it.effect("sends Messages thinking depth as output_config effort", () =>
+    Effect.gen(function* () {
+      const minimax = MiniMax.configure({ apiKey: "fixture" })
+      const messages = yield* compileRequest(
+        ai.request({
+          model: minimax.model("MiniMax-M3.1-Flash"),
+          prompt: "Hello",
+          providerOptions: { effort: "low" },
+        }),
+      )
+      expect(messages.body.output_config).toEqual({ effort: "low" })
+      expect(messages.body.thinking).toBeUndefined()
+    }),
+  )
+
   it.effect("keeps thinking controls native to the selected API", () =>
     Effect.gen(function* () {
       const minimax = MiniMax.configure({ apiKey: "fixture" })

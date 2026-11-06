@@ -14,9 +14,14 @@ ai.request({
 })
 
 ai.request({
-  model: minimax.model("MiniMax-M3"),
+  model: minimax.model("MiniMax-M3.1-Flash"),
   prompt: "Hello",
-  // @ts-expect-error MiniMax Messages has no documented effort setting.
+  providerOptions: { effort: "high" },
+})
+ai.request({
+  model: minimax.responses("MiniMax-M3"),
+  prompt: "Hello",
+  // @ts-expect-error Responses uses reasoningEffort rather than the Messages effort option.
   providerOptions: { effort: "high" },
 })
 ai.request({

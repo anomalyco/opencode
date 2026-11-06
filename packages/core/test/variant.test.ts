@@ -80,6 +80,28 @@ test("spells Messages variants for each provider", () => {
   ])
 })
 
+test("spells declared MiniMax Messages effort ladders", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/minimax/messages", "MiniMax-M3.1-Flash"), [
+      { type: "effort", values: ["low", "medium", "high", "xhigh", "max"] },
+    ]),
+  ).toEqual(["low", "medium", "high", "xhigh", "max"].map((effort) => ({ id: effort, settings: { effort } })))
+})
+
+test("keeps MiniMax Messages thinking controls for models without a ladder", () => {
+  // M2.x always thinks, so it offers no variants at all.
+  expect(
+    resolve(model("@opencode/ai/providers/minimax/messages", "MiniMax-M2.7"), [
+      { type: "effort", values: ["low", "high"] },
+    ]),
+  ).toEqual([])
+  // M3 has no ladder, only the on/off toggle.
+  expect(resolve(model("@opencode/ai/providers/minimax/messages", "MiniMax-M3"), [{ type: "toggle" }])).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "thinking", settings: { thinking: { type: "adaptive" } } },
+  ])
+})
+
 test("recognizes Claude version spellings and future models", () => {
   for (const id of ["claude-sonnet-3.7", "claude-sonnet-3-7", "claude-3.7-sonnet", "claude-3-7-sonnet"])
     expect(resolve(model("@opencode/ai/providers/anthropic", id), [{ type: "effort" }])).toEqual([

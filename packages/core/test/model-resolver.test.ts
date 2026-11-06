@@ -604,6 +604,33 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("sends declared MiniMax Messages effort levels", () =>
+    Effect.gen(function* () {
+      // The minimax.io API and the Token Plan both serve M3.1 Flash through the Messages route.
+      for (const providerID of ["minimax", "minimax-coding-plan"]) {
+        const base = model(Provider.aisdk("@ai-sdk/anthropic"), {
+          providerID: Provider.ID.make(providerID),
+          modelID: "MiniMax-M3.1-Flash",
+        })
+        const catalog = Info.make({
+          ...base,
+          variants: Variant.resolve(base, [{ type: "effort", values: ["low", "max"] }]),
+        })
+        const resolved = yield* ModelResolver.resolveModel(
+          catalog,
+          VariantID.make("low"),
+          Credential.Key.make({ type: "key", key: "fixture" }),
+        )
+        const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
+
+        expect(resolved.route.id).toBe("minimax-messages")
+        expect(prepared.body).toMatchObject({ output_config: { effort: "low" } })
+        // Thinking cannot be turned off on these models, so no toggle is sent.
+        expect(prepared.body.thinking).toBeUndefined()
+      }
+    }),
+  )
+
   it.effect("overlays selected OpenAI-compatible variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {

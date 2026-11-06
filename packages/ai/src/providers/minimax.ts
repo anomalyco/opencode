@@ -22,9 +22,13 @@ import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("minimax")
 
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max" | (string & {})
+
 export type MessagesOptionsInput = {
   /** M3 defaults to disabled; M2.x always thinks. */
   readonly thinking?: { readonly type: "adaptive" | "disabled" }
+  /** Thinking depth for M3.1 Flash. Sent as `output_config.effort`. */
+  readonly effort?: ReasoningEffort
   readonly metadata?: AnthropicMessages.OptionsInput["metadata"]
 }
 
