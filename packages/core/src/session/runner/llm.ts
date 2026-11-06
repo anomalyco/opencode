@@ -11,6 +11,7 @@ import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
+import { SessionGoal } from "../goal.js"
 import { SessionBackground } from "../background.js"
 import { Job } from "../../job.js"
 import { SessionHistory } from "../history.js"
@@ -58,6 +59,7 @@ const layer = Layer.effect(
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
+    const goals = yield* SessionGoal.Service
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
@@ -71,6 +73,7 @@ const layer = Layer.effect(
       let stepped = input.stepped ?? false
       const promotable = input.promotable ?? "input"
       if (!force && !continuing && !stepped) {
+        if (promotable === "input") yield* goals.enqueue(sessionID)
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
         if (!pending) return DrainResult.Complete()
         const control = pending.type === "compaction" || pending.type === "move"
@@ -174,6 +177,7 @@ const layer = Layer.effect(
                 continue
               }
               if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))) {
+                if (promotable === "input" && (yield* goals.enqueue(sessionID))) continue
                 // Control-only drains such as a manual compaction never ran the model, so they skip the hook.
                 if (pending || !stepped) return DrainResult.Complete()
                 // The Session would go idle; a plugin may admit input to keep this execution working.
@@ -462,5 +466,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    SessionGoal.node,
   ],
 })

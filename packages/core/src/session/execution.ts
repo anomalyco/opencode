@@ -14,6 +14,7 @@ import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 import { SessionInbox } from "./inbox.js"
 import { SessionTeam } from "./team.js"
+import { SessionGoal } from "./goal.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -61,6 +62,7 @@ export const layer = Layer.effect(
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
     const teams = yield* SessionTeam.Service
+    const goals = yield* SessionGoal.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -111,8 +113,8 @@ export const layer = Layer.effect(
     const coordinator: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason> =
       yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
         // Shared idle hook (ported from v2-custom): runs after ownership is removed when no
-        // successor is pending. Teams body below; goal (goals.enqueue) and watch
-        // (watches.stopped) merge into this same body at goal/automation integration — do not
+        // successor is pending. Teams + goal below; watch (watches.stopped) merges into this
+        // same body at automation integration (must run BEFORE the team early-return) — do not
         // add a second coordinator. Upstream interrupt({resume}), stepped, Reloaded preserved.
         idle: (sessionID, exit, reason) =>
           reportLifecycle(
@@ -132,7 +134,7 @@ export const layer = Layer.effect(
               for (const target of new Set(candidates)) {
                 if (target === sessionID && !Exit.isSuccess(exit)) continue
                 if (yield* coordinator.isActive(target)) continue
-                yield* coordinator.wake(target)
+                if (yield* goals.enqueue(target, yield* coordinator.active)) yield* coordinator.wake(target)
               }
             }),
           ),
@@ -154,7 +156,11 @@ export const layer = Layer.effect(
             }
             if (outcome.type === "interrupted") {
               // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
+              if (outcome.reason === "user") {
+                if ((yield* goals.get(sessionID))?.status === "active")
+                  yield* goals.status(sessionID, "paused").pipe(Effect.orDie)
+                yield* jobs.cancel(sessionID)
+              }
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
@@ -179,6 +185,8 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
+          if ((yield* goals.get(sessionID))?.status === "active")
+            yield* goals.status(sessionID, "paused").pipe(Effect.orDie)
           const interrupted = yield* coordinator.interrupt(sessionID, "user")
           if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
@@ -205,7 +213,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionTeam.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionTeam.node, SessionGoal.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
