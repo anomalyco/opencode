@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js"
-import { formatOpenApiValue, openApiSchemaLabel, type OpenApiSchema } from "../lib/openapi"
+import { formatOpenApiValue, openApiSchemaLabel, type OpenApiSchema } from "../../lib/openapi"
 
 export function OpenApiSchemaView(props: { schema?: OpenApiSchema; required?: boolean }) {
   const schema = props.schema

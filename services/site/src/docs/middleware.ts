@@ -72,7 +72,7 @@ async function asset(href: string, url: URL, request: Request) {
       .replace(/^\/|\/$/g, "") || "index"
   const body = href.endsWith(".md")
     ? await renderDocsMarkdown(slug)
-    : await renderDocsPage(slug, { stylesheet: "/src/docs/styles/global.css", script: "/src/docs/client.ts" })
+    : await renderDocsPage(slug, { stylesheet: "/src/docs/styles/docs.css", script: "/src/docs/client.ts" })
   if (body === undefined) return notFound()
   return new Response(body, {
     headers: { "Content-Type": href.endsWith(".md") ? markdownType : "text/html; charset=utf-8" },

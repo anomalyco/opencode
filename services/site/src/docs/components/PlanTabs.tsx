@@ -11,8 +11,8 @@ const plans = [
 // switch, and stay in step across every PlanTabs with the same syncKey, through client.ts.
 export function PlanTabs(props: { id: string; label: string; syncKey: string; children?: JSX.Element }) {
   return (
-    <div class="docs-plan-tabs" data-plan-tabs data-sync-key={props.syncKey}>
-      <div class="docs-plan-tabs-list" role="tablist" aria-label={props.label}>
+    <div data-component="plan-tabs" data-plan-tabs data-sync-key={props.syncKey}>
+      <div role="tablist" aria-label={props.label}>
         <For each={plans}>
           {(plan, index) => (
             <button

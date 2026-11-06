@@ -1,6 +1,6 @@
 @font-face {
   font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-Regular.woff2") format("woff2");
+  src: url("../../assets/fonts/OpenTUIMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -8,7 +8,7 @@
 
 @font-face {
   font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-Bold.woff2") format("woff2");
+  src: url("../../assets/fonts/OpenTUIMono-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -16,7 +16,7 @@
 
 @font-face {
   font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-Italic.woff2") format("woff2");
+  src: url("../../assets/fonts/OpenTUIMono-Italic.woff2") format("woff2");
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -24,7 +24,7 @@
 
 @font-face {
   font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-BoldItalic.woff2") format("woff2");
+  src: url("../../assets/fonts/OpenTUIMono-BoldItalic.woff2") format("woff2");
   font-weight: 700;
   font-style: italic;
   font-display: swap;

@@ -121,6 +121,16 @@ export function ChevronRight() {
   )
 }
 
+/** A magnifying glass for search buttons, a 1.5px stroke in a 16px box. */
+export function SearchIcon() {
+  return (
+    <svg data-slot="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.5" />
+      <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
+    </svg>
+  )
+}
+
 /** A light ×: a 1.5px stroke in a 16px box, about the GitHub mark's visual size beside it. */
 export function CloseIcon() {
   return (
