@@ -295,13 +295,18 @@ test("keeps turn token usage inside developer tools", () => {
   expect(settings.some((setting) => setting.path.join(".") === "debug.turn_tokens")).toBe(false)
 })
 
-test("provides config and its host interface", async () => {
-  const config = resolve({}, { terminalSuspend: true })
-  let current = {}
+test.each([
+  { mouse: undefined, initial: "mouse", updated: "none" },
+  { mouse: false, initial: "none", updated: "none" },
+  { mouse: true, initial: "mouse", updated: "mouse" },
+])("provides config and preserves the mouse override across updates: $mouse", async ({ mouse, initial, updated }) => {
+  const options = { terminalSuspend: true, mouse }
+  const config = resolve({}, options)
+  let current: Info = {}
   const service: Interface = {
     get: async () => current,
     update: async (update) => {
-      const draft: Record<string, any> = { ...current }
+      const draft = { ...current }
       update(draft)
       current = draft
       return draft
@@ -314,21 +319,25 @@ test("provides config and its host interface", async () => {
     return <text>{`${context.data.mouse ? "mouse" : "none"} ${context.data.keybinds.get("leader")?.[0]?.key}`}</text>
   }
 
-  const app = await testRender(() => (
-    <ConfigProvider config={config} service={service}>
-      <Consumer />
-    </ConfigProvider>
-  ))
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={config} service={service} options={options}>
+        <Consumer />
+      </ConfigProvider>
+    ),
+    { width: 40, height: 4 },
+  )
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("mouse ctrl+x")
+    expect(app.captureCharFrame()).toContain(`${initial} ctrl+x`)
     if (!context) throw new Error("Config context was not provided")
     await context.update((draft) => {
       draft.mouse = false
       draft.keybinds = { leader: "ctrl+o" }
     })
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("none ctrl+o")
+    expect(app.captureCharFrame()).toContain(`${updated} ctrl+o`)
+    expect(current.mouse).toBe(false)
   } finally {
     app.renderer.destroy()
   }
