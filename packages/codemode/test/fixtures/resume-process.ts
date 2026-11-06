@@ -13,6 +13,4 @@ const slow = Tool.make({
 const [file] = process.argv.slice(2)
 const bytes = new Uint8Array(await Bun.file(file!).arrayBuffer())
 const resumed = CodeMode.make({ tools: { slow }, engine: "vm" }).resume(bytes)
-console.log(
-  JSON.stringify(await Effect.runPromise(Effect.scoped(Effect.flatMap(resumed, (execution) => execution.result)))),
-)
+console.log(JSON.stringify(await Effect.runPromise(resumed.run())))

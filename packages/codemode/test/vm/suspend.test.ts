@@ -1,25 +1,22 @@
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { Effect, Fiber, Schema, Scope } from "effect"
+import { Effect, Fiber, Schema } from "effect"
 import { CodeMode, Extension, Tool } from "../../src/index.js"
 
 // Suspending a run, saving its state, and resuming it in a brand-new runtime.
 
 const Value = Schema.Struct({ value: Schema.Number })
 
-/** Starts a program, or resumes one, in a scope of its own that outlives the test's Effects. */
-const start = <E>(started: Effect.Effect<CodeMode.Execution, E, Scope.Scope>) => {
-  const execution = Effect.runFork(Scope.provide(Scope.makeUnsafe())(started))
-  return {
-    result: Effect.flatMap(Fiber.join(execution), (running) => running.result),
-    suspend: Effect.flatMap(Fiber.join(execution), (running) => running.suspend),
-  }
+/** Runs a program in a fiber of its own: its outcome, and a way to suspend it. */
+const background = <E>(program: CodeMode.Program<never, E>) => {
+  const fiber = Effect.runFork(program.run())
+  return { program, result: Fiber.join(fiber), suspend: program.suspend() }
 }
 
 /** Why resuming a state fails. */
-const refusal = (resumed: Effect.Effect<CodeMode.Execution, CodeMode.SnapshotError, Scope.Scope>) =>
-  Effect.runPromise(Effect.flip(Effect.scoped(resumed)))
+const refusal = (resumed: CodeMode.Program<never, CodeMode.SnapshotError>) =>
+  Effect.runPromise(Effect.flip(resumed.run()))
 
 /** Why a suspend fails. */
 const blocked = (execution: { readonly suspend: Effect.Effect<unknown, CodeMode.SuspendError> }) =>
@@ -91,7 +88,6 @@ const suspendBetweenCalls = async (
   options: {
     readonly extensions?: ReadonlyArray<Extension.Extension>
     readonly limits?: CodeMode.ExecutionLimits
-    readonly suspend?: CodeMode.SuspendOptions
   } = {},
 ) => {
   const step = stepTool()
@@ -100,9 +96,8 @@ const suspendBetweenCalls = async (
     tools: { step: step.tool },
     ...(options.extensions ? { extensions: options.extensions } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
-    ...(options.suspend ? { suspend: options.suspend } : {}),
   })
-  const run = start(runtime.start(code))
+  const run = background(runtime.program(code))
   await step.called()
   await Bun.sleep(10)
   return { step, runtime, run }
@@ -133,11 +128,11 @@ describe("synchronous host calls", () => {
     async () => {
       const draw = counter()
       const runtime = CodeMode.make({ engine: "vm", extensions: [draw.extension] })
-      const run = start(runtime.start("let n = 0\nwhile (n < 200000) draw(n++)\nreturn n"))
+      const run = background(runtime.program("let n = 0\nwhile (n < 200000) draw(n++)\nreturn n"))
       await draw.reached()
       const suspended = suspendedOf(await Effect.runPromise(run.suspend))
       expect(draw.calls()).toBeLessThan(200000)
-      const resumed = await Effect.runPromise(start(runtime.resume(CodeMode.toBytes(suspended.state))).result)
+      const resumed = await Effect.runPromise(background(runtime.resume(CodeMode.toBytes(suspended.state))).result)
       expect(resumed).toMatchObject({ ok: true, value: 200000 })
     },
   )
@@ -171,7 +166,7 @@ describe("suspend", () => {
 
     for (const state of [suspended.state, CodeMode.toBytes(suspended.state)] as const) {
       const outcome = await Effect.runPromise(
-        start(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(state)).result,
+        background(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(state)).result,
       )
       expect(outcome).toEqual({
         ok: true,
@@ -265,7 +260,7 @@ describe("suspend", () => {
       ],
     ]
     for (const [name, code, running, release, path, value] of cases) {
-      const run = start(runtime.start(code))
+      const run = background(runtime.program(code))
       await running()
       const error = await blocked(run)
       expect(error, name).toBeInstanceOf(CodeMode.SuspendError)
@@ -278,8 +273,8 @@ describe("suspend", () => {
 
   test("every running call that blocks a suspend is named", async () => {
     const slow = manual()
-    const run = start(
-      CodeMode.make({ engine: "vm", tools: { slow: slow.tool, "a-b": { work: slow.tool } } }).start(
+    const run = background(
+      CodeMode.make({ engine: "vm", tools: { slow: slow.tool, "a-b": { work: slow.tool } } }).program(
         `return await Promise.all([tools["a-b"].work({ value: 1 }), tools.slow({ value: 2 })])`,
       ),
     )
@@ -288,45 +283,90 @@ describe("suspend", () => {
   })
 
   test("a suspend after the run ended gives its result", async () => {
-    const run = start(CodeMode.make({ engine: "vm" }).start(`return 1 + 1`))
-    expect(await Effect.runPromise(run.result)).toEqual({ ok: true, value: 2, toolCalls: [] })
-    expect(await Effect.runPromise(run.suspend)).toEqual({ ok: true, value: 2, toolCalls: [] })
+    const program = CodeMode.make({ engine: "vm" }).program(`return 1 + 1`)
+    expect(await Effect.runPromise(program.run())).toEqual({ ok: true, value: 2, toolCalls: [] })
+    expect(await Effect.runPromise(program.suspend())).toEqual({ ok: true, value: 2, toolCalls: [] })
   })
 
-  test("a suspend before the program's first step saves its initial state", async () => {
+  test("a program runs inline in the current fiber", async () => {
+    const runtime = CodeMode.make({ engine: "vm", tools: { step: stepTool().tool } })
+    expect(
+      await Effect.runPromise(runtime.program(`return (await tools.step({ value: x })).value`, { x: 21 }).run()),
+    ).toEqual({ ok: true, value: 42, toolCalls: [{ name: "step" }] })
+  })
+
+  test("a suspend from another fiber stops a background run, which returns the same state", async () => {
     const runtime = CodeMode.make({ engine: "vm", tools: {} })
-    const suspended = suspendedOf(
-      await Effect.runPromise(
-        Effect.scoped(
-          Effect.flatMap(
-            runtime.start(`let n = 0; for (let i = 0; i < 10; i++) n += i; return n`),
-            (run) => run.suspend,
-          ),
-        ),
-      ),
+    const code = `let n = 0; for (let i = 0; i < 2_000_000; i++) n = (n + i) % 1_000_003; return n`
+    const expected = await Effect.runPromise(runtime.execute(code))
+    const [suspended, outcome] = await Effect.runPromise(
+      Effect.gen(function* () {
+        const program = runtime.program(code)
+        const fiber = yield* Effect.forkChild(program.run())
+        // Issued before the run starts: it waits for it.
+        const suspended = yield* program.suspend()
+        return [suspended, yield* Fiber.join(fiber)] as const
+      }),
     )
-    expect(await Effect.runPromise(start(runtime.resume(suspended.state)).result)).toEqual({
-      ok: true,
-      value: 45,
-      toolCalls: [],
+    expect(outcome).toBe(suspended)
+    const fresh = CodeMode.make({ engine: "vm", tools: {} })
+    expect(await Effect.runPromise(fresh.resume(CodeMode.toBytes(suspendedOf(suspended).state)).run())).toEqual(
+      expected,
+    )
+  })
+
+  test("a program runs once", async () => {
+    const program = CodeMode.make({ engine: "vm" }).program(`return 1`)
+    expect(await Effect.runPromise(program.run())).toMatchObject({ ok: true, value: 1 })
+    const exit = await Effect.runPromise(Effect.exit(program.run()))
+    expect(String(exit)).toContain("A CodeMode program runs once")
+  })
+
+  test("interrupting run interrupts the program and its running calls", async () => {
+    const called = latch()
+    const interrupted = latch()
+    const hang = Tool.make({
+      description: "Never answers",
+      input: Value,
+      output: Value,
+      execute: () =>
+        Effect.sync(() => called.resolve()).pipe(
+          Effect.andThen(Effect.never),
+          Effect.onInterrupt(() => Effect.sync(() => interrupted.resolve())),
+        ),
     })
+    const program = CodeMode.make({ engine: "vm", tools: { hang } }).program(`return await tools.hang({ value: 1 })`)
+    const fiber = Effect.runFork(program.run())
+    await called.promise
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    await interrupted.promise
   })
 
   test("a state over the byte budget fails the suspend, and the run goes on", async () => {
     const { run } = await suspendBetweenCalls(
       `const big = "x".repeat(1000); await tools.step({ value: 1 }); const t = Date.now(); while (Date.now() - t < 300) {} return big.length`,
-      { suspend: { maxBytes: 100 } },
     )
-    const error = await blocked(run)
+    const error = await blocked({ suspend: run.program.suspend({ maxBytes: 100 }) })
     expect(error.running).toEqual([])
     expect(error.message).toMatch(/^The run's state takes \d+ bytes, more than the 100-byte limit/)
     expect(await Effect.runPromise(run.result)).toMatchObject({ ok: true, value: 1000 })
   })
 
-  test("legacy rejects start and resume clearly", () => {
-    const legacy = CodeMode.make({ engine: "legacy" })
-    expect(() => legacy.start("return 1")).toThrow('CodeMode.Runtime.start requires `engine: "vm"`.')
-    expect(() => legacy.resume(new Uint8Array())).toThrow('CodeMode.Runtime.resume requires `engine: "vm"`.')
+  test("a maxBytes that isn't a non-negative integer is rejected", () => {
+    const program = CodeMode.make({ engine: "vm" }).program("return 1")
+    expect(() => program.suspend({ maxBytes: -1 })).toThrow(RangeError)
+  })
+
+  test("only a VM runtime has program and resume", () => {
+    const vm = CodeMode.make({ engine: "vm" })
+    expect([typeof vm.program, typeof vm.resume]).toEqual(["function", "function"])
+    for (const legacy of [CodeMode.make(), CodeMode.make({ engine: "legacy" })]) {
+      // @ts-expect-error only engine: "vm" runs programs one by one
+      void legacy.program
+      // @ts-expect-error only engine: "vm" resumes runs
+      void legacy.resume
+      expect("program" in legacy || "resume" in legacy).toBe(false)
+    }
   })
 
   test("the snapshot codec does not import Effect", async () => {
@@ -346,8 +386,8 @@ describe("resume", () => {
 
   test("a run saved to a file resumes in another process", async () => {
     const step = stepTool()
-    const run = start(
-      CodeMode.make({ engine: "vm", tools: { slow: step.tool } }).start(`
+    const run = background(
+      CodeMode.make({ engine: "vm", tools: { slow: step.tool } }).program(`
         const seen = new Map([["first", await tools.slow({ value: 10 })]])
         const started = Date.now()
         while (Date.now() - started < 300) {}
@@ -381,7 +421,7 @@ describe("resume", () => {
     expect(suspended.state.header.limits).toEqual({ timeoutMs: null, maxToolCalls: 2, maxOutputBytes: 10 })
     // The resuming runtime has no limits of its own; the saved ones apply.
     const result = await Effect.runPromise(
-      start(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(suspended.state)).result,
+      background(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(suspended.state)).result,
     )
     expect(result).toMatchObject({ ok: false, error: { kind: "ToolCallLimitExceeded" } })
 
@@ -392,7 +432,7 @@ describe("resume", () => {
     const saved = suspendedOf(await Effect.runPromise(long.suspend))
     expect(
       await Effect.runPromise(
-        start(CodeMode.make({ engine: "vm", tools: { step: step2.tool } }).resume(saved.state)).result,
+        background(CodeMode.make({ engine: "vm", tools: { step: step2.tool } }).resume(saved.state)).result,
       ),
     ).toMatchObject({ ok: true, truncated: true })
   })
@@ -400,8 +440,8 @@ describe("resume", () => {
   test("active time and tool calls count across resumes", async () => {
     const step = stepTool()
     const runtime = CodeMode.make({ engine: "vm", tools: { step: step.tool }, limits: { timeoutMs: 300 } })
-    const run = start(
-      runtime.start(`
+    const run = background(
+      runtime.program(`
         await tools.step({ value: 1 })
         const started = Date.now()
         while (Date.now() - started < 220) {}
@@ -415,7 +455,7 @@ describe("resume", () => {
     expect(suspended.state.header.budget.activeMs).toBeGreaterThanOrEqual(200)
     expect(suspended.state.header.budget.toolCalls).toBe(1)
     // 200ms were used before the suspend; the next 200ms of work go past the 300ms limit.
-    const timedOut = await Effect.runPromise(start(runtime.resume(suspended.state)).result)
+    const timedOut = await Effect.runPromise(background(runtime.resume(suspended.state)).result)
     expect(timedOut).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" }, toolCalls: [{ name: "step" }] })
   })
 
@@ -468,7 +508,7 @@ describe("resume", () => {
       [extension],
     )
     const outcome = await Effect.runPromise(
-      start(
+      background(
         CodeMode.make({ engine: "vm", tools: { step: step.tool }, extensions: [extension] }).resume(suspended.state),
       ).result,
     )
@@ -528,7 +568,7 @@ describe("resume", () => {
       }`
     const { step, suspended } = await suspendAt(code)
     const outcome = await Effect.runPromise(
-      start(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(CodeMode.toBytes(suspended.state)))
+      background(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(CodeMode.toBytes(suspended.state)))
         .result,
     )
     expect(outcome).toMatchObject({
@@ -574,12 +614,12 @@ describe("resume", () => {
     const { step, suspended } = await suspendAt(code)
     step.reset()
     const runtime = CodeMode.make({ engine: "vm", tools: { step: step.tool } })
-    const again = start(runtime.resume(CodeMode.toBytes(suspended.state)))
+    const again = background(runtime.resume(CodeMode.toBytes(suspended.state)))
     await step.called()
     await Bun.sleep(10)
     // Nothing changed a built-in since the first resume: the second state keeps what changed before.
     const second = suspendedOf(await Effect.runPromise(again.suspend))
-    const outcome = await Effect.runPromise(start(runtime.resume(CodeMode.toBytes(second.state))).result)
+    const outcome = await Effect.runPromise(background(runtime.resume(CodeMode.toBytes(second.state))).result)
     expect(outcome).toMatchObject({
       ok: true,
       value: {

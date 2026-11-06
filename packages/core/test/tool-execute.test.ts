@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { CodeMode } from "@opencode/codemode"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
 import { Flag } from "@opencode/core/flag"
@@ -481,18 +480,4 @@ test("runtime cache is keyed per engine when experimental.codemode_vm toggles", 
   // Reading the catalog reuses the cached runtime without rebuilding
   expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   expect(conversions).toBe(2)
-})
-
-test("a suspended VM execution is reported as an ExecutionFailure", async () => {
-  const runtime = CodeMode.make({ tools: {}, engine: "vm" })
-  const result = await Effect.runPromise(
-    CodeModeTool.finish(
-      runtime.start("return 1 + 1").pipe(Effect.tap((execution) => execution.suspend)),
-    ),
-  )
-  expect(result).toEqual({
-    ok: false,
-    error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
-    toolCalls: [],
-  })
 })

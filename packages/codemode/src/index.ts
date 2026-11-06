@@ -10,10 +10,12 @@ export {
   SuspendError,
   toBytes,
   toolExpression,
-  type Execution,
+  type Outcome,
+  type Program,
   type Snapshot,
   type SnapshotHeader,
   type Suspended,
   type SuspendOptions,
+  type VmRuntime,
 } from "./codemode.js"
 export { ToolError, toolError } from "./tool-error.js"

@@ -1,6 +1,6 @@
 import { parse, type Program } from "acorn"
-import { Cause, Deferred, Effect, Option, Schema, type Scope } from "effect"
-import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result, Suspended } from "../../codemode.js"
+import { Cause, Deferred, Effect, Option, Schema } from "effect"
+import type { DataValue, Diagnostic, Outcome, ResolvedExecutionLimits, Result, Suspended } from "../../codemode.js"
 import type { Extension } from "../../extension.js"
 import { fromJson } from "../data.js"
 import { fromBytes, header, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
@@ -28,36 +28,18 @@ export type Setup<R> = {
   readonly globals?: Globals<R> | undefined
   /** Whether the host globals can hand the program values with no data form (extensions can). */
   readonly lossy?: boolean
-  /** The most bytes a suspended run's state may take. */
-  readonly suspend?: { readonly maxBytes?: number | undefined }
 }
 
-/** A started program: its outcome, and a way to suspend it. */
-export type Execution = {
-  /** Waits for the program's result, or its saved state once suspended. */
-  readonly result: Effect.Effect<Result | Suspended>
-  /**
-   * Saves the run's state and stops it, at once: what `result` gives. It fails with a `SuspendError`, leaving the run
-   * running, while a host call is in progress. A run that already ended gives its result.
-   */
-  readonly suspend: Effect.Effect<Result | Suspended, SuspendError>
-}
-
-export const finishExecution = <E, R>(
-  started: Effect.Effect<Execution, E, R>,
-): Effect.Effect<Result, E, Exclude<R, Scope.Scope>> =>
-  Effect.scoped(
-    Effect.flatMap(started, (execution) =>
-      Effect.map(execution.result, (outcome): Result => {
-        if (outcome.ok !== "suspended") return outcome
-        return {
-          ok: false,
-          error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
-          toolCalls: outcome.state.header.toolCalls,
-        }
-      }),
-    ),
-  )
+/** Turns a suspended outcome into a failure, for callers that only run programs to their end. */
+export const finishExecution = <E, R>(outcome: Effect.Effect<Outcome, E, R>): Effect.Effect<Result, E, R> =>
+  Effect.map(outcome, (outcome): Result => {
+    if (outcome.ok !== "suspended") return outcome
+    return {
+      ok: false,
+      error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
+      toolCalls: outcome.state.header.toolCalls,
+    }
+  })
 
 /** Runs a program on the VM with `CodeMode.make`'s extensions and JSON bindings. */
 export const execute = <R>(
@@ -89,38 +71,30 @@ export const executeProgram = <R>(
   bindings?: Globals<R>,
   lossy = false,
 ): Effect.Effect<Result, never, R> =>
-  finishExecution(startProgram({ prepared, limits, hooks, globals, lossy }, code, bindings))
+  finishExecution(startProgram({ prepared, limits, hooks, globals, lossy }, code, bindings).run())
 
-/** Starts a program in the current scope; closing the scope interrupts it. */
-export const startProgram = <R>(
-  setup: Setup<R>,
-  code: string,
-  bindings?: Globals<R>,
-): Effect.Effect<Execution, never, R | Scope.Scope> =>
-  Effect.suspend(() => {
+/** A program ready to run on the VM: nothing runs until `run`. */
+export const startProgram = <R>(setup: Setup<R>, code: string, bindings?: Globals<R>): Running<R> =>
+  new Running(setup, 0, () => {
     if (code.trim().length === 0) {
-      return Effect.succeed(
-        ended({ ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] }),
-      )
+      return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] }
     }
-    return new Running(setup, 0, () => {
-      const parsed = parseProgram(code)
-      if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
-      const runtime = instantiate(setup, bindings)
-      runtime.vm.start(parsed.source)
-      return runtime
-    }).start()
+    const parsed = parseProgram(code)
+    if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
+    const runtime = instantiate(setup, bindings)
+    runtime.vm.start(parsed.source)
+    return runtime
   })
 
 /**
- * Resumes a saved run in this runtime, in the current scope, as `startProgram` starts one, under the limits it was
- * saved with. Fails with a `SnapshotError` when the state can't be read or belongs to another build, other host
- * globals, or other sources.
+ * Restores a saved run into this runtime, under the limits it was saved with, ready to run as `startProgram`'s.
+ * Fails with a `SnapshotError` when the state can't be read or belongs to another build, other host globals, or other
+ * sources.
  */
 export const resumeProgram = <R>(
   setup: Setup<R>,
   saved: Snapshot | Uint8Array | unknown,
-): Effect.Effect<Execution, SnapshotError, R | Scope.Scope> =>
+): Effect.Effect<Running<R>, SnapshotError> =>
   Effect.try({
     try: () => {
       const state = saved instanceof Uint8Array ? fromBytes(saved) : saved
@@ -138,9 +112,7 @@ export const resumeProgram = <R>(
       return new Running(resumed, snapshot.header.budget.activeMs, () => fresh, true)
     },
     catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
-  }).pipe(Effect.flatMap((running) => running.start()))
-
-const ended = (result: Result): Execution => ({ result: Effect.succeed(result), suspend: Effect.succeed(result) })
+  })
 
 // Sources restored recently, by text: the AST is never changed, so runs restored from the same program share it.
 const restoredSources = new Map<string, Source>()
@@ -185,7 +157,7 @@ const ROUND_TRIP_TICKS = 2
 const ROUND_TRIP_MAX = 200
 
 /** One run's state: the runtime it is in now (restoring swaps it), its driver, and how much active time it used. */
-class Running<R> {
+export class Running<R> {
   private ctx!: Interpreter<R>
   private driver!: Driver<R>
   private startedAt = 0
@@ -195,7 +167,8 @@ class Running<R> {
   private trips = 0
   // Checkpoints to let pass before the next round trip, so a large state is not saved at every one.
   private skip = 0
-  private readonly done = Deferred.makeUnsafe<Result | Suspended>()
+  private readonly started = Deferred.makeUnsafe<void>()
+  private readonly done = Deferred.makeUnsafe<Outcome>()
 
   constructor(
     private readonly setup: Setup<R>,
@@ -205,31 +178,47 @@ class Running<R> {
     private readonly resuming = false,
   ) {}
 
-  // Makes the run's runtime and driver, then runs the program in a fiber of the current scope.
-  start(): Effect.Effect<Execution, never, R | Scope.Scope> {
+  /** Makes the run's runtime and driver, then runs the program in the current fiber until it ends or is suspended. */
+  run(): Effect.Effect<Outcome, never, R> {
     const self = this
     return Effect.gen(function* () {
       const prepared = self.prepare()
-      if (!(prepared instanceof Interpreter)) return ended(prepared)
+      if (!(prepared instanceof Interpreter)) {
+        self.finished = true
+        return prepared
+      }
       self.ctx = prepared
       self.driver = new Driver(prepared.vm, prepared.tools, yield* Effect.context<R>())
       if (roundTrip) self.driver.checkpoint = Effect.sync(() => self.trip())
       self.startedAt = Date.now()
-      yield* Effect.forkScoped(self.execute().pipe(Effect.onExit((exit) => Deferred.done(self.done, exit))))
-      return {
-        result: Deferred.await(self.done),
-        suspend: Effect.suspend(() => {
-          if (self.finished) return Deferred.await(self.done)
-          const saved = self.save()
-          if (saved instanceof SuspendError) return Effect.fail(saved)
-          self.stop(saved)
-          return Deferred.await(self.done)
-        }),
-      } satisfies Execution
-    })
+      yield* Deferred.succeed(self.started, undefined)
+      return yield* self.execute()
+    }).pipe(
+      Effect.onExit((exit) =>
+        Effect.andThen(Deferred.succeed(self.started, undefined), Deferred.done(self.done, exit)),
+      ),
+    )
   }
 
-  private execute(): Effect.Effect<Result | Suspended, never, R> {
+  /**
+   * Saves the run's state and stops it, at once: `run` then returns the same `Suspended`. It fails with a
+   * `SuspendError`, leaving the run running, while a host call is in progress. A run that already ended gives its result.
+   * Before the run has started, it waits for it.
+   */
+  suspend(maxBytes: number | undefined): Effect.Effect<Outcome, SuspendError> {
+    return Effect.andThen(
+      Deferred.await(this.started),
+      Effect.suspend(() => {
+        if (this.finished) return Deferred.await(this.done)
+        const saved = this.save(maxBytes)
+        if (saved instanceof SuspendError) return Effect.fail(saved)
+        this.stop(saved)
+        return Deferred.await(this.done)
+      }),
+    )
+  }
+
+  private execute(): Effect.Effect<Outcome, never, R> {
     const self = this
     const limits = this.setup.limits
     const logged = () => {
@@ -270,7 +259,7 @@ class Running<R> {
             Effect.timeoutOrElse({
               duration: Math.max(0, timeoutMs - this.activeBefore),
               orElse: () =>
-                Effect.sync((): Result | Suspended => {
+                Effect.sync((): Outcome => {
                   self.finished = true
                   if (self.suspended !== undefined) return self.suspended
                   if (returned === undefined) {
@@ -317,7 +306,7 @@ class Running<R> {
    * Saves the run's state, with no effect on the run: the calls that block a suspend, or the state as it is now. The
    * program shares this thread with the caller, so it is at a step boundary.
    */
-  private save(): Suspended | SuspendError {
+  private save(maxBytes: number | undefined): Suspended | SuspendError {
     const vm = this.ctx.vm
     const running = this.driver.blocking()
     if (running.length > 0) {
@@ -346,7 +335,6 @@ class Running<R> {
       })
     }
     const snapshot = saved.value.snapshot
-    const maxBytes = this.setup.suspend?.maxBytes
     if (maxBytes !== undefined) {
       const size = toBytes(snapshot).byteLength
       if (size > maxBytes) {

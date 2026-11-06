@@ -136,37 +136,36 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const executeCode = (yield* vmEnabled)
-          ? finish(runtime(inventory, "vm").start(code))
-          : runtime(inventory, "legacy").execute(code)
-        const result = yield* executeCode.pipe(
-          Effect.provideService(Run, {
-            executeTool: (name, tool, input) =>
-              Effect.gen(function* () {
-                const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                // The program sees the same failure text the model gets for a direct call.
-                const executed = yield* executeTool(name, tool, input, {
-                  ...context,
-                  // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
-                  progress: () => Effect.void,
-                }).pipe(
-                  Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
-                )
-                const content = resultContent(executed)
-                const outputFileParts = outputFiles(content)
-                if (outputFileParts.length > 0)
-                  yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                return resultValue(executed)
-              }),
-            hooks: progressHooks(record),
-          }),
-          // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
-          Effect.onError(() =>
-            lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
-          ),
-          Effect.provideService(CodeModeExecution.Service, context),
-          Effect.provideService(Permission.Service, permission),
-        )
+        const result = yield* runtime(inventory, (yield* vmEnabled) ? "vm" : "legacy")
+          .execute(code)
+          .pipe(
+            Effect.provideService(Run, {
+              executeTool: (name, tool, input) =>
+                Effect.gen(function* () {
+                  const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // The program sees the same failure text the model gets for a direct call.
+                  const executed = yield* executeTool(name, tool, input, {
+                    ...context,
+                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
+                    progress: () => Effect.void,
+                  }).pipe(
+                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
+                  )
+                  const content = resultContent(executed)
+                  const outputFileParts = outputFiles(content)
+                  if (outputFileParts.length > 0)
+                    yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
+                  return resultValue(executed)
+                }),
+              hooks: progressHooks(record),
+            }),
+            // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
+            Effect.onError(() =>
+              lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
+            ),
+            Effect.provideService(CodeModeExecution.Service, context),
+            Effect.provideService(Permission.Service, permission),
+          )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
@@ -312,34 +311,19 @@ export const check = (
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
   vmEnabled.pipe(
-    Effect.flatMap((vm) => {
-      const created = CodeMode.make({
+    Effect.flatMap((vm) =>
+      CodeMode.make({
         tools: inventoryTools(inventory),
         hooks: runHooks,
         limits,
         engine: vm ? "vm" : "legacy",
-      })
-      return vm ? finish(created.start(code, bindings)) : created.execute(code, bindings)
-    }),
+      }).execute(code, bindings),
+    ),
     Effect.provideService(Run, {
       executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
       hooks: {},
     }),
   )
-
-// Runs a program to its end. No core tool suspends a run yet, so a suspended one is an unsupported failure.
-export function finish<E, R>(started: Effect.Effect<CodeMode.Execution, E, R>) {
-  return Effect.scoped(Effect.flatMap(started, (execution) => execution.result)).pipe(
-    Effect.map((outcome): CodeMode.Result => {
-      if (outcome.ok !== "suspended") return outcome
-      return {
-        ok: false,
-        error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
-        toolCalls: outcome.state.header.toolCalls,
-      }
-    }),
-  )
-}
 
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
