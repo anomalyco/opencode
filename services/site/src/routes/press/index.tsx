@@ -36,6 +36,9 @@ import { pressContent, pressMarkdown, pressReleases } from "~/lib/press-content"
 import { MediaGallery } from "./media-gallery"
 import { PageTitle } from "~/component/site/sticky-title"
 import { ExternalArrow } from "~/component/site/icons"
+// The product list styles (product-list.css). This page used to get them only once the product
+// page's code had loaded in the background; pages now load other pages' code on intent.
+import "~/component/site/product-list.css"
 
 // One-line Anomaly projects for Settings › Press Anomaly projects "list".
 const projectLines: Record<string, string> = {

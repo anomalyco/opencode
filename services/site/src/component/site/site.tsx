@@ -6,7 +6,7 @@ import "./github-link.css"
 import "./tap-targets.css"
 import "./asset-buttons.css"
 import { Link, Meta } from "@solidjs/meta"
-import { A, createAsync, useLocation, useNavigate, usePreloadRoute } from "@solidjs/router"
+import { A, createAsync, useLocation, useNavigate } from "@solidjs/router"
 import {
   createEffect,
   createMemo,
@@ -233,7 +233,6 @@ export function Site(props: {
   const enter = !isServer && navigated && !document.documentElement.hasAttribute("data-card-grow")
   const routed = !isServer && navigated
   onMount(() => (navigated = true))
-  const preloadRoute = usePreloadRoute()
   // The page runs under the notch and home indicator; edge elements pad by the safe-area insets.
   useViewportCover()
   // Read the saved theme before the first client render so hydration doesn't flip it back to
@@ -641,7 +640,8 @@ export function Site(props: {
     // The app's router only handles links marked with a `link` attribute (explicitLinks), so the
     // older console pages and proxied paths like /docs keep full page loads. Links between pages
     // of this site get the attribute as soon as a pointer, focus or click reaches them, so the
-    // router swaps the page in place and preloads it on hover.
+    // router swaps the page in place and preloads it on intent: hover, focus or touch. Nothing else
+    // loads another page's code ahead of time.
     const markLink = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]")
       if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute("link") || anchor.target) return
@@ -651,13 +651,7 @@ export function Site(props: {
     for (const type of ["pointerover", "focusin", "touchstart", "click"])
       document.addEventListener(type, markLink, true)
 
-    // Once the page is idle, load the code for the main pages so the first click is instant too.
     const idle = window.requestIdleCallback ?? ((run: () => void) => setTimeout(run, 1500))
-    idle(() =>
-      ["/", "/product", "/desktop", "/mobile", "/terminal", "/sdk", "/changelog"].forEach((path) =>
-        preloadRoute(language.route(path), { preloadData: false }),
-      ),
-    )
     // window.opencode and its greeting for developers who open DevTools (Settings › Other › Console API).
     createEffect(() => {
       if (siteSettings.consoleApi === "off") return void delete (window as { opencode?: unknown }).opencode
