@@ -190,7 +190,8 @@ export function SectionHeading(props: { level?: 2 | 3; id: string; title: string
 /**
  * The inside of a heading: a button with the title that copies the section's address and puts it in
  * the address bar, then says "Link copied" for a moment (also to screen readers). `children` replaces
- * the plain title for headings with markup of their own.
+ * the plain title for headings with markup of their own. Pages that never hydrate (the docs) do the
+ * same from a delegated listener keyed on `data-heading-id` (src/docs/client.ts).
  */
 export function HeadingLink(props: { id: string; title: string; children?: JSX.Element }) {
   const i18n = useI18n()
@@ -202,6 +203,7 @@ export function HeadingLink(props: { id: string; title: string; children?: JSX.E
       <button
         type="button"
         data-slot="heading-link"
+        data-heading-id={props.id}
         title={i18n.t("site.heading.copyLink")}
         onClick={() => {
           void copyLink(props.id)
@@ -213,7 +215,7 @@ export function HeadingLink(props: { id: string; title: string; children?: JSX.E
       >
         {props.children ?? props.title}
       </button>
-      <span data-slot="heading-copied" aria-live="polite">
+      <span data-slot="heading-copied" aria-live="polite" data-pagefind-ignore>
         {copied() ? i18n.t("changelog.share.copied") : ""}
       </span>
     </>

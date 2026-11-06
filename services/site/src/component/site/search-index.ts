@@ -10,7 +10,9 @@ import { brandContent, brandMarkdown } from "~/lib/brand-content"
 import { brandAssets } from "~/lib/media"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
-import { docsConfigure, docsIntro, docsPages, docsProducts, docsToc } from "~/lib/docs-content"
+import { docsHref, docsSections } from "~/docs/lib/navigation"
+import { v1DocsUrl } from "~/lib/docs"
+import { docsIntro, docsToc } from "~/lib/docs-content"
 import { downloadContent } from "~/lib/download-content"
 import { fontContent } from "~/lib/font-content"
 import { homeContent } from "~/lib/home-content"
@@ -229,11 +231,8 @@ export function buildSearchIndex(
       }),
     )
 
-  const docsPath = (href: string) => new URL(href, "https://opencode.ai").pathname
-  // Only the docs Intro is a page of this site (routes/docs); the other docs pages are the live
-  // v2 docs, served at the same paths on opencode.ai. Linking them absolutely makes them a full
-  // page load there and a new tab from a preview or local build, where those paths don't exist.
-  const liveDocs = (href: string) => (href === docsPages[0].href ? route(href) : `${config.baseUrl}${href}`)
+  // Every docs page (src/docs/lib/navigation.ts), served by this Worker at /docs, so they open in
+  // place on any deployment. The docs are English, so their links never take a locale prefix.
   const docs: SearchItem[] = [
     ...docsToc.map((entry) => ({
       id: `docs:intro#${entry.id}`,
@@ -241,27 +240,30 @@ export function buildSearchIndex(
       title: entry.label,
       context: "Docs › Intro",
       body: docsBody(entry.id),
-      href: `${route(docsPages[0].href)}#${entry.id}`,
+      href: `${docsHref("index")}#${entry.id}`,
       target: { id: entry.id },
     })),
-    ...[...docsPages, ...docsConfigure].map((page) => ({
-      id: `docs:${page.href}`,
+    ...docsSections.flatMap((section) =>
+      section.groups.flatMap((group) =>
+        group.items.map((item) => ({
+          id: `docs:${item.slug}`,
+          group: "Docs" as const,
+          // A section's first page is its intro: "CLI docs" rather than a second "Intro".
+          title: item.slug === section.landingSlug && section.key !== "docs" ? `${section.title} docs` : item.title,
+          context: docsHref(item.slug),
+          body: item.slug === "index" ? docsIntro.lead : undefined,
+          href: docsHref(item.slug),
+        })),
+      ),
+    ),
+    {
+      id: "docs:v1",
       group: "Docs" as const,
-      title: page.label,
-      context: docsPath(page.href),
-      body: page.label === "Intro" ? docsIntro.lead : undefined,
-      href: liveDocs(page.href),
-    })),
-    ...docsProducts
-      .filter((product) => product.label !== "Docs")
-      .map((product) => ({
-        id: `docs:${product.href}`,
-        group: "Docs" as const,
-        title: product.label === "V1" ? "V1 docs" : `${product.label} docs`,
-        context: docsPath(product.href),
-        keywords: product.label === "V1" ? "v1 legacy old docs" : undefined,
-        href: product.href.startsWith("/") ? liveDocs(product.href) : product.href,
-      })),
+      title: "V1 docs",
+      context: v1DocsUrl(),
+      keywords: "v1 legacy old docs",
+      href: v1DocsUrl(),
+    },
   ]
 
   const actions: SearchItem[] = [

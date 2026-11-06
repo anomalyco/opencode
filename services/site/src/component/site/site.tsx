@@ -21,8 +21,8 @@ import {
   Suspense,
 } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
-import interLatin from "../../asset/fonts/inter-latin.woff2"
-import interRest from "../../asset/fonts/inter-rest.woff2"
+import { interFaces, interLatin } from "./inter-fonts"
+import { AgentIcon, Bracket, PersonIcon, ThemeCycle } from "./site-controls"
 import logoLight from "../../asset/brand/opencode-logo-light.svg"
 import logoDark from "../../asset/brand/opencode-logo-dark.svg"
 import wordmarkLight from "../../asset/brand/opencode-wordmark-light.svg"
@@ -87,6 +87,7 @@ import {
 } from "./settings"
 
 export { Chevron, ExternalArrow, NewTab, PlatformIcon } from "./icons"
+export { Bracket } from "./site-controls"
 export {
   applyCarouselPreset,
   carouselBreakpoints,
@@ -113,28 +114,6 @@ const loadLogoFan = () => (logoFanLoad ??= import("./logo-fan").then((module) =>
 const prefetchLogoFan = () => {
   if (siteSettings.logoMenu === "fan") void loadLogoFan().catch(() => (logoFanLoad = undefined))
 }
-
-// Inter as WOFF2, split so most pages only fetch the Latin file (about 95 KB instead of the 870 KB
-// TTF). The other file has the Greek, Cyrillic, Vietnamese and symbol glyphs. The ranges must not
-// overlap: a character in both that Inter lacks would fetch the second file only to fall back. The
-// Latin file keeps both axes (weight, optical size) but only the OpenType features the site uses
-// (pyftsubset --layout-features="calt,case,ccmp,locl,tnum,pnum,kern,mark,mkmk,cpsp,liga"): no
-// character variants or stylistic sets.
-const interFaces = [
-  [
-    interRest,
-    "U+0180-0191, U+0193-0217, U+021C-0236, U+0238-02BA, U+02BD-02C5, U+02C8, U+02CA-02D7, U+02DE-02FF, U+0309, U+030D-0325, U+032A-058F, U+0E3F, U+1D00-1E9D, U+1E9F-1FFF, U+2070-20AB, U+20AD-20B8, U+20BA-20BC, U+20BE-2112, U+2114-2115, U+2117-2121, U+2123-2125, U+2127-212D, U+212F-218F, U+2200-2211, U+2213-2214, U+2216-2218, U+221A-221D, U+221F-2247, U+2249-225F, U+2261-2263, U+2266-2302, U+2304-2317, U+2319-2324, U+2326-232A, U+232C-238A, U+238C-23CD, U+23CF-259F, U+2600-2712, U+2714, U+2716-2E7F, U+A640-A9FF, U+E000-F8FF",
-  ],
-  [
-    interLatin,
-    "U+0000-017F, U+0192, U+0218-021B, U+0237, U+02BB-02BC, U+02C6-02C7, U+02C9, U+02D8-02DD, U+0300-0308, U+030A-030C, U+0326-0329, U+1E9E, U+2000-206F, U+20AC, U+20B9, U+20BD, U+2113, U+2116, U+2122, U+2126, U+212E, U+2190-21FF, U+2212, U+2215, U+2219, U+221E, U+2248, U+2260, U+2264-2265, U+2303, U+2318, U+2325, U+232B, U+238B, U+23CE, U+25A0-25FF, U+2713, U+2715, U+FB01-FB02, U+FEFF, U+FFFD",
-  ],
-]
-  .map(
-    ([url, range]) =>
-      `@font-face { font-family: "Inter"; src: local("Inter"), local("Inter Variable"), url(${url}) format("woff2"); font-weight: 100 900; font-display: optional; unicode-range: ${range}; }`,
-  )
-  .join("\n")
 
 // A nav item as the nav renders it: a known one (links.ts) or a custom link (nav-order.tsx).
 type NavItemView = { id: string; label: string; href: string; arrow: boolean; external: boolean; company: boolean }
@@ -737,7 +716,10 @@ export function Site(props: {
     }
     if (restore && !markdownPages())
       loadMarkdown()
-        .then(() => setMarkdown(true), () => undefined)
+        .then(
+          () => setMarkdown(true),
+          () => undefined,
+        )
         .finally(booted)
 
     document.addEventListener("keydown", navigateWithNumber)
@@ -1685,15 +1667,6 @@ function MenuIcon(props: { name: "wordmark" | "brand" | "press" }) {
   )
 }
 
-/** "[ ]" with a dash that appears on hover or for the current item, as in the footer list. */
-export function Bracket() {
-  return (
-    <span data-slot="box" aria-hidden="true">
-      [<span data-slot="fill" />]
-    </span>
-  )
-}
-
 function ThemeToggle(props: { theme: (typeof themes)[number]; onChange: (theme: (typeof themes)[number]) => void }) {
   const i18n = useI18n()
   return (
@@ -1743,71 +1716,4 @@ function snapToPixels(el: HTMLElement) {
     observer.disconnect()
     cancelAnimationFrame(frame)
   })
-}
-
-/** One button showing the current theme; each click moves to the next (system, light, dark). */
-function ThemeCycle(props: { theme: (typeof themes)[number]; onChange: (theme: (typeof themes)[number]) => void }) {
-  const i18n = useI18n()
-  const next = () => themes[(themes.indexOf(props.theme) + 1) % themes.length]
-  return (
-    <button
-      type="button"
-      data-slot="cycle"
-      aria-label={i18n.t("site.theme.cycle", {
-        theme: i18n.t(`site.theme.${props.theme}`),
-        next: i18n.t(`site.theme.${next()}`),
-      })}
-      onClick={() => props.onChange(next())}
-    >
-      {/* All three icons stay in place so the change can cross-fade. */}
-      <For each={themes}>
-        {(item) => (
-          <span data-slot="icon" data-current={props.theme === item ? "" : undefined}>
-            <ThemeIcon theme={item} />
-          </span>
-        )}
-      </For>
-    </button>
-  )
-}
-
-// A face (eyes and a smile, no outline) on the 16px icon grid, shown in the Markdown view.
-function PersonIcon() {
-  // Drawn about 2px larger than the 16px grid in the same 14px box, to match the robot's ink (the
-  // face alone is smaller than the robot's head and ears); the stroke is thinned to stay 1.1px.
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="1.45 1.3 13.1 13.1"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.02"
-      aria-hidden="true"
-    >
-      <rect x="4.5" y="3.5" width="2" height="4" fill="currentColor" stroke="none" />
-      <rect x="9.5" y="3.5" width="2" height="4" fill="currentColor" stroke="none" />
-      <path d="M3.25 9.25Q8 14 12.75 9.25" />
-    </svg>
-  )
-}
-
-// A robot face on the 16px icon grid, drawn like the theme icons.
-function AgentIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.25"
-      aria-hidden="true"
-    >
-      <rect x="2.125" y="2.125" width="11.75" height="11.75" />
-      <path d="M0.875 6V10M15.125 6V10" />
-      <rect x="4.875" y="5.75" width="2" height="4.5" fill="currentColor" stroke="none" />
-      <rect x="9.125" y="5.75" width="2" height="4.5" fill="currentColor" stroke="none" />
-    </svg>
-  )
 }
