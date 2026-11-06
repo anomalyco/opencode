@@ -9,10 +9,25 @@ export default definePty({
   rows: 30,
   server: server(),
   setup: (root) => config(root, { tools: "show", shell_output: "show" }),
+  // The idle status row starts with the agent. The busy one starts with a static `▪`, and the turn ends after
+  // the session wait answers, so the screen can rest on a busy row longer than a settle under load: wait for the
+  // turn summary and the idle row.
   steps: [
-    { until: { screen: "Looked around." }, settle: 800, timeout: 30_000, checkpoint: "history", scrollback: 10 },
+    {
+      until: { screen: /Looked around\.[\s\S]*^build · model · demo/m },
+      settle: 800,
+      timeout: 30_000,
+      checkpoint: "history",
+      scrollback: 10,
+    },
     { keys: "bump a", settle: 300 },
-    { keys: "\r", until: { screen: "Bumped a." }, settle: 1_000, checkpoint: "turn", scrollback: 20 },
+    {
+      keys: "\r",
+      until: { screen: /Bumped a\.\s*build · model · \d[\s\S]*^build · model · demo/m },
+      settle: 1_000,
+      checkpoint: "turn",
+      scrollback: 20,
+    },
     ...leave,
   ],
   exits: true,
