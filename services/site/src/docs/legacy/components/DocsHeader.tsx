@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js"
-import { base } from "../config"
-import { docsHref, docsSections, getDocsSection } from "../lib/navigation"
+import { base } from "../../config"
+import { docsHref, docsSections, getDocsSection } from "../../lib/navigation"
 
 // Search, the theme toggle and the ⌘K shortcut work through the layout's head script and client.ts.
 export function DocsHeader(props: { currentSlug: string }) {

@@ -13,6 +13,8 @@ export function CodeFrame(props: {
   variant: DocsVariantKey
   kind: "file" | "terminal" | "code" | "tree" | "usage" | "response" | "config"
   label?: string
+  /** The file whose icon leads a file's label, when the label says more than its path ("theme.json (excerpt)"). */
+  file?: string
   /** The text to copy; leading "$ " prompts are dropped. No copy button without it. */
   copy?: string
   /** A different terminal mark, for the icon options in the code gallery. */
@@ -25,7 +27,9 @@ export function CodeFrame(props: {
     <div data-component="code-frame" data-variant={props.variant} data-kind={props.kind} data-icon={props.icon}>
       <div data-slot="code-head">
         <span data-slot="code-label">
-          <Show when={props.kind === "file" && props.label}>{(label) => <FileTypeIcon path={label()} />}</Show>
+          <Show when={props.kind === "file" && (props.file ?? props.label)}>
+            {(path) => <FileTypeIcon path={path()} />}
+          </Show>
           {props.label}
         </span>
         <Show when={props.copy}>{(text) => <CopyButton text={text()} method={props.method} />}</Show>
