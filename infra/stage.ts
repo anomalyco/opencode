@@ -27,6 +27,12 @@ if ($app.stage === "production") {
   })
 }
 
+new cloudflare.RegionalHostname("RegionalHostname", {
+  hostname: domain,
+  regionKey: "us",
+  zoneId: zoneID,
+})
+
 export const shortDomain = (() => {
   if ($app.stage === "production") return "opncd.ai"
   if ($app.stage === "dev") return "dev.opncd.ai"

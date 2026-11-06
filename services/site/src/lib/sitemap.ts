@@ -10,7 +10,7 @@ import { legalDocuments, legalVersions } from "~/lib/legal"
  */
 export const sitemapFiles = [
   "/sitemap-pages.xml", // this app's pages, built below
-  "/v2/sitemap.xml", // the V2 docs, from the docs app (served under /v2 on opencode.ai)
+  "/v2/sitemap.xml", // the V2 docs (src/docs)
   "/data/sitemap.xml", // the Data pages, from the stats app
   "/console/sitemap.xml", // the Console pages, from the Console app
 ]

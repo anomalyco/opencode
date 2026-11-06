@@ -15,14 +15,15 @@ import { readBuildOutput } from "@cloudflare/build-output-utils"
 import { Miniflare, Response } from "miniflare"
 
 const root = path.resolve(import.meta.dir, "..")
-// Pages with a status must answer exactly that; /v2/docs/ (the docs, when this build has them, else
-// a 404) anything but a 5xx.
-const pages = [
+// Pages with a status must answer exactly that, others anything but a 5xx. The docs page is asked for
+// as a browser asks and, at a second URL, as an agent asks (its Markdown twin, src/docs/middleware.ts).
+const pages: { path: string; status?: number; accept?: string }[] = [
   { path: "/", status: 200 },
   { path: "/ja", status: 200 },
   { path: "/desktop", status: 200 },
   { path: "/check-worker-start-404", status: 404 },
-  { path: "/v2/docs/" },
+  { path: "/v2/docs/", status: 200 },
+  { path: "/v2/docs/config/", status: 200, accept: "text/markdown" },
 ]
 
 const started = performance.now()
@@ -82,7 +83,10 @@ const results = await Promise.resolve()
   .then(async (url) => {
     const answers = []
     for (const page of pages) {
-      const actual = await fetch(new URL(page.path, url), { headers: { accept: "text/html" }, redirect: "manual" })
+      const actual = await fetch(new URL(page.path, url), {
+        headers: { accept: page.accept ?? "text/html" },
+        redirect: "manual",
+      })
         .then(async (response) => (await response.arrayBuffer(), response.status))
         .catch(() => 0)
       answers.push({ ...page, actual })
