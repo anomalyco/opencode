@@ -12,7 +12,7 @@ use opencode_mini::{Input, InputError, signals::Trace};
 use opencode_store::target::{self, TargetInput};
 
 use super::Context;
-use super::client::connect;
+use super::client::connect_following;
 use crate::args::MiniArgs;
 use crate::output::Exit;
 
@@ -55,7 +55,7 @@ pub fn run(context: &Context, args: &MiniArgs) -> anyhow::Result<()> {
         .enable_all()
         .thread_name("opencode-mini")
         .build()?;
-    let server = runtime.block_on(connect(context))?;
+    let server = runtime.block_on(connect_following(context))?;
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let input = Input {
         client: server.client.clone(),
