@@ -96,7 +96,12 @@ struct Fake {
 }
 
 impl Backend<TestHost> for Fake {
-    fn load(&self, library: &[u8], options: Option<&str>) -> Result<(Definition<TestHost>, ErrorFn), String> {
+    fn load(
+        &self,
+        _: &Rc<TestHost>,
+        library: &[u8],
+        options: Option<&str>,
+    ) -> Result<(Definition<TestHost>, ErrorFn), String> {
         self.loads.set(self.loads.get() + 1);
         let text = String::from_utf8_lossy(library).into_owned();
         let id = text.strip_prefix("id=").ok_or(text.clone())?.trim().to_owned();

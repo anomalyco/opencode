@@ -12,6 +12,16 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     }
     let host = setup.host();
     setup.storage_key("count");
+    // Setup itself uses the host: storage, the theme mode, and a toast.
+    if setup.options().is_some_and(|options| options.contains("\"probe\":true")) {
+        let count = count(host);
+        let mode = if host.theme_mode() == Some(ThemeMode::Light) { "light" } else { "dark" };
+        let stored = match host.storage_set("count", &format!("{{\"count\":{}}}", count + 1)) {
+            Ok(()) => "stored".to_owned(),
+            Err(error) => error,
+        };
+        host.toast(Toast::Info, &format!("sample setup: count {count}, {mode}, {stored}"));
+    }
     setup.command(command("sample.hello", "Say hello", Some("hello")), move |_| {
         let count = count(host) + 1;
         if let Err(error) = host.storage_set("count", &format!("{{\"count\":{count}}}")) {
