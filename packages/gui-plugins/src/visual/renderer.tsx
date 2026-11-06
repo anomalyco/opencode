@@ -10,6 +10,8 @@ const setup: Plugin.Setup<typeof Visual> = (ctx) => {
   ctx.add(CodeBlock, {
     languages: ["visual", "genui"],
     render: (props) => {
+      if (ctx.appearance.visualDisplay() === "off") return undefined
+
       const parsed = parseVisual(props.code)
 
       if (!parsed.ok) return undefined

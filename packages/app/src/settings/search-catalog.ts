@@ -168,7 +168,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     tab: "appearance",
     label: "settings.appearance.row.visuals.title",
     target: "settings-visuals",
-    keywords: "visuals diagrams mechanisms inline",
+    keywords: "visuals diagrams mechanisms off inline",
   },
   {
     tab: "appearance",

@@ -116,7 +116,7 @@ type Attached = {
   notify: (plugin: string, options: NotifyOptions) => Promise<NotifyResult>
   font: Accessor<string>
   mode: Accessor<"light" | "dark">
-  visualDisplay: Accessor<"inline" | "panel">
+  visualDisplay: Accessor<"off" | "inline" | "panel">
   routing: Accessor<boolean>
   path: Accessor<string>
   keybind: (command: string) => readonly string[]
@@ -361,7 +361,7 @@ export function createHostApis() {
     appearance: () => ({
       font: () => current()?.font() ?? terminalFontFamily(undefined),
       mode: () => current()?.mode() ?? (systemDark() ? "dark" : "light"),
-      visualDisplay: () => current()?.visualDisplay() ?? "inline",
+      visualDisplay: () => current()?.visualDisplay() ?? "off",
     }),
     router: () => ({
       routing: () => current()?.routing() ?? false,

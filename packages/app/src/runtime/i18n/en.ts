@@ -922,6 +922,7 @@ export const dict = {
   "settings.appearance.row.reduceMotion.off": "Off",
   "settings.appearance.row.visuals.title": "Visuals",
   "settings.appearance.row.visuals.description": "Show engineering visuals in the conversation",
+  "settings.appearance.row.visuals.off": "Off",
   "settings.appearance.row.visuals.inline": "Inline in chat",
   "settings.notifications.description": "Choose when to receive notifications and hear sounds",
   "settings.shortcuts.description": "Customize shortcuts for common actions",

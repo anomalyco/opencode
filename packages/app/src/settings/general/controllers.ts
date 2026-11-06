@@ -176,7 +176,7 @@ export function createAppearanceSettingsController() {
     },
     visuals: {
       current: settings.appearance.visuals,
-      select: (value: "inline") => settings.appearance.setVisuals(value),
+      select: (value: "off" | "inline") => settings.appearance.setVisuals(value),
     },
     fonts: {
       ui: createMemo(() => ({

@@ -16,7 +16,10 @@ const reduceMotionOptions = [
   { value: "off" as const, label: "settings.appearance.row.reduceMotion.off" as const },
 ]
 
-const visualOptions = [{ value: "inline" as const, label: "settings.appearance.row.visuals.inline" as const }]
+const visualOptions = [
+  { value: "off" as const, label: "settings.appearance.row.visuals.off" as const },
+  { value: "inline" as const, label: "settings.appearance.row.visuals.inline" as const },
+]
 
 const fontSettings = {
   ui: {
