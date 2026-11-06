@@ -16,7 +16,7 @@ use super::complete::{Agent, Catalog, Command, Reference};
 use super::parts::{Delivery, RunPrompt};
 
 fn error(error: Error) -> String {
-    error.to_string()
+    error.tui_message()
 }
 
 fn location(directory: &str) -> Option<LocationQueryInput> {
@@ -206,4 +206,21 @@ pub async fn select(client: &Client, session: &str, agent: Option<&str>, model: 
         .map_err(error)?;
     call.json(&json!({ "model": model })).map_err(error)?;
     client.empty(call).await.map_err(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencode_api::memory::{Memory, Route};
+    use std::sync::Arc;
+
+    /// A declared error shows its message without its tag, as the TS footer's `formatUnknownError` does.
+    #[tokio::test]
+    async fn a_declared_error_shows_its_message() {
+        let body = json!({ "_tag": "InvalidRequestError", "message": "Unknown agent: nope" });
+        let memory = Memory::new(vec![Route::json("POST", "/api/session/ses_1/agent", 400, &body)]);
+        let client = Client::with_transport("http://test", Arc::new(memory)).unwrap();
+        let result = select(&client, "ses_1", Some("nope"), None).await;
+        assert_eq!(result, Err("Unknown agent: nope".to_owned()));
+    }
 }
