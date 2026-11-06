@@ -578,6 +578,63 @@ LM Studio discovers language models from `/api/v1/models`. vLLM checks `/health`
 discovery cannot infer tool support, so discovered vLLM models start with tools disabled. For another OpenAI-compatible
 runtime, use the [custom provider](#custom) recipe and list its models explicitly.
 
+## QVAC
+
+[QVAC](https://qvac.tether.io) serves local models through an OpenAI-compatible API. Declare a model alias in
+`qvac.config.json`, then start the server with the [QVAC CLI](https://www.npmjs.com/package/@qvac/cli). It listens on
+`http://127.0.0.1:11434` by default.
+
+```json title="qvac.config.json"
+{
+  "serve": {
+    "models": {
+      "qwen3.5-9b": {
+        "model": "QWEN3_5_9B_MULTIMODAL_Q4_K_M",
+        "default": true,
+        "config": { "ctx_size": 32768, "tools": true }
+      }
+    }
+  }
+}
+```
+
+```bash
+npx @qvac/cli serve --openai
+```
+
+`tools: true` enables tool calling, and agent prompts need a large `ctx_size`. Point the `qvac` provider at the
+OpenAI-compatible runtime and list the alias as a model.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "qvac/qwen3.5-9b",
+  "providers": {
+    "qvac": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "http://127.0.0.1:11434/v1" },
+      "models": {
+        "qwen3.5-9b": { "name": "Qwen3.5 9B" },
+        "qwen3.5-9b-fast": {
+          "modelID": "qwen3.5-9b",
+          "name": "Qwen3.5 9B (no reasoning)",
+          "body": { "reasoning_budget": 0 },
+        },
+      },
+    },
+  },
+  "agents": {
+    "title": { "model": "qvac/qwen3.5-9b-fast" },
+  },
+}
+```
+
+QVAC runs one request per model at a time. Reasoning models can spend minutes on a session title and delay the first
+response, so `qwen3.5-9b-fast` sends the same model `reasoning_budget: 0` for the hidden `title` agent.
+
+Then connect QVAC with `/connect` or `QVAC_API_KEY`. Without `--api-key`, a loopback server accepts any key; if you
+start it with `--api-key`, use the same value.
+
 ## Gateways
 
 OpenRouter uses its native runtime and catalog. Provide `OPENROUTER_API_KEY` to the OpenCode server or connect an
