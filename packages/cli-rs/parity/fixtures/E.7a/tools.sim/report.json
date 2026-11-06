@@ -5,12 +5,10 @@
     "rs"
   ],
   "open": {
-    "equal": false,
-    "differences": 3,
+    "equal": true,
+    "differences": 0,
     "colorOnly": 0,
-    "deviation": [
-      "P15-metadata-gap-fg"
-    ]
+    "deviation": []
   },
   "requests": {
     "equal": true,
