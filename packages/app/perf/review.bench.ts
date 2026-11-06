@@ -62,6 +62,22 @@ export default bench({
       },
     },
 
+    // Closing the side panel and opening it again, each flight until it lands: every frame of the edge panel's motion.
+    "close and reopen review": {
+      primary: "main.work",
+      metrics: ["run.duration", "frames.dropped.pct"],
+      async run({ page }) {
+        await page.click(review.toggle)
+        await page.idle()
+        await page.click(review.toggle, { until: review.file })
+        await page.idle()
+      },
+      async reset({ page }) {
+        await openReview(page)
+        await page.idle()
+      },
+    },
+
     // Three files ahead, each to its diff on screen.
     "next file": {
       primary: "main.work",

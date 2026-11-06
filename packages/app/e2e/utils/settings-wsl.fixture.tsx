@@ -19,7 +19,7 @@ type FixtureMethod = (input: FixtureInput) => number | void
 // A desktop window. `wsl` is the Ubuntu server's endpoint (default `server`); updating OpenCode restarts it on `restart`
 // (default `wsl`). `ssh` adds a saved SSH server `box`, ready on that endpoint with password `ssh-1`; each connect
 // brings up a new remote server with the next password (`ssh-2`, ...). `storage=async` stores in localStorage behind
-// asynchronous reads like the desktop app's; reads of keys containing `hold` wait for "Load held storage".
+// asynchronous reads like the desktop app's; reads of keys matching the pattern `hold` wait for "Load held storage".
 export function mount(input: {
   server: string
   mode: "failed" | "stopped" | "ready"
@@ -46,7 +46,7 @@ export function mount(input: {
 
     return {
       getItem: async (key: string) => {
-        if (input.hold && key.includes(input.hold)) await held.promise
+        if (input.hold && new RegExp(input.hold).test(key)) await held.promise
 
         return localStorage.getItem(item(key))
       },

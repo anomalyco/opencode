@@ -889,6 +889,7 @@ test("artifact actions copy and download content, switch source, and follow the 
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
   const source = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80"/></svg>'
   const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
+  const broken = '<svg xmlns="http://www.w3.org/2000/svg"><rect'
 
   const notes = [
     "---",
@@ -923,6 +924,8 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "notes.md") return { content: notes }
 
+      if (path === "broken.svg") return { content: broken }
+
       return { type: "binary", content: "AAEC", encoding: "base64" }
     },
     pageMessages: () => ({
@@ -935,7 +938,7 @@ test("artifact actions copy and download content, switch source, and follow the 
           content: [
             {
               type: "text",
-              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg)",
             },
           ],
           time: { created: 1, completed: 2 },
@@ -1071,6 +1074,13 @@ test("artifact actions copy and download content, switch source, and follow the 
   await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
   await page.getByRole("menuitem", { name: "Copy path", exact: true }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${workspace.directory}/sample.bin`)
+
+  // A text SVG that fails to decode shows the binary placeholder but can still show its source.
+  await page.getByRole("link", { name: "Broken", exact: true }).click()
+  await expect(toolbar.getByText("broken.svg", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Couldn't load this file.", { exact: true })).toBeVisible()
+  await toolbar.getByRole("button", { name: "View source", exact: true }).click()
+  await expect(panel.locator("diffs-container")).toContainText(broken)
 })
 
 test("Markdown and DOCX sheets stay aligned when switching at wide and narrow preview widths", async ({ page }) => {
@@ -1320,6 +1330,28 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   await expect(stage).toHaveAttribute("data-zoom", "actual")
   expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 30, 1)
   expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 20, 1)
+  // A pan whose release the image never heard ends on the next move without the button, and pans nothing.
+  const touched = (await image.boundingBox())!
+  await page.mouse.down()
+  await expect(image).toHaveCSS("cursor", "grabbing")
+  await image.evaluate(
+    (element, point) =>
+      element.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          buttons: 0,
+          clientX: point.x,
+          clientY: point.y,
+        }),
+      ),
+    { x: anchor.x - 100, y: anchor.y - 100 },
+  )
+  await expect(image).toHaveCSS("cursor", "grab")
+  expect(await image.boundingBox()).toEqual(touched)
+  await page.mouse.up()
   // Keyboard-accessible fit restores the exact original geometry.
   await fit.focus()
   await page.keyboard.press("Enter")
