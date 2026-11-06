@@ -25,12 +25,14 @@ import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
+import { useClient } from "./client"
 import { parse } from "../util/model"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const data = useData()
+    const client = useClient()
     const toast = useToast()
     const theme = useTheme()
     const newDesigns = useNewDesigns()
@@ -354,6 +356,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return {
         current: currentModel,
         selection: currentSelection,
+        async commit() {
+          if (route.data.type !== "session") return
+          const sessionID = route.data.sessionID
+          const selection = currentSelection()
+          const current = agent.current()
+          if (!selection || !current) return
+          const value = { providerID: selection.providerID, id: selection.modelID, variant: selection.variant }
+          const cancel = model.trackSessionCommit(sessionID, value, current.id)
+          await client.api.session.switchModel({ sessionID, model: value }).catch((error) => {
+            cancel()
+            throw error
+          })
+        },
         remember() {
           const current = agent.current()
           const selection = currentSelection()

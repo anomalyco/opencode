@@ -3,10 +3,12 @@ import { useLocal } from "../context/local"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useNewDesigns } from "../config"
+import { useToast } from "../ui/toast"
 
 export function DialogVariant() {
   const local = useLocal()
   const dialog = useDialog()
+  const toast = useToast()
   const newDesigns = useNewDesigns()
 
   const options = createMemo(() => [
@@ -16,6 +18,7 @@ export function DialogVariant() {
       onSelect: () => {
         dialog.clear()
         local.model.variant.set(undefined)
+        void local.model.commit().catch(toast.error)
       },
     },
     ...local.model.variant
@@ -27,6 +30,7 @@ export function DialogVariant() {
         onSelect: () => {
           dialog.clear()
           local.model.variant.set(variant)
+          void local.model.commit().catch(toast.error)
         },
       })),
   ])
