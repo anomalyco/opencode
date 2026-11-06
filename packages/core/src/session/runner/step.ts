@@ -282,7 +282,11 @@ export const make = Effect.gen(function* () {
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
           if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true })
-          return yield* Effect.interrupt
+          // A dismissal or decline is the user ending the turn: the tool part above already records
+          // it, so settle the step as a normal completion. Interrupting here would surface as a
+          // shutdown-style stop and keep the execution claim alive, freezing the session until the
+          // next prompt.
+          return Outcome.Completed({ needsContinuation: false })
         }
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)

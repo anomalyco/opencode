@@ -5419,7 +5419,7 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("interrupts runner continuation on a decline after settling an ordinary tool error", function* (s) {
+  scenario("settles the runner on a decline after an ordinary tool error", function* (s) {
     const registry = yield* Tool.Service
     yield* transformTools(
       registry,
@@ -5461,8 +5461,15 @@ describe("SessionRunnerLLM", () => {
 
     const exit = yield* s.resume.pipe(Effect.exit)
 
-    expect(exit._tag).toBe("Failure")
-    if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    // A decline is the user ending the turn: the runner settles normally and releases the claim.
+    expect(exit._tag).toBe("Success")
+    const row = yield* s.db
+      .select({ suspended: SessionTable.time_suspended })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, sessionID))
+      .get()
+      .pipe(Effect.orDie)
+    expect(row?.suspended).toBeNull()
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Call declined"),
@@ -5544,7 +5551,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
   })
 
-  scenario("interrupts runner continuation when a question is cancelled", function* (s) {
+  scenario("settles the runner and releases the claim when a question is cancelled", function* (s) {
     const registry = yield* Tool.Service
     yield* transformTools(
       registry,
@@ -5566,8 +5573,17 @@ describe("SessionRunnerLLM", () => {
     const run = yield* s.resume.pipe(Effect.exit, Effect.forkChild)
     const exit = yield* Fiber.join(run)
 
-    expect(exit._tag).toBe("Failure")
-    if (exit._tag === "Failure") expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    // A dismissal is the user ending the turn, not a shutdown: the runner settles normally so the
+    // execution claim releases and the session returns to idle instead of freezing until the next
+    // prompt.
+    expect(exit._tag).toBe("Success")
+    const row = yield* s.db
+      .select({ suspended: SessionTable.time_suspended })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, sessionID))
+      .get()
+      .pipe(Effect.orDie)
+    expect(row?.suspended).toBeNull()
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Ask then stop"),
