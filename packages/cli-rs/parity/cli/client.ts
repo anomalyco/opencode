@@ -104,11 +104,12 @@ export function normalize(text: string, context: Context) {
   return [
     ...(context.server ? [[context.server, "<server>"] as const] : []),
     [context.root, "<root>"] as const,
+    [/127\.0\.0\.1:\d+/g, "127.0.0.1:<port>"] as const,
     [/\b(ses|msg|prt|per|frm|evt|prj|proj|wrk|pty|tool|call)_[A-Za-z0-9]{6,}\b/g, "<$1>"] as const,
     [/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z\b/g, "<time>"] as const,
-    [/\bv?\d+\.\d+\.\d+(-[\w.]+)?\b/g, "<version>"] as const,
+    // Not three parts of a longer dotted number, such as `127.0.0.1`.
+    [/(?<![\d.])\bv?\d+\.\d+\.\d+(-[\w.]+)?\b(?!\.\d)/g, "<version>"] as const,
     [/\b\d+(\.\d+)?\s?(ms|s)\b/g, "<duration>"] as const,
-    [/127\.0\.0\.1:\d+/g, "127.0.0.1:<port>"] as const,
   ].reduce((current, [pattern, replacement]) => current.replaceAll(pattern, replacement), text)
 }
 
