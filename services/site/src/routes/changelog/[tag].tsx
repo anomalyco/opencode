@@ -12,6 +12,7 @@ import { useMarkdown } from "~/component/site/use-markdown"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { changelogEntry } from "~/lib/changelog"
+import { entryStatus } from "~/lib/changelog-notes"
 import { changelogEntryPageMarkdown } from "~/lib/changelog-markdown"
 import { PageTitle } from "~/component/site/sticky-title"
 
@@ -73,9 +74,7 @@ export default function ChangelogRelease() {
               when={entry()}
               fallback={
                 <>
-                  <Show when={current().ok}>
-                    <HttpStatusCode code={404} />
-                  </Show>
+                  <HttpStatusCode code={entryStatus(current())} />
                   <Title>{i18n.t("changelog.title")}</Title>
                   <section data-component="hero">
                     <PageTitle title={i18n.t("changelog.hero.title")} />
