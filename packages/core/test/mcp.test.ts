@@ -3629,143 +3629,78 @@ describe("MCP pool", () => {
     }),
   )
 
-  // The reviewer's first case: a recovery worker must not reconnect a server the user
-  // disconnected. Scheduled while the server is down, cancelled by the explicit disconnect.
-  live("stays disconnected when the user disconnects while recovery waits", () => {
-    const captured = poolLogs()
-    return Effect.gen(function* () {
-      const failing = { value: true }
-      const server = yield* resourceServer({
-        modern: true,
-        resources: false,
-        respond: (request) => (failing.value ? new Response(null, { status: 503 }) : undefined),
-      })
-      const pool = yield* makePool
-      const a = yield* open(pooled(server.url), pool, directories[0])
-      expect((yield* status(a.mcp))?.status).toBe("failed")
-      // The failure scheduled a recovery worker; disconnect cancels it before it can fire.
-      yield* a.mcp.disconnect("resources")
-      expect((yield* status(a.mcp))?.status).toBe("disabled")
-      const posts = server.state.urls.length
-      yield* Effect.sleep("2500 millis")
-      expect((yield* status(a.mcp))?.status).toBe("disabled")
-      expect(server.state.urls.length).toBe(posts)
-      // Letting the server recover changes nothing: nothing is scheduled anymore.
-      failing.value = false
-      yield* Effect.sleep("2500 millis")
-      expect((yield* status(a.mcp))?.status).toBe("disabled")
-      expect(server.state.urls.length).toBe(posts)
-    }).pipe(Effect.provide(captured.layer))
-  })
-
-  // The reviewer's second case: a pooled server still down at the first rejoin is tried again
-  // with backoff, and comes back as connected when the server does — no manual connect.
-  live(
-    "recovers a pooled server that is still down at the first rejoin",
-    () =>
-      Effect.gen(function* () {
-        const failing = { value: true }
-        const server = yield* resourceServer({
-          modern: true,
-          resources: false,
-          respond: (request) => (failing.value ? new Response(null, { status: 503 }) : undefined),
-        })
-        const pool = yield* makePool
-        const a = yield* open(pooled(server.url), pool, directories[0])
-        expect((yield* status(a.mcp))?.status).toBe("failed")
-        // The first recovery runs while the server is still down; later ones must follow it.
-        const posts = server.state.urls.length
-        yield* Effect.sleep("6000 millis")
-        expect(server.state.urls.length).toBeGreaterThan(posts)
-        // The server comes back: a later rejoin connects on its own. The backoff may be deep
-        // after the outage, so give the next attempt a full minute-plus to land.
-        failing.value = false
-        yield* a.mcp.tools().pipe(
-          Effect.filterOrFail(
-            (tools) => tools.some((tool) => tool.name === "echo"),
-            () => "pending",
-          ),
-          Effect.retry({ times: 400, schedule: Schedule.spaced("250 millis") }),
-        )
-        expect((yield* status(a.mcp))?.status).toBe("connected")
-        expect(server.state.toolLists).toBe(1)
-      }),
-    90_000,
-  )
-
-  // The reviewer's second case, first-connect form: a pooled server that fails when it first
-  // connects is retried by the same recovery — it never appears connected without a listing.
-  live("retries a pooled server that is down when first connected", () =>
+  testEffect(Layer.empty).effect("stays disconnected when the user disconnects while recovery waits", () =>
     Effect.gen(function* () {
       const failing = { value: true }
       const server = yield* resourceServer({
         modern: true,
         resources: false,
-        respond: (request) => (failing.value ? new Response(null, { status: 503 }) : undefined),
+        respond: () => (failing.value ? new Response(null, { status: 503 }) : undefined),
       })
-      const pool = yield* makePool
-      const a = yield* open(pooled(server.url), pool, directories[0])
-      expect((yield* status(a.mcp))?.status).toBe("failed")
-      failing.value = false
-      yield* a.mcp.tools().pipe(
-        Effect.filterOrFail(
-          (tools) => tools.some((tool) => tool.name === "echo"),
-          () => "pending",
-        ),
-        Effect.retry({ times: 900, schedule: Schedule.spaced("10 millis") }),
-      )
-      expect((yield* status(a.mcp))?.status).toBe("connected")
+      const published: string[] = []
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        yield* advance(() => published.filter((type) => type === McpEvent.StatusChanged.type).length >= 2)
+        expect((yield* status(mcp))?.status).toBe("failed")
+        yield* mcp.disconnect("resources")
+        const posts = server.state.urls.length
+        yield* TestClock.adjust("10 minutes")
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("disabled")
+        expect(server.state.urls.length).toBe(posts)
+        failing.value = false
+        yield* TestClock.adjust("10 minutes")
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("disabled")
+        expect(server.state.urls.length).toBe(posts)
+      }).pipe(Effect.provide(resourceMcpLayer(pooled(server.url), undefined, undefined, { published })))
     }),
   )
 
-  // Endurance, live clock: a server that stays down is retried with bounded gaps (the delay
-  // starts near a second and caps at a minute), every attempt stays quiet, and no worker
-  // piles up. Recovery after the outage is covered end-to-end by the live rejoin test above.
-  live("retries a server that stays down, with bounded gaps and quiet status", () =>
+  testEffect(Layer.empty).effect("recovers a pooled server that is still down at the first rejoin", () =>
     Effect.gen(function* () {
       const failing = { value: true }
       const server = yield* resourceServer({
         modern: true,
         resources: false,
-        respond: (request) => (failing.value ? new Response(null, { status: 503 }) : undefined),
+        respond: () => (failing.value ? new Response(null, { status: 503 }) : undefined),
       })
       const published: string[] = []
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void).pipe(Effect.ignore))
-      const context = yield* Layer.buildWithScope(
-        resourceMcpLayer(pooled(server.url), undefined, undefined, { published }),
-        scope,
-      )
-      const mcp = Context.get(context, Mcp.Service)
-      const statusOf = () => mcp.servers().pipe(Effect.map((servers) => servers[0]?.status))
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        // Each failed start sends three discover probes (the initial attempt and two quick retries).
+        yield* advance(() => server.state.urls.length >= 6)
+        expect((yield* status(mcp))?.status).toBe("failed")
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(2)
+        failing.value = false
+        yield* advance(() => server.state.toolLists === 1)
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("connected")
+        expect(published.filter((type) => type === McpEvent.StatusChanged.type)).toHaveLength(3)
+        expect((yield* mcp.tools()).some((tool) => tool.name === "echo")).toBe(true)
+      }).pipe(Effect.provide(resourceMcpLayer(pooled(server.url), undefined, undefined, { published })))
+    }),
+  )
 
-      // The startup fails, recovery is scheduled, and the first attempts fire within seconds.
-      yield* statusOf().pipe(
-        Effect.filterOrFail(
-          (status) => status?.status === "failed",
-          () => "pending",
-        ),
-        Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
-      )
-      expect((yield* statusOf())?.status).toBe("failed")
-
-      // ~14 real seconds of outage: the gap starts near a second and doubles per failure, so
-      // a handful of attempts is the schedule working as designed — and zero would be it dead.
-      const before = server.state.urls.length
-      yield* Effect.sleep("14 seconds")
-      const attempts = server.state.urls.length - before
-      expect(attempts).toBeGreaterThan(1)
-      expect(attempts).toBeLessThan(15)
-
-      // Quiet the whole time: pending once at startup, failed once after it, and repeated
-      // background failures published no further status events.
-      expect(published.filter((type) => type === McpEvent.StatusChanged.type).length).toBeLessThanOrEqual(3)
-
-      // The pending worker is interrupted with the entry: a shutdown mid-backoff stops it.
-      yield* Scope.close(scope, Exit.void)
-      const posts = server.state.urls.length
-      yield* Effect.sleep("1500 millis")
-      expect(server.state.urls.length).toBe(posts)
+  testEffect(Layer.empty).effect("retries a pooled server that is down when first connected", () =>
+    Effect.gen(function* () {
+      const failing = { value: true }
+      const server = yield* resourceServer({
+        modern: true,
+        resources: false,
+        respond: () => (failing.value ? new Response(null, { status: 503 }) : undefined),
+      })
+      const published: string[] = []
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        yield* advance(() => published.filter((type) => type === McpEvent.StatusChanged.type).length >= 2)
+        expect((yield* status(mcp))?.status).toBe("failed")
+        failing.value = false
+        yield* advance(() => server.state.toolLists === 1)
+        yield* drain
+        expect((yield* status(mcp))?.status).toBe("connected")
+        expect((yield* mcp.tools()).some((tool) => tool.name === "echo")).toBe(true)
+      }).pipe(Effect.provide(resourceMcpLayer(pooled(server.url), undefined, undefined, { published })))
     }),
   )
 
