@@ -55,6 +55,7 @@ pub fn connection_changed(tui: &Tui, state: &State) {
             let weak = tui.weak();
             tui.app.set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
         }
+        crate::features::location::connected_again(tui);
     }
     if connected {
         if let Some(view) = overlays.reconnecting.take() {
