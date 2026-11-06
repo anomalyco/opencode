@@ -1,4 +1,3 @@
-import opencodeWordmarkDark from "../asset/logo-ornate-dark.svg"
 import { query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useI18n } from "../context/i18n"
@@ -222,7 +221,6 @@ export function Footer(props: {
 }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const [subscribeOpen, setSubscribeOpen] = createSignal(false)
   const localHref = (href: string) => (href.startsWith("/") ? language.route(href) : href)
   const modelStats = props.links ?? [
     { href: "#top-models", label: i18n.t("nav.topModels") },
@@ -260,13 +258,6 @@ export function Footer(props: {
         <FooterColumn title={i18n.t("footer.modelData")} links={modelStats} localHref={localHref} />
         <FooterColumn title={i18n.t("footer.legal")} links={legal} localHref={localHref} />
         <FooterColumn title={i18n.t("footer.connect")} links={connect} localHref={localHref} />
-        <div data-slot="footer-column">
-          <h2>{i18n.t("footer.newsletter")}</h2>
-          <p>{i18n.t("footer.newsletterBody")}</p>
-          <button data-slot="subscribe-button" type="button" onClick={() => setSubscribeOpen(true)}>
-            {i18n.t("footer.subscribe")}
-          </button>
-        </div>
       </div>
       <div data-slot="footer-pattern" aria-hidden="true" />
       <div data-slot="footer-bottom">
@@ -294,9 +285,6 @@ export function Footer(props: {
           </div>
         </div>
       </div>
-      <Show when={subscribeOpen()}>
-        <SubscribeModal onClose={() => setSubscribeOpen(false)} />
-      </Show>
     </footer>
   )
 }
@@ -434,110 +422,6 @@ function ThemePreferenceIcon(props: { preference: ThemePreference }) {
         </svg>
       </Show>
     </svg>
-  )
-}
-
-function SubscribeModal(props: { onClose: () => void }) {
-  const i18n = useI18n()
-  const [status, setStatus] = createSignal<"idle" | "pending" | "success" | "error">("idle")
-  const [message, setMessage] = createSignal("")
-  let input: HTMLInputElement | undefined
-
-  onMount(() => {
-    if (typeof document === "undefined") return
-    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
-    const htmlOverflow = document.documentElement.style.overflow
-    const bodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = "hidden"
-    document.body.style.overflow = "hidden"
-    const focusTimeout = window.setTimeout(() => input?.focus(), 0)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose()
-    }
-    document.addEventListener("keydown", onKeyDown)
-    onCleanup(() => {
-      window.clearTimeout(focusTimeout)
-      document.documentElement.style.overflow = htmlOverflow
-      document.body.style.overflow = bodyOverflow
-      document.removeEventListener("keydown", onKeyDown)
-      activeElement?.focus()
-    })
-  })
-
-  return (
-    <div data-component="subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="subscribe-title">
-      <div data-slot="modal-scrim" aria-hidden="true" onClick={props.onClose} />
-      <div data-slot="modal-panel">
-        <div data-slot="modal-brand">
-          <img data-slot="modal-logo" src={opencodeWordmarkDark} alt="OpenCode" />
-          <button
-            data-slot="modal-close"
-            type="button"
-            aria-label={i18n.t("modal.closeNewsletter")}
-            onClick={props.onClose}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M4.44 4.44L11.56 11.56M11.56 4.44L4.44 11.56" stroke="currentColor" />
-            </svg>
-          </button>
-        </div>
-        <div data-slot="modal-body">
-          <div data-slot="modal-intro">
-            <h2 id="subscribe-title">{i18n.t("modal.title")}</h2>
-            <p>{i18n.t("modal.body")}</p>
-          </div>
-          <form
-            data-slot="subscribe-form"
-            method="post"
-            onSubmit={(event) => {
-              event.preventDefault()
-              const form = event.currentTarget
-              setStatus("pending")
-              setMessage("")
-              fetch(`${import.meta.env.BASE_URL}api/newsletter`, {
-                method: "POST",
-                body: new FormData(form),
-              }).then(
-                async (response) => {
-                  if (response.ok) {
-                    form.reset()
-                    setStatus("success")
-                    return
-                  }
-                  setMessage(await newsletterErrorMessage(response, i18n.t("modal.error")))
-                  setStatus("error")
-                },
-                () => {
-                  setMessage(i18n.t("modal.error"))
-                  setStatus("error")
-                },
-              )
-            }}
-          >
-            <input ref={input} type="email" name="email" placeholder={i18n.t("modal.email")} required />
-            <button type="submit" disabled={status() === "pending"}>
-              <span>{status() === "pending" ? i18n.t("modal.subscribing") : i18n.t("modal.subscribe")}</span>
-            </button>
-          </form>
-          <div data-slot="subscribe-feedback" aria-live="polite">
-            <Show when={status() === "success"}>
-              <p data-state="success">{i18n.t("modal.success")}</p>
-            </Show>
-            <Show when={status() === "error"}>
-              <p data-state="error">{message()}</p>
-            </Show>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function newsletterErrorMessage(response: Response, fallback: string) {
-  return response.json().then(
-    (body: unknown) =>
-      body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : fallback,
-    () => fallback,
   )
 }
 

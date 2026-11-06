@@ -2,7 +2,6 @@ import { domain, zoneID } from "./stage"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
-export const EMAILOCTOPUS_API_KEY = new sst.Secret("EMAILOCTOPUS_API_KEY")
 const ADMIN_SECRET = new sst.Secret("ADMIN_SECRET")
 
 export const api = new sst.cloudflare.Worker("Api", {
