@@ -420,6 +420,7 @@ const layer = Layer.effect(
 
     const message = (cause: Cause.Cause<unknown>) => {
       const error = Cause.squash(cause)
+      if (error instanceof AuthorizationError && error.cause instanceof Error) return error.cause.message
       return error instanceof Error ? error.message : String(error)
     }
 

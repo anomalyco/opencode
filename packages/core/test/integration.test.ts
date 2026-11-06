@@ -312,6 +312,35 @@ describe("Integration", () => {
     }),
   )
 
+  it.effect("reports the OAuth callback failure in attempt status", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("chatgpt")
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
+          authorize: () =>
+            Effect.succeed({
+              mode: "code" as const,
+              url: "https://example.com/authorize",
+              instructions: "Paste the code",
+              callback: () => Effect.fail(new Error("Token exchange failed: 400")),
+            }),
+        }),
+      )
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
+      yield* integrations.oauth
+        .complete({ integrationID, attemptID: attempt.attemptID, code: "1234" })
+        .pipe(Effect.flip)
+      expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toMatchObject({
+        status: "failed",
+        message: "Token exchange failed: 400",
+      })
+    }),
+  )
+
   it.effect("keeps code attempts open when the code is missing and closes them on cancel", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
