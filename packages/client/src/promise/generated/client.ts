@@ -271,6 +271,10 @@ import type {
   ExperimentalArtifactsViewOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalAgentTunnelListInput,
+  ExperimentalAgentTunnelListOutput,
+  ExperimentalAgentTunnelLogInput,
+  ExperimentalAgentTunnelLogOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1701,6 +1705,35 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+      },
+      agentTunnel: {
+        list: (input: ExperimentalAgentTunnelListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAgentTunnelListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/agent-tunnel`,
+              query: { sessionID: input["sessionID"], after: input["after"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        log: (
+          input: ExperimentalAgentTunnelLogInput,
+          requestOptions?: RequestOptions,
+        ): AsyncIterable<ExperimentalAgentTunnelLogOutput> =>
+          sse<ExperimentalAgentTunnelLogOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/agent-tunnel/log`,
+              query: { sessionID: input["sessionID"], after: input["after"], follow: input["follow"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {

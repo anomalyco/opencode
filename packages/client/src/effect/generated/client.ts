@@ -269,6 +269,10 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalAgentTunnelListInput,
+  ExperimentalAgentTunnelListOutput,
+  ExperimentalAgentTunnelLogInput,
+  ExperimentalAgentTunnelLogOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1715,6 +1719,28 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalAgentTunnelList =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAgentTunnelListInput) =>
+    preserveEffect<ExperimentalAgentTunnelListOutput>()(
+      raw["agentTunnel.list"]({ query: { sessionID: input["sessionID"], after: input["after"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalAgentTunnelLog =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAgentTunnelLogInput) =>
+    preserveStream<ExperimentalAgentTunnelLogOutput>()(
+      Stream.unwrap(
+        raw["agentTunnel.log"]({
+          query: { sessionID: input["sessionID"], after: input["after"], follow: input["follow"] },
+        }).pipe(
+          Effect.mapError(mapClientError),
+          Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
+        ),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1745,6 +1771,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
   job: { list: EndpointExperimentalJobList(raw) },
+  agentTunnel: { list: EndpointExperimentalAgentTunnelList(raw), log: EndpointExperimentalAgentTunnelLog(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

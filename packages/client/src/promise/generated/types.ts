@@ -415,6 +415,8 @@ export type PermissionRule = { action: string; resource: string; effect: Permiss
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
 
+export type AgentTunnelSynced = { type: "agent-tunnel.synced"; sessionID: SessionID }
+
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
   | { type: "through"; messageID: SessionMessageID }
@@ -2123,6 +2125,8 @@ export type SessionTunnelSent = {
   location?: LocationRef
   data: { sessionID: SessionID; message: AgentTunnelMessage }
 }
+
+export type AgentTunnelLogItem = AgentTunnelMessage | AgentTunnelSynced
 
 export type SessionToolSuccess = {
   id: EventID
@@ -4728,6 +4732,18 @@ export type ExperimentalJobListInput = {
 }
 
 export type ExperimentalJobListOutput = { data: Array<JobInfo> }["data"]
+
+export type ExperimentalAgentTunnelListInput = { readonly sessionID: string; readonly after?: number | undefined }
+
+export type ExperimentalAgentTunnelListOutput = { data: Array<AgentTunnelMessage> }["data"]
+
+export type ExperimentalAgentTunnelLogInput = {
+  readonly sessionID: string
+  readonly after?: number | undefined
+  readonly follow?: boolean | undefined
+}
+
+export type ExperimentalAgentTunnelLogOutput = AgentTunnelLogItem
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

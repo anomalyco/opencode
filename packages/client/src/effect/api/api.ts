@@ -2527,6 +2527,43 @@ export type ExperimentalJobListOperation<E = never> = (
   input?: ExperimentalJobListInput,
 ) => Effect.Effect<ExperimentalJobListOutput, E>
 
+export type ExperimentalAgentTunnelListInput = {
+  readonly sessionID: Session.ID
+  readonly after?: Event.Seq | undefined
+}
+export type ExperimentalAgentTunnelListOutput = ReadonlyArray<{
+  readonly id: SessionMessage.ID
+  readonly from: { readonly sessionID: Session.ID; readonly agent?: Agent.ID | undefined }
+  readonly to: { readonly sessionID: Session.ID; readonly agent?: Agent.ID | undefined }
+  readonly kind: "message" | "report"
+  readonly body: string
+  readonly time: { readonly created: number }
+  readonly sequence: number
+}>
+export type ExperimentalAgentTunnelListOperation<E = never> = (
+  input: ExperimentalAgentTunnelListInput,
+) => Effect.Effect<ExperimentalAgentTunnelListOutput, E>
+
+export type ExperimentalAgentTunnelLogInput = {
+  readonly sessionID: Session.ID
+  readonly after?: Event.Seq | undefined
+  readonly follow?: boolean | undefined
+}
+export type ExperimentalAgentTunnelLogOutput =
+  | {
+      readonly id: SessionMessage.ID
+      readonly from: { readonly sessionID: Session.ID; readonly agent?: Agent.ID | undefined }
+      readonly to: { readonly sessionID: Session.ID; readonly agent?: Agent.ID | undefined }
+      readonly kind: "message" | "report"
+      readonly body: string
+      readonly time: { readonly created: number }
+      readonly sequence: number
+    }
+  | { readonly type: "agent-tunnel.synced"; readonly sessionID: Session.ID }
+export type ExperimentalAgentTunnelLogOperation<E = never> = (
+  input: ExperimentalAgentTunnelLogInput,
+) => Stream.Stream<ExperimentalAgentTunnelLogOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2557,6 +2594,10 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E> }
+  readonly agentTunnel: {
+    readonly list: ExperimentalAgentTunnelListOperation<E>
+    readonly log: ExperimentalAgentTunnelLogOperation<E>
+  }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
