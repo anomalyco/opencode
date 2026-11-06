@@ -184,7 +184,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       fileDiff={view().fileDiff}
       preloadedDiff={view().preloaded}
       diffStyle={props.diffStyle}
-      expandUnchanged={expandUnchanged()}
+      expandUnchanged={expandUnchanged() && !view().fileDiff.isPartial}
       virtualize={shouldVirtualizeReviewDiff({
         additionLines: view().fileDiff.additionLines.length,
         deletionLines: view().fileDiff.deletionLines.length,
