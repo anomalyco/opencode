@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4f6e16c6-f070-4545-b9d0-19fcb6e5210c",
-  "prevIds": ["0ac88673-a402-45a0-b931-e694d59ccefa"],
+  "id": "05c50d5d-c46f-4803-b05d-327b04326d9e",
+  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
   "ddl": [
     {
       "name": "account_state",
@@ -86,6 +86,10 @@
     },
     {
       "name": "session_v2",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_tunnel",
       "entityType": "tables"
     },
     {
@@ -1924,6 +1928,96 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "from_session_id",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "from_agent",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "to_session_id",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "to_agent",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "body",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "sequence",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "session_tunnel"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "workspace"
     },
     {
@@ -2161,6 +2255,28 @@
       "table": "session_v2"
     },
     {
+      "columns": ["from_session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_session_tunnel_from_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "session_tunnel"
+    },
+    {
+      "columns": ["to_session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_session_tunnel_to_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "session_tunnel"
+    },
+    {
       "columns": ["project_id"],
       "tableTo": "project",
       "columnsTo": ["id"],
@@ -2323,6 +2439,13 @@
       "nameExplicit": false,
       "name": "session_v2_pk",
       "table": "session_v2",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "session_tunnel_pk",
+      "table": "session_tunnel",
       "entityType": "pks"
     },
     {
@@ -2689,6 +2812,52 @@
       "name": "session_v2_time_suspended_idx",
       "entityType": "indexes",
       "table": "session_v2"
+    },
+    {
+      "columns": [
+        {
+          "value": "from_session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_tunnel_from_idx",
+      "entityType": "indexes",
+      "table": "session_tunnel"
+    },
+    {
+      "columns": [
+        {
+          "value": "to_session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_tunnel_to_idx",
+      "entityType": "indexes",
+      "table": "session_tunnel"
+    },
+    {
+      "columns": [
+        {
+          "value": "to_session_id",
+          "isExpression": false
+        },
+        {
+          "value": "sequence",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_tunnel_to_sequence_idx",
+      "entityType": "indexes",
+      "table": "session_tunnel"
     }
   ],
   "renames": []

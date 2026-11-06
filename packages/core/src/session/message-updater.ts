@@ -483,6 +483,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.revert.staged": () => Effect.void,
       "session.revert.cleared": () => Effect.void,
       "session.revert.committed": () => Effect.void,
+      // The send is not transcript-visible on the recipient: delivery reaches the transcript through the
+      // synthetic inbox admission's own `session.inbox.delivered` projection.
+      "session.tunnel.sent": () => Effect.void,
     }),
   )
   return project(event)

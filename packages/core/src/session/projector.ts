@@ -16,7 +16,7 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
-import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, type SessionPartData } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, SessionTunnelTable, type SessionPartData } from "./sql.js"
 import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update"
@@ -1058,6 +1058,26 @@ const layer = Layer.effectDiscard(
         sessionID: event.data.sessionID,
         delivery: event.data.delivery,
       }),
+    )
+    // One row per send, on the recipient's aggregate; the payload's `sequence` was predicted by the
+    // sender, while the committed event's durable seq is authoritative and always ascending.
+    yield* bus.project(SessionEvent.TunnelSent, (event) =>
+      db
+        .insert(SessionTunnelTable)
+        .values({
+          id: event.data.message.id,
+          from_session_id: event.data.message.from.sessionID,
+          ...(event.data.message.from.agent === undefined ? {} : { from_agent: event.data.message.from.agent }),
+          to_session_id: event.data.message.to.sessionID,
+          ...(event.data.message.to.agent === undefined ? {} : { to_agent: event.data.message.to.agent }),
+          kind: event.data.message.kind,
+          body: event.data.message.body,
+          sequence: event.durable.seq,
+          time_created: event.data.message.time.created,
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie),
     )
     yield* bus.project(SessionEvent.Execution.Started, (event) =>
       setSession(db, event.data.sessionID, {

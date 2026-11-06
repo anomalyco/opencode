@@ -5,6 +5,7 @@ import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
 import type { Agent } from "@opencode/schema/agent"
+import type { AgentTunnel } from "@opencode/schema/agent-tunnel"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import type { Permission } from "@opencode/schema/permission"
 import type { Project } from "@opencode/schema/project"
@@ -148,6 +149,37 @@ export const SessionInboxTable = sqliteTable(
   (table) => [
     index("session_inbox_session_delivery_seq_idx").on(table.session_id, table.delivery, table.enqueued_seq),
     uniqueIndex("session_inbox_session_enqueued_seq_idx").on(table.session_id, table.enqueued_seq),
+  ],
+)
+
+/**
+ * One row per tunnel message, projected from `session.tunnel.sent` on the recipient's aggregate.
+ * The body travels with the row so family queries never fold event logs; `sequence` is the
+ * recipient's durable event seq, assigned by the projection from the committed event.
+ */
+export const SessionTunnelTable = sqliteTable(
+  "session_tunnel",
+  {
+    id: text().$type<SessionMessage.ID>().primaryKey(),
+    from_session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    from_agent: text().$type<Agent.ID>(),
+    to_session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    to_agent: text().$type<Agent.ID>(),
+    kind: text().$type<AgentTunnel.Kind>().notNull(),
+    body: text().notNull(),
+    sequence: integer().notNull(),
+    time_created: integer().notNull(),
+  },
+  (table) => [
+    index("session_tunnel_from_idx").on(table.from_session_id),
+    index("session_tunnel_to_idx").on(table.to_session_id),
+    index("session_tunnel_to_sequence_idx").on(table.to_session_id, table.sequence),
   ],
 )
 
