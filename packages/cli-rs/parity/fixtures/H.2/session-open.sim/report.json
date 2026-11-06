@@ -39,7 +39,6 @@
       ]
     },
     "onlyA": [
-      "GET /api/fs/list",
       "GET /api/plugin"
     ],
     "onlyB": []

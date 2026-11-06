@@ -49,12 +49,6 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
     ))?;
     // A managed service's client follows the service when it restarts on a new port or password.
     let client = opencode_service::follow::client(transport, &connection, &paths, &env)?;
-    let location = runtime.block_on(server_directory(&client, &directory.to_string_lossy()))?;
-    let info = CliConfig::new(&paths).get().unwrap_or_else(|error| {
-        log::warn!("failed to read cli.json: {error}");
-        Default::default()
-    });
-    let config = Resolved::new(info, |name| std::env::var(name).ok());
     // A `--session` ID the server does not know becomes the ID of the session the first prompt creates.
     let session = match &args.session {
         Some(id) => {
@@ -66,6 +60,13 @@ pub fn run(context: &Context, args: &RootArgs) -> anyhow::Result<()> {
         }
         None => None,
     };
+    let info = CliConfig::new(&paths).get().unwrap_or_else(|error| {
+        log::warn!("failed to read cli.json: {error}");
+        Default::default()
+    });
+    let config = Resolved::new(info, |name| std::env::var(name).ok());
+    // As TS `run` does, after the session lookup and the config read.
+    let location = runtime.block_on(server_directory(&client, &directory.to_string_lossy()))?;
     let route = match &session {
         Some((id, true)) => Route::Session { id: id.clone() },
         _ => std::env::var("OPENCODE_ROUTE")
