@@ -76,6 +76,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogCodex } from "./component/dialog-codex"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
@@ -769,6 +770,13 @@ function App() {
         run: () => {
           dialog.replace(() => <DialogSessionList />)
         },
+      },
+      {
+        name: "session.codex",
+        title: "Open Codex session",
+        category: "Session",
+        slash: { name: "codex" },
+        run: () => dialog.replace(() => <DialogCodex />),
       },
       {
         name: "session.new",
