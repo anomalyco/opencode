@@ -67,6 +67,6 @@ export default defineSim({
     { type: "Fix the off-by-one in the parser" },
     { until: "in the parser" },
     { enter: true },
-    { checkpoint: "open", until: "Fixed the bound.", masks: [duration], deviation: ["P15-metadata-gap-fg"] },
+    { checkpoint: "open", until: "Fixed the bound.", masks: [duration] },
   ],
 })

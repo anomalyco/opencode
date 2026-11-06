@@ -194,9 +194,6 @@
     {
       "checkpoint": "sent",
       "until": "Demo Model",
-      "deviation": [
-        "C01-startup-prompt-cells"
-      ],
       "fixture": "C.13/prompt-new/sent"
     }
   ],

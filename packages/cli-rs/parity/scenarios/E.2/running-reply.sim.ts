@@ -5,7 +5,6 @@
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
-const deviation = ["P15-metadata-gap-fg"]
 
 export default defineSim({
   model: [
@@ -31,11 +30,11 @@ export default defineSim({
     { type: "Run the shell command `echo hello` and then reply done" },
     { until: "reply done" },
     { enter: true },
-    { checkpoint: "waiting", until: "esc interrupt", deviation },
+    { checkpoint: "waiting", until: "esc interrupt" },
     { release: "waiting" },
-    { checkpoint: "thinking", until: "Planning the command", deviation },
+    { checkpoint: "thinking", until: "Planning the command" },
     { release: "thinking" },
-    { checkpoint: "shell", until: "to move running work", masks: [duration], deviation },
-    { checkpoint: "done", until: "All done.", masks: [duration], deviation },
+    { checkpoint: "shell", until: "to move running work", masks: [duration] },
+    { checkpoint: "done", until: "All done.", masks: [duration] },
   ],
 })

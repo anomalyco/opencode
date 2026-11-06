@@ -6,7 +6,6 @@
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
-const deviation = ["P15-metadata-gap-fg"]
 const leader = { press: "x", modifiers: { ctrl: true } } as const
 const click = (x: number, y: number) =>
   (["down", "up"] as const).map((action) => ({ mouse: { action, x, y, button: "left" as const } }))
@@ -30,7 +29,7 @@ export default defineSim({
     // TS submits asynchronously and keeps text typed before the prompt clears, and the prompt shows the same text,
     // so there is nothing to wait for.
     { sleep: 1000 },
-    { checkpoint: "steer", deviation },
+    { checkpoint: "steer" },
     { type: "First queued" },
     { until: "First queued" },
     leader,
@@ -40,30 +39,30 @@ export default defineSim({
     { until: "Second queued" },
     leader,
     { enter: true },
-    { checkpoint: "dock", until: "2 queued", deviation },
+    { checkpoint: "dock", until: "2 queued" },
     leader,
     { press: "q" },
-    { checkpoint: "queued", until: "Search queued prompts", deviation },
+    { checkpoint: "queued", until: "Search queued prompts" },
     { arrow: "down" },
-    { checkpoint: "second", until: "2 of 2", deviation },
+    { checkpoint: "second", until: "2 of 2" },
     { enter: true },
-    { checkpoint: "steered", until: "1 queued", deviation },
+    { checkpoint: "steered", until: "1 queued" },
     // The dock.
     ...click(5, 20),
-    { checkpoint: "dock-click", until: "Search queued prompts", deviation },
+    { checkpoint: "dock-click", until: "Search queued prompts" },
     { press: "escape" },
-    { checkpoint: "dock-closed", until: "1 queued · First queued", deviation },
+    { checkpoint: "dock-closed", until: "1 queued · First queued" },
     // The pending steer of "Second queued", then "Move to queue".
     ...click(5, 13),
-    { checkpoint: "pending-steer", until: "Pending steer", deviation },
+    { checkpoint: "pending-steer", until: "Pending steer" },
     { enter: true },
-    { checkpoint: "moved", until: "2 queued", deviation },
+    { checkpoint: "moved", until: "2 queued" },
     // A delivered prompt opens the message actions.
     ...click(5, 3),
-    { checkpoint: "message", until: "Message Actions", deviation },
+    { checkpoint: "message", until: "Message Actions" },
     { press: "escape" },
-    { checkpoint: "closed", until: "2 queued", deviation },
+    { checkpoint: "closed", until: "2 queued" },
     { release: "busy" },
-    { checkpoint: "drained", until: "Answered the second queued prompt.", masks: [duration], deviation },
+    { checkpoint: "drained", until: "Answered the second queued prompt.", masks: [duration] },
   ],
 })
