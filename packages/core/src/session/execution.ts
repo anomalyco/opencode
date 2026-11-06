@@ -106,7 +106,13 @@ export const layer = Layer.effect(
         Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
       })
     })
-    const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
+    const coordinator: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason> =
+      yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
+        // Shared idle hook (ported from v2-custom): runs after ownership is removed when no
+        // successor is pending. The custom body that wakes goal/team/watch continuations is
+        // integrated once port/teams, port/goal and port/automation land; add it here, not
+        // as a parallel coordinator. Upstream interrupt({resume}), stepped, Reloaded preserved.
+        idle: (sessionID, _exit, _reason) => reportLifecycle(sessionID, Effect.void),
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
