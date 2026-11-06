@@ -1,0 +1,27 @@
+diff --git a/luaparse.js b/luaparse.js
+--- a/luaparse.js
++++ b/luaparse.js
+@@ -1764,6 +1764,8 @@
+       // Return has to be the last statement in a block.
+       // Likewise 'break' in Lua older than 5.2
+       if ('return' === token.value || (!features.relaxedBreak && 'break' === token.value)) {
++        var isBreak = token.value === 'break';
+         block.push(parseStatement(flowContext));
++        if (isBreak) consume(';');
+         break;
+       }
+@@ -1917,3 +1919,3 @@
+-    if ('end' !== token.value) {
++    if (!isBlockFollow(token)) {
+       var expression = parseExpression(flowContext);
+       if (null != expression) expressions.push(expression);
+@@ -2517,6 +2519,9 @@
+     } else if (consume('(')) {
+       base = parseExpectedExpression(flowContext);
+       expect(')');
++      // A grouped call or vararg produces exactly one result in Lua.
++      // Keep this bit on the inner expression, not on any subsequent suffix.
++      base.inParens = true;
+     } else {
+       return null;
+     }
