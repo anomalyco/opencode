@@ -65,6 +65,7 @@ import {
   Sink,
   Stream,
 } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -1168,6 +1169,61 @@ for (const entry of [
       expect(server.state.urls.length).toBeGreaterThanOrEqual(3)
       expect(new Set(server.state.urls)).toEqual(new Set([server.url + entry.expected]))
       expect(config.url).toBe(server.url + entry.query)
+    }),
+  )
+}
+
+for (const entry of [
+  {
+    name: "LaunchDarkly host keeps the configured URL",
+    url: "https://mcp.launchdarkly.com/mcp",
+    expected: "https://mcp.launchdarkly.com/mcp",
+  },
+  {
+    name: "LaunchDarkly earlier path keeps the configured URL",
+    url: "https://mcp.launchdarkly.com/mcp/launchdarkly",
+    expected: "https://mcp.launchdarkly.com/mcp/launchdarkly",
+  },
+  {
+    name: "LaunchDarkly parent domain still gets the parameter",
+    url: "https://launchdarkly.com/mcp",
+    expected: "https://launchdarkly.com/mcp?codemode=false",
+  },
+  {
+    name: "LaunchDarkly dot-suffix host still gets the parameter",
+    url: "https://evil.launchdarkly.com/mcp",
+    expected: "https://evil.launchdarkly.com/mcp?codemode=false",
+  },
+  {
+    name: "unrelated host still gets the parameter",
+    url: "https://example.com/mcp",
+    expected: "https://example.com/mcp?codemode=false",
+  },
+  {
+    name: "prefix lookalike host still gets the parameter",
+    url: "https://mcp.launchdarkly.com.example/mcp",
+    expected: "https://mcp.launchdarkly.com.example/mcp?codemode=false",
+  },
+]) {
+  testEffect(Layer.empty).live(`remote MCP codemode query: ${entry.name}`, () =>
+    Effect.gen(function* () {
+      const requested: string[] = []
+      const fetchStub = Object.assign(
+        async (input: string | URL | Request) => {
+          requested.push(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
+          return new Response("no bearer token", { status: 401 })
+        },
+        { preconnect: fetch.preconnect },
+      ) as typeof fetch
+      // The codemode decision happens before any OAuth provider is used; oauth:false keeps this test
+      // on the URL-construction path and avoids creating a provider. The live entry has no oauth key,
+      // but that does not change the URL this test observes.
+      const config = new ConfigMCP.Remote({ type: "remote", url: entry.url, oauth: false })
+      yield* connect("launchdarkly", config, import.meta.dir).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetchStub),
+        Effect.exit,
+      )
+      expect(requested).toEqual([entry.expected])
     }),
   )
 }

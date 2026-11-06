@@ -593,6 +593,8 @@ function rejectsUnknownQuery(url: URL) {
   if (url.hostname.endsWith(".googleapis.com")) return true
   // Zoho MCP gateways (zohomcp.com, zohomcp.eu, ...) return 400.
   if (/(^|\.)zohomcp\.[a-z.]+$/.test(url.hostname)) return true
+  // LaunchDarkly's hosted MCP server rejects unknown query parameters with HTTP 400.
+  if (url.hostname === "mcp.launchdarkly.com") return true
   // Loopback servers run on this machine (Figma Desktop's Dev Mode MCP returns 404), so they are not hosted Code Mode servers.
   return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
 }
