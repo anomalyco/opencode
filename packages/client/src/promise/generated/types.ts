@@ -374,6 +374,8 @@ export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigCompactionPercent = string
 
+export type ConfigRemoteSource = { url: string; headers?: { [x: string]: string } }
+
 export type ConfigWorktree = { directory: string }
 
 export type ConfigModelReasoning =
@@ -980,6 +982,8 @@ export type VcsInfo = { provider?: string; branch: VcsBranch }
 export type WebSearchProvider = { id: WebSearchID; name: string }
 
 export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMeter; monthly: UsageLimitsMeter }
+
+export type ConfigSource = string | ConfigRemoteSource
 
 export type ConfigModelCapabilities = {
   tools?: boolean
@@ -2473,7 +2477,7 @@ export type ConfigEntry =
           }
         }
         compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: ConfigCompactionPercent | number }
-        skills?: Array<string>
+        skills?: Array<ConfigSource>
         commands?: {
           [x: string]: {
             template: string
@@ -2484,7 +2488,7 @@ export type ConfigEntry =
             subtask?: boolean
           }
         }
-        instructions?: Array<string>
+        instructions?: Array<ConfigSource>
         references?: {
           [x: string]:
             | string

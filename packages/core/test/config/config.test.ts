@@ -1612,6 +1612,10 @@ describe("Config", () => {
                       // Ignored reference: {file:.}
                       "username": "user-{env:OPENCODE_TEST_MISSING}",
                       "snapshots": {env:OPENCODE_TEST_FLAG},
+                      "instructions": [
+                        { "url": "https://example.com/rules.md", "headers": { "Authorization": "Bearer {env:OPENCODE_TEST_MCP_TOKEN}" } }
+                      ],
+                      "skills": ["./skills", { "url": "https://example.com/skills/", "headers": { "X-Token": "{file:token.txt}" } }],
                       "mcp": {
                         "servers": {
                           "remote": {
@@ -1636,6 +1640,16 @@ describe("Config", () => {
               const document = (yield* config.entries()).find((entry) => entry.type === "document")
               expect(document?.info.username).toBe("user-")
               expect(document?.info.snapshots).toBe(false)
+              expect(document?.info.instructions).toEqual([
+                {
+                  url: "https://example.com/rules.md",
+                  headers: { Authorization: String.raw`Bearer C:\Users\new\"secret"` },
+                },
+              ])
+              expect(document?.info.skills).toEqual([
+                "./skills",
+                { url: "https://example.com/skills/", headers: { "X-Token": 'file\n"token"' } },
+              ])
               const remote = document?.info.mcp?.servers?.remote
               expect(remote?.type).toBe("remote")
               if (remote?.type !== "remote") return

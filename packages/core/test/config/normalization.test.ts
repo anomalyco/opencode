@@ -353,6 +353,31 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics.filter((item) => item.kind === "invalid")).toHaveLength(4)
   })
 
+  test("keeps remote sources with headers in skills and instructions", () => {
+    const result = normalized({
+      skills: ["./skills", { url: "https://example.com/skills/", headers: { authorization: "Bearer a" } }, { url: 1 }],
+      instructions: [
+        "AGENTS.local.md",
+        { url: "https://example.com/rules.md" },
+        { url: "https://example.com/team.md", headers: { "x-token": 2 } },
+        { headers: {} },
+      ],
+    })
+    expect(result.encoded.skills).toEqual([
+      "./skills",
+      { url: "https://example.com/skills/", headers: { authorization: "Bearer a" } },
+    ])
+    expect(result.encoded.instructions).toEqual(["AGENTS.local.md", { url: "https://example.com/rules.md" }])
+    expect(result.diagnostics.map((item) => item.path)).toEqual([
+      ["skills", "2"],
+      ["instructions", "2"],
+      ["instructions", "3"],
+    ])
+    expect(decoded({ skills: { urls: ["https://example.com/skills/"] } }).skills).toEqual([
+      "https://example.com/skills/",
+    ])
+  })
+
   test("omits malformed collection roots instead of synthesizing empty values", () => {
     const result = normalized({
       commands: [],

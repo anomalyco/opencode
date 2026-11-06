@@ -3,7 +3,7 @@ export * as ConfigNormalize from "./normalize.js"
 import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode/util/record"
 import { Option, Schema } from "effect"
-import { Info } from "@opencode/schema/config"
+import { Info, Source } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { ConfigCommand } from "@opencode/schema/config/command"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
@@ -225,7 +225,7 @@ export function normalize(input: unknown): Result {
     overlay(encoded, key, value, [key], diagnostics)
   })
 
-  const instructions = decodeList(input.instructions, Schema.String, ["instructions"], diagnostics, decodeEncoded)
+  const instructions = decodeList(input.instructions, Source, ["instructions"], diagnostics, decodeEncoded)
   if (instructions.length || Array.isArray(input.instructions)) encoded.instructions = instructions
 
   return { type: "normalized", encoded, diagnostics }
@@ -234,7 +234,7 @@ export function normalize(input: unknown): Result {
 function normalizeSkills(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
   if (!own(input, "skills")) return
   if (Array.isArray(input.skills)) {
-    encoded.skills = decodeList(input.skills, Schema.String, ["skills"], diagnostics, decodeEncoded)
+    encoded.skills = decodeList(input.skills, Source, ["skills"], diagnostics, decodeEncoded)
     return
   }
   if (!isRecord(input.skills)) {

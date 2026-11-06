@@ -23,6 +23,17 @@ import { ConfigWatcher } from "./config/watcher.js"
 import { ConfigWarming } from "./config/warming.js"
 import { ConfigWorktree } from "./config/worktree.js"
 
+export interface RemoteSource extends Schema.Schema.Type<typeof RemoteSource> {}
+export const RemoteSource = Schema.Struct({
+  url: Schema.String.annotate({ description: "HTTP(S) URL to fetch" }),
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional).annotate({
+    description: "Headers sent with every request to this URL and to same-origin redirects",
+  }),
+}).annotate({ identifier: "Config.RemoteSource" })
+
+export const Source = Schema.Union([Schema.String, RemoteSource]).annotate({ identifier: "Config.Source" })
+export type Source = typeof Source.Type
+
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
@@ -88,14 +99,14 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   compaction: ConfigCompaction.Info.pipe(optional).annotate({
     description: "Conversation compaction behavior",
   }),
-  skills: Schema.String.pipe(Schema.Array, optional).annotate({
-    description: "Additional paths or URLs to discover skills from",
+  skills: Source.pipe(Schema.Array, optional).annotate({
+    description: "Additional paths or URLs to discover skills from. A URL entry may be an object with headers",
   }),
   commands: Schema.Record(Schema.String, ConfigCommand.Info).pipe(optional).annotate({
     description: "Named slash command definitions",
   }),
-  instructions: Schema.String.pipe(Schema.Array, optional).annotate({
-    description: "Additional paths or URLs supplying ambient instructions",
+  instructions: Source.pipe(Schema.Array, optional).annotate({
+    description: "Additional paths or URLs supplying ambient instructions. A URL entry may be an object with headers",
   }),
   references: ConfigReference.Info.pipe(optional).annotate({
     description: "Named local directories or Git repositories available as external context",

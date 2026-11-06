@@ -16575,7 +16575,7 @@
           "skills": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Config.Source"
             }
           },
           "commands": {
@@ -16587,7 +16587,7 @@
           "instructions": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Config.Source"
             }
           },
           "references": {
@@ -17247,6 +17247,33 @@
         },
         "required": ["path"],
         "additionalProperties": false
+      },
+      "Config.RemoteSource": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "HTTP(S) URL to fetch"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "Config.Source": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/Config.RemoteSource"
+          }
+        ]
       },
       "Config.WarmingEncoded": {
         "type": "object",

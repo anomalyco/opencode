@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import { generate } from "../script/config-schema.js"
 import { Config } from "../src/config.js"
 import { ConfigAgent } from "../src/config/agent.js"
 import { ConfigFlag } from "../src/config/flag.js"
@@ -147,6 +148,27 @@ describe("Config.Entry", () => {
     ])
   })
 
+  test("accepts instructions and skills as paths or remote sources with headers", () => {
+    const input = {
+      instructions: [
+        "AGENTS.local.md",
+        { url: "https://example.com/rules.md", headers: { authorization: "Bearer a" } },
+      ],
+      skills: [{ url: "https://example.com/skills/" }],
+    }
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    expect(Schema.encodeSync(Config.RemoteSource)({ url: "https://example.com/", headers: undefined })).toEqual({
+      url: "https://example.com/",
+    })
+    expect(() => Schema.decodeUnknownSync(Config.Info)({ instructions: [{ headers: {} }] })).toThrow()
+    expect(() =>
+      Schema.decodeUnknownSync(Config.Info)({ skills: [{ url: "https://example.com/", headers: { a: 1 } }] }),
+    ).toThrow()
+    expect(Config.RemoteSource.ast.annotations?.identifier).toBe("Config.RemoteSource")
+    expect(Config.Source.ast.annotations?.identifier).toBe("Config.Source")
+  })
+
   test("has a stable public identifier", () => {
     expect(Config.Entry.ast.annotations?.identifier).toBe("Config.Entry")
   })
@@ -186,6 +208,15 @@ describe("Config.Entry", () => {
     expect(encoded.info.providers?.custom).not.toHaveProperty("headers")
     expect(encoded.info.providers?.custom).not.toHaveProperty("canonical")
   })
+})
+
+test("the published config schema accepts remote sources and keeps V1 skill paths", async () => {
+  const schema = await generate()
+  expect(schema.properties.instructions).toMatchObject({ items: { $ref: "#/$defs/Config.Source" } })
+  expect(schema.properties.skills).toMatchObject({
+    anyOf: [{ items: { $ref: "#/$defs/Config.Source" } }, { type: "object", deprecated: true }],
+  })
+  expect(schema.$defs["Config.RemoteSource"]).toMatchObject({ required: ["url"], additionalProperties: false })
 })
 
 test("no flag is named after the everything-on switches", () => {
