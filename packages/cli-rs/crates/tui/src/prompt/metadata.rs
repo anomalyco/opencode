@@ -299,24 +299,27 @@ impl Row {
                 if let Some(agent) = &layout.agent {
                     spans.push(agent.clone().fg(highlight));
                 }
+                // TS lays the row out as separate texts with `gap={1}`, so no text draws the gaps: a transparent
+                // foreground keeps the one beneath, as there.
+                let gap = || " ".fg(Color::TRANSPARENT);
                 if layout.auto {
-                    spans.push(" auto".fg(theme.text.muted));
+                    spans.extend([gap(), "auto".fg(theme.text.muted)]);
                 }
                 if !layout.model.is_empty() {
                     if layout.agent.is_some() {
-                        spans.push(" · ".fg(theme.text.muted));
+                        spans.extend([gap(), "·".fg(theme.text.muted), gap()]);
                     }
                     spans.push(layout.model.clone().fg(theme.text.base));
                     if !layout.provider.is_empty() {
-                        spans.push(format!(" {}", layout.provider).fg(theme.text.muted));
+                        spans.extend([gap(), layout.provider.clone().fg(theme.text.muted)]);
                     }
                     if let Some(variant) = layout.variant {
-                        spans.push(" · ".fg(theme.text.muted));
+                        spans.extend([gap(), "·".fg(theme.text.muted), gap()]);
                         spans.push(variant.fg(theme.text.feedback.warning.base).bold());
                     }
                     if let Some((limit, danger)) = layout.limit {
                         let color = if danger { theme.text.feedback.error.base } else { theme.text.muted };
-                        spans.push(format!("  {limit}").fg(color));
+                        spans.extend([gap(), gap(), limit.fg(color)]);
                     }
                 }
                 spans

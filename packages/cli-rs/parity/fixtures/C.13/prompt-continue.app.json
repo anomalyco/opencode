@@ -249,9 +249,6 @@
     {
       "checkpoint": "sent",
       "until": "Fix the parser",
-      "deviation": [
-        "C01-startup-prompt-cells"
-      ],
       "fixture": "C.13/prompt-continue/sent"
     }
   ],

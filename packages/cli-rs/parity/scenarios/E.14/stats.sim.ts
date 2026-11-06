@@ -15,7 +15,7 @@ export default defineSim({
       checkpoint: "home",
       until: "Simulated Model",
       masks: [{ line: "Ask anything….*", reason: "the prompt placeholder is picked at random (T17-home-prompt)" }],
-      deviation: ["T17-home-prompt", "P15-metadata-gap-fg"],
+      deviation: ["T17-home-prompt"],
     },
     { type: "/stats" },
     { until: "/stats" },

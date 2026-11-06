@@ -27,7 +27,7 @@ export default defineSim({
       checkpoint: "home",
       until: "Simulated Model",
       masks: [{ line: "Ask anything….*", reason: "the placeholder is random" }],
-      deviation: ["T17-home-prompt", "P15-metadata-gap-fg"],
+      deviation: ["T17-home-prompt"],
     },
     { type: "Say hello" },
     { until: "Say hello" },
@@ -45,7 +45,6 @@ export default defineSim({
           reason: "the turn duration depends on timing, also in length (980ms, 1.0s); the row ends there",
         },
       ],
-      deviation: ["P15-metadata-gap-fg"],
     },
   ],
 })
