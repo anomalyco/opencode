@@ -21,7 +21,8 @@ Read the design-system rules in `DESIGN.md` (also shown at `/dev/components#rule
 
 ## Boundaries
 
-- This service is only the website, deployed as its own Worker with `cf` (`cloudflare.config.ts`, `script/build.ts`); the V2 docs at `/v2*` are `services/www`. Never add Wrangler or SST here.
+- This service is the website and the V2 docs, deployed as its own Worker with `cf` (`cloudflare.config.ts`, `script/build.ts`). Never add Wrangler or SST here.
+- The V2 docs at `/v2` are a self-contained feature in `src/docs/` (read `src/docs/AGENTS.md`). They render their own pages with their own styles and script, never the site's, and the site's styles and scripts never load on them.
 - Old URLs kept for outside links live in `src/lib/legacy.ts`, each commented with why it exists and who still uses it; nothing may link to them. Short links (`/discord`, `/feishu`, `/desktop-feedback`) are ordinary routes.
 - The site also serves fixed-URL machine files: `/config.json` and `/openapi.json` (written by `bun run generate`), `/tui.json` (`public/`), and `/oauth/opencode/client.json` and `/.well-known/apple-app-site-association` (`src/lib/meta.ts`). Their bytes and headers are a contract with clients.
 - Heavy media (video, audio, zips, 3D models) is never a Worker asset: link it with `mediaUrl()` (`src/lib/media.ts`), which points into the files bucket behind `/files`.
