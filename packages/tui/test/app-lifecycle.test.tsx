@@ -1036,6 +1036,38 @@ test("delayed continuation submits only to the resumed session with its saved mo
   expect(selections).toEqual([{ model: { providerID: "provider", id: "first" } }])
 })
 
+test.each(["lookup", "fork"] as const)("continuation %s failure shows the error and returns home", async (stage) => {
+  const existing = session("existing", { providerID: "provider", id: "first" })
+  const message = `Continuation ${stage} failed`
+  let forks = 0
+  await using setup = await createAppFixture({
+    args: { continue: true, fork: stage === "fork", model: "provider/startup" },
+    fetch: (url) => {
+      if (url.pathname === "/api/session" && url.searchParams.get("limit") === "1")
+        return stage === "lookup" ? json({ message }, { status: 500 }) : json({ data: [existing], cursor: {} })
+      if (url.pathname === "/api/session/existing/fork") {
+        forks++
+        return json({ message }, { status: 500 })
+      }
+      if (url.pathname === "/api/session/dummy") return json({})
+      if (/^\/api\/session\/dummy\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/agent")
+        return json({ location: existing.location, data: [agent("build", existing.model)] })
+      if (url.pathname === "/api/model")
+        return json({ location: existing.location, data: [model("first"), model("startup")] })
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus: 500"))
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("RECOVERED_INPUT")
+  await setup.waitForFrame((frame) => frame.includes("UnexpectedStatus: 500") && frame.includes("RECOVERED_INPUT"))
+  expect(forks).toBe(stage === "fork" ? 1 : 0)
+  setup.mockInput.pressKey("u", { ctrl: true })
+  await setup.waitForFrame((frame) => !frame.includes("RECOVERED_INPUT"))
+})
+
 test("empty continuation applies the startup model when it returns home", async () => {
   const location = { directory }
   await using setup = await createAppFixture({

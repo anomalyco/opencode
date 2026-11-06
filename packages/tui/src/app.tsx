@@ -708,12 +708,14 @@ function App() {
           route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
         }
-        void client.api.session
+        return client.api.session
           .fork({ sessionID: match })
           .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
-          .catch(toast.error)
       })
-      .catch(toast.error)
+      .catch((error) => {
+        toast.error(error)
+        route.navigate({ type: "home" })
+      })
   })
 
   // Handle --session with --fork once.
