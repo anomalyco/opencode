@@ -23,7 +23,7 @@ pub use one_cell::{
     seed_mono, work_spinner,
 };
 pub use scanner::{ScannerOptions, ScannerStyle, scanner_colors, scanner_frames};
-pub use spinner::{ColorFn, SPINNER_FRAMES, SPINNER_INTERVAL, Spinner, SpinnerColor, spinner_frame};
+pub use spinner::{ColorFn, SPINNER_FRAMES, SPINNER_INTERVAL, Spinner, SpinnerColor, one_cell_color, spinner_frame};
 pub use text::{FadeInText, ShimmerText, fade_strength, shimmer_strength};
 
 use crate::bind;
