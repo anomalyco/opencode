@@ -6,15 +6,18 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use opencode_api::generated::{SessionID, SessionMessageID};
+use opencode_api::generated::{AgentID, ModelRef, SessionID, SessionMessageID};
 
 use crate::location::Location;
 
 /// Flushes kept for [`Log::since`]. A view further behind gets [`Changes::all`].
 pub const LOG_LIMIT: usize = 256;
 
+/// A session's agent and model.
+pub type Selected = (Option<AgentID>, Option<ModelRef>);
+
 /// What changed. The query methods also answer true when a coarser entry covers the question.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Changes {
     /// Everything may have changed: the view fell out of the log.
     pub all: bool,
@@ -22,6 +25,9 @@ pub struct Changes {
     pub sessions: bool,
     /// Sessions whose info changed.
     pub session: HashSet<SessionID>,
+    /// A session's agent and model after each `session.agent.selected` or `session.model.selected`, in
+    /// order: a batch can hold this client's acknowledgment and then another client's switch.
+    pub selected: HashMap<SessionID, Vec<Selected>>,
     /// Sessions whose running state changed.
     pub status: HashSet<SessionID>,
     /// Sessions whose message list changed shape: insert, remove, reorder, reload, page.
@@ -49,6 +55,7 @@ impl Changes {
         !self.all
             && !self.sessions
             && self.session.is_empty()
+            && self.selected.is_empty()
             && self.status.is_empty()
             && self.messages.is_empty()
             && self.message.is_empty()
@@ -110,6 +117,9 @@ impl Changes {
         self.all |= other.all;
         self.sessions |= other.sessions;
         self.session.extend(other.session.iter().cloned());
+        for (session, selected) in &other.selected {
+            self.selected.entry(session.clone()).or_default().extend(selected.iter().cloned());
+        }
         self.status.extend(other.status.iter().cloned());
         self.messages.extend(other.messages.iter().cloned());
         for (session, messages) in &other.message {
@@ -172,6 +182,10 @@ impl Log {
     pub(crate) fn session(&mut self, id: &SessionID) {
         self.current.sessions = true;
         self.current.session.insert(id.clone());
+    }
+
+    pub(crate) fn selected(&mut self, id: &SessionID, agent: Option<AgentID>, model: Option<ModelRef>) {
+        self.current.selected.entry(id.clone()).or_default().push((agent, model));
     }
 
     pub(crate) fn status(&mut self, id: &SessionID) {

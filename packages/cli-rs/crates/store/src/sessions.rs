@@ -226,6 +226,12 @@ impl State {
         }
     }
 
+    fn log_selected(&mut self, id: &SessionID) {
+        if let Some(info) = self.info.get(id) {
+            self.log.selected(id, info.agent.clone(), info.model.clone());
+        }
+    }
+
     /// True when a session read is worth revalidating: its info is loaded or a read is active.
     fn known(&self, id: &SessionID) -> bool {
         self.info.contains_key(id) || self.syncs.has(&format!("session:{}", id.0))
@@ -262,6 +268,7 @@ impl State {
         let data = &event.data;
         let previous = self.info.get(&data.session_id).and_then(|info| info.agent.clone());
         self.edit_info(&data.session_id, |info| info.agent = Some(data.agent.clone()));
+        self.log_selected(&data.session_id);
         let row = SessionMessageAgentSelected {
             id: from_event(&event.id),
             r#type: "agent-switched".into(),
@@ -278,6 +285,7 @@ impl State {
         let previous =
             data.previous.clone().or_else(|| self.info.get(&data.session_id).and_then(|info| info.model.clone()));
         self.edit_info(&data.session_id, |info| info.model = Some(data.model.clone()));
+        self.log_selected(&data.session_id);
         if !self.messages.contains_key(&data.session_id) {
             return Vec::new();
         }
