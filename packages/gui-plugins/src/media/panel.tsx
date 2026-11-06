@@ -60,6 +60,30 @@ export default function MediaPanel(props: { session: MountedSession }) {
 
   const openPath = (path: string) => ctx.links.open({ href: path, exact: true, session: props.session })
 
+  const dialog = useDialog()
+  // Each image card's thumbnail, so the viewer opens from and closes into the card of the image it shows.
+  const thumbnails = new Map<string, HTMLImageElement>()
+
+  // Images whose bytes are gone stay as cards that say so, but the viewer steps past them.
+  const images = createMemo(() =>
+    media().filter((item) => item.kind === "image" && !load.failed(props.session, item.source)),
+  )
+
+  const view = (id: string) =>
+    dialog.show(() => (
+      <MediaViewer
+        items={images}
+        start={id}
+        session={props.session}
+        load={load}
+        thumbnail={(item) => thumbnails.get(item)}
+        name={(item) => item.name ?? ctx.t("media.image")}
+      />
+    ))
+
+  const thumbnail = (id: string, element: HTMLImageElement | undefined) =>
+    element ? thumbnails.set(id, element) : thumbnails.delete(id)
+
   return (
     <div data-component="media-panel">
       <div data-slot="media-panel-filters">
@@ -98,7 +122,15 @@ export default function MediaPanel(props: { session: MountedSession }) {
       <div data-slot="media-panel-body" data-scrollable>
         <Switch>
           <Match when={kind() === "media" && media().length > 0}>
-            <MediaGrid items={media()} session={props.session} load={load} openURL={openURL} openPath={openPath} />
+            <MediaGrid
+              items={media()}
+              session={props.session}
+              load={load}
+              openURL={openURL}
+              openPath={openPath}
+              view={view}
+              thumbnail={thumbnail}
+            />
           </Match>
           <Match when={kind() === "files" && files().length > 0}>
             <div data-slot="media-panel-list">
@@ -139,6 +171,8 @@ function MediaGrid(props: {
   load: MediaLoader
   openURL: (url: string) => void
   openPath: (path: string) => void
+  view: (id: string) => void
+  thumbnail: (id: string, element: HTMLImageElement | undefined) => void
 }) {
   const ctx = usePlugin<typeof Media>()
 
@@ -185,6 +219,8 @@ function MediaGrid(props: {
                         load={props.load}
                         openURL={props.openURL}
                         openPath={props.openPath}
+                        view={props.view}
+                        thumbnail={props.thumbnail}
                       />
                     )}
                   </Show>
@@ -204,23 +240,23 @@ function MediaCard(props: {
   load: MediaLoader
   openURL: (url: string) => void
   openPath: (path: string) => void
+  view: (id: string) => void
+  thumbnail: (id: string, element: HTMLImageElement | undefined) => void
 }) {
   const ctx = usePlugin<typeof Media>()
-  const dialog = useDialog()
   const [visible, setVisible] = createSignal(false)
   const [playing, setPlaying] = createSignal(false)
 
   // Loads once the card nears the viewport; the item's id names the same bytes for as long as the card lives.
   const src = createLatest(
     () => visible() && props.item.id,
-    () => untrack(() => props.load(props.session, props.item.source, props.item.mime)),
+    () => untrack(() => props.load.load(props.session, props.item.source, props.item.mime)),
   )
 
   // A load that rejects, or that finds no bytes (e.g. a deleted file), leaves the card with its caption.
   const failed = () => !!src.error || (visible() && !src.loading && src.latest === undefined)
   const state = () => (failed() ? "failed" : src.latest ? "loaded" : "loading")
   const name = () => props.item.name ?? ctx.t(props.item.kind === "video" ? "media.video" : "media.image")
-  let image: HTMLImageElement | undefined
   let video: HTMLVideoElement | undefined
 
   const observe = (element: HTMLElement) => {
@@ -238,10 +274,8 @@ function MediaCard(props: {
   }
 
   const open = () => {
-    const url = src.latest
-
     if (props.item.kind === "image") {
-      if (url) dialog.show(() => <ImagePreview src={url} alt={name()} origin={image} />)
+      if (src.latest) props.view(props.item.id)
 
       return
     }
@@ -275,7 +309,21 @@ function MediaCard(props: {
             </span>
           </Match>
           <Match when={props.item.kind === "image" && src.latest}>
-            {(url) => <img ref={image} src={url()} alt="" decoding="async" draggable={false} />}
+            {(url) => {
+              const id = props.item.id
+
+              onCleanup(() => props.thumbnail(id, undefined))
+
+              return (
+                <img
+                  ref={(element) => props.thumbnail(id, element)}
+                  src={url()}
+                  alt=""
+                  decoding="async"
+                  draggable={false}
+                />
+              )
+            }}
           </Match>
           <Match when={props.item.kind === "video" && src.latest}>
             {(url) => (
@@ -299,6 +347,78 @@ function MediaCard(props: {
         </span>
       </span>
     </button>
+  )
+}
+
+/**
+ * The image viewer over the panel's images, in the order the grid shows them. It follows the image on screen by id, so
+ * a reply that adds an image does not move it; when that image drops out (its bytes are gone), the one now in its
+ * place shows.
+ */
+function MediaViewer(props: {
+  items: () => readonly MediaItem[]
+  start: string
+  session: MountedSession
+  load: MediaLoader
+  thumbnail: (id: string) => HTMLImageElement | undefined
+  name: (item: MediaItem) => string
+}) {
+  const [shown, setShown] = createSignal({
+    id: props.start,
+    index: Math.max(
+      0,
+      props.items().findIndex((item) => item.id === props.start),
+    ),
+  })
+
+  const index = createMemo(() => {
+    const found = props.items().findIndex((item) => item.id === shown().id)
+
+    return found === -1 ? Math.min(shown().index, props.items().length - 1) : found
+  })
+
+  const item = (): MediaItem | undefined => props.items()[index()]
+
+  const step = (direction: 1 | -1) => {
+    const next = props.items()[index() + direction]
+
+    if (next) setShown({ id: next.id, index: index() + direction })
+  }
+
+  // Keyed by id; the grid already loaded most of these, so a step usually reads a URL it has.
+  const src = createLatest(
+    () => item()?.id,
+    () => {
+      const current = untrack(item)
+
+      return current ? props.load.load(props.session, current.source, current.mime) : Promise.resolve(undefined)
+    },
+  )
+
+  const nameOf = () => {
+    const current = item()
+
+    return current && props.name(current)
+  }
+
+  const thumbnailOf = () => {
+    const current = item()
+
+    return current && props.thumbnail(current.id)
+  }
+
+  return (
+    <Show when={src.latest}>
+      {(url) => (
+        <ImagePreview
+          src={url()}
+          alt={nameOf()}
+          origin={thumbnailOf()}
+          position={{ index: Math.max(0, index()), total: props.items().length }}
+          onStep={step}
+        />
+      )}
+    </Show>
   )
 }
 

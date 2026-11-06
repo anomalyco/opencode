@@ -64,6 +64,13 @@ export interface ImagePreviewProps {
    * flies out of its place and back, and returns it once the close lands.
    */
   video?: HTMLVideoElement
+  /** Where the image sits in a set the preview steps through; shows previous and next buttons and "3 / 12". */
+  position?: { readonly index: number; readonly total: number }
+  /**
+   * Moves to the previous (-1) or next (1) image of `position`'s set by changing `src` and `origin`. The arrow keys
+   * do the same while the image is not zoomed in.
+   */
+  onStep?: (direction: 1 | -1) => void
 }
 
 const STEP = Math.SQRT2
@@ -161,9 +168,9 @@ export function ImagePreview(props: ImagePreviewProps) {
 
     if (effect.type === "video.return") return giveBack()
 
-    if (effect.type === "origin.hide") return home()?.setAttribute("data-image-preview-origin", "")
+    if (effect.type === "origin.hide") return hide(home())
 
-    if (effect.type === "origin.show") return home()?.removeAttribute("data-image-preview-origin")
+    if (effect.type === "origin.show") return hide(undefined)
 
     if (effect.type === "open.flight") {
       dimTo(1, FLIGHT_SPRING)
@@ -504,6 +511,26 @@ export function ImagePreview(props: ImagePreviewProps) {
   }
 
   const home = () => holder ?? props.origin ?? props.video
+
+  // The element the page hides while the preview stands in for it. Stepping to another image moves the mark to that
+  // image's origin, so the one left behind shows again.
+  let hidden: HTMLElement | undefined
+
+  const hide = (element: HTMLElement | undefined) => {
+    hidden?.removeAttribute("data-image-preview-origin")
+    hidden = element
+    hidden?.setAttribute("data-image-preview-origin", "")
+  }
+
+  createEffect(
+    on(
+      () => props.origin,
+      () => {
+        if (hidden) hide(home())
+      },
+      { defer: true },
+    ),
+  )
   const panElement = (target: PanTarget) => (target === "video" && props.video ? props.video : viewport)
 
   const suppressVideoClick = () => {
@@ -682,6 +709,19 @@ export function ImagePreview(props: ImagePreviewProps) {
         return props.video.pause()
       }
 
+      const arrow = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0
+
+      // Zoomed in, the arrows are the page's; at fit they step through the set, mirrored in a right-to-left layout.
+      if (bare && arrow !== 0 && props.onStep && scaleSpring.target <= 1) {
+        event.preventDefault()
+        event.stopPropagation()
+        const direction = (root.matches(":dir(rtl)") ? -arrow : arrow) === 1 ? 1 : -1
+
+        if (canStep(direction)) props.onStep(direction)
+
+        return
+      }
+
       const action = bare ? (event.key === "0" ? "fit" : undefined) : event.altKey ? undefined : shortcut(event.key)
 
       if (!action) return
@@ -693,6 +733,14 @@ export function ImagePreview(props: ImagePreviewProps) {
     },
     { capture: true },
   )
+
+  const canStep = (direction: 1 | -1) => {
+    const position = props.position
+
+    if (!position) return false
+
+    return direction === 1 ? position.index < position.total - 1 : position.index > 0
+  }
 
   return (
     <div
@@ -773,6 +821,35 @@ export function ImagePreview(props: ImagePreviewProps) {
           </Show>
         </div>
         <div data-slot="image-preview-controls">
+          <Show when={props.onStep && props.position}>
+            {(position) => (
+              <>
+                <IconButton
+                  data-slot="image-preview-previous"
+                  icon={<Icon name="chevron-left" />}
+                  variant="ghost"
+                  aria-label={i18n.t("ui.imagePreview.previous")}
+                  disabled={!canStep(-1)}
+                  onClick={() => props.onStep?.(-1)}
+                />
+                <span data-slot="image-preview-position">
+                  {i18n.t("ui.imagePreview.position", {
+                    index: position().index + 1,
+                    total: position().total,
+                  })}
+                </span>
+                <IconButton
+                  data-slot="image-preview-next"
+                  icon={<Icon name="chevron-right" />}
+                  variant="ghost"
+                  aria-label={i18n.t("ui.imagePreview.next")}
+                  disabled={!canStep(1)}
+                  onClick={() => props.onStep?.(1)}
+                />
+                <div data-slot="image-preview-divider" />
+              </>
+            )}
+          </Show>
           <IconButton
             data-slot="image-preview-zoom-out"
             icon={<Icon name="minus" />}

@@ -205,6 +205,9 @@ const source = {
   "ui.imagePreview.zoomIn": "Zoom in",
   "ui.imagePreview.zoomOut": "Zoom out",
   "ui.imagePreview.zoomToFit": "Zoom to fit",
+  "ui.imagePreview.previous": "Previous image",
+  "ui.imagePreview.next": "Next image",
+  "ui.imagePreview.position": "{{index}} / {{total}}",
   "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",

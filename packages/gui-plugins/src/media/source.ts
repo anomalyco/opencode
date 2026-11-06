@@ -1,9 +1,14 @@
 import { mediaHashFromUri } from "@opencode/client/promise"
 import type { MountedSession } from "@opencode/plugin/gui"
-import { onCleanup } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { mimeOf, type MediaSource } from "./collect"
 
-export type MediaLoader = (session: MountedSession, source: MediaSource, mime: string) => Promise<string | undefined>
+export type MediaLoader = {
+  /** The item's URL, or undefined when its bytes are gone (e.g. a deleted file). */
+  load(session: MountedSession, source: MediaSource, mime: string): Promise<string | undefined>
+  /** The last load of the item rejected or found no bytes, so the viewer can skip it. Reactive. */
+  failed(session: MountedSession, source: MediaSource): boolean
+}
 
 /**
  * Resolves item sources to URLs an `<img>` or `<video>` loads, once per item while the panel stays mounted. Object
@@ -13,6 +18,7 @@ export function createMediaLoader(): MediaLoader {
   const controller = new AbortController()
   const loaded = new Map<string, Promise<string | undefined>>()
   const objects = new Set<string>()
+  const [failures, setFailures] = createSignal<ReadonlySet<string>>(new Set())
 
   onCleanup(() => {
     controller.abort()
@@ -83,17 +89,33 @@ export function createMediaLoader(): MediaLoader {
     return tool(session, source, mime)
   }
 
-  return (session, source, mime) => {
-    const key = [session.key, session.directory, JSON.stringify(source)].join("\n")
-    const existing = loaded.get(key)
+  const keyOf = (session: MountedSession, source: MediaSource) =>
+    [session.key, session.directory, JSON.stringify(source)].join("\n")
 
-    if (existing) return existing
-    const pending = load(session, source, mime)
+  const fail = (key: string) => {
+    if (!controller.signal.aborted) setFailures((previous) => new Set([...previous, key]))
+  }
 
-    loaded.set(key, pending)
-    // A failed load can be tried again the next time its tile mounts.
-    pending.catch(() => loaded.delete(key))
+  return {
+    load(session, source, mime) {
+      const key = keyOf(session, source)
+      const existing = loaded.get(key)
 
-    return pending
+      if (existing) return existing
+      const pending = load(session, source, mime)
+
+      loaded.set(key, pending)
+      pending.then(
+        (url) => url === undefined && fail(key),
+        () => {
+          // A failed load can be tried again the next time its card mounts.
+          loaded.delete(key)
+          fail(key)
+        },
+      )
+
+      return pending
+    },
+    failed: (session, source) => failures().has(keyOf(session, source)),
   }
 }
