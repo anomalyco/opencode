@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../src/index.js"
+import { CodeMode, Tool } from "./lib/index.js"
 
 // Key enumeration: Object.keys and for...in share one surface over plain objects, arrays
 // (index strings), and tool references (namespace/tool names from the supplied tools), so a

@@ -7,7 +7,7 @@ import { globalNames } from "./interpreter/globals.js"
 import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
-import { VmEngine } from "./vm/index.js"
+import type { VmEngine } from "./vm/index.js"
 
 export { scanTools }
 
@@ -174,8 +174,8 @@ export const make = <
   )
   const limits = resolveExecutionLimits(options.limits)
   const extensions = options.extensions ?? []
-  const engine = options.engine ?? defaultEngine()
-  const bound = new Set(engine === "vm" ? VmEngine.globalNames : globalNames)
+  // Both engines bind the same global names; test/engines.test.ts keeps them in step.
+  const bound = new Set(globalNames)
   for (const extension of extensions) {
     for (const name of Object.keys(extension.globals)) {
       if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)
@@ -187,8 +187,10 @@ export const make = <
       return prepared.catalog
     },
     execute: (code, bindings) =>
-      engine === "vm"
-        ? VmEngine.execute(code, prepared, limits, options.hooks ?? {}, extensions, bindings)
+      options.engine === "vm"
+        ? Effect.flatMap(loadVm(), (vm) =>
+            vm.execute(code, prepared, limits, options.hooks ?? {}, extensions, bindings),
+          )
         : executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
             ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
             ...extensionGlobals(ctx, extensions),
@@ -196,8 +198,6 @@ export const make = <
   }
 }
 
-// Test-only switch: `CODEMODE_ENGINE=vm` (or the VM's round-trip mode) runs the suites on the VM.
-const defaultEngine = () =>
-  typeof process !== "undefined" && (process.env.CODEMODE_ENGINE === "vm" || process.env.CODEMODE_ROUNDTRIP === "1")
-    ? "vm"
-    : "legacy"
+// The VM is loaded on first use so the default engine pulls in none of its code.
+let vmEngine: Promise<typeof VmEngine> | undefined
+const loadVm = () => Effect.promise(() => (vmEngine ??= import("./vm/index.js")))

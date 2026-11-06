@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Glob } from "bun"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "../../src/index.js"
+import { CodeMode, Tool } from "../lib/index.js"
 import { parseProgram } from "../../src/vm/runtime/execute.js"
 import { Interpreter } from "../../src/vm/runtime/interpreter.js"
 import { createBuiltins } from "../../src/vm/runtime/intrinsics.js"
