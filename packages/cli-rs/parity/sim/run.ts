@@ -49,7 +49,7 @@ setTimeout(() => {
 const argv = process.argv.slice(2)
 const sidesFlag = argv.indexOf("--sides")
 const sides = parseSides(sidesFlag === -1 ? undefined : argv[sidesFlag + 1])
-const files = argv.filter((arg, index) => !arg.startsWith("--") && index !== sidesFlag + 1)
+const files = argv.filter((arg, index) => !arg.startsWith("--") && (sidesFlag === -1 || index !== sidesFlag + 1))
 const scenarios = files.length
   ? files.map((file) => path.resolve(file))
   : [...new Bun.Glob("scenarios/*/*.sim.ts").scanSync({ cwd: parityRoot, absolute: true })].toSorted()
