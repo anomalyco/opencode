@@ -1,7 +1,8 @@
 // The translation slices in the client build (script/i18n-slices.ts works out what goes in each):
 //
-// - each locale gets a table module (virtual:i18n/<locale>) of its slices, each slice a module of its
-//   own (virtual:i18n/<locale>/<slice>), and src/i18n/tables.ts becomes the 18 tables;
+// - each locale gets a table module (virtual:i18n/<locale>) holding the shell's strings and where each
+//   other slice is, each slice a module of its own (virtual:i18n/<locale>/<slice>), and
+//   src/i18n/tables.ts becomes the 18 tables;
 // - src/i18n/english.ts keeps only the English the browser reads in every language;
 // - every import() of a lazy boundary (a page route, a module only ever loaded with import())
 //   loads the boundary's slice alongside it and resolves once both have arrived, so the boundary's
@@ -54,7 +55,7 @@ export function i18nSlices(): Plugin {
         return `export default ${JSON.stringify(build && this.environment.name !== "client" ? preloads() : null)}`
       if (!client(this.environment)) return
       const data = analyze()
-      if (id === englishFile) return `export const english = ${JSON.stringify(data.english)}`
+      if (id === englishFile) return `export const english = ${json(data.english)}`
       if (id === tablesFile)
         return `export const tables = {\n${Object.keys(data.locales)
           .map((locale) => `  ${JSON.stringify(locale)}: () => import("virtual:i18n/${locale}").then((module) => module.default),`)
@@ -62,15 +63,17 @@ export function i18nSlices(): Plugin {
       const match = id.match(/^\0virtual:i18n\/(\w+)(?:\/([\w-]+))?$/)
       if (!match) return
       const locale = data.locales[match[1] as keyof Slices["locales"]]
-      if (match[2] === "all") return `export default ${JSON.stringify(locale.full)}`
-      if (match[2]) return `export default ${JSON.stringify(locale.slices[match[2]])}`
-      const entries = Object.keys(data.shared).map((slice) => {
+      if (match[2] === "all") return `export default ${json(locale.full)}`
+      if (match[2]) return `export default ${json(locale.slices[match[2]])}`
+      // The shell's strings are in the table itself, which every page loads anyway; an empty slice
+      // has no entry.
+      const entries = Object.keys(data.shared).flatMap((slice) => {
         const payload = locale.slices[data.shared[slice]]
-        const empty = !Object.keys(payload.dict).length && !Object.keys(payload.content).length
-        const file = `virtual:i18n/${match[1]}/${data.shared[slice]}`
-        return `  ${JSON.stringify(slice)}: ${empty ? "null" : `() => import(${JSON.stringify(file)})`},`
+        if (slice === "shell") return [`    shell: ${json(payload)},`]
+        if (!Object.keys(payload.dict).length && !Object.keys(payload.content).length) return []
+        return [`    ${JSON.stringify(slice)}: () => import("virtual:i18n/${match[1]}/${data.shared[slice]}"),`]
       })
-      return `export default {\n${entries.join("\n")}\n  "*": () => import("virtual:i18n/${match[1]}/all"),\n}`
+      return `export default {\n  slices: {\n${entries.join("\n")}\n  },\n  all: () => import("virtual:i18n/${match[1]}/all"),\n}`
     },
     async transform(code, id) {
       if (!client(this.environment) || id.startsWith("\0") || id.includes("/src/i18n/")) return
@@ -99,7 +102,7 @@ export function i18nSlices(): Plugin {
     },
   }
 
-  /** For each locale, the files a page in it loads before hydration: its table, the shell, its route's slice. */
+  /** For each locale, the files a page in it loads before hydration: its table (with the shell's strings) and its route's slice. */
   function preloads() {
     const data = analyze()
     const src = path.join(root, "src")
@@ -108,7 +111,6 @@ export function i18nSlices(): Plugin {
         locale,
         {
           table: files.get(`virtual:i18n/${locale}`),
-          shell: files.get(`virtual:i18n/${locale}/shell`) ?? null,
           routes: Object.fromEntries(
             Object.entries(data.boundaries)
               .filter(([file]) => file.startsWith(path.join(src, "routes")))
@@ -123,3 +125,7 @@ export function i18nSlices(): Plugin {
   }
 }
 
+/** Strings as one JSON.parse call: compact whether or not the build minifies, and quick to parse. */
+function json(value: unknown) {
+  return `JSON.parse('${JSON.stringify(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')`
+}

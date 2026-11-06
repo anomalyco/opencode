@@ -4,7 +4,7 @@
 declare module "virtual:i18n-preload" {
   const preloads: Record<
     import("~/lib/language").Locale,
-    { table?: string; shell: string | null; routes: Record<string, string | null> }
+    { table?: string; routes: Record<string, string | null> }
   > | null
   export default preloads
 }

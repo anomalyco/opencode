@@ -42,5 +42,5 @@ function language(dict: Promise<{ dict: Partial<Record<keyof typeof en, string>>
 }
 
 function whole(load: () => Promise<Payload>): Promise<Table> {
-  return Promise.resolve({ "*": () => load().then((value) => ({ default: value })) })
+  return Promise.resolve({ all: () => load().then((value) => ({ default: value })) })
 }

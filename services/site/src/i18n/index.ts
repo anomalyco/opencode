@@ -9,8 +9,13 @@ export type Dict = Record<Key, string>
 
 /** Some of a language's strings: dictionary keys, areas of page copy, and the keys still in English. */
 export type Payload = { dict: Partial<Dict>; content: Record<string, unknown>; same: string[] }
-/** Where a language's slices load from, by slice id; `null` for a slice with nothing in it. */
-export type Table = Record<string, (() => Promise<{ default: Payload }>) | null>
+type Load = () => Promise<{ default: Payload }>
+/**
+ * Where a language's strings load from: `all` of them, and, when the build split them, each slice by
+ * id (where it loads from, or the slice itself for the shell's). A split table has no entry for an
+ * empty slice.
+ */
+export type Table = { all: Load; slices?: Record<string, Load | Payload> }
 
 // The server registers every language at startup (i18n/server.ts). The browser loads only what the
 // page can show, in the page's language: the shell's strings before it hydrates (entry-client.tsx),
@@ -41,8 +46,10 @@ export function loadSlice(id: string, locale = currentLocale()): Promise<void> {
   if (known) return known
   const promise = tables[locale]()
     .then((table) => {
-      const load = id in table ? table[id] : table["*"]
-      return load?.().then((module) => register(locale, module.default, !(id in table) || id === "*"))
+      const whole = id === "*" || !table.slices
+      const entry = whole ? table.all : table.slices?.[id]
+      if (typeof entry === "function") return entry().then((module) => register(locale, module.default, whole))
+      if (entry) register(locale, entry, whole)
     })
     .catch((error) => {
       pending.delete(key)

@@ -27,7 +27,11 @@ const src = path.join(root, "src")
 const english = en as Record<string, string>
 const keys = Object.keys(english)
 const areas = Object.keys(source)
-const transpiler = new Bun.Transpiler({ loader: "tsx" })
+// As the client build sees the code: development-only and server-only branches dropped.
+const transpiler = new Bun.Transpiler({
+  loader: "tsx",
+  define: { "import.meta.env.DEV": "false", "import.meta.env.PROD": "true", "import.meta.env.SSR": "false" },
+})
 
 type Module = { file: string; imports: string[]; dynamic: string[]; keys: Set<string>; areas: Set<string> }
 const modules = new Map<string, Module>()
@@ -56,7 +60,7 @@ function scan(file: string): Module {
   const text = readFileSync(file, "utf8")
   const code = file.endsWith(".json") ? text : transpiler.transformSync(text)
   if (!file.endsWith(".json"))
-    for (const found of transpiler.scan(text).imports) {
+    for (const found of transpiler.scan(code).imports) {
       const target = resolve(file, found.path)
       if (target) (found.kind === "dynamic-import" ? module.dynamic : module.imports).push(target)
     }
@@ -142,6 +146,13 @@ contentSource((key: Key) => (recorded.add(key), english[key]))
 const englishFile = path.join(src, "i18n/english.ts")
 ;[...client].filter((file) => scan(file).imports.includes(englishFile)).forEach((file) => scan(file).keys.forEach((key) => recorded.add(key)))
 
+// The keys client code asks i18n.translated() about: a payload lists which of those are still English.
+const asked = new Set(
+  [...client].flatMap((file) =>
+    file.endsWith(".json") ? [] : [...readFileSync(file, "utf8").matchAll(/\btranslated\(\s*["'`]([\w.-]+)["'`]/g)].map((match) => match[1]),
+  ),
+)
+
 type Payload = { dict: Record<string, string>; content: Record<string, unknown>; same: string[] }
 const locales = Object.fromEntries(
   await Promise.all(
@@ -153,7 +164,7 @@ const locales = Object.fromEntries(
       const payload = (picked: string[], pickedAreas: string[]): Payload => ({
         dict: Object.fromEntries(picked.map((key) => [key, dict[key]])),
         content: locale === "en" ? {} : Object.fromEntries(pickedAreas.map((area) => [area, content[area] ?? {}])),
-        same: locale === "en" ? [] : picked.filter((key) => dict[key] === english[key]),
+        same: locale === "en" ? [] : picked.filter((key) => asked.has(key) && dict[key] === english[key]),
       })
       return [
         locale,
