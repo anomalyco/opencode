@@ -18,7 +18,10 @@ import { useViewportCover } from "~/lib/viewport"
 import { LiveMeta } from "~/component/head-meta"
 import { siteLinks } from "../links"
 import { navCustomItems, navSavedLabel, navSequence } from "../nav-order"
+import { GitHubLink } from "../github-link"
+import { ExternalArrow, NewTab } from "../icons"
 import { LogoIcon } from "../marks"
+import { MenuSheet, MenuToggle } from "../phone-menu"
 import { monoFontLatin } from "../mono-fonts"
 import { SiteSearch } from "../search"
 import { loadSiteSettings, siteSettings } from "../settings"
@@ -33,6 +36,9 @@ const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings")) : u
 // (and with it this overlay).
 const [settings, setSettings] = createSignal(false)
 let settingsLoaded = false
+// Whether the small-screen menu sheet is open: the scene (arcade.tsx) ignores input and goes quiet under it.
+const [arcadeMenu, setArcadeMenu] = createSignal(false)
+export { arcadeMenu }
 
 /**
  * The page around an arcade 404 scene, shared by every version of it: the site's own logo mark and
@@ -55,6 +61,7 @@ export function ArcadeChrome(props: { settingsRows?: () => JSX.Element }) {
           href: siteSettings.productNavDemo === "on" && item.demo ? item.demo : item.href,
           label: navSavedLabel(entry(item.id), language.locale()) ?? item.label,
           external: "external" in item && !!item.external,
+          arrow: "arrow" in item && !!item.arrow,
           company: "company" in item,
         })),
         ...navCustomItems(siteSettings.navConfig),
@@ -65,6 +72,7 @@ export function ArcadeChrome(props: { settingsRows?: () => JSX.Element }) {
   })
 
   let settingsButton: HTMLButtonElement | undefined
+  let menuButton: HTMLButtonElement | undefined
 
   // The tone script set the grade on <html> before first paint; keep it in step with Settings.
   createEffect(() => {
@@ -90,6 +98,22 @@ export function ArcadeChrome(props: { settingsRows?: () => JSX.Element }) {
     }
     document.addEventListener("keydown", shortcut)
     onCleanup(() => document.removeEventListener("keydown", shortcut))
+    // The menu closes on Escape (focus back on its button) and once the sidebar is back, as on the site.
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !arcadeMenu()) return
+      event.preventDefault()
+      setArcadeMenu(false)
+      menuButton?.focus()
+    }
+    const wide = matchMedia("(min-width: 60.0625rem)")
+    const closeMenu = () => setArcadeMenu(false)
+    document.addEventListener("keydown", escape)
+    wide.addEventListener("change", closeMenu)
+    onCleanup(() => {
+      document.removeEventListener("keydown", escape)
+      wide.removeEventListener("change", closeMenu)
+      setArcadeMenu(false)
+    })
   })
 
   const close = () => {
@@ -133,7 +157,39 @@ export function ArcadeChrome(props: { settingsRows?: () => JSX.Element }) {
           </ul>
         </nav>
       </header>
-      <SoundToggle />
+      {/* Small screens: the site's top-bar GitHub mark and menu (phone-menu.tsx), on the logo's row. */}
+      <div data-site data-theme="dark" data-slot="phone-bar">
+        <GitHubLink owner="topbar" />
+        <MenuToggle
+          ref={(element) => (menuButton = element)}
+          open={arcadeMenu()}
+          onToggle={() => setArcadeMenu(!arcadeMenu())}
+        />
+        <MenuSheet open={arcadeMenu()} onClose={() => setArcadeMenu(false)}>
+          <For each={nav()}>
+            {(item, index) => (
+              <li>
+                <a href={item.href} target={item.external ? "_blank" : undefined}>
+                  <span data-slot="index" aria-hidden="true">
+                    [{index() + 1}]
+                  </span>
+                  <span data-slot="label">{item.label}</span>
+                  <Show when={item.arrow}>
+                    <ExternalArrow />
+                  </Show>
+                  <Show when={item.external}>
+                    <NewTab />
+                  </Show>
+                </a>
+              </li>
+            )}
+          </For>
+        </MenuSheet>
+      </div>
+      {/* Under the open menu the scene's own controls leave the tab order (arcade.tsx does the stage). */}
+      <div inert={arcadeMenu()}>
+        <SoundToggle />
+      </div>
       {/* The site's tools need the [data-site] scope; the logo and nav above stay outside it so the
           site's stylesheet (loaded with the Settings panel) never restyles them. */}
       <div data-site data-theme="dark" data-slot="site-tools">

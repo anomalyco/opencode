@@ -1924,15 +1924,16 @@
   }
 }
 
-/* Phones: the Console panel's background (the dark panel and its dots) runs edge to edge; its
-   content keeps its place, the page edge plus the panel's 1.5rem padding. */
+/* Phones: the Console panel's background (the dark panel and its dots) runs edge to edge, to the
+   screen's edges; its content keeps the page's side padding, so its text lines up with the FAQ's
+   above on both sides. */
 @media (max-width: 40rem) {
   [data-page="home"][data-site]
     [data-component="block"][data-console="panel"][data-console-layout="block"][data-console-layout] {
     margin-inline: calc(-1 * var(--edge));
 
     [data-slot="console"] {
-      padding-inline: calc(var(--edge) + 1.5rem);
+      padding-inline: var(--edge);
     }
   }
 }

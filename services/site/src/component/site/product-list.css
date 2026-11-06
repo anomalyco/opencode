@@ -97,17 +97,67 @@
       margin-inline-start: var(--gutter);
     }
 
-    /* Phones: the button drops under the text. The tile keeps its size (a description that wraps
-       just runs on below it). */
+    /* The nav's corner arrow after an external item's name, as in the phone menu: 6px after the
+       label and nudged up, in the name's colour. */
+    [data-slot="name"] [data-slot="external"] {
+      display: inline-block;
+      margin-inline-start: 6px;
+      translate: 0 -2px;
+      vertical-align: middle;
+    }
+
+    /* Phones: no Learn more button; the whole row is the link. The row's pressed grey runs to the
+       screen's edges and its content keeps the page's 24px edges, like the phone menu's rows. The
+       link's box covers the row (its label stays its accessible name), the row's other parts let
+       taps through to it, and its focus ring draws around the row. */
     @media (max-width: 39.9375rem) {
+      row-gap: calc(var(--product-list-gap) - 1.5rem);
+
       li {
         grid-template-columns: var(--product-list-tile) minmax(0, 1fr);
+        isolation: isolate;
+        margin-inline: calc(-1 * var(--edge));
+        padding: 0.75rem var(--edge);
+
+        > :not([data-slot="get"]) {
+          pointer-events: none;
+        }
       }
 
       [data-slot="get"] {
-        grid-column: 2;
-        justify-self: start;
-        margin: 0.875rem 0 0;
+        position: static;
+        width: 0;
+        min-width: 0;
+        height: 0;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        background: none;
+        font-size: 0;
+        outline: none;
+        /* No press scale: a transform would make the link the box its cover is placed in, and the
+           tap would end outside it. */
+        transform: none !important;
+        scale: none;
+
+        &::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: -1;
+          transition: background-color 150ms ease;
+        }
+
+        &:active::before {
+          background: var(--bg-weak);
+        }
+
+        &:focus-visible::before {
+          outline: 2px solid var(--link);
+          outline-offset: -2px;
+        }
       }
     }
   }

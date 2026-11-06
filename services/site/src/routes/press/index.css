@@ -838,11 +838,13 @@
       }
     }
 
+    /* The downloads under each tile at the inline end (the right, or the left in right-to-left text),
+       as on /brand; a line that wraps ends there too. */
     [data-slot="meta"] {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 0.5rem 1rem;
     }
 
@@ -855,6 +857,8 @@
     /* The buttons' size and spacing match /brand: asset-buttons.css. */
     [data-slot="actions"] {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
   }
 

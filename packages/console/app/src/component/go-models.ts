@@ -79,6 +79,16 @@ export const goModels: GoModel[] = [
     regions: true,
   },
   {
+    id: "crouton-alpha-free",
+    name: "Crouton Alpha Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    fresh: true,
+    limitedTime: true,
+    regions: true,
+  },
+  {
     id: "beam-free",
     name: "Beam Free",
     requests: Infinity,
@@ -127,6 +137,7 @@ const plusLimits: Record<string, [number, number]> = {
   "mimo-v2.5": [60200, 120],
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
+  "crouton-alpha-free": [Infinity, Infinity],
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
 }
@@ -161,6 +172,7 @@ const teamsLimits: Record<string, [number, number]> = {
   "mimo-v2.5": [32608, 65],
   "muse-spark-1.3-contributor": [49075, 65],
   "muse-spark-1.2-contributor": [49075, 65],
+  "crouton-alpha-free": [Infinity, Infinity],
   "beam-free": [Infinity, Infinity],
   "iceman-contributor-free": [Infinity, Infinity],
 }

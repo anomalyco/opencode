@@ -493,6 +493,17 @@ export function Typewriter() {
     })
   })
 
+  const claim = () => (
+    <>
+      A TYPEFACE WITH{" "}
+      <span data-slot="count">
+        {fontContent.combinations.base}
+        <sup>{fontContent.combinations.exponent}</sup>
+      </span>{" "}
+      POSSIBLE COMBINATIONS
+    </>
+  )
+
   return (
     <section data-component="font-hero" aria-label="Logo typewriter">
       <h1 data-slot="sr-only">{fontContent.title}</h1>
@@ -514,16 +525,11 @@ export function Typewriter() {
         </textarea>
         {/* The server renders the starting wordmark, so the hero is never empty before hydration. */}
         <div ref={output} class="letter-output" aria-hidden="true" innerHTML={initialLetters} />
+        {/* Phones show the claim under the wordmark instead of in the bar; CSS shows one of the two. */}
+        <p data-slot="phone-copy">{claim()}</p>
       </div>
       <div data-slot="top-bar">
-        <p data-slot="top-copy">
-          A TYPEFACE WITH{" "}
-          <span data-slot="count">
-            {fontContent.combinations.base}
-            <sup>{fontContent.combinations.exponent}</sup>
-          </span>{" "}
-          POSSIBLE COMBINATIONS
-        </p>
+        <p data-slot="top-copy">{claim()}</p>
         <div data-slot="tools" role="group" aria-label="Canvas controls">
           <div ref={gifControl} class="gif-control" aria-hidden="true" inert>
             <button

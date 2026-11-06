@@ -14,7 +14,7 @@
     --github-right: calc(0.75rem + (4.5rem - var(--github-size)) / 2 + env(safe-area-inset-right, 0px));
   }
 
-  /* The link is the full 40px target. No backing: over a dark or light surface it takes that
+  /* The link is the full 40px target round the 20px mark. No backing: over a dark or light surface it takes that
      scheme's ink instead (below). */
   [data-component="github-link"] {
     --github-mark: 20px;
@@ -26,6 +26,17 @@
     border-radius: 50%;
     color: var(--text-strong);
     cursor: pointer;
+
+    svg {
+      width: var(--github-mark);
+      height: var(--github-mark);
+    }
+
+    /* Phones and tablets: a 24px mark in the top bar and in the bare pages' corner (the font page),
+       still centred in its 44px target. */
+    @media (max-width: 60rem) {
+      --github-mark: 24px;
+    }
   }
 
   /* The fixed marks (the GitHub mark, the product pages' chevrons beside it, the /font logo) take

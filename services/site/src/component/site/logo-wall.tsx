@@ -341,7 +341,7 @@ function fitRule(id: string, label: string) {
   return `@container (width < calc(${width}em + 24px)){${at}>[data-slot="long"]{display:none}${at}>[data-slot="short"]{display:inline}}`
 }
 
-/** The label's text with its number ("16M+", "16 Mio.+", "1,600万") kept on one line. */
+/** The label's text with its number ("22M+", "22 Mio.+", "2,200万") kept on one line. */
 function LabelText(props: { text: string }) {
   const parts = () => props.text.split(/(\d[\d,.]*(?:\s?(?:Mio\.|万|萬|만|ล้าน|M))?\+?)/)
   return <For each={parts()}>{(part, index) => (index() % 2 ? <span data-slot="number">{part}</span> : part)}</For>

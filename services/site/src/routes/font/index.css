@@ -136,6 +136,10 @@
       z-index: 3;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      /* The first row is the logo row (--top down, --logo-height tall), so the claim and the
+         Download button centre on the line the fixed logo and GitHub mark share; taller items
+         overflow it evenly above and below. */
+      grid-template-rows: var(--logo-height);
       align-items: center;
       /* The right end clears the fixed GitHub mark in the corner (github-link.css). */
       padding: var(--top) var(--github-clear) 0 var(--edge);
@@ -304,6 +308,39 @@
     @media (max-width: 760px) {
       [data-slot="canvas"] {
         padding: 88px 24px;
+      }
+    }
+
+    [data-slot="phone-copy"] {
+      display: none;
+    }
+
+    /* On phones the claim sits centred under the wordmark, and the pair is centred together. It
+       follows the wordmark in the DOM, so it also reads after it. */
+    @media (pointer: coarse) and (max-width: 40rem) {
+      [data-slot="top-copy"] {
+        display: none;
+      }
+
+      .letter-output {
+        margin-block: auto 0;
+      }
+
+      [data-slot="phone-copy"] {
+        display: block;
+        flex-shrink: 0;
+        max-width: 22rem;
+        margin: 24px 0 auto;
+        font-family: var(--font-mono);
+        font-size: var(--fs-small);
+        line-height: 1.5;
+        text-align: center;
+        text-wrap: balance;
+
+        sup {
+          font-size: 0.72em;
+          line-height: 0;
+        }
       }
     }
   }
@@ -547,13 +584,13 @@
   /* Windows wider than the layout centre it (site.css); two copies of the box, shifted out by the
      room on each side, carry the plates' colour (and the blue universe bands') to the window's
      edges without changing their layout. Zero below 1728px. */
-  :is([data-plate], [data-slot="universe-stage"], [data-slot="universe-notes"]) {
+  :is([data-plate], [data-slot="universe-track"], [data-slot="universe-stage"], [data-slot="universe-notes"]) {
     box-shadow:
       calc(-1 * var(--page-offset)) 0 0 var(--plate-bleed, var(--bg)),
       var(--page-offset-end) 0 0 var(--plate-bleed, var(--bg));
   }
 
-  :is([data-slot="universe-stage"], [data-slot="universe-notes"]) {
+  :is([data-slot="universe-track"], [data-slot="universe-stage"], [data-slot="universe-notes"]) {
     --plate-bleed: var(--universe-blue);
   }
 
@@ -728,11 +765,18 @@
 
     a {
       display: flex;
+      align-items: baseline;
       gap: 1rem;
       padding: 0.4rem 0;
       border-bottom: 1px solid var(--hair);
       font-size: 0.9375rem;
       transition: color 150ms ease;
+
+      /* The number shares the label's baseline, then rises to centre its cap height on the label's
+         (Inter's cap height is 0.727 em). */
+      [data-anno] {
+        translate: 0 calc((1cap - 0.727 * 0.9375rem) / 2);
+      }
 
       @media (hover: hover) and (pointer: fine) {
         &:hover {
@@ -2106,8 +2150,12 @@
       padding: max(1.5rem, calc(var(--m) * 1.5)) 0 max(1.5rem, calc(var(--m) * 1.5)) var(--pad);
       border-bottom: 1px solid var(--hair);
 
+      /* Phones put the size and its ruler above the line, so the line gets the full width and the
+         large rulers are not cut off. */
       @media (max-width: 40rem) {
-        grid-template-columns: 5.5rem minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        padding-block: max(1.5rem, calc(var(--m) * 0.75));
       }
     }
   }
@@ -2124,6 +2172,13 @@
     [data-anno] {
       color: var(--text-weak);
       white-space: nowrap;
+    }
+
+    @media (max-width: 40rem) {
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      padding-right: var(--pad);
     }
   }
 
@@ -2507,6 +2562,9 @@
   [data-slot="universe-track"] {
     margin-inline: calc(-1 * var(--pad));
     height: 420vh;
+    /* The same blue under the pinned stage: on phones the stage is 100svh, so once the browser bar
+       hides, the strip below it would show the page colour between the stage and the notes. */
+    background: var(--universe-blue);
 
     @media (max-width: 40rem) {
       height: 320vh;
