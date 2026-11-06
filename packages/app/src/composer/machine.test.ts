@@ -43,6 +43,7 @@ const session: ComposerSession = {
     switchModel: async () => undefined,
     revert: { commit: async () => undefined },
   },
+  file: { list: async () => ({ data: [] }) },
   data: {
     location: { command: { list: () => [] } },
     session: {
