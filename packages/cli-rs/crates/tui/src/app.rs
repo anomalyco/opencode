@@ -343,6 +343,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         },
     ));
 
+    opencode_ui::motion::set_running(app, opencode_ui::motion::enabled(deps.config.info.animations));
     let page = theme.theme().page();
     app.set_theme(app_theme(&page));
     let shell = View::new(app).column().grow(1.0).basis(Length::Auto);

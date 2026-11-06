@@ -86,7 +86,7 @@ impl Compaction {
         self.label.clear();
         match status {
             Status::Running => {
-                self.label.add(&Spinner::new(cx.app).color(color).animations(cx.animations));
+                self.label.add(&Spinner::new(cx.app).color(color));
             }
             Status::Failed => {
                 self.label.add(&Text::new(cx.app, "✗").fg(color));

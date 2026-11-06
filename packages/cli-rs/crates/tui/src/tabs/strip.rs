@@ -86,6 +86,11 @@ pub fn animating(strip: &Custom<Strip>) -> bool {
     strip.with(|strip| strip.pulses.borrow().values().any(Pulse::live))
 }
 
+/// Turns the pulses' motion on or off (`TabPulse`'s `enabled`).
+pub fn set_animations(strip: &Custom<Strip>, enabled: bool) {
+    strip.with(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.set_enabled(enabled)));
+}
+
 pub fn tick(strip: &Custom<Strip>, delta: std::time::Duration) {
     strip.update(|strip| strip.pulses.borrow_mut().values_mut().for_each(|pulse| pulse.advance(delta)));
 }
@@ -377,6 +382,9 @@ impl Component for Strip {
             }
             slots.push((x, tab_width, session.to_owned()));
             x += tab_width;
+        }
+        if pulses.values().any(Pulse::live) {
+            crate::frame::wake(&tui);
         }
         drop(pulses);
         if layout.after > 0 {

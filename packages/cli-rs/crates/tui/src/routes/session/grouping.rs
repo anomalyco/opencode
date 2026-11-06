@@ -563,7 +563,6 @@ struct Inner {
     children: RefCell<Vec<(ChildKey, Child)>>,
     /// The latest thought's title (`latest`), kept while the next thought has none yet.
     latest: RefCell<Option<String>>,
-    animations: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -642,7 +641,6 @@ impl GroupView {
             painted: RefCell::default(),
             children: RefCell::default(),
             latest: RefCell::default(),
-            animations: cx.animations,
         });
         inner.header.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, cx, _| {
             // A click that ends a text selection does not toggle (`useDisclosure`).
@@ -906,7 +904,7 @@ impl Inner {
         self.header.clear();
         let fg = self.color(header.color);
         let painted = if header.spinner {
-            let spinner = Spinner::new(&self.app).color(fg).label(header.label.clone()).animations(self.animations);
+            let spinner = Spinner::new(&self.app).color(fg).label(header.label.clone());
             self.header.add(&View::new(&self.app).row().child(&spinner));
             Painted::Spinner(spinner)
         } else {
