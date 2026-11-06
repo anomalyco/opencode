@@ -1,10 +1,11 @@
 /**
- * Names a message's day relatively: Today and Yesterday, then the date this year, then the date with its year.
- * `bareToday` leaves today's time on its own, for places where an unqualified time already reads as today.
+ * Names a message's day relatively to `today` (any time on the current day, such as `useToday()`): Today and
+ * Yesterday, then the date this year, then the date with its year. `bareToday` leaves today's time on its own, for
+ * places where an unqualified time already reads as today.
  */
-export function messageTime(time: number, locale: string, options: { bareToday?: boolean } = {}) {
+export function messageTime(time: number, today: number, locale: string, options: { bareToday?: boolean } = {}) {
   const date = new Date(time)
-  const now = new Date()
+  const now = new Date(today)
   const midnight = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
   const days = Math.round((midnight(now) - midnight(date)) / 86_400_000)
   const clock = new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(date)

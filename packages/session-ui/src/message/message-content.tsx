@@ -56,6 +56,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { messageTime } from "./message-time"
+import { useToday } from "./relative-time"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 import {
@@ -311,7 +312,8 @@ export function CurrentUserMessageDisplay(props: {
     return agent ? [{ label: agent }] : []
   })
 
-  const sent = createMemo(() => messageTime(props.message.time.created, i18n.locale()))
+  const today = useToday()
+  const sent = createMemo(() => messageTime(props.message.time.created, today(), i18n.locale()))
 
   // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
   const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
@@ -1214,14 +1216,18 @@ export function AssistantTextContent(props: {
               )}
             </Show>
             <Show when={props.turnCompletedAt ?? props.message.time.completed}>
-              {(completed) => (
-                <span data-slot="text-part-meta-time">
-                  <span aria-hidden="true">{"\u00B7"}</span>
-                  <time dateTime={new Date(completed()).toISOString()} dir="auto">
-                    {messageTime(completed(), i18n.locale(), { bareToday: true })}
-                  </time>
-                </span>
-              )}
+              {(completed) => {
+                const today = useToday()
+
+                return (
+                  <span data-slot="text-part-meta-time">
+                    <span aria-hidden="true">{"\u00B7"}</span>
+                    <time dateTime={new Date(completed()).toISOString()} dir="auto">
+                      {messageTime(completed(), today(), i18n.locale(), { bareToday: true })}
+                    </time>
+                  </span>
+                )
+              }}
             </Show>
           </span>
         </Show>

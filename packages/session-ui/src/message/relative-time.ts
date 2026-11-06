@@ -1,4 +1,4 @@
-import { createSignal, onCleanup } from "solid-js"
+import { createMemo, createSignal, onCleanup } from "solid-js"
 
 const MINUTE = 60_000
 
@@ -42,4 +42,16 @@ export function useNow() {
   })
 
   return now
+}
+
+// The start of the local day on the shared clock. It changes only at midnight, so labels that name the day (Today,
+// Yesterday) redraw once a day, and the 30-second tick catches up soon after a sleeping machine wakes.
+export function useToday() {
+  const now = useNow()
+
+  return createMemo(() => {
+    const date = new Date(now())
+
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  })
 }

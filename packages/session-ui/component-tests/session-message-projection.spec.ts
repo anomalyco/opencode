@@ -142,6 +142,22 @@ story.describe("message actions menu", () => {
     },
   )
 
+  story("names the day again in the menu and the response footer once the date changes", async ({ mount, page }) => {
+    // The prompt is sent at midnight on 1 January 2025 and its turn finishes five minutes later; the page opens late that day.
+    await page.clock.install({ time: new Date("2025-01-01T23:59:30Z") })
+    const timeline = await mount("current-session-timeline-rows--response-speed")
+    const finished = timeline.locator('[data-slot="text-part-meta-time"] time')
+    await expect(finished).toHaveText("12:05 AM")
+
+    // Still open a minute after midnight, without a reload. Jump before opening the menu: a clock jump right after the
+    // menu closes takes seconds.
+    await page.clock.fastForward("01:00")
+    await expect(finished).toHaveText("Yesterday, 12:05 AM")
+    await timeline.getByText("Check the timeline performance.", { exact: true }).hover()
+    await timeline.getByRole("button", { name: "More actions", exact: true }).click()
+    await expect(page.getByRole("menu").locator("time")).toHaveText("Yesterday, 12:00 AM")
+  })
+
   story("opens upward, 4px from the chevron, with its trailing edge on the chevron's", async ({ mount, page }) => {
     const timeline = await mount("current-session-timeline-rows--prompt-runs")
     await timeline.getByRole("button", { name: "Send next", exact: true }).click()
