@@ -107,11 +107,14 @@ const instantiate = <R>(setup: Setup<R>, bindings?: Globals<R>): Interpreter<R> 
 }
 
 /**
- * The round-trip test mode (`CODEMODE_ROUNDTRIP=1`): at every host stop and every slice, which come every few loop
- * back-edges and calls, a run's state is saved to bytes and restored into a brand-new runtime, which continues the run.
- * It proves the VM's state is plain data at every step.
+ * The round-trip test mode: at every host stop and every slice, which come every few loop back-edges and calls, a run's
+ * state is saved to bytes and restored into a brand-new runtime, which continues the run. It proves the VM's state is
+ * plain data at every step. Internal: only the test suite turns it on (`bun run test:roundtrip`).
  */
-const roundTrip = typeof process !== "undefined" && process.env.CODEMODE_ROUNDTRIP === "1"
+let roundTrip = false
+export const setRoundTrip = (enabled: boolean) => {
+  roundTrip = enabled
+}
 const ROUND_TRIP_TICKS = 2
 const ROUND_TRIP_MAX = 200
 
