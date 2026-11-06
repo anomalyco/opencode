@@ -495,8 +495,10 @@ export const bannerLabels = ["badge", "plain"] as const
 // a sentence, a dense grid with the count, or a slow marquee.
 export const providerLogoStyles = ["none", "row", "inline", "grid", "marquee"] as const
 // "Bring your own subs": the providers' grid then the plans, your subscriptions beside the plans,
-// or tabs between the two.
-export const subsStyles = ["grid", "split", "tabs"] as const
+// or tabs between the two. A, B and C (byos-options.tsx) explore showing that OpenCode works with
+// nearly every subscription, provider and model: a ruled row per way in, a wall of every provider's
+// mark, or the names set as one run of text.
+export const subsStyles = ["grid", "split", "tabs", "A rows", "B wall", "C names"] as const
 // "Get started": a numbered path, a price ladder, one large sentence, a terminal transcript, or two
 // cells in the tools grid's borders.
 export const getStartedStyles = ["steps", "ladder", "sentence", "terminal", "cards"] as const
