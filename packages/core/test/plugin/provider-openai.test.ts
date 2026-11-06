@@ -97,6 +97,7 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-sol"), (model) => {
+          model.name = "GPT-5.6 Sol"
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
@@ -120,6 +121,17 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.1"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), (model) => {
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-luna"), (model) => {
+          model.name = "GPT-6 Luna"
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-luna-fast"), (model) => {
+          model.name = "GPT-6 Luna Fast"
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.6-terra"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.10"), (model) => {
@@ -194,6 +206,24 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
+      const luna = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-luna")))
+      const longLuna = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-luna-1m")))
+      expect(luna.enabled).toBe(true)
+      expect(longLuna.name).toBe("GPT-6 Luna (1M)")
+      expect(longLuna.modelID).toBe(Model.ID.make("gpt-6-luna"))
+      expect(longLuna.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+      expect(longLuna.enabled).toBe(true)
+      const longLunaFast = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-luna-fast-1m")))
+      expect(longLunaFast.name).toBe("GPT-6 Luna Fast (1M)")
+      expect(longLunaFast.modelID).toBe(Model.ID.make("gpt-6-luna-fast"))
+      const longSol = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol-1m")))
+      expect(longSol.name).toBe("GPT-5.6 Sol 1M")
+      expect(longSol.modelID).toBe(Model.ID.make("gpt-5.6-sol"))
+      expect(longSol.limit).toEqual({ context: 1_000_000, input: 872_000, output: 128_000 })
+      expect(longSol.cost).toEqual([])
+      expect(longSol.enabled).toBe(true)
+      const longTerra = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-terra-1m")))
+      expect(longTerra.enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)

@@ -6,6 +6,7 @@ import type { Server } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
@@ -279,6 +280,11 @@ export const OpenAIPlugin = define({
       })
     })
     yield* ctx.model.transform((models) => {
+      // Capture the long-context originals before any later transform can edit them.
+      const longLuna = ["gpt-6-luna", "gpt-6-luna-fast"].flatMap((id) => {
+        const model = models.get(Provider.ID.openai, Model.ID.make(id))
+        return model?.enabled ? [{ model, limit: { ...model.limit } }] : []
+      })
       for (const model of models.list(Provider.ID.openai)) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
@@ -302,6 +308,32 @@ export const OpenAIPlugin = define({
             return
           }
           draft.cost = []
+        })
+      }
+      if (!chatgpt) return
+      // ChatGPT OAuth also serves the long-context GPT-5.6 tiers. Expose opt-in
+      // `-1m` catalog entries that keep the same API model but raise the limit.
+      for (const model of Array.from(models.list(Provider.ID.openai))) {
+        const apiID = model.modelID ?? model.id
+        if (!model.enabled || !/^gpt-5\.6-(sol|terra|luna)(-fast)?$/.test(apiID)) continue
+        const id = Model.ID.make(`${model.id}-1m`)
+        if (models.get(Provider.ID.openai, id)) continue
+        models.update(Provider.ID.openai, id, (draft) => {
+          Object.assign(draft, structuredClone(model))
+          draft.id = id
+          draft.modelID = apiID
+          draft.name = `${model.name} 1M`
+          draft.limit = { context: 1_000_000, input: 872_000, output: 128_000 }
+          draft.cost = []
+          draft.enabled = true
+        })
+      }
+      for (const entry of longLuna) {
+        models.update(Provider.ID.openai, Model.ID.make(`${entry.model.id}-1m`), (draft) => {
+          Object.assign(draft, structuredClone(entry.model))
+          draft.modelID = entry.model.modelID ?? entry.model.id
+          draft.name = `${entry.model.name} (1M)`
+          draft.limit = entry.limit
         })
       }
     })
