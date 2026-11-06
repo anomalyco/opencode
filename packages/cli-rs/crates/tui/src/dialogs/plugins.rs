@@ -72,6 +72,8 @@ enum Entry {
         target: String,
         status: &'static str,
         error: Option<String>,
+        /// Has an activation, failed or not: Enter disables it.
+        active: bool,
     },
     Server {
         key: String,
@@ -242,30 +244,7 @@ impl Manager {
         let Some(tui) = self.tui.upgrade() else {
             return Vec::new();
         };
-        let mut local: Vec<Entry> = tui
-            .plugins
-            .entries()
-            .into_iter()
-            .filter(|entry| entry.id != ID)
-            .map(|entry| {
-                let (status, error) = match &entry.status {
-                    Status::Active => ("active", None),
-                    Status::Inactive => ("inactive", None),
-                    Status::Skipped(reason) => ("skipped", Some(reason.clone())),
-                    Status::Failed(error) => ("failed", Some(error.clone())),
-                };
-                // Only a plugin with a definition can be toggled; an unloaded target cannot.
-                let loaded = entry.source != Source::Configured;
-                Entry::Tui {
-                    key: format!("tui:{}", entry.target.as_ref().unwrap_or(&entry.id)),
-                    internal: entry.source == Source::Builtin,
-                    id: loaded.then(|| entry.id.clone()),
-                    target: entry.target.unwrap_or(entry.id),
-                    status,
-                    error,
-                }
-            })
-            .collect();
+        let mut local: Vec<Entry> = tui.plugins.entries().into_iter().filter(|entry| entry.id != ID).map(row).collect();
         // A package without a server part runs nothing there; its TUI part has its own row.
         let mut server: Vec<Entry> = self
             .server
@@ -316,8 +295,9 @@ impl Manager {
         entry.filter(|entry| matches!(entry, Entry::Tui { id: Some(_), .. }))
     }
 
+    /// TS `registered().active`: a plugin that failed while active is still active, so it can be disabled.
     fn active(entry: &Entry) -> bool {
-        status(entry) == "active"
+        matches!(entry, Entry::Tui { active: true, .. })
     }
 
     fn updating(&self, entry: &Entry) -> bool {
@@ -591,6 +571,27 @@ fn is_local(entry: &Entry) -> bool {
     }
 }
 
+/// The row of a registry entry.
+fn row(entry: opencode_plugin::Entry) -> Entry {
+    let (status, error) = match &entry.status {
+        Status::Active => ("active", None),
+        Status::Inactive => ("inactive", None),
+        Status::Skipped(reason) => ("skipped", Some(reason.clone())),
+        Status::Failed(error) => ("failed", Some(error.clone())),
+    };
+    // Only a plugin with a definition can be toggled; an unloaded target cannot.
+    let loaded = entry.source != Source::Configured;
+    Entry::Tui {
+        key: format!("tui:{}", entry.target.as_ref().unwrap_or(&entry.id)),
+        internal: entry.source == Source::Builtin,
+        id: loaded.then(|| entry.id.clone()),
+        target: entry.target.unwrap_or(entry.id),
+        status,
+        error,
+        active: entry.active,
+    }
+}
+
 fn status(entry: &Entry) -> &str {
     match entry {
         Entry::Server { plugin, .. } => plugin.state.tag(),
@@ -653,5 +654,23 @@ mod tests {
         let mut labels = vec!["beta", "Alpha", "alpha"];
         labels.sort_by(|a, b| locale_compare(a, b));
         assert_eq!(labels, ["alpha", "Alpha", "beta"]);
+    }
+
+    // Expected: as in TS, a plugin that failed while active (a panic, or a failed rebuild with the previous
+    // version running) offers disable, and an inactive one enable.
+    #[test]
+    fn a_failed_active_plugin_can_be_disabled() {
+        let entry = |status: Status, active: bool| {
+            row(opencode_plugin::Entry {
+                id: "sample".to_owned(),
+                target: Some("sample.so".to_owned()),
+                source: Source::External,
+                status,
+                active,
+            })
+        };
+        assert!(Manager::active(&entry(Status::Failed("boom (previous version still active)".to_owned()), true)));
+        assert!(Manager::active(&entry(Status::Active, true)));
+        assert!(!Manager::active(&entry(Status::Inactive, false)));
     }
 }
