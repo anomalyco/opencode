@@ -9,6 +9,8 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+use opencode_service::ts_command::write_script;
+
 const SERVICE: &str = r#"
 import { appendFile, rename, writeFile } from "node:fs/promises"
 const [registration, log] = process.argv.slice(2)
@@ -73,11 +75,7 @@ esac
             data = sandbox.path("data").display(),
             config = sandbox.path("config/opencode/service-local.json").display(),
         );
-        let program = sandbox.path("opencode-ts");
-        std::fs::write(&program, script).unwrap();
-        let mut permissions = std::fs::metadata(&program).unwrap().permissions();
-        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
-        std::fs::set_permissions(&program, permissions).unwrap();
+        write_script(&sandbox.path("opencode-ts"), &script);
         Some(sandbox)
     }
 
@@ -218,7 +216,7 @@ fn set_remote_true_runs_the_typescript_command() {
     assert_eq!(sandbox.log(), "service set remote true\n");
     assert_eq!(text(&sandbox.run(&["service", "get", "remote"], &[]).stdout), "true\n");
     // A failure of the TS command is the exit code.
-    std::fs::write(sandbox.path("opencode-ts"), "#!/bin/sh\necho tunnel failed >&2\nexit 4\n").unwrap();
+    write_script(&sandbox.path("opencode-ts"), "#!/bin/sh\necho tunnel failed >&2\nexit 4\n");
     let failed = sandbox.run(&["service", "set", "remote", "true"], &[]);
     assert_eq!(failed.status.code(), Some(4));
     assert_eq!(text(&failed.stderr), "tunnel failed\n");
@@ -302,17 +300,13 @@ fn interop_with_a_typescript_service() {
     .map(|(name, dir)| format!("{name}='{}'", sandbox.path(dir).display()))
     .join(" ");
     let wrapper = sandbox.path("opencode-ts-source");
-    std::fs::write(
+    write_script(
         &wrapper,
-        format!(
+        &format!(
             "#!/bin/sh\ncd '{}/packages/cli' || exit 1\nexec env -i PATH=\"$PATH\" {vars} OPENCODE_DISABLE_MODELS_FETCH=1 OPENCODE_DISABLE_AUTOUPDATE=1 bun run --silent src/index.ts \"$@\"\n",
             root.display()
         ),
-    )
-    .unwrap();
-    let mut permissions = std::fs::metadata(&wrapper).unwrap().permissions();
-    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
-    std::fs::set_permissions(&wrapper, permissions).unwrap();
+    );
     let free_port = || std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let port = free_port();
     std::fs::write(sandbox.path("config/opencode/service-local.json"), format!("{{\"port\":{port}}}\n")).unwrap();

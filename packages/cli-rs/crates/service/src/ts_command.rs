@@ -51,6 +51,21 @@ impl TsCommand {
     }
 }
 
+/// For tests: writes an executable script that stands in for the TypeScript binary. `sh` writes it, because a
+/// write descriptor open in the test process can leak into a child that another test thread forks, and an exec
+/// of the script then fails with ETXTBSY.
+#[doc(hidden)]
+#[cfg(unix)]
+pub fn write_script(path: &std::path::Path, script: &str) {
+    let status = std::process::Command::new("sh")
+        .args(["-c", "printf %s \"$1\" > \"$0\" && chmod 755 \"$0\""])
+        .arg(path)
+        .arg(script)
+        .status()
+        .unwrap();
+    assert!(status.success(), "write {}", path.display());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -56,10 +56,7 @@ impl Isolation {
             ts_root.display()
         );
         let wrapper = self.path("opencode-ts");
-        std::fs::write(&wrapper, script).unwrap();
-        let mut permissions = std::fs::metadata(&wrapper).unwrap().permissions();
-        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
-        std::fs::set_permissions(&wrapper, permissions).unwrap();
+        opencode_service::ts_command::write_script(&wrapper, &script);
         wrapper
     }
 }

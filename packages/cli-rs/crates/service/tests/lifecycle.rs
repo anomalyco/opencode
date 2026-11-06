@@ -10,7 +10,7 @@ use opencode_service::connect::{self, Connection, Env};
 use opencode_service::contender::Delays;
 use opencode_service::ensure::{self, Ensured, Options, Timing};
 use opencode_service::stop::{self, Poll, Pty};
-use opencode_service::ts_command::TsCommand;
+use opencode_service::ts_command::{TsCommand, write_script};
 use opencode_service::{follow, handoff, standalone};
 use rustix::process::{Pid, Signal, kill_process, test_kill_process};
 use std::ffi::OsString;
@@ -637,17 +637,15 @@ fn channel_build(fixture: &Fixture, mode: &str) -> (Options, PathBuf, PathBuf) {
     let other = root.join("service-oc-y.json");
     let spawns = root.join("spawns");
     let program = root.join("opencode-ts");
-    std::fs::write(
+    write_script(
         &program,
-        format!(
+        &format!(
             "#!/bin/sh\necho $$ >> {}\nexec bun {} {} {mode}\n",
             spawns.display(),
             fixture_script().display(),
             other.display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    );
     let ts = TsCommand::from_vars(|name| (name == TsCommand::VAR).then(|| program.clone().into()));
     let mut options = Options::new(fixture.registration.clone(), root.to_owned(), &ts);
     options.timing = fast();
@@ -764,16 +762,14 @@ impl Channel {
         std::fs::create_dir_all(&paths.state).unwrap();
         fixture.registration = paths.state.join("service-oc-x.json");
         let program = root.join("opencode-ts");
-        std::fs::write(
+        write_script(
             &program,
-            format!(
+            &format!(
                 "#!/bin/sh\nexec bun {} {} record-start\n",
                 fixture_script().display(),
                 root.join("spawned").display()
             ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        );
         let env = Env { ts_bin: Some(program.to_string_lossy().into_owned()), ..Env::default() };
         Self { fixture, paths, env }
     }
