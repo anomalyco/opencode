@@ -256,8 +256,14 @@ fn catalog_options(
         option
     };
     if !needle.is_empty() {
-        let matches =
-            fuzzy::go(needle, &rows, |row| [Some(row.title.as_str()), row.category.as_deref()], fuzzy::best_key, 0.0);
+        let matches = fuzzy::go_scored(
+            needle,
+            &rows,
+            |row| [Some(row.title.as_str()), row.category.as_deref()],
+            |_, score, _| score,
+            0.0,
+            usize::MAX,
+        );
         let mut results: Vec<Row> = matches.into_iter().map(|index| rows[index].clone()).collect();
         sort_rows(&mut results, false);
         prioritize(&mut results, |row| &row.value, &favorite_priority);
