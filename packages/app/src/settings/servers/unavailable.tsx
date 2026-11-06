@@ -1,14 +1,14 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
-import type { JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createSignal, onCleanup, untrack, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
 import type { SettingsServer } from "./inventory"
+import { createServerRetryState, isServerRetrying, transitionServerRetry, type ServerRetryEvent } from "./machine"
 import "@/settings/settings.css"
 
 /** A per-server page while its server is unreachable. */
@@ -24,17 +24,30 @@ export function SettingsServerUnavailable(props: {
   const language = useLanguage()
   const dialog = useDialog()
   const global = useGlobal()
-  const [state, setState] = createStore({ retrying: false })
+  const [retryState, setRetryState] = createSignal(createServerRetryState(props.entry.key))
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: ServerRetryEvent) => {
+    const result = transitionServerRetry(untrack(retryState), event)
+    setRetryState(result.state)
+    result.effects.forEach((effect) => {
+      clearTimeout(timer)
+      timer = undefined
+
+      if (effect.type === "timeout.cancel") return
+      timer = setTimeout(() => dispatch({ type: "retry.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+      void global.servers.retry().finally(() => dispatch({ type: "retry.settled", attempt: effect.attempt }))
+    })
+  }
+
+  // The page stays mounted while the switcher moves it to another unavailable server.
+  createEffect(() => dispatch({ type: "server.synced", server: props.entry.key }))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const http = () =>
     props.entry.connection?.type === "http" && !ServerConnection.builtin(props.entry.connection)
       ? props.entry.connection
       : undefined
-
-  const retry = () => {
-    setState("retrying", true)
-    void global.servers.retry().finally(() => setState("retrying", false))
-  }
 
   const edit = () => {
     const server = http()
@@ -69,8 +82,8 @@ export function SettingsServerUnavailable(props: {
                 size="normal"
                 variant="neutral"
                 icon="refresh"
-                disabled={state.retrying}
-                onClick={retry}
+                disabled={isServerRetrying(retryState())}
+                onClick={() => dispatch({ type: "retry.clicked" })}
               >
                 {language.t("settings.server.unreachable.retry")}
               </Button>

@@ -13,6 +13,7 @@
     "./timeline/row": "./src/timeline/session-timeline-row.tsx",
     "./timeline": "./src/timeline/session-timeline.tsx",
     "./basic-tool": "./src/components/basic-tool.tsx",
+    "./copy": "./src/components/copy.ts",
     "./dock-prompt": "./src/components/dock-prompt.tsx",
     "./file": "./src/components/file.tsx",
     "./file-media": "./src/components/file-media.tsx",

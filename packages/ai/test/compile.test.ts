@@ -45,13 +45,18 @@ describe("request option precedence", () => {
       const route = OpenAIChat.route.with({
         endpoint: { baseURL: "https://api.openai.test/v1/" },
         auth: Auth.bearer("test"),
-        generation: { maxTokens: 10, temperature: 1, stop: ["route"] },
+        maxTokens: 10,
+        temperature: 1,
+        stop: ["route"],
         providerOptions: { store: false, reasoningEffort: "low" },
       })
       const model = route.model({
         id: "gpt-4o-mini",
-        defaults: {
-          generation: { maxTokens: 20, temperature: 0.5, frequencyPenalty: 0.25, stop: ["model"] },
+        options: {
+          maxTokens: 20,
+          temperature: 0.5,
+          frequencyPenalty: 0.25,
+          stop: ["model"],
           providerOptions: { reasoningEffort: "medium" },
         },
       })
@@ -59,7 +64,9 @@ describe("request option precedence", () => {
         ai.request({
           model,
           prompt: "Say hello.",
-          generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
+          maxTokens: 30,
+          topP: 0.9,
+          stop: ["request"],
           providerOptions: { store: true },
         }),
       )
@@ -196,7 +203,7 @@ describe("request option precedence", () => {
           })
           .model({
             id: "gpt-4o-mini",
-            defaults: {
+            options: {
               headers: { "x-model": "model", "x-shared": "model" },
               http: {
                 body: { metadata: { model: true, shared: "model" }, value: "model" },
@@ -447,7 +454,7 @@ describe("request option precedence", () => {
       const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
+        ai.request({ model, prompt: "Say hello.", cache: "none", maxTokens: 8_000 }),
       )
 
       expect(withoutMaxTokens.body.max_tokens).toBe(32_000)

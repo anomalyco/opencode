@@ -1,0 +1,80 @@
+
+
+                                     ▄
+    █▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█
+    █  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀
+    ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+
+         THE OPEN SOURCE CODING AGENT
+
+             A PRODUCT OF ANOMALY
+
+
+    ────────────── THE TEAM ───────────────
+
+    Dax ....................... x.com/thdxr
+    Aiden .................. x.com/rekram11
+    Kit .................. x.com/kitlangton
+    Adam ................. x.com/adamdotdev
+    Luke .............. x.com/LukeParkerDev
+    David .............. x.com/iamdavidhill
+    Brendan ............ x.com/brendonovich
+    Frank ................ x.com/fanjiewang
+    James ................. x.com/jlongster
+    Jay ...................... x.com/jayair
+    usrnk1 ................... x.com/usrnk1
+    Sebastian ................ x.com/kmdrfx
+    Simon ................. x.com/simonklee
+    Filip .................. x.com/Neriousy
+    Victor ................... x.com/vimtor
+    Aarav .................... x.com/arvsrn
+    Ryan .................. x.com/ryanvogel
+    Alan ................. x.com/alan__rice
+    Stefan .................. x.com/savram8
+    Ludvig .............. x.com/ludvigrask_
+    Juliana ......... x.com/juliana_ardila3
+    Michelle ......... x.com/MichelleBakels
+
+
+    ───────── CONTRIBUTORS 1,000+ ─────────
+
+    @OpeOginni ................. 89 commits
+    @ariane-emory .............. 53 commits
+    @dbpolito .................. 52 commits
+    @timoclsn .................. 41 commits
+    @vglafirov ................. 41 commits
+    @jerome-benoit ............. 35 commits
+    @spoons-and-mirrors ........ 33 commits
+    @elithrar .................. 30 commits
+    @Tarquinen ................. 29 commits
+    @veracioux ................. 28 commits
+    @gigamonster256 ............ 28 commits
+    @remorses .................. 26 commits
+
+
+    ────────────── MADE WITH ──────────────
+
+    Framework ....... SolidStart, Solid 1.9
+    Build ................. Vite 7, Nitro 3
+    Runtime ....................... Bun 1.4
+    Hosting .......... Cloudflare via SST 4
+    Text face ....................... Inter
+    Code face ................ OpenTUI Mono
+    opencode.try() ................ Text.js
+    Data ............... GitHub, models.dev
+
+
+    ────────────── THANKS TO ──────────────
+
+    everyone who sent us an issue or a fix
+      the people who help out on Discord
+     the open source projects we build on
+
+
+            opencode.ai/contribute
+
+         last updated 4 November 2026
+
+
+                      ###

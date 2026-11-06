@@ -18,7 +18,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
 
   if (!path) return
 
-  if (path.startsWith(".git/")) return
+  if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 
   if (ops.hasFile(path) || ops.isOpen?.(path)) {
     ops.loadFile(path)
@@ -33,7 +33,8 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
     return
   }
 
-  const parent = path.split("/").slice(0, -1).join("/")
+  // Paths keep the native separator, so a Windows event names `src\sub\a.ts`.
+  const parent = path.split(/[/\\]/).slice(0, -1).join("/")
 
   if (!ops.isDirLoaded(parent)) return
 

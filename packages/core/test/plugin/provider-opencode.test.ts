@@ -4,7 +4,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -12,11 +12,14 @@ import { App } from "@opencode/core/app"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
+import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
+import { ConsoleAccess } from "@opencode/core/console-access"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -26,12 +29,15 @@ import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
+import { Skill } from "@opencode/core/skill"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
-import { PluginTestLayer } from "./fixture"
+import { emptyMcp } from "../fixture/mcp"
+import { makePluginTestLayer, PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
@@ -51,6 +57,11 @@ const consoleDocument = (config: Config.Interface) =>
       ),
     )
 const consoleSearch = { id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" }
+// A Console skill archive as the plugin downloads it: the version's files, with SKILL.md carrying the frontmatter.
+const skillBundle = {
+  slug: "deploy",
+  files: [{ path: "SKILL.md", content: "---\nname: Deploy\ndescription: Deploys the service.\n---\n\n# Deploy\n" }],
+}
 const consolePolicies = (config: Config.Interface) =>
   consoleDocument(config).pipe(Effect.map((document) => document?.info.policies ?? []))
 
@@ -71,6 +82,51 @@ const inProcess = (server: { fetch: (request: Request) => Response | Promise<Res
       ),
     ),
   )
+
+// Without `drain`: what the hook applied must be visible when it returns.
+const prompt = Effect.fn(function* () {
+  const hooks = yield* PluginHooks.Service
+  yield* hooks.trigger("session", "prompt", {
+    sessionID: Session.ID.make("ses_console_prompt"),
+    messageID: SessionMessage.ID.make("msg_console_prompt"),
+    prompt: { text: "hello" },
+    delivery: "steer",
+  })
+})
+
+// Records the MCP servers config transforms produce, rebuilt on each reload and registration as the MCP service does.
+type McpServerConfig = NonNullable<ReturnType<Mcp.Editor["get"]>>
+const recordingMcp = (() => {
+  const transforms = new Set<(editor: Mcp.Editor) => void>()
+  const configured = new Map<string, McpServerConfig>()
+  const reload = () =>
+    Effect.sync(() => {
+      const servers = new Map<string, McpServerConfig>()
+      const editor: Mcp.Editor = {
+        list: () => Array.from(servers, ([name, config]) => [Mcp.ServerName.make(name), config] as const),
+        get: (name) => servers.get(name),
+        set: (name, config) => servers.set(name, structuredClone(config) as McpServerConfig),
+        update: (name, update) => {
+          const config = servers.get(name)
+          if (config) update(config)
+        },
+        remove: (name) => servers.delete(name),
+      }
+      transforms.forEach((transform) => transform(editor))
+      configured.clear()
+      servers.forEach((config, name) => configured.set(name, config))
+    })
+  const service = Mcp.Service.of({
+    ...emptyMcp,
+    transform: (callback) =>
+      Effect.sync(() => {
+        transforms.add(callback)
+        return { dispose: Effect.sync(() => transforms.delete(callback)).pipe(Effect.andThen(reload)) }
+      }).pipe(Effect.tap(reload)),
+    reload,
+  })
+  return { configured, layer: Layer.succeed(Mcp.Service, service) }
+})()
 
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
@@ -761,6 +817,187 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("applies a credential switch only when it changes the Console config", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json({ providers: {} }) })),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const bus = yield* Bus.Service
+          const rebuilds = { count: 0 }
+          const key = (key: string) =>
+            Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
+          yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: key("first") })
+          yield* providers.transform(() => {
+            rebuilds.count++
+          })
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+          const initial = rebuilds.count
+
+          const second = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: key("second"),
+          })
+          yield* drain
+          expect(rebuilds.count).toBe(initial + 1)
+
+          // A switch queued behind a prompt that already applied this credential's config.
+          yield* bus.publish(Credential.Event.Switched, {
+            integrationID: Integration.ID.make("opencode"),
+            credentialID: second.id,
+          })
+          yield* drain
+          expect(rebuilds.count).toBe(initial + 1)
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  describe("refreshing Console config", () => {
+    const serve = () =>
+      Effect.sync(() => {
+        const state = { advertised: false, requests: [] as (string | null)[], hang: false }
+        const hanging: (() => void)[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            state.requests.push(request.headers.get("authorization"))
+            const response = Response.json({
+              providers: {},
+              ...(state.advertised ? { websearch: { provider: "opencode" } } : {}),
+            })
+            if (!state.hang) return response
+            return new Promise<Response>((resolve) => hanging.push(() => resolve(response)))
+          },
+        })
+        return { server, state, release: () => hanging.splice(0).forEach((resolve) => resolve()) }
+      })
+    const key = (server: Bun.Server<undefined>, key = "secret") =>
+      Credential.Key.make({ type: "key", key, metadata: { server: server.url.origin } })
+    // A real macrotask, so a request can reach the server without advancing the TestClock as `drain` does.
+    const settle = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+    const connect = Effect.fn(function* (server: Bun.Server<undefined>, poll = false) {
+      const credentials = yield* Credential.Service
+      const credential = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: key(server),
+      })
+      yield* addPlugin().pipe(inProcess(server), Effect.provideService(ConsoleAccess.Options, { poll }))
+      yield* drain
+      return credential
+    })
+
+    it.effect("schedules no background Console check", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state }) =>
+          Effect.gen(function* () {
+            yield* connect(server)
+            expect(state.requests).toHaveLength(1)
+            yield* TestClock.adjust("5 minutes")
+            yield* drain
+            expect(state.requests).toHaveLength(1)
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      ),
+    )
+
+    it.effect("refreshes Console config older than a minute when a prompt starts", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            yield* connect(server)
+            state.advertised = true
+
+            yield* TestClock.adjust("50 seconds")
+            yield* prompt()
+            expect(state.requests).toHaveLength(1)
+            expect(yield* websearch.providers()).toEqual([])
+
+            yield* TestClock.adjust("20 seconds")
+            yield* prompt()
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      ),
+    )
+
+    it.effect("admits a prompt after 3 seconds on the config it has when the Console doesn't answer", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            state.advertised = true
+            yield* connect(server)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+
+            state.hang = true
+            state.advertised = false
+            yield* TestClock.adjust("2 minutes")
+            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
+            yield* TestClock.adjust("3 seconds")
+            yield* Fiber.join(admitted)
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
+    it.effect("admits a prompt within 3 seconds while a background check waits on the Console", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state, release }) =>
+          Effect.gen(function* () {
+            const websearch = yield* WebSearch.Service
+            state.advertised = true
+            yield* connect(server, true)
+
+            state.hang = true
+            state.advertised = false
+            yield* TestClock.adjust("1 minute")
+            yield* settle
+            expect(state.requests).toHaveLength(2)
+
+            const admitted = yield* prompt().pipe(Effect.forkChild({ startImmediately: true }))
+            yield* settle
+            yield* TestClock.adjust("3 seconds")
+            yield* Fiber.join(admitted)
+            // The prompt joined the background check's request rather than sending its own.
+            expect(state.requests).toHaveLength(2)
+            expect(yield* websearch.providers()).toContainEqual(consoleSearch)
+            release()
+          }),
+        ({ server, release }) => Effect.sync(release).pipe(Effect.andThen(Effect.promise(() => server.stop(true)))),
+      ),
+    )
+
+    it.effect("fetches again under a key replaced in place, even while the last config is fresh", () =>
+      Effect.acquireUseRelease(
+        serve(),
+        ({ server, state }) =>
+          Effect.gen(function* () {
+            const credentials = yield* Credential.Service
+            const credential = yield* connect(server)
+            expect(state.requests).toEqual(["Bearer secret"])
+
+            yield* credentials.update(credential.id, { value: key(server, "rotated") })
+            yield* TestClock.adjust("10 seconds")
+            yield* prompt()
+            expect(state.requests).toEqual(["Bearer secret", "Bearer rotated"])
+          }),
+        ({ server }) => Effect.promise(() => server.stop(true)),
+      ),
+    )
+  })
+
   it.effect("refreshes past future-only policies while retaining config on malformed statements", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -1362,16 +1599,21 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.live("does not forward hosted search credentials through redirects", () =>
+  it.live("follows a hosted search redirect without sending credentials to another origin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
-        const requests: string[] = []
+        const requests: Array<{ path: string; method: string; authorization: string | null; body?: unknown }> = []
         const state = { crossOrigin: false }
         const server = Bun.serve({
           port: 0,
-          fetch: (request) => {
+          fetch: async (request) => {
             const url = new URL(request.url)
-            requests.push(url.pathname)
+            requests.push({
+              path: url.pathname,
+              method: request.method,
+              authorization: request.headers.get("authorization"),
+              ...(request.method === "POST" ? { body: await request.json() } : {}),
+            })
             if (url.pathname === "/console/api/v2/config") {
               return Response.json({
                 providers: {},
@@ -1380,6 +1622,7 @@ describe("OpencodePlugin", () => {
             }
             if (url.pathname === "/console/api/websearch") {
               if (state.crossOrigin) url.hostname = "127.0.0.1"
+              // A gateway hop keeps the method and body, so the request has to survive it.
               return Response.redirect(`${url.origin}/outside-console`, 307)
             }
             return Response.json({ providerID: "opencode", results: [] })
@@ -1401,16 +1644,218 @@ describe("OpencodePlugin", () => {
           })
           yield* addPlugin()
 
-          expect(
-            (yield* websearch.query({ query: "private search", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
-          ).toBe("WebSearch.Request")
-          expect(requests).toEqual(["/console/api/v2/config", "/console/api/websearch"])
+          // A same-origin hop is still the Console, so it keeps the caller's credentials.
+          expect(yield* websearch.query({ query: "private search", providerID: consoleSearch.id })).toEqual(
+            new WebSearch.Response({ providerID: WebSearch.ID.make("opencode"), results: [] }),
+          )
+          expect(requests.at(-1)).toEqual({
+            path: "/outside-console",
+            method: "POST",
+            authorization: "Bearer secret",
+            body: { query: "private search", providerID: "opencode" },
+          })
 
+          // Another origin never receives them.
           state.crossOrigin = true
+          expect(yield* websearch.query({ query: "private search", providerID: consoleSearch.id })).toEqual(
+            new WebSearch.Response({ providerID: WebSearch.ID.make("opencode"), results: [] }),
+          )
+          expect(requests.at(-1)).toEqual({
+            path: "/outside-console",
+            method: "POST",
+            authorization: null,
+            body: { query: "private search", providerID: "opencode" },
+          })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("follows a 302 hosted search redirect as a GET", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: Array<{ path: string; method: string; authorization: string | null }> = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            requests.push({
+              path: url.pathname,
+              method: request.method,
+              authorization: request.headers.get("authorization"),
+            })
+            if (url.pathname === "/api/v2/config") {
+              return Response.json({ providers: {}, websearch: { provider: "opencode" } })
+            }
+            if (url.pathname === "/api/websearch") return Response.redirect(`${url.origin}/gateway/search`, 302)
+            return Response.json({ providerID: "opencode", results: [] })
+          },
+        })
+        return { requests, server }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_test" },
+            }),
+          })
+          yield* addPlugin()
+
+          expect(yield* websearch.query({ query: "gateway search", providerID: consoleSearch.id })).toEqual(
+            new WebSearch.Response({ providerID: WebSearch.ID.make("opencode"), results: [] }),
+          )
+          expect(requests.at(-1)).toEqual({
+            path: "/gateway/search",
+            method: "GET",
+            authorization: "Bearer secret",
+          })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("stops following a hosted search redirect loop at the hop limit", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: string[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            requests.push(url.pathname)
+            if (url.pathname === "/api/v2/config") {
+              return Response.json({ providers: {}, websearch: { provider: "opencode" } })
+            }
+            return Response.redirect(`${url.origin}/loop`, 302)
+          },
+        })
+        return { requests, server }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_test" },
+            }),
+          })
+          yield* addPlugin()
+
           expect(
-            (yield* websearch.query({ query: "private search", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
+            (yield* websearch.query({ query: "looping search", providerID: consoleSearch.id }).pipe(Effect.flip))._tag,
           ).toBe("WebSearch.Request")
-          expect(requests).toEqual(["/console/api/v2/config", "/console/api/websearch", "/console/api/websearch"])
+          expect(requests.filter((path) => path === "/loop")).toHaveLength(5)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("downloads a skill through a redirect without sending credentials to another origin", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const downloads: Array<{ path: string; search: string; authorization: string | null; orgID: string | null }> =
+          []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            downloads.push({
+              path: url.pathname,
+              search: url.search,
+              authorization: request.headers.get("authorization"),
+              orgID: request.headers.get("x-org-id"),
+            })
+            if (url.pathname === "/api/v2/config") {
+              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
+            }
+            if (url.pathname === "/api/v2/library/skills/deploy") {
+              // Skill archives come from presigned storage on its own host, where the signature covers the encoding.
+              const target = new URL("/archive/deploy.json?expires=1&sig=a%20b~c", url)
+              target.hostname = "127.0.0.1"
+              return Response.redirect(target.toString(), 302)
+            }
+            return Response.json(skillBundle)
+          },
+        })
+        return { downloads, server }
+      }),
+      ({ downloads, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const skills = yield* Skill.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_test" },
+            }),
+          })
+          yield* addPlugin()
+
+          yield* eventually(skills.list(), (list) => list.some((skill) => skill.id === Skill.ID.make("deploy")))
+          expect(downloads).toContainEqual({
+            path: "/api/v2/library/skills/deploy",
+            search: "",
+            authorization: "Bearer secret",
+            orgID: "org_test",
+          })
+          expect(downloads.at(-1)).toEqual({
+            path: "/archive/deploy.json",
+            search: "?expires=1&sig=a%20b~c",
+            authorization: null,
+            orgID: null,
+          })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("keeps credentials on a same-origin skill redirect", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const downloads: Array<{ path: string; authorization: string | null }> = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const url = new URL(request.url)
+            downloads.push({ path: url.pathname, authorization: request.headers.get("authorization") })
+            if (url.pathname === "/api/v2/config") {
+              return Response.json({ providers: {}, library: { skills: [{ slug: "deploy", version: "1" }] } })
+            }
+            if (url.pathname === "/api/v2/library/skills/deploy")
+              return Response.redirect(`${url.origin}/assets/deploy.json`, 302)
+            return Response.json(skillBundle)
+          },
+        })
+        return { downloads, server }
+      }),
+      ({ downloads, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const skills = yield* Skill.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_test" },
+            }),
+          })
+          yield* addPlugin()
+
+          yield* eventually(skills.list(), (list) => list.some((skill) => skill.id === Skill.ID.make("deploy")))
+          expect(downloads.at(-1)).toEqual({ path: "/assets/deploy.json", authorization: "Bearer secret" })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -1741,6 +2186,67 @@ describe("OpencodePlugin", () => {
         expect(required(yield* catalog.get(Provider.ID.openai)).settings?.apiKey).toBeUndefined()
         expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("paid"))).enabled).toBe(true)
       }),
+    ),
+  )
+})
+
+describe("OpencodePlugin prompt refresh", () => {
+  const it = testEffect(makePluginTestLayer(undefined, undefined, recordingMcp.layer))
+
+  it.effect("applies a rotated MCP header and a new policy before the prompt hook returns", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { header: "Bearer one", deny: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              providers: { remote: { name: "Remote" } },
+              mcp: {
+                servers: {
+                  gateway: {
+                    type: "remote",
+                    url: "https://gateway.example/mcp",
+                    headers: { authorization: state.header },
+                  },
+                },
+              },
+              policies: state.deny ? [{ action: "provider.use", resource: "remote", effect: "deny" }] : [],
+            }),
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const header = () => {
+            const gateway = recordingMcp.configured.get("gateway")
+            return gateway?.type === "remote" ? gateway.headers?.authorization : undefined
+          }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          const host = yield* PluginHost.make(yield* Plugin.Service, "test")
+          yield* OpencodePlugin.effect(host).pipe(
+            inProcess(server),
+            Effect.provideService(ConsoleAccess.Options, { poll: false }),
+          )
+          yield* ConfigMcpPlugin.Plugin.effect(host)
+          yield* ConfigPolicyPlugin.Plugin.effect(host)
+          yield* drain
+          expect(header()).toBe("Bearer one")
+          expect(yield* providers.get(Provider.ID.make("remote"))).toBeDefined()
+
+          state.header = "Bearer two"
+          state.deny = true
+          yield* TestClock.adjust("2 minutes")
+          yield* prompt()
+          expect(header()).toBe("Bearer two")
+          expect(yield* providers.get(Provider.ID.make("remote"))).toBeUndefined()
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
     ),
   )
 })

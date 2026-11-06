@@ -124,6 +124,7 @@ function ComposerDocksPreview(props: DockArgs) {
         loading: () => false,
         loadFailed: () => false,
         failed: () => false,
+        optionUnavailable: () => false,
         sending: () => false,
         connected: () => true,
         select: (value) => setState("searchProvider", value),

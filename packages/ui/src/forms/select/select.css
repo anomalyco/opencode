@@ -233,6 +233,14 @@
   padding: 0;
 }
 
+[data-component="menu-v2-content"][data-slot="select-v2-content"] > [data-component="menu-scroll"] {
+  max-height: 12rem;
+
+  > [data-scrollable] {
+    overflow-x: hidden;
+  }
+}
+
 /* Listbox inside menu surface */
 [data-component="menu-v2-content"][data-slot="select-v2-content"] [data-slot="select-v2-listbox"] {
   box-sizing: border-box;
@@ -244,9 +252,6 @@
   list-style: none;
   min-width: 0;
   width: 100%;
-  max-height: 12rem;
-  overflow-x: hidden;
-  overflow-y: auto;
   outline: none;
   white-space: nowrap;
 

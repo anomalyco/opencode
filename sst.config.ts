@@ -43,7 +43,7 @@ export default $config({
     await import("./infra/share.js")
 
     return {
-      ...(stats ? { StatsUrl: stats.app.url } : {}),
+      ...(stats ? { StatsUrl: stats.publicUrl } : {}),
       AwsStage: stage.awsStage,
     }
   },

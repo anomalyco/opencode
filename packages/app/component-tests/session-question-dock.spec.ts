@@ -28,7 +28,9 @@ for (const variant of ["classic", "experimental"] as const) {
       await page.mouse.down()
       await page.mouse.move(box!.x + box!.width - 1, box!.y + box!.height / 2, { steps: 12 })
       await page.mouse.up()
-      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim())).toBe(await text.innerText())
+      await expect
+        .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
+        .toBe(await text.innerText())
     }
 
     for (const slot of ["option-label", "option-description"]) {
@@ -1104,6 +1106,44 @@ story.describe("with the new question UI experiment enabled", () => {
 
       expect(frames.moving.heights + frames.moving.ghosts).toBeGreaterThan(0)
       expect(frames.after).toEqual({ animations: 0, heights: 0, ghosts: 0 })
+    })
+
+    story("lands the composer's switch to a question at once when the knob turns off", async ({ mount }) => {
+      const component = await mount("session-composer-docks--empty")
+      await expect(component.locator('[data-slot="composer-face"]')).toHaveCount(1)
+
+      const frames = await component.evaluate(
+        async (root, tuning) => {
+          const { motionTuning } = await import(tuning)
+          const knob = motionTuning.list().find((item: MotionKnob) => item.id === "question.motion")
+          const region = root.querySelector<HTMLElement>('[data-slot="composer-morph"]')!
+          const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+          const sample = () => ({
+            moving: region.hasAttribute("data-moving"),
+            height: !!region.style.height,
+            faces: region.querySelectorAll('[data-slot="composer-face"]').length,
+          })
+
+          // A face that changes within 250ms of mount swaps without a flight.
+          for (const end = performance.now() + 300; performance.now() < end; ) await frame()
+          motionTuning
+            .actions()
+            .find((action: { id: string }) => action.id === "docks.question")
+            .run()
+          await frame()
+          await frame()
+          const moving = sample()
+          motionTuning.set(knob, false)
+          await frame()
+
+          return { moving, after: sample() }
+        },
+        sourceURL(new URL("../../ui/src/motion-tuning.ts", import.meta.url)),
+      )
+
+      expect(frames.moving).toEqual({ moving: true, height: true, faces: 2 })
+      expect(frames.after).toEqual({ moving: false, height: false, faces: 1 })
     })
   })
 

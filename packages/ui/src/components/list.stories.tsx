@@ -78,6 +78,14 @@ export const Empty = {
   ),
 }
 
+export const LoadFailed = {
+  render: () => (
+    <mod.List items={() => Promise.reject(new Error("offline"))} key={(item: string) => item} search={true}>
+      {(item: string) => item}
+    </mod.List>
+  ),
+}
+
 export const WithAdd = {
   render: () => (
     <mod.List
