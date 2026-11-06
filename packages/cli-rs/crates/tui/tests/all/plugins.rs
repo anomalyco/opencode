@@ -168,6 +168,11 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     let screen = h.wait_for("run-command panicked: sample command panicked");
     print_excerpt("error details after a panic", &screen);
     h.app.press("escape");
+    // A plugin that failed while active is still active, as in TS: enter disables it, then enables it afresh.
+    h.wait_for("disable enter");
+    h.app.press("enter");
+    h.app.wait_until(Duration::from_secs(5), || h.status() == opencode_plugin::Status::Inactive);
+    assert_eq!(h.status(), opencode_plugin::Status::Inactive);
     h.wait_for("enable enter");
     h.app.press("enter");
     h.app.wait_until(Duration::from_secs(5), || h.status() == opencode_plugin::Status::Active);
