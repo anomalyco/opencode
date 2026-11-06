@@ -73,7 +73,7 @@ const decodeRow = (row: typeof SessionTunnelTable.$inferSelect): AgentTunnel.Mes
     sequence: Event.Seq.make(row.sequence),
   })
 
-const make = Effect.gen(function* () {
+export const make = Effect.gen(function* () {
   const sessions = yield* Session.Service
   const store = yield* SessionStore.Service
   const bus = yield* Bus.Service

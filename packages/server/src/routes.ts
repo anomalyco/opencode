@@ -18,6 +18,7 @@ import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
 import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
+import { SessionTunnel } from "@opencode/core/session/tunnel"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
@@ -69,6 +70,7 @@ const applicationServiceNodes = [
   Session.node,
   Instance.node,
   SessionTransfer.node,
+  SessionTunnel.node,
   InstructionEntry.node,
   SdkPlugins.node,
   PluginUpdate.node,

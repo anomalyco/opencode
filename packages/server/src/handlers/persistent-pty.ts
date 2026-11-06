@@ -18,6 +18,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { makeAgentTunnel } from "./agent-tunnel"
 import { makeArtifact } from "./artifact"
 import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
@@ -29,6 +30,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
+    const agentTunnel = yield* makeAgentTunnel
     const artifact = yield* makeArtifact
     const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
@@ -36,6 +38,8 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handle("agentTunnel.list", (ctx) => agentTunnel.list(ctx.query))
+      .handle("agentTunnel.log", (ctx) => agentTunnel.log(ctx.query))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))

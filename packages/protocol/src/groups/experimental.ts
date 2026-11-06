@@ -1,3 +1,4 @@
+import { AgentTunnelEndpoints } from "./agent-tunnel.js"
 import { ArtifactEndpoints } from "./artifact.js"
 import { JobEndpoints } from "./job.js"
 import { MediaGetEndpoint } from "./media.js"
@@ -10,4 +11,5 @@ export const ExperimentalGroup = PersistentPtyGroup.add(
   ...ScheduleEndpoints,
   ...ArtifactEndpoints,
   ...JobEndpoints,
+  ...AgentTunnelEndpoints,
 )
