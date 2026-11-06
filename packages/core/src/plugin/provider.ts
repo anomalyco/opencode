@@ -28,6 +28,7 @@ import { SapAICorePlugin } from "./provider/sap-ai-core.js"
 import { VLLMPlugin } from "./provider/vllm.js"
 import { XAIPlugin } from "./provider/xai.js"
 import { ZenmuxPlugin } from "./provider/zenmux.js"
+import { AnthropicPlugin } from "./provider/anthropic.js"
 import type { PluginInternal } from "./internal.js"
 
 export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
@@ -61,4 +62,5 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   XAIPlugin,
   ZenmuxPlugin,
   ClaudeAgentPlugin,
+  AnthropicPlugin,
 ]
