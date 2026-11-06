@@ -1,14 +1,5 @@
 # M05: mini's footer views
 
-## The permission scrollbar does not follow the scroll
-
-- TypeScript: the scrollbar shows always; its thumb fills the track when the request fits and shrinks and moves
-  when it scrolls.
-- Rust: the column shows a full-height thumb always.
-- Reason: a permission's content fits its footer in every case the scenarios and the live service showed. The
-  form body, whose content does overflow, uses the scroll box's own scrollbar, which shows only on overflow as
-  TypeScript's form does.
-
 ## No mouse in the footer
 
 - TypeScript: hovering a permission button or a form row selects it, and a click picks it. In the subagent
