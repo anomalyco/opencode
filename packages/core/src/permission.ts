@@ -174,7 +174,10 @@ const layer = Layer.effect(
     })
 
     function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
-      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
+      return input.resources.flatMap((resource) => {
+        const rule = evaluate(input.action, resource, rules)
+        return rule.effect === "deny" ? [{ resource, pattern: rule.resource }] : []
+      })
     }
 
     function relevant(input: AssertInput, rules: Permission.Ruleset) {
@@ -183,7 +186,14 @@ const layer = Layer.effect(
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
-      if (denied(input, rules)) return { effect: "deny" as const, rules }
+      const blocked = denied(input, rules)
+      if (blocked.length)
+        return {
+          effect: "deny" as const,
+          rules,
+          resources: blocked.map((item) => item.resource),
+          message: `Permission denied: ${input.action}. Blocked by configured rule patterns: ${JSON.stringify([...new Set(blocked.map((item) => item.pattern))])}`,
+        }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
@@ -263,7 +273,7 @@ const layer = Layer.effect(
               return yield* new BlockedError({
                 rules: relevant(input, result.rules),
                 permission: input.action,
-                resources: input.resources,
+                resources: result.resources ?? input.resources,
                 reason: result.message,
               })
             }
@@ -293,7 +303,7 @@ const layer = Layer.effect(
       return yield* new BlockedError({
         rules: relevant(input, result.rules),
         permission: input.action,
-        resources: input.resources,
+        resources: result.resources ?? input.resources,
         reason: result.message,
       })
     })
