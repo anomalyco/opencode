@@ -24,6 +24,7 @@ export const installs = [
 export const docsInstalls = [
   { label: "curl", code: installs[0].command },
   { label: "homebrew", code: installs[3].command },
+  { label: "winget", code: "winget install --id Anomaly.OpenCode -e" },
   { label: "npm", code: installs[1].command },
   { label: "bun", code: installs[2].command },
   { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
