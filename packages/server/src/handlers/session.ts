@@ -3,6 +3,8 @@ import { Session } from "@opencode/core/session"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
+import { SessionGoal } from "@opencode/core/session/goal"
+import { SessionExecution } from "@opencode/core/session/execution"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
 import { DateTime, Effect, Stream } from "effect"
@@ -38,6 +40,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
   Effect.gen(function* () {
     const session = yield* Session.Service
     const transfer = yield* SessionTransfer.Service
+    const goals = yield* SessionGoal.Service
+    const execution = yield* SessionExecution.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
     const requireSession = (sessionID: Session.ID) =>
@@ -64,6 +68,42 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       )
 
     return handlers
+      .handle(
+        "session.goalGet",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: yield* goals.inspect(ctx.params.sessionID) }
+        }),
+      )
+      .handle(
+        "session.goalSave",
+        Effect.fn(function* (ctx) {
+          const id = ctx.params.sessionID
+          yield* session.get(id).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const goal = yield* goals.get(id)
+          if (!goal && !ctx.payload.objective)
+            return yield* new InvalidRequestError({ message: "Goal objective is required" })
+          if (ctx.payload.status === "blocked" && !ctx.payload.reason?.trim())
+            return yield* new InvalidRequestError({ message: "A blocked goal requires a reason" })
+          yield* (
+            goal
+              ? goals.update(id, ctx.payload)
+              : goals.set(id, ctx.payload.objective!).pipe(Effect.andThen(goals.update(id, ctx.payload)))
+          ).pipe(Effect.catchTag("SessionGoal.Error", (error) => new InvalidRequestError({ message: error.message })))
+          if ((yield* goals.get(id))?.status === "active") yield* execution.wake(id)
+          if (ctx.payload.status === "paused") yield* execution.interrupt(id)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.goalRemove",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          yield* goals.clear(ctx.params.sessionID)
+          yield* execution.interrupt(ctx.params.sessionID)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
       .handle(
         "session.list",
         Effect.fn(function* (ctx) {

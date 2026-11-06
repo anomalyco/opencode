@@ -15,6 +15,7 @@ import { Permission } from "./permission.js"
 import { TokenUsage } from "./token-usage.js"
 import { Revert } from "./session-revert.js"
 import { SessionFork } from "./session-fork.js"
+import { SessionGoal } from "./session-goal.js"
 
 export const ID = SessionID
 export type ID = SessionID
@@ -57,6 +58,7 @@ export const Info = Schema.Struct({
   location: Location.Ref,
   subpath: RelativePath.pipe(optional),
   metadata: Metadata.pipe(optional),
+  goal: SessionGoal.Info.pipe(optional),
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),

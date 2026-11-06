@@ -31,6 +31,8 @@ import { LocationActivity } from "@opencode/core/location-activity"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { ConsoleAccess } from "@opencode/core/console-access"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { SessionGoal } from "@opencode/core/session/goal"
+import { SessionExecution } from "@opencode/core/session/execution"
 import { Schedule } from "@opencode/core/schedule"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
@@ -81,6 +83,8 @@ const applicationServiceNodes = [
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
+  SessionGoal.node,
+  SessionExecution.node,
   Schedule.node,
   Workspace.node,
   FileWatch.node,
