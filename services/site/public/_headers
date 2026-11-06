@@ -12,6 +12,9 @@
   Cache-Control: public, max-age=31536000, immutable
 /textjs/picker-*
   Cache-Control: public, max-age=31536000, immutable
+# Yoga's WebAssembly, named by a hash of its bytes (textjs/script/build.ts).
+/textjs/yoga-*
+  Cache-Control: public, max-age=31536000, immutable
 # Link preview cards, named by a hash of the PNG (script/og.ts).
 /og/*
   Cache-Control: public, max-age=31536000, immutable
