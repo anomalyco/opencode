@@ -59,7 +59,7 @@ test("selecting an unhydrated session preserves its location", async () => {
   }
 })
 
-test("finds and opens an exact session ID outside the recent list", async () => {
+test("finds and opens an exact child session ID outside the recent list", async () => {
   const sessionID = "ses_04a7a3d82ffeIphUJgd3SnEqiv"
   const remote = { directory: "/tmp/opencode/archive", workspaceID: "ws_archive" }
   const fixture = await renderOpen((url) => {
@@ -68,6 +68,7 @@ test("finds and opens an exact session ID outside the recent list", async () => 
     return json({
       data: {
         id: sessionID,
+        parentID: "ses_04a7a3d82ffeParentSessionID",
         projectID: "proj_archive",
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
