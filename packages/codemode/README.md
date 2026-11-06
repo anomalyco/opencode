@@ -97,8 +97,59 @@ denies it: the host function is never called, and the program catches the failur
 fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
 throws.
 
-`engine: "vm"` runs programs on the bytecode VM in `src/vm` instead of the default `"legacy"` interpreter. It is
-experimental: `execute` has the same signature and results on both engines.
+### Bytecode VM and suspending/resuming a run (experimental, `engine: "vm"`)
+
+Pass `engine: "vm"` to `CodeMode.make` or `CodeMode.execute` to run programs on the bytecode VM instead of the default
+`"legacy"` AST interpreter. `runtime.execute(code, bindings?)` keeps the same `Effect<CodeMode.Result>` signature on
+both engines.
+
+On `engine: "vm"`, `CodeMode.make` returns a `CodeMode.VmRuntime`, which can also run a program step by step:
+`runtime.program(code, bindings?)` makes a `CodeMode.Program`, and nothing runs until `program.run()`. `run()` runs it in
+the current fiber until it ends or is suspended, and gives a `CodeMode.Outcome`: a `Result`, or:
+
+```ts
+type Suspended = {
+  ok: "suspended"
+  state: CodeMode.Snapshot // JSON; CodeMode.toBytes / CodeMode.fromBytes convert it
+}
+
+const runtime = CodeMode.make({ tools, engine: "vm" })
+
+// inline
+const outcome = yield* runtime.program(code).run()
+
+// in the background, suspended from another fiber
+const program = runtime.program(code)
+const fiber = yield* Effect.forkChild(program.run())
+const suspended = yield* program.suspend() // the same Suspended that run() returns
+const outcome = yield* Fiber.join(fiber)
+
+// later, in this process or another one built from the same version
+yield* runtime.resume(CodeMode.toBytes(suspended.state)).run()
+```
+
+The default runtime has no `program` or `resume`. A program runs once: running it again is a defect, so make another
+with `runtime.program` or `runtime.resume`. `run()` owns the run's host calls: interrupting it interrupts the program and
+every call in progress.
+
+`program.suspend(options?)` saves the run's state and stops it at once, and `run()` returns the same `Suspended`. It
+can be suspended only while no host call (tool, `search`, `fetch`, or extension call) is running. When one is in
+progress, `suspend` fails with a `CodeMode.SuspendError` naming each blocking call by its path (`tools.x.y`, `fetch`),
+and the run goes on untouched. Tool calls queued but not started don't block: they start on resume. Outcomes already
+waiting in the inbox are part of the state. A suspend after the run ended gives its result; one issued before `run()`
+has started waits for it to start (and for ever if it never runs).
+
+The suspend is immediate: the program shares the thread with the caller, so it is at a step boundary. Its checks, saving
+the state, and checking it against `options.maxBytes` all happen before anything about the run changes, so a state that
+can't be saved or is too large fails the suspend the same way.
+
+A resumed run keeps the limits it was saved with: `timeoutMs` counts active time across every resume, and `maxToolCalls`
+counts every call of the run. A state resumes only on the same build of this package and with the same extensions. The
+state is checked when the resumed program runs: its `run()` fails with a `CodeMode.SnapshotError` when it can't be
+resumed here or is malformed. Built-ins are saved by name and only their changes are copied.
+
+Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests on the VM with every run saved to bytes and
+restored into a brand-new runtime at every host call and every few steps.
 
 ### `Extension.make`
 

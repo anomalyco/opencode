@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -10,7 +11,7 @@ import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Schema } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
@@ -29,12 +30,15 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll)
   CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
 
 const vmConfig = (codemode_vm: boolean) =>
-  Config.testLayer([
-    new Document({
-      type: "document",
-      info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
-    }),
-  ])
+  Layer.merge(
+    Layer.succeed(Flag.Overrides, undefined),
+    Config.testLayer([
+      new Document({
+        type: "document",
+        info: new ConfigInfo({ experimental: new ConfigExperimental.Info({ codemode_vm }) }),
+      }),
+    ]),
+  )
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
