@@ -205,3 +205,38 @@ fn the_loader_reloads_a_rebuilt_library() {
     assert!(screen.contains("SAMPLE v2 HI"), "{screen}");
     assert_eq!(registry.entries().len(), 1);
 }
+
+// Expected: a table from a C plugin is refused, without reading past its declared size or through a null or
+// misaligned pointer, when it is too short for its header, misaligned, or leaves a required callback null. A null
+// `destroy` is allowed.
+#[test]
+fn a_malformed_table_is_refused_without_reading_it() {
+    let refused = |api: *const PluginApi| Library::from_table(api).err().unwrap();
+    assert_eq!(refused(std::ptr::null()), "`opencode_plugin_v1` returned no table");
+    let short: [usize; 1] = [size_of::<usize>()];
+    assert_eq!(refused(short.as_ptr().cast()), "plugin table is 8 bytes, shorter than its version header");
+    let bytes = [0u64; 16];
+    assert_eq!(refused(bytes.as_ptr().cast::<u8>().wrapping_add(1).cast()), "plugin table is not aligned");
+    let null = PluginApi {
+        size: size_of::<PluginApiV1_0>(),
+        major: 1,
+        minor: 0,
+        requires_minor: 0,
+        create: None,
+        call: None,
+        destroy: None,
+        free: None,
+        describe: None,
+    };
+    assert_eq!(refused(&null), "plugin table has a null `create` callback");
+    unsafe extern "C" fn create(_: *const HostApi, _: Bytes, _: *mut *mut c_void, _: *mut Owned) -> i32 {
+        abi::ERROR
+    }
+    let api = PluginApi { create: Some(create), ..null };
+    assert_eq!(refused(&api), "plugin table has a null `call` callback");
+    let api = PluginApi { call: Some(abi::runtime::call), ..api };
+    assert_eq!(refused(&api), "plugin table has a null `free` callback");
+    let api = PluginApi { free: Some(abi::runtime::free), ..api };
+    let library = Library::from_table(&api).unwrap();
+    assert!(library.destroy.is_none() && library.describe.is_none());
+}
