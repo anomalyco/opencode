@@ -1084,7 +1084,7 @@
     "@effect/platform-node-shared": "4.1.0",
     "@effect/sql-sqlite-bun": "4.1.0",
     "@effect/sql-sqlite-node": "4.1.0",
-    "@hona/strobe": "0.11.0",
+    "@hona/strobe": "0.13.0",
     "@kobalte/core": "0.13.13",
     "@lydell/node-pty": "1.2.0-beta.12",
     "@npmcli/arborist": "9.4.0",
@@ -1734,17 +1734,17 @@
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.0.11", "", { "dependencies": { "@types/node": "^20.0.0", "happy-dom": "^20.0.11" } }, "sha512-GqNqiShBT/lzkHTMC/slKBrvN0DsD4Di8ssBk4aDaVgEn+2WMzE6DXxq701ndSXj7/0cJ8mNT71pM7Bnrr6JRw=="],
 
-    "@hona/strobe": ["@hona/strobe@0.11.0", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.11.0", "@hona/strobe-darwin-x64": "0.11.0", "@hona/strobe-linux-arm64": "0.11.0", "@hona/strobe-linux-x64": "0.11.0", "@hona/strobe-win32-x64": "0.11.0" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-UHI3s3YviomZFfHqmE4nWyuu1YLkuHDVlIJeLehr5wynk+yBX7IbAZ7UGpMTplYU42MwgSuU0rnqDysTsjJl3Q=="],
+    "@hona/strobe": ["@hona/strobe@0.13.0", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.13.0", "@hona/strobe-darwin-x64": "0.13.0", "@hona/strobe-linux-arm64": "0.13.0", "@hona/strobe-linux-x64": "0.13.0", "@hona/strobe-win32-x64": "0.13.0" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-btPRfxrPD21qMPlTcE4dguKQXQQWgL2lFdVW4cKBKOLXD7c+nMHpRJGuiaAlwGRMvbJPOqrx/q3aOFsCGJuhsQ=="],
 
-    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.11.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-EJLi3Hp7CAd/mKPqe5bD80yRtxs+OgTfbifeA/5NkqnmyF2pJvyhiCRZAVOOSFtmGvrqib3hHFPZu+yd95g/+Q=="],
+    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.13.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-qtl4Yuis+C+VwJ5ztodfb5qb4l1sPKFNgDMbJZ64KDyA8ZzdahHcCxrGA0pRfmZPpe3Qm8UhT15eWUyrcH87mg=="],
 
-    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.11.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-eon7IXVZcQv2RLNzojMVpqUQ3D0uJPafRRdHcdTiamVMO/IHlYFgTqv117BSvIhuQVmaDlwUV8D7IBS1m0vUBg=="],
+    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.13.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-BN0JjjM7jMqwgOMhE6TK+34W50+9irW7UTWVmyz4a5h3CcZaEzsqnoQanAUoyzy5nEXaByzJ7Dcr/Y3rgjZwkw=="],
 
-    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.11.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-mrxSY5PF6Nm1XHQ222kan6s2A8twnZQ5kDjIdrOzC6pvkdbBBlI4DAfYcHgKAHU6NLicq25yqysDW5dGFbfkxQ=="],
+    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.13.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-QPcuJdogqOlf6uHRwo/c+6ueOQoIJZPUl+tMET5mRcerRkTXoZCNGvo1V1SxAU397TMZksM3GU0YUm+aQ6G9NA=="],
 
-    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.11.0", "", { "os": "linux", "cpu": "x64" }, "sha512-JQcQ+zLjOLLylfkwB5NKh0OMcpSF9fiv/er+zJ1ZiXmM7TfQ0FrrAom4FNl58f0zwn7fn2HHWrCh98aN5d0cmw=="],
+    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.13.0", "", { "os": "linux", "cpu": "x64" }, "sha512-YvSi63OAm3RnB1Y2keq/XememJgzCy7bTSDQU/lCxmHPVWtVBodWycaEu8PnBrWLOvmE5ZNNFpTG4ucaspKmSg=="],
 
-    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.11.0", "", { "os": "win32", "cpu": "x64" }, "sha512-71dPvMA/iV9hL+VPE1nKTzymBPjEdP1xrejTxf/+YLt//Y1+AuUHTVAfveAmDXJc+Doj4HOcKYSSHqWV0NhvmQ=="],
+    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.13.0", "", { "os": "win32", "cpu": "x64" }, "sha512-D848SPKX5J140Gz8lRuKtlOyU5fJLPRhfsKussx5DbC4PG1pMU9u2lNsJkVWxUCc3VBSJszWbPzWujJI5Rzwqg=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.5", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q=="],
 
