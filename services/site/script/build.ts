@@ -38,6 +38,7 @@ await Bun.$`vite build`.cwd(root).env(env)
 await Bun.$`bun ./src/docs/script/build.ts --mode ${mode}`.cwd(root).env(env)
 await Bun.$`bun ./script/check-server-bundle.ts`.cwd(root).env(env)
 await Bun.$`bun ./script/check-client-bundle.ts`.cwd(root).env(env)
+await Bun.$`bun ./script/check-css-output.ts`.cwd(root).env(env)
 
 // @cloudflare/config's file loader refuses Bun; it resolves an imported config the same way.
 const parsed = await resolveAndParseConfig((await import("../cloudflare.config")).default, { isPreview: false, mode })

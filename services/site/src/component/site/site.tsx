@@ -230,10 +230,12 @@ export function Site(props: {
   const [theme, setTheme] = createSignal<(typeof themes)[number]>(
     isServer ? "system" : (themes.find((item) => item === localStorage.getItem("opencode-theme")) ?? "system"),
   )
-  // The colour at the top of the screen: the open banner's blue while it covers it, else the page's
-  // background in the scheme the tag's media query stands for (or the chosen theme's).
+  // The browser bar colour: the open banner's blue while it covers the top of the screen, the letters
+  // bar's while it fills the bottom, else the page's background in the scheme the tag's media query
+  // stands for (or the chosen theme's).
   const themeColor = (scheme: "light" | "dark") =>
     bannerTopColor() ??
+    lettersBlue() ??
     ((theme() === "system" ? scheme : theme()) === "dark" ? "#0c0c0c" : siteSettings.lightBackground)
   const colorScheme = () => (theme() === "system" ? "light dark" : theme())
   const [dark, setDark] = createSignal(false)
@@ -274,11 +276,38 @@ export function Site(props: {
     const highlight = i18n.t("footer.wordmark.font")
     return label.startsWith(highlight) ? label.slice(highlight.length).trim() : label
   }
+  // Whether the whole open bar is on screen (the page is scrolled to its end), so it fills the bottom
+  // of the screen.
+  const [lettersBarAtEnd, setLettersBarAtEnd] = createSignal(false)
   const watchLettersBar = (element: HTMLDivElement) => {
-    const observer = new IntersectionObserver(([entry]) => setLettersBarInView(entry.isIntersecting))
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setLettersBarInView(entry.isIntersecting)
+        setLettersBarAtEnd(entry.intersectionRatio >= 0.98)
+      },
+      { threshold: [0, 0.98] },
+    )
     observer.observe(element)
     onCleanup(() => observer.disconnect())
   }
+  // While the open bar fills the bottom of the screen, its blue runs on to the screen's bottom edge:
+  // the page behind the site (what shows past the end, and what iOS Safari tints its bottom toolbar
+  // area from) and the browser bar colour take the bar's blue as painted, and a fixed strip under the
+  // home indicator (site.css) gives Safari a blue element touching the bottom edge.
+  const lettersBottom = () => lettersBarShown() && lettersBarAtEnd()
+  const [lettersBlue, setLettersBlue] = createSignal<string>()
+  createEffect(
+    on(lettersBottom, (bottom) => {
+      const link = document.querySelector<HTMLElement>('[data-component="letters-bar"] a')
+      const blue = bottom && link ? getComputedStyle(link).backgroundColor : undefined
+      setLettersBlue(blue)
+      if (blue) document.documentElement.style.backgroundColor = blue
+      else document.documentElement.style.removeProperty("background-color")
+    }),
+  )
+  onCleanup(() => {
+    if (!isServer) document.documentElement.style.removeProperty("background-color")
+  })
   // The bar grows at the very end of the page. Someone at the bottom stays at the bottom while it
   // grows, so the page visibly moves up with it.
   createEffect(
@@ -1094,6 +1123,7 @@ export function Site(props: {
       data-theme={theme()}
       data-popover={popoverTheme()}
       data-letters-bar={lettersBarShown() && lettersBarInView() ? "" : undefined}
+      data-letters-end={lettersBottom() ? "" : undefined}
       data-spacer={props.page === "home" || props.page === "product" ? siteSettings.spacer : undefined}
       data-logo={logoVariant()}
       data-hero-install={props.page === "home" ? siteSettings.heroInstall : undefined}

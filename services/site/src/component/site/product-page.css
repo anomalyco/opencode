@@ -3,6 +3,9 @@
      between them. */
   --feature-row-gap: 2rem;
   --feature-step: 1.75rem;
+  /* On phones, the room the previous and next chevrons take at the breadcrumb row's end: two 2.75rem
+     targets, less the 0.75rem pulled into the page edge, and a 0.5rem gap before them. */
+  --cycle-room: calc(2 * 2.75rem - 0.75rem + 0.5rem);
 
   /* Sits in the logo row so the hero video starts at the top of the content column. */
   [data-component="breadcrumb"] {
@@ -19,17 +22,31 @@
     line-height: 1.2;
 
     /* Small screens: the header holds the logo and menu, so the breadcrumb is the first row of
-       the page. The chevrons get 44px targets; the last one still ends on the page edge. */
+       the page. Its end leaves room for the previous and next chevrons (below), and a long name
+       shortens with an ellipsis rather than run under them. */
     @media (max-width: 60rem) {
       position: static;
       height: 2.75rem;
       /* 0.5rem under the top bar, wherever the content line sits. */
       margin: calc(var(--topbar-height) + 0.5rem - var(--content-top)) 0 0.5rem;
+      padding-inline-end: var(--cycle-room);
 
       > a {
         display: flex;
         align-items: center;
         height: 100%;
+      }
+
+      > * {
+        flex-shrink: 0;
+      }
+
+      [aria-current="page"] {
+        flex-shrink: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
   }
@@ -72,25 +89,20 @@
       }
     }
 
-    /* Small screens: in the top bar, left of its GitHub mark. The bar's right padding, the menu
-       button (2.75rem, pulled 0.75rem into the padding) and the mark's 0.5rem gap and 2.5rem width
-       put the mark's left edge 5rem in from the padding; the targets grow to 36px for touch. */
+    /* Small screens: at the end of the breadcrumb row, not in the top bar, which holds just the
+       logo, the GitHub mark and the menu as on other pages. In the flow right after the breadcrumb,
+       pulled up over its row (its 2.75rem and 0.5rem gap) and taking the gap back below, so the page
+       below doesn't move. Two 44px targets; the next chevron is pulled 0.75rem into the page edge,
+       like the menu button, so its centre is on the menu button's centre. They scroll with the row. */
     @media (max-width: 60rem) {
-      top: calc(var(--banner-offset, 0px) + env(safe-area-inset-top, 0px) + var(--topbar-height) / 2 - 1.125rem);
-      inset-inline-end: calc(var(--edge) + env(safe-area-inset-right, 0px) + 5.5rem);
-      z-index: 11;
+      position: static;
+      width: fit-content;
+      margin-block: calc(-2.75rem - 0.5rem) 0.5rem;
+      margin-inline: auto -0.75rem;
 
       a {
-        position: relative;
-        width: 2.25rem;
-        height: 2.25rem;
-
-        /* An invisible band above and below makes each target 44px tall. */
-        &::after {
-          content: "";
-          position: absolute;
-          inset: -0.25rem 0;
-        }
+        width: 2.75rem;
+        height: 2.75rem;
       }
     }
   }

@@ -686,7 +686,7 @@ function LegalHistory(props: { document: LegalDocumentContent; onBack?: () => vo
         </For>
       </ol>
       <p>
-        Follow changes to every legal document in a feed reader: <a href={feed}>RSS feed</a>.
+        Follow changes to every legal document with the <a href={feed}>RSS feed</a>.
       </p>
     </section>
   )
