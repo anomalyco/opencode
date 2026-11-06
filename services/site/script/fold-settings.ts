@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { transformAsync, types, type NodePath, type PluginObj } from "@babel/core"
+import { transformSync, types, type NodePath, type PluginObj } from "@babel/core"
 import type { Plugin } from "vite"
 import defaults from "../src/component/site/settings-defaults.json"
 
@@ -64,18 +64,7 @@ export function foldSettingsForProduction(): Plugin {
     },
     async transform(code, id) {
       const file = id.split("?")[0]
-      if (!file.startsWith(root + path.sep) || !/\.(ts|tsx)$/.test(file)) return
-      if (file === settingsModule || designModules.includes(file)) return
-      if (!candidate.test(code)) return
-      const result = await transformAsync(code, {
-        filename: file,
-        babelrc: false,
-        configFile: false,
-        sourceMaps: true,
-        parserOpts: { plugins: ["jsx", "typescript"] },
-        generatorOpts: { retainLines: false },
-        plugins: [foldSettings(file, cards)],
-      })
+      const result = foldModule(code, file, cards)
       if (!result?.code) return
       // FOLD_DEBUG=<directory> writes each folded module there, to see what production compiles.
       if (process.env.FOLD_DEBUG) {
@@ -120,6 +109,26 @@ export function foldSettingsForProduction(): Plugin {
   }
 }
 
+/**
+ * One module as production compiles it, or undefined when nothing in it folds. `trimImports` also
+ * drops imports left unused, for script/i18n-slices.ts, which reads the client's import graph to
+ * find the strings each page can show; the build keeps them, as an imported module's CSS still
+ * loads.
+ */
+export function foldModule(code: string, file: string, cards: Record<string, unknown> = {}, trimImports = false) {
+  if (!file.startsWith(root + path.sep) || !/\.(ts|tsx)$/.test(file)) return
+  if (file === settingsModule || designModules.includes(file)) return
+  if (!candidate.test(code)) return
+  return transformSync(code, {
+    filename: file,
+    babelrc: false,
+    configFile: false,
+    sourceMaps: true,
+    parserOpts: { plugins: ["jsx", "typescript"] },
+    plugins: [foldSettings(file, cards, trimImports)],
+  })
+}
+
 type Imports = {
   settings: Set<string>
   defaults: Set<string>
@@ -129,7 +138,7 @@ type Imports = {
   solid: Map<string, string>
 }
 
-function foldSettings(file: string, cards: Record<string, unknown>) {
+function foldSettings(file: string, cards: Record<string, unknown>, trimImports: boolean) {
   return (): PluginObj => ({
     name: "fold-settings",
     visitor: {
@@ -200,8 +209,21 @@ function foldSettings(file: string, cards: Record<string, unknown>) {
         if (liveImport.length) program.unshiftContainer("body", liveImport)
         program.scope.crawl()
         fold(program, imports)
+        if (trimImports) removeUnusedImports(program)
       },
     },
+  })
+}
+
+function removeUnusedImports(program: NodePath<types.Program>) {
+  program.get("body").forEach((statement) => {
+    if (!statement.isImportDeclaration() || !statement.node.specifiers.length) return
+    const used = statement.node.specifiers.filter(
+      (specifier) => program.scope.getBinding(specifier.local.name)?.referenced,
+    )
+    if (used.length === statement.node.specifiers.length) return
+    if (!used.length) return statement.remove()
+    statement.node.specifiers = used
   })
 }
 

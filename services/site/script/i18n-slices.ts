@@ -20,6 +20,7 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { dict as en } from "../src/i18n/en"
 import { english as englishSource } from "../src/i18n/english"
 import { LOCALES, type Locale } from "../src/lib/language"
+import { foldModule } from "./fold-settings"
 
 const root = path.resolve(import.meta.dir, "..")
 const src = path.join(root, "src")
@@ -72,7 +73,11 @@ function scan(file: string): Module {
   if (/src\/i18n\/(content\/)?[a-z]+\.ts$/.test(posix) && !/src\/i18n\/(content\/)?(index|rich|source|paths|english|tables)\.ts$/.test(posix))
     return module
   const text = readFileSync(file, "utf8")
-  const code = file.endsWith(".json") ? text : transpiler.transformSync(text)
+  // Production's settings and Design mode folded away first (fold-settings.ts), so the strings of
+  // what production never renders, and of the imports only that used, stay out of the slices.
+  const code = file.endsWith(".json")
+    ? text
+    : transpiler.transformSync(foldModule(text, file, {}, true)?.code ?? text)
   if (!file.endsWith(".json"))
     for (const found of transpiler.scan(code).imports) {
       const target = resolve(file, found.path)
