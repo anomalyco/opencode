@@ -1,0 +1,222 @@
+.vw {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--background-base, #101010);
+  color: var(--text-strong, #ededed);
+  font-family: var(--font-family-sans, sans-serif);
+  font-size: 13px;
+}
+
+.vw *,
+.vw *::before,
+.vw *::after {
+  box-sizing: border-box;
+}
+
+.vw-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+}
+
+.vw-kicker {
+  color: var(--text-weak, rgba(255, 255, 255, 0.42));
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.vw-title {
+  margin: 1px 0 0;
+  font-size: 15px;
+  font-weight: 530;
+  letter-spacing: -0.1px;
+}
+
+.vw-count {
+  color: var(--text-weak, rgba(255, 255, 255, 0.42));
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--border-weaker-base, #202020);
+}
+
+.vw-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-weak, rgba(255, 255, 255, 0.42));
+  cursor: pointer;
+}
+
+.vw-icon:hover {
+  background: var(--surface-base, rgba(255, 255, 255, 0.031));
+  color: var(--text-strong, #ededed);
+}
+
+.vw-icon[aria-pressed="true"] {
+  color: var(--surface-brand-base, #fab283);
+}
+
+.vw-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.vw-current {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  padding: 0 4px;
+}
+
+.vw-kind {
+  flex: none;
+  color: var(--text-weak, rgba(255, 255, 255, 0.42));
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+}
+
+.vw-name {
+  overflow: hidden;
+  color: var(--text-strong, #ededed);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vw-list {
+  margin: 0;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid var(--border-weaker-base, #202020);
+  list-style: none;
+}
+
+.vw-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-strong, #ededed);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vw-row:hover {
+  background: var(--surface-base, rgba(255, 255, 255, 0.031));
+}
+
+.vw-row[aria-current="true"] {
+  background: var(--surface-base, rgba(255, 255, 255, 0.031));
+}
+
+.vw-row-index,
+.vw-row-kind {
+  color: var(--text-weak, rgba(255, 255, 255, 0.42));
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+}
+
+.vw-row-name {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vw-stage {
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+}
+
+.vw-stage .vz {
+  border-color: var(--border-weaker-base, #202020);
+}
+
+.vw-empty {
+  max-width: 460px;
+  padding: 10px 16px 24px;
+}
+
+.vw-empty-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 530;
+}
+
+.vw-empty-body {
+  margin: 0 0 12px;
+  color: var(--text-base, rgba(255, 255, 255, 0.62));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vw-empty-body code {
+  color: var(--text-strong, #ededed);
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+}
+
+.vw-sample {
+  max-height: 180px;
+  margin: 0 0 10px;
+  overflow: auto;
+  padding: 9px 10px;
+  border: 1px solid var(--border-weaker-base, #202020);
+  border-radius: 4px;
+  background: var(--background-strong, #121212);
+  color: var(--text-base, rgba(255, 255, 255, 0.62));
+  font-family: var(--font-family-mono, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.vw-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-weak-base, #2a2a2a);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-strong, #ededed);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.vw-button:hover {
+  background: var(--surface-base, rgba(255, 255, 255, 0.031));
+}

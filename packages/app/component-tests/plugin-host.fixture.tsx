@@ -106,7 +106,7 @@ const about: App = { name: "opencode", version: "", channel: "dev", platform: "d
 
 const locale: BuiltinLocale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
 
-const appearance: Appearance = { font: () => "monospace", mode: () => "light" }
+const appearance: Appearance = { font: () => "monospace", mode: () => "light", visualDisplay: () => "inline" }
 
 const router: Router = { routing: () => false, path: () => "/" }
 
@@ -400,6 +400,7 @@ function standIn(overrides: Partial<Interface>): Interface {
     notify: async () => ({ notification: false, sound: false }),
     font: () => "fixture mono",
     mode: () => "dark",
+    visualDisplay: () => "inline",
     routing: () => false,
     path: () => "/",
     keybind: () => [],
