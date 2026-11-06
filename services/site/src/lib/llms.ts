@@ -25,7 +25,7 @@ export async function llmsText(locale: Locale) {
     [
       "/product",
       ...productPages.map((product) => `/${product.slug}`),
-      ...extensionPages.filter((extension) => extension.product).map((extension) => `/${extension.slug}`),
+      ...extensionPages.filter((extension) => extension.product).map((extension) => `/product/${extension.slug}`),
     ]
       .map(page)
       .join("\n"),

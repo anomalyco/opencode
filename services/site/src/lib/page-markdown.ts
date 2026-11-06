@@ -60,7 +60,7 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
   ),
   ...Object.fromEntries(
     extensionPages.map((extension) => [
-      extension.product ? `/${extension.slug}` : `/extensions/${extension.slug}`,
+      extension.product ? `/product/${extension.slug}` : `/extensions/${extension.slug}`,
       { title: extension.name, description: extension.body, markdown: extensionMarkdown(extension.slug) },
     ]),
   ),

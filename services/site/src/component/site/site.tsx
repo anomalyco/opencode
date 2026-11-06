@@ -137,7 +137,13 @@ const speculationRules = JSON.stringify({
       where: {
         and: [
           {
-            href_matches: ["{/:locale}?/:page(product|ide|mini|font|browse)", "{/:locale}?/extensions/*", "/docs{/*}?", "/data{/*}?"],
+            href_matches: [
+              "{/:locale}?/:page(product|ide|mini|font)",
+              "{/:locale}?/product/*",
+              "{/:locale}?/extensions/*",
+              "/docs{/*}?",
+              "/data{/*}?",
+            ],
           },
           { not: { selector_matches: "[hreflang]" } },
         ],
