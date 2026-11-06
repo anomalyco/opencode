@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { App } from "@opencode/core/app"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Config } from "@opencode/core/config"
 import { Flag } from "@opencode/core/flag"
@@ -480,4 +481,94 @@ test("runtime cache is keyed per engine when experimental.codemode_vm toggles", 
   // Reading the catalog reuses the cached runtime without rebuilding
   expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   expect(conversions).toBe(2)
+})
+
+describe("codemode_vm follows the flag registry", () => {
+  const document = (experimental: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
+    new Document({
+      type: "document",
+      info: new ConfigInfo({ experimental: new ConfigExperimental.Info(experimental) }),
+    })
+
+  // A fresh inventory prepares its tools once per engine, so a second conversion after a legacy run means the VM ran.
+  const engine = async (input: {
+    readonly channel: string
+    readonly overrides?: string
+    readonly entries?: Array<Document>
+  }) => {
+    let conversions = 0
+    const echo: Info = {
+      name: "echo",
+      description: "Echo a value",
+      input: {
+        "~standard": {
+          version: 1,
+          vendor: "test",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => {
+              conversions++
+              return { type: "object", properties: { value: { type: "string" } }, required: ["value"] }
+            },
+            output: () => ({}),
+          },
+        },
+      },
+      execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
+    }
+    const codeMode = CodeModeTool.create(
+      { tools: new Map([["echo", echo]]) },
+      (_, tool, input, context) => execute(tool, input, context),
+      allowAll,
+    )
+    const run = codeMode.execute({ code: 'return await tools.echo({ value: "a" })' }, context)
+    await Effect.runPromise(run.pipe(Effect.provide(vmConfig(false))))
+    const result = await Effect.runPromise(
+      run.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            App.layer({ channel: input.channel }),
+            Layer.succeed(Flag.Overrides, input.overrides),
+            Config.testLayer(input.entries ?? []),
+          ),
+        ),
+      ),
+    )
+    expect(result.output.output).toBe("a")
+    return conversions === 2 ? "vm" : "legacy"
+  }
+
+  test("is on by default in local and dev builds and off in every other channel", async () => {
+    const table = await Promise.all(
+      ["local", "dev", "latest", "beta", "pr", "my-branch", "unknown"].map(async (channel) => [
+        channel,
+        await engine({ channel }),
+      ]),
+    )
+    expect(Object.fromEntries(table)).toEqual({
+      local: "vm",
+      dev: "vm",
+      latest: "legacy",
+      beta: "legacy",
+      pr: "legacy",
+      "my-branch": "legacy",
+      unknown: "legacy",
+    })
+  })
+
+  test("a release build opts in with OPENCODE_FLAGS, config, all or all_flags", async () => {
+    expect(await engine({ channel: "latest", overrides: "codemode_vm" })).toBe("vm")
+    expect(await engine({ channel: "latest", entries: [document({ codemode_vm: true })] })).toBe("vm")
+    expect(await engine({ channel: "latest", overrides: "all" })).toBe("vm")
+    expect(await engine({ channel: "latest", entries: [document({ all_flags: true })] })).toBe("vm")
+  })
+
+  test("a dev build opts out with OPENCODE_FLAGS or config", async () => {
+    expect(await engine({ channel: "dev", overrides: "-codemode_vm" })).toBe("legacy")
+    expect(await engine({ channel: "dev", overrides: "all,-codemode_vm" })).toBe("legacy")
+    expect(await engine({ channel: "dev", entries: [document({ codemode_vm: false })] })).toBe("legacy")
+    expect(await engine({ channel: "dev", entries: [document({ all_flags: true, codemode_vm: false })] })).toBe(
+      "legacy",
+    )
+  })
 })

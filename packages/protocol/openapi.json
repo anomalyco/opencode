@@ -16673,10 +16673,10 @@
               "artifacts": {
                 "type": "boolean"
               },
-              "part_rows": {
+              "codemode_vm": {
                 "type": "boolean"
               },
-              "codemode_vm": {
+              "part_rows": {
                 "type": "boolean"
               },
               "image_generate": {
