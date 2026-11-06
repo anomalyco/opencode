@@ -1,6 +1,7 @@
 # Cache headers for the static files in public/ (Cloudflare Workers static assets; script/build.ts ships
 # .output/public/_headers with the assets). Nitro appends its own /_build/assets/* rule (hashed
-# build files, immutable). Rules must not overlap: Cloudflare joins repeated headers with a comma.
+# build files, immutable), and dev builds a /* X-Robots-Tag rule (src/lib/noindex.ts). Rules must not
+# overlap: Cloudflare joins repeated headers with a comma.
 #
 # Only files whose name changes with their content are immutable. The media below keep their URL
 # when re-rendered in place, so browsers and the edge may keep them for a day and serve a stale

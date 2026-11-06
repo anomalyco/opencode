@@ -13,11 +13,14 @@
 import path from "node:path"
 import { readBuildOutput } from "@cloudflare/build-output-utils"
 import { Miniflare, Response } from "miniflare"
+import { stageHeaders } from "../src/lib/noindex"
 
 const root = path.resolve(import.meta.dir, "..")
 // Pages with a status must answer exactly that, others anything but a 5xx; a redirect must go to its
 // location. The docs page is asked for as a browser asks and, at a second URL, as an agent asks (its
-// Markdown twin, src/docs/middleware.ts). The docs' old /v2 address and a V1 docs path redirect.
+// Markdown twin, src/docs/middleware.ts). The docs' old /v2 address and a V1 docs path redirect. The
+// last three are files the Worker serves, or the assets layer before it (_headers). Every answer
+// carries the stage's headers (src/lib/noindex.ts): dev's noindex, none in production.
 const pages: { path: string; status?: number; accept?: string; location?: string }[] = [
   { path: "/", status: 200 },
   { path: "/ja", status: 200 },
@@ -27,6 +30,9 @@ const pages: { path: string; status?: number; accept?: string; location?: string
   { path: "/docs/config/", status: 200, accept: "text/markdown" },
   { path: "/v2/docs/config/", status: 301, location: "/docs/config/" },
   { path: "/docs/ja/", status: 302, location: "/v1/docs/ja/" },
+  { path: "/robots.txt", status: 200 },
+  { path: "/docs/llms.txt", status: 200 },
+  { path: "/favicon.svg", status: 200 },
 ]
 
 const started = performance.now()
@@ -51,6 +57,9 @@ const env = Object.fromEntries(
     throw new Error(`check-worker-start: the ${binding.type} binding ${name} is not emulated`)
   }),
 )
+
+const stage = env.STAGE?.type === "text" && env.STAGE.value === "production" ? "production" : "dev"
+const robots = new Headers(stageHeaders(stage)).get("x-robots-tag") ?? undefined
 
 const errors: string[] = []
 let offline = 0
@@ -92,10 +101,14 @@ const results = await Promise.resolve()
       })
         .then(async (response) => {
           await response.arrayBuffer()
-          return { status: response.status, location: response.headers.get("location") ?? undefined }
+          return {
+            status: response.status,
+            location: response.headers.get("location") ?? undefined,
+            robots: response.headers.get("x-robots-tag") ?? undefined,
+          }
         })
-        .catch(() => ({ status: 0, location: undefined }))
-      answers.push({ ...page, actual: actual.status, actualLocation: actual.location })
+        .catch(() => ({ status: 0, location: undefined, robots: undefined }))
+      answers.push({ ...page, actual: actual.status, actualLocation: actual.location, actualRobots: actual.robots })
     }
     return answers
   })
@@ -110,12 +123,14 @@ const failures = results
   .filter(
     (result) =>
       (result.status ? result.actual !== result.status : result.actual === 0 || result.actual >= 500) ||
-      result.actualLocation !== result.location,
+      result.actualLocation !== result.location ||
+      result.actualRobots !== robots,
   )
   .map(
     (result) =>
       `${result.path} answered ${result.actual || "nothing"}${result.status ? `, not ${result.status}` : ""}` +
-      (result.actualLocation !== result.location ? ` to ${result.actualLocation}, not ${result.location}` : ""),
+      (result.actualLocation !== result.location ? ` to ${result.actualLocation}, not ${result.location}` : "") +
+      (result.actualRobots !== robots ? ` with X-Robots-Tag ${result.actualRobots ?? "absent"} in ${stage}` : ""),
   )
 if (failures.length || errors.length) {
   console.error(`check-worker-start: FAILED\n${[...errors, ...failures].map((line) => `  ${line}`).join("\n")}`)
@@ -123,5 +138,5 @@ if (failures.length || errors.length) {
 }
 const answered = results.map((result) => `${result.path} ${result.actual}`).join(", ")
 console.log(
-  `check-worker-start: ${config.name} starts in workerd; ${answered}; ${offline} outbound calls answered offline (${Math.round(performance.now() - started)} ms)`,
+  `check-worker-start: ${config.name} starts in workerd; ${answered}; X-Robots-Tag ${robots ?? "absent"}; ${offline} outbound calls answered offline (${Math.round(performance.now() - started)} ms)`,
 )

@@ -4,7 +4,7 @@
 // .output/public as its assets. cf's own build step can't detect this project, so it deploys prebuilt.
 //
 //   bun script/build.ts [--mode dev|production]
-import { cp, mkdir, rm } from "node:fs/promises"
+import { appendFile, cp, mkdir, rm } from "node:fs/promises"
 import path from "node:path"
 import {
   cleanBuildOutputDir,
@@ -15,6 +15,7 @@ import {
 } from "@cloudflare/build-output-utils"
 import { resolveAndParseConfig } from "@cloudflare/config"
 import { mediaFile } from "../src/lib/media"
+import { stageHeaders } from "../src/lib/noindex"
 
 const root = path.resolve(import.meta.dir, "..")
 const modeIndex = process.argv.indexOf("--mode")
@@ -67,6 +68,9 @@ const fixed = ["config.json", "tui.json", "openapi.json", "v2/cli.json", "docs/o
   (file) => !shipped.includes(file),
 )
 if (fixed.length) throw new Error(`fixed-URL files missing from Worker assets: ${fixed.join(", ")}`)
+// The stage's headers for the assets the Worker never sees; its own responses get them from src/lib/noindex.ts.
+const headers = Object.entries(stageHeaders(mode)).map(([name, value]) => `  ${name}: ${value}\n`)
+if (headers.length) await appendFile(path.join(assets, "_headers"), `\n/*\n${headers.join("")}`)
 await writeAssets({ root, sourceDirectory: assets })
 
 const bundle = getWorkerBundleDir(root)
