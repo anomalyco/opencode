@@ -39,11 +39,16 @@ type Data = {
 /** Names a finished turn by its Session and the user message that opened it. */
 export type TurnDiffInput = { sessionID: string; from: string }
 
+/** A turn's diff load as the host reports it; a turn not loaded yet reads as `loading`. */
+export type TurnDiffState =
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly diffs: readonly FileDiffInfo[] }
+  | { readonly status: "failed" }
+
 /** The host's cache of the files each finished turn changed. */
 export type TurnDiffSource = {
-  /** The turn's diffs, or undefined until they load. */
-  get: (input: TurnDiffInput) => readonly FileDiffInfo[] | undefined
-  /** Starts loading the turn's diffs unless they are cached or already loading. */
+  state: (input: TurnDiffInput) => TurnDiffState
+  /** Starts loading the turn's diffs, or retries a failed load; does nothing while loading or once loaded. */
   load: (input: TurnDiffInput) => void
 }
 
@@ -55,7 +60,11 @@ export type ReadMediaUrlFn = (uri: string, mime: string, signal?: AbortSignal) =
 
 export type PeekMediaUrlFn = (uri: string, mime: string) => string | undefined
 
-export const { use: useData, provider: DataProvider } = createSimpleContext({
+export const {
+  use: useData,
+  provider: DataProvider,
+  context: DataContext,
+} = createSimpleContext({
   name: "Data",
   init: (props: {
     data: Data
@@ -93,7 +102,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       sessionHref: props.onSessionHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
-      turnDiff: props.turnDiff,
+      get turnDiff() {
+        return props.turnDiff
+      },
       readMedia: props.readMedia,
       peekMedia: props.peekMedia,
     }

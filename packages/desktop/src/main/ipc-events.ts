@@ -1,30 +1,20 @@
 import type { WebContents } from "electron"
-import { Effect, Queue, Stream } from "effect"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
 
-const queues = new Map<number, Queue.Queue<DesktopEvent>>()
+type Sink = (sender: WebContents, event: DesktopEvent) => boolean
 
-export const bindIpcEvents = Effect.fn("IpcEvents.bind")(function* (senderId: number) {
-  const queue = yield* Queue.unbounded<DesktopEvent>()
-  const previous = queues.get(senderId)
-  queues.set(senderId, queue)
+// The IPC transport owns each window's event stream and registers itself here while its layer lives.
+let sink: Sink | undefined
 
-  if (previous) yield* Queue.shutdown(previous)
+export function setIpcEventSink(next: Sink) {
+  sink = next
 
-  return Effect.fnUntraced(function* () {
-    if (queues.get(senderId) === queue) queues.delete(senderId)
-    yield* Queue.shutdown(queue)
-  })()
-})
-
-export function ipcEventStream(senderId: number) {
-  const queue = queues.get(senderId)
-
-  return queue ? Stream.fromQueue(queue) : Stream.empty
+  return () => {
+    if (sink === next) sink = undefined
+  }
 }
 
+/** Returns false when the renderer has no event stream to receive the event, now or once its document binds. */
 export function emitIpcEvent(sender: WebContents, event: DesktopEvent) {
-  const queue = queues.get(sender.id)
-
-  if (queue) Queue.offerUnsafe(queue, event)
+  return sink ? sink(sender, event) : false
 }

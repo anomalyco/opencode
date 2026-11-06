@@ -1,0 +1,91 @@
+:root {
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Default light theme colors */
+  --color-bg: #ffffff;
+  --color-bg-surface: #f5f5f7;
+  --color-bg-elevated: #ffffff;
+
+  --color-text: #1d1d1f;
+  --color-text-secondary: #424245;
+  --color-text-muted: #6e6e73;
+  --color-text-disabled: #86868b;
+
+  --color-accent: #007aff;
+  --color-accent-hover: #0056b3;
+  --color-accent-active: #004085;
+
+  --color-success: #30d158;
+  --color-warning: #ff9f0a;
+  --color-danger: #ff3b30;
+
+  --color-border: #d2d2d7;
+  --color-border-muted: #e5e5ea;
+
+  /* Button colors */
+  --color-primary: var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-primary-active: var(--color-accent-active);
+  --color-primary-text: #ffffff;
+
+  --color-danger: #ff3b30;
+  --color-danger-hover: #d70015;
+  --color-danger-active: #a50011;
+  --color-danger-text: #ffffff;
+
+  --color-warning: #ff9f0a;
+  --color-warning-hover: #cc7f08;
+  --color-warning-active: #995f06;
+  --color-warning-text: #000000;
+
+  /* Surface colors */
+  --color-surface: var(--color-bg-surface);
+  --color-surface-hover: var(--color-bg-elevated);
+  --color-surface-border: var(--color-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0c0c0e;
+    --color-bg-surface: #161618;
+    --color-bg-elevated: #1c1c1f;
+
+    --color-text: #ffffff;
+    --color-text-secondary: #c7c7cc;
+    --color-text-muted: #a1a1a6;
+    --color-text-disabled: #68686f;
+
+    --color-accent: #007aff;
+    --color-accent-hover: #0056b3;
+    --color-accent-active: #004085;
+
+    --color-success: #30d158;
+    --color-warning: #ff9f0a;
+    --color-danger: #ff453a;
+
+    --color-border: #38383a;
+    --color-border-muted: #2c2c2e;
+
+    /* Button colors */
+    --color-primary: var(--color-accent);
+    --color-primary-hover: var(--color-accent-hover);
+    --color-primary-active: var(--color-accent-active);
+    --color-primary-text: #ffffff;
+
+    --color-danger: #ff453a;
+    --color-danger-hover: #d70015;
+    --color-danger-active: #a50011;
+    --color-danger-text: #ffffff;
+
+    --color-warning: #ff9f0a;
+    --color-warning-hover: #cc7f08;
+    --color-warning-active: #995f06;
+    --color-warning-text: #000000;
+
+    /* Surface colors */
+    --color-surface: var(--color-bg-surface);
+    --color-surface-hover: var(--color-bg-elevated);
+    --color-surface-border: var(--color-border);
+  }
+}

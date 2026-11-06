@@ -120,7 +120,7 @@ it.live(
       // Closing the host interrupts active execution while preserving its durable recovery claim.
       yield* Scope.close(firstScope, Exit.void)
       expect(closed).toEqual([1])
-      yield* llm.push(TestLLM.tool("recovered-tool", "thread_echo", {}), TestLLM.text("Recovered", "answer"))
+      yield* llm.push(TestLLM.toolCall("recovered-tool", "thread_echo", {}), TestLLM.text("Recovered", "answer"))
       const second = yield* OpenCode.create(options, embed).pipe(Scope.provide(secondScope))
       yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"))
       expect((yield* llm.requests()).length).toBe(1)
@@ -133,7 +133,7 @@ it.live(
       expect((yield* second.sessions.get({ sessionID: session.id })).title).toBe("thread-recovery:2")
       expect(
         (yield* llm.requests()).map((request) => ({
-          temperature: request.generation?.temperature,
+          temperature: request.temperature,
           tools: request.tools?.filter((tool) => tool.name.startsWith("thread_")).map((tool) => tool.name),
         })),
       ).toEqual(Array.from({ length: 3 }, () => ({ temperature: 0.25, tools: ["thread_echo"] })))

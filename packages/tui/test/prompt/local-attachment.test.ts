@@ -180,7 +180,7 @@ describe("prompt local attachments", () => {
     expect(await resolvePastedAttachments(Array(33).fill(file).join(" "), process.platform)).toBeUndefined()
   })
 
-  test("sends pasted files by path to a local server and by bytes otherwise", async () => {
+  test("keeps pasted bytes with source paths only for a local server", async () => {
     await using tmp = await tmpdir()
     const image = path.join(tmp.path, "scrëen shot.png")
     const photo = path.join(tmp.path, "photo.jpg")
@@ -204,10 +204,26 @@ describe("prompt local attachments", () => {
 
     const mentions = files.map((file) => file.mention)
 
+    await Bun.write(image, new Uint8Array([10, 11, 12]))
     expect(promptFilesForServer(files, true)).toEqual([
-      { uri: pathToFileURL(image).href, name: "scrëen shot.png", mention: mentions[0] },
-      { uri: pathToFileURL(photo).href, name: "photo.jpg", mention: mentions[1] },
-      { uri: pathToFileURL(pdf).href, name: "report.pdf", mention: mentions[2] },
+      {
+        uri: "data:image/png;base64,AQID",
+        source: { type: "uri", uri: pathToFileURL(image).href },
+        name: "scrëen shot.png",
+        mention: mentions[0],
+      },
+      {
+        uri: "data:image/jpeg;base64,BwgJ",
+        source: { type: "uri", uri: pathToFileURL(photo).href },
+        name: "photo.jpg",
+        mention: mentions[1],
+      },
+      {
+        uri: "data:application/pdf;base64,BAUG",
+        source: { type: "uri", uri: pathToFileURL(pdf).href },
+        name: "report.pdf",
+        mention: mentions[2],
+      },
       { uri: "data:image/png;base64,Cg==", name: "clipboard" },
     ])
     expect(promptFilesForServer(files, false)).toEqual([
@@ -220,6 +236,7 @@ describe("prompt local attachments", () => {
     await Bun.file(image).delete()
     expect(promptFilesForServer(files, true)?.[0]).toEqual({
       uri: "data:image/png;base64,AQID",
+      source: { type: "uri", uri: pathToFileURL(image).href },
       name: "scrëen shot.png",
       mention: mentions[0],
     })

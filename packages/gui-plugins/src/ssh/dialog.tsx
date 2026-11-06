@@ -3,11 +3,19 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@op
 import { Divider } from "@opencode/ui/divider"
 import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { uuid } from "@opencode/util/uuid"
+import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createKeyed, usePlugin } from "@opencode/plugin/gui"
-import type { SshConfig, SshItem } from "./contract"
-import { isSshConnecting, sshName } from "./name"
+import type { SshConfig } from "./contract"
+import {
+  createSshDialogState,
+  transitionSshDialog,
+  viewSshDialog,
+  type SshDialogEffect,
+  type SshDialogEvent,
+  type SshDialogSnapshot,
+} from "./dialog-machine"
+import { sshName } from "./name"
 import type { SshController } from "./state"
 
 export { default as css } from "./ssh.css?inline"
@@ -26,119 +34,82 @@ export function DialogSsh(props: {
   const ssh = props.ssh
   // Entry-point behavior is fixed for the lifetime of this dialog.
   const openProject = props.onOpenProject
-  const id = props.config?.id ?? crypto.randomUUID()
+  const id = props.config?.id ?? uuid()
   let cancelButton: HTMLButtonElement | undefined
 
-  const [state, setState] = createStore({
-    target: props.config?.target ?? "",
-    name: props.config?.name ?? "",
-    started: !!props.promptOnly,
-    // Counts `start` calls, each of which forgets the challenges shown before it.
-    starts: 0,
-    complete: false,
-  })
-
-  const item = createMemo(() => ssh.item(id))
-
-  const error = createMemo(() => {
-    if (ssh.error(id)) return plugin.t("common.requestFailed")
-    const error = item()?.error
-
-    return error ? plugin.t(`error.${error}`) : undefined
-  })
-
-  const busy = createMemo(
-    () => ssh.submitting(id) || (state.started && !ssh.error(id) && isSshConnecting(item()?.stage ?? "connecting")),
+  // The machine state is immutable; each transition replaces it whole.
+  const [dialogState, setDialogState] = createSignal(
+    createSshDialogState({ id, config: props.config, promptOnly: props.promptOnly }),
   )
 
-  const prompt = createMemo<SshItem["prompt"]>((previous) => item()?.prompt ?? (busy() ? previous : undefined))
-  // A new object for each challenge shown, and when one goes away.
-  const challenge = createMemo(on([prompt, () => prompt()?.id], () => ({})))
-
-  // A challenge showed since the dialog opened, or since the last start when it was started again.
-  const prompted = createMemo(
-    (previous: { readonly starts: number; readonly value: boolean }) => {
-      const shown = !!prompt()
-
-      return previous.starts === state.starts
-        ? { starts: state.starts, value: previous.value || shown }
-        : { starts: state.starts, value: shown }
-    },
-    { starts: 0, value: !!props.promptOnly },
+  const snapshot = createMemo(
+    (): SshDialogSnapshot => ({
+      item: ssh.item(id),
+      submitting: ssh.submitting(id),
+      error: ssh.error(id),
+      answeredPrompt: ssh.answeredPrompt(id),
+      activeAttempt: ssh.activeAttempt(id),
+    }),
   )
 
-  // What the user typed belongs to the challenge it was typed for; the next one starts empty.
-  const [typed, setTyped] = createSignal({ challenge: challenge(), value: "" })
+  const view = createMemo(() => viewSshDialog(dialogState(), snapshot()))
+  // One key per prompt, so typing a response never remounts and refocuses its field.
+  const prompt = createMemo(() => view().prompt, undefined, { equals: (previous, next) => previous?.id === next?.id })
 
-  const response = () => {
-    const current = typed()
+  const dispatch = (event: SshDialogEvent) => {
+    const previous = untrack(dialogState)
+    const next = transitionSshDialog(previous, event)
 
-    return current.challenge === challenge() ? current.value : ""
+    if (next.state !== previous) setDialogState(next.state)
+    next.effects.forEach(run)
   }
 
-  const waiting = () => busy() || ssh.answered(id)
+  const run = (effect: SshDialogEffect) => {
+    if (effect.type === "connect") return ssh.connect(effect.config, { dialog: true, replace: effect.replace })
 
-  const start = (replace = false) => {
-    if (busy() || !state.target.trim()) return
-    setState({ started: true, starts: state.starts + 1 })
-    ssh.connect({ id, target: state.target, name: state.name }, { dialog: true, replace })
+    if (effect.type === "respond") return ssh.respond(id, effect.prompt, effect.value)
+
+    if (effect.type === "cancel") return ssh.cancel(id)
+    dialog.close()
+
+    if (openProject) queueMicrotask(() => openProject(id))
+
+    if (props.onConnected) queueMicrotask(props.onConnected)
   }
 
-  const respond = () => {
-    const current = item()?.prompt
+  const submit = () => dispatch({ type: "submitted", snapshot: untrack(snapshot) })
+  const respond = () => dispatch({ type: "responded", snapshot: untrack(snapshot) })
 
-    if (!current || waiting() || (!current.confirm && !response())) return
-    ssh.respond(id, current.id, current.confirm ? "yes" : response())
-  }
+  // Follows the attempt in this window and main's state for the server.
+  createKeyed(snapshot, (next) => dispatch({ type: "synced", snapshot: next }))
 
   // Never let a focused Continue button become Trust between SSH challenges.
   createKeyed(
-    () => (prompt()?.confirm ? challenge() : undefined),
+    () => (prompt()?.confirm ? prompt() : undefined),
     () => queueMicrotask(() => cancelButton?.focus()),
   )
-
-  // Closes the dialog once the server it started is ready.
-  createKeyed(
-    () => state.started && item()?.stage === "ready" && !ssh.submitting(id) && !state.complete,
-    () => {
-      setState("complete", true)
-      dialog.close()
-
-      if (openProject) queueMicrotask(() => openProject(id))
-
-      if (props.onConnected) queueMicrotask(props.onConnected)
-    },
-  )
   onMount(() => {
-    if (props.connect) start()
+    if (props.connect) submit()
   })
-  onCleanup(() => {
-    if (state.started && !state.complete) ssh.cancel(id)
-  })
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const keyDown = (event: KeyboardEvent) => {
     if (event.key !== "Enter" || event.isComposing) return
     event.preventDefault()
-
-    if (prompt()) return
-    start(item()?.stage === "incompatible")
+    submit()
   }
 
   return (
     <Dialog fit class="settings-server-dialog">
       <DialogHeader hideClose={true}>
         <DialogTitle>
-          {prompted().value || props.config ? plugin.t("connectTo", { host: sshName(state) }) : plugin.t("add")}
+          {view().title === "connectTo" ? plugin.t("connectTo", { host: sshName(dialogState()) }) : plugin.t("add")}
         </DialogTitle>
       </DialogHeader>
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
-          <Show
-            when={
-              !props.promptOnly && item()?.stage !== "incompatible" && (!prompted().value || (!!error() && !prompt()))
-            }
-          >
+          <Show when={view().showForm}>
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-target">
                 {plugin.t("target")}
@@ -149,14 +120,14 @@ export function DialogSsh(props: {
                 appearance="large"
                 class="!w-full self-stretch"
                 dir="ltr"
-                value={state.target}
+                value={dialogState().target}
                 autofocus
                 placeholder={plugin.t("placeholder")}
                 spellcheck={false}
                 autocomplete="off"
-                disabled={busy() || !!prompt()}
-                invalid={!!error()}
-                onInput={(event) => setState("target", event.currentTarget.value)}
+                disabled={view().inputsDisabled}
+                invalid={!!view().error}
+                onInput={(event) => dispatch({ type: "target.changed", value: event.currentTarget.value })}
                 onKeyDown={keyDown}
               />
             </div>
@@ -170,15 +141,15 @@ export function DialogSsh(props: {
                 appearance="large"
                 class="!w-full self-stretch"
                 dir="auto"
-                value={state.name}
+                value={dialogState().name}
                 placeholder={plugin.t("form.namePlaceholder")}
-                disabled={busy() || !!prompt()}
-                onInput={(event) => setState("name", event.currentTarget.value)}
+                disabled={view().inputsDisabled}
+                onInput={(event) => dispatch({ type: "name.changed", value: event.currentTarget.value })}
                 onKeyDown={keyDown}
               />
             </div>
           </Show>
-          <Show when={item()?.stage === "incompatible"}>
+          <Show when={view().incompatible}>
             <div class="flex w-full min-w-0 flex-col gap-2" role="status" aria-live="polite">
               <span class="text-14-medium text-v2-text-text-base">{plugin.t("stage.incompatible")}</span>
               <span class="text-13-regular text-v2-text-text-muted">{plugin.t("error.version")}</span>
@@ -203,11 +174,13 @@ export function DialogSsh(props: {
                     appearance="large"
                     class="!w-full self-stretch"
                     autofocus
-                    value={response()}
+                    value={view().response}
                     autocomplete="off"
                     spellcheck={false}
-                    disabled={waiting()}
-                    onInput={(event) => setTyped({ challenge: challenge(), value: event.currentTarget.value })}
+                    disabled={view().waiting}
+                    onInput={(event) =>
+                      dispatch({ type: "response.changed", prompt: prompt.id, value: event.currentTarget.value })
+                    }
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.isComposing) {
                         event.preventDefault()
@@ -219,10 +192,10 @@ export function DialogSsh(props: {
               </div>
             )}
           </Show>
-          <Show when={item()?.stage !== "incompatible" && error()}>
+          <Show when={view().error}>
             {(error) => (
               <span class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
-                {error()}
+                {plugin.t(error())}
               </span>
             )}
           </Show>
@@ -238,30 +211,13 @@ export function DialogSsh(props: {
         >
           {plugin.t("common.cancel")}
         </Button>
-        <Show
-          when={prompt()}
-          fallback={
-            <Button
-              variant="contrast"
-              disabled={busy() || !state.target.trim()}
-              onClick={() => start(item()?.stage === "incompatible")}
-            >
-              {busy()
-                ? plugin.t("stage.connecting")
-                : item()?.stage === "incompatible"
-                  ? plugin.t("update")
-                  : props.config
-                    ? plugin.t("connect")
-                    : plugin.t("form.add")}
-            </Button>
-          }
+        <Button
+          variant="contrast"
+          disabled={view().primary.disabled}
+          onClick={() => (view().primary.action === "respond" ? respond() : submit())}
         >
-          {(prompt) => (
-            <Button variant="contrast" disabled={waiting() || (!prompt().confirm && !response())} onClick={respond}>
-              {waiting() ? plugin.t("stage.connecting") : plugin.t(prompt().confirm ? "trust" : "continue")}
-            </Button>
-          )}
-        </Show>
+          {plugin.t(view().primary.label)}
+        </Button>
       </DialogFooter>
     </Dialog>
   )

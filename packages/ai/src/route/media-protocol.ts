@@ -309,17 +309,9 @@ export const identity = (input: { readonly id: string; readonly name: string; re
 
 export type Identity = ReturnType<typeof identity>
 
-export type Output = Effect.Success<ReturnType<Identity["text"]>>
-
-/** Map a provider status string through the protocol's table; unknown values are an invalid provider document. */
-export const status = <Table extends Record<string, Status>>(
-  table: Table,
-  raw: string,
-  output: Output,
-): Effect.Effect<Status, AIError> => {
-  if (!Object.hasOwn(table, raw)) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
-  return Effect.succeed(table[raw])
-}
+/** Map a provider status string through the protocol's table; unknown values keep the generation running. */
+export const status = (table: Readonly<Record<string, Status>>, raw: string): Status =>
+  Object.hasOwn(table, raw) ? table[raw] : "running"
 
 /** Map a provider error code through the protocol's table; missing or unmapped codes are `ProviderInternal`. */
 export const failure = (table: Readonly<Record<string, Failure>>, code: string | number | undefined): Failure =>

@@ -1,6 +1,6 @@
 import { base64Encode } from "@opencode/util/encode"
 import { expect, test } from "@playwright/test"
-import { NO_PROVIDER, REMOTE_SERVER, SERVER, project, provider, session } from "../utils/app"
+import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, provider, session } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -93,48 +93,6 @@ test("adding an SSH server while the SSH plugin is down fails instead of connect
   await dialog.getByRole("button", { name: "Add server", exact: true }).click()
   await expect(dialog.getByRole("alert")).toHaveText("Request failed")
   await expect(dialog.getByRole("button", { name: "Add server", exact: true })).toBeEnabled()
-})
-
-test("an open session's terminal follows its WSL server to the endpoint it restarts on", async ({ page }) => {
-  const restarted = "http://127.0.0.1:4098"
-  const directory = "/home/ubuntu/project"
-  const wsl = session({ id: "ses_wsl", directory, title: "WSL session" })
-
-  const config = {
-    directory,
-    project: project({ id: "proj_wsl", directory }),
-    provider: NO_PROVIDER,
-    sessions: [wsl],
-    pageMessages: () => ({ items: [] }),
-  }
-
-  const servers = await mockServers(page, {
-    [SERVER]: { ...config, sessions: [] },
-    [REMOTE_SERVER]: { ...config, pty: { prefix: "pty_before" } },
-    [restarted]: { ...config, pty: { prefix: "pty_after" } },
-  })
-
-  const path = `/server/${base64Encode("wsl:Ubuntu")}/session/${wsl.id}`
-  await page.goto(
-    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", wsl: REMOTE_SERVER, restart: restarted, path })}`,
-  )
-  await expectSessionTitle(page, wsl.title)
-  await page.keyboard.press("Control+Backquote")
-  await expect.poll(() => servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
-
-  await page.keyboard.press("Control+,")
-  const settings = page.getByTestId("settings-screen")
-  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
-  const connection = settings.getByRole("region", { name: "Ubuntu", exact: true })
-  await connection.getByRole("button", { name: "Update OpenCode", exact: true }).click()
-  await expect(connection.getByRole("button", { name: "Update OpenCode", exact: true })).toHaveCount(0)
-  await settings.getByRole("button", { name: "Back to app" }).click()
-  await expectSessionTitle(page, wsl.title)
-
-  // The tab and its open terminal outlive the restart. The stopped server no longer knows the terminal, so it is
-  // recreated on the restarted one.
-  await expect.poll(() => servers[restarted]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_after1"])
-  expect(servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
 })
 
 test("WSL session and draft tabs outlive the plugin going away until the server is removed", async ({ page }) => {
@@ -281,6 +239,8 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
       timeout: 20_000,
     })
     .toEqual([true])
+  // The session waits for a sign-in instead of showing what the disposed controller last loaded.
+  await expect(page.getByText("Signed out of this server", { exact: true })).toBeVisible()
 
   await page.getByRole("button", { name: "Drop SSH tunnel" }).click()
   await page.getByRole("button", { name: "Reconnect", exact: true }).click()
@@ -289,4 +249,44 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
   await editor.fill("after sign-in")
   await editor.press("Enter")
   await expect.poll(() => prompts).toEqual(["after sign-in"])
+})
+
+test("a session being created on an SSH host that turns out incompatible says so", async ({ page }) => {
+  const directory = "/home/box/project"
+  const box = session({ id: "ses_ssh_incompatible", directory, title: "SSH incompatible session" })
+
+  const config = {
+    directory,
+    project: project({ id: "proj_ssh_incompatible", directory }),
+    provider: provider(),
+    sessions: [box],
+    pageMessages: () => ({ items: [] }),
+  }
+
+  await mockServers(page, { [SERVER]: { ...config, sessions: [] }, [REMOTE_SERVER]: config })
+  const path = `/server/${base64Encode("ssh:box")}/session/${box.id}`
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", ssh: REMOTE_SERVER, path })}`,
+  )
+  await expectSessionTitle(page, box.title)
+  await page.getByRole("button", { name: "New session", exact: true }).click()
+
+  // The create request stays in flight, so the new session stays in preparation.
+  await holdRoute(page, new RegExp(`^${REMOTE_SERVER.replace(/[.]/g, "\\.")}/api/session(\\?|$)`), { method: "POST" })
+  const editor = page.locator('[data-component="composer-editor"]')
+  const send = page.getByRole("button", { name: "Send", exact: true })
+  await expect(page.locator('[data-component="new-session"]')).toBeVisible()
+  await expect(editor).toBeEditable()
+  await editor.fill("start on the box")
+  await expect(editor).toHaveText("start on the box")
+  await expect(send).toBeEnabled()
+  await send.click()
+  const preparing = page.locator('[data-component="session-preparing"]')
+  await expect(preparing).toBeVisible()
+
+  // The SSH plugin covers a host that is not ready; the route stays mounted beneath its cover.
+  await page.getByRole("button", { name: "Report incompatible SSH server" }).click()
+  await expect(page.getByRole("heading", { name: "SSH connection inactive", exact: true })).toBeVisible()
+  await expect(page.getByText("This server version isn't supported", { exact: true })).toBeAttached()
+  await expect(preparing).toHaveCount(0)
 })

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/site",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "imports": {
+    "#resource": {
+      "production": "./src/lib/resource.cloudflare.ts",
+      "default": "./src/lib/resource.node.ts"
+    }
+  },
+  "scripts": {
+    "dev": "bun run generate && bun ./script/build-stamp.ts --dev && bun ./script/og.ts && vite dev --host 0.0.0.0",
+    "build": "bun script/build.ts",
+    "deploy:dev": "bun script/build.ts --mode dev && cf deploy --prebuilt --mode dev",
+    "deploy:production": "bun script/build.ts --mode production && cf deploy --prebuilt --mode production",
+    "generate": "cp ../../packages/protocol/openapi.json public/openapi.json && bun ../../packages/schema/script/config-schema.ts public/config.json",
+    "typecheck": "bun check --no-script && bun --cwd textjs check --no-script",
+    "typecheck:tsc": "tsc --noEmit && tsc --noEmit -p textjs",
+    "test": "bun test --only-failures"
+  },
+  "dependencies": {
+    "@ibm/plex": "6.4.1",
+    "@kitlangton/rolling-number": "0.4.1",
+    "@opencode/ui": "workspace:*",
+    "@solidjs/meta": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@solidjs/start": "catalog:",
+    "@textjs/app": "1.5.0",
+    "@textjs/core": "1.5.0",
+    "@textjs/opencode": "1.5.0",
+    "@textjs/react": "1.5.0",
+    "fuzzysort": "3.1.0",
+    "nitro": "3.0.260903-beta",
+    "number-flow": "0.6.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "solid-js": "catalog:",
+    "three": "0.180.0",
+    "uqr": "0.1.3",
+    "vite": "8.2.4",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/build-output-utils": "0.8.5",
+    "@cloudflare/config": "0.23.0",
+    "@types/bun": "catalog:",
+    "@types/react": "19.3.0",
+    "@types/three": "0.180.0",
+    "@typescript/native": "catalog:",
+    "@webgpu/types": "0.1.54",
+    "cf": "1.0.0-beta.12",
+    "miniflare": "5.20260930.0-alpha",
+    "playwright-core": "1.59.1",
+    "satori": "0.63.2",
+    "sharp": "0.34.5",
+    "typescript": "catalog:",
+    "wawoff2": "2.0.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

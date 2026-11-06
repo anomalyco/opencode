@@ -80,7 +80,6 @@ export const layer = Layer.effect(
       const metadataKey = prepared.request.model.route.providerMetadataKey ?? prepared.request.model.provider
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
           // Responses can classify a text block only when it ends; filter after the stream completes.
           if (LLMEvent.is.textStart(event) || LLMEvent.is.textDelta(event) || LLMEvent.is.textEnd(event)) {
             const phase = event.providerMetadata?.[metadataKey]?.phase

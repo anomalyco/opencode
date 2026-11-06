@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { homeProjectDirectories } from "@/shell/layout/helpers"
@@ -16,6 +16,7 @@ import { SettingsSearchField } from "../search-field"
 import { SettingsProjectRow } from "./project-row"
 import "@/settings/search.css"
 import "@/settings/settings.css"
+import "./project.css"
 
 export const SettingsProjects: Component<{
   server: ServerConnection.Any
@@ -24,18 +25,29 @@ export const SettingsProjects: Component<{
   headerAction?: JSX.Element
 }> = (props) => {
   const language = useLanguage()
-  const global = useGlobal()
+  // The server provider mounts this page again for a new controller.
+  const context = useServer().ctx
   const pickDirectory = useDirectoryPicker()
-  const [store, setStore] = createStore({ filter: "" })
-  const context = createMemo(() => global.ensureServerCtx(props.server))
-  const projects = createMemo(() => context().projects.list())
-  const searchable = createMemo(() => projects().length > 7)
+  const [store, setStore] = createStore({ filter: "", others: false })
 
-  const filtered = createMemo(() => {
-    const query = searchable() ? store.filter.trim().toLowerCase() : ""
+  let focus: string | undefined
 
-    return query ? projects().filter((project) => displayName(project).toLowerCase().includes(query)) : projects()
-  })
+  const projects = createMemo(() => context.projects.unique())
+  const used = createMemo(() => new Set(context.projects.used().map((project) => project.id)))
+
+  const others = createMemo(() => projects().filter((project) => !used().has(project.id)))
+  const searchable = createMemo(() => projects().length > 7 || others().length > 0)
+  const query = createMemo(() => (searchable() ? store.filter.trim().toLowerCase() : ""))
+
+  const filtered = createMemo(() =>
+    projects().filter(
+      (project) =>
+        !query() || [displayName(project), project.worktree].some((value) => value.toLowerCase().includes(query())),
+    ),
+  )
+
+  const added = createMemo(() => filtered().filter((project) => used().has(project.id)))
+  const otherResults = createMemo(() => filtered().filter((project) => !used().has(project.id)))
 
   createEffect(() => {
     if (!searchable()) setStore("filter", "")
@@ -49,7 +61,7 @@ export const SettingsProjects: Component<{
       onSelect: (result) => {
         const directories = homeProjectDirectories(result)
 
-        void addProjects(context(), directories).then((project) => {
+        void addProjects(context, directories).then((project) => {
           if (project && directories.length === 1) props.onOpenProject(project)
         })
       },
@@ -108,9 +120,7 @@ export const SettingsProjects: Component<{
                 class="settings-project-empty-card flex flex-col items-center gap-2 py-24 text-center"
               >
                 <Icon name="folder" size="large" class="mb-2 text-v2-icon-icon-muted" />
-                <div class="text-13-medium text-v2-text-text-base">
-                  {language.t("settings.projects.empty.title")}
-                </div>
+                <div class="text-13-medium text-v2-text-text-base">{language.t("settings.projects.empty.title")}</div>
                 <div class="text-13-regular text-v2-text-text-muted">
                   {language.t("settings.projects.empty.description")}
                 </div>
@@ -121,12 +131,67 @@ export const SettingsProjects: Component<{
             </Show>
           }
         >
-          <div role="list" class="settings-project-list">
-            <Key each={filtered()} by="worktree">
-              {(project) => (
-                <SettingsProjectRow project={project()} server={props.server} onOpen={props.onOpenProject} />
-              )}
-            </Key>
+          <div class="flex flex-col gap-3">
+            <Show when={added().length > 0}>
+              <div role="list" class="settings-project-list">
+                <Key each={added()} by="worktree">
+                  {(project) => (
+                    <SettingsProjectRow
+                      project={project()}
+                      server={props.server}
+                      onOpen={props.onOpenProject}
+                      onMount={(button) => {
+                        if (focus !== project().worktree) return
+                        focus = undefined
+                        requestAnimationFrame(() => button.focus())
+                      }}
+                    />
+                  )}
+                </Key>
+              </div>
+            </Show>
+            <Show when={otherResults().length > 0}>
+              <Show
+                when={!query()}
+                fallback={
+                  <h3 class="text-13-medium text-v2-text-text-muted">{language.t("settings.projects.other")}</h3>
+                }
+              >
+                <button
+                  type="button"
+                  class="settings-models-group-trigger project-settings-shared-trigger"
+                  aria-label={language.t("settings.projects.other")}
+                  aria-expanded={store.others}
+                  onClick={() => setStore("others", (value) => !value)}
+                >
+                  <span class="settings-models-group-chevron">
+                    <Icon
+                      name="fill-triangle-down"
+                      size="small"
+                      classList={{ "project-settings-shared-chevron": true, open: store.others }}
+                    />
+                  </span>
+                  <span class="project-settings-shared-label">
+                    <span class="settings-models-group-title">{language.t("settings.projects.other")}</span>
+                    <span class="project-settings-shared-count">{others().length}</span>
+                  </span>
+                </button>
+              </Show>
+              <Show when={store.others || query()}>
+                <div role="list" class="settings-project-list">
+                  <Key each={otherResults()} by="worktree">
+                    {(project) => (
+                      <SettingsProjectRow
+                        project={project()}
+                        server={props.server}
+                        onOpen={props.onOpenProject}
+                        onAdd={() => (focus = project().worktree)}
+                      />
+                    )}
+                  </Key>
+                </div>
+              </Show>
+            </Show>
           </div>
         </Show>
       </div>

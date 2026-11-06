@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.messagePart.tools.used.few": "Використано {{count}} рази: {{tools}}",
   "ui.messagePart.tools.used.many": "Використано {{count}} разів: {{tools}}",
   "ui.common.fileCount.few": "{{count}} файли",
@@ -105,10 +105,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Підпишіться на OpenCode Go за $10 на місяць для надійного доступу до найкращих моделей із відкритим кодом.",
   "dialog.usageExceeded.freeTier.actionLabel": "Підписатися",
-  "dialog.usageExceeded.accountRateLimit.title": "Ліміт Go вичерпано",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ліміт використання вичерпано. Щоб і надалі користуватися цією моделлю, увімкніть оплату з доступного балансу",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Відкрити налаштування",
 
   "ui.sessionTurn.status.delegating": "Делегування роботи",
   "ui.sessionTurn.status.planning": "Планування наступних кроків",

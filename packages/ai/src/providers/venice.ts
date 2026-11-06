@@ -3,14 +3,14 @@ import { VeniceChat } from "../protocols/venice-chat.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("venice")
 export type ChatOptionsInput = VeniceChat.OptionsInput
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly queryParams?: Readonly<Record<string, string>>
@@ -18,7 +18,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   }
 export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
     readonly queryParams?: Readonly<Record<string, string>>
   }
@@ -40,7 +40,7 @@ const responsesRoute = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL }),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 export const routes = [route, responsesRoute]
 
@@ -52,7 +52,11 @@ export const configure = (input: Config = {}) => {
     auth: AuthOptions.bearer(input, "VENICE_API_KEY"),
   }
   const chat = (modelID: string | ModelID) =>
-    route.with(options).model<ChatOptionsInput>({ id: modelID, compatibility: VeniceChat.compatibility })
+    route.with(options).model<ChatOptionsInput>({
+      id: modelID,
+      compatibility: VeniceChat.compatibility,
+      capabilities: VeniceChat.capabilities,
+    })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(options).model<OpenResponsesProviderOptionsInput>({ id: modelID })
   return { id, model: chat, chat, responses, configure }

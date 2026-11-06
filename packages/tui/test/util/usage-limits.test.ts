@@ -3,9 +3,11 @@ import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client"
 import {
   formatDollars,
   formatReset,
+  goLimitLink,
   limitScope,
   modelUsage,
   refusalReset,
+  retryReset,
   usageLevel,
 } from "../../src/util/usage-limits"
 
@@ -135,5 +137,18 @@ describe("util.usage-limits", () => {
       }),
     ).toBe(RESET)
     expect(refusalReset({ response: { body: "{}" } })).toBeUndefined()
+  })
+
+  test("a Go limit links to its workspace's Go page for new and migrated workspaces", () => {
+    const body = (workspace: string) => ({ response: { body: JSON.stringify({ metadata: { workspace } }) } })
+    expect(goLimitLink(body("org_01JXYZ7Q2M"))).toBe("https://opencode.ai/console/org_01JXYZ7Q2M/go")
+    expect(goLimitLink(body("wrk_legacy"))).toBe("https://opencode.ai/console/wrk_legacy/go")
+    expect(goLimitLink(body("acct_other"))).toBe("https://opencode.ai/console")
+    expect(goLimitLink({ response: { body: "{}" } })).toBe("https://opencode.ai/console")
+  })
+
+  test("a monthly Go limit keeps its reset weeks out", () => {
+    expect(retryReset({ retryAfterMs: 25 * 86_400_000 }, RESET)).toBe(RESET + 25 * 86_400_000)
+    expect(retryReset({ retryAfterMs: 60 * 86_400_000 }, RESET)).toBeUndefined()
   })
 })

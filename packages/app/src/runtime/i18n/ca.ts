@@ -744,6 +744,7 @@ export const dict = {
   "dialog.server.menu.remove": "Elimina",
   "home.workspaceTip": "Inicieu la propera sessió en un nou espai de treball per mantenir els canvis aïllats",
   "session.tab.add": "Afegeix una pestanya",
+  "session.tab.closeOthers": "Tanca les altres pestanyes",
   "session.queue.attachments.one": "Més adjunt {{count}}",
   "session.queue.attachments.other": "Més fitxers adjunts {{count}}",
   "settings.backToSettings": "Tornar a la configuració",

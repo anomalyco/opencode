@@ -1,0 +1,1032 @@
+/* The arcade 404 (arcade.tsx). Every plate is laid out at its source size from the stage's top-left
+   corner, and the camera places it with one transform per frame. The page is dark whatever the
+   theme: it is a photograph of a dark room. */
+
+[data-component="arcade-404"] {
+  /* The site variables the shared search and tooltips need (site.css is not loaded here). */
+  color-scheme: dark;
+  --bg: #0c0c0c;
+  --bg-weak: hsl(0, 0%, 10%);
+  --text-strong: hsl(0, 0%, 95%);
+  --text: hsl(0, 0%, 72%);
+  --text-weak: hsl(0, 0%, 56%);
+  --border: hsl(0, 0%, 18%);
+  --link: #4f8bff;
+  --popover-bg: hsl(0, 0%, 10%);
+  --popover-text-weak: hsl(0, 0%, 64%);
+  --popover-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier", ui-monospace, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* The site's menu grey (site.css › Settings › Menu color). */
+  --menu-hover: light-dark(hsl(0, 0%, 94.5%), hsl(0, 0%, 13.5%));
+  --menu-press: light-dark(hsl(0, 0%, 91%), hsl(0, 0%, 17%));
+  --menu-hint: light-dark(hsl(0, 0%, 66%), hsl(0, 0%, 34%));
+  --menu-bar: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 62%));
+  --edge: 1.5rem;
+  --gutter: 1rem;
+  --sidebar-width: 14.75rem;
+  --topbar-height: 3.5rem;
+  --page-offset: 0px;
+  /* The ⌘K hint (search.css), left of the Settings button. */
+  --search-hint-right: calc(4.75rem + env(safe-area-inset-right, 0px));
+  --phosphor: var(--tone-phosphor);
+  --phosphor-hot: var(--tone-phosphor-hot);
+  --glow:
+    0 0 0.35em color-mix(in srgb, var(--tone-glow-near) 85%, transparent),
+    0 0 1.2em color-mix(in srgb, var(--tone-glow-far) 55%, transparent);
+
+  position: relative;
+  min-height: 100svh;
+  /* The same colour as the page around it (tone.css), so nothing flashes before the image. */
+  background: var(--tone-backdrop);
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+
+  @media (max-width: 40rem) {
+    --edge: 1rem;
+  }
+
+  [data-slot="stage"] {
+    position: relative;
+    height: 100svh;
+    overflow: hidden;
+    /* The page keeps its vertical scroll on touch; only the coin and the panel take the finger. */
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Settings › Saturation: the stills are neutral grades (*-neutral), desaturated on the GPU, from
+     the server-rendered first paint on (not only once the page is live). */
+  :is([data-slot="scene"], [data-slot="front"], [data-slot="faceplate"], [data-slot="closeup"]) {
+    filter: saturate(var(--tone-sat-pct));
+  }
+
+  /* Before the camera takes over (server render), the room shot simply covers the stage. */
+  [data-slot="scene"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="front"],
+  [data-slot="faceplate"],
+  [data-component="arcade-screen"],
+  [data-slot="coin"] {
+    display: none;
+  }
+
+  &[data-live] {
+    :is([data-slot="scene"], [data-slot="front"], [data-slot="faceplate"], [data-component="arcade-screen"]) {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      inset: 0 auto auto 0;
+      transform-origin: 0 0;
+      will-change: transform, opacity;
+      max-width: none;
+    }
+
+    /* The hybrid's sharp close-up of the coin door, over the room shot, feathered into it. */
+    [data-slot="closeup"] {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+      width: 2048px;
+      height: 1536px;
+      max-width: none;
+      transform-origin: 0 0;
+      will-change: transform, opacity;
+      opacity: 0;
+      pointer-events: none;
+      mask-image:
+        linear-gradient(to right, transparent, #000 14%, #000 86%, transparent),
+        linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+      mask-composite: intersect;
+    }
+
+    /* Settings › White balance: channel gains over the stills (white, so no change, when neutral). */
+    [data-slot="balance"] {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      background: var(--tone-balance);
+      mix-blend-mode: multiply;
+    }
+
+    [data-slot="scene"] {
+      width: 2752px;
+      height: 1536px;
+      object-fit: fill;
+      z-index: 1;
+    }
+
+    [data-slot="front"] {
+      width: 3072px;
+      height: 5504px;
+      z-index: 2;
+      opacity: 0;
+      /* Feathered, in case its edge is ever in view while it takes over. */
+      mask-image:
+        linear-gradient(to right, transparent, #000 4%, #000 96%, transparent),
+        linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
+      mask-composite: intersect;
+    }
+
+    [data-slot="faceplate"] {
+      width: 202px;
+      height: 214px;
+      z-index: 4;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Above the balance layer: the screen is light, not paint. */
+    [data-component="arcade-screen"] {
+      z-index: 5;
+      opacity: 0;
+    }
+
+    [data-slot="coin"] {
+      display: block;
+    }
+
+    /* The hybrid's three.js token (coin3d.ts), over the stills; arcade.tsx moves it under the
+       faceplate while the coin slides in. */
+    [data-slot="coin-canvas"] {
+      display: block;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 6;
+      pointer-events: none;
+    }
+  }
+
+  [data-slot="coin-canvas"],
+  [data-slot="closeup"] {
+    display: none;
+  }
+
+  /* The black the coin → screen cut fades through (arcade.tsx fadeTo), over the whole stage. */
+  [data-slot="fade"] {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* The hybrid's slot lamp, over the room shot's slot (arcade.tsx flashes it on a credit). */
+  [data-slot="slot-glow"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 4;
+    width: 200px;
+    height: 200px;
+    transform-origin: 0 0;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(circle, rgb(255 246 228 / 0.95) 0 6%, rgb(255 236 205 / 0.45) 22%, transparent 62%);
+    mix-blend-mode: screen;
+  }
+
+  /* Once the three.js token draws, the CSS one stays only as its hit area and focus ring. */
+  &[data-coin3d] [data-slot="coin"] [data-slot="body"] {
+    visibility: hidden;
+  }
+
+  /* ——— The token ——— */
+
+  [data-slot="coin"] {
+    --size: 8px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 6;
+    /* The hit area stays at least 44px, however small the coin is drawn. */
+    width: max(var(--size), 44px);
+    height: max(var(--size), 44px);
+    margin: calc(max(var(--size), 44px) / -2) 0 0 calc(max(var(--size), 44px) / -2);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+    /* Settings › 404 arcade › Coin › Perspective. */
+    perspective: calc(var(--size) * var(--perspective, 6));
+    outline-offset: 2px;
+
+    &:focus-visible {
+      outline: 2px solid var(--link);
+    }
+  }
+
+  &[data-phase="drag"] [data-slot="coin"] {
+    cursor: grabbing;
+  }
+
+  /* Going into the slot the focus ring would be cut by the slit's clip: the token is already on its way. */
+  &[data-phase="inserting"] [data-slot="coin"] {
+    outline: none;
+  }
+
+  &:is([data-phase="climb"], [data-phase="select"], [data-phase="play"], [data-phase="inserting"]) [data-slot="coin"] {
+    pointer-events: none;
+  }
+
+  [data-slot="body"] {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--size);
+    height: var(--size);
+    margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+    transform-style: preserve-3d;
+    transform: rotateX(var(--tilt, 70deg)) rotateY(var(--turn, 0deg)) rotateZ(var(--spin, 0deg));
+    filter: brightness(calc(1 - var(--dim, 0) * 0.7))
+      drop-shadow(0 calc(var(--size) * 0.06) calc(var(--size) * 0.06) rgb(0 0 0 / 0.55));
+
+    > span {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      backface-visibility: hidden;
+    }
+
+    /* The rim: stacked silver discs give the coin its thickness when it turns edge-on. */
+    [data-slot="edge"] {
+      background: radial-gradient(circle at 60% 35%, #eef0f2, #9ca2a9 60%, #4c5157);
+      backface-visibility: visible;
+
+      &:nth-child(1) {
+        transform: translateZ(calc(var(--size) * -0.04));
+      }
+      &:nth-child(2) {
+        transform: translateZ(calc(var(--size) * -0.02));
+      }
+      &:nth-child(3) {
+        transform: translateZ(0);
+      }
+      &:nth-child(4) {
+        transform: translateZ(calc(var(--size) * 0.02));
+      }
+      &:nth-child(5) {
+        transform: translateZ(calc(var(--size) * 0.04));
+      }
+    }
+
+    /* The milled rim, facing the camera when the coin turns edge-on into the slot. */
+    [data-slot="rim"] {
+      left: 50%;
+      width: calc(var(--size) * 0.09);
+      margin-left: calc(var(--size) * -0.045);
+      border-radius: calc(var(--size) * 0.04);
+      transform: rotateY(90deg);
+      backface-visibility: visible;
+      background:
+        repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.35) 0 1px, transparent 1px 3px),
+        linear-gradient(to right, #4c5157, #f1f3f5 45%, #a7adb3 60%, #4c5157);
+    }
+
+    [data-slot="face"],
+    [data-slot="back"] {
+      background: url("/arcade404/coin-face-silver.webp") center / cover;
+    }
+
+    [data-slot="face"] {
+      transform: translateZ(calc(var(--size) * 0.045));
+    }
+
+    [data-slot="back"] {
+      transform: rotateY(180deg) translateZ(calc(var(--size) * 0.045));
+    }
+
+    /* The specular sheen sweeps across the face now and then. */
+    [data-slot="sheen"] {
+      transform: translateZ(calc(var(--size) * 0.05));
+      background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.85) 48%, transparent 60%) no-repeat;
+      background-size: 300% 100%;
+      background-position: 140% 0;
+      mix-blend-mode: screen;
+      opacity: var(--glisten, 1);
+      animation: arcade-sheen calc(var(--glisten-rate, 2.8s) * 1.3) ease-in-out infinite;
+    }
+  }
+
+  /* The glisten: four-point stars that twinkle at the coin's edge. */
+  [data-slot="sparkle"] {
+    --star: max(calc(var(--size) * 0.9), 9px);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--star);
+    height: var(--star);
+    margin: calc(var(--star) / -2) 0 0 calc(var(--star) / -2);
+    background: radial-gradient(
+      circle,
+      #fff 0 12%,
+      color-mix(in srgb, var(--tone-tint) 90%, transparent) 20%,
+      transparent 62%
+    );
+    clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+    opacity: 0;
+    pointer-events: none;
+    /* Settings › Glisten (amount) and Glisten every (interval). */
+    filter: opacity(var(--glisten, 1));
+    animation: arcade-twinkle var(--glisten-rate, 2.8s) ease-in-out infinite;
+
+    &:nth-child(2) {
+      translate: calc(var(--size) * -0.35) calc(var(--size) * -0.12);
+    }
+    &:nth-child(3) {
+      translate: calc(var(--size) * 0.4) calc(var(--size) * 0.05);
+      animation-delay: calc(var(--glisten-rate, 2.8s) * 0.34);
+      --star: max(calc(var(--size) * 0.65), 7px);
+    }
+    &:nth-child(4) {
+      translate: calc(var(--size) * 0.05) calc(var(--size) * -0.3);
+      animation-delay: calc(var(--glisten-rate, 2.8s) * 0.68);
+      --star: max(calc(var(--size) * 0.5), 6px);
+    }
+  }
+
+  &:not([data-phase="floor"]) [data-slot="sparkle"] {
+    display: none;
+  }
+
+  /* ——— The CRT ——— */
+
+  /* ?debug=screen: the screen half see-through over the painting, with the traced opening outlined. */
+  &[data-debug-screen] [data-component="arcade-screen"] {
+    opacity: 0.45 !important;
+
+    [data-slot="lip-debug"] {
+      display: block;
+    }
+  }
+
+  [data-component="arcade-screen"] {
+    /* The screen's type scale, in the pixel font: everything is the base size (the size of PRESS
+       START), and the one larger step is the 404 alone. Heights are the 7-cell glyph height. */
+    --type: 3.2cqh;
+    --type-large: 26cqh;
+    overflow: hidden;
+    container-type: size;
+    color: var(--phosphor);
+    font-family: var(--font-mono);
+
+    > [data-slot="glass"] {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(
+          ellipse at 50% 45%,
+          color-mix(in srgb, var(--tone-screen-mid) 85%, transparent),
+          var(--tone-screen-deep) 75%
+        ),
+        var(--tone-screen-black);
+    }
+
+    [data-slot="scanlines"] {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.28) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse at 50% 50%, transparent 55%, rgb(0 0 0 / 0.55));
+      mix-blend-mode: multiply;
+      /* Settings › Scanlines. */
+      opacity: var(--scanlines, 1);
+    }
+
+    [data-slot="sheen"] {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      pointer-events: none;
+      background:
+        linear-gradient(160deg, rgb(255 255 255 / 0.07) 0%, transparent 32%),
+        radial-gradient(ellipse at 78% 18%, color-mix(in srgb, var(--tone-tint) 8%, transparent), transparent 30%);
+    }
+
+    [data-component="pixel-text"] {
+      display: block;
+      fill: currentColor;
+      filter: drop-shadow(0 0 0.06em color-mix(in srgb, var(--tone-glow-line) 90%, transparent))
+        drop-shadow(0 0 0.35em color-mix(in srgb, var(--tone-glow-far) 60%, transparent));
+      overflow: visible;
+    }
+
+    .arcade-big {
+      height: var(--type-large);
+    }
+
+    :is(.arcade-title, .arcade-label, .arcade-hint, .arcade-subtitle, .arcade-press) {
+      height: var(--type);
+    }
+
+    .arcade-hint {
+      opacity: 0.7;
+    }
+
+    .arcade-blink {
+      animation: arcade-blink 1.2s steps(1, end) infinite;
+    }
+  }
+
+  /* Powering down: whatever the tube shows collapses to a line, then a dot, inside the glass. */
+  &[data-power-down]
+    [data-component="arcade-screen"]
+    > :is([data-slot="boot"], [data-slot="start"], [data-slot="menu"], [data-slot="boot-404"]) {
+    animation: arcade-power-off 0.42s ease-in forwards;
+  }
+
+  /* The attract screen: "404" with "INSERT COIN" steady below it, a centred pair. */
+  [data-slot="boot-404"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 10cqh;
+    padding-top: 6cqh;
+    color: var(--phosphor-hot);
+
+    [data-slot="prompt"] {
+      color: var(--phosphor);
+    }
+  }
+
+  /* A phone's screen once the coin is in (arcade.tsx phoneCredit): the games need a desktop. */
+  [data-slot="mobile"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 4cqh;
+    color: var(--phosphor-hot);
+
+    .arcade-label {
+      color: var(--phosphor);
+    }
+
+    .arcade-hint {
+      margin-top: 3cqh;
+      opacity: 1;
+    }
+  }
+
+  /* The phone's painted screen is a few hundred pixels across: its base size is larger, so the
+     message stays legible (the longest line still fits the glass). */
+  [data-component="arcade-screen"][data-state="mobile"] {
+    --type: 5.8cqh;
+  }
+
+  /* The 404 tears, rolls and collapses inside the glass only, before the machine boots. */
+  [data-state="glitch"] [data-slot="boot-404"] {
+    animation: arcade-glitch var(--glitch-duration, 0.9s) steps(1, end) forwards;
+  }
+
+  [data-state="glitch"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    background: linear-gradient(
+      to bottom,
+      transparent 40%,
+      color-mix(in srgb, var(--tone-tint) 30%, transparent) 48%,
+      transparent 56%
+    );
+    background-size: 100% 220%;
+    animation: arcade-roll var(--glitch-duration, 0.9s) linear forwards;
+    pointer-events: none;
+  }
+
+  /* The boot log, in the pixel font at the base size (screen.tsx Boot). */
+  [data-slot="boot"] {
+    position: absolute;
+    inset: 7cqh 7cqw;
+    display: grid;
+    align-content: start;
+    gap: calc(var(--type) * 0.75);
+    color: var(--phosphor);
+
+    [data-slot="line"] {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--type) * 0.85);
+      height: var(--type);
+
+      > span {
+        display: flex;
+        height: 100%;
+      }
+
+      [data-component="pixel-text"] {
+        height: 100%;
+        width: auto;
+      }
+    }
+
+    [data-slot="ok"] {
+      color: var(--phosphor-hot);
+    }
+
+    [data-slot="caret"] {
+      animation: arcade-blink 0.7s steps(1, end) infinite;
+    }
+
+    [data-slot="bar"] {
+      display: inline-block;
+      width: 36cqw;
+      height: 100%;
+      background:
+        linear-gradient(to right, var(--phosphor) calc(var(--progress) * 100%), transparent 0),
+        repeating-linear-gradient(
+          to right,
+          color-mix(in srgb, var(--tone-glow-line) 25%, transparent) 0 1.4cqw,
+          transparent 1.4cqw 1.8cqw
+        );
+      box-shadow: var(--glow);
+    }
+  }
+
+  /* The title: the Anomaly wordmark on the CRT's pixel grid (pixel-logo.tsx), "ARCADE" under it in
+     the screen's font, and a small "PRESS START" near the bottom. */
+  [data-slot="start"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    justify-items: center;
+    padding: 0 0 12cqh;
+    border: 0;
+    background: none;
+    color: var(--phosphor-hot);
+    cursor: pointer;
+
+    [data-slot="marquee"] {
+      display: grid;
+      justify-items: center;
+      align-content: center;
+      gap: 5cqh;
+    }
+
+    .arcade-logo {
+      width: 56cqw;
+      height: auto;
+    }
+
+    /* The wordmark draws in from the left a whole cell column at a time (steps over its 64-cell
+       grid), a bright write head on the leading column that settles when it is done. Then ARCADE
+       snaps on and PRESS START starts blinking. Replayed each time the title screen mounts. */
+    [data-slot="logo-reveal"] {
+      position: relative;
+      display: block;
+
+      &[data-reveal="column wipe"] .arcade-logo {
+        animation: logo-reveal var(--logo-reveal) steps(var(--logo-cells), end) both;
+      }
+
+      /* The pixel reveal's canvas (screen.tsx LogoPixels), over the logo, with its glow. */
+      [data-slot="logo-pixels"] {
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 100%;
+        height: auto;
+        pointer-events: none;
+      }
+
+      &:not([data-reveal="column wipe"]) [data-slot="write-head"] {
+        display: none;
+      }
+    }
+
+    [data-slot="write-head"] {
+      position: absolute;
+      top: -4%;
+      bottom: -4%;
+      left: 0;
+      width: calc(100% / var(--logo-cells));
+      background: color-mix(in srgb, var(--phosphor-hot) 85%, white);
+      box-shadow:
+        0 0 1.2cqh color-mix(in srgb, var(--tone-glow-near) 95%, transparent),
+        0 0 3cqh color-mix(in srgb, var(--tone-glow-far) 70%, transparent);
+      mix-blend-mode: screen;
+      opacity: 0;
+      animation:
+        write-head-move var(--logo-reveal) steps(var(--logo-cells), end) both,
+        write-head-glow var(--logo-reveal) linear both;
+    }
+
+    .arcade-subtitle {
+      visibility: hidden;
+      animation: title-appear 0s calc(var(--logo-reveal) + var(--arcade-delay)) forwards;
+    }
+
+    .arcade-press {
+      visibility: hidden;
+      animation:
+        title-appear 0s calc(var(--logo-reveal) + var(--arcade-delay) + 300ms) forwards,
+        arcade-blink 1.2s steps(1, end) calc(var(--logo-reveal) + var(--arcade-delay) + 300ms) infinite;
+    }
+
+    .arcade-subtitle {
+      color: var(--phosphor);
+    }
+
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  /* A phone shows the logo and ARCADE only: its message follows, not the game menu. */
+  &[data-phone] [data-slot="start"] .arcade-press {
+    display: none;
+  }
+
+  [data-slot="menu"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    justify-items: center;
+    align-items: center;
+    gap: 4cqh;
+    padding: 9cqh 10cqw 8cqh;
+    color: var(--phosphor-hot);
+    animation: arcade-on 0.35s ease-out both;
+  }
+
+  /* Three box-art covers, exactly 4:5 at every size: each card is as tall as both the height left
+     between the heading and the hint and the width (three cards and two gaps inside the margins)
+     allow, so they never stretch or crop differently. Clear gaps, the row centred. */
+  [data-slot="tiles"] {
+    --card-height: min(50cqh, calc((100cqw - 2 * 10cqw - 2 * var(--card-gap)) / 3 * 5 / 4));
+    --card-gap: 4cqw;
+    position: relative;
+    width: max-content;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: var(--card-gap);
+  }
+
+  /* One card: the cover, its title under it. The brackets mark the cover. */
+  [data-slot="tile"] {
+    --bracket: 2.4cqh;
+    --bracket-weight: 0.5cqh;
+    --bracket-offset: 1.4cqh;
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 2.6cqh;
+    width: calc(var(--card-height) * 4 / 5);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--phosphor);
+    cursor: pointer;
+    outline: none;
+
+    [data-slot="cover"] {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 0.3cqh color-mix(in srgb, var(--tone-glow-line) 55%, transparent),
+        0 0 2cqh color-mix(in srgb, var(--tone-glow-far) 45%, transparent);
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      /* A touch of the phosphor's colour, like an image on a CRT. */
+      filter: saturate(0.9) contrast(1.05);
+    }
+
+    &[data-active] {
+      color: var(--phosphor-hot);
+    }
+  }
+
+  /* The selection: one set of four equal corner brackets just outside the selected cover. It
+     slides from card to card (all cards are one size, so only translateX changes) with a quick
+     ease-out that retargets smoothly on rapid presses; it never scales. Reduced motion: instant. */
+  [data-slot="brackets"] {
+    --bracket: 2.4cqh;
+    --bracket-weight: 0.5cqh;
+    --bracket-offset: 1.4cqh;
+    position: absolute;
+    top: calc(var(--bracket-offset) * -1);
+    left: calc(var(--bracket-offset) * -1);
+    width: calc(var(--card-height) * 4 / 5 + 2 * var(--bracket-offset));
+    height: calc(var(--card-height) + 2 * var(--bracket-offset));
+    pointer-events: none;
+    transform: translateX(calc(var(--index, 0) * (var(--card-height) * 4 / 5 + var(--card-gap))));
+    transition: transform 150ms var(--ease-out);
+    background:
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) top left / var(--bracket) var(--bracket-weight),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) top left / var(--bracket-weight) var(--bracket),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) top right / var(--bracket) var(--bracket-weight),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) top right / var(--bracket-weight) var(--bracket),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) bottom left / var(--bracket) var(--bracket-weight),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) bottom left / var(--bracket-weight) var(--bracket),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) bottom right / var(--bracket) var(--bracket-weight),
+      linear-gradient(var(--phosphor-hot), var(--phosphor-hot)) bottom right / var(--bracket-weight) var(--bracket);
+    background-repeat: no-repeat;
+    filter: drop-shadow(0 0 1cqh color-mix(in srgb, var(--tone-glow-line) 90%, transparent));
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  /* Left of the Settings button in the corner (chrome.css). */
+  [data-slot="tools"] {
+    position: absolute;
+    inset-inline-end: calc(var(--edge) + 2.75rem);
+    bottom: calc(var(--edge) + env(safe-area-inset-bottom, 0px));
+    z-index: 10;
+    display: flex;
+    gap: 0.5rem;
+
+    button {
+      height: 2rem;
+      padding: 0 0.875rem;
+      font: inherit;
+      font-size: 12px;
+      color: var(--text-strong);
+      background: rgb(12 12 12 / 0.72);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+
+      kbd {
+        font: inherit;
+        color: var(--text-weak);
+        margin-inline-start: 0.375rem;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          border-color: hsl(0, 0%, 30%);
+        }
+      }
+
+      &:active {
+        border-color: hsl(0, 0%, 30%);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  &[data-phase="play"][data-touch] [data-slot="tools"] {
+    display: none;
+  }
+
+  /* Key hints mean nothing on a touch screen. */
+  &[data-touch] [data-slot="tools"] kbd {
+    display: none;
+  }
+
+  /* The control panel covers the bottom while playing on a touch screen: the sound switch moves into
+     the top bar, beside the logo mark and level with it. */
+  &[data-phase="play"][data-touch] [data-component="arcade-sound"] {
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    inset-inline-start: calc(var(--arcade-inset, 1.5rem) + 20px + 1rem + env(safe-area-inset-left, 0px));
+  }
+
+  [data-slot="status"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="sheen"],
+    [data-slot="sparkle"],
+    .arcade-blink,
+    [data-slot="caret"],
+    [data-component="arcade-screen"] {
+      animation: none !important;
+    }
+
+    [data-slot="logo-reveal"] .arcade-logo,
+    [data-slot="write-head"] {
+      animation: none !important;
+    }
+
+    [data-slot="start"] :is(.arcade-subtitle, .arcade-press) {
+      visibility: visible;
+      animation: none !important;
+    }
+
+    [data-slot="sparkle"]:nth-child(2) {
+      opacity: 0.8;
+    }
+  }
+}
+
+@keyframes arcade-sheen {
+  0%,
+  55% {
+    background-position: 140% 0;
+  }
+  80%,
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes arcade-twinkle {
+  0%,
+  60%,
+  100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1) rotate(20deg);
+  }
+  84% {
+    opacity: 0;
+    transform: scale(0.35) rotate(40deg);
+  }
+}
+
+/* A classic arcade blink: fully on for most of the beat, then off (stepped, never a dim fade). */
+@keyframes arcade-blink {
+  0% {
+    opacity: 1;
+  }
+  65% {
+    opacity: 0;
+  }
+}
+
+@keyframes arcade-glitch {
+  0% {
+    filter: brightness(1);
+    transform: none;
+    clip-path: inset(0);
+  }
+  8% {
+    filter: brightness(1.7) contrast(1.2);
+    transform: translateX(1.5%);
+  }
+  14% {
+    filter: brightness(0.5);
+    transform: translateX(-3%) skewX(-2deg);
+    clip-path: inset(0 0 52% 0);
+  }
+  20% {
+    filter: brightness(1.4);
+    transform: translateX(0.6%);
+    clip-path: inset(0);
+  }
+  30% {
+    filter: brightness(0.3);
+    transform: none;
+  }
+  38% {
+    filter: brightness(1.9) saturate(1.4);
+    transform: translateX(-4%);
+    clip-path: inset(38% 0 0 0);
+  }
+  46% {
+    filter: brightness(0.8);
+    transform: translateX(2%);
+    clip-path: inset(0);
+  }
+  58% {
+    filter: brightness(1.5);
+    transform: scaleY(1.03);
+  }
+  66% {
+    filter: brightness(0.25);
+    transform: none;
+  }
+  74% {
+    filter: brightness(1.2);
+    transform: scaleY(0.6);
+  }
+  84% {
+    filter: brightness(2);
+    transform: scaleY(0.03);
+  }
+  100% {
+    filter: brightness(0);
+    transform: scaleY(0.01) scaleX(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes arcade-power-off {
+  0% {
+    transform: none;
+    filter: brightness(1);
+  }
+  55% {
+    transform: scale(1, 0.012);
+    filter: brightness(3);
+  }
+  85% {
+    transform: scale(0.02, 0.012);
+    filter: brightness(4);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes arcade-roll {
+  from {
+    background-position: 0 120%;
+  }
+  to {
+    background-position: 0 -120%;
+    opacity: 0;
+  }
+}
+
+@keyframes arcade-on {
+  from {
+    opacity: 0;
+    transform: scaleY(0.02);
+    filter: brightness(3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes logo-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes write-head-move {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(var(--logo-cells) * 100%));
+  }
+}
+
+/* On while it writes, gone once the last column is down. */
+@keyframes write-head-glow {
+  0% {
+    opacity: 0.9;
+  }
+  96% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes title-appear {
+  to {
+    visibility: visible;
+  }
+}

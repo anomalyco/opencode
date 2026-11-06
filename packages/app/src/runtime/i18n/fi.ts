@@ -35,6 +35,7 @@ export const dict = {
   "dialog.server.menu.remove": "Poista",
   "home.workspaceTip": "Aloita seuraava istunto uudessa työtilassa, jotta muutokset pysyvät erillään",
   "session.tab.add": "Lisää välilehti",
+  "session.tab.closeOthers": "Sulje muut välilehdet",
   "session.queue.attachments.one": "Plus {{count}} kiinnitys",
   "session.queue.attachments.other": "Plus {{count}} lisälaitteet",
   "settings.backToSettings": "Takaisin asetuksiin",

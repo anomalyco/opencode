@@ -18,6 +18,7 @@ export {
   ThemeDefinition,
   ThemeDocument,
   type BackgroundDefinition,
+  type DialogTokensDefinition,
   type DiffDefinition,
   type FormfieldColorDefinition,
   type HueDefinition,

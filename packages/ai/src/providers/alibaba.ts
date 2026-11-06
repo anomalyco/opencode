@@ -5,7 +5,7 @@ import { AlibabaImages } from "../protocols/alibaba-images.js"
 import { AlibabaMessages } from "../protocols/alibaba-messages.js"
 import { AlibabaResponses } from "../protocols/alibaba-responses.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
@@ -15,6 +15,7 @@ import {
   ToolDefinition,
   type ModelID,
   type ProviderOptions,
+  type RequestOptions,
 } from "../schema/index.js"
 
 export const id = ProviderID.make("alibaba")
@@ -39,14 +40,14 @@ type Location = AtLeastOne<{
 }> & { readonly workspaceID?: string }
 
 export type Config = Location &
-  Omit<RouteDefaultsInput, "providerOptions"> &
+  Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
   }
 export type Settings<Options = ChatOptionsInput> = Location &
   ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
   }
 
 const hosts = new Map<string, string>([
@@ -103,7 +104,9 @@ export const configure = (input: Config) => {
   const opts = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
   const common = { ...opts, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }
   const chat = (id: string | ModelID) =>
-    chatRoute.with(common).model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility })
+    chatRoute
+      .with(common)
+      .model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility, capabilities: AlibabaChat.capabilities })
   const messages = (id: string | ModelID) =>
     messagesRoute
       .with({
@@ -127,6 +130,9 @@ export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInpu
   id,
   input,
 ) => configure(config(input)).responses(id)
+export const chat = model
+export const messages = messagesModel
+export const responses = responsesModel
 export const imageModel = (id: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(id, input.providerOptions)

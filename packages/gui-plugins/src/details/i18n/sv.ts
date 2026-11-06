@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Inga plugins konfigurerade",
   skills: "Färdigheter",
   "skills.empty": "Inga färdigheter konfigurerade",
-  lsp: "LSP",
-  "lsp.empty": "Inga LSP-servrar har konfigurerats",
   failed: "Misslyckades",
   retry: "Försök igen",
   connecting: "Ansluter...",

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { LanguageModelCompatibility, LLMRequest } from "../schema/index.js"
+import type { LanguageModelCompatibility, LLMRequest, Capabilities } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { ProviderShared } from "./shared.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -18,9 +18,7 @@ const Options = Schema.Struct({
   ),
   toolStream: Schema.optional(Schema.Boolean),
   doSample: Schema.optional(Schema.Boolean),
-  responseFormat: Schema.optional(
-    Schema.Struct({ type: ProviderShared.knownString<"text" | "json_object">() }),
-  ),
+  responseFormat: Schema.optional(Schema.Struct({ type: ProviderShared.knownString<"text" | "json_object">() })),
   requestID: Schema.optional(Schema.String),
   userID: Schema.optional(Schema.String),
 })
@@ -58,10 +56,11 @@ const fromRequest = Effect.fn("ZAIChat.fromRequest")(function* (request: LLMRequ
 
 export const compatibility = {
   maxTokensField: "max_tokens",
-  supportsStrictMode: false,
   reasoningField: "reasoning_content",
   zaiToolStream: false,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { tools: { strict: false } } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "zai-chat",

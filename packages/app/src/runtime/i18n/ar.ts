@@ -777,6 +777,7 @@ export const dict = {
   "dialog.server.menu.remove": "إزالة",
   "home.workspaceTip": "ابدأ الجلسة التالية في شجرة عمل جديدة لإبقاء التغييرات معزولة",
   "session.tab.add": "إضافة علامة تبويب",
+  "session.tab.closeOthers": "إغلاق علامات التبويب الأخرى",
   "session.queue.attachments.one": "بالإضافة إلى {{count}} مرفق",
   "session.queue.attachments.other": "بالإضافة إلى \u2068{{count}}\u2069 مرفقات",
   "settings.backToSettings": "العودة إلى الإعدادات",

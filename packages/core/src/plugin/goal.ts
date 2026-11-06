@@ -145,9 +145,12 @@ export const Plugin = define({
       if (goal?.status !== "active") return
       if (goal.boot !== boot())
         return yield* settle(sessionID, goal, "paused", "The server restarted while the goal was active")
-      // The Session's own running subagent wakes it with its report, and the hook runs again then. A grandchild reports
-      // to its own parent, so it would never wake this Session.
-      if (background.some((work) => work.kind === "subagent" && work.sessionID === sessionID)) return
+      // The Session's own running subagent or image job wakes it with its notice, and the hook runs again then. A
+      // grandchild reports to its own parent, so it would never wake this Session.
+      if (
+        background.some((work) => (work.kind === "subagent" || work.kind === "image") && work.sessionID === sessionID)
+      )
+        return
       if (goal.rounds >= goal.maxRounds)
         return yield* settle(sessionID, goal, "paused", `Reached the limit of ${goal.maxRounds} rounds`)
 
