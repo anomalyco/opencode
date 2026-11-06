@@ -126,3 +126,26 @@ fn an_opened_session_gets_the_environment_only_on_a_local_server() {
         drop(tui);
     }
 }
+
+/// TS uploads when the status turns connected (`app.tsx:529-539`), which follows `server.connected`
+/// (`connection.ts:114-115`). The connection is driven by hand to get that order.
+#[test]
+fn the_environment_is_uploaded_when_the_status_follows_server_connected() {
+    let app = TestApp::new(100, 30);
+    let memory = Memory::new(routes());
+    let tui = opencode_tui::mount_with(
+        &app,
+        Deps { route: support::session_route("ses_b"), events: false, ..support::deps(Arc::new(memory.clone())) },
+        Args { local: true, environment: Some(environment()), ..Args::default() },
+    );
+    let upload = || find(&memory.requests(), "PUT", "/api/session/ses_b/environment").is_some();
+    assert!(app.wait_until(support::WAIT, || find(&memory.requests(), "GET", "/api/session/ses_b").is_some()));
+    let connected = serde_json::from_value(json!({ "id": "evt_c", "type": "server.connected", "data": {} })).unwrap();
+    tui.data.apply(&[connected]);
+    assert!(!app.wait_until(Duration::from_millis(300), upload), "{:?}", writes(&memory));
+    let state =
+        opencode_api::events::State { status: opencode_api::events::Status::Connected, attempt: 0, error: None };
+    opencode_tui::features::overlays::connection_changed(&tui, &state);
+    assert!(app.wait_until(support::WAIT, upload), "{:?}", writes(&memory));
+    drop(tui);
+}
