@@ -80,10 +80,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "Pretplati se na OpenCode Go za $10/mjesec i ostvari pouzdan pristup najboljim modelima otvorenog koda.",
   "dialog.usageExceeded.freeTier.actionLabel": "Pretplati se",
-  "dialog.usageExceeded.accountRateLimit.title": "Dostignut Go limit",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Dostignut je limit korištenja. Da sada nastaviš koristiti ovaj model, omogući korištenje raspoloživog salda",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvori postavke",
 
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
@@ -206,7 +202,6 @@ export const dict = {
   "ui.question.answer.none": "(nema odgovora)",
   "ui.question.review.notAnswered": "(nije odgovoreno)",
   "ui.question.multiHint": "Odaberi sve primjenjive odgovore",
-  "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor…",
 
   "ui.fileSearch.placeholder": "Pronađi",

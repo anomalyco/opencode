@@ -1,0 +1,17 @@
+export default {
+  "command.toggle": "تبديل إظهار شريط تصحيح الأخطاء",
+  providerAriaLabel: "تشخيص أداء المزوّد",
+  na: "غير متاح",
+  "duration.label": "TIME",
+  "duration.tip": "الوقت من الطلب الذي بدأ الدورة الأخيرة حتى اكتمال استجابتها.",
+  "tps.label": "TPS",
+  "tps.tip": "رموز الإخراج والاستدلال في الثانية عبر طلبات النموذج في الدورة الأخيرة، باستثناء وقت الأدوات.",
+  "focus.label": "FOCUS",
+  "focus.tip": "فرض أنماط التركيز على جميع العناصر التفاعلية",
+  "focus.on": "تشغيل",
+  "focus.off": "إيقاف",
+  "direction.label": "DIR",
+  "direction.tip": "فرض اتجاه التخطيط على التطبيق بالكامل دون تغيير اللغة المحددة",
+  "direction.ltr": "LTR",
+  "direction.rtl": "RTL",
+}

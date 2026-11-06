@@ -5,7 +5,7 @@ import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
 import { SidebarContext } from "../../src/feature-plugins/sidebar/context"
 
-function context(options?: { cost?: number; allowance?: number; tokens?: number }) {
+function context(options?: { cost?: number; tokens?: number }) {
   const color = RGBA.fromInts(200, 200, 200)
   return {
     theme: { text: { base: color, muted: color } },
@@ -13,7 +13,6 @@ function context(options?: { cost?: number; allowance?: number; tokens?: number 
       session: {
         get: () => ({ location: { directory: "/workspace" } }),
         cost: () => options?.cost ?? 0,
-        allowance: () => options?.allowance ?? 0,
         message: {
           list: () =>
             options?.tokens
@@ -65,22 +64,6 @@ test("sidebar shows available context usage", async () => {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Context")
     expect(app.captureCharFrame()).toContain("1,234 tokens")
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("sidebar shows the allowance a subscription covered", async () => {
-  const app = await testRender(() => <SidebarContext context={context({ allowance: 0.42 })} sessionID="session" />, {
-    width: 42,
-    height: 8,
-  })
-
-  try {
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Context")
-    expect(app.captureCharFrame()).toContain("$0.42 allowance used")
-    expect(app.captureCharFrame()).not.toContain("spent")
   } finally {
     app.renderer.destroy()
   }

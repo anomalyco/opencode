@@ -3,6 +3,7 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { Schedule } from "@opencode/core/schedule"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
@@ -94,6 +95,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     ),
   )
 
+  // Built without the startup span: route handlers and background fibers capture this context, and would
+  // otherwise nest every request and session turn for the life of the process under one trace.
   const boot = Effect.gen(function* () {
     const context = yield* Layer.buildWithScope(
       createRoutes(
@@ -110,6 +113,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
+    // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
+    yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
@@ -121,6 +126,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       updated: (version: string) => bus.publish(InstallationEvent.Updated, { version }).pipe(Effect.asVoid),
     }
   }).pipe(
+    withoutParentSpan,
     Effect.catchCause((cause) => {
       if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
       return status.fail.pipe(

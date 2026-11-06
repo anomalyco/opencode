@@ -59,6 +59,8 @@ test("a fake entry keeps the visitor message, spend range, and enterprise lead s
     Title: "Engineering lead",
     Description: "  We need SSO for our developers.\nPlease share the enterprise options.  ",
     Current_Monthly_Inference_Spend__c: "$10K–$50K",
+    In_Region_Routing__c: false,
+    DPA_Required__c: false,
     LeadSource: "enterprise website form",
   })
 })
@@ -74,7 +76,10 @@ test("the local Enterprise request handler applies the updated mapping to a form
         role: "Engineering lead",
         company: "Example Test Company",
         email: "fake-local-visitor@example.test",
+        country: " Germany ",
         inferenceSpend: "50k-100k",
+        inRegionRouting: true,
+        dpa: false,
         message: "  How are you bro!\nThis is a local form test.  ",
         alias: "",
         captcha: "test-token",
@@ -99,7 +104,10 @@ test("the local Enterprise request handler applies the updated mapping to a form
   expect(leads.at(-1)).toMatchObject({
     LastName: "Fake Local Form Visitor",
     Description: "  How are you bro!\nThis is a local form test.  ",
+    Country: "Germany",
     Current_Monthly_Inference_Spend__c: "$50K–$100K",
+    In_Region_Routing__c: true,
+    DPA_Required__c: false,
     LeadSource: "enterprise website form",
   })
 })

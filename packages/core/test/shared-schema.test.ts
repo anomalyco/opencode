@@ -54,7 +54,7 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode/core/filesystem"),
     import("@opencode/core/integration"),
     import("@opencode/core/location"),
-    import("@opencode/ai"),
+    import("@opencode/ai/effect"),
     import("@opencode/core/model"),
     import("@opencode/core/permission"),
     import("@opencode/core/worktree"),

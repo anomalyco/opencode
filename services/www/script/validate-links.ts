@@ -1,7 +1,7 @@
 import path from "node:path"
 
 const root = path.resolve(import.meta.dir, "../dist/client")
-const externalRoutes = new Set(["/docs"])
+const externalRoutes = new Set(["/docs", "/status"])
 const files = await Array.fromAsync(new Bun.Glob("**/*.html").scan({ cwd: root, absolute: true }))
 const failures = (
   await Promise.all(

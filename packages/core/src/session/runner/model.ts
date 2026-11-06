@@ -1,7 +1,7 @@
 export * as SessionRunnerModel from "./model.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { LanguageModel } from "@opencode/ai"
+import { LanguageModel } from "@opencode/ai/effect"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"

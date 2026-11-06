@@ -5,11 +5,18 @@ import { AlibabaImages } from "../protocols/alibaba-images.js"
 import { AlibabaMessages } from "../protocols/alibaba-messages.js"
 import { AlibabaResponses } from "../protocols/alibaba-responses.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderConfigurationError, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
+import {
+  ProviderConfigurationError,
+  ProviderID,
+  ToolDefinition,
+  type ModelID,
+  type ProviderOptions,
+  type RequestOptions,
+} from "../schema/index.js"
 
 export const id = ProviderID.make("alibaba")
 
@@ -33,14 +40,14 @@ type Location = AtLeastOne<{
 }> & { readonly workspaceID?: string }
 
 export type Config = Location &
-  Omit<RouteDefaultsInput, "providerOptions"> &
+  Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
   }
 export type Settings<Options = ChatOptionsInput> = Location &
   ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
   }
 
 const hosts = new Map<string, string>([
@@ -97,7 +104,9 @@ export const configure = (input: Config) => {
   const opts = { ...rest, auth: AuthOptions.bearer(input, ["DASHSCOPE_API_KEY", "ALIBABA_API_KEY"]) }
   const common = { ...opts, endpoint: { baseURL: baseURL ?? `https://${host}/compatible-mode/v1` } }
   const chat = (id: string | ModelID) =>
-    chatRoute.with(common).model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility })
+    chatRoute
+      .with(common)
+      .model<ChatOptionsInput>({ id, compatibility: AlibabaChat.compatibility, capabilities: AlibabaChat.capabilities })
   const messages = (id: string | ModelID) =>
     messagesRoute
       .with({
@@ -107,30 +116,35 @@ export const configure = (input: Config) => {
       .model<MessagesOptionsInput>({ id, compatibility: { requireSignature: false } })
   const responses = (id: string | ModelID) => responsesRoute.with(common).model<ResponsesOptionsInput>({ id })
   const media = MediaRoute.deployment({ ...input, baseURL: baseURL ?? `https://${host}/api/v1` }, opts.auth)
-  const image = (id: string | ModelID) => AlibabaImages.model({ ...media, id })
+  const image = (id: string | ModelID, providerOptions?: ProviderOptions) =>
+    AlibabaImages.model({ ...media, id, providerOptions })
   return { id, model: chat, chat, messages, responses, image, configure }
 }
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (id, input) =>
-  fromSettings(input).chat(id)
-export const messagesModel: ProviderPackage.Definition<
-  Settings<MessagesOptionsInput>,
-  MessagesOptionsInput
->["model"] = (id, input) => fromSettings(input).messages(id)
-export const responsesModel: ProviderPackage.Definition<
-  Settings<ResponsesOptionsInput>,
-  ResponsesOptionsInput
->["model"] = (id, input) => fromSettings(input).responses(id)
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (id, input) => configure(config(input)).chat(id)
+export const messagesModel: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (id, input) =>
+  configure(config(input)).messages(id)
+export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInput>, ResponsesOptionsInput> = (
+  id,
+  input,
+) => configure(config(input)).responses(id)
+export const chat = model
+export const messages = messagesModel
+export const responses = responsesModel
+export const imageModel = (id: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).image(id, input.providerOptions)
+}
 
-function fromSettings(input: Settings<Config["providerOptions"]>) {
+function config(input: Settings<Config["providerOptions"]>) {
   const { body, ...rest } = input
-  return configure({
+  return {
     ...rest,
     http: body === undefined ? undefined : { body },
     providerOptions: Struct.omit(rest, ["apiKey", "baseURL", "headers", "region", "workspaceID"]),
-  })
+  }
 }
 
 export const webSearch = () => hostedTool("web_search", "Search the web with Alibaba's hosted search tool.")

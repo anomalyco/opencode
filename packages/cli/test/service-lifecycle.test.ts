@@ -116,7 +116,11 @@ serviceTest(
       () => undefined,
       (error: Error) => error.message,
     )
-    expect(conflict).toContain(`Managed service port ${home.port} on 127.0.0.1 is already in use by another process`)
+    expect(conflict).toContain(
+      `Managed service port ${home.port} on 127.0.0.1 is already in use by ${
+        process.platform !== "win32" && Bun.which("lsof") ? `PID ${process.pid} (` : "another process"
+      }`,
+    )
     expect(conflict).toContain("opencode service set port <port>")
     expect(await servers(home)).toEqual([])
     expect(await Bun.file(home.registration).exists()).toBe(false)

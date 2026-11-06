@@ -34,7 +34,7 @@
     height: 8px;
     overflow: hidden;
     border-radius: 999px;
-    border: 1px solid var(--border-weak-base);
+    border: 1px solid var(--v2-border-border-base);
     background-color: var(--surface-base);
   }
 
@@ -42,7 +42,7 @@
     height: 100%;
     width: var(--kb-progress-fill-width);
     border-radius: inherit;
-    background-color: var(--border-active);
+    background-color: var(--v2-icon-icon-base);
     transition: width 200ms ease;
   }
 

@@ -68,7 +68,7 @@ export default Runtime.handler(
           })
       if (!sessionID) return
       const data = yield* Effect.tryPromise({
-        try: () => client.session.export({ sessionID, sanitize: input.sanitize }),
+        try: () => client.experimental.session.export({ sessionID, sanitize: input.sanitize }),
         catch: (cause) => cause,
       })
       process.stdout.write(JSON.stringify(data, null, 2) + EOL)

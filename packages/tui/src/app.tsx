@@ -65,6 +65,7 @@ import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
+import { DialogUsage } from "./component/usage"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
@@ -113,7 +114,7 @@ import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
-const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
+const appGlobalBindingCommands = ["session.list", "session.new", "open.menu", "terminal.suspend"] as const
 
 const sessionTabBindingCommands = [
   "session.tab.next",
@@ -155,6 +156,7 @@ const appBindingCommands = [
   "model.cycle_favorite_reverse",
   "agent.list",
   "mcp.list",
+  "usage.show",
   "agent.cycle",
   "agent.cycle.reverse",
   "variant.cycle",
@@ -175,7 +177,6 @@ const appBindingCommands = [
   "diff.open",
   "app.debug",
   "app.console",
-  "terminal.suspend",
   "terminal.title.toggle",
   "app.toggle.animations",
   "app.toggle.file_context",
@@ -187,6 +188,7 @@ export type TuiInput = {
   app: TuiApp
   server: {
     endpoint: Endpoint
+    local?: boolean
     service?: {
       reconnect: (signal: AbortSignal) => Promise<Endpoint>
       restart: () => Promise<void>
@@ -359,6 +361,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                               value={{
                                 platform: process.platform,
                                 variables: input.environment,
+                                localServer: input.server.local,
                               }}
                             >
                               <TuiStartupProvider
@@ -692,6 +695,7 @@ function App() {
         limit: 1,
         order: "desc",
         parentID: null,
+        archived: false,
         directory: location.directory,
       })
       .then((response) => {
@@ -948,6 +952,15 @@ function App() {
         slash: { name: "agents" },
         run: () => {
           dialog.replace(() => <DialogAgent />)
+        },
+      },
+      {
+        name: "usage.show",
+        title: "View usage",
+        category: "Agent",
+        slash: { name: "usage" },
+        run: () => {
+          dialog.replace(() => <DialogUsage />)
         },
       },
       {

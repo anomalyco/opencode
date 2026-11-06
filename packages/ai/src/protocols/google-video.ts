@@ -5,7 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
+import { VideoModel, VideoResponse, type VideoRequest } from "../video.js"
 import { ProviderShared, optionalArray } from "./shared.js"
 
 const route = MediaProtocol.identity({ id: "google-video", name: "Google Veo", provider: "google" })
@@ -22,7 +22,7 @@ export type GoogleVideoOptions = {
   readonly personGeneration?: OpenString<"allow_all" | "allow_adult" | "dont_allow">
 } & Record<string, unknown>
 
-export type Request = VideoRequestFor<GoogleVideoOptions>
+export type Request = VideoRequest<VideoModel<GoogleVideoOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Token and response schemas
@@ -181,11 +181,6 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
       }),
   )
   const reasons = generated?.raiMediaFilteredReasons ?? []
-  const notices = reasons.map((reason) => ({
-    type: "filtered" as const,
-    message: `${route.name} filtered media: ${reason}`,
-    providerMetadata: { google: { raiMediaFilteredReason: reason } },
-  }))
   if (videos.length === 0 && (reasons.length > 0 || (generated?.raiMediaFilteredCount ?? 0) > 0))
     return yield* output.contentPolicy(
       `${route.name} filtered every video${reasons.length === 0 ? "" : `: ${reasons.join("; ")}`}`,
@@ -193,11 +188,11 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
   if (videos.length === 0) return yield* output.invalid(`${route.name} operation completed without any video`)
   return new VideoResponse({
     videos,
-    notices: notices.length === 0 ? undefined : notices,
     providerMetadata: {
       google: {
         operation: context.token.operation,
         raiMediaFilteredCount: generated?.raiMediaFilteredCount,
+        raiMediaFilteredReasons: generated?.raiMediaFilteredReasons,
         metadata: operation.metadata,
       },
     },

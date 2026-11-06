@@ -1,9 +1,13 @@
 import { createMiddleware } from "@solidjs/start/middleware"
+import { appleAppSiteAssociation } from "~/lib/apple-app-site-association"
 import { LOCALE_HEADER, cookie, fromPathname, strip } from "~/lib/language"
 import { sanitizeServerActionRequest } from "~/lib/server-action"
 
 export default createMiddleware({
   async onRequest(event) {
+    const association = appleAppSiteAssociation(event.request)
+    if (association) return association
+
     event.request = sanitizeServerActionRequest(event.request)
 
     const url = new URL(event.request.url)
@@ -39,6 +43,24 @@ export default createMiddleware({
       return new Response(null, {
         status: 302,
         headers: { Location: "https://opencode.ai/console/login", "Cache-Control": "no-store" },
+      })
+
+    // The Go, Zen, pricing, models, teams and enterprise pages moved to the Console. Match the exact paths only: /zen/v1/* and
+    // /zen/go/v1/* are the inference API, so a prefix match here would break API clients if the inference routes ever
+    // stopped catching them.
+    const moved = new Map([
+      ["/go", "/console/go"],
+      ["/zen", "/console/models"],
+      ["/zen/go", "/console/go"],
+      ["/pricing", "/console/go"],
+      ["/models", "/console/models"],
+      ["/teams", "/console/teams"],
+      ["/enterprise", "/console/enterprise"],
+    ]).get(url.pathname.replace(/(.)\/$/, "$1"))
+    if (moved && !locale && (event.request.method === "GET" || event.request.method === "HEAD"))
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${moved}${url.search}`, "Cache-Control": "no-store" },
       })
   },
 })

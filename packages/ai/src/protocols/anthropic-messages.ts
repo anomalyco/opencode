@@ -10,8 +10,8 @@ import { Headers } from "effect/http"
 import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
-  HttpOptions,
-  LLMRequest,
+  CacheTTL,
+  type LLMRequest,
   LLMEvent,
   mergeJsonRecords,
   Usage,
@@ -80,9 +80,10 @@ export type ContextManagement = typeof ContextManagement.Type
 // =============================================================================
 const AnthropicCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  ttl: Schema.optional(CacheTTL),
 })
 const AnthropicServiceTier = knownString<"auto" | "standard_only">()
+const AnthropicSpeed = knownString<"fast" | "standard">()
 
 const AnthropicTextBlock = Schema.Struct({
   type: Schema.tag("text"),
@@ -116,6 +117,13 @@ const AnthropicImageBlock = Schema.Struct({
   transformations: Schema.optional(AnthropicImageTransformations),
 })
 type AnthropicImageBlock = Schema.Schema.Type<typeof AnthropicImageBlock>
+
+const AnthropicVideoBlock = Schema.Struct({
+  type: Schema.tag("video"),
+  source: AnthropicImageSource,
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+type AnthropicVideoBlock = Schema.Schema.Type<typeof AnthropicVideoBlock>
 
 // SDK: Base64PDFSource:209 {type:"base64", media_type:"application/pdf", data}, PlainTextSource:2716 {type:"text", media_type:"text/plain", data},
 // SDK: URLPDFSource:3823 {type:"url", url}, FileDocumentSource:2344 {type:"file", file_id}, ContentBlockSource:2266 {type:"content", content}
@@ -206,7 +214,12 @@ type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerT
 // Anthropic accepts either a plain string or an ordered array of text, image, and
 // document blocks inside `tool_result.content`. The array form keeps media as native
 // model input instead of JSON-stringifying base64 into prompt text.
-const AnthropicToolResultContent = Schema.Union([AnthropicTextBlock, AnthropicImageBlock, AnthropicDocumentBlock])
+const AnthropicToolResultContent = Schema.Union([
+  AnthropicTextBlock,
+  AnthropicImageBlock,
+  AnthropicDocumentBlock,
+  AnthropicVideoBlock,
+])
 
 const AnthropicToolResultBlock = Schema.Struct({
   type: Schema.tag("tool_result"),
@@ -220,6 +233,7 @@ const AnthropicUserBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicImageBlock,
   AnthropicDocumentBlock,
+  AnthropicVideoBlock,
   AnthropicToolResultBlock,
 ])
 type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
@@ -346,6 +360,7 @@ const Options = Schema.Struct({
   effort: Schema.optional(Schema.String),
   service_tier: Schema.optional(AnthropicServiceTier),
   serviceTier: Schema.optional(AnthropicServiceTier),
+  speed: Schema.optional(AnthropicSpeed),
   metadata: Schema.optional(AnthropicMetadata),
   container: Schema.optional(AnthropicContainer),
   inference_geo: optionalNull(Schema.String),
@@ -389,6 +404,7 @@ const AnthropicBodyFields = {
   inference_geo: Schema.optional(Schema.NullOr(Schema.String)),
   metadata: Schema.optional(AnthropicMetadata),
   service_tier: Schema.optional(AnthropicServiceTier),
+  speed: Schema.optional(AnthropicSpeed),
 }
 export const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
@@ -517,17 +533,10 @@ const invalid = ProviderShared.invalidRequest
 // that exceed it.
 const ANTHROPIC_BREAKPOINT_CAP = 4
 
-const EPHEMERAL_5M = { type: "ephemeral" as const }
-const EPHEMERAL_1H = { type: "ephemeral" as const, ttl: "1h" as const }
-
 const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefined) => {
   if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
-  if (breakpoints.remaining <= 0) {
-    breakpoints.dropped += 1
-    return undefined
-  }
-  breakpoints.remaining -= 1
-  return Cache.ttlBucket(cache.ttlSeconds) === "1h" ? EPHEMERAL_1H : EPHEMERAL_5M
+  if (!Cache.take(breakpoints)) return undefined
+  return { type: "ephemeral" as const, ...(cache.ttl === undefined ? {} : { ttl: cache.ttl }) }
 }
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
@@ -615,185 +624,103 @@ const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart,
   } satisfies AnthropicServerToolResultBlock
 })
 
-const fileIdFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
-  if (!metadata) return undefined
-  const anthropic = metadata.anthropic
-  if (ProviderShared.isRecord(anthropic)) {
-    if (typeof anthropic.file_id === "string") return anthropic.file_id
-    if (typeof anthropic.fileId === "string") return anthropic.fileId
-  }
-  if (typeof metadata.file_id === "string") return metadata.file_id
-  if (typeof metadata.fileId === "string") return metadata.fileId
-  return undefined
-}
-
-const transformationsFromMetadata = (
-  metadata: MediaPart["metadata"],
-): AnthropicImageBlock["transformations"] | undefined => {
-  if (!metadata) return undefined
-  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
-  const raw = anthropic?.transformations ?? metadata.transformations
-  if (ProviderShared.isRecord(raw)) {
-    const value = raw.oversized_image
-    if (value === "downsize" || value === "error") return { oversized_image: value }
-  }
-  if (anthropic && (anthropic.oversized_image === "downsize" || anthropic.oversized_image === "error"))
-    return { oversized_image: anthropic.oversized_image }
-  return undefined
-}
-
-const documentTitleFromPart = (part: MediaPart): string | undefined => {
-  if (part.metadata !== undefined) {
-    const anthropic = part.metadata.anthropic
-    if (ProviderShared.isRecord(anthropic) && typeof anthropic.title === "string") return anthropic.title
-    if (typeof part.metadata.title === "string") return part.metadata.title
-  }
-  if (part.filename && part.filename.length > 0) return part.filename
-  return undefined
-}
-
-const documentContextFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
-  if (!metadata) return undefined
-  const anthropic = ProviderShared.isRecord(metadata.anthropic) ? metadata.anthropic : undefined
-  if (anthropic && typeof anthropic.context === "string") return anthropic.context
-  if (typeof metadata.context === "string") return metadata.context
-  return undefined
-}
-
-const citationsFromMetadata = (metadata: MediaPart["metadata"]): AnthropicDocumentBlock["citations"] | undefined => {
-  if (!metadata) return undefined
-  const raw = ProviderShared.isRecord(metadata.anthropic)
-    ? (metadata.anthropic.citations ?? metadata.citations)
-    : metadata.citations
-  if (ProviderShared.isRecord(raw) && typeof raw.enabled === "boolean") return { enabled: raw.enabled }
-  return undefined
-}
+// Per-part Anthropic block fields, read from `providerMetadata[providerMetadataKey]` with Anthropic's wire names.
+const MediaOptions = Schema.Struct({
+  file_id: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  citations: Schema.optional(Schema.Struct({ enabled: Schema.Boolean })),
+  transformations: Schema.optional(AnthropicImageTransformations),
+})
+const decodeMediaOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(MediaOptions))
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
 
-const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, breakpoints?: Cache.Breakpoints) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, breakpoints?: Cache.Breakpoints) {
   const mime = part.media.mediaType.toLowerCase()
   const cacheControlValue = breakpoints ? cacheControl(breakpoints, part.cache) : undefined
-  const fileId = fileIdFromMetadata(part.metadata)
+  if (mime.startsWith("video/")) {
+    const inline = part.media.inline()
+    const source = inline
+      ? { type: "base64" as const, media_type: mime, data: inline.base64 }
+      : yield* ProviderShared.mediaReference(part.media, request.model.provider, "Messages video").pipe(
+          Effect.map((reference) =>
+            reference.type === "ref" && !reference.value.includes("://")
+              ? { type: "file" as const, file_id: reference.value }
+              : { type: "url" as const, url: reference.value },
+          ),
+        )
+    return {
+      type: "video" as const,
+      source,
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+    } satisfies AnthropicVideoBlock
+  }
+  const options = yield* decodeMediaOptions(
+    part.providerMetadata?.[request.model.route.providerMetadataKey ?? request.model.provider] ?? {},
+  )
+  const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => ({
+    type: "image",
+    source,
+    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+    ...(options.transformations === undefined ? {} : { transformations: options.transformations }),
+  })
+  const document = (source: AnthropicDocumentBlock["source"]): AnthropicDocumentBlock => {
+    const title = options.title ?? (part.filename ? part.filename : undefined)
+    return {
+      type: "document",
+      source,
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+      ...(title === undefined ? {} : { title }),
+      ...(options.context === undefined ? {} : { context: options.context }),
+      ...(options.citations === undefined ? {} : { citations: options.citations }),
+    }
+  }
 
   // SDK file sources: FileImageSource:2350 / FileDocumentSource:2344 {type:"file", file_id}
-  if (fileId) {
-    if (mime.startsWith("image/"))
-      return {
-        type: "image" as const,
-        source: { type: "file" as const, file_id: fileId },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(transformationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { transformations: transformationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicImageBlock
-    return {
-      type: "document" as const,
-      source: { type: "file" as const, file_id: fileId },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
+  if (options.file_id) {
+    if (mime.startsWith("image/")) return image({ type: "file", file_id: options.file_id })
+    return document({ type: "file", file_id: options.file_id })
   }
 
   const rawString = ProviderShared.mediaUrl(part.media)?.trim()
   // SDK URL sources: URLImageSource:3817 / URLPDFSource:3823 {type:"url", url}
   if (rawString && isHttpUrl(rawString)) {
-    if (mime.startsWith("image/"))
-      return {
-        type: "image" as const,
-        source: { type: "url" as const, url: rawString },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(transformationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { transformations: transformationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicImageBlock
-    if (mime === "application/pdf")
-      return {
-        type: "document" as const,
-        source: { type: "url" as const, url: rawString },
-        ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-        ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-        ...(documentContextFromMetadata(part.metadata) === undefined
-          ? {}
-          : { context: documentContextFromMetadata(part.metadata)! }),
-        ...(citationsFromMetadata(part.metadata) === undefined
-          ? {}
-          : { citations: citationsFromMetadata(part.metadata)! }),
-      } satisfies AnthropicDocumentBlock
+    if (mime.startsWith("image/")) return image({ type: "url", url: rawString })
+    if (mime === "application/pdf") return document({ type: "url", url: rawString })
   }
 
   const media = yield* ProviderShared.requireInlineMedia("Anthropic Messages", part.media)
 
   // SDK PlainTextSource:2716 {type:"text", media_type:"text/plain", data}
-  if (mime === "text/plain") {
-    const textData = Buffer.from(media.base64, "base64").toString("utf8")
-    return {
-      type: "document" as const,
-      source: { type: "text" as const, media_type: "text/plain" as const, data: textData },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
-  }
+  if (mime === "text/plain")
+    return document({
+      type: "text",
+      media_type: "text/plain",
+      data: Buffer.from(media.base64, "base64").toString("utf8"),
+    })
 
   if (media.mime === "application/pdf")
-    return {
-      type: "document" as const,
-      source: {
-        type: "base64" as const,
-        media_type: "application/pdf" as const,
-        data: media.base64,
-      },
-      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-      ...(documentTitleFromPart(part) === undefined ? {} : { title: documentTitleFromPart(part)! }),
-      ...(documentContextFromMetadata(part.metadata) === undefined
-        ? {}
-        : { context: documentContextFromMetadata(part.metadata)! }),
-      ...(citationsFromMetadata(part.metadata) === undefined
-        ? {}
-        : { citations: citationsFromMetadata(part.metadata)! }),
-    } satisfies AnthropicDocumentBlock
+    return document({ type: "base64", media_type: "application/pdf", data: media.base64 })
   if (!media.mime.startsWith("image/"))
     return yield* invalid(`Anthropic Messages does not support media type ${part.media.mediaType}`)
-  return {
-    type: "image" as const,
-    source: {
-      type: "base64" as const,
-      media_type: media.mime,
-      data: media.base64,
-    },
-    ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
-    ...(transformationsFromMetadata(part.metadata) === undefined
-      ? {}
-      : { transformations: transformationsFromMetadata(part.metadata)! }),
-  } satisfies AnthropicImageBlock
+  return image({ type: "base64", media_type: media.mime, data: media.base64 })
 })
 
 // Tool results may carry structured text, images, and documents. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content) {
+const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content, request: LLMRequest) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item))
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request)
 })
 
-const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart) {
+const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart, request: LLMRequest) {
   // Text / json / error results stay as a string for backward compatibility
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
   const content: ReadonlyArray<Tool.Content> = part.result.value
-  return yield* Effect.forEach(content, lowerToolResultContentItem)
+  return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request))
 })
 
 const requireThinkingSignature = (request: LLMRequest) => {
@@ -812,11 +739,14 @@ const requireThinkingSignature = (request: LLMRequest) => {
   )
     return false
   if (provider.includes("xiaomi") || model.includes("mimo") || baseURL.includes("xiaomimimo.com")) return false
+  if (model.startsWith("qwen") || model.startsWith("minimax-")) return false
   return true
 }
 
 // Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const override = request.model.capabilities?.systemUpdates
+  if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false
   if (version.family === "opus" && version.major === 4) return version.minor >= 8
@@ -907,10 +837,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           continue
         }
         if (part.type === "media") {
-          content.push(yield* lowerMedia(part, breakpoints))
+          content.push(yield* lowerMedia(part, request, breakpoints))
           continue
         }
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
       if (content.length > 0) messages.push({ role: "user", content })
       continue
@@ -940,19 +869,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
             continue
           }
           if (!signature || signature.trim().length === 0) {
-            if (part.text.trim().length === 0) continue
-            if (!requireThinkingSignature(request)) {
+            if (part.text.trim().length > 0 && !requireThinkingSignature(request)) {
               content.push({ type: "thinking", thinking: part.text, signature: "" })
-              continue
             }
-            // Without a signature this cannot be a valid thinking block per
-            // the SDK ThinkingBlockParam:3217 — demote to text so the
-            // conversation remains sendable.
-            content.push({
-              type: "text",
-              text: part.text,
-              cache_control: cacheControl(breakpoints, part.cache),
-            })
             continue
           }
           content.push({ type: "thinking", thinking: part.text, signature })
@@ -978,12 +897,10 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 
     const content: AnthropicToolResultBlock[] = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
       content.push({
         type: "tool_result",
         tool_use_id: scrubToolCallID(part.id),
-        content: yield* lowerToolResultContent(part),
+        content: yield* lowerToolResultContent(part, request),
         is_error: part.result.type === "error" ? true : undefined,
         cache_control: cacheControl(breakpoints, part.cache),
       })
@@ -998,15 +915,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   return messages
 })
 
-// TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
-// `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
-// only reads `request.model.compatibility`.
+// The model-ID checks below are fallbacks for models that leave `capabilities.reasoning.updates`,
+// `capabilities.systemUpdates` and `compatibility.supportsThinkingBlockBinding` unset.
 const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
 
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (isThinkingOff(request.providerOptions?.thinking)) return false
-  const override = request.model.compatibility?.supportsEffortUpdates
+  const override = request.model.capabilities?.reasoning?.updates
   if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
   if (version === undefined) return false
@@ -1041,7 +957,6 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const outputConfig = options.output_config ?? options.outputConfig
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
-  const generation = request.generation
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -1060,14 +975,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           cache_control: cacheControl(breakpoints, part.cache),
         }))
   const messages = yield* lowerMessages(flattened.request, breakpoints)
-  if (breakpoints.dropped > 0) {
-    yield* Effect.logWarning(
-      `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
-    )
-  }
+  yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
-  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
+  const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -1076,10 +987,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    top_k: generation?.topK,
-    stop_sequences: generation?.stop,
+    temperature: request.temperature,
+    top_p: request.topP,
+    top_k: request.topK,
+    stop_sequences: request.stop,
     thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
@@ -1088,6 +999,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     inference_geo: options.inference_geo ?? options.inferenceGeo ?? undefined,
     metadata: options.metadata,
     service_tier: options.service_tier ?? options.serviceTier,
+    speed: options.speed,
   }
   if (!management) return body
   return {
@@ -1176,7 +1088,6 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined, providerM
     reasoningTokens,
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     cost: right.cost ?? left.cost,
-    allowance: right.allowance ?? left.allowance,
     providerMetadata: {
       [providerMetadataKey]:
         mergeJsonRecords(left.providerMetadata?.[providerMetadataKey], right.providerMetadata?.[providerMetadataKey]) ??
@@ -1384,10 +1295,7 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: AnthropicEvent,
-) {
+const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   if (event.index in state.compactions) {
     const { [event.index]: content, ...compactions } = state.compactions
@@ -1615,7 +1523,7 @@ export const protocol = Protocol.make({
 })
 
 export const transport = <
-  Body extends Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking">,
+  Body extends Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking" | "speed">,
 >() => {
   const http = HttpTransport.httpJson<Body, string>({ framing })
   return {
@@ -1623,7 +1531,7 @@ export const transport = <
     prepare: (input: Parameters<typeof http.prepare>[0]) => {
       const requiredBetas = requiredBetaHeaders(input.body)
       if (requiredBetas.length === 0) return http.prepare(input)
-      const headers = Headers.fromInput(input.request.http?.headers)
+      const headers = Headers.fromInput(input.request.headers)
       const existingBetas = (headers["anthropic-beta"] ?? "")
         .split(",")
         .map((item) => item.trim())
@@ -1631,18 +1539,15 @@ export const transport = <
       const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
-        request: LLMRequest.update(input.request, {
-          http: new HttpOptions({
-            ...input.request.http,
-            headers: { ...headers, "anthropic-beta": [...betas].join(",") },
-          }),
-        }),
+        request: { ...input.request, headers: { ...headers, "anthropic-beta": [...betas].join(",") } },
       })
     },
   }
 }
 
-function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking">) {
+function requiredBetaHeaders(
+  body: Pick<AnthropicMessagesBody, "messages" | "context_management" | "thinking" | "speed">,
+) {
   // Always request interleaved thinking. The API accepts the header on any
   // model and ignores it where unsupported, while manual-thinking models need
   // it for thinking between tool calls.
@@ -1655,6 +1560,9 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
 
   if (body.messages.some((message) => message.role === "system" && message.output_config !== undefined))
     betas.push("mid-conversation-output-config-2026-07-01")
+
+  // Opus 5.5 accepts `speed` without this header; earlier fast-mode models reject `speed` without it.
+  if (body.speed !== undefined) betas.push("fast-mode-2026-02-01")
 
   const thinking = body.thinking
   if (thinking && !isThinkingOff(thinking) && thinking.block_binding) betas.push(THINKING_BINDING_BETA)

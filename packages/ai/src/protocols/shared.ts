@@ -7,15 +7,18 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
-  LLMRequest,
+  AssistantMessage,
+  type LLMRequest,
   Message,
   ToolDefinition,
+  ToolMessage,
   type ContentPart,
   type MediaPart,
   type OpenString,
   type ProviderID,
   type RequestEncoding,
   type TextPart,
+  type ToolCallPart,
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
@@ -46,20 +49,16 @@ export const lenient = <const S extends Schema.Top>(schema: S) =>
 /** A billed amount in USD; a malformed or negative one decodes as absent. */
 const billedAmount = lenient(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)))
 
-/**
- * Billing an endpoint reports beside its token usage. `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode
- * Zen); OpenCode Go reports the subscription allowance a request used as `opencode.allowance`, also in USD.
- */
+/** Billing an endpoint reports beside its token usage: `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode Zen). */
 export const ReportedBilling = Schema.Struct({
   cost: billedAmount,
-  opencode: lenient(Schema.Struct({ allowance: billedAmount })),
 })
 
 /** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
 export const reportedBilling = (usage: unknown) =>
   Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
     onNone: () => ({}),
-    onSome: (billing) => ({ cost: billing.cost, allowance: billing.opencode?.allowance }),
+    onSome: (billing) => ({ cost: billing.cost }),
   })
 
 /**
@@ -89,7 +88,7 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 // Body-level `prompt_cache_key` is off when caching is disabled or the model
 // explicitly rejects the field. Header-based affinity is unaffected.
 export const sendsPromptCacheKey = (request: LLMRequest) =>
-  request.cache !== "none" && request.model.compatibility?.supportsPromptCacheKey !== false
+  request.cache !== "none" && request.model.capabilities?.promptCacheKey !== false
 
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
@@ -206,10 +205,7 @@ export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>
  * raw retrieved, tool, or web content into privileged updates: keep untrusted
  * data in ordinary user/tool messages instead.
  */
-export const systemUpdateText = Effect.fnUntraced(function* (
-  route: string,
-  message: LLMRequest["messages"][number],
-) {
+export const systemUpdateText = Effect.fnUntraced(function* (route: string, message: LLMRequest["messages"][number]) {
   const content: TextPart[] = []
   for (const part of message.content) {
     if (!supportsContent(part, ["text"])) return yield* unsupportedContent(route, "system", ["text"])
@@ -274,14 +270,14 @@ export const mediaReference = (
 }
 
 /**
- * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, an `http(s)` URL, or raw base64 in
+ * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, a URI, or raw base64 in
  * `uri`; the declared `mime` wins over any data-URL prefix so tool authors control the type the model sees.
  */
 export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   const parsed = Media.parseDataUrl(item.uri)
   const asset = parsed
     ? Media.from({ ...parsed.source, mediaType: item.mime })
-    : /^https?:\/\//.test(item.uri)
+    : item.uri.includes("://")
       ? Media.url(item.uri, { mediaType: item.mime })
       : Media.base64(item.uri, item.mime)
   return Message.media(asset, { filename: item.name })
@@ -355,21 +351,29 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 
 export const flattenToolRequest = (request: LLMRequest) => {
   const messages = request.messages.map((message) => {
-    const content = message.content.map((part) => {
-      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
-      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
-    })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : new Message({ ...message, content })
+    if (message.role === "assistant") {
+      const content = message.content.map((part) =>
+        part.type === "tool-call" || part.type === "tool-result" ? flattenToolName(part) : part,
+      )
+      return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+    }
+    if (message.role !== "tool") return message
+    const content = message.content.map(flattenToolName)
+    return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
   return {
     tools: flattenTools(request.tools),
     request: messages.every((message, index) => message === request.messages[index])
       ? request
-      : LLMRequest.update(request, { messages }),
+      : { ...request, messages },
   }
 }
+
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part =>
+  part.namespace === undefined ? part : { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,
