@@ -347,5 +347,14 @@ export const make = Effect.fn("BackgroundServiceMachine.make")(function* (input:
   return {
     connection: request("connection.requested"),
     reconnect: request("reconnect.requested"),
+    /**
+     * Ends the connection before the app stops the service on quit: a window that loses the service then cannot
+     * start a replacement that would outlive the app, and an attempt still running is interrupted.
+     */
+    dispose: Effect.suspend(() => {
+      dispatch({ type: "disposed" })
+
+      return FiberSet.clear(fibers)
+    }),
   }
 })

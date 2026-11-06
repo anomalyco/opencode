@@ -18,6 +18,7 @@ import {
   type Handoff,
   type State,
 } from "./machine"
+import { QuitBehavior } from "../service/quit-behavior"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
@@ -64,6 +65,12 @@ const runtime = Layer.effect(
               duration: "10 seconds",
               orElse: () => Effect.logError("resume timed out, continuing anyway"),
             }),
+          ),
+        ),
+      confirm: () =>
+        runPromise(
+          Effect.tryPromise(QuitBehavior.confirmFirstQuit).pipe(
+            Effect.catch((error) => Effect.logError("first-quit service notice failed", { error })),
           ),
         ),
       // Electron records a cancelled quit only after `before-quit` returns. A stop with nothing to do finishes in a
@@ -121,7 +128,7 @@ const runtime = Layer.effect(
 
     const beforeQuit = (event: Event) => {
       if (preventsQuit(driver.state())) event.preventDefault()
-      driver.dispatch({ type: "before.quit" })
+      driver.dispatch({ type: "before.quit", confirm: QuitBehavior.isQuitNoticePending() })
     }
 
     const willQuit = () => driver.dispatch({ type: "will.quit" })
