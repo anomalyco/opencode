@@ -199,7 +199,8 @@
       }
     }
 
-    /* As wide as its button and lined up with its left edge; a long label ends in "…". Rows as in
+    /* As wide as its button and lined up with its left edge (placeMenu opens it where it fits, and
+       on phones as wide as the screen less 16px a side); a long label ends in "…". Rows as in
        the logo menu (site.css), but OpenTUI Mono at 14px rather than its 12px (David found 12px too small);
        0.5rem × 0.875rem padding, 14px icons, the popover
        background and shadow, and the grey menu states (a tint and a mid-grey bar on hover and

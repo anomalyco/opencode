@@ -168,7 +168,6 @@ function ChangelogSubscribe(props: { filter: string[] }) {
     <div data-slot="subscribe">
       <SiteMenu
         label={i18n.t("changelog.subscribe")}
-        placement="below"
         align="end"
         trigger={
           <>
