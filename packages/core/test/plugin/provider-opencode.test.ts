@@ -4,7 +4,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
@@ -1101,6 +1101,30 @@ describe("OpencodePlugin", () => {
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
+  )
+
+  it.effect("activates when the Console accepts the config request but never answers", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      const state = { requests: 0 }
+      const hanging = {
+        fetch: () => {
+          state.requests++
+          return new Promise<Response>(() => {})
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.example" } }),
+      })
+      const activation = yield* addPlugin().pipe(inProcess(hanging), Effect.forkChild({ startImmediately: true }))
+      // Four attempts of 5 seconds each, with 1, 2 and 4 seconds of backoff between them.
+      yield* TestClock.adjust("1 second").pipe(Effect.repeat({ times: 29 }))
+      yield* Fiber.join(activation)
+      expect(state.requests).toBe(4)
+      expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections).toHaveLength(1)
+    }),
   )
 
   it.effect("reports a Console session rejected before its token expires as signed out", () =>
