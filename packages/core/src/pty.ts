@@ -139,12 +139,13 @@ const makeLayer = (options: Options = {}) =>
                 yield* removeSession(session.info.id)
               }),
             ),
-            Effect.catchCause((cause: Cause.Cause<unknown>) =>
-              Effect.logError("pty reaper failed", {
+            Effect.catchCause((cause: Cause.Cause<unknown>) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.void
+              return Effect.logError("pty reaper failed", {
                 id: session.info.id,
                 errors: ErrorSummary.from(Cause.squash(cause)),
-              }),
-            ),
+              })
+            }),
           ),
         )
       }
