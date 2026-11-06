@@ -77,10 +77,10 @@ export function DialogGoal(props: { sessionID: string }) {
   onMount(() => dialog.setSize("large"))
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+      <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
         ゴール
       </text>
-      <text fg={theme.text.subdued}>
+      <text fg={theme.text.muted}>
         {loaded()
           ? `状態: ${loaded()?.goal ? { active: "実行中", paused: "一時停止", blocked: "ブロック中", complete: "達成済み" }[loaded()!.goal!.status] : "未設定"} · 自動継続 ${loaded()?.continuationCount ?? 0}/50（直近10分） · 承認待ち ${loaded()?.approvalWaits ?? 0}/3`
           : loaded.error
@@ -88,16 +88,16 @@ export function DialogGoal(props: { sessionID: string }) {
             : "読み込み中…"}
       </text>
       <Show when={loaded()?.goal?.reason}>
-        <text fg={theme.text.feedback.warning.default}>{loaded()?.goal?.reason}</text>
+        <text fg={theme.text.feedback.warning.base}>{loaded()?.goal?.reason}</text>
       </Show>
       <textarea
         ref={setEditor}
         height={8}
         wrapMode="word"
         placeholder="達成したいゴールを入力"
-        textColor={theme.text.formfield.default}
+        textColor={theme.text.formfield.base}
         focusedTextColor={theme.text.formfield.focused}
-        placeholderColor={theme.text.subdued}
+        placeholderColor={theme.text.muted}
         cursorColor={theme.text.formfield.focused}
         onMouseDown={() => setFocus(0)}
       />
@@ -112,11 +112,11 @@ export function DialogGoal(props: { sessionID: string }) {
                 backgroundColor={
                   focus() === index() + 1
                     ? theme.background.action[kind].focused
-                    : theme.background.action[kind].default
+                    : theme.background.action[kind].base
                 }
                 onMouseUp={() => act(index())}
               >
-                <text fg={focus() === index() + 1 ? theme.text.action[kind].focused : theme.text.action[kind].default}>
+                <text fg={focus() === index() + 1 ? theme.text.action[kind].focused : theme.text.action[kind].base}>
                   {label}
                 </text>
               </box>
@@ -124,7 +124,7 @@ export function DialogGoal(props: { sessionID: string }) {
           }}
         </For>
       </box>
-      <text fg={theme.text.subdued}>
+      <text fg={theme.text.muted}>
         {busy() ? "保存中…" : "Tab 項目移動 · Enter 選択 · Alt+Enter 改行 · Ctrl+Enter 保存 · Esc 閉じる"}
       </text>
     </box>

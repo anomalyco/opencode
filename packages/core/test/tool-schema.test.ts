@@ -586,4 +586,4 @@ test("empty struct inputs normalize to an empty object schema", () => {
     description: "Empty tool",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   })
-}))
+})

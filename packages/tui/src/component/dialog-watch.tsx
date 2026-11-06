@@ -120,28 +120,28 @@ export function DialogWatch(props: { sessionID: string }) {
   })
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+      <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
         メンバーの停止通知
       </text>
       <Show
         when={loaded()}
         fallback={
-          <text fg={theme.text.feedback.error.default}>{loaded.error ? String(loaded.error) : "読み込み中…"}</text>
+          <text fg={theme.text.feedback.error.base}>{loaded.error ? String(loaded.error) : "読み込み中…"}</text>
         }
       >
-        <text fg={theme.text.default}>
+        <text fg={theme.text.base}>
           通知先: {loaded()?.sessions.find((session) => session.id === props.sessionID)?.title ?? props.sessionID}
         </text>
-        <text fg={theme.text.default}>状態: {enabled() ? "有効" : "一時停止中"}</text>
+        <text fg={theme.text.base}>状態: {enabled() ? "有効" : "一時停止中"}</text>
         <box>
-          <text fg={theme.text.default}>接続するエージェント（{members().length}人）</text>
+          <text fg={theme.text.base}>接続するエージェント（{members().length}人）</text>
           <For each={options().slice(offset(), offset() + 8)}>
             {(session, index) => (
               <text
                 fg={
                   focus() === 0 && position() === offset() + index()
                     ? theme.text.formfield.focused
-                    : theme.text.formfield.default
+                    : theme.text.formfield.base
                 }
                 onMouseDown={() => {
                   setFocus(0)
@@ -155,23 +155,23 @@ export function DialogWatch(props: { sessionID: string }) {
             )}
           </For>
           <Show when={options().length === 0}>
-            <text fg={theme.text.subdued}>接続できるエージェントがありません。</text>
+            <text fg={theme.text.muted}>接続できるエージェントがありません。</text>
           </Show>
         </box>
-        <text fg={theme.text.default}>通知文 · {"{member}"} はメンバー名に置き換えます</text>
+        <text fg={theme.text.base}>通知文 · {"{member}"} はメンバー名に置き換えます</text>
         <textarea
           ref={setEditor}
           initialValue={loaded()?.watch?.text ?? "{member} が止まりました"}
           height={4}
           wrapMode="word"
-          textColor={theme.text.formfield.default}
+          textColor={theme.text.formfield.base}
           focusedTextColor={theme.text.formfield.focused}
           cursorColor={theme.text.formfield.focused}
           cursorStyle={config.cursor}
           onMouseDown={() => setFocus(1)}
         />
         <Show when={error()}>
-          <text fg={theme.text.feedback.error.default}>{error()}</text>
+          <text fg={theme.text.feedback.error.base}>{error()}</text>
         </Show>
         <box flexDirection="row" gap={1} flexWrap="wrap">
           <For each={actions()}>
@@ -182,7 +182,7 @@ export function DialogWatch(props: { sessionID: string }) {
                 backgroundColor={
                   focus() === index() + 2
                     ? theme.background.action[loaded()?.watch && index() === 2 ? "destructive" : "primary"].focused
-                    : theme.background.action[loaded()?.watch && index() === 2 ? "destructive" : "primary"].default
+                    : theme.background.action[loaded()?.watch && index() === 2 ? "destructive" : "primary"].base
                 }
                 onMouseUp={() => act(index())}
               >
@@ -190,7 +190,7 @@ export function DialogWatch(props: { sessionID: string }) {
                   fg={
                     focus() === index() + 2
                       ? theme.text.action[loaded()?.watch && index() === 2 ? "destructive" : "primary"].focused
-                      : theme.text.action[loaded()?.watch && index() === 2 ? "destructive" : "primary"].default
+                      : theme.text.action[loaded()?.watch && index() === 2 ? "destructive" : "primary"].base
                   }
                 >
                   {busy() && index() === 0 ? "保存中…" : label}
@@ -199,7 +199,7 @@ export function DialogWatch(props: { sessionID: string }) {
             )}
           </For>
         </box>
-        <text fg={theme.text.subdued}>
+        <text fg={theme.text.muted}>
           ↑↓ 移動 · Space 選択 · Tab 項目移動 · Alt+Enter 改行 · Ctrl+Enter 保存 · Esc 閉じる
         </text>
       </Show>

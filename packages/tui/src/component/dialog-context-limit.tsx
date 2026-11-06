@@ -49,21 +49,21 @@ export function DialogContextLimit(props: { sessionID: string }) {
   onMount(() => dialog.setSize("medium"))
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+      <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
         総コンテキスト上限（K tokens）
       </text>
-      <text fg={theme.text.subdued}>1000 = 1,000,000 tokens。空欄でモデル既定値に戻します。</text>
+      <text fg={theme.text.muted}>1000 = 1,000,000 tokens。空欄でモデル既定値に戻します。</text>
       <textarea
         ref={setEditor}
         height={1}
         wrapMode="none"
         placeholder="例: 1000"
-        textColor={theme.text.formfield.default}
+        textColor={theme.text.formfield.base}
         focusedTextColor={theme.text.formfield.focused}
-        placeholderColor={theme.text.subdued}
+        placeholderColor={theme.text.muted}
         cursorColor={theme.text.formfield.focused}
       />
-      <text fg={theme.text.subdued}>{busy() ? "保存中…" : "Enter 保存 · Esc 閉じる · 次のモデル呼び出しから反映"}</text>
+      <text fg={theme.text.muted}>{busy() ? "保存中…" : "Enter 保存 · Esc 閉じる · 次のモデル呼び出しから反映"}</text>
     </box>
   )
 }

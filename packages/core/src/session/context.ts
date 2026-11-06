@@ -92,9 +92,9 @@ const layer = Layer.effect(
     const contextLimits = yield* SessionContextLimit.Service
 
     const resolveModel = Effect.fn("SessionContext.resolveModel")(function* (session: SessionSchema.Info) {
-      const model = yield* models.resolve(session, model.available)
+      const resolved = yield* models.resolve(session, model.available)
       const context = yield* contextLimits.get(session.id)
-      return context === null ? model : { ...model, limit: { ...model.limit, context, input: context } }
+      return context === null ? resolved : { ...resolved, limit: { ...resolved.limit, context, input: context } }
     })
 
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {

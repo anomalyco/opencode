@@ -1112,7 +1112,7 @@ describe("SessionRunnerLLM", () => {
       { codemode: false },
     )
     yield* s.admit("作業を実行")
-    yield* s.llm.push(TestLLM.tool("call-shell", "shell", {}), TestLLM.text("完了", "done"))
+    yield* s.llm.push(TestLLM.toolCall("call-shell", "shell", {}), TestLLM.text("完了", "done"))
     yield* s.resume
 
     const request = s.requests[0]!

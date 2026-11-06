@@ -16,12 +16,12 @@ const ResponseBody = Schema.Struct({
     }),
   ),
 })
-const options = { onExcessProperty: "preserve" } as const
-const decodeResponse = Schema.decodeUnknownOption(Schema.fromJsonString(ResponseBody), options)
+const decodeResponse = Schema.decodeUnknownOption(Schema.fromJsonString(ResponseBody))
 
 /** The free gateway recognizes `read`; execution remains Code Mode's execute tool. */
 export async function aliasRequest(request: Request) {
-  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Chat), options)(await request.clone().text())
+  const text = await request.clone().text()
+  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Chat))(text)
   if (Option.isNone(decoded)) return
   const body = decoded.value
   if (
@@ -29,19 +29,41 @@ export async function aliasRequest(request: Request) {
     body.tools.some((tool) => tool.function.name === "read")
   )
     return
-  const name = (call: typeof Call.Type) =>
-    call.function?.name === "execute" ? { ...call, function: { ...call.function, name: "read" } } : call
+  let raw: Record<string, unknown>
+  try {
+    raw = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    return
+  }
   const headers = new Headers(request.headers)
   headers.delete("content-length")
+  const renameExecute = (item: unknown) => {
+    if (typeof item !== "object" || item === null) return item
+    const record = item as Record<string, unknown>
+    const fn = record.function as Record<string, unknown> | undefined
+    if (fn?.name !== "execute") return item
+    return { ...record, function: { ...fn, name: "read" } }
+  }
+  const tools = Array.isArray(raw.tools) ? (raw.tools as unknown[]).map(renameExecute) : raw.tools
+  const messages = Array.isArray(raw.messages)
+    ? (raw.messages as unknown[]).map((message) => {
+        if (typeof message !== "object" || message === null) return message
+        const record = message as Record<string, unknown>
+        if (!Array.isArray(record.tool_calls)) return message
+        return { ...record, tool_calls: (record.tool_calls as unknown[]).map(renameExecute) }
+      })
+    : raw.messages
+  const toolChoice = raw.tool_choice
   return new Request(request, {
     headers,
     body: JSON.stringify({
-      ...body,
-      tools: body.tools.map(name),
-      messages: body.messages?.map((message) =>
-        message.tool_calls ? { ...message, tool_calls: message.tool_calls.map(name) } : message,
-      ),
-      tool_choice: typeof body.tool_choice === "object" ? name(body.tool_choice) : body.tool_choice,
+      ...raw,
+      tools,
+      messages,
+      tool_choice:
+        typeof toolChoice === "object" && toolChoice !== null
+          ? renameExecute(toolChoice)
+          : toolChoice,
     }),
   })
 }
@@ -49,29 +71,51 @@ export async function aliasRequest(request: Request) {
 function responseText(text: string) {
   const decoded = decodeResponse(text)
   if (Option.isNone(decoded)) return text
-  const calls = (call: typeof Call.Type) =>
-    call.function?.name === "read" ? { ...call, function: { ...call.function, name: "execute" } } : call
+  let raw: Record<string, unknown>
+  try {
+    raw = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    return text
+  }
+  const renameRead = (item: unknown) => {
+    if (typeof item !== "object" || item === null) return item
+    const record = item as Record<string, unknown>
+    const fn = record.function as Record<string, unknown> | undefined
+    if (fn?.name !== "read") return item
+    return { ...record, function: { ...fn, name: "execute" } }
+  }
+  const rawChoices = Array.isArray(raw.choices) ? (raw.choices as unknown[]) : []
   return JSON.stringify({
-    ...decoded.value,
-    choices: decoded.value.choices.map((choice) => ({
-      ...choice,
-      ...(choice.delta
-        ? {
-            delta: {
-              ...choice.delta,
-              ...(choice.delta.tool_calls ? { tool_calls: choice.delta.tool_calls.map(calls) } : {}),
-            },
-          }
-        : {}),
-      ...(choice.message
-        ? {
-            message: {
-              ...choice.message,
-              ...(choice.message.tool_calls ? { tool_calls: choice.message.tool_calls.map(calls) } : {}),
-            },
-          }
-        : {}),
-    })),
+    ...raw,
+    choices: rawChoices.map((choice) => {
+      if (typeof choice !== "object" || choice === null) return choice
+      const record = choice as Record<string, unknown>
+      const delta = record.delta as Record<string, unknown> | undefined
+      const message = record.message as Record<string, unknown> | undefined
+      return {
+        ...record,
+        ...(delta
+          ? {
+              delta: {
+                ...delta,
+                ...(Array.isArray(delta.tool_calls)
+                  ? { tool_calls: (delta.tool_calls as unknown[]).map(renameRead) }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(message
+          ? {
+              message: {
+                ...message,
+                ...(Array.isArray(message.tool_calls)
+                  ? { tool_calls: (message.tool_calls as unknown[]).map(renameRead) }
+                  : {}),
+              },
+            }
+          : {}),
+      };
+    }),
   })
 }
 

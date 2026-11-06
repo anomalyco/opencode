@@ -45,8 +45,6 @@ import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const childText = "child final response"
-const completedOutput = (sessionID: Session.ID) =>
-  `<subagent sessionID="${sessionID}" state="completed">\n${childText}\n</subagent>`
 const childModel = Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") })
 const parentModel = Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") })
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }

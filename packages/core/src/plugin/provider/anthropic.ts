@@ -218,7 +218,7 @@ export const AnthropicPlugin = define({
                     ? { ...part, name: names.get(part.name)! }
                     : part,
                 ),
-              }),
+              } as never),
             )
           }),
         ),

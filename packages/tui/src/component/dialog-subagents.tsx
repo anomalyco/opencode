@@ -74,7 +74,7 @@ export function DialogSubagents() {
   const heading = (category: string, divider: boolean) => (
     <>
       <Show when={divider}>
-        <box border={["top"]} borderColor={theme.border.default} width="100%" flexShrink={0} />
+        <box border={["top"]} borderColor={theme.border.base} width="100%" flexShrink={0} />
       </Show>
       <text fg={accent()} attributes={TextAttributes.BOLD}>
         {category}

@@ -70,7 +70,7 @@ export function DialogSchedule(props: { sessionID: string }) {
           `${entry.intervalMinutes}分おき · ${entry.enabled ? "実行中" : "停止中"}${entry.nextAt === null ? "" : ` · 次回 ${new Date(entry.nextAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`}`,
         ],
         value: entry,
-        fg: deleting() === entry.id ? theme.text.action.destructive.default : undefined,
+        fg: deleting() === entry.id ? theme.text.action.destructive.base : undefined,
       }))}
       onMove={(option) => {
         setSelected(option.value)
@@ -79,7 +79,7 @@ export function DialogSchedule(props: { sessionID: string }) {
       onSelect={(option) => edit(option.value)}
       emptyView={
         <box paddingLeft={4}>
-          <text fg={theme.text.subdued}>
+          <text fg={theme.text.muted}>
             {entries.loading ? "読み込み中…" : "定期送信はありません。n で追加できます。"}
           </text>
         </box>
@@ -170,35 +170,35 @@ function ScheduleForm(props: {
   })
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+      <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
         {props.entry ? "定期送信を編集" : "定期送信を追加"}
       </text>
-      <text fg={theme.text.default}>送信する文章</text>
+      <text fg={theme.text.base}>送信する文章</text>
       <textarea
         ref={setText}
         initialValue={props.entry?.text ?? ""}
         height={5}
         wrapMode="word"
         placeholder="定期的に送信する文章"
-        placeholderColor={theme.text.subdued}
-        textColor={theme.text.formfield.default}
+        placeholderColor={theme.text.muted}
+        textColor={theme.text.formfield.base}
         focusedTextColor={theme.text.formfield.focused}
         cursorColor={theme.text.formfield.focused}
         cursorStyle={config.cursor}
         onMouseDown={() => setFocus(0)}
       />
-      <text fg={theme.text.default}>送信間隔（分）</text>
+      <text fg={theme.text.base}>送信間隔（分）</text>
       <input
         ref={setInterval}
         value={String(props.entry?.intervalMinutes ?? 5)}
         width={12}
-        textColor={theme.text.formfield.default}
+        textColor={theme.text.formfield.base}
         focusedTextColor={theme.text.formfield.focused}
         cursorColor={theme.text.formfield.focused}
         onMouseDown={() => setFocus(1)}
       />
       <Show when={error()}>
-        <text fg={theme.text.feedback.error.default}>{error()}</text>
+        <text fg={theme.text.feedback.error.base}>{error()}</text>
       </Show>
       <box flexDirection="row" gap={2}>
         <For each={[props.entry ? "保存" : "保存して開始", "キャンセル"]}>
@@ -209,7 +209,7 @@ function ScheduleForm(props: {
               backgroundColor={
                 focus() === index() + 2
                   ? theme.background.action.primary.focused
-                  : theme.background.action.primary.default
+                  : theme.background.action.primary.base
               }
               onMouseUp={() => {
                 if (busy()) return
@@ -218,7 +218,7 @@ function ScheduleForm(props: {
               }}
             >
               <text
-                fg={focus() === index() + 2 ? theme.text.action.primary.focused : theme.text.action.primary.default}
+                fg={focus() === index() + 2 ? theme.text.action.primary.focused : theme.text.action.primary.base}
               >
                 {busy() && index() === 0 ? "保存中…" : label}
               </text>
@@ -226,7 +226,7 @@ function ScheduleForm(props: {
           )}
         </For>
       </box>
-      <text fg={theme.text.subdued}>Tab 項目移動 · Alt+Enter 改行 · Ctrl+Enter 保存 · Esc 戻る</text>
+      <text fg={theme.text.muted}>Tab 項目移動 · Alt+Enter 改行 · Ctrl+Enter 保存 · Esc 戻る</text>
     </box>
   )
 }

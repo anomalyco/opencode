@@ -34,7 +34,7 @@ const stampContent = <T extends { type: string }>(
   if (index === -1) return [Message.text(timestamp(time)) as unknown as T, ...content]
   return content.map((part, current) =>
     current === index && part.type === "text"
-      ? { ...part, text: `${timestamp(time)}\n\n${(part as { text: string }).text}` }
+      ? { ...part, text: `${timestamp(time)}\n\n${(part as unknown as { text: string }).text}` }
       : part,
   )
 }
