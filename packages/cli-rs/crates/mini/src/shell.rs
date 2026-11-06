@@ -122,6 +122,7 @@ pub fn run(input: Input) -> anyhow::Result<()> {
             replay: input.replay,
             replay_limit: input.replay_limit,
             trace: input.trace.clone(),
+            environment: input.target.environment.clone(),
         },
         initial: RefCell::new(input.initial_input.clone()),
         waiting: RefCell::new(Vec::new()),
@@ -174,6 +175,8 @@ struct Meta {
     replay: bool,
     replay_limit: Option<u32>,
     trace: Option<Trace>,
+    /// The environment uploaded to each session this client opens or starts.
+    environment: Option<indexmap::IndexMap<String, String>>,
 }
 
 /// The session mini talks to, once resolved.
@@ -1218,6 +1221,7 @@ impl Mini {
             directory: Some(directory),
             agent: session.agent.clone(),
             model,
+            environment: self.input.environment.clone(),
             ..target::TargetInput::default()
         };
         let agent = session.agent.clone();
