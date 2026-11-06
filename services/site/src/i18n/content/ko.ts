@@ -71,9 +71,9 @@ export const content = {
     mobile: {
       title: "OpenCode | 휴대폰으로 코딩 에이전트를 조종하는 모바일 앱",
       description:
-        "휴대폰으로 OpenCode 세션을 시작하고, 방향을 잡고, 승인하세요. 에이전트는 내 컴퓨터에서 실행되고, 나는 에이전트와 대화하며 변경 사항을 검토하고 필요한 작업을 허용합니다.",
+        "휴대폰에서 OpenCode 세션을 시작하고 조작하세요. 에이전트가 컴퓨터에서 실행되는 동안 대화할 수 있습니다.",
       intro:
-        "어디에 있든 휴대폰으로 세션을 시작하고, 방향을 잡고, 승인하세요. 세션에 전화를 걸어 에이전트와 대화하고, 변경 사항을 검토하고, 필요한 작업을 허용하세요. 모든 작업은 내 컴퓨터에서 실행 중인 OpenCode에서 이루어집니다.",
+        "어디서든 휴대폰에서 세션을 시작하고 조작하세요. 세션에 전화해 에이전트와 대화하거나, 세션을 열어 멈춘 곳에서 이어갈 수 있습니다. 모두 내 컴퓨터에서 실행되는 OpenCode에서 이뤄집니다.",
       features: {
         "notify-when-done": { title: "완료 알림", body: "시작한 세션이 끝나면 짧은 요약을 받아 보세요." },
         "pair-from-anywhere": {
@@ -93,7 +93,6 @@ export const content = {
       showcase: {
         results: { title: "결과", body: "요청한 작업이 끝나면 통화로 무엇이 바뀌었는지 알려 줍니다." },
         voice: { title: "음성", body: "세션에 전화를 걸어 필요한 것을 말하세요. 에이전트가 소리 내어 답합니다." },
-        approvals: { title: "승인", body: "에이전트가 요청하면 휴대폰에서 변경 사항을 검토하고 허용하세요." },
         sessions: { title: "세션", body: "세션을 열어 진행 상황을 보고, 멈춘 곳에서 바로 이어 가세요." },
         steer: { title: "조종", body: "후속 메시지를 보내 세션 도중에 방향을 바꾸세요." },
       },
@@ -243,7 +242,7 @@ export const content = {
         allowlists: { title: "허용 목록", body: "세션의 탭을 지정한 사이트로만 제한하세요." },
       },
       install:
-        "한 번만 실행하세요. 선택한 에이전트에 browse MCP 서버를 추가하고, Chrome 웹 스토어의 확장 프로그램과 페어링합니다. Node.js 22.19 이상이 필요합니다.",
+        "한 줄로 Browse를 설치하고, 찾은 에이전트에 추가하고 확장 프로그램과 페어링합니다. Windows에서는 irm https://opencode.ai/browse/install.ps1 | iex 를 실행하세요. 에이전트에게 설정을 맡겨도 됩니다.",
     },
   },
   apps: {
@@ -653,13 +652,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "통합",
-      items: {
-        github: { body: "GitHub Actions에서 OpenCode를 사용하세요." },
-        gitlab: { label: "GitLab", body: "GitLab CI/CD 또는 Duo에서 OpenCode를 사용하세요." },
       },
     },
   },

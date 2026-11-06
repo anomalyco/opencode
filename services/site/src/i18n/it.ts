@@ -210,7 +210,6 @@ export const dict = {
   "download.section.terminal": "OpenCode Terminal",
   "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Extensions",
-  "download.section.integrations": "OpenCode Integrations",
   "download.action.download": "Scarica",
   "download.action.install": "Installa",
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",

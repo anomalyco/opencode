@@ -94,9 +94,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile, le tue sessioni di coding sul telefono",
       description:
-        "Avvia, guida e approva le sessioni OpenCode dal telefono. Parla con l'agente, rivedi le sue modifiche e consenti ciò che gli serve, mentre lavora sul tuo computer.",
+        "Avvia e guida sessioni OpenCode dal telefono. Parla con l'agente mentre gira sul tuo computer.",
       intro:
-        "Avvia, guida e approva le sessioni dal telefono, ovunque tu sia. Chiama una sessione e parla con l'agente, rivedi le sue modifiche e consenti ciò che gli serve, tutto su OpenCode in esecuzione sul tuo computer.",
+        "Avvia e guida sessioni dal telefono, ovunque tu sia. Chiama una sessione e parla con l'agente, oppure apri una sessione per riprendere da dove eri rimasto, tutto con OpenCode sul tuo computer.",
       features: {
         "notify-when-done": {
           title: "Avviso a fine lavoro",
@@ -135,10 +135,6 @@ export const content = {
         voice: {
           title: "Voce",
           body: "Chiama una sessione e di' cosa ti serve. L'agente risponde a voce.",
-        },
-        approvals: {
-          title: "Approvazioni",
-          body: "Rivedi la modifica e consentila dal telefono quando l'agente lo chiede.",
         },
         sessions: {
           title: "Sessioni",
@@ -403,7 +399,7 @@ export const content = {
         },
       },
       install:
-        "Eseguilo una volta. Aggiunge il server MCP browse agli agenti che scegli e abbina l'estensione dal Chrome Web Store. Richiede Node.js 22.19 o successivo.",
+        "Una riga installa Browse, lo aggiunge agli agenti che trova e abbina l'estensione. Su Windows, esegui irm https://opencode.ai/browse/install.ps1 | iex. Oppure chiedi al tuo agente di configurarlo.",
     },
   },
   apps: {
@@ -1139,18 +1135,6 @@ export const content = {
         },
         vscodium: {
           label: "VSCodium",
-        },
-      },
-    },
-    integrations: {
-      title: "Integrazioni",
-      items: {
-        github: {
-          body: "Usa OpenCode in GitHub Actions.",
-        },
-        gitlab: {
-          label: "GitLab",
-          body: "Usa OpenCode in GitLab CI/CD o Duo.",
         },
       },
     },

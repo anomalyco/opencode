@@ -118,9 +118,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile, kodlama oturumlarınız telefonunuzda",
       description:
-        "OpenCode oturumlarını telefonunuzdan başlatın, yönlendirin ve onaylayın. Ajan bilgisayarınızda çalışırken onunla konuşun, değişikliklerini inceleyin ve ihtiyaç duyduğu izinleri verin.",
+        "OpenCode oturumlarını telefonunuzdan başlatın ve yönetin. Ajan bilgisayarınızda çalışırken onunla konuşun.",
       intro:
-        "Oturumları nerede olursanız olun telefonunuzdan başlatın, yönlendirin ve onaylayın. Bir oturumu arayıp ajanla konuşun, değişikliklerini inceleyin ve ihtiyaç duyduğu izinleri verin. Hepsi kendi bilgisayarınızda çalışan OpenCode üzerinde.",
+        "Nerede olursanız olun oturumları telefonunuzdan başlatın ve yönetin. Bir oturumu arayıp ajanla konuşun ya da bir oturum açıp kaldığınız yerden devam edin, hepsi kendi bilgisayarınızdaki OpenCode üzerinde.",
       features: {
         "notify-when-done": {
           title: "Bitince haber ver",
@@ -159,10 +159,6 @@ export const content = {
         voice: {
           title: "Ses",
           body: "Oturumu arayın, ne istediğinizi söyleyin. Ajan sesli yanıt verir.",
-        },
-        approvals: {
-          title: "Onaylar",
-          body: "Ajan izin istediğinde değişikliği inceleyin ve telefonunuzdan onaylayın.",
         },
         sessions: {
           title: "Oturumlar",
@@ -428,7 +424,7 @@ export const content = {
         },
       },
       install:
-        "Bunu bir kez çalıştırın. browse MCP sunucusunu seçtiğiniz ajanlara ekler ve eklentiyi Chrome Web Store'dan eşler. Node.js 22.19 ya da daha yenisi gerekir.",
+        "Tek satır Browse'u kurar, bulduğu ajanlara ekler ve eklentiyle eşler. Windows'ta irm https://opencode.ai/browse/install.ps1 | iex komutunu çalıştırın. Ya da ajanınızdan kurmasını isteyin.",
     },
   },
   apps: {
@@ -1201,19 +1197,6 @@ export const content = {
         },
         vscodium: {
           label: "VSCodium",
-        },
-      },
-    },
-    integrations: {
-      title: "Entegrasyonlar",
-      items: {
-        github: {
-          label: "GitHub",
-          body: "OpenCode'u GitHub Actions'ta kullanın.",
-        },
-        gitlab: {
-          label: "GitLab",
-          body: "OpenCode'u GitLab CI/CD'de ya da Duo'da kullanın.",
         },
       },
     },

@@ -55,9 +55,9 @@ export const content = {
     mobile: {
       title: "OpenCode | 用手機引導編碼代理的行動應用程式",
       description:
-        "用手機啟動、引導和核准 OpenCode 工作階段。與代理對話、審查它的變更並允許它需要的操作，而它始終在你的電腦上執行。",
+        "在手機上啟動並引導 OpenCode 工作階段。代理在您的電腦上執行時，您可以與它對話。",
       intro:
-        "不論身在何處，都能用手機啟動、引導和核准工作階段。撥打給工作階段並與代理對話、審查它的變更、允許它需要的操作，一切都在你自己電腦上執行的 OpenCode 中完成。",
+        "無論身在何處，都能在手機上啟動並引導工作階段。打電話給工作階段與代理交談，或開啟任一工作階段從上次中斷處繼續，一切都在您自己電腦上的 OpenCode 中執行。",
       features: {
         "notify-when-done": { title: "完成時通知", body: "你啟動的工作階段完成後，會收到一段簡短摘要。" },
         "pair-from-anywhere": { title: "隨處配對", body: "使用 opencode pair --remote 從任何網路連線。" },
@@ -71,7 +71,6 @@ export const content = {
       showcase: {
         results: { title: "結果", body: "你交代的工作完成後，通話會告訴你改了什麼。" },
         voice: { title: "語音", body: "撥打給工作階段，說出你的需求。代理會出聲回答。" },
-        approvals: { title: "核准", body: "代理請求權限時，在手機上審查變更並允許。" },
         sessions: { title: "工作階段", body: "開啟任何工作階段查看進度，再從上次中斷的地方繼續。" },
         steer: { title: "引導", body: "傳送後續訊息，在工作階段中途調整方向。" },
       },
@@ -197,7 +196,7 @@ export const content = {
         allowlists: { title: "允許清單", body: "將工作階段的分頁限制在你指定的網站內。" },
       },
       install:
-        "只需執行一次。它會把 browse MCP 伺服器加入你選擇的代理，並從 Chrome 線上應用程式商店配對擴充功能。需要 Node.js 22.19 或更新版本。",
+        "一行指令安裝 Browse，將它加入找到的代理並配對擴充功能。在 Windows 上執行 irm https://opencode.ai/browse/install.ps1 | iex。也可以請代理幫你設定。",
     },
   },
   apps: {
@@ -595,13 +594,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "整合",
-      items: {
-        github: { body: "在 GitHub Actions 中使用 OpenCode。" },
-        gitlab: { label: "GitLab", body: "在 GitLab CI/CD 或 Duo 中使用 OpenCode。" },
       },
     },
   },

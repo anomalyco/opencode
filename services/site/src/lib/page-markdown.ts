@@ -15,7 +15,7 @@ import { markdownDocument, type MarkdownContext } from "~/lib/markdown"
 import { pressMarkdown } from "~/lib/press-content"
 import { extensionMarkdown, productMarkdown, productsMarkdown } from "~/lib/product-markdown"
 import { extensionPages } from "~/component/site/extension-data"
-import { allProductPages, productAreas } from "~/component/site/product-data"
+import { allProductPages, productAreas, productDetails } from "~/component/site/product-data"
 
 type PageMarkdown = {
   title: string
@@ -49,7 +49,7 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
         `/${product.slug}`,
         {
           title: product.name,
-          description: product.body,
+          description: product.slug === "mobile" ? productDetails.mobile.description : product.body,
           markdown: productMarkdown(product.slug),
           changelog: filter
             ? (releases: ChangelogRelease[]) => changelogView(releases, { filter, size: 3 })
@@ -60,7 +60,7 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
   ),
   ...Object.fromEntries(
     extensionPages.map((extension) => [
-      `/extensions/${extension.slug}`,
+      extension.product ? `/${extension.slug}` : `/extensions/${extension.slug}`,
       { title: extension.name, description: extension.body, markdown: extensionMarkdown(extension.slug) },
     ]),
   ),

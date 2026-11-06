@@ -58,13 +58,17 @@ export function productsMarkdown(context: MarkdownContext) {
   return blocks(
     "# Product",
     productsSubtitle,
-    productPages
-      .map((product) => `- ${link(product.name, context.route(`/${product.slug}`))}: ${product.body}`)
-      .join("\n"),
-    ...(extensionPages.length > 0
+    [
+      ...productPages.map((product) => `- ${link(product.name, context.route(`/${product.slug}`))}: ${product.body}`),
+      ...extensionPages
+        .filter((extension) => extension.product)
+        .map((extension) => `- ${link(extension.name, context.route(`/${extension.slug}`))}: ${extension.body}`),
+    ].join("\n"),
+    ...(extensionPages.some((extension) => !extension.product)
       ? [
           "## Extensions",
           extensionPages
+            .filter((extension) => !extension.product)
             .map(
               (extension) =>
                 `- ${link(extension.name, context.route(`/extensions/${extension.slug}`))}: ${extension.body}`,
@@ -142,6 +146,7 @@ export function extensionMarkdown(slug: ExtensionSlug) {
       "## Features",
       extension.features.map((feature) => `- **${feature.title}:** ${feature.body}`).join("\n"),
       "## Install",
+      extension.store && `Add to Chrome from the ${link("Chrome Web Store", extension.store)}.`,
       extension.install.lead,
       extension.install.command && codeFence("bash", extension.install.command),
       `Source: ${link(extension.source.replace("https://", ""), extension.source)}`,

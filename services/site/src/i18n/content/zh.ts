@@ -48,9 +48,9 @@ export const content = {
     mobile: {
       title: "OpenCode | 在手机上引导编程代理的移动应用",
       description:
-        "在手机上启动、引导和批准 OpenCode 会话。与代理对话，审查它的更改，批准它需要的操作，而它始终在您的电脑上运行。",
+        "在手机上启动并引导 OpenCode 会话。代理在您的电脑上运行时，您可以与它对话。",
       intro:
-        "无论身在何处，都能在手机上启动、引导和批准会话。呼叫会话并与代理对话，审查它的更改，批准它需要的操作，一切都由您自己电脑上运行的 OpenCode 完成。",
+        "无论身在何处，都能在手机上启动并引导会话。给会话打电话与代理交谈，或打开任意会话从上次中断处继续，一切都在您自己电脑上的 OpenCode 中运行。",
       features: {
         "notify-when-done": { title: "完成时通知", body: "您启动的会话完成后，会收到一段简短总结。" },
         "pair-from-anywhere": { title: "随处配对", body: "使用 opencode pair --remote 从任意网络连接。" },
@@ -64,7 +64,6 @@ export const content = {
       showcase: {
         results: { title: "结果", body: "您交代的工作完成后，通话会告诉您改了什么。" },
         voice: { title: "语音", body: "呼叫会话，说出您的需求。代理会出声回答。" },
-        approvals: { title: "批准", body: "代理请求权限时，在手机上审查更改并批准。" },
         sessions: { title: "会话", body: "打开任意会话查看进度，然后从上次中断的地方继续。" },
         steer: { title: "引导", body: "发送后续消息，在会话中途调整方向。" },
       },
@@ -190,7 +189,7 @@ export const content = {
         allowlists: { title: "允许列表", body: "将会话的标签页限制在您指定的网站内。" },
       },
       install:
-        "只需运行一次。它会把 browse MCP 服务器添加到您选择的代理中，并从 Chrome 网上应用店配对扩展。需要 Node.js 22.19 或更高版本。",
+        "一行命令安装 Browse，把它添加到找到的代理并配对扩展。在 Windows 上运行 irm https://opencode.ai/browse/install.ps1 | iex。也可以让代理帮你设置。",
     },
   },
   apps: {
@@ -588,13 +587,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "集成",
-      items: {
-        github: { body: "在 GitHub Actions 中使用 OpenCode。" },
-        gitlab: { label: "GitLab", body: "在 GitLab CI/CD 或 Duo 中使用 OpenCode。" },
       },
     },
   },

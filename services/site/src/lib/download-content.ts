@@ -48,24 +48,6 @@ export function downloadContent(t: Translate, route: (path: string) => string) {
         href: v1DocsUrl("/ide/"),
       })),
     },
-    integrations: {
-      title: "Integrations",
-      items: [
-        // One line each, from the GitHub and GitLab docs.
-        {
-          id: "github",
-          label: "GitHub",
-          body: "Use OpenCode in GitHub Actions.",
-          href: v1DocsUrl("/github/"),
-        },
-        {
-          id: "gitlab",
-          label: "GitLab",
-          body: "Use OpenCode in GitLab CI/CD or Duo.",
-          href: v1DocsUrl("/gitlab/"),
-        },
-      ],
-    },
     actions: { download: t("download.action.download"), install: t("download.action.install") },
     faq: homeFaq(t, route),
   }
@@ -84,8 +66,6 @@ export function downloadSectionsMarkdown(
     options?.apps !== false && downloadAppsMarkdown(context),
     options?.editors !== false && `## ${content.extensions.title}`,
     options?.editors !== false && content.extensions.items.map((item) => `- ${link(item.label, item.href)}`).join("\n"),
-    `## ${content.integrations.title}`,
-    content.integrations.items.map((item) => `- ${link(item.label, item.href)}: ${item.body}`).join("\n"),
     options?.beforeFaq,
     `## ${content.faq.title}`,
     ...content.faq.items.map((item) => blocks(`### ${item.question}`, richToMarkdown(item.answer)).trimEnd()),

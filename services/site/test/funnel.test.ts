@@ -27,11 +27,11 @@ const sample = (path: string) =>
 const surfaces: Record<string, string | undefined> = {
   "/": "www-home",
   "/brand": "www-brand",
+  "/browse": "www-browse",
   "/changelog": "www-changelog",
   "/changelog/v1.14.40": "www-changelog",
   "/desktop": "www-desktop",
   "/devices": undefined,
-  "/extensions/browse": "www-extensions",
   "/font": "www-font",
   "/ide": "www-ide",
   "/legal": "www-legal",
@@ -56,7 +56,7 @@ describe("funnel config", () => {
     for (const locale of LOCALES)
       for (const path of routes.map(sample)) expect(surfaceOf(strip(route(locale, path)))).toBe(surfaces[path])
     expect(strip("/ja/desktop")).toBe("/desktop")
-    expect(targetOf(strip("/zh/extensions/browse"))).toBe("browse")
+    expect(targetOf(strip("/zh/browse"))).toBe("")
   })
 
   test("reports every docs page as www-docs, targeting its section", () => {

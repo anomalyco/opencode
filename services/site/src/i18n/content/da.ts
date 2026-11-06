@@ -82,9 +82,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile, dine kodningssessioner på telefonen",
       description:
-        "Start, styr og godkend OpenCode-sessioner fra din telefon. Tal med agenten, gennemgå dens ændringer, og tillad det, den har brug for, mens den kører på din computer.",
+        "Start og styr OpenCode-sessioner fra din telefon. Tal med agenten, mens den kører på din computer.",
       intro:
-        "Start, styr og godkend sessioner fra din telefon, uanset hvor du er. Ring til en session og tal med agenten, gennemgå dens ændringer, og tillad det, den har brug for, alt sammen med OpenCode på din egen computer.",
+        "Start og styr sessioner fra din telefon, hvor du end er. Ring til en session og tal med agenten, eller åbn en session og fortsæt, hvor du slap, alt med OpenCode på din egen computer.",
       features: {
         "notify-when-done": {
           title: "Besked når færdig",
@@ -106,10 +106,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "Stemme", body: "Ring til en session, og sig, hvad du har brug for. Agenten svarer højt." },
-        approvals: {
-          title: "Godkendelser",
-          body: "Gennemgå ændringen, og tillad den fra telefonen, når agenten spørger.",
-        },
         sessions: { title: "Sessioner", body: "Åbn en session for at se, hvor den er, og fortsæt, hvor du slap." },
         steer: { title: "Styr", body: "Send en opfølgning for at skifte retning midt i sessionen." },
         results: { title: "Resultater", body: "Opkaldet fortæller dig, hvad der er ændret, når arbejdet er færdigt." },
@@ -298,7 +294,7 @@ export const content = {
         allowlists: { title: "Hvidlister", body: "Begræns en sessions faner til de sites, du angiver." },
       },
       install:
-        "Kør dette én gang. Det tilføjer browse-MCP-serveren til de agenter, du vælger, og parrer udvidelsen fra Chrome Web Store. Kræver Node.js 22.19 eller nyere.",
+        "Én linje installerer Browse, tilføjer det til de agenter den finder, og parrer udvidelsen. På Windows skal du køre irm https://opencode.ai/browse/install.ps1 | iex. Eller bed din agent om at sætte det op.",
     },
   },
   apps: {
@@ -708,13 +704,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "Integrationer",
-      items: {
-        github: { body: "Brug OpenCode i GitHub Actions." },
-        gitlab: { label: "GitLab", body: "Brug OpenCode i GitLab CI/CD eller Duo." },
       },
     },
   },

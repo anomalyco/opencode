@@ -49,8 +49,8 @@
 @media (min-width: 78.0625rem) {
   [data-site][data-page="products"]
     [data-component="block"]:is(
+      [data-slot="products-more"],
       [data-slot="products-extensions"],
-      [data-slot="products-integrations"],
       [data-slot="products-anomaly"],
       [data-columns]
     ) {

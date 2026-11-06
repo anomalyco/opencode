@@ -82,9 +82,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile, deine Coding-Sessions auf dem Smartphone",
       description:
-        "Starte, steuere und genehmige OpenCode-Sessions vom Smartphone aus. Sprich mit dem Agent, prüfe seine Änderungen und erlaube, was er braucht, während er auf deinem Computer läuft.",
+        "Starte und steuere OpenCode-Sessions vom Smartphone aus. Sprich mit dem Agent, während er auf deinem Computer läuft.",
       intro:
-        "Starte, steuere und genehmige Sessions vom Smartphone aus, wo immer du bist. Ruf eine Session an und sprich mit dem Agent, prüfe seine Änderungen und erlaube, was er braucht, alles mit OpenCode auf deinem eigenen Computer.",
+        "Starte und steuere Sessions vom Smartphone aus, wo immer du bist. Ruf eine Session an und sprich mit dem Agent, oder öffne eine Session und mach dort weiter, wo du aufgehört hast, alles mit OpenCode auf deinem eigenen Computer.",
       features: {
         "notify-when-done": {
           title: "Benachrichtigung",
@@ -115,10 +115,6 @@ export const content = {
       },
       showcase: {
         voice: { title: "Stimme", body: "Ruf eine Session an und sag, was du brauchst. Der Agent antwortet laut." },
-        approvals: {
-          title: "Freigaben",
-          body: "Fragt der Agent, prüfst du die Änderung und erlaubst sie am Smartphone.",
-        },
         sessions: {
           title: "Sessions",
           body: "Öffne eine Session, um ihren Stand zu sehen, und mach dort weiter, wo du aufgehört hast.",
@@ -331,7 +327,7 @@ export const content = {
         allowlists: { title: "Allowlists", body: "Beschränke die Tabs einer Session auf die Websites, die du nennst." },
       },
       install:
-        "Einmal ausführen. Das fügt den browse-MCP-Server zu den Agents deiner Wahl hinzu und koppelt die Extension aus dem Chrome Web Store. Benötigt Node.js 22.19 oder neuer.",
+        "Eine Zeile installiert Browse, fügt es den gefundenen Agents hinzu und koppelt die Extension. Unter Windows führst du irm https://opencode.ai/browse/install.ps1 | iex aus. Oder bitte deinen Agent, es einzurichten.",
     },
   },
   apps: {
@@ -756,13 +752,6 @@ export const content = {
         zed: { label: "Zed" },
         windsurf: { label: "Windsurf" },
         vscodium: { label: "VSCodium" },
-      },
-    },
-    integrations: {
-      title: "Integrationen",
-      items: {
-        github: { body: "Nutze OpenCode in GitHub Actions." },
-        gitlab: { label: "GitLab", body: "Nutze OpenCode in GitLab CI/CD oder Duo." },
       },
     },
   },

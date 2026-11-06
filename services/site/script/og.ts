@@ -79,7 +79,7 @@ const cards: Card[] = [
   {
     path: "/mobile",
     title: "Mobile",
-    description: "Start, steer and approve your coding sessions from your phone.",
+    description: "Start and steer your coding sessions from your phone.",
     shows: "the mobile app's dotted voice orb",
     shot: "orb",
   },
@@ -112,7 +112,7 @@ const cards: Card[] = [
     shot: angled(`${covers}/mini.webp`, [250, 540, 680, 260], 150),
   },
   {
-    path: "/extensions/browse",
+    path: "/browse",
     title: "Browse",
     description: "Let your agents use your real browser, with your tabs and logins.",
     shows: "the desktop app setting up the Browse extension, at an angle",

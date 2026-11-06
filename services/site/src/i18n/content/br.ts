@@ -118,9 +118,9 @@ export const content = {
     mobile: {
       title: "OpenCode | Mobile, suas sessões de código no seu celular",
       description:
-        "Inicie, conduza e aprove sessões do OpenCode pelo celular. Fale com o agente, revise as mudanças e permita o que ele precisa, enquanto ele roda no seu computador.",
+        "Inicie e conduza sessões do OpenCode pelo celular. Fale com o agente enquanto ele roda no seu computador.",
       intro:
-        "Inicie, conduza e aprove sessões pelo celular, onde você estiver. Ligue para uma sessão e fale com o agente, revise as mudanças e permita o que ele precisa, tudo no OpenCode rodando no seu próprio computador.",
+        "Inicie e conduza sessões pelo celular, onde você estiver. Ligue para uma sessão e fale com o agente, ou abra qualquer sessão para continuar de onde parou, tudo no OpenCode rodando no seu próprio computador.",
       features: {
         "notify-when-done": {
           title: "Aviso ao terminar",
@@ -159,10 +159,6 @@ export const content = {
         voice: {
           title: "Voz",
           body: "Ligue e diga o que precisa. O agente responde em voz alta.",
-        },
-        approvals: {
-          title: "Aprovações",
-          body: "Revise a mudança e aprove pelo celular quando o agente pedir.",
         },
         sessions: {
           title: "Sessões",
@@ -428,7 +424,7 @@ export const content = {
         },
       },
       install:
-        "Rode isto uma vez. Adiciona o servidor MCP browse aos agentes que você escolher e pareia a extensão da Chrome Web Store. Requer Node.js 22.19 ou mais recente.",
+        "Uma linha instala o Browse, adiciona aos agentes que encontrar e pareia a extensão. No Windows, rode irm https://opencode.ai/browse/install.ps1 | iex. Ou peça ao seu agente para configurar.",
     },
   },
   apps: {
@@ -1201,19 +1197,6 @@ export const content = {
         },
         vscodium: {
           label: "VSCodium",
-        },
-      },
-    },
-    integrations: {
-      title: "Integrações",
-      items: {
-        github: {
-          label: "GitHub",
-          body: "Use o OpenCode no GitHub Actions.",
-        },
-        gitlab: {
-          label: "GitLab",
-          body: "Use o OpenCode no GitLab CI/CD ou no Duo.",
         },
       },
     },
