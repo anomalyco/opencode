@@ -42,14 +42,6 @@ impl Footer {
             status: RefCell::default(),
         });
         inner.refresh(tui);
-        // The visibility follows the terminal size (`useTerminalDimensions`).
-        let weak = Rc::downgrade(&inner);
-        let owner = tui.weak();
-        inner.root.on_resize(move |_, _| {
-            if let (Some(inner), Some(tui)) = (weak.upgrade(), owner.upgrade()) {
-                inner.refresh(&tui);
-            }
-        });
         Self(inner)
     }
 }
@@ -125,10 +117,9 @@ impl Slotted<Tui> for Footer {
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
-        // It reads the default location's MCP servers and the terminal size, which its root's resize misses
-        // when only the height changes.
-        let resized = self.0.shown.borrow().as_ref().is_some_and(|model| model.size != tui.app.size());
-        if !changes.is_empty() && (resized || tui.data.read(|state| changes.location(state.default_location()))) {
+        // It reads the default location's MCP servers and the terminal size; the home syncs every change on a
+        // resize.
+        if tui.data.read(|state| changes.location(state.default_location())) {
             self.0.refresh(tui);
         }
         self.0.status.borrow().sync(tui, changes);
