@@ -197,6 +197,61 @@ describe("pty", () => {
         expect(Cause.squash(result.cause)).toMatchObject({ _tag: "Pty.ExitedError", ptyID: info.id })
     }),
   )
+
+  ptyTest("reaps unattached sessions after the grace period", () =>
+    Effect.gen(function* () {
+      process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT = "200 millis"
+      const pty = yield* Pty.Service
+      const events = yield* subscribePtyEvents()
+      const info = yield* pty.create({
+        command: "cat",
+        cwd: "/tmp",
+        env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" },
+      })
+
+      const initial = yield* pty.get(info.id)
+      expect(initial.status).toBe("running")
+
+      expect(yield* waitForEvents(events, info.id, 2)).toEqual(["created", "deleted"])
+
+      const missing = yield* pty.get(info.id).pipe(Effect.exit)
+      expect(Exit.isFailure(missing)).toBe(true)
+      if (Exit.isFailure(missing))
+        expect(Cause.squash(missing.cause)).toMatchObject({ _tag: "Pty.NotFoundError", ptyID: info.id })
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          delete process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT
+        }),
+      ),
+    ),
+  )
+
+  ptyTest("does not reap sessions that have been attached", () =>
+    Effect.gen(function* () {
+      process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT = "200 millis"
+      const pty = yield* Pty.Service
+      const info = yield* pty.create({
+        command: "cat",
+        cwd: "/tmp",
+        env: { TERM: "xterm-256color", OPENCODE_TERMINAL: "1" },
+      })
+
+      yield* attachCollecting(info.id)
+      yield* Effect.sleep("350 millis")
+
+      const current = yield* pty.get(info.id)
+      expect(current.status).toBe("running")
+
+      yield* pty.remove(info.id)
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          delete process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT
+        }),
+      ),
+    ),
+  )
 })
 
 const configuredShell = process.platform === "win32" ? undefined : Bun.which("bash")

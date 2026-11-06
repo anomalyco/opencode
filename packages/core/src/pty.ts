@@ -2,7 +2,7 @@ export * as Pty from "./pty.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Disp, Proc } from "#pty"
-import { Context, Effect, Layer, Schema, Types } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode/schema/pty"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
@@ -13,6 +13,7 @@ const BUFFER_LIMIT = 1024 * 1024 * 2
 // Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
 // Cap retention so abandoned terminals do not accumulate unbounded buffers.
 const EXITED_LIMIT = 25
+const unattachedTimeout = () => (process.env.OPENCODE_PTY_UNATTACHED_TIMEOUT || "60 seconds") as Duration.Input
 const pty = lazy(() => import("#pty"))
 
 type Subscriber = {
@@ -32,6 +33,8 @@ type Active = {
   cursor: number
   subscribers: Map<object, Subscriber>
   listeners: Disp[]
+  attached: boolean
+  reaperFiber?: Fiber.Fiber<void, unknown>
 }
 
 export const ID = Pty.ID
@@ -115,6 +118,10 @@ const layer = Layer.effect(
     }
 
     function teardown(session: Active) {
+      if (session.reaperFiber) {
+        runFork(Fiber.interrupt(session.reaperFiber))
+        session.reaperFiber = undefined
+      }
       for (const listener of session.listeners) listener.dispose()
       session.listeners.length = 0
       if (session.info.status === "running") {
@@ -198,8 +205,23 @@ const layer = Layer.effect(
         cursor: 0,
         subscribers: new Map(),
         listeners: [],
+        attached: false,
       }
       sessions.set(id, session)
+      session.reaperFiber = yield* Effect.forkDetach(
+        Effect.sleep(unattachedTimeout()).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const current = sessions.get(id)
+              if (!current || current.attached || current.subscribers.size > 0 || current.info.status === "exited") return
+              session.reaperFiber = undefined
+              yield* Effect.logWarning("reaping unattached pty session", { id })
+              yield* removeSession(id)
+            }),
+          ),
+          Effect.ignore,
+        ),
+      )
       session.listeners.push(
         proc.onData((chunk) => {
           session.cursor += chunk.length
@@ -257,6 +279,11 @@ const layer = Layer.effect(
     const attach = Effect.fn("Pty.attach")(function* (id: ID, input: AttachInput) {
       const session = yield* requireSession(id)
       if (session.info.status !== "running") return yield* new ExitedError({ ptyID: id })
+      session.attached = true
+      if (session.reaperFiber) {
+        yield* Fiber.interrupt(session.reaperFiber)
+        session.reaperFiber = undefined
+      }
       yield* Effect.logInfo("client attached to session", { id, directory: location.directory })
       const token = {}
       const subscriber: Subscriber = {
