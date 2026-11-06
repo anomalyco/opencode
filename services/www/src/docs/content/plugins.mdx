@@ -31,7 +31,8 @@ Add published packages, versioned packages, scoped packages, or local plugin dir
 Relative paths resolve from the config file containing the entry.
 
 Configured local paths must be directories. A path to a single file is skipped. See [Load](/build/plugins#load) for
-how OpenCode finds each part in a directory.
+how OpenCode finds each part in a directory. A directory with no `server` (or `index`) or `gui-experimental` module is
+skipped without a warning.
 
 Plugin arrays from applicable config files are applied from lowest to highest precedence instead of replacing one
 another.
