@@ -65,6 +65,7 @@ import { useEditorContext } from "../../context/editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogSubagents } from "../../component/dialog-subagents"
 import { TodoItem } from "../../component/todo-item"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
 import { createMediaSource } from "../../component/media-source"
@@ -1401,9 +1402,18 @@ export function Session(props: {
       id: "session.child.first",
       group: "Session",
       run: () => {
-        if (composer.open || session()?.parentID) setComposer("open", false)
+        if (composer.open) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
+      },
+    },
+    {
+      title: "View subagent tree",
+      id: "session.subagents.tree",
+      group: "Session",
+      slash: { name: "subagents" },
+      run: () => {
+        dialog.replace(() => <DialogSubagents />)
       },
     },
     {
@@ -1598,21 +1608,14 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
-                defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                onClose={() => {
-                  const parent = session()?.parentID
-                  if (parent) {
-                    navigate({ type: "session", sessionID: parent })
-                    return
-                  }
-                  setComposer("open", false)
-                }}
+                open={composer.open}
+                defaultTab={composer.tab}
+                onClose={() => setComposer("open", false)}
                 terminals={props.terminals}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={composer.open}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
                   <Show when={promptedPermissions()[0]?.id} keyed>
                     {(_) => {

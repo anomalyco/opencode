@@ -61,6 +61,7 @@ import { DataProvider, useData } from "./context/data"
 import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { LocationProvider, useLocation } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
+import { SubagentTeamsProvider } from "./context/subagent-teams"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
@@ -420,6 +421,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                           <ThemeErrorToast />
                                                           <ClientMcp />
                                                           <LocalProvider>
+                                                            <SubagentTeamsProvider>
                                                             <PromptStashProvider>
                                                               <DialogProvider>
                                                                 <FrecencyProvider>
@@ -446,6 +448,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                 </FrecencyProvider>
                                                               </DialogProvider>
                                                             </PromptStashProvider>
+                                                            </SubagentTeamsProvider>
                                                           </LocalProvider>
                                                         </ThemeProvider>
                                                       </SessionTerminalsProvider>

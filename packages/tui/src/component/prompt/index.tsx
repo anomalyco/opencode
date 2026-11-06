@@ -1199,7 +1199,8 @@ export function Prompt(props: PromptProps) {
       void promptModelWarning()
       return false
     }
-    const usesModel = !props.sessionID || store.mode !== "shell"
+    const usesModel = store.mode !== "shell"
+    const child = props.sessionID !== undefined && data.session.get(props.sessionID)?.parentID !== undefined
     if (usesModel && !local.model.available(selection)) {
       toast.show({
         title: "Model unavailable",
@@ -1310,6 +1311,7 @@ export function Prompt(props: PromptProps) {
 
     const target = sessionID
     const prepareAgent = async () => {
+      if (child) return
       if (!session) {
         await data.session.sync(target)
         session = data.session.get(target)
@@ -1320,7 +1322,7 @@ export function Prompt(props: PromptProps) {
     }
     const commitModel = () => {
       const model = { providerID: selection.providerID, id: selection.modelID, variant }
-      const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
+      const cancelCommit = child ? () => {} : local.model.trackSessionCommit(target, model, agent.id)
       return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
         cancelCommit()
         throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })

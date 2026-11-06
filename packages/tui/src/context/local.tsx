@@ -269,7 +269,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const session = data.session.get(sessionID)
         const selected =
           selectionState.selectionBySessionAgent[sessionID]?.[current.id] ??
-          (!session?.agent || session.agent === current.id ? durableSelection(sessionID) : undefined)
+          (!session?.agent || session.agent === current.id || session.parentID !== undefined
+            ? durableSelection(sessionID)
+            : undefined)
         if (selected) {
           const info = models()?.find((item) => item.providerID === selected.providerID && item.id === selected.modelID)
           return {
@@ -297,7 +299,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         setSessionSelection(
           sessionID,
           current.id,
-          (!session?.agent || session.agent === current.id) &&
+          (!session?.agent || session.agent === current.id || session.parentID !== undefined) &&
             durable &&
             selectionKey(durable) === selectionKey(selection)
             ? undefined

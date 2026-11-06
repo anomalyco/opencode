@@ -65,6 +65,8 @@ export interface DialogSelectProps<T> {
   searchInTitle?: boolean
   /** Placeholder for the search input while it replaces the title, e.g. "Search models". */
   titlePlaceholder?: string
+  /** Multiplies the dialog's list height. Defaults to 1. */
+  heightScale?: number
 }
 
 type DialogSelectActionBase<T> = {
@@ -108,6 +110,7 @@ export interface DialogSelectOption<T = any> {
   titleWidth?: number
   truncateTitle?: boolean | "left"
   category?: string
+  categoryView?: JSX.Element
   disabled?: boolean
   bg?: RGBA
   fg?: RGBA
@@ -260,7 +263,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   const dimensions = useTerminalDimensions()
-  const limit = createMemo(() => Math.floor(dimensions().height / 2) - 6)
+  const limit = createMemo(() => {
+    const available = Math.floor(dimensions().height / 2) - 6
+    return props.heightScale === undefined ? available : Math.floor(available * props.heightScale)
+  })
   // Under new designs an overflowing list gives its last row to a "…" indicator.
   const overflows = createMemo(() => newDesigns() && rows() > limit())
   // Computed once here so per-row details do not each call useTerminalDimensions(),
@@ -780,7 +786,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               {([category, options], index) => (
                 <>
                   <Show when={category}>
-                    <DialogSelectCategory title={category} first={index() === 0} />
+                    <Show when={options[0]?.categoryView} fallback={<DialogSelectCategory title={category} first={index() === 0} />}>
+                      {options[0]?.categoryView}
+                    </Show>
                   </Show>
                   <For each={options}>
                     {(option) => {

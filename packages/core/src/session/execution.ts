@@ -13,6 +13,7 @@ import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 import { SessionInbox } from "./inbox.js"
+import { SessionTeam } from "./team.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -59,6 +60,7 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
+    const teams = yield* SessionTeam.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -109,10 +111,31 @@ export const layer = Layer.effect(
     const coordinator: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason> =
       yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
         // Shared idle hook (ported from v2-custom): runs after ownership is removed when no
-        // successor is pending. The custom body that wakes goal/team/watch continuations is
-        // integrated once port/teams, port/goal and port/automation land; add it here, not
-        // as a parallel coordinator. Upstream interrupt({resume}), stepped, Reloaded preserved.
-        idle: (sessionID, _exit, _reason) => reportLifecycle(sessionID, Effect.void),
+        // successor is pending. Teams body below; goal (goals.enqueue) and watch
+        // (watches.stopped) merge into this same body at goal/automation integration — do not
+        // add a second coordinator. Upstream interrupt({resume}), stepped, Reloaded preserved.
+        idle: (sessionID, exit, reason) =>
+          reportLifecycle(
+            sessionID,
+            Effect.gen(function* () {
+              const outcome = terminal(exit, reason)
+              if (outcome.type === "interrupted" && outcome.reason === "shutdown") return
+              const membership = yield* teams.membership(sessionID)
+              if (!membership && (yield* teams.teamsOf(sessionID)).length === 0) return
+              const candidates = membership
+                ? [
+                    sessionID,
+                    ...(yield* teams.roster(membership)).map((member) => member.sessionID),
+                    membership.parentID,
+                  ]
+                : [sessionID]
+              for (const target of new Set(candidates)) {
+                if (target === sessionID && !Exit.isSuccess(exit)) continue
+                if (yield* coordinator.isActive(target)) continue
+                yield* coordinator.wake(target)
+              }
+            }),
+          ),
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
@@ -182,7 +205,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionTeam.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
