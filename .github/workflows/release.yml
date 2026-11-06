@@ -689,11 +689,14 @@ jobs:
         env:
           AUR_KEY: ${{ secrets.AUR_KEY }}
 
-  # WinGet manifests as data. Submission to microsoft/winget-pkgs stays paused until the packages are accepted.
+  # Renders the WinGet manifests and, for stable releases, opens their microsoft/winget-pkgs pull requests.
   publish-winget:
     needs: [plan, sign-windows, sign-desktop-windows-installer]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
     env: *env
     steps:
       - *checkout-release
@@ -709,6 +712,12 @@ jobs:
         with:
           name: publish-winget
           path: ${{ runner.temp }}/out
+      # WinGet moderates every submission and can reject one for reasons unrelated to the release.
+      - name: Submit
+        continue-on-error: true
+        run: bash .github/release/publish-winget.sh "$RUNNER_TEMP/out"
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
 
   publish-github-release:
     needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop]
