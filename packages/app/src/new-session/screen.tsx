@@ -74,7 +74,7 @@ export default function NewSessionPage(props: { draftId: string }) {
       if (!ready) return
 
       // Search projects opened this draft; the picker returns focus to the composer when it closes.
-      if (layout.draft.projectSearch.take()) location()
+      if (layout.draft.projectSearch.take(props.draftId)) location()
       else model.restoreFocus()
     }),
   )

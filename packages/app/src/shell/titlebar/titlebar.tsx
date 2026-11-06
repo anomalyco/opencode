@@ -1,7 +1,8 @@
-import { createEffect, createMemo, Match, onCleanup, Show, Switch, untrack } from "solid-js"
-import { createStore, unwrap } from "solid-js/store"
+import { createEffect, createMemo, Match, onCleanup, Show, Switch } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
-import { useLocation, useNavigate } from "@solidjs/router"
+import { useLocation } from "@solidjs/router"
+import { uuid } from "@opencode/util/uuid"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
@@ -14,7 +15,7 @@ import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
-import { applyPath, backPath, forwardPath, type HistoryLocation } from "./history"
+import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
@@ -70,7 +71,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const openSettings = useSettingsDialog()
   const dialog = useDialog()
-  const navigate = useNavigate()
   const location = useLocation()
   const mobile = createMediaQuery("(max-width: 767px)")
   const bottom = createMemo(() => mobile() && settings.general.mobileTitlebarPosition() === "bottom")
@@ -131,61 +131,25 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     onCleanup(() => cancelAnimationFrame(frame))
   })
 
-  const [history, setHistory] = createStore<{
-    stack: HistoryLocation[]
-    index: number
-    action: "back" | "forward" | undefined
-  }>({
-    stack: [],
-    index: 0,
-    action: undefined,
-  })
-
+  const history = createTitlebarHistory()
   const path = () => `${location.pathname}${location.search}${location.hash}`
-
-  createEffect(() => {
-    const current = { url: path(), state: location.state }
-
-    untrack(() => {
-      const next = applyPath(history, current)
-
-      if (next === history) return
-      setHistory(next)
-    })
-  })
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
   const homeInSidebarHeader = () => !windows() && !macTrafficLights()
-
-  const back = () => {
-    const next = backPath(history)
-
-    if (!next) return
-    setHistory(next.state)
-    navigate(next.to.url, { state: unwrap(next.to.state) })
-  }
-
-  const forward = () => {
-    const next = forwardPath(history)
-
-    if (!next) return
-    setHistory(next.state)
-    navigate(next.to.url, { state: unwrap(next.to.state) })
-  }
 
   command.register(() => [
     {
       ...goBackCommand,
       title: language.t("common.goBack"),
       category: language.t("command.category.view"),
-      onSelect: back,
+      onSelect: history.back,
     },
     {
       ...goForwardCommand,
       title: language.t("common.goForward"),
       category: language.t("command.category.view"),
-      onSelect: forward,
+      onSelect: history.forward,
     },
   ])
 
@@ -258,8 +222,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               tabsStoreActions.removeSessions(detail)
             })
 
-            /** Opens a new session draft for the current context. Returns false when there is nothing to open it in. */
-            const openNewTab = () => {
+            /** Opens draft `draftID` for the current context. Returns false when there is nothing to open it in. */
+            const openDraft = (draftID: string) => {
               const route = layout.route()
 
               switch (route.type) {
@@ -268,7 +232,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                   if (pending) {
                     const model = tabs.stateValue<ComposerState>(pending.draft, "prompt")?.model.current()
-                    void tabs.newDraft({ server: route.server, directory: pending.draft.directory }, "", model)
+                    void tabs.newDraft({ server: route.server, directory: pending.draft.directory, draftID }, "", model)
 
                     return true
                   }
@@ -285,7 +249,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                   const model = tabs.stateValue<ComposerState>(sessionTab, "prompt")?.model.current()
                   void tabs.newDraft(
-                    { server: sessionTab.server, directory: activeSession.location.directory },
+                    { server: sessionTab.server, directory: activeSession.location.directory, draftID },
                     "",
                     model,
                   )
@@ -299,7 +263,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   if (activeTab?.type !== "draft") return false
 
                   const model = tabs.stateValue<ComposerState>(activeTab, "prompt")?.model.current()
-                  void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
+                  void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory, draftID }, "", model)
 
                   return true
                 }
@@ -322,7 +286,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     projects?.list()[0]
 
                   if (conn && project) {
-                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree, draftID }, "")
 
                     return true
                   }
@@ -331,6 +295,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 }
               }
             }
+
+            const openNewTab = () => openDraft(uuid())
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
@@ -513,9 +479,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 title: language.t("session.new.project.search"),
                 category: language.t("command.category.project"),
                 onSelect: () => {
-                  layout.draft.projectSearch.request()
+                  const draftID = uuid()
 
-                  if (!openNewTab()) layout.draft.projectSearch.take()
+                  if (openDraft(draftID)) layout.draft.projectSearch.request(draftID)
                 },
               },
             ])
