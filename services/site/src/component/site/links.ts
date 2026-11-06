@@ -130,7 +130,7 @@ export const anomalyApps = [
 ] as const
 
 /**
- * "More from Anomaly" on /product: the apps above, then OpenTUI from the press kit
+ * "More from Anomaly" on the product pages: the apps above, then OpenTUI from the press kit
  * (lib/press-content.ts), which has no app icon (the list draws its logo mark).
  */
 export const anomalyProducts = [

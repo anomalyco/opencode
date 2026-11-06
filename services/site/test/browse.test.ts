@@ -6,7 +6,7 @@ const browse = extensionPages.find((extension) => extension.slug === "browse")!
 // The browse page (anomalyco/browse): the Chrome Web Store is the main action, the standalone
 // installer is the command, and the product name is always lowercase.
 describe("browse", () => {
-  test("is a product at /browse with the Chrome Web Store as its main action", () => {
+  test("is a product at /product/browse with the Chrome Web Store as its main action", () => {
     expect(browse.product).toBe(true)
     expect(browse.store).toBe("https://chromewebstore.google.com/detail/mfnicocicmmlkpjnaffgihfjhdgjkdjg")
     expect(browse.source).toBe("https://github.com/anomalyco/browse")

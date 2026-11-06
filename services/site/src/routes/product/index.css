@@ -48,12 +48,7 @@
    width. */
 @media (min-width: 78.0625rem) {
   [data-site][data-page="products"]
-    [data-component="block"]:is(
-      [data-slot="products-more"],
-      [data-slot="products-extensions"],
-      [data-slot="products-anomaly"],
-      [data-columns]
-    ) {
+    [data-component="block"]:is([data-slot="products-more"], [data-slot="products-extensions"], [data-columns]) {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     column-gap: var(--gutter);

@@ -11,7 +11,6 @@ const pages = new Set([
   "sdk",
   "ide",
   "mini",
-  "browse",
   "extensions",
   "changelog",
   "brand",
@@ -50,6 +49,8 @@ export function funnelConfig() {
 
 /** A page's surface by its path without the locale (`www-home`, `www-docs`), or undefined for a development tool. */
 export function surfaceOf(path: string) {
+  // Browse is a product page but keeps its own surface, as it had at /browse.
+  if (path === "/product/browse") return "www-browse"
   const parts = path.split("/")
   if (path === "/") return "www-home"
   if (parts[1] === "docs") return "www-docs"

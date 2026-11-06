@@ -115,7 +115,7 @@ export function buildSearchIndex(
     })),
     ...extensionPages.map((extension) => ({
       title: content.extensions[extension.slug].name,
-      path: extension.product ? `/${extension.slug}` : `/extensions/${extension.slug}`,
+      path: extension.product ? `/product/${extension.slug}` : `/extensions/${extension.slug}`,
       body: `${content.extensions[extension.slug].body} ${content.extensions[extension.slug].intro}`,
       keywords: extension.product ? "product" : "extension",
     })),

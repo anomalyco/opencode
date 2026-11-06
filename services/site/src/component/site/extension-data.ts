@@ -1,5 +1,5 @@
 // Light product pages with copy from their READMEs and source. Browse is a product, listed on
-// /product with the others and served at /browse. SSH and WSL, built-in desktop app extensions
+// /product with the others and served at /product/browse. SSH and WSL, built-in desktop app extensions
 // (anomalyco/opencode packages/gui-extensions), were listed under /extensions.
 
 // SSH and WSL are left out for now, like Isocast in links.ts: to bring them back, restore "ssh" |

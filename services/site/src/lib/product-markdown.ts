@@ -53,16 +53,20 @@ export function productMarkdown(slug: PageSlug) {
 /** The /product hero subtitle; Design mode offers alternatives ("products.hero.body"). */
 export const productsSubtitle = english["product.hero.subtitle"]
 
-/** The /product page as Markdown: every product with a page, then Anomaly's other products. */
+/** The /product page as Markdown: every product with a page, then more products from Anomaly. */
 export function productsMarkdown(context: MarkdownContext) {
   return blocks(
     "# Product",
     productsSubtitle,
+    productPages
+      .map((product) => `- ${link(product.name, context.route(`/${product.slug}`))}: ${product.body}`)
+      .join("\n"),
+    "## More products",
     [
-      ...productPages.map((product) => `- ${link(product.name, context.route(`/${product.slug}`))}: ${product.body}`),
       ...extensionPages
         .filter((extension) => extension.product)
-        .map((extension) => `- ${link(extension.name, context.route(`/${extension.slug}`))}: ${extension.body}`),
+        .map((extension) => `- ${link(extension.name, context.route(`/product/${extension.slug}`))}: ${extension.body}`),
+      ...anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`),
     ].join("\n"),
     ...(extensionPages.some((extension) => !extension.product)
       ? [
@@ -76,15 +80,10 @@ export function productsMarkdown(context: MarkdownContext) {
             .join("\n"),
         ]
       : []),
-    // The download page's sections, as at the bottom of the page (without its hero or the apps), with
-    // More from Anomaly right above the FAQ.
+    // The download page's sections, as at the bottom of the page (without its hero or the apps).
     downloadSectionsMarkdown(context, {
       apps: false,
       editors: false,
-      beforeFaq: blocks(
-        "## More from Anomaly",
-        anomalyProducts.map((app) => `- ${link(app.name, app.href)}: ${app.body}`).join("\n"),
-      ).trimEnd(),
     }).trimEnd(),
   )
 }

@@ -84,8 +84,8 @@ export function ProductList(props: { items: readonly ProductListItem[] }) {
 }
 
 /**
- * "More from Anomaly": Anomaly's other open source products. The same section on /product and on
- * every product and extension page; `slot` is its data-slot, which each page's layout styles. Each
+ * "More from Anomaly": Anomaly's other open source products. The same section on every product and
+ * extension page; `slot` is its data-slot, which each page's layout styles. Each
  * shows its flat mark, white on the black tile like GitHub's and GitLab's.
  */
 export function MoreFromAnomaly(props: { slot: string }) {
@@ -110,7 +110,7 @@ export function MoreFromAnomaly(props: { slot: string }) {
 }
 
 /** Each Anomaly product's mark in the list: the one place to switch a mark. */
-const anomalyMarks: Record<(typeof anomalyProducts)[number]["id"], () => JSX.Element> = {
+export const anomalyMarks: Record<(typeof anomalyProducts)[number]["id"], () => JSX.Element> = {
   hex: () => <HexMark />,
   opentunnel: () => <OpenTunnelMark />,
   opentui: () => <OpenTUIMark />,

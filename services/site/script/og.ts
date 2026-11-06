@@ -112,7 +112,7 @@ const cards: Card[] = [
     shot: angled(`${covers}/mini.webp`, [250, 540, 680, 260], 150),
   },
   {
-    path: "/browse",
+    path: "/product/browse",
     title: "Browse",
     description: "Let your agents use your real browser, with your tabs and logins.",
     shows: "the desktop app setting up the Browse extension, at an angle",

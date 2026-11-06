@@ -2,7 +2,7 @@ import "./index.css"
 import "~/component/site/hero-title.css"
 import { titleCells } from "~/component/site/hero-title"
 import { Meta, Title } from "@solidjs/meta"
-import { Show } from "solid-js"
+import { createMemo, Show } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
 import { ShareMeta } from "~/component/share-meta"
 import { ogImage } from "~/lib/og"
@@ -11,8 +11,10 @@ import { DownloadSections } from "~/component/site/download-sections"
 import { extensionPages } from "~/component/site/extension-data"
 import { SectionHeading } from "~/component/site/on-this-page"
 import { ProductGrid } from "~/component/site/products"
-import { MoreFromAnomaly, ProductList } from "~/component/site/product-list"
+import { anomalyMarks, ProductList } from "~/component/site/product-list"
 import { BrowseMark } from "~/component/site/icons"
+import { anomalyProducts } from "~/component/site/links"
+import { appsSource } from "~/i18n/content/areas/apps"
 import "~/component/site/product-list.css"
 import { productsOrderScript } from "~/component/site/products-order"
 import { Site } from "~/component/site/site"
@@ -29,8 +31,24 @@ export default function Product() {
   const language = useLanguage()
   const i18n = useI18n()
   const extensionCopy = useArea("extensions", extensionsSource)
+  const appCopy = useArea("apps", appsSource)
   const productLandingPages = () => extensionPages.filter((extension) => extension.product)
   const extensionPagesListed = () => extensionPages.filter((extension) => !extension.product)
+  const moreProducts = createMemo(() => [
+    ...productLandingPages().map((extension) => ({
+      name: extensionCopy()[extension.slug].name,
+      description: extensionCopy()[extension.slug].body,
+      href: language.route(`/product/${extension.slug}`),
+      icon: <BrowseMark />,
+    })),
+    ...anomalyProducts.map((app) => ({
+      name: app.name,
+      description: appCopy()[app.id].body,
+      href: app.href,
+      external: true,
+      icon: anomalyMarks[app.id](),
+    })),
+  ])
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
   const markdown = useMarkdown("/product", (context, pages) => pages.productsMarkdown(context))
@@ -68,19 +86,12 @@ export default function Product() {
       {/* Right after the grid, so a saved order (Design mode, development only) applies before it paints. */}
       {import.meta.env.DEV && <script innerHTML={productsOrderScript} />}
 
-      {/* Products with a light page of their own, listed after the grid. */}
-      <Show when={productLandingPages().length > 0}>
+      {/* Products with a light page of their own, and Anomaly's other open source products. */}
+      <Show when={moreProducts().length > 0}>
         <section data-component="block" data-slot="products-more" data-section="more-products">
           <SectionHeading id="more-products" title={i18n.t("site.moreProducts")} label />
           <div data-slot="body">
-            <ProductList
-              items={productLandingPages().map((extension) => ({
-                name: extensionCopy()[extension.slug].name,
-                description: extensionCopy()[extension.slug].body,
-                href: language.route(`/${extension.slug}`),
-                icon: <BrowseMark />,
-              }))}
-            />
+            <ProductList items={moreProducts()} />
           </div>
         </section>
       </Show>
@@ -108,7 +119,6 @@ export default function Product() {
         columns
         apps={false}
         editors={false}
-        beforeFaq={<MoreFromAnomaly slot="products-anomaly" />}
         heading={(id, title) => <SectionHeading id={id} title={title} label />}
       />
     </Site>

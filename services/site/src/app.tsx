@@ -29,7 +29,7 @@ const shareImagePages = [
   "/sdk",
   "/ide",
   "/mini",
-  "/browse",
+  "/product/browse",
   "/product",
   "/docs",
   "/changelog",
