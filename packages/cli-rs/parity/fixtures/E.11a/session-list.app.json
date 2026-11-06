@@ -74,11 +74,11 @@
       "until": "Ask anything",
       "masks": [
         {
-          "x": 0,
-          "y": 0,
-          "width": 100,
-          "height": 30,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
+          "x": 16,
+          "y": 16,
+          "width": 84,
+          "height": 1,
+          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
         }
       ],
       "fixture": "E.11a/session-list/home"
@@ -92,36 +92,6 @@
     {
       "checkpoint": "list",
       "until": "Write docs",
-      "masks": [
-        {
-          "x": 0,
-          "y": 0,
-          "width": 100,
-          "height": 8,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 0,
-          "y": 19,
-          "width": 100,
-          "height": 11,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 0,
-          "y": 8,
-          "width": 6,
-          "height": 11,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 94,
-          "y": 8,
-          "width": 6,
-          "height": 11,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.11a/session-list/list"
     },
     {
@@ -132,36 +102,6 @@
     {
       "checkpoint": "marked",
       "until": "again to confirm",
-      "masks": [
-        {
-          "x": 0,
-          "y": 0,
-          "width": 100,
-          "height": 8,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 0,
-          "y": 19,
-          "width": 100,
-          "height": 11,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 0,
-          "y": 8,
-          "width": 6,
-          "height": 11,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 94,
-          "y": 8,
-          "width": 6,
-          "height": 11,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.11a/session-list/marked"
     },
     {
@@ -172,36 +112,6 @@
     {
       "checkpoint": "deleted",
       "until": "delete ctrl+d",
-      "masks": [
-        {
-          "x": 0,
-          "y": 0,
-          "width": 100,
-          "height": 8,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 0,
-          "y": 18,
-          "width": 100,
-          "height": 12,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 0,
-          "y": 8,
-          "width": 6,
-          "height": 10,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        },
-        {
-          "x": 94,
-          "y": 8,
-          "width": 6,
-          "height": 10,
-          "reason": "outside the dialog panel: the home prompt behind it differs (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.11a/session-list/deleted"
     }
   ],
