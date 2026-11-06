@@ -8,7 +8,8 @@ import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd, softwareData } from "~/component/structured-data"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { extensionMarkdown } from "~/lib/product-markdown"
 import { ExtensionDownload } from "./download-sections"
 import { extensionPages, type ExtensionSlug } from "./extension-data"
@@ -26,15 +27,15 @@ import { inlineKey } from "~/lib/direction"
 export function ExtensionPage(props: { slug: ExtensionSlug }) {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const extensionCopy = useArea("extensions", extensionsSource)
   const navigate = useNavigate()
   const data = () => extensionPages.find((item) => item.slug === props.slug)!
-  const extension = () => content().extensions[props.slug]
+  const extension = () => extensionCopy()[props.slug]
   const path = () => `/extensions/${props.slug}`
   const neighbour = (step: number) => {
     const index = extensionPages.findIndex((item) => item.slug === props.slug)
     const slug = extensionPages[(index + step + extensionPages.length) % extensionPages.length].slug
-    return { slug, name: content().extensions[slug].name }
+    return { slug, name: extensionCopy()[slug].name }
   }
   const markdown = useMarkdown(path(), extensionMarkdown(props.slug))
   const command = () => data().install.command

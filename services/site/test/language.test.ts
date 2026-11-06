@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LOCALE_HEADER, pageLocale, route } from "../src/lib/language"
+import { LOCALE_HEADER, localized, pageLocale, route } from "../src/lib/language"
 
 describe("language.route", () => {
   test("keeps the changelog unprefixed for every locale", () => {
@@ -9,6 +9,17 @@ describe("language.route", () => {
 
   test("prefixes other marketing pages", () => {
     expect(route("de", "/download")).toBe("/de/download")
+  })
+
+  test("never prefixes the docs, the Console or the English-only pages", () => {
+    for (const path of ["/v2/docs", "/v2/docs/agents/", "/v2", "/v1/docs/ide/", "/docs", "/console/go", "/font", "/changelog.xml"]) {
+      expect(route("ja", path)).toBe(path)
+      expect(route("ja", `/ja${path}`)).toBe(path)
+      expect(localized(path)).toBe(false)
+    }
+    expect(route("ar", "/v2/docs?x=1#y")).toBe("/v2/docs?x=1#y")
+    expect(localized("/v2docs")).toBe(true)
+    expect(localized("/data")).toBe(true)
   })
 })
 
