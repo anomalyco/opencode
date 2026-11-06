@@ -12,7 +12,7 @@ test("every page route is a boundary with its own slice", () => {
     .map((file) => path.join(src, file))
     .filter((file) => readFileSync(file, "utf8").includes("export default"))
   expect(routes.length).toBeGreaterThan(10)
-  expect(routes.filter((file) => !result.boundaries[file])).toEqual([])
+  expect(routes.filter((file) => !result.boundaries[file.replaceAll("\\", "/")])).toEqual([])
 })
 
 test("every locale has a value for every key its slices name", () => {
@@ -43,6 +43,7 @@ test("English slices carry no page copy, and the English for the copy source is 
 // shapes it can't see must not appear: i18n.translated() with anything but one key literal, and a key
 // built from a template that doesn't start with its literal prefix.
 const sources = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(src)]
+  .map((file) => file.replaceAll("\\", "/"))
   .filter((file) => !file.startsWith("i18n/") && !file.startsWith("context/"))
   .map((file) => ({ file, text: readFileSync(path.join(src, file), "utf8") }))
 

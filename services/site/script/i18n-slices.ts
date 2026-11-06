@@ -68,7 +68,8 @@ function scan(file: string): Module {
   const module: Module = { file, imports: [], dynamic: [], keys: new Set(), areas: new Set() }
   modules.set(file, module)
   // The dictionaries and page copy define the strings; they never show one by themselves.
-  if (/src\/i18n\/(content\/)?[a-z]+\.ts$/.test(file) && !/src\/i18n\/(content\/)?(index|rich|source|paths|english|tables)\.ts$/.test(file))
+  const posix = file.replaceAll("\\", "/")
+  if (/src\/i18n\/(content\/)?[a-z]+\.ts$/.test(posix) && !/src\/i18n\/(content\/)?(index|rich|source|paths|english|tables)\.ts$/.test(posix))
     return module
   const text = readFileSync(file, "utf8")
   const code = file.endsWith(".json") ? text : transpiler.transformSync(text)
