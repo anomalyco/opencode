@@ -1,4 +1,5 @@
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { announcementsSource } from "~/i18n/content/areas/announcements"
 import { useI18n } from "~/context/i18n"
 import "./site-banner.css"
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
@@ -47,13 +48,13 @@ export const bannerThemeColorScript = `(()=>{const a=document.currentScript.pare
 export function SiteBanner() {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const announcementText = useArea("announcements", announcementsSource)
   const item = () => announcements.find((entry) => announcementCopy(entry) === message())
   // The chosen announcement in this locale; a custom Design mode message stays as typed.
   const parts = () => {
     const index = announcements.findIndex((entry) => announcementCopy(entry) === message())
     if (index < 0) return { text: message(), link: "" }
-    return content().announcements[index]
+    return announcementText()[index]
   }
   const shown = () => [parts().text, parts().link].filter(Boolean).join(" ")
   let banner: HTMLDivElement | undefined

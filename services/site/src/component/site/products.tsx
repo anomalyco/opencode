@@ -17,7 +17,8 @@ import { useNavigate, type Navigator } from "@solidjs/router"
 import { Link } from "@solidjs/meta"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { extensionCardSource, productsSource } from "~/i18n/content/areas/products"
 import type { DownloadPlatform } from "~/routes/download/types"
 import {
   desktopBuilds,
@@ -213,7 +214,7 @@ function shrink(slug: PageSlug, page: CardPage, saved: Scroll | undefined, go: (
  * place at the same size (products.css); no script decides any of it.
  */
 export function ProductCarouselSkeleton() {
-  const content = useContent()
+  const productCopy = useArea("products", productsSource)
   return (
     <div data-component="products-skeleton" data-phone-content={siteSettings.phoneCardContent} aria-hidden="true">
       <div data-slot="track">
@@ -222,10 +223,10 @@ export function ProductCarouselSkeleton() {
             <div data-component="product-card">
               <div data-slot="media" />
               <h3>
-                <span>{content().products[product.slug].name}</span>
+                <span>{productCopy()[product.slug].name}</span>
               </h3>
               <p>
-                <span>{designCopy(`card.${product.slug}.body`, content().products[product.slug].body)}</span>
+                <span>{designCopy(`card.${product.slug}.body`, productCopy()[product.slug].body)}</span>
               </p>
               <span data-slot="button" />
             </div>
@@ -239,7 +240,8 @@ export function ProductCarouselSkeleton() {
 export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Element }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const content = useContent()
+  const extensionCardCopy = useArea("extensionCard", extensionCardSource)
+  const productCopy = useArea("products", productsSource)
   const navigate = useNavigate()
   let track: HTMLDivElement | undefined
 
@@ -312,8 +314,8 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
                 data-product={product.slug}
                 aria-label={
                   "isNew" in product && product.isNew && siteSettings.productBadges === "show"
-                    ? `${content().products[product.slug].name}, ${i18n.t("home.banner.badge")}`
-                    : content().products[product.slug].name
+                    ? `${productCopy()[product.slug].name}, ${i18n.t("home.banner.badge")}`
+                    : productCopy()[product.slug].name
                 }
                 onClick={(event) => grow(event, navigate, track?.getBoundingClientRect())}
                 onPointerEnter={() => heroPoster(product.slug)}
@@ -339,10 +341,10 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
                 </Show>
               </a>
               <h3>
-                <a href={language.route(`/${product.slug}`)}>{content().products[product.slug].name}</a>
+                <a href={language.route(`/${product.slug}`)}>{productCopy()[product.slug].name}</a>
               </h3>
               <p data-design-copy={`card.${product.slug}.body`}>
-                {designCopy(`card.${product.slug}.body`, content().products[product.slug].body)}
+                {designCopy(`card.${product.slug}.body`, productCopy()[product.slug].body)}
               </p>
               <ProductAction slug={product.slug} split />
             </article>
@@ -354,19 +356,19 @@ export function ProductCarousel(props: { exclude?: ProductSlug; header?: JSX.Ele
               href={extensions.href}
               target="_blank"
               data-slot="media"
-              aria-label={i18n.t("site.newTab", { label: content().extensionCard.name })}
+              aria-label={i18n.t("site.newTab", { label: extensionCardCopy().name })}
             />
             <h3>
               <a href={extensions.href} target="_blank">
-                {content().extensionCard.name}
+                {extensionCardCopy().name}
                 <NewTab />
               </a>
             </h3>
             <p data-design-copy="card.extensions.body">
-              {designCopy("card.extensions.body", content().extensionCard.body)}
+              {designCopy("card.extensions.body", extensionCardCopy().body)}
             </p>
             <a href={extensions.href} target="_blank" data-component="site-button">
-              {content().extensionCard.action}
+              {extensionCardCopy().action}
               <NewTab />
             </a>
           </article>
@@ -446,7 +448,7 @@ const cardCopy = (slug: PageSlug) => `card.${slug}.body` as const
 export function ProductGrid() {
   const i18n = useI18n()
   const language = useLanguage()
-  const content = useContent()
+  const productCopy = useArea("products", productsSource)
   const navigate = useNavigate()
   onMount(() => trackScroll("/product"))
 
@@ -473,8 +475,8 @@ export function ProductGrid() {
                 data-product={product.slug}
                 aria-label={
                   "isNew" in product && product.isNew && siteSettings.productBadges === "show"
-                    ? `${content().products[product.slug].name}, ${i18n.t("home.banner.badge")}`
-                    : content().products[product.slug].name
+                    ? `${productCopy()[product.slug].name}, ${i18n.t("home.banner.badge")}`
+                    : productCopy()[product.slug].name
                 }
                 data-empty={pageMedia(siteSettings.productVideos, product.slug, "portrait") ? undefined : ""}
                 onClick={(event) => grow(event, navigate)}
@@ -517,10 +519,10 @@ export function ProductGrid() {
                 </Show>
               </a>
               <h3>
-                <a href={language.route(`/${product.slug}`)}>{content().products[product.slug].name}</a>
+                <a href={language.route(`/${product.slug}`)}>{productCopy()[product.slug].name}</a>
               </h3>
               <p data-design-copy={cardCopy(product.slug)}>
-                {designCopy(cardCopy(product.slug), content().products[product.slug].body)}
+                {designCopy(cardCopy(product.slug), productCopy()[product.slug].body)}
               </p>
               <ProductAction slug={product.slug} split />
             </article>
@@ -924,7 +926,8 @@ export function useDevicePlatform() {
 export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: boolean }) {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const extensionCardCopy = useArea("extensionCard", extensionCardSource)
+  const productCopy = useArea("products", productsSource)
   // The server and hydration read the same platform (requestPlatform), so the button renders
   // "Download for macOS" at its final width instead of growing after load.
   const platform = useDevicePlatform()
@@ -1254,13 +1257,13 @@ export function ProductAction(props: { slug: PageSlug; split?: boolean; both?: b
         </Match>
         <Match when={props.slug === "sdk"}>
           <a href={language.route(sdkDocs)} data-component="site-button">
-            {content().products.sdk.action}
+            {productCopy().sdk.action}
           </a>
         </Match>
         {/* The VS Code extension; ACP editors are on its page. */}
         <Match when={props.slug === "ide"}>
           <a href={extensions.href} target="_blank" rel="noopener" data-component="site-button">
-            {content().extensionCard.action}
+            {extensionCardCopy().action}
             <NewTab />
           </a>
         </Match>

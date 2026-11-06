@@ -13,7 +13,9 @@
 import path from "node:path"
 import { dict as en } from "~/i18n/en"
 import { LOCALES, type Locale } from "~/lib/language"
-import { itemIds, keyedList, source, structural, structuralPaths, structuralStrings } from "~/i18n/content/source"
+import { interpolate } from "~/i18n"
+import { contentSource } from "~/i18n/content/source"
+import { itemIds, keyedList, structural, structuralPaths, structuralStrings } from "~/i18n/content/paths"
 
 type Report = {
   locale: Locale
@@ -40,7 +42,7 @@ export async function checkLocale(locale: Exclude<Locale, "en">): Promise<Report
     .forEach((key) => report.errors.push(`${key}: not in the English dictionary`))
   const entries = [
     ...Object.keys(english).map((key) => ({ id: key, english: english[key], value: dict[key] })),
-    ...contentEntries(source, content, "", report.unused).map((entry) => ({ ...entry, id: `content:${entry.id}` })),
+    ...contentEntries(contentSource((key, params) => interpolate(english[key], params)), content, "", report.unused).map((entry) => ({ ...entry, id: `content:${entry.id}` })),
   ]
   for (const entry of entries) {
     const hash = Bun.hash(entry.english).toString(36)

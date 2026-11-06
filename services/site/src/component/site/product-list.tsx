@@ -1,7 +1,8 @@
 import "./product-list.css"
 import { For, Show, type JSX } from "solid-js"
 import { useI18n } from "~/context/i18n"
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { appsSource } from "~/i18n/content/areas/apps"
 import { ExternalArrow, HexMark, NewTab, OpenTUIMark, OpenTunnelMark } from "./icons"
 import { anomalyProducts } from "./links"
 import { SectionHeading } from "./on-this-page"
@@ -89,7 +90,7 @@ export function ProductList(props: { items: readonly ProductListItem[] }) {
  */
 export function MoreFromAnomaly(props: { slot: string }) {
   const i18n = useI18n()
-  const content = useContent()
+  const appCopy = useArea("apps", appsSource)
   return (
     <section data-component="block" data-slot={props.slot}>
       <SectionHeading id="more-from-anomaly" title={i18n.t("site.moreFromAnomaly")} label />
@@ -97,7 +98,7 @@ export function MoreFromAnomaly(props: { slot: string }) {
         <ProductList
           items={anomalyProducts.map((app) => ({
             name: app.name,
-            description: content().apps[app.id].body,
+            description: appCopy()[app.id].body,
             href: app.href,
             external: true,
             icon: anomalyMarks[app.id](),

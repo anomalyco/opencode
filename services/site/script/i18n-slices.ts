@@ -18,15 +18,28 @@
 import path from "node:path"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { dict as en } from "../src/i18n/en"
+import { english as englishSource } from "../src/i18n/english"
 import { LOCALES, type Locale } from "../src/lib/language"
-import { contentSource, source } from "../src/i18n/content/source"
-import type { Key } from "../src/i18n"
 
 const root = path.resolve(import.meta.dir, "..")
 const src = path.join(root, "src")
 const english = en as Record<string, string>
 const keys = Object.keys(english)
-const areas = Object.keys(source)
+
+// src/i18n/english.ts in the browser: the English that client modules read from it. The page copy's
+// English sources (content/areas) read it as they load, so record those reads while loading them.
+const recorded = new Set<string>()
+let recording = true
+for (const key of keys) {
+  const value = english[key]
+  Object.defineProperty(englishSource, key, { enumerable: true, get: () => (recording && recorded.add(key), value) })
+}
+const { contentSource } = await import("../src/i18n/content/source")
+await Promise.all(
+  [...new Bun.Glob("i18n/content/areas/*.ts").scanSync(src)].map((file) => import(path.join(src, file))),
+)
+recording = false
+const areas = Object.keys(contentSource((key) => english[key]))
 // As the client build sees the code: development-only and server-only branches dropped.
 const transpiler = new Bun.Transpiler({
   loader: "tsx",
@@ -55,7 +68,7 @@ function scan(file: string): Module {
   const module: Module = { file, imports: [], dynamic: [], keys: new Set(), areas: new Set() }
   modules.set(file, module)
   // The dictionaries and page copy define the strings; they never show one by themselves.
-  if (/src\/i18n\/(content\/)?[a-z]+\.ts$/.test(file) && !/src\/i18n\/(content\/)?(index|rich|source|english|tables)\.ts$/.test(file))
+  if (/src\/i18n\/(content\/)?[a-z]+\.ts$/.test(file) && !/src\/i18n\/(content\/)?(index|rich|source|paths|english|tables)\.ts$/.test(file))
     return module
   const text = readFileSync(file, "utf8")
   const code = file.endsWith(".json") ? text : transpiler.transformSync(text)
@@ -138,10 +151,8 @@ const shared = Object.fromEntries(
   Object.keys(slices).map((id) => [id, Object.keys(slices).find((other) => signature(other) === signature(id))!]),
 )
 
-// src/i18n/english.ts: the English the page copy's source reads (content/source.ts, recorded by
-// running it) plus every key named by a module that imports english.ts itself.
-const recorded = new Set<string>()
-contentSource((key: Key) => (recorded.add(key), english[key]))
+// Plus every key named by a module that imports english.ts itself (product-markdown.ts reads it in a
+// function, so loading it records nothing).
 const englishFile = path.join(src, "i18n/english.ts")
 ;[...client].filter((file) => scan(file).imports.includes(englishFile)).forEach((file) => scan(file).keys.forEach((key) => recorded.add(key)))
 

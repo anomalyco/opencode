@@ -2,45 +2,35 @@ import { createMemo } from "solid-js"
 import { useLanguage } from "~/context/language"
 import type { Locale } from "~/lib/language"
 import { contentArea } from "~/i18n"
-import { itemIds, keyedList, source, structuralPaths, type Content, type Overlay } from "./source"
+import type { Content } from "./source"
+import { itemIds, keyedList, structuralPaths, type Overlay } from "./paths"
 
 export type { Content, ContentOverlay } from "./source"
 export { loadLanguage, loadSlice } from "~/i18n"
 
 // Each language's page copy loads with its dictionary (i18n/index.ts), by area (products, brand, …),
-// and is merged over the English source here, one area at a time as the page reads it.
-const pages = new Map<Locale, Content>()
-const areas = new Map<string, { overlay: unknown; merged: unknown }>()
-
-/** The structured page copy in `locale`, with English wherever the locale's file has no translation. */
-export function siteContent(locale: Locale): Content {
-  if (locale === "en") return source
-  const known = pages.get(locale)
-  if (known) return known
-  const page = Object.defineProperties(
-    {},
-    Object.fromEntries(
-      Object.keys(source).map((area) => [area, { enumerable: true, get: () => mergedArea(locale, area as keyof Content) }]),
-    ),
-  ) as Content
-  pages.set(locale, page)
-  return page
-}
-
-function mergedArea<K extends keyof Content>(locale: Exclude<Locale, "en">, area: K): Content[K] {
-  const overlay = contentArea(locale, area)
-  const key = `${locale} ${area}`
-  const known = areas.get(key)
-  if (known && known.overlay === overlay) return known.merged as Content[K]
-  const merged = merge(source[area], overlay as Overlay<Content[K]> | undefined, area)
-  areas.set(key, { overlay, merged })
-  return merged
-}
+// and is merged here over the English the page passes in: a page's own build of an area (with its
+// localized links), or the English source of one (content/areas, through useArea).
+const merged = new WeakMap<object, Map<Locale, { overlay: unknown; value: unknown }>>()
 
 /** One area's copy built with the page's own localized links, with the locale's translations over it. */
 export function localize<K extends keyof Content>(locale: Locale, key: K, base: Content[K]): Content[K] {
   if (locale === "en") return base
-  return merge(base, contentArea(locale, key) as Overlay<Content[K]> | undefined, key)
+  const overlay = contentArea(locale, key)
+  // The same English and translation give the same objects, so lists keyed by them stay put.
+  const byLocale = merged.get(base) ?? new Map<Locale, { overlay: unknown; value: unknown }>()
+  merged.set(base, byLocale)
+  const known = byLocale.get(locale)
+  if (known && known.overlay === overlay) return known.value as Content[K]
+  const value = merge(base, overlay as Overlay<Content[K]> | undefined, key)
+  byLocale.set(locale, { overlay, value })
+  return value
+}
+
+/** An area of page copy in the current locale, inside a component: its English source with the locale's translations over it. */
+export function useArea<K extends keyof Content>(key: K, english: Content[K]) {
+  const language = useLanguage()
+  return createMemo(() => localize(language.locale(), key, english))
 }
 
 /**
@@ -54,12 +44,6 @@ export function englishText(localized: unknown, english: unknown, out = new Map<
     englishText(value, (english as Record<string, unknown>)[key], out),
   )
   return out
-}
-
-/** `siteContent` for the current locale, inside a component. */
-export function useContent() {
-  const language = useLanguage()
-  return createMemo(() => siteContent(language.locale()))
 }
 
 function merge<T>(base: T, overlay: Overlay<T> | undefined, path = ""): T {
