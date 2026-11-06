@@ -45,7 +45,7 @@ jobs:
 
   release:
     name: Publish preview release
-    if: github.ref == 'refs/heads/v2-custom'
+    if: github.ref == 'refs/heads/v2-custom' || github.ref == 'refs/heads/v2-custom-next'
     needs: build
     runs-on: ubuntu-latest
     permissions:
