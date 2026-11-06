@@ -206,8 +206,15 @@ export const OpencodePlugin = define<
     let librarySkills: { owner: string; items: LibrarySkill[] } = { owner: "", items: [] }
     const owner = (from: typeof snapshot) =>
       `${IntegrationConnection.key(from.connection) ?? ""}:${from.organization ?? ""}`
-    // A newer config's skill download replaces one still in flight.
     const skillDownload = yield* FiberHandle.make<void, never>()
+    // The skills the current config lists, whether every one of them loaded at its listed version, and the ones that
+    // failed here, which the next attempt downloads again.
+    let listedSkills: {
+      from: typeof snapshot
+      items: ReadonlyArray<{ readonly slug: string; readonly version: string }>
+    } = { from: snapshot, items: [] }
+    let synced = true
+    const retry = new Set<string>()
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
@@ -306,28 +313,44 @@ export const OpencodePlugin = define<
           new InstructionDiscovery.File({ path: `OpenCode Console instruction ${item.id}`, content: item.content }),
       )
       if (!allowed) librarySkills = { owner: "", items: [] }
-      // Skills download in the background, so startup and config changes never wait on them. The current ones stay
-      // until the download replaces them.
-      return FiberHandle.run(
-        skillDownload,
-        loadSkills(next.connection, library?.skills ?? []).pipe(
-          Effect.flatMap((loaded) => {
-            // A failed load keeps the skills already shown.
-            if (!loaded) return Effect.void
-            librarySkills = { owner: owner(next), items: loaded }
-            return skills.reload()
-          }),
-        ),
-      )
+      listedSkills = { from: next, items: library?.skills ?? [] }
+      return syncSkills(true)
     }
+    // Skills download in the background, so startup and config changes never wait on them. The current ones stay
+    // until a download replaces them. A config change replaces a sync in flight; the minute check only starts one when
+    // a listed skill is missing or out of date, so a failed download retries even when the config is unchanged.
+    const syncSkills = (replace: boolean) =>
+      FiberHandle.run(
+        skillDownload,
+        Effect.suspend(() => {
+          const listed = listedSkills
+          return loadSkills(listed.from.connection, listed.items).pipe(
+            Effect.flatMap((loaded) => {
+              synced = loaded?.complete ?? false
+              // A failed load keeps the skills already shown.
+              if (!loaded) return Effect.void
+              const current = librarySkills
+              if (
+                current.owner === owner(listed.from) &&
+                current.items.length === loaded.items.length &&
+                current.items.every((item, index) => item === loaded.items[index])
+              )
+                return Effect.void
+              librarySkills = { owner: owner(listed.from), items: loaded.items }
+              return skills.reload()
+            }),
+          )
+        }),
+        { onlyIfMissing: !replace },
+      )
     const loadSkills = Effect.fnUntraced(
       function* (
         connection: ActiveConnection,
         listed: ReadonlyArray<{ readonly slug: string; readonly version: string }>,
       ) {
-        if (listed.length === 0 || !connection) return []
+        if (listed.length === 0 || !connection) return { items: [], complete: true }
         const credential = yield* ctx.integration.connection.resolve(connection)
-        if (!credential || credential.type === "external") return []
+        if (!credential || credential.type === "external") return { items: [], complete: true }
         const server = yield* normalizeServer(ConsoleAccess.server(credential))
         const workspace = workspaceKey(connection, credential)
         const loaded = yield* Effect.forEach(
@@ -340,14 +363,26 @@ export const OpencodePlugin = define<
                 Effect.map((skill) => ({ version: item.version, skill })),
               ),
             }
-            // Every project shares one download per skill. Any other version, or a failure, downloads again; a failed
-            // download keeps the last copy that loaded.
-            return cache.get(input).pipe(
-              Effect.filterOrFail((cached) => cached.version === item.version),
-              Effect.catch(() => cache.get({ ...input, force: true })),
-              Effect.map((cached) => cached.skill),
+            // Every project shares one download per skill, and a failed download keeps the last copy that loaded. A
+            // skill that failed here last time is forced, since the cache would otherwise return the same failure.
+            const id = `${item.slug}@${item.version}`
+            const shared = retry.has(id)
+              ? cache.get({ ...input, force: true })
+              : cache
+                  .get(input)
+                  .pipe(
+                    Effect.flatMap((cached) =>
+                      cached.version === item.version ? Effect.succeed(cached) : cache.get({ ...input, force: true }),
+                    ),
+                  )
+            return shared.pipe(
+              Effect.tap((cached) =>
+                Effect.sync(() => (cached.version === item.version ? retry.delete(id) : retry.add(id))),
+              ),
+              Effect.map((cached) => ({ skill: cached.skill, current: cached.version === item.version })),
               Effect.catch((cause) =>
                 Effect.logWarning("failed to load Console skill", { slug: item.slug, cause }).pipe(
+                  Effect.andThen(Effect.sync(() => retry.add(id))),
                   Effect.as(undefined),
                 ),
               ),
@@ -355,7 +390,10 @@ export const OpencodePlugin = define<
           },
           { concurrency: 8 },
         )
-        return loaded.filter((item) => item !== undefined)
+        return {
+          items: loaded.flatMap((item) => (item ? [item.skill] : [])),
+          complete: loaded.every((item) => item?.current),
+        }
       },
       Effect.catch((cause) => Effect.logWarning("failed to load Console skills", { cause }).pipe(Effect.as(undefined))),
     )
@@ -469,7 +507,8 @@ export const OpencodePlugin = define<
       loading.withPermit(
         Effect.gen(function* () {
           const next = yield* load(maxAge)
-          if (!Equal.equals(snapshot, next)) yield* apply(next)
+          if (!Equal.equals(snapshot, next)) return yield* apply(next)
+          if (!synced) yield* syncSkills(false)
         }),
       )
 
