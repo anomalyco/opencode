@@ -120,8 +120,15 @@ pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
         let (Some(inner), Some(tui)) = (weak.upgrade(), owner.upgrade()) else {
             return;
         };
-        if size.replace(cx.app().size()) != cx.app().size() {
-            inner.layout(&tui);
+        if size.replace(cx.app().size()) == cx.app().size() {
+            return;
+        }
+        inner.layout(&tui);
+        // The footer's card follows the terminal height.
+        if inner.placed.get() != Place::Hidden
+            && let Some(footer) = inner.slots.borrow().last()
+        {
+            footer.sync(&tui, &Changes::everything());
         }
     });
     tui.settings.on_change(bind!(inner, |inner, tui| inner.layout(tui)));

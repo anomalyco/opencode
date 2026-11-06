@@ -28,6 +28,7 @@ mod plugins;
 mod prompt;
 mod queue;
 mod reconnect;
+mod resize;
 mod review_ms1;
 mod review_ms34;
 mod root;
