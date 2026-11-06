@@ -7,7 +7,7 @@ import { bindings, defineConfig, triggers } from "cf/config"
 //
 // Production takes no routes until the go-live flips this switch (the `production` branch is shared
 // with every other service, so an unrelated push must not take the domain).
-const productionOwnsRoot = false
+const productionOwnsRoot = true
 // Until then, production's /v2* can move to this Worker on its own: flip this once the route has
 // been moved over from the old docs Worker (opencode-www-production), so deploys keep it.
 const productionOwnsDocs = false
