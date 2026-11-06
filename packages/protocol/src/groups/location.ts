@@ -11,20 +11,22 @@ export const LocationQuery = Schema.Struct({
   ),
 }).annotate({ identifier: "LocationQuery" })
 
-export const locationQueryOpenApi = OpenApi.annotations({
-  transform: (operation) => {
-    const parameters = operation.parameters
-    if (!Array.isArray(parameters)) return operation
-    return {
-      ...operation,
-      parameters: parameters.map((parameter) =>
-        parameter?.name === "location" && parameter?.in === "query"
-          ? { ...parameter, style: "deepObject", explode: true }
-          : parameter,
-      ),
-    }
-  },
-})
+// Endpoint annotations replace an earlier `transform` instead of composing it, so endpoints that also transform their
+// operation call this directly inside their own transform.
+export const applyLocationQueryOpenApi = (operation: Record<string, unknown>) => {
+  const parameters = operation.parameters
+  if (!Array.isArray(parameters)) return operation
+  return {
+    ...operation,
+    parameters: parameters.map((parameter) =>
+      parameter?.name === "location" && parameter?.in === "query"
+        ? { ...parameter, style: "deepObject", explode: true }
+        : parameter,
+    ),
+  }
+}
+
+export const locationQueryOpenApi = OpenApi.annotations({ transform: applyLocationQueryOpenApi })
 
 // Middleware is applied per endpoint: reload acts on every loaded location and
 // must not boot the caller's location first.

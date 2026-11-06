@@ -4,7 +4,7 @@ import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
-import { LocationQuery, locationQueryOpenApi } from "./location.js"
+import { applyLocationQueryOpenApi, LocationQuery, locationQueryOpenApi } from "./location.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER } from "./pty.js"
 
 export const MCP_CLIENT_PATH = "/api/experimental/client-mcp"
@@ -140,16 +140,14 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
         query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
         success: Schema.Boolean,
         error: [ForbiddenError, LocationNotFoundError],
-      })
-        .annotateMerge(locationQueryOpenApi)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "experimental.mcp.client",
-            summary: "Attach client MCP server",
-            description:
-              "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
-            transform: (operation) => ({ ...operation, "x-websocket": true }),
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.mcp.client",
+          summary: "Attach client MCP server",
+          description:
+            "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
+          transform: (operation) => ({ ...applyLocationQueryOpenApi(operation), "x-websocket": true }),
+        }),
+      ),
     )
     .annotateMerge(OpenApi.annotations({ title: "mcp", description: "MCP server and resource routes." }))
