@@ -3,7 +3,7 @@
 // refuses that too, which shows the failure toast and the list again.
 import { defineApp } from "../../lib/app"
 
-// The TS placeholder picks a random example; the Rust home prompt draws none yet (T17-home-prompt).
+// The home placeholder picks a random example.
 const placeholder = [{ x: 16, y: 16, width: 74, height: 1, reason: "random placeholder example" }]
 
 const refused = {
@@ -41,12 +41,7 @@ export default defineApp({
     { keys: ["enter"] },
     { checkpoint: "list", until: "opencode-spike" },
     { keys: ["down", "ctrl+d", "ctrl+d"] },
-    // Beside the dialog, the placeholder shows its first word.
-    {
-      checkpoint: "changes",
-      until: "old.txt",
-      masks: [{ ...placeholder[0], width: 3, reason: "not drawn yet in Rust (T17-home-prompt)" }],
-    },
+    { checkpoint: "changes", until: "old.txt" },
     { keys: ["d"] },
     { checkpoint: "failed", until: "Failed to delete worktree" },
   ],

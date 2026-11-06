@@ -9,7 +9,7 @@ const masks = [
     y: 16,
     width: 84,
     height: 1,
-    reason: "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)",
+    reason: "the placeholder example: random in TS and Rust",
   },
 ]
 

@@ -29,7 +29,7 @@
           "y": 16,
           "width": 84,
           "height": 1,
-          "reason": "the placeholder: random in TS, not drawn yet in Rust (T17-home-prompt)"
+          "reason": "the placeholder example: random in TS and Rust"
         }
       ],
       "fixture": "E.20/toggles/home"
@@ -47,15 +47,6 @@
     {
       "checkpoint": "settings",
       "until": "Search settings",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.20/toggles/settings"
     },
     {
@@ -64,15 +55,6 @@
     {
       "checkpoint": "animations",
       "until": "Animations",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.20/toggles/animations"
     },
     {
@@ -95,15 +77,6 @@
     {
       "checkpoint": "wrapping",
       "until": "Wrapping",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.20/toggles/wrapping"
     },
     {
@@ -125,15 +98,6 @@
     {
       "checkpoint": "editor",
       "until": "Editor context",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.20/toggles/editor"
     },
     {
@@ -160,15 +124,6 @@
     {
       "checkpoint": "pastes",
       "until": "Large pastes",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.20/toggles/pastes"
     },
     {
@@ -193,15 +148,6 @@
     {
       "checkpoint": "title",
       "until": "Window title",
-      "masks": [
-        {
-          "x": 16,
-          "y": 16,
-          "width": 3,
-          "height": 1,
-          "reason": "the placeholder's first word: random in TS, not drawn yet in Rust (T17-home-prompt)"
-        }
-      ],
       "fixture": "E.20/toggles/title"
     }
   ],

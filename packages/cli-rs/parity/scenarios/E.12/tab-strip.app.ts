@@ -11,9 +11,9 @@ const select = (id: string, sessionID: string) => ({
 const messages = (text: string) => ({
   json: { data: [assistant("msg_2", text), user("msg_1", "Why?")], cursor: {} },
 })
-// The home prompt draws no placeholder (T17).
+// The home placeholder's example is random.
 const home = [
-  { x: 16, y: 17, width: 72, height: 1, reason: "the home placeholder: random in TS, not drawn in Rust (T17-home-prompt)" },
+  { x: 16, y: 17, width: 72, height: 1, reason: "the home placeholder example: random in TS and Rust" },
 ]
 // Read by the prompt as soon as the session is the open one: idle at 5, never viewed.
 const unread = { ...session("ses_b", "Write the docs", { updated: 2 }), time: { created: 2, updated: 5, idle: 5 } }

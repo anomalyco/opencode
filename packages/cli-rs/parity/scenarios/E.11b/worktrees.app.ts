@@ -3,7 +3,7 @@
 // for the first submit, which the footer shows as "(new worktree)".
 import { defineApp } from "../../lib/app"
 
-// The TS placeholder picks a random example; the Rust home prompt draws none yet (T17-home-prompt).
+// The home placeholder picks a random example.
 const placeholder = [{ x: 16, y: 16, width: 74, height: 1, reason: "random placeholder example" }]
 
 export default defineApp({
@@ -25,12 +25,7 @@ export default defineApp({
     { keys: ["down", "ctrl+d"] },
     { checkpoint: "marked", until: "again to confirm" },
     { keys: ["down", "ctrl+a"] },
-    // Beside the dialog, the placeholder shows its first word.
-    {
-      checkpoint: "name",
-      until: "Name worktree",
-      masks: [{ ...placeholder[0], width: 3, reason: "not drawn yet in Rust (T17-home-prompt)" }],
-    },
+    { checkpoint: "name", until: "Name worktree" },
     { type: "My Spike" },
     { keys: ["enter"] },
     { checkpoint: "staged", until: "(new worktree)", masks: placeholder },
