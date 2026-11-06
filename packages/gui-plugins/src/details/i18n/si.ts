@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "ප්ලගින වින්‍යාස කර නැත",
   skills: "කුසලතා",
   "skills.empty": "කුසලතා වින්‍යාස කර නැත",
-  lsp: "LSP",
-  "lsp.empty": "LSP සේවාදායක වින්‍යාස කර නැත",
   failed: "අසාර්ථකයි",
   retry: "නැවත උත්සාහ කරන්න",
   connecting: "සම්බන්ධ වෙමින්...",

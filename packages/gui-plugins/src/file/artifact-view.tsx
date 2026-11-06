@@ -23,44 +23,55 @@ import { Loader } from "@opencode/ui/loader"
 import { showToast } from "@opencode/ui/toast"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
-import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
+import { artifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
-import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import {
+  blobUrlFromContent,
+  bytesFromContent,
+  contentBytes,
+  parseDelimited,
+  resolveArtifactPath,
+  splitFrontmatter,
+  type FrontmatterProperty,
+} from "./artifact"
 import { FileViewer } from "@opencode/plugin/gui/file"
+import { uuid } from "@opencode/util/uuid"
 import { ArtifactToolbar } from "./artifact-toolbar"
+import {
+  createArtifactViewerState,
+  createVideoOverlayState,
+  INITIAL_IMAGE_STAGE_GESTURE_STATE,
+  selectArtifactInfo,
+  selectArtifactMode,
+  selectArtifactPreviewable,
+  selectArtifactReason,
+  selectArtifactShowingPreview,
+  selectArtifactStageKind,
+  selectStageClickSuppressed,
+  selectStageCursor,
+  selectStagePanMoved,
+  selectStagePanPointer,
+  selectVideoControlsVisible,
+  selectVideoLoading,
+  STAGE_DRAG_THRESHOLD_PX,
+  transitionArtifactViewer,
+  transitionImageStageGesture,
+  transitionVideoOverlay,
+  type ArtifactInfo,
+  type ArtifactViewerEvent,
+  type ImageStageGestureEvent,
+  type VideoOverlayEvent,
+} from "./artifact-view-machine"
 
-type ArtifactMode = "preview" | "source"
-
-/** Facts a viewer learns from the decoded media, shown in the toolbar. */
-type ArtifactInfo = {
-  width?: number
-  height?: number
-  duration?: number
-  rows?: number
-  columns?: number
-  /** Facts a plugin's viewer reports, already localized. */
-  details?: readonly string[]
-}
-
-type ViewerState = {
-  readonly mode: ArtifactMode
-  readonly info: ArtifactInfo
-  readonly undecodable: boolean
-  /** Why the file shows as binary, when a viewer said. */
-  readonly reason?: string
-}
-
+/** Results name the content they came from, so one from a file since reread changes nothing. */
 type MediaProps = {
   path: string
   content: FileContent
-  onInfo: (info: ArtifactInfo) => void
+  onInfo: (content: FileContent, info: ArtifactInfo) => void
   /** The browser could not decode the bytes; the host falls back to the binary placeholder. */
-  onError: () => void
+  onError: (content: FileContent) => void
 }
-
-/** Kinds that render a preview from their text and can toggle back to highlighted source. */
-const previewableKinds: readonly ArtifactKind[] = ["svg", "html", "markdown", "mermaid", "table"]
 
 /**
  * Renders a loaded non-text file: media, documents, and data get a dedicated viewer with a toolbar;
@@ -76,32 +87,20 @@ export default function ArtifactView(props: {
 }) {
   const ctx = usePlugin()
   const locale = ctx.locale
-  // Media the browser could not decode falls back to the binary placeholder.
-  const initial: ViewerState = { mode: "preview", info: {}, undecodable: false }
-  // The viewer state belongs to one loaded content: a reloaded file starts from the preview again.
-  const [saved, setSaved] = createSignal({ ...initial, content: props.content })
+  // The viewer state belongs to one loaded content: a reread file starts from the preview again.
+  const [viewerState, setViewerState] = createSignal(createArtifactViewerState(props.content))
 
-  const state = () => {
-    const value = saved()
+  const dispatchViewer = (event: ArtifactViewerEvent) => {
+    const prev = untrack(viewerState)
+    const content = untrack(() => props.content)
+    const next = transitionArtifactViewer(prev, content, event)
 
-    return value.content === props.content ? value : initial
+    if (next !== prev) setViewerState(next)
   }
 
-  const change = (next: Partial<ViewerState>) => setSaved({ ...state(), ...next, content: props.content })
-
-  const kind = createMemo<ArtifactKind | "binary">(() => {
-    if (props.content.type === "binary" && !props.content.mimeType) return "binary"
-
-    if (state().undecodable) return "binary"
-
-    return artifactKind(props.path)
-  })
-
-  const previewable = createMemo(() => {
-    const value = kind()
-
-    return value !== "binary" && previewableKinds.includes(value)
-  })
+  // Media the browser could not decode falls back to the binary placeholder.
+  const kind = createMemo(() => selectArtifactStageKind(viewerState(), props.path, props.content))
+  const previewable = createMemo(() => selectArtifactPreviewable(props.path, props.content))
 
   const table = createMemo(() =>
     kind() === "table"
@@ -111,7 +110,10 @@ export default function ArtifactView(props: {
 
   const meta = createMemo(() => {
     const parsed = table()
-    const info: ArtifactInfo = parsed ? { rows: parsed.total, columns: parsed.columns } : state().info
+
+    const info: ArtifactInfo = parsed
+      ? { rows: parsed.total, columns: parsed.columns }
+      : selectArtifactInfo(viewerState(), props.content)
 
     return [
       info.duration ? formatDuration(info.duration) : undefined,
@@ -123,10 +125,11 @@ export default function ArtifactView(props: {
     ].filter((item): item is string => !!item)
   })
 
-  // A file that fails also drops the facts its viewer reported, such as a page count.
-  const fail = (reason?: string) => change({ undecodable: true, info: {}, reason })
-
-  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => fail(ctx.t("view.loadFailed")) }
+  const media = {
+    onInfo: (content: FileContent, info: ArtifactInfo) => dispatchViewer({ type: "info.reported", content, info }),
+    onError: (content: FileContent) =>
+      dispatchViewer({ type: "decode.failed", content, reason: ctx.t("view.loadFailed") }),
+  }
 
   const size = () => formatBytes(locale.locale(), contentBytes(props.content))
 
@@ -167,18 +170,22 @@ export default function ArtifactView(props: {
         session={props.session}
         screen={props.screen}
         path={props.path}
-        text={
-          props.content.type !== "binary" && previewableKinds.includes(artifactKind(props.path))
-            ? props.content.content
-            : undefined
-        }
-        mode={state().mode}
-        onModeChange={previewable() ? (mode) => change({ mode }) : undefined}
+        text={previewable() ? props.content.content : undefined}
+        mode={selectArtifactMode(viewerState(), props.content)}
+        onModeChange={previewable() ? (mode) => dispatchViewer({ type: "mode.changed", mode }) : undefined}
         meta={meta()}
         html={kind() === "html"}
       />
-      <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
-        <Switch fallback={<ArtifactBinary path={props.path} size={size()} reason={state().reason} />}>
+      <Show when={selectArtifactShowingPreview(viewerState(), props.path, props.content)} fallback={props.source}>
+        <Switch
+          fallback={
+            <ArtifactBinary
+              path={props.path}
+              size={size()}
+              reason={selectArtifactReason(viewerState(), props.content)}
+            />
+          }
+        >
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
           </Match>
@@ -204,8 +211,8 @@ export default function ArtifactView(props: {
                 path={props.path}
                 size={size()}
                 content={props.content}
-                onDetails={(details) => change({ info: { details } })}
-                onError={fail}
+                onDetails={(content, details) => dispatchViewer({ type: "info.reported", content, info: { details } })}
+                onError={(content, reason) => dispatchViewer({ type: "decode.failed", content, reason })}
               />
             )}
           </Match>
@@ -236,16 +243,24 @@ function formatDuration(seconds: number) {
   return `${minutes}:${String(total % 60).padStart(2, "0")}`
 }
 
-function createMediaUrl(content: () => FileContent) {
-  return createMemo(() => {
-    const streamed = content().url
+/**
+ * The URL media loads from, with the content it was made for. A reread that streams from the same URL keeps the
+ * source, so media already showing is not reloaded.
+ */
+function createMediaSource(content: () => FileContent) {
+  return createMemo(
+    () => {
+      const value = content()
 
-    if (streamed) return streamed
-    const value = blobUrlFromContent(content())
-    onCleanup(() => URL.revokeObjectURL(value))
+      if (value.url) return { content: value, src: value.url }
+      const src = blobUrlFromContent(value)
+      onCleanup(() => URL.revokeObjectURL(src))
 
-    return value
-  })
+      return { content: value, src }
+    },
+    undefined,
+    { equals: (prev, next) => prev.src === next.src },
+  )
 }
 
 /** Holds the pane until the media's first frame, so a file still streaming never shows as blank. */
@@ -265,26 +280,25 @@ function MediaLoading() {
 
 /** Images and SVG previews: each decoded image owns its viewport. */
 function ArtifactImage(props: MediaProps) {
-  const url = createMediaUrl(() => props.content)
+  const source = createMediaSource(() => props.content)
 
   return (
-    <Show when={url()} keyed>
-      {(src) => <ImageStage {...props} src={src} />}
+    <Show when={source()} keyed>
+      {(source) => <ImageStage {...props} content={source.content} src={source.src} />}
     </Show>
   )
 }
 
 function ImageStage(props: MediaProps & { src: string }) {
-  const [view, setView] = createStore({
-    width: 0,
-    height: 0,
-    imageWidth: 0,
-    imageHeight: 0,
-    zoom: 1,
-    x: 0,
-    y: 0,
-    dragging: false,
-  })
+  const [view, setView] = createStore({ width: 0, height: 0, imageWidth: 0, imageHeight: 0, zoom: 1 })
+  const [gesture, setGesture] = createSignal(INITIAL_IMAGE_STAGE_GESTURE_STATE)
+  // The pan offsets paint straight to the image, so a pointer move writes no reactive state.
+  let panX = 0
+  let panY = 0
+  // Where the pan's pointer pressed, then where it was on its last move.
+  const origin = { x: 0, y: 0 }
+  let stage: HTMLDivElement | undefined
+  let image: HTMLImageElement | undefined
 
   const fit = () =>
     Math.min(
@@ -296,37 +310,43 @@ function ImageStage(props: MediaProps & { src: string }) {
   const minZoom = () => Math.min(0.25, 1 / fit())
   const maxZoom = () => Math.max(8, 1 / fit())
 
-  const bound = (offset: number, image: number, zoom: number) => {
+  const bound = (offset: number, size: number) => {
     // Keep the fitted footprint covered, including its letterboxing. Clamping to
     // the stage edges instead would move the anchor during small pinch increments.
-    const limit = Math.max(0, (image * fit() * (zoom - 1)) / 2)
+    const limit = Math.max(0, (size * fit() * (view.zoom - 1)) / 2)
 
     return Math.max(-limit, Math.min(limit, offset))
   }
 
-  const x = () => bound(view.x, view.imageWidth, view.zoom)
-  const y = () => bound(view.y, view.imageHeight, view.zoom)
-  const reset = () => setView({ zoom: 1, x: 0, y: 0 })
-
-  const pan = (left: number, top: number) =>
-    setView({ x: bound(left, view.imageWidth, view.zoom), y: bound(top, view.imageHeight, view.zoom) })
-
-  let stage: HTMLDivElement | undefined
-  let drag: { id: number; clientX: number; clientY: number; x: number; y: number } | undefined
-  let dragged = false
-
-  const cursor = () => {
-    if (view.zoom <= 1) return undefined
-
-    return view.dragging ? "grabbing" : "grab"
+  const paint = () => {
+    if (image) image.style.transform = `translate(-50%, -50%) translate(${panX}px, ${panY}px) scale(${view.zoom})`
   }
 
-  const endDrag = (event: PointerEvent) => {
-    if (event.pointerId !== drag?.id) return
-
-    drag = undefined
-    setView("dragging", false)
+  const pan = (left: number, top: number) => {
+    panX = bound(left, view.imageWidth)
+    panY = bound(top, view.imageHeight)
+    paint()
   }
+
+  const dispatchGesture = (event: ImageStageGestureEvent) => {
+    const prev = untrack(gesture)
+    const next = transitionImageStageGesture(prev, event)
+
+    if (next.state !== prev) setGesture(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "pointer.capture") return image?.setPointerCapture(effect.pointerId)
+
+      if (image?.hasPointerCapture(effect.pointerId)) image.releasePointerCapture(effect.pointerId)
+    })
+  }
+
+  const setZoom = (zoom: number, left: number, top: number) => {
+    setView("zoom", zoom)
+    pan(left, top)
+    dispatchGesture({ type: "zoom.changed", zoomed: zoom > 1 })
+  }
+
+  const reset = () => setZoom(1, 0, 0)
 
   const zoomAt = (zoom: number, clientX: number, clientY: number) => {
     if (!stage) return
@@ -335,11 +355,7 @@ function ImageStage(props: MediaProps & { src: string }) {
     const next = Math.max(minZoom(), Math.min(maxZoom(), zoom))
     const ratio = next / view.zoom
     const anchor = { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 }
-    setView({
-      zoom: next,
-      x: bound(anchor.x - (anchor.x - x()) * ratio, view.imageWidth, next),
-      y: bound(anchor.y - (anchor.y - y()) * ratio, view.imageHeight, next),
-    })
+    setZoom(next, anchor.x - (anchor.x - panX) * ratio, anchor.y - (anchor.y - panY) * ratio)
   }
 
   const zoomBy = (factor: number) => {
@@ -349,15 +365,19 @@ function ImageStage(props: MediaProps & { src: string }) {
     zoomAt(view.zoom * factor, rect.left + rect.width / 2, rect.top + rect.height / 2)
   }
 
+  const cancel = (event: PointerEvent) => dispatchGesture({ type: "pointer.cancel", pointerId: event.pointerId })
+
   createResizeObserver(
     () => stage,
     () => {
       if (!stage) return
 
       setView({ width: stage.clientWidth, height: stage.clientHeight })
-      setView({ x: x(), y: y() })
+      pan(panX, panY)
     },
   )
+
+  onCleanup(() => dispatchGesture({ type: "disposed" }))
 
   return (
     <div
@@ -382,10 +402,14 @@ function ImageStage(props: MediaProps & { src: string }) {
         }
 
         // Use the OS's trackpad momentum directly, with no second animation loop.
-        pan(x() - event.deltaX * unit, y() - event.deltaY * unit)
+        pan(panX - event.deltaX * unit, panY - event.deltaY * unit)
       }}
     >
       <img
+        ref={(element) => {
+          image = element
+          paint()
+        }}
         data-slot="artifact-media"
         src={props.src}
         alt={getFilename(props.path)}
@@ -396,40 +420,54 @@ function ImageStage(props: MediaProps & { src: string }) {
           height: view.imageHeight ? `${view.imageHeight * fit()}px` : undefined,
           "max-width": "none",
           "max-height": "none",
-          transform: `translate(-50%, -50%) translate(${x()}px, ${y()}px) scale(${view.zoom})`,
           "touch-action": view.zoom > 1 ? "none" : "auto",
-          cursor: cursor(),
+          cursor: selectStageCursor(gesture(), view.zoom > 1),
         }}
         onPointerDown={(event) => {
-          if (!event.isPrimary || event.button !== 0) return
+          dispatchGesture({
+            type: "pointer.down",
+            pointerId: event.pointerId,
+            button: event.button,
+            primary: event.isPrimary,
+            zoomed: view.zoom > 1,
+          })
 
-          dragged = false
-
-          if (view.zoom <= 1) return
-
-          drag = { id: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: x(), y: y() }
-          event.currentTarget.setPointerCapture(event.pointerId)
-          setView("dragging", true)
+          if (!selectStagePanPointer(gesture(), event.pointerId)) return
+          origin.x = event.clientX
+          origin.y = event.clientY
         }}
         onPointerMove={(event) => {
-          if (!drag || drag.id !== event.pointerId) return
+          const current = gesture()
 
-          const dx = event.clientX - drag.clientX
-          const dy = event.clientY - drag.clientY
+          if (!selectStagePanPointer(current, event.pointerId)) return
 
-          if (!dragged && Math.hypot(dx, dy) < 3) return
+          // The button came up where this element could not hear it.
+          if (event.pointerType === "mouse" && (event.buttons & 1) === 0) return cancel(event)
+          const dx = event.clientX - origin.x
+          const dy = event.clientY - origin.y
 
-          dragged = true
-          pan(drag.x + dx, drag.y + dy)
+          if (dx === 0 && dy === 0) return
+
+          // Only the move that crosses the threshold changes the gesture; the rest dispatch and allocate nothing.
+          if (!selectStagePanMoved(current)) {
+            if (Math.hypot(dx, dy) < STAGE_DRAG_THRESHOLD_PX) return
+
+            dispatchGesture({ type: "pointer.moved", pointerId: event.pointerId })
+          }
+
+          // Each move pans by its own delta, so reversing at a clamp wall moves the image at once.
+          origin.x = event.clientX
+          origin.y = event.clientY
+          pan(panX + dx, panY + dy)
         }}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onLostPointerCapture={endDrag}
-        onError={() => props.onError()}
+        onPointerUp={(event) => dispatchGesture({ type: "pointer.up", pointerId: event.pointerId })}
+        onPointerCancel={cancel}
+        onLostPointerCapture={cancel}
+        onError={() => props.onError(props.content)}
         onLoad={(event) => {
-          const image = event.currentTarget
-          const width = image.naturalWidth || image.width || image.clientWidth || 300
-          const height = image.naturalHeight || image.height || image.clientHeight || 150
+          const element = event.currentTarget
+          const width = element.naturalWidth || element.width || element.clientWidth || 300
+          const height = element.naturalHeight || element.height || element.clientHeight || 150
 
           setView({
             imageWidth: width,
@@ -437,14 +475,15 @@ function ImageStage(props: MediaProps & { src: string }) {
             width: stage?.clientWidth ?? 0,
             height: stage?.clientHeight ?? 0,
           })
-          props.onInfo({ width, height })
+          pan(panX, panY)
+          props.onInfo(props.content, { width, height })
         }}
         onClick={(event) => {
-          if (dragged) {
-            dragged = false
+          // The click that ends a moved pan neither fits nor zooms.
+          const suppressed = selectStageClickSuppressed(gesture())
+          dispatchGesture({ type: "click" })
 
-            return
-          }
+          if (suppressed) return
 
           if (view.zoom !== 1) return reset()
 
@@ -467,43 +506,89 @@ function ImageStage(props: MediaProps & { src: string }) {
 }
 
 function ArtifactVideo(props: MediaProps) {
+  const source = createMediaSource(() => props.content)
+
+  return (
+    <Show when={source()} keyed>
+      {(source) => <VideoStage {...props} content={source.content} src={source.src} />}
+    </Show>
+  )
+}
+
+function VideoStage(props: MediaProps & { src: string }) {
   const ctx = usePlugin()
   const dialog = useDialog()
-  const url = createMediaUrl(() => props.content)
-  const [loadedUrl, setLoadedUrl] = createSignal<string>()
-  const [paused, setPaused] = createSignal(true)
-  const [active, setActive] = createSignal(false)
-  const [open, setOpen] = createSignal(false)
+  const [overlay, setOverlay] = createSignal(createVideoOverlayState())
   const [box, setBox] = createStore({ left: 0, top: 0, ready: false })
 
   let stage: HTMLDivElement | undefined
+  let frame: HTMLDivElement | undefined
   let video: HTMLVideoElement | undefined
   let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let popoverFrame: number | undefined
+  let preview: { attempt: number; id: string; observer: MutationObserver } | undefined
 
-  const clearIdle = () => {
-    if (idleTimer !== undefined) clearTimeout(idleTimer)
-    idleTimer = undefined
+  const dispatch = (event: VideoOverlayEvent) => {
+    const prev = untrack(overlay)
+    const next = transitionVideoOverlay(prev, event)
+
+    if (next.state !== prev) setOverlay(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "idle.schedule") {
+        clearTimeout(idleTimer)
+        idleTimer = setTimeout(() => dispatch({ type: "idle.elapsed", attempt: effect.attempt }), effect.delayMs)
+
+        return
+      }
+
+      if (effect.type === "idle.clear") {
+        clearTimeout(idleTimer)
+        idleTimer = undefined
+
+        return
+      }
+
+      if (effect.type === "preview.open") return open(effect.attempt)
+
+      if (preview?.attempt !== effect.attempt) return
+      preview.observer.disconnect()
+
+      if (effect.type === "preview.close") dialog.close(preview.id)
+      preview = undefined
+    })
   }
-
-  const wake = () => {
-    setActive(true)
-    clearIdle()
-    idleTimer = setTimeout(() => setActive(false), 2500)
-  }
-
-  onCleanup(clearIdle)
 
   // The preview fills the window and borrows this <video> element, so playback carries on as it flies out and back.
-  const expand = () => {
+  // The overlay controls stay hidden until the video is back in the stage, or the preview is gone without it.
+  const open = (attempt: number) => {
     const el = video
 
-    if (!el?.videoWidth || open() || !stage?.contains(el)) return
-    setOpen(true)
+    if (!el || !frame) return dispatch({ type: "preview.returned", attempt })
+
+    const back = () => {
+      if (stage?.contains(el)) dispatch({ type: "preview.returned", attempt })
+    }
+
+    // The preview hands the video back into this frame; nothing else in it changes while the preview is open.
+    const observer = new MutationObserver(back)
+    const id = uuid()
+
+    observer.observe(frame, { childList: true })
+    preview = { attempt, id, observer }
     dialog.show(
-      () => <ImagePreview src={el.currentSrc} alt={getFilename(props.path)} video={el} />,
-      () => setOpen(false),
+      () => {
+        onCleanup(() => dispatch({ type: "preview.returned", attempt }))
+
+        return <ImagePreview src={el.currentSrc} alt={getFilename(props.path)} video={el} />
+      },
+      // A preview that closes before it borrowed the video, or never mounts, leaves it in place.
+      back,
+      id,
     )
   }
+
+  const expand = () =>
+    dispatch({ type: "expand.requested", canExpand: !!video?.videoWidth && !!stage?.contains(video) })
 
   const measure = () => {
     if (!video || video.offsetWidth === 0 || video.offsetHeight === 0) return
@@ -522,7 +607,14 @@ function ArtifactVideo(props: MediaProps) {
     () => measure(),
   )
 
-  const controlsVisible = () => !open() && (paused() || active())
+  onCleanup(() => {
+    if (popoverFrame !== undefined) {
+      cancelAnimationFrame(popoverFrame)
+      video?.removeAttribute("popover")
+    }
+
+    dispatch({ type: "disposed" })
+  })
 
   return (
     <div
@@ -530,13 +622,10 @@ function ArtifactVideo(props: MediaProps) {
       data-slot="artifact-stage"
       data-zoom="fit"
       class="relative min-h-0 flex-1 overflow-hidden"
-      onPointerMove={wake}
-      onPointerLeave={() => {
-        clearIdle()
-        setActive(false)
-      }}
+      onPointerMove={() => dispatch({ type: "pointer.moved" })}
+      onPointerLeave={() => dispatch({ type: "pointer.left" })}
     >
-      <div class="absolute inset-0 flex items-center justify-center p-6">
+      <div ref={frame} class="absolute inset-0 flex items-center justify-center p-6">
         <video
           ref={video}
           data-slot="artifact-media"
@@ -544,8 +633,8 @@ function ArtifactVideo(props: MediaProps) {
           controls
           preload="metadata"
           playsinline
-          onError={() => props.onError()}
-          src={url()}
+          onError={() => props.onError(props.content)}
+          src={props.src}
           onClick={(event) => {
             // Chromium's controls answer the second click of a double click with a native fullscreen request, which
             // covers the preview the double click opens. Opting out with controlslist="nofullscreen" would also end
@@ -557,21 +646,25 @@ function ArtifactVideo(props: MediaProps) {
             if (event.detail < 2 || document.fullscreenElement === el) return
             el.setAttribute("popover", "manual")
             el.showPopover?.()
-            requestAnimationFrame(() => el.removeAttribute("popover"))
+
+            if (popoverFrame !== undefined) cancelAnimationFrame(popoverFrame)
+            popoverFrame = requestAnimationFrame(() => {
+              popoverFrame = undefined
+              el.removeAttribute("popover")
+            })
           }}
           onDblClick={expand}
-          onPlay={() => setPaused(false)}
-          onPause={() => setPaused(true)}
-          onEnded={() => setPaused(true)}
+          onPlay={() => dispatch({ type: "playback.changed", paused: false })}
+          onPause={() => dispatch({ type: "playback.changed", paused: true })}
+          onEnded={() => dispatch({ type: "playback.changed", paused: true })}
           onLoadedMetadata={(event) => {
             const el = event.currentTarget
-            setPaused(el.paused)
-            props.onInfo({ width: el.videoWidth, height: el.videoHeight, duration: el.duration })
+            props.onInfo(props.content, { width: el.videoWidth, height: el.videoHeight, duration: el.duration })
             measure()
           }}
-          onLoadedData={() => setLoadedUrl(url())}
+          onLoadedData={(event) => dispatch({ type: "media.loaded", paused: event.currentTarget.paused })}
         />
-        <Show when={loadedUrl() !== url()}>
+        <Show when={selectVideoLoading(overlay())}>
           <MediaLoading />
         </Show>
         <button
@@ -583,8 +676,8 @@ function ArtifactVideo(props: MediaProps) {
           style={box.ready ? { left: `${box.left}px`, top: `${box.top}px` } : { right: "72px", bottom: "48px" }}
           classList={{
             "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none": true,
-            "opacity-100": controlsVisible(),
-            "pointer-events-none opacity-0": !controlsVisible(),
+            "opacity-100": selectVideoControlsVisible(overlay()),
+            "pointer-events-none opacity-0": !selectVideoControlsVisible(overlay()),
           }}
         >
           <span class="flex size-9 items-center justify-center rounded-full transition-colors">
@@ -597,7 +690,7 @@ function ArtifactVideo(props: MediaProps) {
 }
 
 function ArtifactAudio(props: MediaProps) {
-  const url = createMediaUrl(() => props.content)
+  const source = createMediaSource(() => props.content)
 
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
@@ -609,11 +702,12 @@ function ArtifactAudio(props: MediaProps) {
           <div class="max-w-full truncate text-14-medium text-text-strong">{getFilename(props.path)}</div>
           <audio
             class="w-full"
-            onError={() => props.onError()}
+            // Setting a new src drops the old one's queued events, so these always describe the current source.
+            onError={() => props.onError(source().content)}
             controls
             preload="metadata"
-            src={url()}
-            onLoadedMetadata={(event) => props.onInfo({ duration: event.currentTarget.duration })}
+            src={source().src}
+            onLoadedMetadata={(event) => props.onInfo(source().content, { duration: event.currentTarget.duration })}
           />
         </div>
       </div>
@@ -622,9 +716,9 @@ function ArtifactAudio(props: MediaProps) {
 }
 
 function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" | "html" }) {
-  const url = createMediaUrl(() => props.content)
+  const source = createMediaSource(() => props.content)
   // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
-  const src = () => (props.kind === "pdf" ? `${url()}#navpanes=0&view=FitH` : url())
+  const src = () => (props.kind === "pdf" ? `${source().src}#navpanes=0&view=FitH` : source().src)
 
   return (
     <iframe
@@ -647,6 +741,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
   const resolve = (href: string) => (/^([a-z]:)?\//i.test(href) ? href : (resolveArtifactPath(dir(), href) ?? href))
+  const split = createMemo(() => splitFrontmatter(props.text))
 
   return (
     <MarkdownProvider
@@ -656,10 +751,38 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
     >
       <div data-slot="artifact-markdown-page" data-component="document-surface">
         <div data-slot="artifact-markdown-content">
-          <Markdown text={props.text} cacheKey={props.cacheKey} />
+          <Show when={split().properties}>{(properties) => <ArtifactProperties properties={properties()} />}</Show>
+          <Markdown text={split().body} cacheKey={props.cacheKey} />
         </div>
       </div>
     </MarkdownProvider>
+  )
+}
+
+function ArtifactProperties(props: { properties: FrontmatterProperty[] }) {
+  const ctx = usePlugin()
+  const [expanded, setExpanded] = createSignal(false)
+  // Long frontmatter shows its first entries until the reader asks for the rest.
+  const shown = () => (expanded() || props.properties.length <= 8 ? props.properties : props.properties.slice(0, 6))
+
+  return (
+    <div data-slot="artifact-properties">
+      <dl aria-label={ctx.t("view.properties")}>
+        <For each={shown()}>
+          {(property) => (
+            <>
+              <dt>{property.key}</dt>
+              <dd data-code={property.code ? "" : undefined}>{property.value}</dd>
+            </>
+          )}
+        </For>
+      </dl>
+      <Show when={shown().length < props.properties.length}>
+        <button type="button" data-slot="artifact-properties-more" onClick={() => setExpanded(true)}>
+          {ctx.t("view.properties.showAll", { count: props.properties.length })}
+        </button>
+      </Show>
+    </div>
   )
 }
 
@@ -774,12 +897,12 @@ const specimenSizes = [12, 16, 24, 40, 64]
 
 function ArtifactFont(props: { path: string; content: FileContent }) {
   const ctx = usePlugin()
-  const url = createMediaUrl(() => props.content)
+  const source = createMediaSource(() => props.content)
   const family = createMemo(() => `artifact-${Math.random().toString(36).slice(2)}`)
 
   // The document's font set holds the face while it shows.
-  createKeyed(url, (source) => {
-    const face = new FontFace(family(), `url(${source})`)
+  createKeyed(source, (value) => {
+    const face = new FontFace(family(), `url(${value.src})`)
 
     document.fonts.add(face)
     void face.load().catch(() => undefined)
@@ -843,14 +966,21 @@ function ArtifactViewer(props: {
   path: string
   size: string
   content: FileContent
-  onDetails: (details: readonly string[]) => void
-  onError: (reason?: string) => void
+  onDetails: (content: FileContent, details: readonly string[]) => void
+  onError: (content: FileContent, reason?: string) => void
 }) {
-  // Checked together, so the check only ever reads bytes freshly decoded, never ones the viewer has moved away.
+  // Checked together, so the check only ever reads bytes freshly decoded, never ones the viewer has moved away. The
+  // callbacks name the content these bytes came from, so a viewer that answers after a reread changes nothing.
   const decoded = createMemo(() => {
-    const bytes = bytesFromContent(props.content)
+    const content = props.content
+    const bytes = bytesFromContent(content)
 
-    return { bytes, problem: props.viewer.problem?.(bytes) }
+    return {
+      bytes,
+      problem: props.viewer.problem?.(bytes),
+      onDetails: (details: readonly string[]) => props.onDetails(content, details),
+      onError: (reason?: string) => props.onError(content, reason),
+    }
   })
 
   return (
@@ -862,7 +992,7 @@ function ArtifactViewer(props: {
         // Taking the error makes Solid call this once per error, untracked, rather than render it as a reactive child.
         fallback={(_) => {
           // Fails the file as a rejection does: its details leave the toolbar, and a reloaded file mounts a new viewer.
-          props.onError()
+          untrack(decoded).onError()
 
           return <ArtifactBinary path={props.path} size={props.size} />
         }}
@@ -870,8 +1000,8 @@ function ArtifactViewer(props: {
         <Dynamic
           component={props.viewer.View}
           bytes={decoded().bytes}
-          onDetails={props.onDetails}
-          onError={props.onError}
+          onDetails={decoded().onDetails}
+          onError={decoded().onError}
         />
       </ErrorBoundary>
     </Show>

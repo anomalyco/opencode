@@ -1,8 +1,10 @@
 import { Effect, Stream } from "effect"
 import {
   AIError,
+  AssistantMessage,
   InvalidProviderOutputError,
   LLMResponse,
+  ResponseFold,
   Message,
   Usage,
   LLMEvent,
@@ -37,8 +39,8 @@ const invalidCall = (event: ToolInputError) =>
   ToolCallPart.make({ id: event.id, name: event.name, namespace: event.namespace, input: {} })
 
 /** Add the replayed calls for invalid input to the assistant message, so each tool result has its call. */
-const withInvalidCalls = (message: Message, calls: ReadonlyArray<ToolCallPart>) =>
-  calls.length === 0 ? message : new Message({ ...message, content: [...message.content, ...calls] })
+const withInvalidCalls = (message: AssistantMessage, calls: ReadonlyArray<ToolCallPart>) =>
+  calls.length === 0 ? message : new AssistantMessage({ ...message, content: [...message.content, ...calls] })
 
 /** The step's assistant message followed by one tool message per call, in call order. */
 export const stepMessages = (
@@ -138,7 +140,7 @@ export function collect<E, R>(
   return Effect.suspend(() => {
     const steps: LLMResponse[] = []
     const messages: Message[] = []
-    let step = LLMResponse.empty()
+    let step = ResponseFold.empty()
     // Between a `step-finish` and the next `step-start`, tool results come from the loop running tools.
     let betweenSteps = false
     // The last step's assistant message, and its calls with invalid input that the loop may answer.
@@ -156,7 +158,7 @@ export function collect<E, R>(
       steps.push(response)
       assistant = messages.push(response.message) - 1
       invalid = step.events.filter(LLMEvent.is.toolInputError).map(invalidCall)
-      step = LLMResponse.empty()
+      step = ResponseFold.empty()
     }
     return Stream.runForEach(events, (event) =>
       Effect.sync(() => {
@@ -167,7 +169,8 @@ export function collect<E, R>(
         }
         if (event.type === "tool-result" && betweenSteps) {
           const call = invalid.find((item) => item.id === event.id)
-          if (call) messages[assistant] = withInvalidCalls(messages[assistant], [call])
+          const previous = messages[assistant]
+          if (call && previous.role === "assistant") messages[assistant] = withInvalidCalls(previous, [call])
           messages.push(
             Message.tool({
               id: event.id,
@@ -180,7 +183,7 @@ export function collect<E, R>(
           return
         }
         if (event.type === "step-start") betweenSteps = false
-        step = LLMResponse.reduce(step, event)
+        step = ResponseFold.reduce(step, event)
         if (event.type !== "step-finish") return
         close(event.reason, event.usage)
         betweenSteps = true

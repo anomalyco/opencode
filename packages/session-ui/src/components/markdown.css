@@ -116,7 +116,7 @@
 
   /* A heading's own bottom margin sets the gap to its section, so a block's larger top margin can't push the heading away from it. */
   :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, blockquote, [data-component]),
-  :is(h1, h2, h3, h4, h5, h6) + [data-component="markdown-code"] > pre {
+  :is(h1, h2, h3, h4, h5, h6) + [data-component="markdown-code"] > :is(pre, [data-slot="markdown-code-content"]) {
     margin-top: 0;
   }
 
@@ -146,7 +146,9 @@
   }
 
   /* An atomic inline such as inline-block leaves a line break opportunity before the label, so the icon stays an
-     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word. */
+     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word.
+     The artwork is a pseudo-element because an out-of-flow element is a block, and Chromium ends a triple-click
+     paragraph selection at a block. The hidden img only reports when the favicon has loaded. */
   .markdown-link-favicon {
     position: relative;
     padding-inline-start: 14px;
@@ -167,20 +169,14 @@
     mask-image: url("./markdown-github.svg");
   }
 
-  .markdown-link-favicon img {
-    position: absolute;
-    inset: 0;
-    display: block;
-    width: 14px;
-    height: 14px;
-    margin: auto 0;
+  .markdown-link-favicon[data-loaded]::before {
     border-radius: 2px;
-    cursor: inherit;
-    opacity: 0;
+    background: var(--markdown-link-favicon) center / contain no-repeat;
+    mask: none;
   }
 
-  .markdown-link-favicon img[data-loaded] {
-    opacity: 1;
+  .markdown-link-favicon img {
+    display: none;
   }
 
   a[data-local-link] {
@@ -325,9 +321,18 @@
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
   [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-actions"],
   [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"] {
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-code-content] > pre {
     display: none;
+  }
+
+  /* Plugin content in place of the code keeps the code block's spacing. */
+  [data-slot="markdown-code-content"] {
+    margin-top: 12px;
+    margin-bottom: 24px;
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] .highlights {
@@ -356,8 +361,23 @@
     }
   }
 
-  [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
-  [data-slot="markdown-copy-button"]:focus-within {
+  /* Plugin actions sit before the 24px Copy button, revealed with it. */
+  [data-slot="markdown-code-actions"] {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 30px;
+    display: flex;
+    gap: 2px;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
+  }
+
+  [data-component="markdown-code"]:hover :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]),
+  :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]):focus-within {
     opacity: 1;
   }
 
@@ -396,10 +416,13 @@
     background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
   }
 
+  /* A path turns into a link after an async existence check, so it keeps the plain code box and only fades its colours. */
   :not(pre) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    padding: 0 2px;
-    background: none;
+    background-color: transparent;
+    transition:
+      color 200ms ease-out,
+      background-color 200ms ease-out;
   }
 
   a.external-link > code[data-inline-code-kind="url"] {
@@ -497,6 +520,10 @@
 :root[data-motion="reduce"] {
   [data-component="markdown"] :is([data-markdown-word], code)[data-markdown-enter] {
     animation: none;
+  }
+
+  [data-component="markdown"] :not(pre) > code[data-inline-code-kind="path"] {
+    transition: none;
   }
 }
 

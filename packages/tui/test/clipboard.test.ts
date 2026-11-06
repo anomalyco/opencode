@@ -140,3 +140,9 @@ test("rejects only when no clipboard route accepted the write", async () => {
   expect(await clipboard.write("hello").then(undefined, (error) => error)).toBe(failure)
   expect(writes).toEqual([["hello", { destination: "all-available", selection: "clipboard" }]])
 })
+
+test("rejects reads when no clipboard route is supported", async () => {
+  const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
+
+  await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
+})

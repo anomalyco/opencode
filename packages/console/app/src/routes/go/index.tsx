@@ -33,6 +33,7 @@ const models = [
   { name: "Kimi K3.1 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Step 5 Preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Crouton Alpha Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Beam Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Iceman Contributor Free", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
@@ -58,6 +59,7 @@ const models = [
   { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Hy4", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
@@ -129,7 +131,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.kimiK31Pro")}</span>
+                <span data-slot="text">{i18n.t("go.promo.hy4")}</span>
               </div>
             </div>
             <Show when={searchParams.ref}>

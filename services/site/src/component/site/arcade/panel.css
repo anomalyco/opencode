@@ -1,0 +1,166 @@
+/* The cabinet control panel for touch screens (panel.tsx): dark scratched metal, a ball-top
+   joystick and lit arcade buttons, fixed over the lower half of the screen. */
+
+[data-component="arcade-panel"] {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  height: 50svh;
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  grid-template-rows: auto 1fr auto;
+  align-items: center;
+  padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  color: var(--tone-panel-text);
+  border-top: 1px solid color-mix(in srgb, var(--tone-panel-line) 60%, transparent);
+  box-shadow:
+    0 -1px 0 color-mix(in srgb, var(--tone-panel-glow) 50%, transparent),
+    0 -12px 30px rgb(0 0 0 / 0.6);
+  /* Dark scratched metal: a brushed gradient, fine scratches and a little grain. */
+  background:
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(28deg, rgb(255 255 255 / 0.012) 0 1px, transparent 1px 13px),
+    linear-gradient(180deg, var(--tone-metal-top), var(--tone-metal-mid) 60%, var(--tone-metal-bottom));
+  animation: arcade-panel-in 0.35s cubic-bezier(0.23, 1, 0.32, 1) both;
+
+  [data-slot="system"] {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+  }
+
+  [data-slot="small"] {
+    min-width: 5rem;
+    height: 1.75rem;
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--tone-key-text);
+    background: linear-gradient(var(--tone-key-top), var(--tone-key-bottom));
+    border: 1px solid color-mix(in srgb, var(--tone-panel-line) 55%, transparent);
+    border-radius: 4px;
+    box-shadow:
+      0 0 10px color-mix(in srgb, var(--tone-panel-glow) 35%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.12);
+
+    &:active {
+      transform: translateY(1px);
+      box-shadow: 0 0 16px color-mix(in srgb, var(--tone-panel-glow) 60%, transparent);
+    }
+  }
+
+  [data-slot="stick"] {
+    position: relative;
+    justify-self: center;
+    width: min(38vw, 150px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    touch-action: none;
+    background: radial-gradient(
+      circle,
+      var(--tone-socket-dark) 0 30%,
+      var(--tone-socket) 31% 58%,
+      var(--tone-metal-mid) 59% 70%,
+      transparent 71%
+    );
+  }
+
+  [data-slot="gate"] {
+    position: absolute;
+    inset: 28%;
+    border-radius: 50%;
+    background: radial-gradient(circle, #000 0 55%, var(--tone-socket-ring) 56% 64%, transparent 65%);
+    box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.8);
+  }
+
+  [data-slot="shaft"] {
+    position: absolute;
+    left: 46%;
+    top: 46%;
+    width: 8%;
+    height: 8%;
+    border-radius: 50%;
+    background: var(--tone-shaft);
+  }
+
+  [data-slot="ball"] {
+    position: absolute;
+    left: 30%;
+    top: 30%;
+    width: 40%;
+    height: 40%;
+    border-radius: 50%;
+    background: var(--tone-ball);
+    box-shadow:
+      0 8px 14px rgb(0 0 0 / 0.6),
+      0 0 18px color-mix(in srgb, var(--tone-panel-glow) 35%, transparent);
+  }
+
+  [data-slot="buttons"] {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem 0.5rem;
+    justify-items: center;
+  }
+
+  [data-slot="cell"] {
+    display: grid;
+    justify-items: center;
+    gap: 0.35rem;
+  }
+
+  [data-slot="button"] {
+    width: min(15vw, 3.75rem);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 2px solid var(--tone-button-ring);
+    touch-action: none;
+    background: var(--tone-button);
+    box-shadow:
+      inset 0 3px 6px rgb(0 0 0 / 0.8),
+      0 2px 0 var(--tone-button-edge);
+
+    &[data-lit] {
+      border-color: var(--tone-button-ring-lit);
+      background: var(--tone-button-lit);
+      box-shadow:
+        0 0 16px color-mix(in srgb, var(--tone-panel-glow) 65%, transparent),
+        inset 0 -4px 8px rgb(0 0 0 / 0.45),
+        inset 0 3px 4px rgb(255 255 255 / 0.25);
+    }
+
+    &[data-pressed] {
+      transform: scale(0.93);
+      filter: brightness(1.35);
+    }
+  }
+
+  [data-slot="label"] {
+    min-height: 1em;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--tone-panel-hint);
+  }
+
+  [data-slot="note"] {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 11px;
+    color: var(--tone-panel-hint);
+    text-align: center;
+  }
+}
+
+@keyframes arcade-panel-in {
+  from {
+    transform: translateY(100%);
+  }
+}

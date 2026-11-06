@@ -2,6 +2,7 @@
 import { createSignal } from "solid-js"
 import { LineCommentEditor, LineComment, LineCommentOverflowIcon } from "./line-comment"
 import { Menu } from "../../navigation/menu/menu"
+import { Popover } from "../../components/popover"
 
 const docs = `### Overview
 Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, small \`Button\` ghost + contrast actions).
@@ -70,13 +71,15 @@ export const DisplayMultiline = {
 }
 
 export const Editor = {
-  args: { variant: "default", allowEmpty: false },
+  args: { variant: "default", allowEmpty: false, alternateSubmit: false },
   argTypes: {
     variant: { control: "select", options: ["default", "compact"] },
     allowEmpty: { control: "boolean" },
+    alternateSubmit: { control: "boolean" },
   },
   render: (args) => {
     const [value, setValue] = createSignal("")
+
     const [result, setResult] = createSignal("")
 
     return (
@@ -94,6 +97,18 @@ export const Editor = {
             setValue("")
             setResult(`Submitted: ${comment}`)
           }}
+          alternateSubmit={
+            args.alternateSubmit
+              ? {
+                  label: "Send",
+                  keys: ["Ctrl", "Enter"],
+                  onSubmit: (comment) => {
+                    setValue("")
+                    setResult(`Sent: ${comment}`)
+                  },
+                }
+              : undefined
+          }
         />
         <output aria-label="Editor result">{result()}</output>
       </div>
@@ -114,6 +129,65 @@ export const EditorFilled = {
           onSubmit={() => {}}
           autofocus={false}
         />
+      </div>
+    )
+  },
+}
+
+/** File search answers only when "Finish search" is pressed, so the loading state can be explored. */
+export const EditorWithMentions = {
+  render: () => {
+    const [value, setValue] = createSignal("")
+    const [result, setResult] = createSignal("")
+    const pending: (() => void)[] = []
+    const files = ["src/app.ts", "src/api.ts", "src/server.ts"]
+
+    return (
+      <div style={{ width: "400px" }}>
+        <LineCommentEditor
+          value={value()}
+          onInput={setValue}
+          onCancel={() => {
+            setValue("")
+            setResult("Cancelled")
+          }}
+          onSubmit={(comment) => {
+            setValue("")
+            setResult(`Submitted: ${comment}`)
+          }}
+          mention={{
+            items: (query) =>
+              new Promise((resolve) => pending.push(() => resolve(files.filter((file) => file.includes(query))))),
+          }}
+        />
+        <button type="button" onClick={() => pending.splice(0).forEach((finish) => finish())}>
+          Finish search
+        </button>
+        <output aria-label="Editor result">{result()}</output>
+      </div>
+    )
+  },
+}
+
+/** An editor inside a popover: Escape in the field cancels the comment, and Escape on its buttons closes the popover. */
+export const EditorInPopover = {
+  render: () => {
+    const [value, setValue] = createSignal("")
+    const [result, setResult] = createSignal("")
+
+    return (
+      <div>
+        <Popover trigger="Open editor" triggerAs="button" portal={false}>
+          <div style={{ width: "360px" }}>
+            <LineCommentEditor
+              value={value()}
+              onInput={setValue}
+              onCancel={() => setResult("Cancelled")}
+              onSubmit={(comment) => setResult(`Submitted: ${comment}`)}
+            />
+          </div>
+        </Popover>
+        <output aria-label="Editor result">{result()}</output>
       </div>
     )
   },

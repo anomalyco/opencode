@@ -1,0 +1,92 @@
+/* The hero title's size, shared by the home page (routes/index.css) and /product, so /product'
+   "Product" is set at exactly the home title's size and its card row lands where home's does.
+   /product copies the home hero's options (data-variant, data-title-size and --title-chars, the
+   home title's length) onto its own hero. Sizes use the carousel's card width. */
+:is([data-page="home"], [data-page="products"]) [data-component="content"] {
+  container-type: inline-size;
+}
+
+[data-page="products"] [data-component="hero"] {
+  --card: calc((100cqw - var(--gaps) * var(--gutter)) / var(--visible));
+  --two-cards: calc(var(--card) * 2 + var(--gutter));
+}
+
+/* Hero title. The size comes from the hero option, Settings › Hero title size and Settings › Hero
+   size, in this one place:
+
+   | Hero      | 64px (default)                       | fitted                                  |
+   | --------- | ------------------------------------ | --------------------------------------- |
+   | current   | 64px, or 2 cards ÷ 15 characters     | clamp(2.25rem, 4.4vw, 4rem)             |
+   | two-up    | as above                             | 2 cards ÷ 15 characters                 |
+   | full      | as above                             | content width ÷ 31 characters, one line |
+   | three-up  | 3 cards (or content) ÷ title length, one line, with either option              |
+
+   A line of n characters at size s is n × 0.57s wide (OpenTUI Mono advances 0.6em; the tracking takes
+   0.03em), less 2% for room. --title-chars counts cells, not characters (hero-title.ts): a CJK
+   character is about 1.7 cells. Hero size scales the 64px and fluid sizes and can only shrink a fitted
+   one. The 64px size keeps a 15-character measure, so the title breaks after "The open source".
+   Phones and tablets (60rem and below) all use the 64px rule, fitted to the content width and capped
+   at --fs-display-max (48px there), so a tablet's title is never larger than a laptop's. */
+:is([data-page="home"], [data-page="products"])[data-site] [data-component="hero"] {
+  --title-size: min(var(--fs-display-max), var(--hero-title) * 4 / 3);
+  --title-scale: var(--hero-scale, 1);
+  --title-width: auto;
+  --title-measure: calc(15 * 0.57em + 0.1em);
+  --title-wrap: normal;
+
+  h1 {
+    width: var(--title-width);
+    max-width: var(--title-measure);
+    font-size: calc(var(--title-size) * var(--title-scale));
+    white-space: var(--title-wrap);
+    hyphens: auto;
+  }
+
+  @media (min-width: 60.0625rem) {
+    &[data-title-size="fitted"] {
+      --title-size: clamp(2.25rem, 4.4vw, 4rem);
+      --title-measure: 52rem;
+    }
+
+    &[data-title-size="fitted"][data-variant="two-up"] {
+      --title-size: calc(var(--two-cards) / (15 * 0.57) * 0.98);
+      --title-scale: min(var(--hero-scale, 1), 1);
+      --title-width: var(--two-cards);
+      --title-measure: none;
+    }
+
+    &[data-title-size="fitted"][data-variant="full"] {
+      --title-size: calc(100cqw / (31 * 0.57) * 0.98);
+      --title-scale: min(var(--hero-scale, 1), 1);
+      --title-measure: none;
+      --title-wrap: nowrap;
+    }
+
+    /* --title-chars is the title's length, set by the page. */
+    &[data-variant="three-up"] {
+      --title-line: min(100cqw, calc(var(--card) * 3 + var(--gutter) * 2));
+      /* At most the display size, so a short title (Chinese is six characters) stays a title. */
+      --title-size: min(var(--fs-display-max), calc(var(--title-line) / (var(--title-chars, 28) * 0.57) * 0.98));
+      --title-scale: min(var(--hero-scale, 1), 1);
+      --title-width: var(--title-line);
+      --title-measure: none;
+      --title-wrap: nowrap;
+    }
+  }
+
+  @media (max-width: 60rem) {
+    --title-size: min(var(--fs-display-max), var(--hero-title));
+
+    &:is([data-title-size="fitted"], [data-variant="three-up"]) {
+      --title-scale: min(var(--hero-scale, 1), 1);
+    }
+  }
+}
+
+/* Up to 60rem the home title wraps at 15 characters, onto as many lines as its length needs; the
+   one-word "Product" keeps the same room below it, so the subtitle starts on the same line. */
+@media (max-width: 60rem) {
+  [data-site][data-page="products"] [data-component="hero"] h1 {
+    padding-bottom: calc((round(up, var(--title-chars, 15) / 15, 1) - 1) * 1lh);
+  }
+}

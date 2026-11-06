@@ -1,0 +1,79 @@
+[data-page="products"] {
+  /* The carousel's cards in rows, at exactly the home carousel's card width (Settings › Carousel
+     sets --visible and --gaps per screen width, products.tsx), so going from the home page the cards
+     keep their x and size: as many as fit per row. Phones: one card across the content width (the
+     home carousel's peeking 1.1 card there doesn't make a row). Unlike the carousel, the grid stays
+     inside the page's padding and never scrolls sideways. */
+  /* The grid follows the hero directly, with no divider or title, a block's space below it. */
+  /* The home carousel's own top margin (products.css), so the first row lands where home's does. */
+  [data-component="products"][data-layout="grid"] {
+    margin: 3rem 0 0;
+
+    [data-slot="grid"] {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, calc((100% - var(--gaps) * var(--gutter)) / var(--visible)));
+      column-gap: var(--gutter);
+      row-gap: 3.5rem;
+    }
+
+    /* No real footage yet: plain black in both themes. */
+    [data-slot="media"][data-empty] {
+      background: #000;
+    }
+
+    @media (max-width: 39.9375rem) {
+      [data-slot="grid"] {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 3rem;
+      }
+    }
+  }
+}
+
+/* The hero's subtitle is as wide as two grid cards (the carousel's card width) and the gap between
+   them, so it ends on the second card's right edge; where the grid shows two cards or one, it spans the content column. */
+[data-site][data-page="products"] [data-component="hero"] p {
+  max-width: calc(2 * (100% - var(--gaps) * var(--gutter)) / var(--visible) + var(--gutter));
+
+  @media (max-width: 60rem) {
+    max-width: none;
+  }
+}
+
+/* David's call for these sections (overriding "titles above"): from 60rem up the title takes the
+   first of the page's four columns and the content the others, on the product grid's column math:
+   every section's content spans columns 2–3 (the lists, the download sections, marked data-columns,
+   and the FAQ), so all their buttons and toggles end on column 3's right edge. The title and the first row are both trimmed to their cap height, so their tops line
+   up. Up to 78rem (phones and tablets) the title goes back above and the content takes the full
+   width. */
+@media (min-width: 78.0625rem) {
+  [data-site][data-page="products"]
+    [data-component="block"]:is(
+      [data-slot="products-extensions"],
+      [data-slot="products-integrations"],
+      [data-slot="products-anomaly"],
+      [data-columns]
+    ) {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: start;
+
+    /* Every section's content spans columns 2–3, so the Install buttons, the download rows'
+       buttons and the FAQ toggles all end on column 3's right edge. */
+    > [data-slot="body"] {
+      grid-column: 2 / 4;
+    }
+
+    [data-component="download-list"] {
+      max-width: none;
+    }
+  }
+}
+
+/* Stacked under its title, the first download row needs no pull up to the title's line. */
+@media (max-width: 78rem) {
+  [data-site][data-page="products"] [data-columns] > [data-slot="body"] > [data-component="download-list"]:first-child {
+    margin-top: 0;
+  }
+}

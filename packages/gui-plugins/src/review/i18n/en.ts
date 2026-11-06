@@ -5,6 +5,7 @@ export default {
   "menu.count.one": "{{count}} file changed",
   "menu.count.other": "{{count}} files changed",
   "folder.more": "{{count}} · more not shown",
+  "folder.failed": "Couldn't load changes",
   "command.open": "Open review",
   "mobile.title.one": "Change",
   "mobile.title.other": "Changes",
@@ -14,6 +15,9 @@ export default {
   "git.description": "Track, review, and undo changes in this project",
   loadingChanges: "Loading changes…",
   noChanges: "No changes",
+  "load.failed": "Couldn't load changes",
+  "load.timeout": "The server took too long to answer",
+  offline: "Can't reach this server",
   "settings.wrapLines.title": "Wrap lines",
   "settings.wrapLines.description": "Wrap long lines in mobile diffs instead of scrolling horizontally",
 }

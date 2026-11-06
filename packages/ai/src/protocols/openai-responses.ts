@@ -167,7 +167,7 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
   if (request.providerOptions?.reasoningMode === "pro") return false
   if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
-  const override = request.model.compatibility?.supportsEffortUpdates
+  const override = request.model.capabilities?.reasoning?.updates
   if (override !== undefined) return override
   const match = /(?:^|\/)gpt-(\d+)(?:\.\d+)?(?:-|$)/i.exec(request.model.id)
   return match !== null && Number(match[1]) >= 6
@@ -315,31 +315,11 @@ const hostedToolResult = Effect.fnUntraced(function* (item: ResponsesHostedTools
 })
 
 const HOSTED_TOOLS = {
-  web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
+  ...ResponsesHostedTools.common,
   web_search_preview_call: { name: "web_search_preview", input: (item) => item.action ?? {} },
-  file_search_call: { name: "file_search", input: (item) => ({ queries: item.queries ?? [] }) },
-  code_interpreter_call: {
-    name: "code_interpreter",
-    input: (item) => ({ code: item.code, container_id: item.container_id }),
-  },
   computer_call: { name: "computer_use", input: (item) => item.action ?? {} },
   image_generation_call: { name: "image_generation", input: () => ({}), result: hostedToolResult },
-  mcp_call: {
-    name: "mcp",
-    input: (item) => ({ server_label: item.server_label, name: item.name, arguments: item.arguments }),
-  },
 } as const satisfies ResponsesHostedTools.Definitions
-
-const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
-  const event = OpenResponses.normalize(state, input)
-  if (event.type === "response.reasoning_text.delta")
-    return event.item_id !== undefined
-      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
-      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
-  if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
-    return ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)
-  return OpenResponses.step(state, event)
-}
 
 export const protocol = Protocol.make({
   id: ADAPTER,
@@ -347,12 +327,12 @@ export const protocol = Protocol.make({
     schema: OpenAIResponsesBody,
     from: fromRequest,
   },
-  stream: {
-    event: OpenResponses.protocol.stream.event,
-    initial: (request) => OpenResponses.initial(request, adapter),
-    step,
-    terminal: OpenResponses.terminal,
-  },
+  stream: ResponsesHostedTools.stream(adapter, HOSTED_TOOLS, (state, event) => {
+    if (event.type !== "response.reasoning_text.delta") return undefined
+    return event.item_id !== undefined
+      ? Effect.succeed(OpenResponses.onReasoningDelta(state, event, event.item_id))
+      : ProviderShared.eventError(ADAPTER, `${event.type} is missing item_id`)
+  }),
   supportsEffortUpdates,
 })
 
@@ -380,7 +360,7 @@ export const route = Route.make({
   endpoint,
   auth,
   transport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export * as OpenAIResponses from "./openai-responses.js"
