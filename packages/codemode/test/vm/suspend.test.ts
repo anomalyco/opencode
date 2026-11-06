@@ -108,6 +108,51 @@ const suspendBetweenCalls = async (
   return { step, runtime, run }
 }
 
+describe("synchronous host calls", () => {
+  // Each sync extension call stops the VM; the slice clock must keep running across those stops, or a loop of them
+  // never yields: suspend can't land and timeouts can't interrupt it.
+  const counter = () => {
+    let calls = 0
+    let reached = latch()
+    const extension = Extension.make({
+      name: "draw",
+      globals: {
+        draw: (n: number) => {
+          calls += 1
+          if (calls === 500) reached.resolve()
+          return n
+        },
+      },
+    })
+    return { extension, reached: () => reached.promise, calls: () => calls }
+  }
+
+  // Round-trip mode also yields at every host stop, where a suspend lands mid-call and is rightly refused.
+  test.skipIf(process.env.CODEMODE_ROUNDTRIP === "1")(
+    "a loop of sync extension calls can be suspended and resumed",
+    async () => {
+      const draw = counter()
+      const runtime = CodeMode.make({ engine: "vm", extensions: [draw.extension] })
+      const run = start(runtime.start("let n = 0\nwhile (n < 200000) draw(n++)\nreturn n"))
+      await draw.reached()
+      const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+      expect(draw.calls()).toBeLessThan(200000)
+      const resumed = await Effect.runPromise(start(runtime.resume(CodeMode.toBytes(suspended.state))).result)
+      expect(resumed).toMatchObject({ ok: true, value: 200000 })
+    },
+  )
+
+  test("a loop of sync extension calls is interrupted by the timeout", async () => {
+    const draw = counter()
+    const outcome = await Effect.runPromise(
+      CodeMode.make({ engine: "vm", extensions: [draw.extension], limits: { timeoutMs: 100 } }).execute(
+        "let n = 0\nwhile (true) draw(n++)",
+      ),
+    )
+    expect(outcome).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
+  })
+})
+
 describe("suspend", () => {
   test("a run suspended while idle-awaiting between calls resumes from state and from bytes", async () => {
     const code = `
@@ -423,8 +468,9 @@ describe("resume", () => {
       [extension],
     )
     const outcome = await Effect.runPromise(
-      start(CodeMode.make({ engine: "vm", tools: { step: step.tool }, extensions: [extension] }).resume(suspended.state))
-        .result,
+      start(
+        CodeMode.make({ engine: "vm", tools: { step: step.tool }, extensions: [extension] }).resume(suspended.state),
+      ).result,
     )
     expect(outcome).toMatchObject({
       ok: true,
@@ -482,7 +528,8 @@ describe("resume", () => {
       }`
     const { step, suspended } = await suspendAt(code)
     const outcome = await Effect.runPromise(
-      start(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(CodeMode.toBytes(suspended.state))).result,
+      start(CodeMode.make({ engine: "vm", tools: { step: step.tool } }).resume(CodeMode.toBytes(suspended.state)))
+        .result,
     )
     expect(outcome).toMatchObject({
       ok: true,
