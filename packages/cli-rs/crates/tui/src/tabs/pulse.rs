@@ -272,6 +272,22 @@ impl Pulse {
                 || self.flash.clock.is_some())
     }
 
+    /// `setEnabled`: turning off settles every stage at once; turning on resumes a running sweep where it was.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        if std::mem::replace(&mut self.enabled, enabled) == enabled {
+            return;
+        }
+        if !enabled {
+            self.run.settle(false);
+            self.glow.settle(self.input.glow);
+            self.completion.clock = None;
+            self.flash.clock = None;
+            self.completion_pending = false;
+        } else if self.input.active {
+            self.run.trigger();
+        }
+    }
+
     pub fn set(&mut self, input: Input) {
         let previous = self.input;
         self.input = input;
@@ -501,6 +517,24 @@ mod tests {
         pulse.advance(Duration::from_millis(5_000));
         assert!(!pulse.live());
         assert!(paint(&pulse, &colors(), None, 20).is_none());
+    }
+
+    #[test]
+    fn turning_animations_off_settles_and_on_resumes_the_sweep() {
+        let input = Input { active: true, glow: true, ..Input::default() };
+        let mut pulse = Pulse::new(true, input);
+        pulse.set(Input { prompt_pulse: 1, ..input });
+        pulse.advance(Duration::from_millis(1_000));
+        pulse.set_enabled(false);
+        assert!(!pulse.live());
+        assert_eq!(pulse.level(20), 0.0);
+        // Only the held glow is left, as `a_still_pulse_draws_only_its_glow` draws it.
+        let still = Pulse::new(false, Input { prompt_pulse: 1, ..input });
+        assert_eq!(paint(&pulse, &colors(), None, 10), paint(&still, &colors(), None, 10));
+        pulse.set_enabled(true);
+        assert!(pulse.live());
+        pulse.advance(Duration::from_millis(RUN_ATTACK as u64));
+        assert_ne!(paint(&pulse, &colors(), None, 10), paint(&still, &colors(), None, 10), "no sweep after turning on");
     }
 
     #[test]

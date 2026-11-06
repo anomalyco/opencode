@@ -54,10 +54,7 @@ struct Pending {
 
 impl Pending {
     fn new(tui: &Tui, count: Rc<Cell<u32>>) -> Self {
-        let spinner = Spinner::new(&tui.app)
-            .color(tui.page().interactive().step(200))
-            .label("/btw")
-            .animations(opencode_ui::motion::enabled(tui.config().info.animations));
+        let spinner = Spinner::new(&tui.app).color(tui.page().interactive().step(200)).label("/btw");
         let root = View::new(&tui.app).shrink(0.0).child(&spinner).visible(count.get() > 0);
         Self { root, count }
     }

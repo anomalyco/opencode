@@ -430,7 +430,6 @@ impl Workspaces {
         };
         let session = matches!(tui.route(), Route::Session { .. });
         let current = self.current_value();
-        let animations = opencode_ui::motion::enabled(tui.config().info.animations);
         let height = i64::from(tui.app.size().1);
         let full_height = (height - height / 4 - 2).clamp(8, 16) as u32;
         let built = self.clone();
@@ -450,7 +449,7 @@ impl Workspaces {
                     let title =
                         View::new(app).row().gap(1).child(&Text::new(app, "Worktrees").fg(theme.text.base).bold());
                     if spinning {
-                        title.add(&Spinner::new(app).color(theme.text.muted).animations(animations));
+                        title.add(&Spinner::new(app).color(theme.text.muted));
                     }
                     props.title_view = Some(title.as_any());
                     props.render_filter = !show_error;

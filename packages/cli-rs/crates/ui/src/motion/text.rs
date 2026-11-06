@@ -3,11 +3,12 @@
 //! per-column strength, through the same native color matrix the TypeScript renderables use.
 
 use super::curve::{clamp, coast, intensity_at, smootherstep};
-use super::{Clock, channels, millis, tick_frames};
+use super::{Clock, channels, millis, running, tick_frames};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
 use std::cell::Cell;
+use std::rc::Rc;
 use std::time::Duration;
 
 const SHIMMER_DURATION: f64 = 1200.0;
@@ -109,6 +110,10 @@ impl ShimmerText {
 
 impl Component for ShimmerView {
     fn paint(&self, painter: &mut Painter<'_>) {
+        if !running() {
+            painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
+            return;
+        }
         let elapsed = millis(self.clock.get());
         paint_shaded(painter, &self.text, self.fg, self.shimmer, |column, end| {
             shimmer_strength_at(elapsed, column, end)
@@ -173,9 +178,14 @@ impl FadeInText {
         self
     }
 
-    /// `animate && animations` in TypeScript.
+    /// `animate` in TypeScript; the thread's switch is `animations`. Disabled, it shows at once and stops its driver.
     pub fn enabled(self, enabled: bool) -> Self {
-        self.widget.update(|view| view.enabled = enabled);
+        self.widget.update(|view| {
+            view.enabled = enabled;
+            if !enabled {
+                view.clock = Rc::new(Cell::new(FADE_DURATION));
+            }
+        });
         self
     }
 
@@ -197,7 +207,7 @@ impl FadeInText {
 impl Component for FadeView {
     fn paint(&self, painter: &mut Painter<'_>) {
         let elapsed = self.clock.get();
-        if !self.enabled || self.finished.get() {
+        if !self.enabled || !running() || self.finished.get() {
             painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
             return;
         }

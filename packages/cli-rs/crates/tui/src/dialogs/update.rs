@@ -160,15 +160,9 @@ fn draw(tui: &Tui, cx: &Rc<DialogCx>, root: &View, check: &Check) {
         Shown::Update(UpdateState::Available(_) | UpdateState::Failed(_)) => "Update available",
         _ => "Update",
     };
-    let animations = opencode_ui::motion::enabled(tui.settings.info().animations);
     let spinner = |label: String| {
         // `Spinner` draws in the muted color unless told otherwise; the shimmer runs in the base one.
-        Spinner::new(app)
-            .color(theme.text.muted)
-            .shimmer(Some(theme.text.base))
-            .label(label)
-            .animations(animations)
-            .as_any()
+        Spinner::new(app).color(theme.text.muted).shimmer(Some(theme.text.base)).label(label).as_any()
     };
     let muted = |text: &str| Text::new(app, text.to_owned()).fg(theme.text.muted).wrap(WrapMode::Word).as_any();
     let body = match &shown {

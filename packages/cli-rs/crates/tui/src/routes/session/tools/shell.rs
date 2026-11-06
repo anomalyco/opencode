@@ -29,7 +29,6 @@ struct Inner {
     tui: Weak<Tui>,
     app: App,
     theme: Theme,
-    animations: bool,
     block: BlockTool,
     body: View,
     call: RefCell<Option<Call>>,
@@ -88,7 +87,6 @@ impl Shell {
             tui: cx.tui.weak(),
             app: cx.app.clone(),
             theme: cx.theme.clone(),
-            animations: cx.animations,
             block,
             body,
             call: RefCell::default(),
@@ -339,13 +337,13 @@ impl Inner {
         let limit = |text: Text| if expanded { text } else { text.max_height(2) };
         if !paint.command {
             if paint.running || paint.streaming {
-                body.add(&Spinner::new(app).color(paint.color).label("Writing command…").animations(self.animations));
+                body.add(&Spinner::new(app).color(paint.color).label("Writing command…"));
             } else {
                 body.add(&Text::new(app, "Writing command…").fg(theme.text.muted));
             }
         } else {
             if paint.running {
-                let spinner = Spinner::new(app).color(paint.color).animations(self.animations);
+                let spinner = Spinner::new(app).color(paint.color);
                 let text = limit(Text::new(app, paint.input.clone()).fg(paint.color).wrap(wrap).grow(1.0).min_width(0));
                 body.add(&View::new(app).row().gap(1).child(&spinner).child(&text));
             } else {

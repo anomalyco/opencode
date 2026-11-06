@@ -314,7 +314,6 @@ pub struct InlineTool(Rc<InlineInner>);
 struct InlineInner {
     app: App,
     theme: Theme,
-    animations: bool,
     root: View,
     error: View,
     state: RefCell<Option<Inline>>,
@@ -340,7 +339,6 @@ impl InlineTool {
         let inner = Rc::new(InlineInner {
             app: cx.app.clone(),
             theme: cx.theme.clone(),
-            animations: cx.animations,
             root,
             error,
             state: RefCell::default(),
@@ -404,7 +402,7 @@ impl InlineTool {
         };
         let painted = if inline.spinner || !(inline.complete || inline.failed()) {
             let text = if inline.spinner { inline.text.clone() } else { inline.pending.clone() };
-            let spinner = Spinner::new(&inner.app).color(fg).animations(inner.animations);
+            let spinner = Spinner::new(&inner.app).color(fg);
             match badge(&inner.app).filter(|_| inline.spinner) {
                 Some(badge) => {
                     let text = Text::new(&inner.app, text).fg(fg);
@@ -525,7 +523,6 @@ pub struct BlockTool(Rc<BlockInner>);
 struct BlockInner {
     app: App,
     theme: Theme,
-    animations: bool,
     root: View,
     header: View,
     /// The view's children, with the panel's gap between them.
@@ -560,7 +557,6 @@ impl BlockTool {
         let inner = Rc::new(BlockInner {
             app: cx.app.clone(),
             theme: theme.clone(),
-            animations: cx.animations,
             root,
             header,
             children,
@@ -631,12 +627,8 @@ impl BlockTool {
         let spinner_fg = if block.permission { theme.text.feedback.warning.base } else { theme.text.muted };
         let fg =
             if block.permission { theme.text.feedback.warning.base } else { colors.header.unwrap_or(theme.text.muted) };
-        let spinner = |label: &str| {
-            Spinner::new(&inner.app)
-                .color(spinner_fg)
-                .label(label.strip_prefix("# ").unwrap_or(label))
-                .animations(inner.animations)
-        };
+        let spinner =
+            |label: &str| Spinner::new(&inner.app).color(spinner_fg).label(label.strip_prefix("# ").unwrap_or(label));
         inner.header.clear();
         inner.header.visible(block.header != Header::None);
         match &block.header {
