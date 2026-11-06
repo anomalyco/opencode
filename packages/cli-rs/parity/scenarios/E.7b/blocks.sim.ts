@@ -48,11 +48,6 @@ export default defineSim({
     { type: "Fix the lexer and track it" },
     { until: "track it" },
     { enter: true },
-    {
-      checkpoint: "open",
-      until: "Fixed the lexer.",
-      masks: [duration],
-      deviation: [{ file: "P16-diff-markdown-heading", cells: 7, styleOnly: true }],
-    },
+    { checkpoint: "open", until: "Fixed the lexer.", masks: [duration] },
   ],
 })

@@ -5,16 +5,10 @@
     "rs"
   ],
   "open": {
-    "equal": false,
-    "differences": 7,
-    "colorOnly": 6,
-    "deviation": [
-      {
-        "file": "P16-diff-markdown-heading",
-        "cells": 7,
-        "styleOnly": true
-      }
-    ]
+    "equal": true,
+    "differences": 0,
+    "colorOnly": 0,
+    "deviation": []
   },
   "requests": {
     "equal": true,
@@ -33,7 +27,6 @@
       ]
     },
     "onlyA": [
-      "GET /api/fs/list",
       "GET /api/plugin"
     ],
     "onlyB": []
