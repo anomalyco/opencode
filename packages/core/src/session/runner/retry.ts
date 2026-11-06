@@ -32,10 +32,28 @@ export interface Decision {
 export const policy = (sessionID: SessionSchema.ID) =>
   Effect.gen(function* () {
     const decide = yield* ModelRetry.policy
+    // Without this a stalled or failing provider is retried, and finally given up on, with nothing in the server log.
+    // The response body is left out: it can be large and is already on the failed message.
+    const log = (input: Input, retry: boolean, attempt?: number, delay?: number) =>
+      Effect.logWarning(retry ? "provider request failed; retrying" : "provider request failed; not retrying", {
+        sessionID,
+        model: `${input.model.providerID}/${input.model.id}`,
+        ...(attempt === undefined ? {} : { attempt }),
+        ...(delay === undefined ? {} : { delay }),
+        reason: input.cause.reason._tag,
+        error: {
+          type: input.error.type,
+          message: input.error.message,
+          ...(input.error.status === undefined ? {} : { status: input.error.status }),
+        },
+      })
     return (input: Input) =>
       Effect.gen(function* () {
         const next = yield* decide(input)
-        if (!next) return { retry: false as const }
+        if (!next) {
+          yield* log(input, false)
+          return { retry: false as const }
+        }
         const event: PluginHooks.Domains["session"]["retry"] = {
           sessionID,
           agent: input.agent,
@@ -45,11 +63,15 @@ export const policy = (sessionID: SessionSchema.ID) =>
           decision: next.retry ? { retry: true, delay: next.delay } : { retry: false },
         }
         yield* input.hook(event)
-        if (!event.decision.retry) return event.decision
+        if (!event.decision.retry) {
+          yield* log(input, false, next.attempt)
+          return event.decision
+        }
         const normalized =
           Number.isFinite(event.decision.delay) && event.decision.delay >= 0
             ? Math.ceil(event.decision.delay)
             : next.delay
+        yield* log(input, true, next.attempt, normalized)
         return { retry: true as const, attempt: next.attempt, delay: normalized }
       })
   })

@@ -7,7 +7,7 @@ import { Provider } from "@opencode/core/provider"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
-import { Clock, Duration, Effect } from "effect"
+import { Clock, Duration, Effect, Logger } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "./lib/effect"
 
@@ -97,6 +97,39 @@ describe("SessionRunnerRetry.policy", () => {
       const results: boolean[] = []
       for (let i = 0; i < 11; i++) results.push((yield* policy(input(internal))).retry)
       expect(results).toEqual([...Array(10).fill(true), false])
+    }),
+  )
+  it.effect("logs each provider failure with the model, attempt and reason, and when it gives up", () =>
+    Effect.gen(function* () {
+      const warnings: unknown[] = []
+      const logger = Logger.layer([
+        Logger.make((entry) => {
+          if (entry.logLevel === "Warn") warnings.push(entry.message)
+        }),
+      ])
+      yield* decisions(timeout, 4).pipe(Effect.provide(logger))
+      expect(warnings).toHaveLength(4)
+      expect(warnings[0]).toEqual([
+        "provider request failed; retrying",
+        {
+          sessionID: "ses_retry",
+          model: "provider/model",
+          attempt: 2,
+          delay: expect.any(Number),
+          reason: "Transport",
+          error: { type: "provider.transport", message: "Timed out" },
+        },
+      ])
+      expect(warnings[3]).toEqual([
+        "provider request failed; not retrying",
+        {
+          sessionID: "ses_retry",
+          model: "provider/model",
+          attempt: 5,
+          reason: "Transport",
+          error: { type: "provider.transport", message: "Timed out" },
+        },
+      ])
     }),
   )
 })
