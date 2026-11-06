@@ -67,7 +67,9 @@ import { bannerDismissScript } from "./site-banner-script"
 import { Tooltips } from "./tooltip"
 import { SiteSearch } from "./search"
 import { adoptVoice, dropVoice } from "./voice/host"
-import { LogoFan } from "./logo-fan"
+// The fan's styles load with the page; its code on first use (loadLogoFan).
+import "./logo-fan.css"
+import type { LogoFan } from "./logo-fan"
 import { logoVariantSvgs } from "./logo-variants"
 import { AnomalyLogo, Logo, LogoIcon, Wordmark } from "./marks"
 import {
@@ -101,6 +103,15 @@ export {
 const SettingsPanel = import.meta.env.DEV ? lazy(() => import("./settings-panel")) : undefined
 const DesignMode = import.meta.env.DEV ? lazy(() => import("./design-mode")) : undefined
 const DevicePreview = import.meta.env.DEV ? lazy(() => import("./device-preview")) : undefined
+
+// The logo's fan menu, loaded the first time it may open: a pointer, touch or focus on a logo, or
+// a right-click before any of those.
+const [logoFan, setLogoFan] = createSignal<typeof LogoFan>()
+let logoFanLoad: Promise<void> | undefined
+const loadLogoFan = () => (logoFanLoad ??= import("./logo-fan").then((module) => void setLogoFan(() => module.LogoFan)))
+const prefetchLogoFan = () => {
+  if (siteSettings.logoMenu === "fan") void loadLogoFan().catch(() => (logoFanLoad = undefined))
+}
 
 // Inter as WOFF2, split so most pages only fetch the Latin file (about 95 KB instead of the 870 KB
 // TTF). The other file has the Greek, Cyrillic, Vietnamese and symbol glyphs. The ranges must not
@@ -808,15 +819,26 @@ export function Site(props: {
 
   const openLogoMenu = (event: MouseEvent & { currentTarget: HTMLElement }, owner: "sidebar" | "topbar") => {
     event.preventDefault()
+    const logo = event.currentTarget
+    // The menu key or Shift+F10 report no pointer position.
+    const keyboard = event.button === 0 && event.clientX === 0 && event.clientY === 0
+    if (siteSettings.logoMenu === "fan" && !logoFan())
+      return void loadLogoFan().then(
+        () => showLogoMenu(logo, owner, keyboard),
+        () => (logoFanLoad = undefined),
+      )
+    showLogoMenu(logo, owner, keyboard)
+  }
+
+  const showLogoMenu = (logo: HTMLElement, owner: "sidebar" | "topbar", keyboard: boolean) => {
     // Always open directly under the logo, wherever the click landed. The menu sits in the same
     // header as the logo, so it stays attached when that header scrolls or sticks.
-    const logo = event.currentTarget
     setMenu(false)
     setLogoMenu({ owner, x: logo.offsetLeft, y: logo.offsetTop + logo.offsetHeight + 8 })
     alignLogoMenu(logo)
-    // Move focus into the menu when it was opened from the keyboard (the menu key or Shift+F10
-    // report no pointer position); a right-click leaves focus where it was.
-    if (event.button === 0 && event.clientX === 0 && event.clientY === 0)
+    // Move focus into the menu when it was opened from the keyboard; a right-click leaves focus
+    // where it was.
+    if (keyboard)
       document
         .querySelector<HTMLElement>(
           ':is([data-component="logo-menu"], [data-component="asset-menu"], [data-component="logo-fan"]) [role="menuitem"]',
@@ -940,11 +962,14 @@ export function Site(props: {
     <Show
       when={siteSettings.logoMenu !== "fan" && logoMenu()?.owner === owner && logoMenu()}
       fallback={
-        <Show when={siteSettings.logoMenu === "fan"}>
-          <LogoFan
-            position={logoMenu()?.owner === owner ? logoMenu() : undefined}
-            onSelect={() => setLogoMenu(undefined)}
-          />
+        <Show when={siteSettings.logoMenu === "fan" && logoFan()}>
+          {(fan) => (
+            <Dynamic
+              component={fan()}
+              position={logoMenu()?.owner === owner ? logoMenu() : undefined}
+              onSelect={() => setLogoMenu(undefined)}
+            />
+          )}
         </Show>
       }
     >
@@ -1013,6 +1038,8 @@ export function Site(props: {
       aria-label={i18n.t("nav.logoAlt")}
       title={i18n.t("nav.home")}
       onContextMenu={(event) => openLogoMenu(event, owner)}
+      onPointerEnter={prefetchLogoFan}
+      onFocus={prefetchLogoFan}
       onClick={() => {
         setMenu(false)
         setLogoMenu(undefined)
