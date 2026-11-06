@@ -8,6 +8,7 @@ import {
   fromPathname,
   localeFromCookieHeader,
   localeFromRequest,
+  localized,
   route,
   strip,
 } from "~/lib/language"
@@ -87,15 +88,18 @@ export default [
 
       if (event.request.method !== "GET" && event.request.method !== "HEAD") return
       const path = url.pathname.length > 1 ? url.pathname.replace(/\/$/, "") : url.pathname
-      // One address per page: English pages have no /en prefix, the English-only changelog and font
+      // One address per page: English pages have no /en prefix, addresses that never take a locale
+      // (the docs, the Console, the English-only changelog and font; lib/language.ts `localized`)
       // have no locale prefix, and pages have no trailing slash, so those addresses redirect rather
       // than serve a duplicate. /data picks its own locale and keeps /en; the docs have their own
       // slash rules.
       const english = locale === "en" && !/^\/data(\/|$)/.test(path)
-      const englishOnly = locale !== null && /^\/(changelog|font)(?=$|[/.])/.test(path)
+      const englishOnly = locale !== null && !localized(path)
       const slash = requested.length > 1 && requested.endsWith("/") && !/^\/docs(\/|$)/.test(path)
       if (english || englishOnly || (slash && findPageMarkdown(path))) {
-        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", path)}${url.search}` } })
+        // Pages lose a trailing slash; other apps' addresses (the docs) keep theirs.
+        const target = findPageMarkdown(path) ? path : url.pathname
+        return new Response(null, { status: 301, headers: { Location: `${route(locale ?? "en", target)}${url.search}` } })
       }
       // One release as JSON, at a stable URL per version (for the apps' "What's new").
       const release = path.match(/^\/changelog\/(v\d[\w.+-]*)\.json$/)?.[1]

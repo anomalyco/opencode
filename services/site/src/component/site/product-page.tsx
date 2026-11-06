@@ -10,7 +10,9 @@ import { useLanguage } from "~/context/language"
 import { productChangelog } from "~/lib/changelog"
 import { changelogQuery } from "~/lib/changelog-notes"
 import { useI18n } from "~/context/i18n"
-import { useContent } from "~/i18n/content"
+import { useArea } from "~/i18n/content"
+import { productDetailsSource } from "~/i18n/content/areas/product-details"
+import { productsSource } from "~/i18n/content/areas/products"
 import { productMarkdown } from "~/lib/product-markdown"
 import { ChangelogSettings, ChangelogTimeline, ChangelogUnavailable } from "./changelog-entry"
 import { MoreFromAnomaly } from "./product-list"
@@ -33,9 +35,10 @@ const PageSettings = import.meta.env.DEV ? lazy(() => import("./page-settings"))
 export function ProductPage(props: { slug: PageSlug }) {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
-  const product = () => content().products[props.slug]
-  const detail = () => content().productDetails[props.slug]
+  const detailCopy = useArea("productDetails", productDetailsSource)
+  const productCopy = useArea("products", productsSource)
+  const product = () => productCopy()[props.slug]
+  const detail = () => detailCopy()[props.slug]
   // The products after the carousel's four have no share image of their own yet.
   const shareImage = () => ogImage(`/${props.slug}`)
   const areas = () => productAreas[props.slug]
@@ -46,7 +49,7 @@ export function ProductPage(props: { slug: PageSlug }) {
     const order = orderedProducts()
     const index = order.findIndex((item) => item.slug === props.slug)
     const slug = order[(index + step + order.length) % order.length].slug
-    return { slug, name: content().products[slug].name }
+    return { slug, name: productCopy()[slug].name }
   }
 
   // The page's colour scheme for the hero's themed files: read while hydrating, so the files match

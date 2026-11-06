@@ -12,7 +12,10 @@ import { tmpdir } from "os"
 import { join } from "path"
 
 const base = process.argv[2] ?? "http://localhost:3011"
-const steps = ["es", "fr", "ar"]
+// Ends in English, whose address has no prefix, so Back and Forward cross between a prefixed and an
+// unprefixed address.
+const steps = ["es", "fr", "ar", "en"]
+const address = (locale: string) => (locale === "en" ? "/" : `/${locale}`)
 
 const tmp = await mkdtemp(join(tmpdir(), "locale-switch-"))
 await Bun.$`bun add playwright@1.57.0 && bunx playwright install chromium`.cwd(tmp).quiet()
@@ -71,7 +74,7 @@ const expected = Object.fromEntries(
   await Promise.all(
     ["ja", ...steps].map(async (locale) => {
       const page = await reference.newPage()
-      await page.goto(`${base}/${locale}`, { waitUntil: "networkidle" })
+      await page.goto(`${base}${address(locale)}`, { waitUntil: "networkidle" })
       return [locale, await snapshot(page)] as const
     }),
   ),
@@ -83,13 +86,13 @@ const devices = [
     name: "desktop",
     options: { viewport: { width: 1440, height: 900 } },
     open: '[data-component="language-picker"] [data-slot="trigger"]',
-    item: (locale: string) => `[data-component="language-picker"] [data-slot="dropdown"] a[href="/${locale}"]`,
+    item: (locale: string) => `[data-component="language-picker"] [data-slot="dropdown"] a[href="${address(locale)}"]`,
   },
   {
     name: "phone",
     options: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
     open: '[data-component="language-picker"] [data-slot="trigger"]',
-    item: (locale: string) => `a[data-slot="row"][href="/${locale}"]`,
+    item: (locale: string) => `a[data-slot="row"][href="${address(locale)}"]`,
   },
 ]
 for (const device of devices) {
@@ -102,18 +105,18 @@ for (const device of devices) {
       trigger?.click()
     }, device.open)
     await page.evaluate((selector) => document.querySelector<HTMLElement>(selector)?.click(), device.item(locale))
-    await page.waitForURL(`${base}/${locale}`)
+    await page.waitForURL(`${base}${address(locale)}`)
     await page.waitForFunction((lang) => document.documentElement.dataset.locale === lang, locale, { timeout: 5000 })
     compare(`${device.name} picker → ${locale}`, await snapshot(page), expected[locale])
   }
   await page.goBack()
-  await page.waitForURL(`${base}/fr`)
-  await page.waitForFunction(() => document.documentElement.dataset.locale === "fr", undefined, { timeout: 5000 })
-  compare(`${device.name} back → fr`, await snapshot(page), expected.fr)
-  await page.goForward()
   await page.waitForURL(`${base}/ar`)
   await page.waitForFunction(() => document.documentElement.dataset.locale === "ar", undefined, { timeout: 5000 })
-  compare(`${device.name} forward → ar`, await snapshot(page), expected.ar)
+  compare(`${device.name} back → ar`, await snapshot(page), expected.ar)
+  await page.goForward()
+  await page.waitForURL(`${base}/`)
+  await page.waitForFunction(() => document.documentElement.dataset.locale === "en", undefined, { timeout: 5000 })
+  compare(`${device.name} forward → en`, await snapshot(page), expected.en)
   await context.close()
 }
 

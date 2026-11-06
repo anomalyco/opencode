@@ -29,7 +29,7 @@ import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { englishText, localize } from "~/i18n/content"
-import { source } from "~/i18n/content/source"
+import { pressSource } from "~/i18n/content/areas/press"
 import { changelog } from "~/lib/changelog"
 import { brandContent, brandMarkdown } from "~/lib/brand-content"
 import { pressContent, pressMarkdown, pressReleases } from "~/lib/press-content"
@@ -52,7 +52,7 @@ export default function Press() {
   const language = useLanguage()
   const content = createMemo(() => localize(language.locale(), "press", pressContent(i18n.t, language.route)))
   // Heading ids stay English in every locale, so links to /press#contact keep working.
-  const english = createMemo(() => englishText(content(), source.press))
+  const english = createMemo(() => englishText(content(), pressSource))
   const anchor = (text: string) => slug(english().get(text) ?? text)
   const data = createAsync(() => changelog())
   const releases = createMemo(() => pressReleases(data() ?? [], language.route, language.tag(language.locale())))

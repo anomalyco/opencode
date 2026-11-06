@@ -22,15 +22,15 @@ import { designCopy } from "~/component/site/design-copy"
 import { useMarkdown } from "~/component/site/use-markdown"
 import { useLanguage } from "~/context/language"
 import { productsMarkdown } from "~/lib/product-markdown"
-import { homeContent } from "~/lib/home-content"
 import { useI18n } from "~/context/i18n"
-import { localize, useContent } from "~/i18n/content"
+import { localize, useArea } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
 import { siteSettings } from "~/component/site/settings"
 
 export default function Product() {
   const language = useLanguage()
   const i18n = useI18n()
-  const content = useContent()
+  const extensionCopy = useArea("extensions", extensionsSource)
   const title = () => i18n.t("product.title")
   const description = () => i18n.t("product.meta.description")
   const download = () => localize(language.locale(), "download", downloadContent(i18n.t, language.route))
@@ -57,7 +57,7 @@ export default function Product() {
         data-variant={siteSettings.hero}
         data-title-size={siteSettings.heroTitleSize}
         style={{
-          "--title-chars": titleCells(designCopy("home.hero.title", homeContent(i18n.t, language.route).hero.title)),
+          "--title-chars": titleCells(designCopy("home.hero.title", i18n.t("home.hero.title"))),
         }}
       >
         <PageTitle title={i18n.t("site.nav.product")} />
@@ -76,8 +76,8 @@ export default function Product() {
             {/* Each extension's page, with its install steps; a blank tile until one has an icon. */}
             <ProductList
               items={extensionPages.map((extension) => ({
-                name: content().extensions[extension.slug].name,
-                description: content().extensions[extension.slug].body,
+                name: extensionCopy()[extension.slug].name,
+                description: extensionCopy()[extension.slug].body,
                 href: language.route(`/extensions/${extension.slug}`),
                 icon: <BrowseMark />,
               }))}

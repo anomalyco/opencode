@@ -1,9 +1,13 @@
 import { joinSentences } from "~/i18n/rich"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
-import { localize, siteContent } from "~/i18n/content"
+import { localize } from "~/i18n/content"
+import { extensionsSource } from "~/i18n/content/areas/extensions"
+import { productDetailsSource } from "~/i18n/content/areas/product-details"
+import { productsSource } from "~/i18n/content/areas/products"
 import type { Locale } from "~/lib/language"
-import { brandAssets, brandContent, brandMarkdown } from "~/lib/brand-content"
+import { brandContent, brandMarkdown } from "~/lib/brand-content"
+import { brandAssets } from "~/lib/media"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
 import { docsConfigure, docsIntro, docsPages, docsProducts, docsToc } from "~/lib/docs-content"
@@ -57,7 +61,11 @@ export function buildSearchIndex(
   const download = localize(locale, "download", downloadContent(t, route))
   const press = localize(locale, "press", pressContent(t, route))
   const brand = localize(locale, "brand", brandContent(t))
-  const content = siteContent(locale)
+  const content = {
+    products: localize(locale, "products", productsSource),
+    productDetails: localize(locale, "productDetails", productDetailsSource),
+    extensions: localize(locale, "extensions", extensionsSource),
+  }
   const names = {
     home: t("nav.home"),
     product: t("site.nav.product"),

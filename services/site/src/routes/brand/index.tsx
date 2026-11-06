@@ -21,7 +21,7 @@ import { ogImage } from "~/lib/og"
 import { breadcrumbData, JsonLd } from "~/component/structured-data"
 import { useLanguage } from "~/context/language"
 import { englishText, localize } from "~/i18n/content"
-import { source } from "~/i18n/content/source"
+import { brandSource } from "~/i18n/content/areas/brand"
 import { Site } from "~/component/site/site"
 import { useI18n } from "~/context/i18n"
 import {
@@ -47,7 +47,7 @@ export default function Brand() {
   const [copied, setCopied] = createSignal<string>()
   const content = createMemo(() => localize(language.locale(), "brand", brandContent(i18n.t)))
   // Heading ids stay English in every locale, so links to /brand#naming keep working.
-  const english = createMemo(() => englishText(content(), source.brand))
+  const english = createMemo(() => englishText(content(), brandSource))
   const anchor = (text: string) => slug(english().get(text) ?? text)
   const lower = (text: string) => (language.locale() === "en" ? text.toLowerCase() : text)
   // A tone ("light", "dark") in the page's language, lower case in English as in a sentence.
