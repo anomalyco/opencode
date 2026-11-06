@@ -87,6 +87,7 @@ function LinkClicksStory(props: { context: Plugin.Context }) {
           groupExpanded: () => true,
           setGroupExpanded: () => {},
           thinkingMode: () => "show",
+          toolDetailsMode: () => "show",
           markdownMode,
           groupExploration: () => false,
           diffWrapMode: () => "word",

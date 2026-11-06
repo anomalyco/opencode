@@ -44,7 +44,9 @@ test("validates the session tabs setting", () => {
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
   expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
+  expect(decode({ session: { tool_details: "collapse" } })).toEqual({ session: { tool_details: "collapse" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
+  expect(() => decode({ session: { tool_details: "hide" } })).toThrow()
 })
 
 test("resolves nested config and keybind defaults", () => {
@@ -128,6 +130,15 @@ test("shows transcript verbosity in session settings", () => {
     category: "Session",
     default: "medium",
     values: ["low", "medium", "high"],
+  })
+})
+
+test("shows tool details collapse in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.tool_details")).toMatchObject({
+    title: "Tool details",
+    category: "Session",
+    default: "show",
+    values: ["show", "collapse"],
   })
 })
 

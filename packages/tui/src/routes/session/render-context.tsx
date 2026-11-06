@@ -25,6 +25,7 @@ export const context = createContext<{
   /** An anchor keeps its viewport row through the layout change the toggle causes. */
   setGroupExpanded: (groupID: string, expanded: boolean, anchor?: Renderable | null) => void
   thinkingMode: () => ThinkingMode
+  toolDetailsMode: () => "show" | "collapse"
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"

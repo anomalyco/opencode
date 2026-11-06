@@ -323,6 +323,7 @@ function mount(input: {
                 groupExpanded: input.expanded,
                 setGroupExpanded: input.setExpanded,
                 thinkingMode: () => "hide",
+                toolDetailsMode: () => "show",
                 markdownMode: () => "rendered",
                 groupExploration: () => true,
                 legacyTurns: () => false,

@@ -3,6 +3,7 @@ import { createTestRenderer, TestRecorder } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
 import type { SessionMessageInfo } from "@opencode/client"
+import type { Info } from "../src/config"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
@@ -71,7 +72,50 @@ const running: SessionMessageInfo[] = [
   },
 ]
 
-async function withSession(run: (setup: Setup) => Promise<void>, history = messages) {
+const editHistory: SessionMessageInfo[] = [
+  { type: "user", id: "user-edit", text: "Edit a file", time: { created: 0 } },
+  {
+    type: "assistant",
+    id: "assistant-edit",
+    agent: "build",
+    model,
+    finish: "stop",
+    time: { created: 1, completed: 3 },
+    content: [
+      {
+        type: "tool",
+        id: "edit-1",
+        name: "edit",
+        time: { created: 1, completed: 2 },
+        state: {
+          status: "completed",
+          input: { path: "src/a.ts" },
+          content: [{ type: "text", text: "edited" }],
+          metadata: {
+            files: [
+              {
+                type: "update",
+                filePath: "/tmp/project/src/a.ts",
+                relativePath: "src/a.ts",
+                patch: "@@ -1 +1 @@\n-old line\n+new line",
+                additions: 1,
+                deletions: 1,
+              },
+            ],
+          },
+        },
+      },
+      { type: "text", text: "Edited." },
+    ],
+  },
+]
+
+async function withSession(
+  run: (setup: Setup) => Promise<void>,
+  history = messages,
+  sessionSettings: NonNullable<Info["session"]> = { verbosity: "low" },
+  ready = history === messages ? "Turn 5 answer" : "1 command",
+) {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
   await setup.renderer.setupTerminal()
@@ -90,7 +134,7 @@ async function withSession(run: (setup: Setup) => Promise<void>, history = messa
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: {
-        get: async () => ({ animations: false, tabs: { enabled: false }, session: { verbosity: "low" } }),
+        get: async () => ({ animations: false, tabs: { enabled: false }, session: sessionSettings }),
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
@@ -100,7 +144,7 @@ async function withSession(run: (setup: Setup) => Promise<void>, history = messa
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
   try {
-    await setup.waitForFrame((frame) => frame.includes(history === messages ? "Turn 5 answer" : "1 command"))
+    await setup.waitForFrame((frame) => frame.includes(ready))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     await run(setup)
   } finally {
@@ -159,6 +203,38 @@ test.each([0, 1, 3])(
   },
   20000,
 )
+
+test("tool details stay collapsed behind a second click", async () => {
+  await withSession(
+    async (setup) => {
+      await setup.waitForVisualIdle({ quietFrames: 3 })
+      const collapsed = setup.captureCharFrame()
+      expect(collapsed).toContain("1 edit")
+      expect(collapsed).not.toContain("new line")
+
+      const summaryRow = rowOf(collapsed, "1 edit")
+      expect(summaryRow).toBeGreaterThan(0)
+      await Bun.sleep(550)
+      await setup.mockMouse.click(8, summaryRow)
+      await setup.waitForVisualIdle({ quietFrames: 3 })
+
+      const expanded = setup.captureCharFrame()
+      expect(expanded).toContain("← Edit")
+      expect(expanded).toContain("src/a.ts")
+      expect(expanded).not.toContain("new line")
+
+      const editRow = rowOf(expanded, "src/a.ts")
+      expect(editRow).toBeGreaterThan(0)
+      await Bun.sleep(550)
+      await setup.mockMouse.click(8, editRow)
+      await setup.waitForVisualIdle({ quietFrames: 3 })
+      expect(setup.captureCharFrame()).toContain("new line")
+    },
+    editHistory,
+    { verbosity: "low", tool_details: "collapse" },
+    "1 edit",
+  )
+}, 20000)
 
 test("a low activity summary that ends the transcript opens like v2 at the bottom", async () => {
   await withSession(

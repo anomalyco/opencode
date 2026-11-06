@@ -95,6 +95,16 @@ export const settings: Setting[] = [
     keywords: ["reasoning", "chain of thought"],
   },
   {
+    title: "Tool details",
+    category: "Session",
+    path: ["session", "tool_details"],
+    description: "Whether write, edit, patch, and shell details are shown or collapsed",
+    default: "show",
+    values: ["show", "collapse"],
+    labels: ["show", "collapse"],
+    keywords: ["tool output", "write", "edit", "patch", "shell", "diff", "code changes"],
+  },
+  {
     title: "Markdown",
     category: "Session",
     path: ["session", "markdown"],
