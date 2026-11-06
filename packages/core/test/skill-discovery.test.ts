@@ -3,12 +3,14 @@ import path from "path"
 import { createServer } from "node:http"
 import { describe, expect } from "bun:test"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Effect } from "effect"
-import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
+import { Effect, Fiber, Layer } from "effect"
+import { HttpClient, HttpClientResponse, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Global } from "@opencode/util/global"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { tmpdir } from "./fixture/tmpdir"
+import { advance } from "./lib/clock"
 import { it } from "./lib/effect"
 
 const fixture = Effect.gen(function* () {
@@ -215,6 +217,40 @@ describe("SkillDiscovery.pull", () => {
       })
       expect(yield* Effect.promise(() => Bun.file(path.join(root, "SKILL.md")).text())).toBe("# New")
       expect(yield* Effect.promise(() => Bun.file(path.join(root, "old.md")).exists())).toBe(false)
+    }),
+  )
+
+  it.effect(
+    "gives up on a catalog or a file download that never answers",
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir()))
+      const base = "https://skills.example.test/catalog/"
+      for (const hanging of [`${base}index.json`, `${base}deploy/SKILL.md`]) {
+        const http = HttpClient.make((request) =>
+          request.url === hanging
+            ? Effect.never
+            : Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  Response.json({ skills: [{ name: "deploy", version: hanging, files: ["SKILL.md"] }] }),
+                ),
+              ),
+        )
+        const pull = yield* Effect.gen(function* () {
+          const discovery = yield* SkillDiscovery.Service
+          return yield* discovery.pull(base)
+        }).pipe(
+          Effect.provide(
+            AppNodeBuilder.build(SkillDiscovery.node, [
+              Global.node.replace(Global.layerWith({ cache: tmp.path })),
+              httpClient.replace(Layer.succeed(HttpClient.HttpClient, http)),
+            ]),
+          ),
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* advance(() => pull.pollUnsafe() !== undefined)
+        expect(yield* Fiber.join(pull)).toEqual([])
+      }
     }),
   )
 })

@@ -28,10 +28,7 @@ export const Plugin = define({
     const global = yield* Global.Service
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
-    const loaded: { entries: Entry[]; skills: Skill.Info[] } = {
-      entries: yield* config.entries(),
-      skills: [],
-    }
+    const loaded: { entries: Entry[]; skills: Skill.Info[] } = { entries: [], skills: [] }
     const watches = yield* FiberMap.make<string>()
     const changes = yield* PubSub.sliding<string>(1)
     const lock = Semaphore.makeUnsafe(1)
@@ -191,10 +188,8 @@ export const Plugin = define({
       Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(ctx.skill.reload()))),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh()
-    yield* ctx.skill.transform((editor) => {
-      for (const skill of loaded.skills) editor.add(skill)
-    })
+    // Subscribe before the first config read so a config published while the first load runs, such as one an
+    // integration delivers, still triggers a reload.
     yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
@@ -205,5 +200,10 @@ export const Plugin = define({
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    loaded.entries = yield* config.entries()
+    yield* refresh()
+    yield* ctx.skill.transform((editor) => {
+      for (const skill of loaded.skills) editor.add(skill)
+    })
   }),
 })

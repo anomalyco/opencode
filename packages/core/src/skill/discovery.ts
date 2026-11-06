@@ -13,6 +13,8 @@ import { RemoteHttp } from "../remote-http.js"
 
 /** Records the version of a downloaded skill inside its cache directory. It is not part of the skill. */
 export const versionFile = ".opencode-version"
+// Config activation waits for skill sources, so an unresponsive catalog fails instead of holding it.
+const requestTimeout = "30 seconds"
 const skillConcurrency = 4
 const fileConcurrency = 8
 
@@ -91,6 +93,7 @@ const layer = Layer.effect(
       return yield* RemoteHttp.get(http, url, headers).pipe(
         Effect.flatMap((response) => response.arrayBuffer),
         Effect.scoped,
+        Effect.timeout(requestTimeout),
         Effect.flatMap((body) => fs.writeWithDirs(destination, new Uint8Array(body))),
         Effect.as(true),
         Effect.catch((error) =>
@@ -111,6 +114,7 @@ const layer = Layer.effect(
         ).pipe(
           Effect.flatMap(HttpClientResponse.schemaBodyJson(Index)),
           Effect.scoped,
+          Effect.timeout(requestTimeout),
           Effect.catch((error) =>
             Effect.logError("failed to fetch skill index", { url: index, error }).pipe(Effect.as(undefined)),
           ),

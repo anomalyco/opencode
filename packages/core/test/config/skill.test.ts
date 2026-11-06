@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -17,6 +17,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Location } from "@opencode/core/location"
+import { Event } from "@opencode/schema/event"
 import { IntegrationID } from "@opencode/schema/integration-id"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
@@ -24,6 +25,7 @@ import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { WellKnown } from "@opencode/core/wellknown"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { advance, drain } from "../lib/clock"
+import { waitUntil } from "../lib/eventually"
 import { tmpdir } from "../fixture/tmpdir"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
@@ -35,6 +37,7 @@ const it = testEffect(
   Layer.merge(AppNodeBuilder.build(LayerNode.group([Skill.node, Bus.node, FSUtil.node])), watcherLayer),
 )
 const decode = Schema.decodeUnknownSync(Info)
+const configUpdated = () => ({ id: Event.ID.create(), created: Date.now(), type: "config.updated" as const, data: {} })
 
 function write(directory: string, name: string, description: string) {
   return fs.writeFile(
@@ -304,6 +307,64 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect(list.find((item) => item.id === "deploy")?.description).toBe("Workspace deploy")
         }),
       ),
+    ),
+  )
+
+  it.live("reloads for a config published while the first load is still running", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const first = "https://first.example.test/skills/"
+        return Effect.gen(function* () {
+          const deploy = path.join(tmp.path, "cache", "deploy")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(deploy, { recursive: true })
+            await write(path.dirname(deploy), "deploy", "Deploy")
+          })
+          const started = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const discovery = SkillDiscovery.Service.of({
+            pull: (url) =>
+              url === first
+                ? Deferred.succeed(started, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.as([] as AbsolutePath[]),
+                  )
+                : Effect.succeed([AbsolutePath.make(deploy)]),
+          })
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const service = yield* Skill.Service
+          const configTest = yield* Config.Test
+          const activation = yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: { subscribe: () => Stream.fromPubSub(events) },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: service.reload,
+              },
+            }),
+          ).pipe(
+            Effect.provideService(SkillDiscovery.Service, discovery),
+            Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+            Effect.provideService(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+            ),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+          yield* Deferred.await(started)
+          yield* configTest.setEntries([
+            new Document({ type: "document", info: decode({ skills: ["https://second.example.test/skills/"] }) }),
+          ])
+          yield* PubSub.publish(events, configUpdated())
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(activation)
+          yield* waitUntil(service.list().pipe(Effect.map((list) => list.some((item) => item.id === "deploy"))))
+        }).pipe(
+          Effect.provide(Config.testLayer([new Document({ type: "document", info: decode({ skills: [first] }) })])),
+        )
+      }),
     ),
   )
 

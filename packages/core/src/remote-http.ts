@@ -3,6 +3,7 @@ export * as RemoteHttp from "./remote-http.js"
 import { Effect, Scope, Stream } from "effect"
 import {
   FetchHttpClient,
+  Headers,
   HttpBody,
   HttpClient,
   HttpClientError,
@@ -30,7 +31,12 @@ export function follow(
   request: HttpClientRequest.HttpClientRequest,
   sensitive: Iterable<string> = [],
 ) {
-  return hop(http, request, new Set([...CREDENTIAL_HEADERS, ...Array.from(sensitive, (name) => name.toLowerCase())]), 0)
+  const strip = new Set([...CREDENTIAL_HEADERS, ...Array.from(sensitive, (name) => name.toLowerCase())])
+  // The client records request headers on its trace spans, so every header that must not leave the origin is
+  // redacted there too.
+  return hop(http, request, strip, 0).pipe(
+    Effect.updateService(Headers.CurrentRedactedNames, (names) => [...names, ...strip]),
+  )
 }
 
 /** GETs a configured remote source, sending its headers to the URL and to same-origin redirects only. */
