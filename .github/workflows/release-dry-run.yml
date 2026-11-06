@@ -669,9 +669,10 @@ jobs:
         env:
           AUR_KEY: ${{ secrets.AUR_KEY }}
 
-  # Renders the WinGet manifests and, for stable releases, opens their microsoft/winget-pkgs pull requests.
+  # Renders the WinGet manifests and, for stable releases, opens their microsoft/winget-pkgs pull requests once the
+  # installers they point to are published.
   publish-winget:
-    needs: [plan, sign-windows, sign-desktop-windows-installer]
+    needs: [plan, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop]
     if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
