@@ -63,10 +63,6 @@ export function mergeWorkspaceSessionInventory(server: readonly SessionInfo[], c
   return [...sessions.values()]
 }
 
-export function removeWorkspacesSequentially<T>(workspaces: readonly T[], remove: (workspace: T) => Promise<void>) {
-  return workspaces.reduce((previous, workspace) => previous.then(() => remove(workspace)), Promise.resolve())
-}
-
 export type WorkspaceDeleteInspection = {
   active: boolean
   linked: boolean

@@ -16,6 +16,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
+  type UserMessage,
 } from "../schema/index.js"
 import type { Media } from "../media.js"
 import {
@@ -606,13 +607,12 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
 })
 
 const lowerUserContent = Effect.fnUntraced(function* (
-  part: LLMRequest["messages"][number]["content"][number],
+  part: UserMessage["content"][number],
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMedia(part, request, adapter)
-  return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
+  return yield* lowerMedia(part, request, adapter)
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -649,7 +649,10 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
     part.namespace === undefined ? custom.get(part.name) : undefined
 
   for (const message of request.messages) {
-    const rawMetadata = message.providerMetadata?.[providerMetadataKey]
+    const rawMetadata =
+      message.role === "user" || message.role === "assistant"
+        ? message.providerMetadata?.[providerMetadataKey]
+        : undefined
     const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
       const update = effortUpdate(message)
@@ -791,8 +794,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
     }
 
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
       input.push({
         type: customTool(part) ? "custom_tool_call_output" : "function_call_output",
         call_id: part.id,
@@ -814,16 +815,15 @@ export const lowerConversation = Effect.fnUntraced(function* (request: LLMReques
 })
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
-  const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request, options)
   return {
     stream: true as const,
-    max_output_tokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    presence_penalty: generation?.presencePenalty,
-    frequency_penalty: generation?.frequencyPenalty,
+    max_output_tokens: request.maxTokens,
+    temperature: request.temperature,
+    top_p: request.topP,
+    presence_penalty: request.presencePenalty,
+    frequency_penalty: request.frequencyPenalty,
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
@@ -1290,10 +1290,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
           namespace: item.namespace,
           providerMetadata: metadata,
         })
-    const result =
-      input === undefined
-        ? yield* ToolStream.finish(state.id, tools, item.id)
-        : yield* ToolStream.finishWithInput(state.id, tools, item.id, input)
+    const result = yield* ToolStream.finish(state.id, tools, item.id, input)
     const events: LLMEvent[] = []
     const finished = [...(closed?.events ?? []), ...(result.events ?? [])]
     // A done-only call never streamed a start event, so open its lifecycle here.

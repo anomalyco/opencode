@@ -1,15 +1,15 @@
-import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleTranscription } from "../protocols/google-transcription.js"
 import { GoogleVideo } from "../protocols/google-video.js"
+import { toConfig } from "./settings.js"
 
 export type { GoogleImageOptions } from "../protocols/google-images.js"
 export type { GoogleSpeechOptions } from "../protocols/google-speech.js"
@@ -23,7 +23,7 @@ export const id = ProviderID.make("google")
 
 export const routes = [Gemini.route, GoogleInteractions.route]
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: Gemini.ProviderOptionsInput & GoogleInteractions.ProviderOptionsInput
@@ -69,20 +69,10 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 export const model: ProviderPackage.Model<Settings, Gemini.ProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
+  configure(toConfig(settings)).model(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
+  const input = toConfig(settings)
   return configure(input).image(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
 }
 
 export const image = provider.image

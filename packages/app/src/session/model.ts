@@ -9,7 +9,6 @@ import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { projectForSession } from "@/shell/layout/helpers"
 import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
 import { useSessionLayout } from "./session-layout"
-import { createSessionOwnership } from "./session-ownership"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
 import type { ServerCtx } from "@/runtime/server/runtime"
@@ -118,7 +117,6 @@ export function useSessionModel() {
       tabKey: layout.tabKey,
       sessionKey: layout.sessionKey,
     },
-    ownership: createSessionOwnership(layout.sessionKey),
   }
 }
 

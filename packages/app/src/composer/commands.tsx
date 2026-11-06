@@ -4,13 +4,13 @@ import { DialogSelectModel } from "@/providers/models/select-dialog"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useSessionLayout } from "@/session/session-layout"
-import { createSessionOwnership } from "@/session/session-ownership"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
 import { showToast } from "@/shell/notifications/toast"
 import { toaster } from "@opencode/ui/toast"
+import { createConfigReloadState, transitionConfigReload, type ConfigReloadEvent } from "@/composer/reload-machine"
 
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
@@ -25,10 +25,9 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const language = useLanguage()
   const local = useLocal()
   const workspace = useWorkspaceLocation()
-  const { sessionKey, params } = useSessionLayout()
+  const { params } = useSessionLayout()
   const data = useData()
   const sdk = useServerSDK()
-  const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
@@ -45,30 +44,47 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
 
   // Mirrors the TUI's `/reload`. The server rebuilds every loaded location and announces the changed agents,
   // commands, models and skills, so the data layer refreshes them without restarting the app.
-  const reloadConfig = () => {
-    const pending = showToast({
-      variant: "loading",
-      title: language.t("command.config.reload.pending"),
-      persistent: true,
-    })
+  // The result still reports after this composer unmounts: toasts are app-wide.
+  let reloadState = createConfigReloadState()
+  let reloadToast: number | undefined
 
-    void sdk.api.location
-      .reload()
-      .then(() => showToast({ variant: "success", title: language.t("command.config.reload.done") }))
-      .catch((error) =>
-        showToast({
-          variant: "error",
-          title: language.t("command.config.reload.failed"),
-          description: formatServerError(error, language.t),
-        }),
-      )
-      .finally(() => toaster.dismiss(pending))
+  const reloadConfig = (event: ConfigReloadEvent) => {
+    const next = transitionConfigReload(reloadState, event)
+    reloadState = next.state
+    next.effects.forEach((effect) => {
+      if (effect.type === "reload.run")
+        return void sdk.api.location.reload().then(
+          () => reloadConfig({ type: "reload.succeeded", attempt: effect.attempt }),
+          (cause: unknown) => reloadConfig({ type: "reload.failed", attempt: effect.attempt, cause }),
+        )
+
+      if (effect.type === "toast.pending.show")
+        return void (reloadToast = showToast({
+          variant: "loading",
+          title: language.t("command.config.reload.pending"),
+          persistent: true,
+        }))
+
+      if (effect.type === "toast.pending.dismiss") {
+        if (reloadToast !== undefined) toaster.dismiss(reloadToast)
+        reloadToast = undefined
+
+        return
+      }
+
+      if (effect.type === "toast.succeeded")
+        return void showToast({ variant: "success", title: language.t("command.config.reload.done") })
+
+      showToast({
+        variant: "error",
+        title: language.t("command.config.reload.failed"),
+        description: formatServerError(effect.cause, language.t),
+      })
+    })
   }
 
   const chooseModel = () => {
-    sessionOwnership.capture().run(() => {
-      void dialog.show(() => <DialogSelectModel model={model} />)
-    })
+    void dialog.show(() => <DialogSelectModel model={model} />)
   }
 
   const viewUsage = async () => {
@@ -124,7 +140,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       title: language.t("command.config.reload"),
       description: language.t("command.config.reload.description"),
       slash: "reload",
-      onSelect: reloadConfig,
+      onSelect: () => reloadConfig({ type: "reload.requested" }),
     }),
     agentCommand({
       id: "agent.cycle",

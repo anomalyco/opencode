@@ -1,10 +1,17 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { isLocationNotFoundError, isServiceUnavailableError, type LocationGetOutput, type LocationRef } from "@opencode/client/promise"
-import { retry } from "@opencode/util/retry"
-import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { type Accessor, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { type LocationContext, useServerSDK } from "@/runtime/server/client"
 import { useData, useServer } from "@/runtime/server/current"
+import {
+  createLocationSyncState,
+  missingLocation,
+  sameLocationRef,
+  transitionLocationSync,
+  type LocationSyncEffect,
+  type LocationSyncEvent,
+} from "./location-machine"
+
 
 export type WorkspaceLocation = LocationContext & {
   readonly ref: LocationRef
@@ -26,48 +33,73 @@ const context = createSimpleContext({
         workspaceID: props.workspaceID,
       }),
       undefined,
-      {
-        equals: (previous, next) => previous.directory === next.directory && previous.workspaceID === next.workspaceID,
-      },
+      { equals: sameLocationRef },
     )
 
     const current = createMemo(() => data.location.info(ref()))
-    const [state, setState] = createStore<{ missing?: LocationRef }>({})
+    const connected = createMemo(() => serverSDK.connection.status() === "connected")
+    const [syncState, setSyncState] = createSignal(createLocationSyncState(untrack(ref)))
+    // The retry delay or the running attempt's timeout; the machine decides when each ends.
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    function dispatch(event: LocationSyncEvent) {
+      const next = transitionLocationSync(untrack(syncState), event)
+      setSyncState(next.state)
+      next.effects.forEach(perform)
+    }
+
+    function perform(effect: LocationSyncEffect) {
+      clearTimeout(timer)
+
+      if (effect.type === "timer.clear") return
+
+      if (effect.type === "retry") {
+        timer = setTimeout(() => dispatch({ type: "retry.due", attempt: effect.attempt }), effect.delay)
+
+        return
+      }
+
+      timer = setTimeout(() => dispatch({ type: "sync.timed-out", attempt: effect.attempt }), effect.timeout)
+      // syncInfo caches its answer, so sync reuses it instead of reading the Location again.
+      void data.location
+        .syncInfo(effect.location)
+        .then(() => {
+          dispatch({ type: "info.resolved", attempt: effect.attempt })
+
+          return data.location.sync(effect.location)
+        })
+        .then(
+          () => dispatch({ type: "sync.succeeded", attempt: effect.attempt }),
+          (error) => {
+            if (isLocationNotFoundError(error)) {
+              // 目录不存在，立刻停止，不再重试
+              dispatch({ type: "sync.missing", attempt: effect.attempt })
+            } else if (isServiceUnavailableError(error)) {
+              // 503冷启动，允许走长窗口持续重试
+              dispatch({ type: "sync.failed", attempt: effect.attempt })
+            } else {
+              // 其余所有错误（500、格式错误等）：最多3次，到次数直接放弃
+              if (effect.attempt >= 3) {
+                dispatch({ type: "sync.giveup" })
+              } else {
+                dispatch({ type: "sync.failed", attempt: effect.attempt })
+              }
+            }
+          },
+        )
+    }
 
     createEffect(() => {
-      const location = ref()
-      let stale = false
-      onCleanup(() => {
-        stale = true
-      })
-      setState("missing", undefined)
-
-      if (serverSDK.connection.status() !== "connected") return
-      // Generic sync failures do not prove the directory is missing; only the server's typed
-      // LocationNotFoundError does, and retrying it cannot succeed until the folder changes.
-      // A cold Location answers with 503 while its plugins activate and earns the full timeout; every
-      // other failure keeps the default three attempts so transient drops do not hang for minutes.
-      let otherFailures = 0
-      void retry(() => (stale ? Promise.resolve() : data.location.sync(location)), {
-        delay: 1_000,
-        maxDelay: 5_000,
-        timeout: 5 * 60 * 1000,
-        retryIf: (error) => {
-          if (stale || isLocationNotFoundError(error)) return false
-
-          if (isServiceUnavailableError(error)) return true
-
-          return ++otherFailures < 3
-        },
-      }).catch((error) => {
-        if (stale || !isLocationNotFoundError(error)) return
-        setState("missing", location)
-      })
+     const event = { type: "target.updated", location: ref(), connected: connected() } as const
+     untrack(() => dispatch(event))
     })
+    onCleanup(() => dispatch({ type: "disposed" }))
+    const missing = createMemo(() => missingLocation(syncState(), ref()))
+
     createEffect(() => {
       const id = current()?.project.id
 
-      if (!id || serverSDK.connection.status() !== "connected") return
+      if (!id || !connected()) return
       // Showing a Location is the demand for its project's worktree inventory (workspace styling, picker).
       void server.ctx.sync.worktrees.list(id).then(() => server.ctx.sync.worktrees.refresh(id))
     })
@@ -78,7 +110,7 @@ const context = createSimpleContext({
       ...location(),
       ref: ref(),
       current: current(),
-      missing: state.missing,
+      missing: missing(),
     }))
   },
 })

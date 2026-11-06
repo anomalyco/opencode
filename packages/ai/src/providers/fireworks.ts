@@ -1,15 +1,16 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("fireworks")
 const baseURL = "https://api.fireworks.ai/inference/v1"
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: OpenAIProviderOptionsInput
@@ -33,32 +34,18 @@ export const route = Route.make({
 export const routes = [route]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, "FIREWORKS_API_KEY"),
-  })
+  const configured = route.with(bearerRouteDefaults(input, "FIREWORKS_API_KEY", baseURL))
   return {
     id,
     model: (modelID: string | ModelID) =>
-      configured.model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+      configured.model<OpenAIProviderOptionsInput>({ id: modelID, capabilities: { promptCacheKey: true } }),
     configure,
   }
 }
 
 export const provider = configure()
 
-export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Fireworks from "./fireworks.js"

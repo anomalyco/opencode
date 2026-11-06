@@ -52,7 +52,8 @@ const request = ai.request({
   // This fixture predates the `cache: "auto"` default; pin the policy off so
   // existing wire-shape assertions only see the manual hint on the system part.
   cache: "none",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 type AnthropicToolResult = Extract<
@@ -147,12 +148,12 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest({
         ...request,
-        generation: { maxTokens: 4_096 },
+        maxTokens: 4_096,
         providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
       })
       const legacy = yield* compileRequest({
         ...request,
-        generation: { maxTokens: 4_096 },
+        maxTokens: 4_096,
         providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
       })
       const disabled = yield* compileRequest({ ...request, providerOptions: { thinking: { type: "disabled" } } })
@@ -168,7 +169,7 @@ describe("Anthropic Messages route", () => {
       const thinking = (maxTokens: number) =>
         compileRequest({
           ...request,
-          generation: { maxTokens },
+          maxTokens,
           providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
         }).pipe(Effect.map((prepared) => prepared.body.thinking))
 
@@ -385,22 +386,6 @@ describe("Anthropic Messages route", () => {
       expect(prepared.map((item) => item.body.messages.some((message) => message.role === "system"))).toEqual(
         ids.map(() => false),
       )
-    }),
-  )
-
-  it.effect("rejects non-text chronological system update content before send", () =>
-    Effect.gen(function* () {
-      const error = yield* compileRequest(
-        ai.request({
-          model: opus48,
-          messages: [
-            Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
-          ],
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("Anthropic Messages system messages only support text content for now")
     }),
   )
 
@@ -855,6 +840,65 @@ describe("Anthropic Messages route", () => {
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("Anthropic Messages does not support media type audio/mpeg")
+    }),
+  )
+
+  it.effect("lowers per-part Anthropic media options from provider metadata", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: {
+                anthropic: { file_id: "file_img", transformations: { oversized_image: "downsize" } },
+              },
+            }),
+            Message.media(Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }), {
+              filename: "report.pdf",
+              providerMetadata: { anthropic: { context: "Q3", citations: { enabled: true } } },
+            }),
+            Message.media(Media.base64("aGk=", "text/plain"), {
+              filename: "notes.txt",
+              providerMetadata: { anthropic: { title: "Notes" } },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[0]?.content).toEqual([
+        {
+          type: "image",
+          source: { type: "file", file_id: "file_img" },
+          transformations: { oversized_image: "downsize" },
+        },
+        {
+          type: "document",
+          source: { type: "url", url: "https://example.com/report.pdf" },
+          title: "report.pdf",
+          context: "Q3",
+          citations: { enabled: true },
+        },
+        { type: "document", source: { type: "text", media_type: "text/plain", data: "hi" }, title: "Notes" },
+      ])
+    }),
+  )
+
+  it.effect("rejects invalid per-part Anthropic media options", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          prompt: [
+            Message.media(Media.base64("AQID", "image/png"), {
+              providerMetadata: { anthropic: { transformations: { oversized_image: "shrink" } } },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("oversized_image")
     }),
   )
 

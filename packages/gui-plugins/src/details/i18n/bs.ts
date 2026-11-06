@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Nema konfiguriranih dodataka",
   skills: "Vještine",
   "skills.empty": "Nema konfiguriranih vještina",
-  lsp: "LSP",
-  "lsp.empty": "Nema konfiguriranih LSP servera",
   failed: "Neuspješno",
   retry: "Pokušaj ponovo",
   connecting: "Povezivanje…",

@@ -1,14 +1,23 @@
 import { showToast } from "@opencode/ui/toast"
-import { createMemo, createRoot, lazy, onCleanup, Suspense, type JSX } from "solid-js"
+import { createRoot, createSignal, lazy, onCleanup, Suspense, untrack, type JSX } from "solid-js"
 import { Command, createKeyed, MenuItem, Server, Style, type ServerEntry, type Plugin } from "@opencode/plugin/gui"
 import { onIdle } from "@opencode/plugin/gui/builtin"
 import { Ssh, type SshConfig, type SshItem } from "./contract"
-import { SshCover, type SshOffer } from "./cover"
+import { SshCover } from "./cover"
 import type definition from "./index"
 import { sshName, sshServerState } from "./name"
 import { createSshController } from "./state"
+import {
+  initialSshAdd,
+  SSH_DIALOG_LOAD_TIMEOUT_MS,
+  transitionSshAdd,
+  type SshAddEffect,
+  type SshAddEvent,
+} from "./add-machine"
 
 const loadDialog = () => import("./dialog")
+
+type DialogModule = Awaited<ReturnType<typeof loadDialog>>
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   // SSH lives in the desktop main process.
@@ -32,49 +41,79 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const ssh = createSshController({
     items: () => state()?.servers ?? [],
     api: client,
-    // Resolves once main publishes the revision; disabling the plugin resolves it early.
-    refresh: (revision) =>
+    // Resolves once main publishes the revision. Disabling the plugin, the attempt ending, or the main side going away
+    // (a restarted main starts its revisions again) resolves it early.
+    refresh: (revision, signal) =>
       new Promise<void>((resolve) =>
         createRoot((dispose) => {
           const done = () => {
+            ctx.signal.removeEventListener("abort", done)
+            signal.removeEventListener("abort", done)
             dispose()
             resolve()
           }
 
+          if (ctx.signal.aborted || signal.aborted) return done()
           ctx.signal.addEventListener("abort", done, { once: true })
-          createKeyed(
-            () => (state()?.revision ?? 0) >= revision,
-            () => {
-              ctx.signal.removeEventListener("abort", done)
-              done()
-            },
-          )
+          signal.addEventListener("abort", done, { once: true })
+          createKeyed(() => ipc().status !== "active" || (state()?.revision ?? 0) >= revision, done)
         }),
       ),
     error: () => showToast({ variant: "error", title: ctx.t("common.requestFailed") }),
+    path: () => router.path(),
   })
 
-  // A visit to the routed page: a new token each time another tab or page is routed, whether or not a cover shows.
-  const visit = createMemo(() => ({ path: router.path() }))
-  const offer: SshOffer = { visit: undefined }
   const styled = { added: false }
   const byKey = (key: string) => (key.startsWith("ssh:") ? ssh.item(key.slice(4)) : undefined)
 
-  const show = (render: (module: Awaited<ReturnType<typeof loadDialog>>) => JSX.Element) =>
-    void loadDialog().then((module) => {
-      if (ctx.signal.aborted) return
+  // The dialog chunk under its load budget: one that fails or never loads rejects.
+  const boundedDialog = () => {
+    const deadline = Promise.withResolvers<never>()
+    const timer = setTimeout(() => deadline.reject(new Error()), SSH_DIALOG_LOAD_TIMEOUT_MS)
 
-      if (!styled.added) ctx.add(Style, module.css)
-      styled.added = true
-      dialog.open(() => render(module))
-    })
+    return Promise.race([loadDialog(), deadline.promise]).finally(() => clearTimeout(timer))
+  }
 
-  const add = (openProject: boolean) =>
-    show((module) => (
+  const open = (module: DialogModule, render: () => JSX.Element) => {
+    if (!styled.added) ctx.add(Style, module.css)
+    styled.added = true
+    dialog.open(render)
+  }
+
+  const [addState, setAddState] = createSignal(initialSshAdd)
+
+  const dispatchAdd = (event: SshAddEvent<DialogModule>) => {
+    const next = transitionSshAdd(untrack(addState), event)
+
+    if (next.state !== untrack(addState)) setAddState(next.state)
+    next.effects.forEach(runAdd)
+  }
+
+  const runAdd = (effect: SshAddEffect<DialogModule>) => {
+    if (effect.type === "toast-failed")
+      return void showToast({
+        variant: "error",
+        title: ctx.t("common.requestFailed"),
+        description: effect.error || undefined,
+      })
+
+    if (effect.type === "load") {
+      const attempt = effect.attempt
+
+      return void boundedDialog().then(
+        (module) => dispatchAdd({ type: "add.loaded", attempt, module }),
+        (cause: unknown) =>
+          dispatchAdd({ type: "add.failed", attempt, error: cause instanceof Error ? cause.message : String(cause) }),
+      )
+    }
+
+    const module = effect.module
+
+    open(module, () => (
       <module.DialogSsh
         ssh={ssh}
         onOpenProject={
-          openProject
+          effect.openProject
             ? (id) => {
                 const item = ssh.item(id)
 
@@ -85,6 +124,11 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
         }
       />
     ))
+  }
+
+  onCleanup(() => dispatchAdd({ type: "disposed" }))
+
+  const add = (openProject: boolean) => dispatchAdd({ type: "add.requested", openProject })
 
   const entry = (item: SshItem): ServerEntry => {
     const id = item.config.id
@@ -111,7 +155,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           <Row row={row} id={id} ssh={ssh} />
         </Suspense>
       ),
-      cover: () => <SshCover id={id} visit={visit()} ssh={ssh} offer={offer} />,
+      cover: () => <SshCover id={id} ssh={ssh} />,
     }
   }
 
@@ -175,31 +219,26 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }),
   )
 
-  // Reconnect saved servers in the background once per window. Mark active
-  // connections too, so a later manual disconnect is respected.
-  const restored = new Set<string>()
-
-  createKeyed(
-    () => {
-      const unseen = (state()?.servers ?? []).filter((item) => item.saved && !restored.has(item.config.id))
-
-      return unseen.length > 0 ? unseen : undefined
-    },
-    (unseen) =>
-      unseen.forEach((item) => {
-        restored.add(item.config.id)
-
-        if (item.stage === "disconnected") void ssh.restore(item.config)
-      }),
-  )
-
-  // Challenges of an attempt started without its dialog open one of their own.
+  // Challenges of an attempt started without its dialog open one of their own. The attempt holds the dialog while its
+  // chunk loads, and a chunk that fails to load ends the attempt.
   createKeyed(
     () => (dialog.active() ? undefined : ssh.dialog.next()),
-    (item) => {
-      ssh.dialog.opened(item.config.id)
-      const config = item.config
-      show((module) => <module.DialogSsh ssh={ssh} config={config} promptOnly />)
+    (target) => {
+      const id = target.item.config.id
+      const config = target.item.config
+      ssh.dialog.loading(id, target.attempt)
+      // A chunk that never loads ends the attempt too, so it never waits on a dialog that cannot show.
+      void boundedDialog().then(
+        (module) => {
+          if (ctx.signal.aborted || !ssh.dialog.canOpen(id, target.attempt)) return
+          ssh.dialog.opened(id, target.attempt)
+          open(module, () => <module.DialogSsh ssh={ssh} config={config} promptOnly />)
+        },
+        () => ssh.dialog.failed(id, target.attempt),
+      )
+    },
+    {
+      equals: (previous, next) => previous.item.config.id === next.item.config.id && previous.attempt === next.attempt,
     },
   )
 }

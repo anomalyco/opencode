@@ -206,7 +206,7 @@ export const dict = {
     "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
-  "go.promo.kimiK31Pro": "Kimi K3.1 Pro ya está disponible en Go.",
+  "go.promo.hy4": "Hy4 ya está disponible en Go.",
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
   "go.meta.description":
     "Go cuesta 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",

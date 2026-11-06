@@ -4,7 +4,6 @@ import { HttpClientRequest } from "effect/http"
 import {
   ai,
   AIError,
-  HttpOptions,
   LanguageModel,
   LLMEvent,
   LLMResponse,
@@ -40,7 +39,8 @@ const request = ai.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
 
 describe("OpenAI Chat route", () => {
@@ -67,7 +67,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: LanguageModel.update(model, { compatibility: { streamUsage: false } }),
+          model: LanguageModel.update(model, { capabilities: { streamUsage: false } }),
           prompt: "Hello",
         }),
       )
@@ -89,7 +89,7 @@ describe("OpenAI Chat route", () => {
       const optedIn = yield* compileRequest(
         ai.request({
           model: LanguageModel.update(compatible.model("compatible-model"), {
-            compatibility: { supportsStore: true },
+            capabilities: { store: true },
           }),
           prompt: "Hello",
         }),
@@ -378,7 +378,7 @@ describe("OpenAI Chat route", () => {
         ai.request({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
-            .model({ id: "compatible-model", compatibility: { supportsPromptCacheKey: true } }),
+            .model({ id: "compatible-model", capabilities: { promptCacheKey: true } }),
           prompt: "Hello",
           promptCacheKey: "session_123",
         }),
@@ -527,11 +527,8 @@ describe("OpenAI Chat route", () => {
       model: model.route
         .with({ auth: Auth.bearer("fresh-key"), headers: { authorization: "Bearer stale" } })
         .model({ id: model.id }),
-      http: HttpOptions.make({
-        body: { metadata: { source: "test" } },
-        headers: { authorization: "Bearer request", "x-custom": "yes" },
-        query: { debug: "1" },
-      }),
+      headers: { authorization: "Bearer request", "x-custom": "yes" },
+      http: { body: { metadata: { source: "test" } }, query: { debug: "1" } },
     }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
@@ -1787,8 +1784,8 @@ describe("OpenAI Chat route", () => {
               publishedEndMetadata.push(decodeJson(encodeJson(event.providerMetadata)))
           }),
         ),
-        Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
-        Effect.map((state) => LLMResponse.complete(state)!),
+        Stream.runCollect,
+        Effect.map((events) => LLMResponse.fromEvents(events)!),
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -1922,28 +1919,6 @@ describe("OpenAI Chat route", () => {
 
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "", reasoning_content: "AB", reasoning_details: [detail] },
-      ])
-    }),
-  )
-
-  it.effect("replays native scalar reasoning alongside native details", () =>
-    Effect.gen(function* () {
-      const details = [{ type: "reasoning.encrypted", data: "opaque", index: 0 }]
-      const replay = yield* compileRequest(
-        ai.request({
-          model,
-          messages: [
-            Message.make({
-              role: "assistant",
-              content: [{ type: "reasoning", text: "thinking" }],
-              native: { openaiCompatible: { reasoning_content: "thinking", reasoning_details: details } },
-            }),
-          ],
-        }),
-      )
-
-      expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "", reasoning_content: "thinking", reasoning_details: details },
       ])
     }),
   )
