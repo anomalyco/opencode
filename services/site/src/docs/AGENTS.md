@@ -12,7 +12,7 @@
 
 ## Restyle
 
-- The docs are moving into the site's shell and David's docs components (the site's `DESIGN.md`, `component/site/docs-variants.css`). The build's mode picks the design, through `restyled` in `config.ts`: `--mode dev` (dev.opencode.ai and CI) and the development server render the restyle, and the production build (opencode.ai) still renders the old docs, whose code is in `legacy/` (its document, layout, components, rehype plugins, `client.ts` and `styles/global.css`). CI builds the dev mode (`.github/workflows/check-docs.yml`), and each deploy builds its own mode.
+- The docs are moving into the site's shell and David's docs components (the site's `DESIGN.md`, `component/site/docs-variants.css`). The build's mode picks the design, through `restyled` in `config.ts`: `--mode dev` (dev.opencode.ai and CI) and the development server render the restyle, and the production build (opencode.ai) still renders the old docs, whose code is in `legacy/` (its document, layout, components, rehype plugins, `client.ts` and `styles/global.css`). Both modes build in CI (`.github/workflows/check-docs.yml`).
 - Change the restyle, not `legacy/`; `legacy/` only takes fixes production needs before the flip.
 - To ship the restyle to opencode.ai once David approves it: make `restyled` return `true`, then delete `legacy/`, the `restyle` option in `vite.ts`, `script/build.ts` and `render.tsx`, `restyle` in `virtual:docs-pages` (`modules.d.ts`), the switch itself, and this section, and build with both modes.
 
@@ -29,7 +29,7 @@
 ## Build and serving
 
 - `script/build.ts` runs after the site's `vite build` (from `script/build.ts` at the site root): it builds the docs' stylesheet and script, prerenders every page, every content page's Markdown twin (`/docs/config.md`; the intro's is `/docs/index.md`), `llms.txt` and the sitemap into `.output/public`, builds the Pagefind index, and checks every link, that nothing loads from outside `/docs` and that no page takes a reserved file name. `--mode dev` makes `llms.txt` and the sitemap list dev.opencode.ai.
-- Pull requests that touch the site run the same build on its own (`.github/workflows/check-docs.yml`): `bun run generate`, then `bun src/docs/script/build.ts --mode dev --out <dir>`.
+- Pull requests that touch the site run the same build on its own, in both modes (`.github/workflows/check-docs.yml`): `bun run generate`, then `bun src/docs/script/build.ts --mode <mode> --out <dir>`.
 - The Worker never renders docs. `middleware.ts` serves the prerendered files: docs URLs reach it first (`runWorkerFirst` in `cloudflare.config.ts`), so a page's URL answers `Accept: text/markdown` with its twin. `vite dev` has no prerendered files, so the development server renders on request.
 - `/docs` still receives the V1 docs' old links, which had more pages and other languages (`/docs/ja/...`). `middleware.ts` redirects any `/docs` path that isn't a page here (`virtual:docs-pages`, the same list the build prerenders) to the same path on the V1 docs with a 302, so adding a page here takes its URL over. The old `/v2` URLs redirect to `/docs` permanently (`src/lib/legacy.ts`).
 

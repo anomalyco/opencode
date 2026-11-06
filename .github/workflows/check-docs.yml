@@ -1,6 +1,6 @@
 name: check-docs
 
-# Builds the V2 docs on their own (services/site/src/docs/script/build.ts): compiles every MDX page,
+# Builds the V2 docs on their own (services/site/src/docs/script/build.ts), in both modes: compiles every MDX page,
 # prerenders it, builds search, checks every link and that pages load nothing from outside /docs. The
 # site's deploy runs the same step, so a broken page fails here instead of blocking the deploy.
 on:
@@ -38,5 +38,10 @@ jobs:
       - name: Generate
         run: bun run generate
 
-      - name: Build docs
-        run: bun src/docs/script/build.ts --mode dev --out "$RUNNER_TEMP/docs"
+      # dev.opencode.ai renders the restyle and opencode.ai the legacy docs until the flip
+      # (src/docs/AGENTS.md, "Restyle"), so both must build.
+      - name: Build docs (dev)
+        run: bun src/docs/script/build.ts --mode dev --out "$RUNNER_TEMP/docs-dev"
+
+      - name: Build docs (production)
+        run: bun src/docs/script/build.ts --mode production --out "$RUNNER_TEMP/docs-production"
