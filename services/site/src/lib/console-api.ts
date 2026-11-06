@@ -104,9 +104,19 @@ export function install() {
   // One OpenCode Lite at a time. Quitting it brings the greeting back, and stops it from starting on
   // its own in this browser (people who debug the site open DevTools all day) until opencode.try().
   let lite: Promise<{ stop: () => void }> | undefined
-  const startLite = () => {
-    lite ??= textjs<{ start: (options: { onExit: () => void }) => Promise<{ stop: () => void }> }>("lite").then((app) =>
+  const startLite = (reason?: string) => {
+    if (lite) return lite
+    // Lite takes a moment to download, and the visitor may click back into the page from DevTools
+    // meanwhile. Its keyboard needs to know that focus left the page (see src/lite.tsx). A DevTools
+    // shortcut counts at once, since DevTools takes focus as it opens.
+    let away = reason === "shortcut" || !document.hasFocus()
+    const blur = () => (away = true)
+    window.addEventListener("blur", blur)
+    lite = textjs<{
+      start: (options: { away: () => boolean; onExit: () => void }) => Promise<{ stop: () => void }>
+    }>("lite").then((app) =>
       app.start({
+        away: () => away,
         onExit: () => {
           lite = undefined
           localStorage.setItem(liteQuitKey, "1")
@@ -121,7 +131,7 @@ export function install() {
         },
       }),
     )
-    lite.catch(() => (lite = undefined))
+    lite.finally(() => window.removeEventListener("blur", blur)).catch(() => (lite = undefined))
     return lite
   }
 
@@ -287,10 +297,10 @@ export function install() {
     // Settings › Other › Console API removes window.opencode when it's turned off, and Lite may have
     // been started by hand and quit since this page loaded.
     const intent = textjs.onConsoleIntent(
-      () =>
+      (e) =>
         (window as { opencode?: unknown }).opencode === api &&
         !localStorage.getItem(liteQuitKey) &&
-        void startLite().catch(greetOnce),
+        void startLite(e.reason).catch(greetOnce),
       { engageSelector: false },
     )
     if (!intent.triggered) greetOnce()
