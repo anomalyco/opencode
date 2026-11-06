@@ -8,7 +8,7 @@ import { detectDesktopBuild, detectOS, requestOS, type OS } from "~/lib/download
 import type { DownloadPlatform } from "~/routes/download/types"
 import { downloadContent, productDownloads } from "~/lib/download-content"
 import { localize } from "~/i18n/content"
-import { source } from "~/i18n/content/source"
+import { productDownloadsSource } from "~/i18n/content/areas/product-downloads"
 import { NewTab } from "./icons"
 import { PairPanel } from "./pair-panel"
 import { SectionHeading } from "./on-this-page"
@@ -312,7 +312,7 @@ export function ProductDownload(props: { slug: PageSlug }) {
   const details = createMemo(
     () =>
       localize(language.locale(), "productDownloads", {
-        ...source.productDownloads,
+        ...productDownloadsSource,
         [props.slug]: productDownloads(props.slug, language.route),
       })[props.slug],
   )

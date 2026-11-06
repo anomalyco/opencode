@@ -38,7 +38,8 @@ import {
 import { ProviderLogos } from "~/component/site/provider-logos"
 import { PhoneFeatures } from "~/component/site/phone-features"
 import { byos } from "~/lib/byos"
-import { localize, useContent } from "~/i18n/content"
+import { localize, useArea } from "~/i18n/content"
+import { announcementsSource } from "~/i18n/content/areas/announcements"
 import "~/component/site/byos.css"
 import { getStarted } from "~/lib/get-started"
 import "~/component/site/get-started.css"
@@ -62,7 +63,6 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { homeContent, linkPhrases } from "~/lib/home-content"
 import { tag } from "~/lib/language"
-import { dict as en } from "~/i18n/en"
 import { homeMarkdown } from "~/lib/home-markdown"
 import { repoStats, type RepoStats } from "~/lib/github"
 import { inlineKey } from "~/lib/direction"
@@ -94,7 +94,7 @@ export default function Home() {
   // Its own meta description (140–155 characters). Until a locale translates it, the locale keeps
   // the tagline and hero subtitle it already has in its language.
   const description = () =>
-    language.locale() === "en" || i18n.t("home.meta.description") !== en["home.meta.description"]
+    i18n.translated("home.meta.description")
       ? i18n.t("home.meta.description")
       : joinSentences([i18n.t("app.meta.description"), ...content().hero.subtitle])
   const title = () => designCopy("home.hero.title", content().hero.title)
@@ -538,13 +538,13 @@ export default function Home() {
 function Announcement() {
   const language = useLanguage()
   const i18n = useI18n()
-  const translated = useContent()
+  const announcementText = useArea("announcements", announcementsSource)
   const message = () => designCopy("home.announcement", announcementCopy(announcements[0]))
   const item = () => announcements.find((entry) => announcementCopy(entry) === message())
   // The chosen announcement in this locale, with its link text; a custom Design mode message stays as typed.
   const local = () => {
     const index = announcements.findIndex((entry) => announcementCopy(entry) === message())
-    return index < 0 ? undefined : translated().announcements[index]
+    return index < 0 ? undefined : announcementText()[index]
   }
   const shown = () => (local() ? `${local()!.text} ${local()!.link}` : message())
 
