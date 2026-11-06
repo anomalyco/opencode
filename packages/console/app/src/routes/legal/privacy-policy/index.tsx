@@ -4,6 +4,7 @@ import { Title, Meta } from "@solidjs/meta"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
+import { AnalyticsChoice } from "~/component/analytics-choice"
 import { LocaleLinks } from "~/component/locale-links"
 import { useLanguage } from "~/context/language"
 
@@ -21,7 +22,7 @@ export default function PrivacyPolicy() {
           <section data-component="brand-content">
             <article data-component="privacy-policy">
               <h1>Privacy Policy</h1>
-              <p class="effective-date">Effective date: Nov 4, 2026</p>
+              <p class="effective-date">Effective date: Nov 6, 2026</p>
 
               <p>
                 At OpenCode, we take your privacy seriously. Please read this Privacy Policy to learn how we treat your
@@ -86,7 +87,7 @@ export default function PrivacyPolicy() {
                   <a href="#tracking-tools">Tracking Tools and Opt-Out</a>
                   <ul>
                     <li>
-                      <a href="#product-analytics">Product Analytics on opencode.ai/console</a>
+                      <a href="#product-analytics">Product Analytics on opencode.ai</a>
                     </li>
                   </ul>
                 </li>
@@ -449,14 +450,7 @@ export default function PrivacyPolicy() {
                   the Services, what pages visitors view on our Services and how long visitors are viewing pages on the
                   Services. Performance/Analytical Cookies also help us measure the performance of our advertising
                   campaigns in order to help us improve our campaigns and the Services' content for those who engage
-                  with our advertising. For example, Google LLC ("Google") uses cookies in connection with its Google
-                  Analytics services. Google's ability to use and disclose information collected by Google Analytics
-                  about your visits to the Services is subject to the Google Analytics Terms of Use and the Google
-                  Privacy Policy. You have the option to opt-out of Google's use of Cookies by visiting the Google
-                  advertising opt-out page at{" "}
-                  <a href="http://www.google.com/privacy_ads.html">www.google.com/privacy_ads.html</a> or the Google
-                  Analytics Opt-out Browser Add-on at{" "}
-                  <a href="https://tools.google.com/dlpage/gaoptout/">https://tools.google.com/dlpage/gaoptout/</a>.
+                  with our advertising.
                 </li>
               </ul>
 
@@ -475,18 +469,21 @@ export default function PrivacyPolicy() {
                 <a href="http://www.allaboutcookies.org/">http://www.allaboutcookies.org/</a>.
               </p>
 
-              <h3 id="product-analytics">Product Analytics on opencode.ai/console</h3>
+              <h3 id="product-analytics">Product Analytics on opencode.ai</h3>
               <p>
-                When you visit pages under opencode.ai/console, including the sign-in pages, we record the pages you
-                view, how long each page is visible, how long you're active on it and how far you scroll, the links and
-                buttons you click, and the type of any sign-in error. In the Console we record the pages you open and
-                the controls you use in its navigation, plan, billing and onboarding screens. We also record account and
-                workspace events: when you sign up, sign in, verify your email, approve a device, create or delete a
-                workspace, invite or remove members, create API keys, connect providers or clients, and start or
-                complete a checkout or payment, including its amount and any decline reason. We use these records to
-                understand how people find OpenCode and where they stop before signing up or subscribing, so we can
-                improve the Services.
+                When you visit opencode.ai, including the docs and the Console, we record the pages you view, how long
+                each page is visible, how long you're active on it, how far you scroll and how quickly it loads. We also
+                record the links and buttons you click, when you download an app or copy a command, when you search (but
+                not what you search for), and the type of any sign-in error. We record each click under a fixed name we
+                give that link or button, so text you or your team entered, such as workspace names or email addresses,
+                isn't recorded even when it appears on the page. We record account and workspace events: when you sign
+                up, sign in, verify your email, approve a device, create or delete a workspace, invite or remove
+                members, create API keys, connect providers or clients, and start or complete a checkout or payment,
+                including its amount and any decline reason. We use these records to understand how people find OpenCode
+                and where they stop before signing up or subscribing, so we can improve the Services.
               </p>
+
+              <p>We collect these records ourselves and don't use third-party analytics services on opencode.ai.</p>
 
               <p>
                 With each record sent from your browser, we keep the country, region and time zone your request came
@@ -496,8 +493,8 @@ export default function PrivacyPolicy() {
               </p>
 
               <p>
-                We set the following first-party Cookies. Your browser sends them only to opencode.ai/console. We also
-                keep a list in your browser's local storage of which events it has already reported that day.
+                We set the following first-party Cookies. Your browser sends them only to opencode.ai. We also keep a
+                list in your browser's local storage of which events it has already reported that day.
               </p>
 
               <div class="table-wrapper">
@@ -513,7 +510,7 @@ export default function PrivacyPolicy() {
                     <tr>
                       <td>oc_vid</td>
                       <td>A random ID for your browser</td>
-                      <td>1 year from when it's first set</td>
+                      <td>1 year from your latest visit</td>
                     </tr>
                     <tr>
                       <td>oc_sid</td>
@@ -523,11 +520,16 @@ export default function PrivacyPolicy() {
                     <tr>
                       <td>oc_attr</td>
                       <td>
-                        How you first and most recently arrived: the page you landed on, the domain of the website that
-                        referred you, any campaign (UTM) parameters in the link, and the last sign-up or sign-in link
-                        you clicked
+                        The page you first and most recently landed on, the domain of the website that referred you and
+                        any campaign (UTM) parameters in the link, plus the last link into the Console you clicked (a
+                        sign-up or sign-in link, and the plan it was for, if any) and when you clicked it
                       </td>
-                      <td>1 year</td>
+                      <td>1 year from the last time it changed</td>
+                    </tr>
+                    <tr>
+                      <td>oc_optout</td>
+                      <td>A record that you turned off analytics in this browser</td>
+                      <td>1 year from your latest visit</td>
                     </tr>
                   </tbody>
                 </table>
@@ -537,6 +539,18 @@ export default function PrivacyPolicy() {
                 When you create an account, sign in, verify your email or approve a device, we link the records from
                 that browser to your account. Records made while you're signed in carry your account ID directly.
               </p>
+
+              <p>
+                If your browser sends a Global Privacy Control signal, or you{" "}
+                <a href="https://opencode.ai/legal/privacy-policy#product-analytics">turn off analytics on this page</a>
+                , we still record the page views, clicks and other browser events above, but without the IDs and arrival
+                details in oc_vid, oc_sid and oc_attr, and without your account or workspace ID. We delete those Cookies
+                and the local storage list from your browser and don't set them again while analytics are off. Account
+                and workspace events, such as sign-ups, payments and workspace changes, still carry your account ID, but
+                we don't link them or any other records to that browser, even if you're signed in.
+              </p>
+
+              <AnalyticsChoice />
 
               <p>
                 We delete these records from our analytics database within a month after they turn 24 months old. We
