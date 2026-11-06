@@ -847,12 +847,11 @@ async function existingMentions(session: ComposerSession, mentions: string[]) {
 
   await Promise.all(
     [...new Set(mentions)].map(async (path) => {
-      const parent = /[\\/]/.test(path) ? getDirectory(path) : undefined
+      const target = path.replace(/[\\/]+$/, "")
+      const parent = /[\\/]/.test(target) ? getDirectory(target) : undefined
       const found = await session.file
         .list({ path: parent, location: { directory: session.directory } })
-        .then((result) =>
-          result.data.some((entry) => entry.type === "file" && getFilename(entry.path) === getFilename(path)),
-        )
+        .then((result) => result.data.some((entry) => getFilename(entry.path) === getFilename(target)))
         .catch(() => false)
 
       if (found) existing.add(path)
