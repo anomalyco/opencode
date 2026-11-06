@@ -16,6 +16,9 @@
           all projects ctrl+a                                delete ctrl+d   rename ctrl+r
 
              ┃
+             ┃  Build · Simulated Model Simulation
+             ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+             /…/opencode…/                      /work  shift+tab agents  ctrl+p commands
 
 
 
@@ -23,8 +26,5 @@
 
 
 
-
-
-
-
+                                                                                             local
 

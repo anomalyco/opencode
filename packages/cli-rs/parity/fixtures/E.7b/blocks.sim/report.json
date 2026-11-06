@@ -6,11 +6,14 @@
   ],
   "open": {
     "equal": false,
-    "differences": 10,
+    "differences": 7,
     "colorOnly": 6,
     "deviation": [
-      "P15-metadata-gap-fg",
-      "P16-diff-markdown-heading"
+      {
+        "file": "P16-diff-markdown-heading",
+        "cells": 7,
+        "styleOnly": true
+      }
     ]
   },
   "requests": {
