@@ -335,6 +335,24 @@ session. Each update carries `_meta["opencode/child-session"]`. OpenCode prefixe
 Permission requests from a child session carry the same key on `toolCall._meta`. After the prompt ends, OpenCode stops
 sending child session updates. Permission requests and questions from child sessions still reach the client.
 
+`session/list` includes child sessions. Each child session's entry carries the same
+`_meta["opencode/child-session"]` key with `id`, `parentID`, and `title`, but no `depth`:
+
+```json
+{
+  "sessionId": "ses_child",
+  "cwd": "/work/app",
+  "title": "Explore the codebase",
+  "updatedAt": "2026-10-02T12:00:00.000Z",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "title": "Explore the codebase" }
+  }
+}
+```
+
+`parentID` is the immediate parent, which can itself be a child session. The parent may be missing from the response
+because of pagination, the `cwd` filter, or deletion. Entries for sessions without a parent have no `_meta` key.
+
 ### Retry status
 
 When a model call fails and OpenCode schedules a retry, it sends `session_info_update` with `_meta["opencode/retry"]`.

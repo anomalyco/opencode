@@ -185,6 +185,17 @@ export function make(input: {
               time: { created: DateTime.toEpochMillis(session.time.created) },
             }),
             updatedAt: DateTime.formatIso(session.time.updated),
+            ...(session.parentID
+              ? {
+                  _meta: {
+                    "opencode/child-session": {
+                      id: session.id,
+                      parentID: session.parentID,
+                      ...(session.title ? { title: session.title } : {}),
+                    },
+                  },
+                }
+              : {}),
           }
         }),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),
