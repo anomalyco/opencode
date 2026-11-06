@@ -17,6 +17,7 @@ import { Permission } from "../../permission.js"
 import type { FileAccess } from "../../file-access.js"
 import type { ReadTool } from "../../tool/plugin/read.js"
 import type { EditTool } from "../../tool/plugin/edit.js"
+import type { WebFetchTool } from "../../tool/plugin/webfetch.js"
 import { AbsolutePath } from "../../schema.js"
 
 const legacySources = [
@@ -29,6 +30,7 @@ const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof ReadTool.name | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
+const urlAction: typeof WebFetchTool.name = "webfetch"
 const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 // Fields only V2 understands. A file that uses any of them is read as V2, whatever else it contains.
 const nativeKeys = ["permissions", "request", "system", "disabled"]
@@ -111,9 +113,22 @@ export const Plugin = define({
 function expandPermissions(rules: Permission.Ruleset, home: string): Permission.Ruleset {
   // Expand only resources tools resolve as filesystem paths. Bash resources are raw shell text:
   // rewriting `$HOME/private/**` would miss `$HOME/private/key`, and safe expansion needs shell-aware parsing.
-  return rules.map((rule) =>
-    isPathAction(rule.action) ? { ...rule, resource: expandHome(rule.resource, home) } : rule,
-  )
+  return rules.map((rule) => {
+    if (isPathAction(rule.action)) return { ...rule, resource: expandHome(rule.resource, home) }
+    if (rule.action === urlAction) return { ...rule, resource: normalizeUrlRule(rule.resource) }
+    return rule
+  })
+}
+
+// Web requests are matched by their parsed URL (lowercase host, punycode, no default port, `/` path), so
+// rewrite the scheme and host of a rule the same way. The rest stays as written to keep its wildcards.
+function normalizeUrlRule(resource: string) {
+  // `?` is also a one-character wildcard, so a host containing it is ambiguous and stays as written.
+  const parts = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)(\/.*)?$/is.exec(resource)
+  if (!parts) return resource
+  const origin = URL.parse(`${parts[1]}${parts[2]}/`)
+  if (!origin || origin.username || origin.password) return resource
+  return `${origin.protocol}//${origin.host}${parts[3] ?? (resource.endsWith("*") ? "" : "/")}`
 }
 
 function isPathAction(action: string): action is PathAction {

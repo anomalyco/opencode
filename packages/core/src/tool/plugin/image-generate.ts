@@ -162,7 +162,7 @@ export const Plugin = {
             // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
             yield* permission.assert({
               action: "webfetch",
-              resources: [source],
+              resources: [URL.parse(source)?.href ?? source],
               save: ["*"],
               metadata: { url: source },
               ...Permission.invocation(context),

@@ -155,6 +155,34 @@ permissions:
     }),
   )
 
+  it.effect("matches webfetch rules in the form requested URLs are checked in", () =>
+    Effect.gen(function* () {
+      const permissions = yield* loadPermissions({
+        permission: {
+          webfetch: {
+            "*": "allow",
+            "https://example.com": "deny",
+            "HTTPS://Internal.Corp/*": "deny",
+            "https://пример.срб/*": "deny",
+            "https://port.test:443/*": "deny",
+            "https://prefix.test*": "deny",
+            "https://*.Wild.test/*": "deny",
+            "https://query.test?q=*": "deny",
+          },
+        },
+      })
+      const check = (url: string) => Permission.evaluate("webfetch", new URL(url).href, permissions).effect
+      expect(check("https://example.com")).toBe("deny")
+      expect(check("https://example.com/other")).toBe("allow")
+      expect(check("https://internal.corp/docs")).toBe("deny")
+      expect(check("https://пример.срб/docs")).toBe("deny")
+      expect(check("https://port.test/docs")).toBe("deny")
+      expect(check("https://prefix.test/docs")).toBe("deny")
+      expect(check("https://a.wild.test/docs")).toBe("deny")
+      expect(permissions).toContainEqual({ action: "webfetch", resource: "https://query.test?q=*", effect: "deny" })
+    }),
+  )
+
   it.effect("matches Windows paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("C:\\Users\\test")
@@ -813,6 +841,33 @@ function sourceCases() {
 }
 
 function loadHomePermissions(home: string) {
+  return loadPermissions(
+    {
+      permission: {
+        external_directory: {
+          "~/p/**": "allow",
+          "/some/~/path": "deny",
+          "$HOMELESS/**": "deny",
+        },
+        bash: {
+          "$HOME/private/**": "deny",
+        },
+      },
+      agent: {
+        build: {
+          permission: {
+            external_directory: {
+              "$HOME/cache/**": "deny",
+            },
+          },
+        },
+      },
+    },
+    home,
+  )
+}
+
+function loadPermissions(config: unknown, home = Global.make().home) {
   return Effect.gen(function* () {
     const agents = yield* Agent.Service
     const build = Agent.ID.make("build")
@@ -820,29 +875,7 @@ function loadHomePermissions(home: string) {
     const entries = [
       new Document({
         type: "document",
-        info: decode(
-          migrateV1({
-            permission: {
-              external_directory: {
-                "~/p/**": "allow",
-                "/some/~/path": "deny",
-                "$HOMELESS/**": "deny",
-              },
-              bash: {
-                "$HOME/private/**": "deny",
-              },
-            },
-            agent: {
-              build: {
-                permission: {
-                  external_directory: {
-                    "$HOME/cache/**": "deny",
-                  },
-                },
-              },
-            },
-          }),
-        ),
+        info: decode(migrateV1(config)),
       }),
     ]
 
