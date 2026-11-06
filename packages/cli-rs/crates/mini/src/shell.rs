@@ -6,7 +6,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use opencode_api::client::Client;
@@ -14,7 +14,7 @@ use opencode_api::generated::V2Event;
 use opencode_local::cli_config::{CliConfig, MiniWorkSpinner, NewLocation, ThemeMode as ConfigMode, Visibility};
 use opencode_local::model_pref::ModelPreferences;
 use opencode_store::target::{self, Prepared, SessionTarget, TargetError};
-use opencode_ui::motion::Spinner;
+use opencode_ui::motion::{Spinner, SpinnerColor};
 use opencode_ui::theme::ThemeMode;
 use opentui::native::{KittyKeyboard, MouseTracking};
 use opentui::prelude::*;
@@ -235,8 +235,8 @@ struct Mini {
     status: Text,
     status_row: View,
     spinner_slot: View,
-    /// The running work spinner, with what it was built for: the color, the motion, and mono.
-    spinner: RefCell<Option<(Spinner, Color, MiniWorkSpinner, bool)>>,
+    /// The running work spinner.
+    spinner: RefCell<Option<WorkSpinner>>,
     animations: bool,
     /// The provider catalog (`state.providers`), `None` until it loads.
     providers: RefCell<Option<Vec<Provider>>>,
@@ -261,6 +261,15 @@ struct Mini {
     size: Cell<(u16, u16)>,
     exit_splash: Cell<bool>,
     failure: RefCell<Option<anyhow::Error>>,
+}
+
+/// The running work spinner and what it was built for: the color, the motion, and mono, and when the work started.
+struct WorkSpinner {
+    spinner: Spinner,
+    color: Color,
+    motion: MiniWorkSpinner,
+    mono: bool,
+    started: Instant,
 }
 
 impl Mini {
@@ -629,24 +638,17 @@ impl Mini {
         self.paint_status();
     }
 
-    /// The work spinner's cell (`OneCellSpinner` in `mini-work-spinner`): built again when its color, motion, or
-    /// mono changes, removed while idle.
+    /// The work spinner's cell (`OneCellSpinner` in `mini-work-spinner`): recolored in place, built again when
+    /// its motion or mono changes, at the age of the work (`age`), and removed while idle.
     fn paint_spinner(&self, busy: bool, color: Color) {
         let settings = self.settings.get();
         let mut current = self.spinner.borrow_mut();
         if !busy {
-            if let Some((spinner, ..)) = current.take() {
-                spinner.detach();
+            if let Some(work) = current.take() {
+                work.spinner.detach();
             }
             self.spinner_slot.visible(false);
             return;
-        }
-        let key = (color, settings.work_spinner, settings.mono);
-        if current.as_ref().is_some_and(|(_, color, motion, mono)| (*color, *motion, *mono) == key) {
-            return;
-        }
-        if let Some((spinner, ..)) = current.take() {
-            spinner.detach();
         }
         let motion = if settings.mono {
             opencode_ui::motion::seed_mono()
@@ -654,12 +656,36 @@ impl Mini {
             opencode_ui::motion::work_spinner(settings.work_spinner.as_str())
                 .unwrap_or_else(opencode_ui::motion::seed_mono)
         };
-        let spinner = Spinner::one_cell(&self.app, &motion, color).animations(self.animations);
         // `glow={!mono}`: mono draws every frame in the plain color.
-        let spinner = if settings.mono { spinner.color(color).still("*") } else { spinner };
+        let paint = if settings.mono {
+            SpinnerColor::Solid(color)
+        } else {
+            opencode_ui::motion::one_cell_color(&motion, color)
+        };
+        if let Some(work) = current.as_mut()
+            && (work.motion, work.mono) == (settings.work_spinner, settings.mono)
+        {
+            if work.color != color {
+                work.spinner.set_color(paint);
+                work.color = color;
+            }
+            return;
+        }
+        let started = match current.take() {
+            Some(work) => {
+                work.spinner.detach();
+                work.started
+            }
+            None => self.app.now(),
+        };
+        let spinner = Spinner::one_cell(&self.app, &motion, color)
+            .age(self.app.now().saturating_duration_since(started))
+            .animations(self.animations)
+            .color(paint);
+        let spinner = if settings.mono { spinner.still("*") } else { spinner };
         self.spinner_slot.add(&spinner);
         self.spinner_slot.visible(true);
-        *current = Some((spinner, color, settings.work_spinner, settings.mono));
+        *current = Some(WorkSpinner { spinner, color, motion: settings.work_spinner, mono: settings.mono, started });
     }
 
     /// `loadDefaultModel`: the label of the model a session without one uses.

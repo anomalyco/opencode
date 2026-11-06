@@ -5,8 +5,8 @@
 
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::motion::{
-    FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, scanner_colors, scanner_frames, set_running,
-    work_spinner,
+    FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, one_cell_frame, scanner_colors, scanner_frames,
+    set_running, work_spinner,
 };
 use opentui::AppOptions;
 use opentui::prelude::*;
@@ -132,6 +132,30 @@ fn animations_off_shows_the_still_glyph_and_requests_no_frames() {
     app.advance(Duration::from_millis(500));
     assert!(!app.needs_frame());
     assert_eq!(app.text(), "⋯ Working");
+}
+
+#[test]
+fn sequenced_one_cell_spinners_play_their_intro_and_pace_from_their_age() {
+    // The seed ticks every 32 ms (its 40 ms at the 1.25 pace), the sweep every 40 ms: each instant is on a tick.
+    for (name, age, instants) in
+        [("seed", 0, [320, 640, 3520]), ("block-soft-sweep", 0, [1000, 2000, 4000]), ("seed", 60_000, [0, 320, 640])]
+    {
+        let motion = work_spinner(name).unwrap();
+        let app = test_app(1);
+        app.root().add(&Spinner::one_cell(&app, &motion, ACCENT).age(Duration::from_millis(age)));
+        let mut now = 0;
+        for instant in instants {
+            app.advance(Duration::from_millis(instant - now));
+            now = instant;
+            let frame = app.render();
+            let expected = one_cell_frame(&motion, (age + instant) as f64);
+            assert_eq!(frame.text(), expected.glyph, "{name} at {age} + {instant} ms");
+            // The level is the glyph's alpha, blended over the black screen.
+            let red = (f64::from(ACCENT.r) * expected.level).round() as i32;
+            let actual = frame.cells[0].fg;
+            assert!((i32::from(actual.r) - red).abs() <= 2, "{name} at {age} + {instant} ms: {actual:?} vs {red}");
+        }
+    }
 }
 
 #[test]
