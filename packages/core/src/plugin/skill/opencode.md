@@ -143,7 +143,7 @@ secret into configuration.
 For any request to migrate OpenCode configuration, agents, commands, skills,
 plugins, integrations, or other behavior from V1 to V2, read the full
 [migration guide](https://opencode.ai/v2/docs/migrate-v1) before acting. In
-the repository, its source is `services/www/src/docs/content/migrate-v1.mdx`.
+the repository, its source is `services/site/src/docs/content/migrate-v1.mdx`.
 
 V1 config files and `.opencode/` definitions are intended to remain compatible.
 The only intentional breaking changes are the server API and plugin API. Native
@@ -191,10 +191,20 @@ opencode service status
 OpenCode exposes an HTTP API from its server. The API is described by an
 OpenAPI document available from the running server at `/openapi.json`.
 
-Use OpenCode's built-in `api` command for local requests. It uses the same
-discovery and authentication flow as the TUI and may start the background
-service when no compatible healthy service is available. It accepts either an
-HTTP method and path or an OpenAPI operation ID.
+In Code Mode, use the built-in `opencode` tool namespace first, called inside
+`execute` as `tools.opencode.*`. These tools skip the shell round-trip and
+handle discovery and authentication. They cover sessions (`session_rename`,
+`session_move`), worktrees (`worktree_create`, `worktree_list`,
+`worktree_remove`), model search (`models`), MCP resource discovery and reading
+(`list_mcp_resources`, `read_mcp_resource`), schedules (`schedule_create`,
+`schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_delete`), and
+artifacts (`artifact_create`, `artifact_read`, `artifact_update`,
+`artifact_delete`).
+
+For anything those tools do not cover, use OpenCode's built-in `api` command.
+It uses the same discovery and authentication flow as the TUI and may start the
+background service when no compatible healthy service is available. It accepts
+either an HTTP method and path or an OpenAPI operation ID.
 
 Call an endpoint with an HTTP method and path:
 

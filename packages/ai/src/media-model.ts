@@ -2,7 +2,14 @@ import { Effect } from "effect"
 import { Endpoint } from "./route/endpoint.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID, type ProviderOptions } from "./schema/index.js"
+import {
+  AIError,
+  InvalidRequestError,
+  ModelID,
+  ProviderID,
+  type HttpOptions,
+  type ProviderOptions,
+} from "./schema/index.js"
 
 /**
  * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
@@ -105,10 +112,12 @@ export const tryRequest = <A>(make: () => A): Effect.Effect<A, AIError> =>
   Effect.try({
     try: make,
     catch: (error) =>
-      new AIError({
-        reason: new InvalidRequestError({
-          message: error instanceof Error ? error.message : String(error),
-          cause: error,
-        }),
-      }),
+      error instanceof AIError
+        ? error
+        : new AIError({
+            reason: new InvalidRequestError({
+              message: error instanceof Error ? error.message : String(error),
+              cause: error,
+            }),
+          }),
   })

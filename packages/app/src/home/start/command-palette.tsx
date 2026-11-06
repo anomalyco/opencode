@@ -1,5 +1,5 @@
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo } from "solid-js"
 import { commandPaletteOptions, useCommand } from "@/shell/commands/command"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -7,9 +7,9 @@ import { ServerConnection } from "@/runtime/server/registry"
 import {
   createCommandPaletteCommandEntry,
   createKnownServerSessions,
+  createPaletteHighlight,
   createServerSessionEntries,
   type CommandPaletteEntry,
-  type PaletteHighlight,
 } from "@/shell/commands/palette"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 import { createSettingsPaletteEntries } from "@/settings/palette"
@@ -22,8 +22,9 @@ export function HomeCommandPalette(props: {
   const dialog = useDialog()
   const global = useGlobal()
   const language = useLanguage()
-  const server = global.ensureServerCtx(props.server)
-  const state: PaletteHighlight = { cleanup: undefined, committed: false }
+  // A server that rejects our credentials lists no sessions; commands and settings still work.
+  const server = () => global.serverCtx(ServerConnection.key(props.server))
+  const preview = createPaletteHighlight()
   const settings = createSettingsPaletteEntries()
 
   const commandEntries = createMemo(() => {
@@ -35,27 +36,21 @@ export function HomeCommandPalette(props: {
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(props.server),
     known: createKnownServerSessions(server),
-    projects: server.projects.list,
+    projects: () => server()?.projects.list() ?? [],
     load: (search, signal) =>
-      server.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
-    get: (sessionID, signal) => server.sdk.api.session.get({ sessionID }, { signal }),
+      server()?.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }) ??
+      Promise.resolve({ data: [] }),
+    get: (sessionID, signal) =>
+      server()?.sdk.api.session.get({ sessionID }, { signal }) ??
+      Promise.reject(new Error(`Server ${ServerConnection.key(props.server)} is unavailable`)),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
     recentCategory: () => language.t("palette.group.recentSessions"),
   })
 
-  const highlight = (item: CommandPaletteEntry | undefined) => {
-    state.cleanup?.()
-    state.cleanup = undefined
-
-    if (item?.type !== "command") return
-    state.cleanup = item.option?.onHighlight?.()
-  }
-
   const select = (item: CommandPaletteEntry | undefined) => {
     if (!item) return
-    state.committed = true
-    state.cleanup = undefined
+    preview.select(item)
     dialog.close()
 
     if (item.type === "command") {
@@ -79,17 +74,12 @@ export function HomeCommandPalette(props: {
     ]
   }
 
-  onCleanup(() => {
-    if (state.committed) return
-    state.cleanup?.()
-  })
-
   return (
     <CommandPaletteView
       placeholder={language.t("palette.search.placeholder.home")}
       items={items}
       sources={[sessions.search]}
-      highlight={highlight}
+      highlight={preview.highlight}
       select={select}
       close={() => dialog.close()}
     />

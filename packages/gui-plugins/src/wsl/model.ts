@@ -1,5 +1,16 @@
 import fuzzysort from "fuzzysort"
 import type { WslInstalledDistro, WslOnlineDistro, WslOpencodeCheck, WslServersState } from "./contract"
+import {
+  selectWslDialogAdding,
+  selectWslDialogBusy,
+  selectWslDialogCatalogSearch,
+  selectWslDialogCatalogTarget,
+  selectWslDialogInstallingCatalog,
+  selectWslDialogInstallingOpencode,
+  selectWslDialogSelectedDistro,
+  selectWslDialogView,
+  type WslDialogState,
+} from "./dialog-machine"
 
 export type AddServerText = {
   key: string
@@ -41,12 +52,12 @@ function isHiddenDistro(name: string) {
   return /^docker-desktop(?:-data)?$/i.test(name)
 }
 
-export function wslOpencodeAction(check?: WslOpencodeCheck) {
-  if (!check) return
+// Jobs the add dialog waits for: WSL itself, and distros it lists, which have no server yet. Jobs on added servers
+// belong to their rows.
+function dialogJobRunning(state: WslServersState) {
+  if (state.hostJob === "busy") return true
 
-  if (!check.resolvedPath) return "onboarding.installOpencode"
-
-  if (check.matchesDesktop === false) return "onboarding.updateOpencode"
+  return Object.keys(state.distroJobs).some((distro) => !state.servers.some((item) => item.config.distro === distro))
 }
 
 function wslDistroReady(state: WslServersState | undefined, name: string) {
@@ -62,27 +73,34 @@ function wslDistroReady(state: WslServersState | undefined, name: string) {
 
 export function addServerViewModel(input: {
   state: WslServersState | undefined
-  view: WslAddServerView
-  selectedDistro: string | null
-  catalogSearch: string
-  catalogTarget: string | null
-  adding: boolean
+  dialog: WslDialogState
   probingAddable: boolean
 }) {
   const state = input.state
+  const catalogSearch = selectWslDialogCatalogSearch(input.dialog)
   const visibleInstalledDistros = (state?.installed ?? []).filter((item) => !isHiddenDistro(item.name))
   const visibleOnlineDistros = (state?.online ?? []).filter((item) => !isHiddenDistro(item.name))
   const existingServerDistros = new Set((state?.servers ?? []).map((item) => item.config.distro))
   const addableInstalledDistros = visibleInstalledDistros.filter((item) => !existingServerDistros.has(item.name))
-  const selectedDistro = addServerSelectedDistro(input.selectedDistro, visibleInstalledDistros, addableInstalledDistros)
+
+  const selectedDistro = addServerSelectedDistro(
+    selectWslDialogSelectedDistro(input.dialog),
+    visibleInstalledDistros,
+    addableInstalledDistros,
+  )
+
   const opencodeCheck = selectedDistro ? (state?.opencodeChecks[selectedDistro] ?? null) : null
   const installableDistros = addServerInstallableDistros(visibleInstalledDistros, visibleOnlineDistros)
-  const filteredInstallableDistros = addServerFilteredInstallableDistros(installableDistros, input.catalogSearch)
-  const catalogTarget = addServerCatalogTarget(input.catalogTarget, filteredInstallableDistros)
-  const busy = !!state?.job || input.adding || input.probingAddable
+  const filteredInstallableDistros = addServerFilteredInstallableDistros(installableDistros, catalogSearch)
+  const catalogTarget = addServerCatalogTarget(selectWslDialogCatalogTarget(input.dialog), filteredInstallableDistros)
+  // The dialog's own call counts from the click, before main's state shows the job.
+  const working = (!!state && dialogJobRunning(state)) || selectWslDialogBusy(input.dialog)
 
   return {
-    busy,
+    view: selectWslDialogView(input.dialog),
+    catalogSearch,
+    adding: selectWslDialogAdding(input.dialog),
+    busy: working || input.probingAddable,
     runtimeState: addServerRuntimeState(state),
     visibleInstalledDistros,
     visibleOnlineDistros,
@@ -103,13 +121,16 @@ export function addServerViewModel(input: {
       state,
       selectedDistro,
       opencodeCheck,
-      adding: input.adding,
+      busy: working,
+      installingOpencode: selectWslDialogInstallingOpencode(input.dialog, selectedDistro),
+      adding: selectWslDialogAdding(input.dialog),
       probingAddable: input.probingAddable,
     }),
     installableDistros,
     filteredInstallableDistros,
     catalogTarget,
-    installingCatalogDistro: state?.job?.kind === "install-distro",
+    installingCatalogDistro:
+      selectWslDialogInstallingCatalog(input.dialog) || Object.values(state?.distroJobs ?? {}).includes("installing"),
   }
 }
 
@@ -152,16 +173,10 @@ function addServerDistroStatus(input: {
   const installed = input.state?.installed.find((item) => item.name === input.name)
 
   if (installed?.version === 1) return { label: { key: "onboarding.distroStatus.unsupported" }, tone: "muted" }
-  const job = input.state?.job
+  const probing = input.probingAddable || input.state?.distroJobs[input.name] === "probing"
   const probe = input.state?.distroProbes[input.name]
 
-  if (!probe) {
-    if (input.probingAddable || (job?.kind === "probe-addable" && job.distros.includes(input.name))) {
-      return checkingStatus()
-    }
-
-    return
-  }
+  if (!probe) return probing ? checkingStatus() : undefined
 
   if (!probe.canExecute) {
     if (!installed) {
@@ -177,13 +192,7 @@ function addServerDistroStatus(input: {
 
   const check = input.state?.opencodeChecks[input.name]
 
-  if (!check) {
-    if (input.probingAddable || (job?.kind === "probe-addable" && job.distros.includes(input.name))) {
-      return checkingStatus()
-    }
-
-    return
-  }
+  if (!check) return probing ? checkingStatus() : undefined
 
   if (check.matchesDesktop === false) return { label: { key: "onboarding.updateOpencode" }, tone: "warning" }
 
@@ -202,22 +211,18 @@ function addServerPrimaryButton(input: {
   state: WslServersState | undefined
   selectedDistro: string | null
   opencodeCheck: WslOpencodeCheck | null
+  /** Main runs a job the dialog waits for, or the dialog waits for its own call. */
+  busy: boolean
+  /** The dialog asked main to install OpenCode in the selected distro and waits for the answer. */
+  installingOpencode: boolean
   adding: boolean
   probingAddable: boolean
 }): AddServerPrimaryButton {
   const ready = !!input.selectedDistro && wslDistroReady(input.state, input.selectedDistro)
   const probingSelected = input.probingAddable && !addServerSelectedDistroSettled(input.state, input.selectedDistro)
-
-  const probingOpencode =
-    probingSelected ||
-    (ready &&
-      (!input.opencodeCheck ||
-        (!!input.selectedDistro &&
-          input.state?.job?.kind === "probe-addable" &&
-          input.state.job.distros.includes(input.selectedDistro))))
-
-  const installingOpencode =
-    input.state?.job?.kind === "install-opencode" && input.state.job.distro === input.selectedDistro
+  const job = input.selectedDistro ? input.state?.distroJobs[input.selectedDistro] : undefined
+  const probingOpencode = probingSelected || (ready && (!input.opencodeCheck || job === "probing"))
+  const installingOpencode = job === "updating" || input.installingOpencode
 
   if (!ready || probingOpencode) {
     return {
@@ -240,7 +245,7 @@ function addServerPrimaryButton(input: {
         : update
           ? { key: "onboarding.updateOpencode" }
           : { key: "onboarding.installOpencode" },
-      disabled: !!input.state?.job || input.adding,
+      disabled: input.busy,
       action: "install-opencode",
       loading: installingOpencode,
       width: update ? "138px" : "129px",
@@ -250,7 +255,7 @@ function addServerPrimaryButton(input: {
   return {
     variant: "contrast",
     label: input.adding ? { key: "onboarding.adding" } : { key: "server.add" },
-    disabled: input.adding || !!input.state?.job,
+    disabled: input.busy,
     action: "add",
     loading: input.adding,
     width: null,
@@ -300,15 +305,16 @@ function addServerCatalogTarget(target: string | null, distros: WslOnlineDistro[
 function addableProbePlan(input: {
   state: WslServersState | undefined
   view: WslAddServerView
-  adding: boolean
+  busy: boolean
   selectedDistro: string | null
   addableInstalledDistros: WslInstalledDistro[]
 }) {
   const state = input.state
 
-  if (!state?.runtime?.available || state.pendingRestart || input.view !== "main" || input.adding) return
+  // `busy` also covers the dialog's own call, which starts before main's state shows it.
+  if (!state?.runtime?.available || state.pendingRestart || input.view !== "main" || input.busy) return
 
-  if (state.job) return
+  if (dialogJobRunning(state)) return
 
   const ordered = input.selectedDistro
     ? [
@@ -350,7 +356,6 @@ function autoProbePlan(input: { state: WslServersState | undefined; busy: boolea
 export function addServerProbePlan(input: {
   state: WslServersState | undefined
   view: WslAddServerView
-  adding: boolean
   busy: boolean
   selectedDistro: string | null
   addableInstalledDistros: WslInstalledDistro[]
@@ -361,27 +366,4 @@ export function addServerProbePlan(input: {
   const addable = addableProbePlan(input)
 
   if (addable) return { kind: "addable", key: `addable:${addable.key}`, plan: addable } satisfies AddServerProbePlan
-}
-
-export function createProbeFailureGate() {
-  let failed: string | undefined
-
-  return {
-    accepts(key: string) {
-      return key !== failed
-    },
-    settle(key: string, succeeded: boolean) {
-      if (!succeeded) failed = key
-    },
-    reset() {
-      failed = undefined
-    },
-  }
-}
-
-export async function runAddableProbePlan(input: {
-  plan: AddableProbePlan
-  probeAddable: (distros: string[]) => Promise<void>
-}) {
-  await input.probeAddable(input.plan.distros)
 }

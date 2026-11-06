@@ -4,12 +4,13 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderID, type LLMRequest, type ModelID, type RequestOptions } from "../schema/index.js"
+import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("moonshotai")
 
@@ -35,7 +36,7 @@ export type ResponsesOptionsInput = {
   readonly safetyIdentifier?: string
 }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Overrides the selected API's base URL, including its version prefix. */
     readonly baseURL?: string
@@ -44,7 +45,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 
@@ -99,22 +100,16 @@ const responsesRoute = Route.make({
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
-  const defaults = {
-    ...rest,
-    endpoint: baseURL === undefined ? undefined : { baseURL },
-    auth: AuthOptions.bearer(input, ["MOONSHOT_API_KEY", "MOONSHOTAI_API_KEY"]),
-  }
+  const defaults = bearerRouteDefaults(input, ["MOONSHOT_API_KEY", "MOONSHOTAI_API_KEY"])
   const chat = (modelID: string | ModelID) =>
     chatRoute.with(defaults).model<ChatOptionsInput>({
       id: modelID,
       compatibility: {
         maxTokensField: "max_tokens",
-        supportsStrictMode: false,
-        supportsPromptCacheKey: true,
         sanitizer: "moonshot",
         reasoningField: "reasoning_content",
       },
+      capabilities: { tools: { strict: false }, promptCacheKey: true },
     })
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({
@@ -133,16 +128,7 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const responses = provider.responses
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
-) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).model(modelID)
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (modelID, settings) =>
+  configure(toConfig(settings)).model(modelID)
 
 export * as Moonshot from "./moonshot.js"

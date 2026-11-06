@@ -1,15 +1,21 @@
 export * as SessionModelRequest from "./model-request.js"
 
 import {
-  GenerationOptions,
+  ai,
+  AssistantMessage,
+  type ContentPart,
+  GENERATION_KEYS,
   type GenerationOptionsFields,
-  HttpOptions,
   LanguageModel,
-  LLM,
-  LLMRequest,
+  type LLM,
+  type LLMRequest,
   type Media,
+  type MediaPart,
   Message,
   SystemPart,
+  ToolMessage,
+  type ToolResultPart,
+  UserMessage,
 } from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
@@ -27,6 +33,7 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -43,13 +50,16 @@ const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
-const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
 const OUTPUT_TOKEN_MAX = 256_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
+// Share of the window a turn leaves unused when its output limit is fitted to the room left. Providers count a few
+// tokens more than we do (chat template, tool schemas), and strict ones reject input plus output past the window.
+// Compaction sizes its summary against its own reserve instead.
+const WINDOW_HEADROOM = 0.01
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
 const OUTPUT_TOKEN_MIN = 1_024
 
@@ -74,7 +84,7 @@ export interface Input {
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
   readonly messages: Array<Message>
-  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
@@ -82,10 +92,13 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
+export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"], headroom = 0) => {
   const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
   if (inputTokens === undefined || limit.context <= 0) return requested
-  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
+  const room =
+    Math.floor(limit.context * (1 - headroom)) -
+    inputTokens.measured -
+    Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 
@@ -93,20 +106,23 @@ export const baseTranscript = (input: {
   readonly agent: Agent.Info
   readonly model: SessionRunnerModel.Resolved
   readonly tools: Tool.Snapshot
-  readonly initial: string
+  readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
     providerMetadataKey,
     system: [
-      input.agent.system
-        ? input.agent.system
-        : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
-      input.initial,
-    ]
-      .filter((part) => part.length > 0)
-      .map(SystemPart.make),
+      SystemPart.make(
+        input.agent.system
+          ? input.agent.system
+          : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
+      ),
+      {
+        ...SystemPart.make(Instructions.join(input.initial)),
+        metadata: { experimental: { instructions: input.initial } },
+      },
+    ].filter((part) => part.text.length > 0),
     messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
   }
 }
@@ -150,28 +166,46 @@ const mediaBytes = (media: Media.Asset) => {
 const replaceMedia = (
   messages: LLMRequest["messages"],
   replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
-) =>
-  messages.map((message) => {
-    const content = message.content.map((part) => {
-      if (part.type === "media") {
-        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
-        return text === undefined ? part : Message.text(text)
-      }
-      if (part.type !== "tool-result" || part.result.type !== "content") return part
-      const result = part.result
-      const value = result.value.map((item): Content => {
-        if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
-        return text === undefined ? item : { type: "text", text }
-      })
-      return value.every((item, index) => item === result.value[index])
-        ? part
-        : { ...part, result: { ...result, value } }
+) => {
+  const media = (part: MediaPart) => {
+    const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+    return text === undefined ? part : Message.text(text)
+  }
+  const toolResult = (part: ToolResultPart) => {
+    if (part.result.type !== "content") return part
+    const result = part.result
+    const value = result.value.map((item): Content => {
+      if (item.type !== "file") return item
+      const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
+      return text === undefined ? item : { type: "text", text }
     })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : new Message({ ...message, content })
+    return value.every((item, index) => item === result.value[index]) ? part : { ...part, result: { ...result, value } }
+  }
+  return messages.map((message) => {
+    switch (message.role) {
+      case "system":
+        return message
+      case "user": {
+        const content = message.content.map((part) => (part.type === "media" ? media(part) : part))
+        return sameParts(content, message.content) ? message : new UserMessage({ ...message, content })
+      }
+      case "assistant": {
+        const content = message.content.map((part) => {
+          if (part.type === "media") return media(part)
+          return part.type === "tool-result" ? toolResult(part) : part
+        })
+        return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
+      }
+      case "tool": {
+        const content = message.content.map(toolResult)
+        return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
+      }
+    }
   })
+}
+
+const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
+  next.every((part, index) => part === previous[index])
 
 export const unsupportedParts = (
   messages: LLMRequest["messages"],
@@ -255,9 +289,11 @@ export const layer = Layer.effect(
           system: input.system,
           messages: input.messages,
           options:
-            kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
-              : {},
+            kind === "primary"
+              ? { maxTokens: outputLimit(model.limit, input.inputTokens, WINDOW_HEADROOM) }
+              : kind === "compaction"
+                ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
+                : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
@@ -274,20 +310,18 @@ export const layer = Layer.effect(
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
       const affinity = SessionAffinity.get(session)
-      const base = LLM.request({
+      const base = ai.request({
         model: model.model,
-        http: {
-          headers: {
-            "x-opencode-session-id": session.id,
-            ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
-            "x-session-affinity": affinity,
-            "X-Session-Id": affinity,
-            ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
-            "User-Agent": App.useragent(app),
-            "x-opencode-project": session.projectID,
-            "x-opencode-session": affinity,
-            "x-opencode-client": app.name,
-          },
+        headers: {
+          "x-opencode-session-id": session.id,
+          ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
+          "x-session-affinity": affinity,
+          "X-Session-Id": affinity,
+          ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
+          "User-Agent": App.useragent(app),
+          "x-opencode-project": session.projectID,
+          "x-opencode-session": affinity,
+          "x-opencode-client": app.name,
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
@@ -296,7 +330,7 @@ export const layer = Layer.effect(
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 
@@ -304,19 +338,17 @@ export const layer = Layer.effect(
       const modelHook = yield* hooks.trigger("session", "model.request", {
         ...scope,
         baseURL,
-        headers: { ...base.http?.headers },
+        headers: { ...base.headers },
       })
       const route =
         modelHook.baseURL !== undefined && modelHook.baseURL !== baseURL
           ? base.model.route.with({ endpoint: { baseURL: modelHook.baseURL } })
           : base.model.route
-      const request = LLMRequest.update(base, {
+      const request = {
+        ...base,
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
-        http: new HttpOptions({
-          ...base.http,
-          headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
-        }),
-      })
+        headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
+      }
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", model.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", model.ref.providerID))

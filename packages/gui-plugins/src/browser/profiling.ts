@@ -5,43 +5,275 @@ import { Schema } from "effect"
 import type { Cdp } from "./cdp"
 import type { BrowserFiles } from "./files"
 import { analyzeCpu, analyzeTrace, parseHeap } from "./analysis"
+import {
+  createProfilingState,
+  isTraceStoppingAttempt,
+  selectProfilingTarget,
+  transitionProfiling,
+  type CpuCapture,
+  type ProfilingEffect,
+  type ProfilingEvent,
+  type ProfilingRefusal,
+  type ProfilingTimer,
+  type Settled,
+  type SharedTrace,
+  type TraceCapture,
+} from "./profiling-machine"
 
-export type Recording = {
-  owner: WebContents
-  pid: number
-  started: number
-  timer?: ReturnType<typeof setTimeout>
-  finish: () => Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }>
+type Deferred<T> = ReturnType<typeof Promise.withResolvers<T>>
+
+const refusals: Record<ProfilingRefusal, string> = {
+  "trace-active-here":
+    "A performance trace is already active in this tab. Use browser.trace.stop({tabID}) to finish it before starting another.",
+  "trace-active-elsewhere":
+    "Another tab owns the active performance trace. Wait for its owner to finish; do not stop or replace another tab's recording.",
+  "no-trace":
+    "This tab has no performance trace to stop. Call browser.trace.start({tabID}), perform the interaction to inspect, then browser.trace.stop({tabID}).",
+  "cpu-active":
+    "A CPU profile is already active in this tab. Use browser.cpu.stop({tabID}) before starting another profile.",
+  "no-cpu":
+    "No CPU profile has been started in this tab. Call browser.cpu.start({tabID}), perform the interaction to inspect, then browser.cpu.stop({tabID}).",
+  "heap-active":
+    "A heap snapshot is already being captured in this tab. Await that call before taking another; do not capture the same tab's heaps in parallel.",
+  closed:
+    "Browser tab was closed. Call browser.tabs.list({}) and choose an existing tabID; do not reuse the closed tab's refs.",
 }
 
-/** Only one trace records across every tab of the app; `shared` holds it. */
+const TRACE_FLUSH_TIMEOUT =
+  "Chromium did not finish flushing the trace within 10 seconds. No complete export is confirmed. Check browser.files.list({tabID}); do not start another recording until the current trace has finished or the user resolves the failure."
+
+const CPU_STOP_TIMEOUT =
+  "Chromium did not stop the CPU profile within 10 seconds. No profile export is confirmed. Check browser.files.list({tabID}) before starting another profile; do not repeat the stop."
+
+const HEAP_TIMEOUT =
+  "Heap snapshot did not finish within 30 seconds. No snapshot is confirmed. Use a smaller page/test case or ask the user to inspect the heap with desktop developer tools; do not repeat the same capture unchanged."
+
+/** Only one trace records across every tab of the app; `shared.trace` names the page that owns it. */
 export function createProfiling(
   contents: WebContents,
   cdp: Cdp,
   files: BrowserFiles,
   source: () => readonly string[],
-  shared: { recording?: Recording },
+  shared: { trace?: SharedTrace },
 ) {
-  let trace: Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }> | undefined
-  let traceResources = new Set<string>()
-  let traceID = ""
+  let profilingState = createProfilingState(crypto.randomUUID())
+  const timers = new Map<ProfilingTimer, ReturnType<typeof setTimeout>>()
+  const traceStarts = new Map<number, Deferred<undefined>>()
+  const traceStops = new Map<number, Deferred<TraceCapture>>()
+  const cpuStarts = new Map<number, Deferred<undefined>>()
+  const cpuStops = new Map<number, Deferred<CpuCapture>>()
+  const heaps = new Map<number, Deferred<Browser.FileID>>()
+  const disposed = Promise.withResolvers<void>()
 
-  let cpu:
-    | {
-        started: number
-        id: string
-        resources: Set<string>
-        timer?: ReturnType<typeof setTimeout>
-        result?: Promise<{ id: Browser.FileID; durationMs: number }>
+  const dispatch = (event: ProfilingEvent) => {
+    const next = transitionProfiling(profilingState, shared.trace, event)
+    profilingState = next.state
+    shared.trace = next.shared
+    next.effects.forEach(run)
+
+    return next.reply
+  }
+
+  // A request waits for the settle of the attempt it joined, or fails at once.
+  const request = <T>(event: ProfilingEvent, waiters: Map<number, Deferred<T>>) => {
+    const reply = dispatch(event)
+
+    if (reply?.status === "pending") return waiter(waiters, reply.attempt).promise
+
+    return Promise.reject(new Error(refusals[reply?.refusal ?? "closed"]))
+  }
+
+  const run = (effect: ProfilingEffect) => {
+    switch (effect.type) {
+      case "start-trace":
+        void cdp
+          .send("Tracing.start", {
+            transferMode: "ReturnAsStream",
+            traceConfig: {
+              recordMode: "recordUntilFull",
+              traceBufferSizeInKb: 8192,
+              includedCategories: [
+                "devtools.timeline",
+                "disabled-by-default-devtools.timeline",
+                "disabled-by-default-devtools.timeline.stack",
+                "v8.execute",
+                "blink.user_timing",
+                "disabled-by-default-v8.cpu_profiler",
+              ],
+              excludedCategories: ["*"],
+            },
+          })
+          .then(
+            () => dispatch({ type: "trace.start.succeeded", attempt: effect.attempt, now: performance.now() }),
+            (error: Error) => dispatch({ type: "trace.start.failed", attempt: effect.attempt, error }),
+          )
+
+        return
+      case "end-trace":
+        void exportTrace(effect).then(
+          (value) => dispatch({ type: "trace.stop.succeeded", attempt: effect.attempt, value }),
+          (error: Error) => dispatch({ type: "trace.stop.failed", attempt: effect.attempt, error }),
+        )
+
+        return
+      case "start-cpu":
+        void cdp
+          .send("Profiler.enable")
+          .then(() => cdp.send("Profiler.start"))
+          .then(
+            () => dispatch({ type: "cpu.start.succeeded", attempt: effect.attempt }),
+            (error: Error) => dispatch({ type: "cpu.start.failed", attempt: effect.attempt, error }),
+          )
+
+        return
+      case "stop-cpu":
+        void cdp
+          .send("Profiler.stop")
+          .then(async ({ profile }) => ({
+            id: await files.save("profile.cpuprofile", "application/json", Buffer.from(JSON.stringify(profile)), [
+              ...effect.resources,
+            ]),
+            durationMs: (profile.endTime - profile.startTime) / 1000,
+          }))
+          .then(
+            (value) => dispatch({ type: "cpu.stop.succeeded", attempt: effect.attempt, value }),
+            (error: Error) => dispatch({ type: "cpu.stop.failed", attempt: effect.attempt, error }),
+          )
+
+        return
+      case "capture-heap":
+        void captureHeap(effect.resources).then(
+          (id) => dispatch({ type: "heap.succeeded", attempt: effect.attempt, id }),
+          (error: Error) => dispatch({ type: "heap.failed", attempt: effect.attempt, error }),
+        )
+
+        return
+      case "schedule":
+        clearTimeout(timers.get(effect.timer))
+        timers.set(
+          effect.timer,
+          setTimeout(() => dispatch(expired(effect.timer, effect.attempt)), effect.delayMs),
+        )
+
+        return
+      case "cancel":
+        clearTimeout(timers.get(effect.timer))
+        timers.delete(effect.timer)
+
+        return
+      case "settle-trace-start":
+        return settle(traceStarts, effect.attempt, effect.outcome)
+      case "settle-trace-stop":
+        return settle(traceStops, effect.attempt, effect.outcome)
+      case "settle-cpu-start":
+        return settle(cpuStarts, effect.attempt, effect.outcome)
+      case "settle-cpu-stop":
+        return settle(cpuStops, effect.attempt, effect.outcome)
+      case "settle-heap":
+        return settle(heaps, effect.attempt, effect.outcome)
+      case "settle-dispose":
+        disposed.resolve()
+    }
+  }
+
+  const exportTrace = async (effect: Extract<ProfilingEffect, { type: "end-trace" }>): Promise<TraceCapture> => {
+    const complete = Promise.withResolvers<{ stream?: string; dataLossOccurred: boolean }>()
+    const off = cdp.on("Tracing.tracingComplete", (event) => complete.resolve(event))
+
+    try {
+      const result = await cdp.send("Tracing.end").then(() => complete.promise)
+
+      // The stop timed out before Chromium completed; a completion now may belong to a later trace, whose stream
+      // this export must not read or close.
+      if (!isTraceStoppingAttempt(profilingState, effect.attempt)) throw new Error(TRACE_FLUSH_TIMEOUT)
+
+      if (!result.stream)
+        throw new Error(
+          "Chromium stopped tracing without returning a trace stream. No export is available. Check desktop/plugin compatibility and report the failure; repeating trace.stop cannot recover a missing stream.",
+        )
+      const chunks: Buffer[] = []
+      let bytes = 0
+
+      try {
+        while (true) {
+          // The stop timed out meanwhile and already answered; stop reading.
+          if (!isTraceStoppingAttempt(profilingState, effect.attempt)) throw new Error(TRACE_FLUSH_TIMEOUT)
+          const part = await cdp.send("IO.read", { handle: result.stream, size: 256 * 1024 })
+          const buffer = Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
+          bytes += buffer.byteLength
+
+          if (bytes > 64 * 1024 * 1024)
+            throw new Error(
+              "Trace exceeded its 64 MiB desktop capture limit. Record a shorter interaction with a smaller durationMs in browser.trace.start; do not repeat the same recording unchanged.",
+            )
+          chunks.push(buffer)
+
+          if (part.eof) break
+        }
+      } finally {
+        await cdp.send("IO.close", { handle: result.stream })
       }
-    | undefined
 
-  let takingHeap = false
-  cdp.on("Page.frameNavigated", ({ frame }) => {
-    if (shared.recording?.owner === contents) traceResources.add(frame.url)
+      const raw = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Struct({ traceEvents: Schema.Array(Schema.Record(Schema.String, Schema.Json)) })),
+      )(Buffer.concat(chunks).toString("utf8"))
 
-    if (cpu && !cpu.result) cpu.resources.add(frame.url)
-  })
+      // A CDP trace is browser-wide. Export only this renderer process, never
+      // the application renderer or another session's process metadata.
+      const traceEvents = raw.traceEvents.filter((event) => event.pid === effect.pid)
+
+      const id = await files.save(
+        "trace.json.gz",
+        "application/gzip",
+        gzipSync(
+          JSON.stringify({
+            traceEvents,
+            metadata: { source: "opencode", scope: "renderer-process", processId: effect.pid },
+          }),
+        ),
+        [...effect.resources],
+      )
+
+      return {
+        id,
+        durationMs: effect.durationMs,
+        incomplete: result.dataLossOccurred || contents.isDestroyed() || contents.getOSProcessId() !== effect.pid,
+      }
+    } finally {
+      off()
+    }
+  }
+
+  const captureHeap = async (resources: readonly string[]) => {
+    const chunks: string[] = []
+    let size = 0
+    let overflow = false
+
+    const off = cdp.on("HeapProfiler.addHeapSnapshotChunk", ({ chunk }) => {
+      size += Buffer.byteLength(chunk)
+
+      if (size > 128 * 1024 * 1024) overflow = true
+
+      if (!overflow) chunks.push(chunk)
+    })
+
+    try {
+      await cdp.send("HeapProfiler.enable")
+      await cdp.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false })
+    } finally {
+      off()
+    }
+
+    if (overflow)
+      throw new Error(
+        "Heap snapshot exceeded the 128 MiB desktop capture limit. Use a smaller page/test case or ask the user to inspect the heap with desktop developer tools; this tool has no size override.",
+      )
+
+    return files.save("heap.heapsnapshot.gz", "application/gzip", gzipSync(chunks.join("")), [
+      ...resources,
+      ...source(),
+    ])
+  }
 
   const json = async (id: Browser.FileID) => {
     const file = await files.transfer(id)
@@ -60,229 +292,35 @@ export function createProfiling(
     }
   }
 
-  const stopCpu = () => {
-    if (!cpu)
-      return Promise.reject(
-        new Error(
-          "No CPU profile has been started in this tab. Call browser.cpu.start({tabID}), perform the interaction to inspect, then browser.cpu.stop({tabID}).",
-        ),
-      )
-
-    if (cpu.result) return cpu.result
-    const resources = cpu.resources
-    clearTimeout(cpu.timer)
-    cpu.result = cdp.send("Profiler.stop").then(async ({ profile }) => ({
-      id: await files.save("profile.cpuprofile", "application/json", Buffer.from(JSON.stringify(profile)), [
-        ...resources,
-      ]),
-      durationMs: (profile.endTime - profile.startTime) / 1000,
-    }))
-
-    return cpu.result
-  }
+  cdp.on("Page.frameNavigated", ({ frame }) => dispatch({ type: "frame.navigated", url: frame.url }))
 
   return {
     target(type: "trace" | "cpu"): Browser.Target {
-      return {
-        resources: (type === "trace" ? [...traceResources] : [...(cpu?.resources ?? [])]).sort(),
-        key: type === "trace" ? traceID : (cpu?.id ?? ""),
-      }
+      return selectProfilingTarget(profilingState, type)
     },
-    async startTrace(durationMs = 10_000) {
-      if (shared.recording)
-        throw new Error(
-          shared.recording.owner === contents
-            ? "A performance trace is already active in this tab. Use browser.trace.stop({tabID}) to finish it before starting another."
-            : "Another tab owns the active performance trace. Wait for its owner to finish; do not stop or replace another tab's recording.",
-        )
-      const complete = Promise.withResolvers<{ stream?: string; dataLossOccurred: boolean }>()
-      const off = cdp.on("Tracing.tracingComplete", (event) => complete.resolve(event))
-
-      const owner = {
-        owner: contents,
-        pid: contents.getOSProcessId(),
-        started: performance.now(),
-        timer: undefined as ReturnType<typeof setTimeout> | undefined,
-        finish: () => {
-          if (trace) return trace
-          trace = (async () => {
-            clearTimeout(owner.timer)
-            const durationMs = performance.now() - owner.started
-            const deadline = Promise.withResolvers<never>()
-
-            const timeout = setTimeout(
-              () =>
-                deadline.reject(
-                  new Error(
-                    "Chromium did not finish flushing the trace within 10 seconds. No complete export is confirmed. Check browser.files.list({tabID}); do not start another recording until the current trace has finished or the user resolves the failure.",
-                  ),
-                ),
-              10_000,
-            )
-
-            try {
-              const result = await Promise.race([
-                cdp.send("Tracing.end").then(() => complete.promise),
-                deadline.promise,
-              ])
-
-              if (!result.stream)
-                throw new Error(
-                  "Chromium stopped tracing without returning a trace stream. No export is available. Check desktop/plugin compatibility and report the failure; repeating trace.stop cannot recover a missing stream.",
-                )
-              const chunks: Buffer[] = []
-              let bytes = 0
-
-              try {
-                while (true) {
-                  const part = await cdp.send("IO.read", { handle: result.stream, size: 256 * 1024 })
-                  const buffer = Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
-                  bytes += buffer.byteLength
-
-                  if (bytes > 64 * 1024 * 1024)
-                    throw new Error(
-                      "Trace exceeded its 64 MiB desktop capture limit. Record a shorter interaction with a smaller durationMs in browser.trace.start; do not repeat the same recording unchanged.",
-                    )
-                  chunks.push(buffer)
-
-                  if (part.eof) break
-                }
-              } finally {
-                await cdp.send("IO.close", { handle: result.stream })
-              }
-
-              const raw = Schema.decodeUnknownSync(
-                Schema.fromJsonString(
-                  Schema.Struct({ traceEvents: Schema.Array(Schema.Record(Schema.String, Schema.Json)) }),
-                ),
-              )(Buffer.concat(chunks).toString("utf8"))
-
-              // A CDP trace is browser-wide. Export only this renderer process, never
-              // the application renderer or another session's process metadata.
-              const traceEvents = raw.traceEvents.filter((event) => event.pid === owner.pid)
-
-              const id = await files.save(
-                "trace.json.gz",
-                "application/gzip",
-                gzipSync(
-                  JSON.stringify({
-                    traceEvents,
-                    metadata: { source: "opencode", scope: "renderer-process", processId: owner.pid },
-                  }),
-                ),
-                [...traceResources],
-              )
-
-              return {
-                id,
-                durationMs,
-                incomplete:
-                  result.dataLossOccurred || contents.isDestroyed() || contents.getOSProcessId() !== owner.pid,
-              }
-            } finally {
-              clearTimeout(timeout)
-              off()
-
-              if (shared.recording === owner) shared.recording = undefined
-            }
-          })()
-
-          return trace
+    startTrace(durationMs = 10_000) {
+      return request(
+        {
+          type: "trace.start.requested",
+          key: crypto.randomUUID(),
+          pid: contents.getOSProcessId(),
+          durationMs,
+          resources: source(),
         },
-      }
-
-      shared.recording = owner
-      trace = undefined
-      traceResources = new Set(source())
-      traceID = crypto.randomUUID()
-
-      try {
-        await cdp.send("Tracing.start", {
-          transferMode: "ReturnAsStream",
-          traceConfig: {
-            recordMode: "recordUntilFull",
-            traceBufferSizeInKb: 8192,
-            includedCategories: [
-              "devtools.timeline",
-              "disabled-by-default-devtools.timeline",
-              "disabled-by-default-devtools.timeline.stack",
-              "v8.execute",
-              "blink.user_timing",
-              "disabled-by-default-v8.cpu_profiler",
-            ],
-            excludedCategories: ["*"],
-          },
-        })
-        owner.timer = setTimeout(() => {
-          void owner.finish().catch(() => undefined)
-        }, durationMs)
-      } catch (error) {
-        off()
-
-        if (shared.recording === owner) shared.recording = undefined
-        throw error
-      }
-    },
-    stopTrace() {
-      if (shared.recording?.owner === contents) return shared.recording.finish()
-
-      if (trace) return trace
-
-      return Promise.reject(
-        new Error(
-          "This tab has no performance trace to stop. Call browser.trace.start({tabID}), perform the interaction to inspect, then browser.trace.stop({tabID}).",
-        ),
+        traceStarts,
       )
     },
-    async startCpu() {
-      if (cpu && !cpu.result)
-        throw new Error(
-          "A CPU profile is already active in this tab. Use browser.cpu.stop({tabID}) before starting another profile.",
-        )
-      await cdp.send("Profiler.enable")
-      await cdp.send("Profiler.start")
-      cpu = { started: Date.now(), id: crypto.randomUUID(), resources: new Set(source()) }
-      cpu.timer = setTimeout(() => {
-        void stopCpu().catch(() => undefined)
-      }, 30_000)
+    stopTrace() {
+      return request({ type: "trace.stop.requested", now: performance.now() }, traceStops)
     },
-    stopCpu,
-    async heap() {
-      if (takingHeap)
-        throw new Error(
-          "A heap snapshot is already being captured in this tab. Await that call before taking another; do not capture the same tab's heaps in parallel.",
-        )
-      takingHeap = true
-      const resources = source()
-      const chunks: string[] = []
-      let size = 0
-      let overflow = false
-
-      const off = cdp.on("HeapProfiler.addHeapSnapshotChunk", ({ chunk }) => {
-        size += Buffer.byteLength(chunk)
-
-        if (size > 128 * 1024 * 1024) overflow = true
-
-        if (!overflow) chunks.push(chunk)
-      })
-
-      try {
-        await cdp.send("HeapProfiler.enable")
-        await cdp.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false })
-      } finally {
-        takingHeap = false
-        off()
-      }
-
-      if (overflow)
-        throw new Error(
-          "Heap snapshot exceeded the 128 MiB desktop capture limit. Use a smaller page/test case or ask the user to inspect the heap with desktop developer tools; this tool has no size override.",
-        )
-
-      return files.save("heap.heapsnapshot.gz", "application/gzip", gzipSync(chunks.join("")), [
-        ...resources,
-        ...source(),
-      ])
+    startCpu() {
+      return request({ type: "cpu.start.requested", key: crypto.randomUUID(), resources: source() }, cpuStarts)
+    },
+    stopCpu() {
+      return request({ type: "cpu.stop.requested" }, cpuStops)
+    },
+    heap() {
+      return request({ type: "heap.requested", resources: source() }, heaps)
     },
     async analyze(
       action: Extract<
@@ -320,10 +358,47 @@ export function createProfiling(
 
       return heap.object(action.id, action.limit)
     },
-    async dispose() {
-      if (shared.recording?.owner === contents) await shared.recording.finish().catch(() => undefined)
+    /** Stops this page's trace and CPU profile; resolves once both settled, each within its stop timeout. */
+    dispose() {
+      dispatch({ type: "dispose.requested", now: performance.now() })
 
-      if (cpu && !cpu.result) await stopCpu().catch(() => undefined)
+      return disposed.promise
     },
+  }
+}
+
+/** The attempt's waiter; a new attempt drops the settled waiters of earlier ones. */
+function waiter<T>(waiters: Map<number, Deferred<T>>, attempt: number) {
+  const existing = waiters.get(attempt)
+
+  if (existing) return existing
+  const created = Promise.withResolvers<T>()
+  // A recording its timer stopped settles with nobody waiting; a later stop still reads the outcome.
+  created.promise.catch(() => undefined)
+  waiters.clear()
+  waiters.set(attempt, created)
+
+  return created
+}
+
+function settle<T>(waiters: Map<number, Deferred<T>>, attempt: number, outcome: Settled<T>) {
+  const target = waiter(waiters, attempt)
+
+  if (outcome.ok) return target.resolve(outcome.value)
+  target.reject(outcome.error)
+}
+
+function expired(timer: ProfilingTimer, attempt: number): ProfilingEvent {
+  switch (timer) {
+    case "trace.duration":
+      return { type: "trace.duration.elapsed", attempt, now: performance.now() }
+    case "trace.stop":
+      return { type: "trace.stop.failed", attempt, error: new Error(TRACE_FLUSH_TIMEOUT) }
+    case "cpu.duration":
+      return { type: "cpu.duration.elapsed", attempt }
+    case "cpu.stop":
+      return { type: "cpu.stop.failed", attempt, error: new Error(CPU_STOP_TIMEOUT) }
+    case "heap":
+      return { type: "heap.failed", attempt, error: new Error(HEAP_TIMEOUT) }
   }
 }

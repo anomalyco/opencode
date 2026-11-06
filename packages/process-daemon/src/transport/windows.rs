@@ -38,6 +38,8 @@ use security::PrivateSecurity;
 const BUFFER_BYTES: u32 = 64 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const COMPLETION_TIMEOUT: Duration = Duration::from_secs(2);
+/// Interim idle poll until `wait` blocks on the pending connect and a stop event.
+const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 pub(crate) struct Listener {
     endpoint: Vec<u16>,
@@ -81,6 +83,39 @@ impl Listener {
     pub fn stop(&mut self) {
         self.stopped = true;
         self.pending.operation.pipe.cancel();
+    }
+
+    /// Windows keeps a 25 ms poll for now; the caller then polls `accept`.
+    pub fn wait(&self, _wake: &Wake, listen: bool, timeout: Duration) -> io::Result<Readiness> {
+        thread::sleep(timeout.min(POLL_INTERVAL));
+        // `timed_out` stays false: Windows cannot tell, and the missed-wake detector must stay off.
+        Ok(Readiness {
+            connection: listen,
+            timed_out: false,
+        })
+    }
+}
+
+/// Readiness reported by `Listener::wait`. On Windows `connection` mirrors `listen` and
+/// `timed_out` is never set.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Readiness {
+    pub connection: bool,
+    pub timed_out: bool,
+}
+
+/// Windows keeps a 25 ms poll for now, so notify is a no-op.
+pub(crate) struct Wake;
+
+impl Wake {
+    pub fn new() -> io::Result<Self> {
+        Ok(Self)
+    }
+
+    pub fn notify(&self) {}
+
+    pub fn drain(&self) -> bool {
+        false
     }
 }
 
@@ -251,7 +286,7 @@ impl Connection {
         Ok(Cancellation(Arc::clone(&self.pipe)))
     }
 
-    /// Protocol 7 has an explicit response/final event, not a pipe half-close.
+    /// The protocol has an explicit response/final event, not a pipe half-close.
     /// Retain the pipe until the client reads that frame and closes its end.
     /// An uncooperative peer is cancelled after a bounded grace period.
     pub(crate) fn finish_response(&mut self) -> io::Result<()> {
@@ -668,7 +703,11 @@ mod tests {
                 &mut server,
                 &Response::Exited {
                     exit_code: Some(0),
+                    signal: None,
                     final_offset: 123,
+                    output_lines: None,
+                    output_error: None,
+                    exited_at: 1,
                 },
             )
             .unwrap();

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, jest, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createPresence } from "../src/runtime/presence"
 
@@ -6,6 +6,8 @@ const cleanups: Array<() => void> = []
 
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
+  document.documentElement.removeAttribute("data-motion")
+  jest.useRealTimers()
 })
 
 function setup(input: { show: boolean; element?: boolean }) {
@@ -163,5 +165,72 @@ describe("createPresence", () => {
     next.dispatchEvent(new AnimationEvent("animationend", { animationName: "exit" }))
     expect(view.presence.state()).toBe("hidden")
     next.remove()
+  })
+
+  test("hides on the fallback timer when the exit animation never ends", () => {
+    jest.useFakeTimers()
+    const view = setup({ show: true })
+    view.element.style.animationName = "exit"
+    view.element.style.animationDuration = "300ms"
+    view.setShow(false)
+    expect(view.presence.state()).toBe("hiding")
+
+    // The computed duration plus 50ms of grace.
+    jest.advanceTimersByTime(349)
+    expect(view.presence.state()).toBe("hiding")
+    jest.advanceTimersByTime(1)
+    expect(view.presence.state()).toBe("hidden")
+  })
+
+  test("hides at once when the element is removed mid-exit", () => {
+    const view = setup({ show: true })
+    view.element.style.animationName = "exit"
+    view.setShow(false)
+    expect(view.presence.state()).toBe("hiding")
+
+    view.setTarget(null)
+    expect(view.presence.state()).toBe("hidden")
+  })
+
+  test("waits for a transition exit to end or cancel, ignoring transitions of children", () => {
+    const view = setup({ show: true })
+    const child = document.createElement("span")
+    view.element.append(child)
+    view.element.style.transitionProperty = "opacity"
+    view.element.style.transitionDuration = "200ms"
+
+    view.setShow(false)
+    expect(view.presence.state()).toBe("hiding")
+    child.dispatchEvent(new TransitionEvent("transitionend", { propertyName: "opacity", bubbles: true }))
+    expect(view.presence.state()).toBe("hiding")
+    view.element.dispatchEvent(new TransitionEvent("transitionend", { propertyName: "opacity" }))
+    expect(view.presence.state()).toBe("hidden")
+
+    view.setShow(true)
+    view.setShow(false)
+    expect(view.presence.state()).toBe("hiding")
+    view.element.dispatchEvent(new TransitionEvent("transitioncancel", { propertyName: "opacity" }))
+    expect(view.presence.state()).toBe("hidden")
+  })
+
+  test("skips the exit animation under Reduce Motion", () => {
+    document.documentElement.setAttribute("data-motion", "reduce")
+    const view = setup({ show: true })
+    view.element.style.animationName = "exit"
+
+    view.setShow(false)
+    expect(view.presence.state()).toBe("hidden")
+  })
+
+  test("hides when Reduce Motion turns on mid-exit", async () => {
+    const view = setup({ show: true })
+    view.element.style.animationName = "exit"
+    view.setShow(false)
+    expect(view.presence.state()).toBe("hiding")
+
+    document.documentElement.setAttribute("data-motion", "reduce")
+    // Mutation observers deliver in a microtask.
+    await Promise.resolve()
+    expect(view.presence.state()).toBe("hidden")
   })
 })

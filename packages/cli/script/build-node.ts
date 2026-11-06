@@ -53,7 +53,7 @@ if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
 if (appArchiveOnly) {
   if (!archivePath) throw new Error("--app-archive-only requires OPENCODE_APP_ARCHIVE")
   await mkdir(path.dirname(archivePath), { recursive: true })
-  await writeFile(archivePath, await buildAppArchive(Script.channel))
+  await writeFile(archivePath, await buildAppArchive(Script.channel, Script.version))
   process.exit(0)
 }
 if (targets.length === 0) {
@@ -64,7 +64,7 @@ if (!bundleOnly && targets.some((target) => target.platform === "darwin" && targ
   throw new Error("Node 26.4 SEA does not support macOS x64")
 }
 const modelsSnapshot = await bundledModelsSnapshot()
-const appArchive = archivePath ? await Bun.file(archivePath).bytes() : await buildAppArchive(Script.channel)
+const appArchive = archivePath ? await Bun.file(archivePath).bytes() : await buildAppArchive(Script.channel, Script.version)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
   !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)

@@ -169,6 +169,25 @@ const table = sqliteTable("session", {
 })
 ```
 
+### Experimental API
+
+- An experimental endpoint lives at `/api/experimental/<group>/...`, its OpenAPI identifier is `experimental.<group>.<method>`, and it lands in the SDK as `client.experimental.<group>.<method>`. Its description says "Experimental: may change without compatibility guarantees."
+- `packages/protocol/test/experimental-identifiers.test.ts` enforces the path and identifier match in both directions; the SDK namespace follows from the path.
+- An experimental field or parameter on a stable endpoint goes under an `experimental` key (`experimental.<name>`), the same way config does (`config.experimental.*`).
+- New endpoints and new default behaviors start experimental.
+- To graduate one, move the route out of `/api/experimental`, drop the `experimental.` prefix, and note it in `CHANGELOG.md`.
+- Experimental HTTP routes change without aliases: rename or remove the route, then update the callers.
+- A breaking move of shipped SDK or plugin API (including moving it under `experimental`) keeps the old path and type names as deprecated aliases of the new ones until the next minor, each marked `@deprecated` with the replacement and "Removed in the next minor". Generated SDK moves get them from the codegen (`compile(..., { aliases: true })` in `packages/client/script/generate.ts`), not by hand.
+- Experimental plugin hooks are named `experimental.*` (`experimental.ws.handshake`).
+
+### Feature Flags
+
+- When you open a PR, decide whether the change needs a flag: new user-visible behavior, risky core changes, and anything not ready to release get one; fixes, refactors, docs and tests do not.
+- Gate risky behavior, or behavior that lands over several PRs, with a key and a description in `packages/schema/src/config/flag.ts`, and read it with `Flag.enabled("<key>")` from `@opencode/core/flag`.
+- Flags are on in local and dev builds and off in releases; `experimental.<key>` in config and `OPENCODE_FLAGS="key,-other"` override that.
+- Say in the PR body which flag guards the change. To try every flag at once, use `OPENCODE_FLAGS=all` or `experimental.all_flags: true`; a `-<key>` opt-out or `experimental.<key>: false` still wins, and neither `all` nor `all_flags` is a flag key.
+- Ship a feature by deleting its flag and the checks that read it.
+
 ## Testing
 
 - Avoid mocks as much as possible, you shouldn't be using globalThis.\* at all unless it's the only option.

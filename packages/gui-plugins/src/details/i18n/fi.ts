@@ -13,8 +13,6 @@ export default {
   "plugins.empty": "Mitään laajennuksia ei ole määritetty",
   skills: "Taidot",
   "skills.empty": "Ei määritettyjä taitoja",
-  lsp: "LSP",
-  "lsp.empty": "LSP-palvelimia ei ole määritetty",
   failed: "Epäonnistui",
   retry: "Yritä uudelleen",
   connecting: "Yhdistetään…",

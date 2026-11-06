@@ -38,19 +38,24 @@ describe("new session workspace selection", () => {
     expect(resolveNewSessionWorktree(input)).toBe(expected)
   })
 
-  const branch = (worktree: string) => (worktree === "/project/feature" ? "feature" : undefined)
+  const branches = new Map([
+    ["/project", "dev"],
+    ["/project/feature", "feature"],
+  ])
+
+  const branch = (worktree: string) => branches.get(worktree)
 
   test.each([
-    { worktree: "main", directory: "/project/feature", createBranch: undefined, expected: "feature" },
-    { worktree: "create", directory: "/project/feature", createBranch: undefined, expected: "feature" },
-    { worktree: "/project/feature", directory: "/project", createBranch: undefined, expected: "feature" },
-    { worktree: "/missing", directory: "/project/feature", createBranch: undefined, expected: undefined },
-    { worktree: "create", directory: "/project/feature", createBranch: "release", expected: "release" },
-  ])("resolves the branch for $worktree in $directory (new branch: $createBranch)", (row) => {
+    { worktree: "main", root: "/project", createBranch: undefined, expected: "dev" },
+    { worktree: "create", root: "/project", createBranch: undefined, expected: "dev" },
+    { worktree: "/project/feature", root: "/project", createBranch: undefined, expected: "feature" },
+    { worktree: "/missing", root: "/project", createBranch: undefined, expected: undefined },
+    { worktree: "create", root: "/project", createBranch: "release", expected: "release" },
+  ])("resolves the branch for $worktree from $root (new branch: $createBranch)", (row) => {
     expect(
       resolveNewSessionBranch({
         worktree: row.worktree,
-        directory: row.directory,
+        root: row.root,
         createBranch: row.createBranch,
         worktreeBranch: branch,
       }),

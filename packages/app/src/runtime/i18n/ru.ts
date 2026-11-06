@@ -827,6 +827,7 @@ export const dict = {
   "home.workspaceTip":
     "Начните следующую сессию в новом рабочем пространстве, чтобы изменения оставались изолированными",
   "session.tab.add": "Добавить вкладку",
+  "session.tab.closeOthers": "Закрыть другие вкладки",
   "session.queue.attachments.one": "Плюс {{count}} вложение",
   "session.queue.attachments.other": "Плюс {{count}} вложения",
   "settings.backToSettings": "Назад к настройкам",

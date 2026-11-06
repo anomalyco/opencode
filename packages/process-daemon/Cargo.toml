@@ -1,6 +1,6 @@
 [package]
 name = "opencode-pty"
-version = "0.3.1"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Persistent PTY service for OpenCode"
@@ -21,7 +21,7 @@ shell-words = "1.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-nix = { version = "0.28", features = ["process", "term", "user"] }
+nix = { version = "0.28", features = ["poll", "process", "term", "user"] }
 sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]

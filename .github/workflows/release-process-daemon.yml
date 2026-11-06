@@ -1,6 +1,6 @@
 name: Process daemon release
 
-# Publishes the opencode-pty binaries and the @opencode-ai/pty npm packages from packages/process-daemon.
+# Publishes the opencode-pty binaries and the @opencode/pty npm packages from packages/process-daemon.
 # Only process-daemon-v<version> tags publish; pull requests that touch the release pipeline build and pack
 # without publishing.
 
@@ -25,7 +25,6 @@ defaults:
 
 env:
   CARGO_TERM_COLOR: always
-  PROTOCOL_VERSION: 7
   ZIG_VERSION: 0.16.0
   GNU_GLIBC_VERSION: "2.30"
   CARGO_ZIGBUILD_VERSION: 0.23.2
@@ -33,6 +32,8 @@ env:
 jobs:
   checks:
     runs-on: ubuntu-22.04
+    outputs:
+      protocol: ${{ steps.protocol.outputs.protocol }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
@@ -45,6 +46,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin" >> "$GITHUB_PATH"
       - name: Install Rust
         run: rustup toolchain install 1.90.0 --profile minimal --component clippy --component rustfmt
+      - name: Read protocol version
+        id: protocol
+        run: |
+          protocol="$(sed -nE 's/^pub const PROTOCOL_VERSION: u32 = ([0-9]+);$/\1/p' src/protocol.rs)"
+          test -n "$protocol"
+          echo "protocol=$protocol" >> "$GITHUB_OUTPUT"
       - name: Validate tag
         run: |
           package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "opencode-pty") | .version')"
@@ -80,6 +87,7 @@ jobs:
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
     env:
+      PROTOCOL_VERSION: ${{ needs.checks.outputs.protocol }}
       MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -165,6 +173,7 @@ jobs:
         shell: pwsh
         working-directory: packages/process-daemon
     env:
+      PROTOCOL_VERSION: ${{ needs.checks.outputs.protocol }}
       CARGO_BUILD_TARGET: ${{ matrix.target }}
       RUSTUP_TOOLCHAIN: 1.90.0-x86_64-pc-windows-msvc
       # Portable CPU for Ghostty (see build.rs) and no Visual C++ runtime dependency.
@@ -238,12 +247,14 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build, build-windows]
+    needs: [checks, build, build-windows]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
       id-token: write
       attestations: write
+    env:
+      PROTOCOL_VERSION: ${{ needs.checks.outputs.protocol }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -301,7 +312,7 @@ jobs:
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --latest=false \
               --title "process-daemon v$version" \
-              --notes "opencode-pty $version (protocol $PROTOCOL_VERSION) from packages/process-daemon, published to npm as @opencode-ai/pty@$version."
+              --notes "opencode-pty $version (protocol $PROTOCOL_VERSION) from packages/process-daemon, published to npm as @opencode/pty@$version."
           gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS dist/release-manifest.json --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false --repo "$GITHUB_REPOSITORY"
       - name: Publish npm packages
@@ -314,7 +325,7 @@ jobs:
               npm publish "$package" --access public --provenance
             fi
           done
-          name="@opencode-ai/pty"
+          name="@opencode/pty"
           if ! npm view "$name@$version" version >/dev/null 2>&1; then
             npm publish dist/npm/opencode-pty --access public --provenance
           fi

@@ -14,6 +14,7 @@ pub struct Registration {
     /// Opaque local transport endpoint, not necessarily a filesystem entry.
     pub socket: PathBuf,
     pub token: String,
+    pub features: Vec<String>,
 }
 
 /// Shared parent of runtime directories, inside OpenCode's state directory.
@@ -69,6 +70,8 @@ pub fn read_registration(directory: &Path) -> Result<Registration> {
     }
 }
 
+#[cfg(any(unix, windows))]
+mod control;
 #[cfg(unix)]
 #[path = "daemon/unix.rs"]
 mod platform;

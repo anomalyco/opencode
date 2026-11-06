@@ -159,6 +159,32 @@ ctx.add(Command, () => ({
 }))
 ```
 
+### Referencing a subject
+
+Attach a `type: "note"` part to reference a subject outside workspace lines. Set `comment: ""` to attach only the
+subject: the model reads "The user referenced <subject>." With a comment it reads "The user made the following
+comment regarding <subject>: <comment>" instead.
+
+For an uncommented note, optional `title` supplies the primary heading. Optional `subtitle` supplies a plain-text
+footer beside the icon, with or without a comment. Each defaults to `label` when omitted. For example, the browser
+uses a selector as `title` and its localized annotation label as `subtitle`; a comment replaces only the heading.
+These display fields do not change `subject`. Both survive draft storage, sent-message metadata and restoration.
+Only the process-bound `live` reference is dropped when a stored draft or sent message is restored.
+
+### Quoting selected content
+
+Attach a `type: "quote"` part with a `commentID`, then call `screen.composer.focus(commentID, { anchor })` to open its
+optional comment beside the source. `anchor(size)` returns the editor's physical viewport `{ top, left }` for its
+current `width` and frozen opening `height`. It is first called after measurement (never with an unmeasured zero
+height), then again on scroll, resize, and changes to reactive values it reads. The editor holds its opening bottom
+edge as its input grows upward. Return `undefined` when the source is hidden or gone to fall back to the quote's
+composer tile. The anchor is client-only and never persisted. Omitting the options
+anchors the editor to the tile, as clicking that tile does. To quote without opening a comment, call
+`screen.composer.focus()` instead; the built-in selection toolbars offer this through Alt-click.
+
+The built-in terminal follows manual scrolling until new output or a grid resize invalidates the captured source.
+It then falls back to the quote's composer tile without closing the editor or discarding its unsaved comment.
+
 ## Primitives
 
 | Primitive                                        | Use it for                                                                     |
@@ -187,50 +213,66 @@ const Page = lazy(() => import("./page"))
 onCleanup(onIdle(() => void Page.preload()))
 ```
 
-Pairing's shipping page uses a query, not `createLatest`. It passes the query's abort signal directly to the no-input Ipc method; options are the only argument. The generation in the key asks again when main comes back:
+Pairing's shipping page reads through its state machine's driver, not `createLatest`, because a read can retry, time out and race a change of the same setting. Each read or change is an attempt of one generation of main: the driver passes the attempt's abort signal directly to the Ipc method, and every outcome, a timeout included, goes back to the machine, which ignores answers for an attempt it no longer runs. A new generation reads again:
 
-<!-- source: src/pairing/page.tsx#screenActive -->
+<!-- source: src/pairing/page.tsx#runScreen -->
 
 ```tsx
-const screenActive = useQuery(() => ({
-  queryKey: [ctx.id, "screen-active", main()?.generation],
-  queryFn: (input) => {
-    const live = main()
+// Reads or changes the display sleep setting through the generation that asked for it. `screenActive` has no input,
+// so its options are its only argument. The attempt's signal ends either call at its timeout, or when the page or
+// that generation goes away.
+const runScreen = (effect: Extract<PairingEffect, { type: "read-screen" | "set-screen" }>) => {
+  const attempt = effect.attempt
 
-    if (!live) throw new Error("Pairing's main side is not active")
+  const fail = () =>
+    dispatch({ type: effect.type === "read-screen" ? "screen.read.failed" : "screen.change.failed", attempt })
 
-    return live.value.screenActive({ signal: input.signal })
-  },
-  enabled: !!main(),
-  gcTime: 0,
-}))
+  const live = main()
+
+  if (live?.generation !== effect.generation) return fail()
+
+  const signal = start(attempt, effect.timeoutMs, fail)
+
+  if (effect.type === "read-screen")
+    return void live.value
+      .screenActive({ signal })
+      .then((enabled) => dispatch({ type: "screen.read.succeeded", attempt, enabled }), fail)
+
+  void live.value
+    .setScreenActive(effect.enabled, { signal })
+    .then(() => dispatch({ type: "screen.change.succeeded", attempt }), fail)
+}
 ```
 
 ## Catalog
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, dialog frame, fields, Markdown and code with the other `ctx.ui` components.
+SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, menu rows, dialog frame, fields, selects, settings pages and rows, Markdown and code with the other `ctx.ui` components. Built-ins use them too where they need nothing more, such as the settings rows of pairing, updates and review.
 
 ### Registries
 
-| Registry                                          | Process | What an item is                                                                                                                                                     |
-| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Command`](../plugin/src/gui/registries.ts)      | window  | A palette command with an optional keybind and slash command                                                                                                        |
-| [`MenuItem`](../plugin/src/gui/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                                                             |
-| [`Panel`](../plugin/src/gui/registries.ts)        | window  | Tabs in the session's side region                                                                                                                                   |
-| [`SettingsPage`](../plugin/src/gui/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                                                                                                |
-| [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                                                              |
-| [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                             |
-| [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                                                           |
-| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                                                                     |
-| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
-| [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
-| [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
+| Registry                                             | Process | What an item is                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`Command`](../plugin/src/gui/registries.ts)         | window  | A palette command with an optional keybind and slash command                                                                                                                                                                         |
+| [`MenuItem`](../plugin/src/gui/registries.ts)        | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                                                                                                                              |
+| [`Panel`](../plugin/src/gui/registries.ts)           | window  | Tabs in the session's side region                                                                                                                                                                                                    |
+| [`SettingsPage`](../plugin/src/gui/registries.ts)    | window  | A settings page, a section on a host page, or rows in a host section                                                                                                                                                                 |
+| [`Server`](../plugin/src/gui/registries.ts)          | window  | A source of servers, such as SSH hosts                                                                                                                                                                                               |
+| [`LinkHandler`](../plugin/src/gui/registries.ts)     | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                                                                                              |
+| [`TitlebarItem`](../plugin/src/gui/registries.ts)    | window  | A pill in the titlebar or the tabs footer                                                                                                                                                                                            |
+| [`ComposerPill`](../plugin/src/gui/registries.ts)    | window  | A pill in the row above a session's composer, optionally opening a menu of rows or a popover of your own content                                                                                                                     |
+| [`CodeBlock`](../plugin/src/gui/registries.ts)       | window  | Your UI in place of the highlighted code of complete fenced code blocks of the languages you list, such as a diagram or a table                                                                                                      |
+| [`CodeBlockAction`](../plugin/src/gui/registries.ts) | window  | A button beside the Copy button of complete fenced code blocks of the languages you list, such as "Run in terminal"                                                                                                                  |
+| [`Slot`](../plugin/src/gui/registries.ts)            | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
+| [`Style`](../plugin/src/gui/registries.ts)           | window  | CSS imported with `?inline`                                                                                                                                                                                                          |
+| [`Theme`](../plugin/src/gui/registries.ts)           | window  | A color theme in the app's theme file format, listed in Settings › Appearance › Theme                                                                                                                                                |
+| [`MenubarItem`](../plugin/src/gui/main.ts)           | main    | An item of the native app menu                                                                                                                                                                                                       |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
-owning screen show the host's location details without this slot.
+owning screen show the host's location details without this slot. Render its rows with `ctx.ui.MenuItem`,
+`ctx.ui.MenuSub`, `ctx.ui.MenuGroup` and `ctx.ui.MenuSeparator`, so they navigate and close like the host's rows.
 
 `session.location.branch.menu` (built-ins only, through `BuiltinSlot`) contributes items after Copy branch name in
 the branch submenu, with the same `screen`, live `session`, and project-menu `shown` context. It renders only when a
@@ -264,7 +306,7 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.commands`               | `Commands`                                                                         | Runs a published or app command, as the palette does             |
 | `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler   |
 | `ctx.embeds`                 | `Embeds`                                                                           | Shows a web page the main entry created                          |
-| `ctx.ui`                     | `Ui`                                                                               | The app's icons, buttons, menus, dialog frame, Markdown and code |
+| `ctx.ui`                     | `Ui`                                                                               | Icons, buttons, menu rows, dialog frame, fields, settings rows   |
 | `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                             |
 | `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                     |
 | `ctx.appearance`             | `Appearance`                                                                       | The user's mono font, and the light or dark scheme               |
@@ -349,12 +391,9 @@ The updater's actions branch on the state its main entry pushes and still answer
 <!-- source: src/updater/renderer.tsx#act -->
 
 ```tsx
-const act = (name: "check" | "install") => {
-  if (state()) return void import("./actions").then((module) => module[name](ctx, updater))
-
-  // Not loaded yet, or not active (failed, or not on this platform): nothing can check or install.
-  showToast({ title: ctx.t("common.requestFailed") })
-}
+// Main missing (not loaded yet, failed, or not on this platform) answers that nothing can check or install.
+const act = (name: "check" | "install") =>
+  dispatchWindow({ type: "action.requested", action: name, available: state() !== undefined })
 ```
 
 The pairing settings page waits for its main side only where it needs it. Pairing codes come from the local server's `ServerRef`, so they never wait for main; remote access and the display setting render only while main is active, so the page never offers a switch that cannot answer:
@@ -433,7 +472,7 @@ A built-in always runs, whatever setting is saved under its id, so Extensions �
 - **The lint bans raw effects.** `createEffect`, `createRenderEffect` and `createComputed` may not be imported in `packages/gui-plugins/src`; the SDK (`packages/plugin/src/gui`) wraps them. An escape hatch needs an `oxlint-disable` comment with a reason.
 - **Suspense only on first load.** Wrap each `lazy()` component in its own `<Suspense>`, read async data through `.latest` or `createLatest`, and never read a refetching resource in render: it blanks the nearest boundary.
 - **Stable objects.** Return the same object from `Panel.list` and reactive contributions while nothing changed, so the host never remounts.
-- **No timeline work.** `session.header` is the only timeline surface.
+- **No timeline work.** `session.header` is the only timeline surface, besides `CodeBlock` and `CodeBlockAction` content, which the host renders only for a complete fenced block of a language you list.
 - **No module state.** Keep state inside setup; module state survives a reload and leaks across windows.
 
 ## Testing
@@ -497,7 +536,7 @@ import en from "./i18n/en"
 export default Plugin.define({ i18n: { en } })
 ```
 
-3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, with the caller's signal for a read and `ctx.signal` for a change a closing window must not cancel. `ctx.onCleanup` releases the blocker when the instance goes away.
+3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, one command at a time through the machine in `main-machine.ts`, with the same `createDispatch` loop as the settings page: a read stops when its caller goes away, a change goes on when the window closes, and every command has a timeout, so a hung one never holds the queue. `ctx.onCleanup` disposes the machine, which releases the blocker.
 
 <!-- source: src/pairing/main.ts -->
 
@@ -508,12 +547,17 @@ import { Schema } from "effect"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import type { Plugin } from "@opencode/plugin/gui/main"
 import { Pairing } from "./contract"
+import { createDispatch } from "./dispatch"
+import {
+  createPairingMainState,
+  pairingMainEffectFailed,
+  selectBlocker,
+  transitionPairingMain,
+  type PairingMainEffect,
+  type ServiceRequest,
+} from "./main-machine"
 
-/** The display sleep blocker this instance holds, if any. */
-type Blocker = { id?: number }
-
-/** The last `opencode service` command; the next one starts after it settles. */
-type Queue = { tail: Promise<unknown> }
+type Waiter = { resolve: (value: boolean | undefined) => void; reject: (error: Error) => void }
 
 const setup: Plugin.MainSetup = (ctx) => {
   // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
@@ -525,59 +569,104 @@ const setup: Plugin.MainSetup = (ctx) => {
 
   const cli = ctx.cli
   const log = ctx.log
-  const blocker: Blocker = {}
-  const queue: Queue = { tail: Promise.resolve() }
+  const current = { state: createPairingMainState(), waiter: 0 }
+  // Each running command's abort controller, and each caller waiting on a command.
+  const commands = new Map<number, AbortController>()
+  const waiters = new Map<number, Waiter>()
 
-  const release = () => {
-    if (blocker.id === undefined) return
-    powerSaveBlocker.stop(blocker.id)
-    blocker.id = undefined
+  const dispatch = createDispatch({
+    read: () => current.state,
+    write: (state) => {
+      current.state = state
+    },
+    transition: transitionPairingMain,
+    run: (effect: PairingMainEffect) => run(effect),
+    failed: pairingMainEffectFailed,
+  })
+
+  // The OS can drop the blocker, so whether main holds it is asked each time.
+  const screenActive = () => {
+    const id = selectBlocker(current.state)
+
+    return id !== undefined && powerSaveBlocker.isStarted(id)
   }
 
-  const keepScreenActive = (enabled: boolean) => {
-    if (enabled && blocker.id === undefined) blocker.id = powerSaveBlocker.start("prevent-display-sleep")
+  const run = (effect: PairingMainEffect) => {
+    if (effect.type === "blocker.start")
+      return dispatch({ type: "blocker.started", id: powerSaveBlocker.start("prevent-display-sleep") })
 
-    if (!enabled) release()
-    stored.set(enabled)
-  }
+    if (effect.type === "blocker.stop") {
+      if (powerSaveBlocker.isStarted(effect.id)) powerSaveBlocker.stop(effect.id)
 
-  // Remote access is a setting of the background service, so it changes through the CLI the app runs, as with
-  // `opencode pair --remote`. A change restarts the service, so commands run one at a time.
-  const service = (args: readonly string[], signal: AbortSignal) => {
-    const run = queue.tail.then(
-      () =>
-        new Promise<string>((resolve, reject) => {
-          execFile(
-            cli.command[0] ?? "opencode",
-            [...cli.command.slice(1), "service", ...args],
-            { signal, windowsHide: true },
-            (error, stdout, stderr) => {
-              if (!error) return resolve(stdout.trim())
-              log.write("error", "pairing service command failed", { args, error: error.message, stderr })
-              reject(error)
-            },
-          )
-        }),
+      return
+    }
+
+    if (effect.type === "persist.screen") return stored.set(effect.enabled)
+
+    if (effect.type === "service.abort") {
+      commands.get(effect.attempt)?.abort()
+      commands.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "waiter.resolve" || effect.type === "waiter.reject") {
+      const waiter = waiters.get(effect.waiter)
+
+      waiters.delete(effect.waiter)
+
+      if (effect.type === "waiter.resolve") return waiter?.resolve(effect.value)
+
+      return waiter?.reject(new Error(effect.message))
+    }
+
+    // Remote access is a setting of the background service, so it changes through the CLI the app runs, as with
+    // `opencode pair --remote`. A hung command ends at its timeout, so the next one always runs.
+    const attempt = effect.attempt
+    const controller = new AbortController()
+
+    commands.set(attempt, controller)
+    execFile(
+      cli.command[0] ?? "opencode",
+      [...cli.command.slice(1), "service", ...effect.args],
+      { signal: AbortSignal.any([ctx.signal, controller.signal]), timeout: effect.timeoutMs, windowsHide: true },
+      (error, stdout, stderr) => {
+        commands.delete(attempt)
+
+        if (!error) return dispatch({ type: "service.succeeded", attempt, stdout: stdout.trim() })
+        log.write("error", "pairing service command failed", { args: effect.args, error: error.message, stderr })
+        dispatch({ type: "service.failed", attempt, message: error.message })
+      },
     )
-
-    queue.tail = run.catch(() => undefined)
-
-    return run
   }
 
-  if (stored.value) keepScreenActive(true)
-  ctx.onCleanup(release)
+  // Queues a command. A read stops when its caller goes away; a change goes on.
+  const service = (request: ServiceRequest, signal?: AbortSignal) => {
+    current.waiter += 1
+    const waiter = current.waiter
+    const cancel = () => dispatch({ type: "waiter.cancelled", waiter })
+
+    return new Promise<boolean | undefined>((resolve, reject) => {
+      waiters.set(waiter, { resolve, reject })
+      signal?.addEventListener("abort", cancel, { once: true })
+      dispatch({ type: "service.requested", waiter, request })
+
+      if (signal?.aborted) cancel()
+    }).finally(() => signal?.removeEventListener("abort", cancel))
+  }
+
+  if (stored.value) dispatch({ type: "screen.set", enabled: true, started: false })
+  ctx.onCleanup(() => dispatch({ type: "disposed" }))
 
   ctx.provide(Pairing, {
-    remote: async (_, caller) => (await service(["get", "remote"], caller.signal)) === "true",
-    // Changing the setting stops the service. Starting it here brings it back, with the tunnel when remote access is
-    // on. A window that closes meanwhile does not cancel the change.
+    remote: async (_, caller) => (await service({ kind: "get-remote" }, caller.signal)) === true,
+    // Changing the setting stops the service, and starting it again brings it back. A window that closes meanwhile
+    // does not cancel the change.
     setRemote: async (enabled) => {
-      await service(["set", "remote", String(enabled)], ctx.signal)
-      await service(["start"], ctx.signal)
+      await service({ kind: "set-remote", enabled })
     },
-    screenActive: () => blocker.id !== undefined && powerSaveBlocker.isStarted(blocker.id),
-    setScreenActive: (enabled) => keepScreenActive(enabled),
+    screenActive,
+    setScreenActive: (enabled) => dispatch({ type: "screen.set", enabled, started: screenActive() }),
   })
 }
 
@@ -613,7 +702,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   ctx.add(SettingsPage, {
     id: "pairing",
-    icon: "server",
+    icon: "outline-pair",
     get title() {
       return ctx.t("title")
     },
@@ -678,6 +767,7 @@ export const builtins = compose({
   wsl: { ...wsl, mainEntry: () => import("./wsl/main") },
   "microsoft-office": microsoftOffice,
   sources,
+  goal,
 })
 ```
 
@@ -702,6 +792,7 @@ export const builtins = compose({
   wsl: { ...wsl, windowEntry: eager(wslRenderer) },
   "microsoft-office": { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
   sources: { ...sources, windowEntry: eager(sourcesRenderer) },
+  goal: { ...goal, windowEntry: eager(goalRenderer) },
 })
 ```
 

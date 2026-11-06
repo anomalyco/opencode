@@ -621,6 +621,9 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai-compatible-responses": openResponses,
   "@opencode/ai/providers/google-vertex/responses": openResponses,
   "@opencode/ai/providers/xai": openResponses,
+  "@opencode/ai/providers/digitalocean/responses": openResponses,
+  "@opencode/ai/providers/openrouter/responses": openResponses,
+  "@opencode/ai/providers/venice/responses": openResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
@@ -654,6 +657,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
   "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
+  "@opencode/ai/providers/azure/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex-messages": anthropicMessages,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,

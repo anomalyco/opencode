@@ -25,6 +25,10 @@
   background: var(--v2-state-fg-warning);
 }
 
+[data-titlebar-tab] :is([data-mark="failed"], [data-status="failed"] [data-slot="tab-avatar-unread-dot"]) {
+  background: var(--v2-state-fg-danger);
+}
+
 [data-titlebar-tab] [data-slot="tab-avatar-unread-dot"] {
   position: absolute;
   display: none;
@@ -52,8 +56,14 @@
 
 [data-titlebar-tab][data-status="busy"] [data-mark="busy"],
 [data-titlebar-tab][data-status="attention"] [data-mark="attention"],
-[data-titlebar-tab][data-status="unread"] [data-mark="unread"] {
+[data-titlebar-tab][data-status="unread"] [data-mark="unread"],
+[data-titlebar-tab][data-status="failed"] [data-mark="failed"] {
   display: block;
+}
+
+/* The muted spinner's dim dots vanish against the dark tab, leaving only the head visible. */
+[data-color-scheme="dark"] [data-titlebar-tab] [data-mark="busy"] {
+  color: var(--v2-icon-icon-base);
 }
 
 [data-titlebar-tab] [data-slot="tab-close"] > button {
@@ -157,19 +167,46 @@
 }
 
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-list][data-orientation="vertical"] {
-  gap: 4px;
+  gap: 3px;
+}
+
+[data-slot="vertical-tabs-sidebar"] [data-component="resize-handle"] {
+  inset-inline-end: calc(-1 * var(--shell-inline-inset, 8px));
+  width: calc(var(--sidebar-inset-end) + var(--shell-inline-inset, 8px));
+  transform: none;
+}
+
+/* Only visible trailing controls need room over the title. */
+@media (hover: hover) {
+  [data-slot="vertical-tabs-sidebar"]
+    [data-titlebar-tab][data-title-overflow="true"]:not(
+      [data-editing="true"],
+      :hover,
+      :has(:focus-visible),
+      [data-status]
+    )
+    [data-slot="tab-link"] {
+    --tab-title-fade-offset: var(--tab-link-inset);
+  }
+
+  [data-slot="vertical-tabs-sidebar"]
+    [data-titlebar-tab]:not(:hover, :has(:focus-visible), [data-status])
+    [data-slot="tab-close"] {
+    background: transparent;
+  }
 }
 
 /* Each link owns half the gap, without expanding its painted background or close button. */
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab] {
   --tab-hit-before: 0px;
   --tab-hit-after: 0px;
-  --tab-link-inset: 6px;
+  --tab-link-inset: 8px;
   overflow: visible;
   padding-inline: 0;
 }
 
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-link] {
+  column-gap: 8px;
   align-self: flex-start;
   height: calc(100% + var(--tab-hit-before) + var(--tab-hit-after));
   margin-block-start: calc(-1 * var(--tab-hit-before));
@@ -178,11 +215,11 @@
 }
 
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-slot] + [data-titlebar-tab-slot] [data-titlebar-tab] {
-  --tab-hit-before: 2px;
+  --tab-hit-before: 1.5px;
 }
 
 [data-slot="vertical-tabs-sidebar"] [data-titlebar-tab-slot]:has(+ [data-titlebar-tab-slot]) [data-titlebar-tab] {
-  --tab-hit-after: 2px;
+  --tab-hit-after: 1.5px;
 }
 
 [data-titlebar-tab-slot] {
@@ -356,13 +393,17 @@
     height: 6px;
   }
 
-  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"])
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"], [data-status="failed"]):not(
+      [data-orientation="vertical"]
+    )
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
   }
 
-  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"]):dir(rtl)
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"], [data-status="failed"]):not(
+      [data-orientation="vertical"]
+    ):dir(rtl)
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);

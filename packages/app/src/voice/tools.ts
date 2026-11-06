@@ -3,6 +3,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { decodeArguments, type ToolCall } from "./protocol"
 import { ReplyWatch } from "./replies"
+import type { HeardReply } from "./reply-machine"
 import { messageExcerpts } from "./messages"
 import { formatHandoff, headerLapse } from "./handoff"
 import { folder, matchModels, SessionSearch } from "./search"
@@ -11,7 +12,6 @@ type Request = { id: string; sessionID: string; transcript: string[] }
 
 export class VoiceTools {
   readonly replies = new ReplyWatch()
-  private calls = new Map<string, Promise<string>>()
   private observed = new Map<string, Map<string, string[]>>()
   /** When each session last received a delegation's full header in this call. */
   private explained = new Map<string, number>()
@@ -27,23 +27,24 @@ export class VoiceTools {
   ) {}
 
   run(call: ToolCall, request: Request, signal: AbortSignal) {
-    const existing = this.calls.get(call.call_id)
-
-    if (existing) return existing
-
-    const result = this.execute(call, request, signal)
+    return this.execute(call, request, signal)
       .then(JSON.stringify)
       .catch(() =>
         JSON.stringify({ error: "Tool request failed. Do not claim it succeeded or resend an uncertain admission." }),
       )
-
-    this.calls.set(call.call_id, result)
-
-    return result
   }
 
-  answered(id: string) {
-    this.observed.get(id)?.forEach((messages, sessionID) => this.replies.heard(sessionID, messages))
+  /** Marks what the delegation read aloud as heard, and returns it. */
+  answered(id: string): HeardReply[] {
+    const observed = [...(this.observed.get(id) ?? [])]
+    this.observed.delete(id)
+    observed.forEach(([sessionID, messages]) => this.replies.heard(sessionID, messages))
+
+    return observed.flatMap(([sessionID, messages]) => messages.map((messageID) => ({ sessionID, messageID })))
+  }
+
+  /** A delegation that ended without an answer read nothing aloud, so its replies are still announced. */
+  discard(id: string) {
     this.observed.delete(id)
   }
 
@@ -120,6 +121,7 @@ export class VoiceTools {
 
       const seen = new Set<string>()
       const tabs = new Set(this.screen.tabs())
+
       // Best match first; among equal matches, top-level sessions with an open tab, then the most recent.
       const rank = (session: SessionInfo) =>
         (search.score(session) ?? 0) * 4 + (session.parentID ? 0 : 2) + (tabs.has(session.id) ? 1 : 0)
@@ -300,7 +302,10 @@ export class VoiceTools {
 
     if (call.name === "read_session" || call.name === "wait_for_session") {
       if (call.name === "wait_for_session") {
-        await api.session.wait({ sessionID }, { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) })
+        await api.experimental.session.wait(
+          { sessionID },
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) },
+        )
       }
 
       const [session, messages] = await Promise.all([

@@ -110,7 +110,7 @@ story(
     await expect(component.getByRole("option", { selected: true })).toHaveText("Explain the latest changes")
     await expect(
       component.getByRole("option", { name: "Explain the latest changes", exact: true }).locator("bdi"),
-    ).toHaveCSS("font-weight", "400")
+    ).toHaveCSS("font-weight", "440")
     await search.press("ArrowDown")
     await expect(component.getByRole("option", { selected: true })).toHaveText(
       "Review the composer layout Keep keyboard navigation accessible",
@@ -191,6 +191,30 @@ story(
     await expect(composer).toHaveCSS("height", `${restoredHeight}px`)
     await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
     await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
+
+    // A click elsewhere cancels the preview too; it used to leave the previewed prompt in place of the draft.
+    await input.press("Shift+ArrowUp")
+    await expect(input).toHaveText("Explain the latest changes")
+    await page.mouse.click(1, 1)
+    await expect(options).toHaveCount(0)
+    await expect(input).toBeEmpty()
+    await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
+    await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
+
+    // A click into the draft keeps the previewed prompt to edit.
+    await input.press("Shift+ArrowUp")
+    await expect(search).toBeFocused()
+    await input.click()
+    await expect(options).toHaveCount(0)
+    await expect(input).toHaveText("Explain the latest changes")
+
+    // Opening the file picker while browsing keeps the way back to the draft; it used to end browsing.
+    await input.fill("")
+    await input.press("ArrowUp")
+    await expect(input).toHaveText("Explain the latest changes")
+    await input.press("ControlOrMeta+u")
+    await input.press("ArrowDown")
+    await expect(input).toBeEmpty()
   },
 )
 
@@ -461,6 +485,40 @@ story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page 
   await page.keyboard.press("Escape")
   await expect(variant).toBeFocused()
   await expect(variant).toHaveCSS("outline-style", "none")
+})
+
+story("keeps command selection on the keyboard until the pointer moves", async ({ mount, page }) => {
+  const component = await mount("opencode-composer-flow--slash-suggestions")
+
+  const input = component.getByRole("textbox", { name: "Prompt", exact: true })
+
+  const menu = component.locator('[data-component="composer-suggestions"]')
+
+  const test = menu.getByRole("button", { name: "/test", exact: true })
+
+  const review = menu.getByRole("button", { name: "/review", exact: true })
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(test).toHaveAttribute("data-active", "")
+
+  const box = await review.boundingBox()
+
+  if (!box) throw new Error("Missing review command")
+
+  await input.press("Escape")
+  await expect(menu).toHaveCount(0)
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await input.fill("/")
+  await expect(test).toHaveAttribute("data-active", "")
+  await expect(review).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+
+  // Layout changes can deliver pointer events without any actual mouse movement.
+  await review.dispatchEvent("pointermove", { movementX: 0, movementY: 0 })
+  await expect(test).toHaveAttribute("data-active", "")
+
+  await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2)
+  await expect(review).toHaveAttribute("data-active", "")
+  await expect(test).not.toHaveAttribute("data-active")
 })
 
 story("grows suggestions while preserving visible timeline context", async ({ mount }) => {

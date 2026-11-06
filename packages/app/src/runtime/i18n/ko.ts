@@ -757,6 +757,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "데이터 마이그레이션 중 {{current}}/{{total}}",
   "home.workspaceTip": "변경 사항을 격리하려면 새 워크스페이스에서 다음 세션 시작",
   "session.tab.add": "탭 추가",
+  "session.tab.closeOthers": "다른 탭 닫기",
   "session.queue.attachments.one": "첨부파일 {{count}}개 추가",
   "session.queue.attachments.other": "첨부파일 {{count}}개 추가",
   "settings.backToSettings": "설정으로 돌아가기",
